@@ -6,7 +6,7 @@ description:
 category: "development"
 order: 3
 tags: ["security", "ci", "cd", "github-actions", "workflows", "deployment"]
-last_updated: "2026-02-09"
+last_updated: "2026-02-10"
 ---
 
 # Security & CI/CD
@@ -43,16 +43,7 @@ gh workflow run deploy-pages.yml
 
 ### Security Scanning
 
-> **Note:** Security CI/CD workflows are being added. This section will be
-> updated with specific workflow details, scan types, and configuration options
-> once they are merged.
-
-Planned security checks include:
-
-- **Dependency scanning** — automated checks for known vulnerabilities in Go and
-  Node.js dependencies
-- **Static analysis** — code quality and security linting
-- **Secret detection** — prevent accidental credential commits
+Additional security scanning workflows are planned for a future release.
 
 ## Branch Protection
 

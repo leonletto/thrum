@@ -170,8 +170,8 @@ All commands accept these flags:
 
 ### Daemon
 
-  thrum daemon start
-    Start daemon in background.
+  thrum daemon start [--local]
+    Start daemon in background. --local disables remote git sync.
 
   thrum daemon stop
     Stop daemon gracefully.
@@ -252,10 +252,64 @@ All commands accept these flags:
 
 ## Environment Variables
 
+  THRUM_NAME      Agent name (highest priority for identity resolution)
   THRUM_ROLE      Agent role (overrides identity file)
   THRUM_MODULE    Agent module (overrides identity file)
   THRUM_DISPLAY   Display name (overrides identity file)
+  THRUM_LOCAL     Enable local-only mode (disables remote sync) — set to "1"
   THRUM_WS_PORT   WebSocket port (default: 9999)
+
+## Local-Only Mode
+
+  Disables all git push/fetch in the sync loop. Use for public repos where
+  you don't want to expose agent messages to origin.
+
+  thrum daemon start --local             # Via CLI flag
+  THRUM_LOCAL=1 thrum daemon start       # Via environment variable
+
+  Persists in .thrum/config.json: { "local_only": true }
+  Priority: CLI flag > env var > config file > default (false)
+  Check status: thrum sync status (shows "Mode: local-only" or "Mode: normal")
+
+## Worktree Setup Scripts
+
+  Scripts for batch-configuring redirect files across all worktrees:
+
+  ./scripts/setup-worktree-thrum.sh              # Auto-detect all worktrees
+  ./scripts/setup-worktree-thrum.sh PATH          # Single worktree
+  ./scripts/setup-worktree-beads.sh              # Auto-detect all worktrees
+  ./scripts/setup-worktree-beads.sh PATH          # Single worktree
+
+  Creates .thrum/redirect and .beads/redirect pointing to the main repo.
+  Idempotent — skips already-configured worktrees.
+
+## Toolkit
+
+  Ready-to-use agent configurations and workflow templates in toolkit/:
+
+  toolkit/agents/           Claude Code agent definitions
+    thrum-agent.md          Thrum messaging coordination guide
+    beads-agent.md          Beads issue tracking integration guide
+    message-listener.md     Background message polling agent (Haiku model)
+
+  toolkit/templates/        Multi-agent workflow templates
+    planning-agent.md       Phase 1: brainstorm, design spec, task decomposition
+    implementation-agent.md Phase 3: task-by-task execution with quality gates
+    worktree-setup.md       Phase 2: git worktree and beads configuration
+    CLAUDE.md               Overview of the 3-phase workflow
+
+  Install: cp toolkit/agents/*.md your-project/.claude/agents/
+
+## Beads + Thrum Integration
+
+  Beads (task tracking) and Thrum (messaging) together provide complete agent
+  memory and coordination:
+
+  Beads: what agents were doing — tasks, status, dependencies, context recovery
+  Thrum: what agents said — messages, presence, notifications, session tracking
+
+  Both use Git as persistence layer. State survives session boundaries,
+  context compaction, and machine changes.
 
 ## Identity Resolution Order
 

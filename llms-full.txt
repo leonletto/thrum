@@ -404,7 +404,8 @@ All commands accept:
 
 ### thrum daemon start | stop | status | restart
 
-  thrum daemon start     Start daemon in background (10s socket wait)
+  thrum daemon start [--local]  Start daemon in background (10s socket wait)
+                                --local disables remote git sync (local-only mode)
   thrum daemon stop      SIGTERM graceful shutdown (10s wait)
   thrum daemon status    Running state, PID, uptime, version, sync state
   thrum daemon restart   Stop + 500ms + start
@@ -756,9 +757,11 @@ Unknown event types are silently ignored (forward compatibility).
 
 ### Environment Variables
 
+  THRUM_NAME        Agent name (highest priority for identity resolution)
   THRUM_ROLE        Agent role (e.g., implementer, reviewer, planner)
   THRUM_MODULE      Agent module/component (e.g., auth, db, ui)
   THRUM_DISPLAY     Human-readable display name
+  THRUM_LOCAL       Enable local-only mode (disables remote sync) — set to "1"
   THRUM_WS_PORT     WebSocket port (default: 9999)
 
 ### Identity Resolution Chain
@@ -805,6 +808,79 @@ Unknown event types are silently ignored (forward compatibility).
   Related commands:
     thrum migrate             Upgrades repos from old tracked-on-main layout
     thrum setup               Configures .thrum/ in feature worktrees (creates redirect)
+
+## Local-Only Mode
+
+  Disables all git push/fetch in the sync loop. Use for public repos where
+  you don't want to expose agent messages to origin.
+
+  Enable via:
+    thrum daemon start --local             CLI flag (highest priority)
+    THRUM_LOCAL=1 thrum daemon start       Environment variable
+    .thrum/config.json: { "local_only": true }   Config file (auto-persisted)
+
+  Priority: CLI flag > env var > config file > default (false)
+  Check status: thrum sync status (shows "Mode: local-only" or "Mode: normal")
+
+  When enabled:
+    - Sync loop skips fetch/push to origin
+    - Messages stay local to the machine
+    - SQLite projection and JSONL logs still work normally
+    - Setting persists across daemon restarts via .thrum/config.json
+
+## Worktree Setup Scripts
+
+  Scripts for batch-configuring redirect files across all git worktrees:
+
+  ./scripts/setup-worktree-thrum.sh              Auto-detect all worktrees
+  ./scripts/setup-worktree-thrum.sh PATH          Single worktree
+  ./scripts/setup-worktree-beads.sh              Auto-detect all worktrees
+  ./scripts/setup-worktree-beads.sh PATH          Single worktree
+
+  Creates .thrum/redirect and .beads/redirect pointing to the main repo's
+  .thrum/ and .beads/ directories. Idempotent — skips already-configured
+  worktrees.
+
+  Redirect files allow feature worktrees to share the same daemon, message
+  database, and issue tracker as the main repo without separate initialization.
+
+## Toolkit
+
+  Ready-to-use agent configurations and workflow templates in toolkit/:
+
+  toolkit/agents/                 Claude Code agent definitions
+    thrum-agent.md                Thrum messaging coordination guide
+    beads-agent.md                Beads issue tracking integration guide
+    message-listener.md           Background message polling agent (Haiku model)
+    README.md                     Installation and usage instructions
+
+  toolkit/templates/              Multi-agent workflow templates
+    planning-agent.md             Phase 1: brainstorm, design spec, task decomposition
+    implementation-agent.md       Phase 3: task-by-task execution with quality gates
+    worktree-setup.md             Phase 2: git worktree and beads configuration
+    CLAUDE.md                     Overview of the 3-phase plan/prepare/implement workflow
+    README.md                     Template customization guide
+
+  Install agents:  cp toolkit/agents/*.md your-project/.claude/agents/
+  Install templates: cp toolkit/templates/*.md your-project/.claude/agents/
+
+## Beads + Thrum Integration
+
+  Beads (task tracking) and Thrum (messaging) together provide complete agent
+  memory and coordination:
+
+  Beads: what agents were doing — tasks, status, dependencies, context recovery
+  Thrum: what agents said — messages, presence, notifications, session tracking
+
+  Both use Git as persistence layer. State survives session boundaries,
+  context compaction, and machine changes.
+
+  Unified workflow:
+    1. bd create --title "Feature X"           Create task in Beads
+    2. thrum send "Starting Feature X"         Announce via Thrum
+    3. thrum agent set-task "beads:thrum-xyz"   Link session to task
+    4. bd close thrum-xyz                       Complete task
+    5. thrum send "Feature X done"              Notify team
 
 ## Database Tables (SQLite)
 

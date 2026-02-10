@@ -14,7 +14,7 @@ tags:
     "dispatcher",
     "broadcaster",
   ]
-last_updated: "2026-02-08"
+last_updated: "2026-02-10"
 ---
 
 # Subscriptions & Notifications
@@ -455,42 +455,6 @@ When the dispatcher finds matches, it calls `Broadcaster.Notify()` for each:
 3. Don't block message.send on notification failures
 4. Silently ignore notifications to disconnected clients
 
-## Design Decisions
-
-### Why Application-Level Duplicate Checking?
-
-SQLite's `UNIQUE` constraint fails with NULL values:
-
-- `(ses_001, NULL, NULL, NULL)` can be inserted multiple times
-- SQLite treats NULL != NULL in uniqueness checks
-
-**Alternatives considered:**
-
-1. Use empty string `""` instead of NULL - Semantically incorrect
-2. Separate tables per subscription type - Over-engineered
-3. **Application-level checking** - Simple, correct, maintainable (chosen)
-
-### Why Silently Ignore Disconnected Clients?
-
-When a notification can't be sent (client disconnected):
-
-1. Message is already in database (via `message.send`)
-2. Client will see it when they call `message.list`
-3. Failing the entire `message.send` would be wrong
-
-**Design:**
-
-- Notifications are **best-effort delivery**
-- Database is **source of truth**
-- Clients must poll `message.list` on reconnect
-
-### Why Preview Truncation?
-
-- Full message content can be large (megabytes)
-- Notifications should be lightweight
-- Clients can fetch full content with `message.get`
-- 100 chars is enough for preview/triage
-
 ## Testing
 
 ### Coverage
@@ -593,6 +557,42 @@ registry.Notify("ses_001", notification)
 - Registry tracks by session ID
 - Re-register on reconnect
 - Previous subscriptions still active (tied to session, not connection)
+
+## Design Notes
+
+### Why Application-Level Duplicate Checking?
+
+SQLite's `UNIQUE` constraint fails with NULL values:
+
+- `(ses_001, NULL, NULL, NULL)` can be inserted multiple times
+- SQLite treats NULL != NULL in uniqueness checks
+
+**Alternatives considered:**
+
+1. Use empty string `""` instead of NULL - Semantically incorrect
+2. Separate tables per subscription type - Over-engineered
+3. **Application-level checking** - Simple, correct, maintainable (chosen)
+
+### Why Silently Ignore Disconnected Clients?
+
+When a notification can't be sent (client disconnected):
+
+1. Message is already in database (via `message.send`)
+2. Client will see it when they call `message.list`
+3. Failing the entire `message.send` would be wrong
+
+**Design:**
+
+- Notifications are **best-effort delivery**
+- Database is **source of truth**
+- Clients must poll `message.list` on reconnect
+
+### Why Preview Truncation?
+
+- Full message content can be large (megabytes)
+- Notifications should be lightweight
+- Clients can fetch full content with `message.get`
+- 100 chars is enough for preview/triage
 
 ## References
 

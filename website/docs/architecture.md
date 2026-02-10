@@ -6,7 +6,7 @@ description:
 category: "development"
 order: 1
 tags: ["architecture", "foundation", "packages", "identity", "jsonl", "sqlite"]
-last_updated: "2026-02-08"
+last_updated: "2026-02-10"
 ---
 
 # Thrum Foundation Architecture
@@ -148,24 +148,7 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)
 - ULID format: 26 characters, sortable by time, 128-bit random
 - Thread-safe generation with mutex-protected monotonic entropy
 
-### Agent Name Utilities
-
-```go
-// Generate agent ID (named or hash-based)
-id := identity.GenerateAgentID(repoID, role, module, name)
-
-// Validate agent name
-err := identity.ValidateAgentName("furiosa") // nil if valid
-
-// Parse agent ID to extract role and hash
-role, hash := identity.ParseAgentID("implementer_9F2K3M1Q8Z")
-
-// Convert agent ID to filename-safe name
-name := identity.AgentIDToName("agent:coordinator:1B9K33T6RK") // "coordinator_1B9K33T6RK"
-
-// Extract display name for UI
-display := identity.ExtractDisplayName("furiosa") // "@furiosa"
-```
+Agent IDs are generated internally from the role and a hash. See [Development Guide](development.md) for implementation details.
 
 ## Paths (`internal/paths`)
 

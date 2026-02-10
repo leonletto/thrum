@@ -6,7 +6,7 @@ description:
 category: "cli"
 order: 1
 tags: ["cli", "commands", "reference", "terminal", "usage"]
-last_updated: "2026-02-08"
+last_updated: "2026-02-10"
 ---
 
 # Thrum CLI Reference
@@ -973,10 +973,19 @@ Start the daemon in the background. Uses `thrum daemon run` internally to run
 the daemon in a detached process. The daemon serves both a Unix socket (for CLI
 RPC) and a combined WebSocket + SPA server on port 9999.
 
-    thrum daemon start
+    thrum daemon start [flags]
+
+| Flag      | Description                                      | Default |
+| --------- | ------------------------------------------------ | ------- |
+| `--local` | Disable remote git sync (local-only mode)        | `false` |
 
 The daemon performs pre-startup duplicate detection by checking if another
 daemon is already serving this repository (via JSON PID files and `flock()`).
+
+Example:
+
+    # Start in local-only mode (no git push/fetch)
+    thrum daemon start --local
 
 ---
 
@@ -1007,7 +1016,8 @@ Restart the daemon (stop + start).
 
 ### thrum sync status
 
-Show sync loop status, last sync time, and any errors.
+Show sync loop status, last sync time, and any errors. When local-only mode is
+active, displays "Mode: local-only" instead of "Mode: normal".
 
     thrum sync status
 
@@ -1018,7 +1028,8 @@ Sync states: `stopped`, `idle`, `synced`, `error`.
 ### thrum sync force
 
 Trigger an immediate sync (non-blocking). Fetches new messages from the remote
-and pushes local messages. The default sync interval is 60 seconds.
+and pushes local messages. The default sync interval is 60 seconds. When
+local-only mode is active, displays "local-only (remote sync disabled)".
 
     thrum sync force
 
@@ -1091,6 +1102,7 @@ For multi-agent worktrees, use `--agent-id` or set `THRUM_NAME`:
 | `THRUM_DISPLAY` | Display name (overrides identity file)                | `Auth Developer`             |
 | `THRUM_WS_PORT` | WebSocket and SPA server port (daemon)                | `9999`                       |
 | `THRUM_UI_DEV`  | Path to dev UI dist for hot reload (daemon)           | `./ui/packages/web-app/dist` |
+| `THRUM_LOCAL`   | Enable local-only mode (disables remote sync)         | `1`                          |
 
 ## Identity Resolution
 
