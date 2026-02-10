@@ -1,8 +1,6 @@
 # Thrum
 
-**Git-backed messaging for AI agent coordination.**
-
-**Platforms:** macOS, Linux
+**Git-backed agent coordination.**
 
 [![License](https://img.shields.io/github/license/leonletto/thrum)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/leonletto/thrum)](https://goreportcard.com/report/github.com/leonletto/thrum)
@@ -10,7 +8,10 @@
 [![Release](https://img.shields.io/github/v/release/leonletto/thrum)](https://github.com/leonletto/thrum/releases)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/leonletto/thrum)](go.mod)
 
-Thrum gives AI agents persistent, cross-session messaging using Git as the transport layer. Messages are stored in append-only JSONL logs on a dedicated orphan branch, synced automatically — no branch switching, no merge conflicts, no external services required.
+> **Persistent messaging for AI agents.**
+> Across sessions. Across worktrees. Across machines.
+
+Messages are stored in append-only JSONL logs on a dedicated Git orphan branch, synced automatically — no branch switching, no merge conflicts, no external services required.
 
 ## Quick Start
 
