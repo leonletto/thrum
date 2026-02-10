@@ -283,7 +283,7 @@ func TestBranchManager_GetSyncBranchRef_NotExists(t *testing.T) {
 	}
 }
 
-func TestBranchManager_EnsureSyncBranch_LocalOnly(t *testing.T) {
+func TestBranchManager_EnsureSyncBranch_NoRemote(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, repoPath)
 
@@ -297,6 +297,57 @@ func TestBranchManager_EnsureSyncBranch_LocalOnly(t *testing.T) {
 	// Verify branch exists locally
 	if !branchExists(t, repoPath, SyncBranchName) {
 		t.Errorf("branch %s does not exist locally", SyncBranchName)
+	}
+}
+
+func TestBranchManager_EnsureSyncBranch_LocalOnly_SkipsRemote(t *testing.T) {
+	// Create a repo with a remote configured
+	remoteDir := t.TempDir()
+	cmd := exec.Command("git", "init", "--bare")
+	cmd.Dir = remoteDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to create bare remote: %v", err)
+	}
+
+	repoPath := setupTestRepoWithCommit(t)
+	setupThrumFiles(t, repoPath)
+
+	// Add remote
+	cmd = exec.Command("git", "remote", "add", "origin", remoteDir) //nolint:gosec // G204 test uses controlled paths
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to add remote: %v", err)
+	}
+
+	// Create BranchManager with localOnly=true
+	bm := NewBranchManager(repoPath, true)
+
+	// EnsureSyncBranch should succeed (creates local branch, skips remote ops)
+	if err := bm.EnsureSyncBranch(); err != nil {
+		t.Fatalf("EnsureSyncBranch failed: %v", err)
+	}
+
+	// Verify branch exists locally
+	if !branchExists(t, repoPath, SyncBranchName) {
+		t.Errorf("branch %s does not exist locally", SyncBranchName)
+	}
+
+	// Verify branch was NOT pushed to remote
+	cmd = exec.Command("git", "ls-remote", "--heads", "origin", SyncBranchName)
+	cmd.Dir = repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ls-remote failed: %v", err)
+	}
+	if strings.TrimSpace(string(output)) != "" {
+		t.Error("a-sync should NOT have been pushed to remote in local-only mode")
+	}
+}
+
+func TestNewBranchManager_LocalOnly(t *testing.T) {
+	bm := NewBranchManager("/test/repo", true)
+	if !bm.localOnly {
+		t.Error("expected localOnly=true")
 	}
 }
 

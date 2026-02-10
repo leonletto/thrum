@@ -298,6 +298,143 @@ func initTestSchema(db *sql.DB) error {
 	return err
 }
 
+func TestSyncLoop_IsLocalOnly(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	setupThrumFiles(t, tmpDir)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	t.Run("false", func(t *testing.T) {
+		syncer := NewSyncer(tmpDir, syncDir, false)
+		projector := setupTestProjector(t, tmpDir)
+		loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
+		if loop.IsLocalOnly() {
+			t.Error("expected IsLocalOnly()=false")
+		}
+	})
+
+	t.Run("true", func(t *testing.T) {
+		syncer := NewSyncer(tmpDir, syncDir, true)
+		projector := setupTestProjector(t, tmpDir)
+		loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, true)
+		if !loop.IsLocalOnly() {
+			t.Error("expected IsLocalOnly()=true")
+		}
+	})
+}
+
+func TestSyncLoop_LocalOnly_StatusReportsMode(t *testing.T) {
+	tmpDir := setupMergeTestRepo(t)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	syncer := NewSyncer(tmpDir, syncDir, true)
+	projector := setupTestProjector(t, tmpDir)
+
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, true)
+
+	// Check status shows local-only before start
+	status := loop.GetStatus()
+	if !status.LocalOnly {
+		t.Error("expected LocalOnly=true in status")
+	}
+
+	ctx := context.Background()
+	if err := loop.Start(ctx); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer func() { _ = loop.Stop() }()
+
+	// Poll until initial sync completes
+	deadline := time.After(2 * time.Second)
+	for {
+		status = loop.GetStatus()
+		if !status.LastSyncAt.IsZero() {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("Expected lastSyncAt to be set after initial sync")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	// Verify status still shows local-only after sync
+	if !status.LocalOnly {
+		t.Error("expected LocalOnly=true in status after sync")
+	}
+	if !status.Running {
+		t.Error("expected Running=true after start")
+	}
+	if status.LastError != "" {
+		t.Errorf("expected no error, got: %s", status.LastError)
+	}
+}
+
+func TestSyncLoop_LocalOnly_FullCycle(t *testing.T) {
+	tmpDir := setupMergeTestRepo(t)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	syncer := NewSyncer(tmpDir, syncDir, true)
+	projector := setupTestProjector(t, tmpDir)
+
+	// Use local-only mode with a long interval, rely on manual trigger
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, true)
+
+	ctx := context.Background()
+	if err := loop.Start(ctx); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer func() { _ = loop.Stop() }()
+
+	// Wait for initial sync to complete
+	deadline := time.After(2 * time.Second)
+	for {
+		status := loop.GetStatus()
+		if !status.LastSyncAt.IsZero() {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("initial sync did not complete")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	// Write a local event to the sync worktree
+	eventsPath := filepath.Join(syncDir, "events.jsonl")
+	f, err := os.OpenFile(eventsPath, os.O_APPEND|os.O_WRONLY, 0600) //nolint:gosec // G304 - test path
+	if err != nil {
+		t.Fatalf("failed to open events.jsonl: %v", err)
+	}
+	_, _ = f.WriteString(`{"type":"agent.register","timestamp":"2026-02-10T10:00:00Z","event_id":"evt_LOC1","agent_id":"agent:test:local","kind":"test","role":"tester","module":"test-mod","v":1}` + "\n")
+	_ = f.Close()
+
+	// Record sync time before trigger
+	beforeTrigger := loop.GetStatus().LastSyncAt
+
+	// Trigger manual sync
+	loop.TriggerSync()
+
+	// Wait for sync to run again
+	deadline = time.After(2 * time.Second)
+	for {
+		status := loop.GetStatus()
+		if status.LastSyncAt.After(beforeTrigger) {
+			if status.LastError != "" {
+				t.Errorf("sync error: %s", status.LastError)
+			}
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("manual sync did not complete")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+}
+
 func TestLoop_SetError(t *testing.T) {
 	tmpDir := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, tmpDir)

@@ -100,6 +100,45 @@ func TestMerger_Fetch_WithRemote(t *testing.T) {
 	}
 }
 
+func TestMerger_Fetch_LocalOnly(t *testing.T) {
+	// Create a repo with a remote configured
+	remoteDir := t.TempDir()
+	cmd := exec.Command("git", "init", "--bare")
+	cmd.Dir = remoteDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to create bare remote: %v", err)
+	}
+
+	repoPath := setupMergeTestRepo(t)
+
+	// Add remote
+	cmd = exec.Command("git", "remote", "add", "origin", remoteDir) //nolint:gosec // G204 test uses controlled paths
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to add remote: %v", err)
+	}
+
+	// Push a-sync to remote
+	cmd = exec.Command("git", "push", "-u", "origin", SyncBranchName)
+	cmd.Dir = repoPath
+	_ = cmd.Run()
+
+	// Create merger with localOnly=true
+	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), true)
+
+	// Fetch should return nil immediately (skip) even though remote exists
+	if err := m.Fetch(); err != nil {
+		t.Errorf("Fetch should succeed (no-op) in local-only mode: %v", err)
+	}
+}
+
+func TestNewMerger_LocalOnly(t *testing.T) {
+	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync", true)
+	if !m.localOnly {
+		t.Error("expected localOnly=true")
+	}
+}
+
 func TestExtractEventID(t *testing.T) {
 	tests := []struct {
 		name      string

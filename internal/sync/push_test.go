@@ -418,6 +418,133 @@ func TestPushError_Unwrap(t *testing.T) {
 	}
 }
 
+func TestSyncer_Push_LocalOnly(t *testing.T) {
+	// Create a repo with a remote configured
+	remoteDir := t.TempDir()
+	cmd := exec.Command("git", "init", "--bare")
+	cmd.Dir = remoteDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to create bare remote: %v", err)
+	}
+
+	repoPath := setupMergeTestRepo(t)
+	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
+
+	// Add remote
+	cmd = exec.Command("git", "remote", "add", "origin", remoteDir) //nolint:gosec // G204 test uses controlled paths
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to add remote: %v", err)
+	}
+
+	// Make a commit so there's something to push
+	cmd = exec.Command("git", "commit", "--allow-empty", "-m", "test commit")
+	cmd.Dir = syncDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("commit failed: %v", err)
+	}
+
+	// Create syncer with localOnly=true
+	s := NewSyncer(repoPath, syncDir, true)
+
+	// push should return nil immediately (skip) even though remote exists
+	if err := s.push(); err != nil {
+		t.Errorf("push should succeed (no-op) in local-only mode: %v", err)
+	}
+
+	// Verify nothing was actually pushed to remote
+	cmd = exec.Command("git", "branch", "-r")
+	cmd.Dir = repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git branch -r failed: %v", err)
+	}
+	if strings.Contains(string(output), SyncBranchName) {
+		t.Error("a-sync should NOT have been pushed to remote in local-only mode")
+	}
+}
+
+func TestSyncer_CommitAndPush_LocalOnly_CommitsButDoesNotPush(t *testing.T) {
+	// Create a repo with a remote configured
+	remoteDir := t.TempDir()
+	cmd := exec.Command("git", "init", "--bare")
+	cmd.Dir = remoteDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to create bare remote: %v", err)
+	}
+
+	repoPath := setupMergeTestRepo(t)
+	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
+
+	// Add remote
+	cmd = exec.Command("git", "remote", "add", "origin", remoteDir) //nolint:gosec // G204 test uses controlled paths
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to add remote: %v", err)
+	}
+
+	// Commit initial state in worktree
+	cmd = exec.Command("git", "add", ".")
+	cmd.Dir = syncDir
+	_ = cmd.Run()
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit", "--allow-empty")
+	cmd.Dir = syncDir
+	_ = cmd.Run()
+
+	// Make a change in the worktree
+	eventsPath := filepath.Join(syncDir, "events.jsonl")
+	f, err := os.OpenFile(eventsPath, os.O_APPEND|os.O_WRONLY, 0600) //nolint:gosec // G304 - test path from t.TempDir()
+	if err != nil {
+		t.Fatalf("failed to open events.jsonl: %v", err)
+	}
+	_, _ = f.WriteString(`{"type":"message.create","timestamp":"2026-02-10T10:00:00Z","event_id":"evt_LOCAL","message_id":"msg_001"}` + "\n")
+	_ = f.Close()
+
+	// Create syncer with localOnly=true
+	s := NewSyncer(repoPath, syncDir, true)
+
+	// CommitAndPush should succeed — commits locally, skips push
+	if err := s.CommitAndPush(); err != nil {
+		t.Fatalf("CommitAndPush failed in local-only mode: %v", err)
+	}
+
+	// Verify commit was created locally
+	cmd = exec.Command("git", "log", "-1", "--format=%s")
+	cmd.Dir = syncDir
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git log failed: %v", err)
+	}
+	if !strings.Contains(string(output), "sync:") {
+		t.Errorf("expected local commit with 'sync:' prefix, got: %s", string(output))
+	}
+
+	// Verify nothing was pushed to remote
+	cmd = exec.Command("git", "branch", "-r")
+	cmd.Dir = repoPath
+	output, err = cmd.Output()
+	if err != nil {
+		t.Fatalf("git branch -r failed: %v", err)
+	}
+	if strings.Contains(string(output), SyncBranchName) {
+		t.Error("a-sync should NOT have been pushed to remote in local-only mode")
+	}
+}
+
+func TestNewSyncer_LocalOnly(t *testing.T) {
+	s := NewSyncer("/test/repo", "/test/repo/.git/thrum-sync/a-sync", true)
+	if !s.localOnly {
+		t.Error("expected localOnly=true")
+	}
+	if !s.merger.localOnly {
+		t.Error("expected merger.localOnly=true")
+	}
+	if !s.branchManager.localOnly {
+		t.Error("expected branchManager.localOnly=true")
+	}
+}
+
 // TestSyncer_WriteMessageToJSONL - REMOVED: Method removed as it was a stub.
 // Message writing should use internal/jsonl Writer directly.
 //

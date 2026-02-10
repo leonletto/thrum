@@ -136,6 +136,112 @@ func TestSyncStatusHandler_Handle(t *testing.T) {
 	}
 }
 
+func TestSyncForceHandler_LocalOnlyMode(t *testing.T) {
+	tmpDir := setupTestRepo(t)
+	setupThrumFiles(t, tmpDir)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	// Create syncer and loop with localOnly=true
+	syncer := sync.NewSyncer(tmpDir, syncDir, true)
+	projector := setupTestProjector(t, tmpDir)
+	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, true)
+
+	ctx := context.Background()
+	if err := loop.Start(ctx); err != nil {
+		t.Fatalf("Failed to start loop: %v", err)
+	}
+	defer func() { _ = loop.Stop() }()
+
+	handler := NewSyncForceHandler(loop)
+
+	// Poll until sync completes
+	deadline := time.After(2 * time.Second)
+	for {
+		resp, err := handler.Handle(ctx, nil)
+		if err != nil {
+			t.Fatalf("Handle failed: %v", err)
+		}
+		syncResp, ok := resp.(SyncForceResponse)
+		if !ok {
+			t.Fatalf("Expected SyncForceResponse, got %T", resp)
+		}
+		if syncResp.LastSyncAt != "" {
+			// Verify LocalOnly is reported
+			if !syncResp.LocalOnly {
+				t.Error("Expected LocalOnly=true in SyncForceResponse")
+			}
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("sync did not complete")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+}
+
+func TestSyncStatusHandler_LocalOnlyMode(t *testing.T) {
+	tmpDir := setupTestRepo(t)
+	setupThrumFiles(t, tmpDir)
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	// Create syncer and loop with localOnly=true
+	syncer := sync.NewSyncer(tmpDir, syncDir, true)
+	projector := setupTestProjector(t, tmpDir)
+	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, true)
+
+	ctx := context.Background()
+	handler := NewSyncStatusHandler(loop)
+
+	// Check status before start shows local-only
+	resp, err := handler.Handle(ctx, nil)
+	if err != nil {
+		t.Fatalf("Handle failed: %v", err)
+	}
+	statusResp, ok := resp.(SyncStatusResponse)
+	if !ok {
+		t.Fatalf("Expected SyncStatusResponse, got %T", resp)
+	}
+	if !statusResp.LocalOnly {
+		t.Error("Expected LocalOnly=true in SyncStatusResponse before start")
+	}
+
+	// Start loop
+	if err := loop.Start(ctx); err != nil {
+		t.Fatalf("Failed to start loop: %v", err)
+	}
+	defer func() { _ = loop.Stop() }()
+
+	// Poll until sync completes
+	deadline := time.After(2 * time.Second)
+	for {
+		resp, err := handler.Handle(ctx, nil)
+		if err != nil {
+			t.Fatalf("Handle failed: %v", err)
+		}
+		statusResp, ok := resp.(SyncStatusResponse)
+		if !ok {
+			t.Fatalf("Expected SyncStatusResponse, got %T", resp)
+		}
+		if statusResp.LastSyncAt != "" {
+			if !statusResp.LocalOnly {
+				t.Error("Expected LocalOnly=true in SyncStatusResponse after sync")
+			}
+			if !statusResp.Running {
+				t.Error("Expected Running=true after start")
+			}
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("sync did not complete")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+}
+
 func TestGetSyncState(t *testing.T) {
 	tests := []struct {
 		name     string
