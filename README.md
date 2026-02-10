@@ -3,7 +3,7 @@
 **Git-backed agent coordination.**
 
 [![License](https://img.shields.io/github/license/leonletto/thrum)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/leonletto/thrum)](https://goreportcard.com/report/github.com/leonletto/thrum)
+[![Go Report Card](https://goreportcard.com/badge/github.com/leonletto/thrum?v=2)](https://goreportcard.com/report/github.com/leonletto/thrum)
 [![CI](https://github.com/leonletto/thrum/actions/workflows/ci.yml/badge.svg)](https://github.com/leonletto/thrum/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/leonletto/thrum)](https://github.com/leonletto/thrum/releases)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/leonletto/thrum)](go.mod)
