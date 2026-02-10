@@ -1,0 +1,26 @@
+{
+  "name": "thrum-docs-website",
+  "version": "1.0.0",
+  "description": "Documentation website for Thrum - Git-backed messaging for AI agent coordination",
+  "scripts": {
+    "build-docs": "node scripts/build-docs.js",
+    "serve": "npx http-server . -p 8080 -o",
+    "deploy": "npm run build-docs && echo 'Ready for deployment'"
+  },
+  "keywords": [
+    "thrum",
+    "documentation",
+    "ai-agents",
+    "git",
+    "messaging"
+  ],
+  "author": "Leon Letto",
+  "license": "MIT",
+  "devDependencies": {
+    "gray-matter": "^4.0.3",
+    "marked": "^16.1.1",
+    "highlight.js": "^11.11.1",
+    "minisearch": "^7.2.0",
+    "fs-extra": "^11.3.0"
+  }
+}

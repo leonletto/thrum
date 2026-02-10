@@ -1,0 +1,67 @@
+# golangci-lint v2 configuration
+version: "2"
+
+run:
+  timeout: 10m
+  go: '1.25.5'
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - unconvert
+    - unparam
+    - durationcheck
+    - makezero
+    - nilerr
+    - predeclared
+    - forcetypeassert
+    - godot
+    - gosec
+
+  settings:
+    godot:
+      scope: declarations
+      capital: true
+    misspell:
+      locale: US
+
+  exclusions:
+    # Directories to skip entirely
+    paths:
+      - third_party
+      - builtin
+      - examples
+      - output
+      - '\.ref'
+      - website/docs/api/examples
+      - docs/api/examples
+
+    rules:
+      # Test files: allow unchecked errors (os.Setenv, defer .Close(), etc.)
+      - path: '_test\.go'
+        linters:
+          - errcheck
+      # Test files: allow unchecked type assertions (casting RPC responses)
+      - path: '_test\.go'
+        linters:
+          - forcetypeassert
+      # Test files: allow subprocess with variable (exec.Command("git", tmpDir))
+      - path: '_test\.go'
+        text: "G204"
+        linters:
+          - gosec
+      # Test files: allow unused params (test helpers with consistent signatures)
+      - path: '_test\.go'
+        linters:
+          - unparam
+
+issues:
+  # No cap on reported issues
+  max-issues-per-linter: 0
+  max-same-issues: 0

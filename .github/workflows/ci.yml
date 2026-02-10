@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Format check
+        run: |
+          gofmt -s -l . | tee /tmp/gofmt.out
+          test -z "$(cat /tmp/gofmt.out)"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.8.0
+
+      - name: Test
+        run: go test ./... -v -race
+
+      - name: Security - govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Build
+        run: |
+          mkdir -p internal/web/dist
+          touch internal/web/dist/.gitkeep
+          go build -o bin/thrum ./cmd/thrum

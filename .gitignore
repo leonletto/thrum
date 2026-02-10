@@ -1,0 +1,76 @@
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/thrum
+
+# Macos stuff
+.DS_Store
+
+# Test binary, built with `go test -c`
+*.test
+
+# Code coverage profiles and other test artifacts
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# env file
+.env
+
+# Development artifacts (local only, not for public repo)
+dev-docs/
+.agents/
+.beads/
+.claude/
+CLAUDE.md
+AGENTS.md
+scripts/setup-worktree-beads.sh
+
+# Editor/IDE
+# .idea/
+# .vscode/
+
+# Reference repos (for development, not tracked)
+.ref/
+
+# Build outputs
+bin/
+dist/
+output/
+build/
+.next/
+.turbo/
+
+# Embedded UI build artifacts (override blanket dist/ ignore above)
+!internal/web/dist/
+internal/web/dist/*
+!internal/web/dist/.gitkeep
+
+.playwright-mcp/
+
+# Node.js / Playwright
+node_modules/
+package-lock.json
+test-results/
+playwright-report/
+
+# Screenshots (Playwright testing artifacts)
+*.png
+
+# Thrum runtime files
+.thrum/
+.thrum.*.json

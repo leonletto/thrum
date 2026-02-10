@@ -1,0 +1,35 @@
+# Prettier ignore file for Markdown formatting
+
+# Build and output directories
+output/
+bin/
+dist/
+build/
+
+# Dependencies
+node_modules/
+vendor/
+
+# Reference repos
+.ref/
+
+# IDE and editor files
+.vscode/
+.idea/
+
+# Git
+.git/
+
+# Go generated files
+*.pb.go
+
+# Test artifacts
+coverage.out
+*.test
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+

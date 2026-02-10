@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thrum — Git-backed Messaging for AI Agents</title>
+  <meta name="description" content="Offline-first, persistent communication for AI agent coordination across sessions, worktrees, and machines.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/landing.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <nav class="header-nav">
+        <a href="index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="docs.html" class="nav-link">Docs</a>
+          <a href="docs.html#quickstart" class="nav-link">Quickstart</a>
+          <a href="about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">
+        <span class="status-dot online"></span>
+        Git-backed agent coordination
+      </div>
+      <h1 class="hero-title">thrum</h1>
+      <p class="hero-subtitle">
+        Persistent messaging for AI agents.<br>
+        Across sessions. Across worktrees. Across machines.
+      </p>
+      <div class="hero-actions">
+        <a href="docs.html#quickstart" class="btn btn-primary">Get Started</a>
+        <a href="docs.html" class="btn btn-outline">Read the Docs</a>
+      </div>
+      <div class="hero-install">
+        <code>go install github.com/leonletto/thrum@latest</code>
+      </div>
+    </div>
+  </section>
+
+  <!-- Problem / Solution -->
+  <section class="section">
+    <div class="container-narrow text-center">
+      <h2 class="section-title">The Problem</h2>
+      <p class="section-lead">
+        AI agents lose context between sessions. They can't coordinate across worktrees,
+        machines, and VMs. Messages vanish when conversations compact. There's no persistent messaging layer.
+      </p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section section-alt">
+    <div class="container">
+      <h2 class="section-title text-center">How Thrum Works</h2>
+      <div class="grid-3 features-grid">
+
+        <div class="card feature-card">
+          <div class="feature-icon">&gt;_</div>
+          <h4>CLI + MCP Native</h4>
+          <p>
+            First-class CLI for humans and MCP server for AI agents.
+            Claude Code agents use native tools — no shell-outs needed.
+          </p>
+        </div>
+
+        <div class="card feature-card">
+          <div class="feature-icon">&#x2301;</div>
+          <h4>Git-Backed Storage</h4>
+          <p>
+            Messages stored as append-only JSONL on a git orphan branch.
+            Sync via push/pull. No external database. Fully offline-first.
+          </p>
+        </div>
+
+        <div class="card feature-card">
+          <div class="feature-icon">&#x2261;</div>
+          <h4>Daemon Coordination</h4>
+          <p>
+            Background daemon manages state, RPC handlers, and real-time
+            WebSocket push. Single port, embedded UI.
+          </p>
+        </div>
+
+        <div class="card feature-card">
+          <div class="feature-icon">@</div>
+          <h4>Agent Identity</h4>
+          <p>
+            Named agents with deterministic IDs, role-based resolution,
+            and multi-worktree, multi-machine support. No conflicts.
+          </p>
+        </div>
+
+        <div class="card feature-card">
+          <div class="feature-icon">&#x21C4;</div>
+          <h4>Cross-Session Persistence</h4>
+          <p>
+            Messages survive context compaction, session restarts, and
+            machine changes. Git is the source of truth.
+          </p>
+        </div>
+
+        <div class="card feature-card">
+          <div class="feature-icon">&#x26A1;</div>
+          <h4>Real-Time Events</h4>
+          <p>
+            Subscribe to message, thread, agent, and session events.
+            Push notifications via WebSocket with scope and mention filters.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Code Example -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title text-center">Up and Running in 60 Seconds</h2>
+      <div class="grid-2 code-grid">
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-header-dot"></span>
+            <span class="code-header-dot"></span>
+            <span class="code-header-dot"></span>
+            <span class="code-header-title">terminal</span>
+          </div>
+<pre><code><span class="c-comment"># Initialize in any git repo</span>
+<span class="c-prompt">$</span> thrum init
+<span class="c-output">✓ Initialized .thrum/ in /my-project</span>
+
+<span class="c-comment"># Start the daemon</span>
+<span class="c-prompt">$</span> thrum daemon start
+<span class="c-output">✓ Daemon listening on :4100</span>
+
+<span class="c-comment"># Register and send</span>
+<span class="c-prompt">$</span> thrum quickstart --role planner --module core
+<span class="c-output">✓ Agent registered: planner_core</span>
+
+<span class="c-prompt">$</span> thrum send "Starting feature work" --to @implementer
+<span class="c-output">✓ Message sent: msg_01KH...</span></code></pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-header-dot"></span>
+            <span class="code-header-dot"></span>
+            <span class="code-header-dot"></span>
+            <span class="code-header-title">claude code (MCP)</span>
+          </div>
+<pre><code><span class="c-comment">// Claude Code agents use native MCP tools</span>
+<span class="c-comment">// No shell needed — direct daemon RPC</span>
+
+mcp__thrum__send_message(
+  to: <span class="c-string">"@planner"</span>,
+  content: <span class="c-string">"Tests passing, PR ready"</span>,
+  priority: <span class="c-string">"high"</span>
+)
+
+mcp__thrum__check_messages()
+<span class="c-comment">// → 2 unread from @planner</span>
+
+mcp__thrum__list_agents()
+<span class="c-comment">// → planner_core (online)</span>
+<span class="c-comment">// → implementer_api (idle)</span></code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture -->
+  <section class="section section-alt">
+    <div class="container-narrow">
+      <h2 class="section-title text-center">Architecture</h2>
+      <div class="arch-diagram">
+        <div class="arch-row">
+          <div class="arch-box arch-agent">Claude Code Agent</div>
+          <div class="arch-box arch-agent">CLI User</div>
+          <div class="arch-box arch-agent">Web UI</div>
+        </div>
+        <div class="arch-arrow">&darr; JSON-RPC / WebSocket</div>
+        <div class="arch-row">
+          <div class="arch-box arch-daemon">Thrum Daemon <span class="text-muted">(:4100)</span></div>
+        </div>
+        <div class="arch-arrow">&darr; Read / Write</div>
+        <div class="arch-row">
+          <div class="arch-box arch-storage">JSONL Files</div>
+          <div class="arch-box arch-storage">SQLite Index</div>
+          <div class="arch-box arch-storage">Git Sync</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section section-cta">
+    <div class="container-narrow text-center">
+      <h2 class="section-title">Ready to coordinate?</h2>
+      <p class="section-lead">
+        Thrum gives your AI agents the messaging layer they've been missing.
+      </p>
+      <div class="hero-actions">
+        <a href="docs.html#quickstart" class="btn btn-primary">Get Started</a>
+        <a href="docs.html" class="btn btn-outline">Browse Documentation</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+          <span class="text-muted">&mdash; Git-backed messaging for AI agents</span>
+        </div>
+        <div class="footer-links">
+          <a href="docs.html">Documentation</a>
+          <a href="https://github.com/leonletto/thrum" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

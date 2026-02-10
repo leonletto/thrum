@@ -1,0 +1,15 @@
+# Ignore output directory
+output/
+
+# Ignore dev-docs (planning documents)
+dev-docs/
+
+# Ignore vendor
+vendor/
+
+# Ignore reference repos
+.ref/
+
+# Ignore node_modules
+node_modules/
+

@@ -1,0 +1,29 @@
+{
+  "name": "@thrum/tui-app",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Thrum Terminal UI Application (TUI) - Ink-based interface",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "exports": {
+    ".": {
+      "types": "src/index.tsx",
+      "import": "src/index.tsx"
+    }
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.tsx",
+    "build": "tsc --noEmit",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ink": "^5.1.0",
+    "react": "^18.3.1",
+    "@thrum/shared-logic": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "typescript": "^5.7.3",
+    "tsx": "^4.7.0"
+  }
+}
