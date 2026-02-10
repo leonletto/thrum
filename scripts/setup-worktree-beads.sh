@@ -1,26 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
-# Setup Thrum redirect for git worktrees
+# Setup Beads redirect for git worktrees
 # Usage:
-#   ./scripts/setup-worktree-thrum.sh                  # auto-detect worktrees
-#   ./scripts/setup-worktree-thrum.sh <worktree-path>  # setup a specific worktree
+#   ./scripts/setup-worktree-beads.sh                  # auto-detect worktrees
+#   ./scripts/setup-worktree-beads.sh <worktree-path>  # setup a specific worktree
 #
-# Creates a .thrum/redirect file in each worktree pointing to the main
-# repository's .thrum directory, so all worktrees share the same daemon,
-# messages, and identities.
+# Creates a .beads/redirect file in each worktree pointing to the main
+# repository's .beads directory, so all worktrees share the same issue database.
 
 MAIN_REPO="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_NAME="$(basename "$MAIN_REPO")"
 
-# Validate main repo has .thrum initialized
-if [[ ! -d "$MAIN_REPO/.thrum" ]]; then
-    echo "Error: Thrum not initialized in $MAIN_REPO"
-    echo "Run 'thrum init' first."
+# Validate main repo has .beads initialized
+if [[ ! -d "$MAIN_REPO/.beads" ]]; then
+    echo "Error: Beads not initialized in $MAIN_REPO"
+    echo "Run 'bd init' first."
     exit 1
 fi
 
-MAIN_THRUM_ABS="$(cd "$MAIN_REPO/.thrum" && pwd)"
+MAIN_BEADS_ABS="$(cd "$MAIN_REPO/.beads" && pwd)"
 
 setup_worktree() {
     local wt_path="$1"
@@ -39,30 +38,30 @@ setup_worktree() {
     fi
 
     # Check if already set up
-    if [[ -f "$wt_path/.thrum/redirect" ]]; then
+    if [[ -f "$wt_path/.beads/redirect" ]]; then
         local existing
-        existing="$(cat "$wt_path/.thrum/redirect")"
-        if [[ "$existing" == "$MAIN_THRUM_ABS" ]]; then
+        existing="$(cat "$wt_path/.beads/redirect")"
+        if [[ "$existing" == "$MAIN_BEADS_ABS" ]]; then
             echo "  Already configured: $wt_path"
             return 0
         fi
     fi
 
-    mkdir -p "$wt_path/.thrum"
-    echo "$MAIN_THRUM_ABS" > "$wt_path/.thrum/redirect"
-    echo "  Created redirect: $wt_path -> $MAIN_THRUM_ABS"
+    mkdir -p "$wt_path/.beads"
+    echo "$MAIN_BEADS_ABS" > "$wt_path/.beads/redirect"
+    echo "  Created redirect: $wt_path -> $MAIN_BEADS_ABS"
 }
 
 # If a path was given, set up just that worktree
 if [[ $# -ge 1 ]]; then
-    echo "Setting up Thrum redirect..."
+    echo "Setting up Beads redirect..."
     setup_worktree "$1"
     echo ""
     echo "Verification:"
-    if command -v thrum &>/dev/null; then
-        cd "$1" && thrum daemon status 2>&1 | head -3
+    if command -v bd &>/dev/null; then
+        cd "$1" && bd where
     else
-        echo "  thrum CLI not found, skipping verification"
+        echo "  bd CLI not found, skipping verification"
     fi
     exit 0
 fi
@@ -73,7 +72,7 @@ WORKTREES="$(cd "$MAIN_REPO" && git worktree list --porcelain 2>/dev/null | grep
 if [[ -z "$WORKTREES" ]]; then
     echo "No git worktrees found."
     echo ""
-    echo "To create a worktree and set up Thrum:"
+    echo "To create a worktree and set up Beads:"
     echo "  git worktree add <path> <branch>"
     echo "  $0 <path>"
     echo ""
@@ -93,7 +92,7 @@ done <<< "$WORKTREES"
 if [[ "$OTHER_COUNT" -eq 0 ]]; then
     echo "No additional worktrees found (only the main repo)."
     echo ""
-    echo "To create a worktree and set up Thrum:"
+    echo "To create a worktree and set up Beads:"
     echo "  git worktree add <path> <branch>"
     echo "  $0 <path>"
     echo ""
@@ -103,7 +102,7 @@ if [[ "$OTHER_COUNT" -eq 0 ]]; then
     exit 0
 fi
 
-echo "Found $OTHER_COUNT worktree(s). Setting up Thrum redirects..."
+echo "Found $OTHER_COUNT worktree(s). Setting up Beads redirects..."
 echo ""
 
 while IFS= read -r wt; do
@@ -111,4 +110,4 @@ while IFS= read -r wt; do
 done <<< "$WORKTREES"
 
 echo ""
-echo "Done. All worktrees now share Thrum from: $MAIN_THRUM_ABS"
+echo "Done. All worktrees now share Beads from: $MAIN_BEADS_ABS"

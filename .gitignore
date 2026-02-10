@@ -38,7 +38,6 @@ dev-docs/
 .claude/
 CLAUDE.md
 AGENTS.md
-scripts/setup-worktree-beads.sh
 
 # Editor/IDE
 # .idea/
