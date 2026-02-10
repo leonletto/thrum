@@ -115,7 +115,7 @@ func TestSaveThrumConfig_PreservesUnknownKeys(t *testing.T) {
 	}
 
 	// Read raw file and check "custom" key survived
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) //nolint:gosec // test file, path from t.TempDir()
 	if err != nil {
 		t.Fatal(err)
 	}
