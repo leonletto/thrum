@@ -2395,9 +2395,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 	// Resolve local-only mode: CLI flag > env var > config file > default
 	localOnly := flagLocal
+	localOnlyFromExplicit := flagLocal // track if set via flag or env (not config)
 	if !localOnly {
 		if env := os.Getenv("THRUM_LOCAL"); env == "1" || env == "true" {
 			localOnly = true
+			localOnlyFromExplicit = true
 		}
 	}
 	if !localOnly {
@@ -2406,6 +2408,13 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			fmt.Fprintf(os.Stderr, "Warning: failed to read config.json: %v\n", cfgErr)
 		} else if thrumCfg.Daemon.LocalOnly {
 			localOnly = true
+		}
+	}
+	// Persist to config.json when set explicitly via flag or env var
+	if localOnlyFromExplicit {
+		cfg := &config.ThrumConfig{Daemon: config.DaemonConfig{LocalOnly: true}}
+		if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save config.json: %v\n", err)
 		}
 	}
 	if localOnly {
