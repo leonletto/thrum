@@ -13,6 +13,7 @@ type SyncForceResponse struct {
 	Triggered  bool   `json:"triggered"`
 	LastSyncAt string `json:"last_sync_at"`
 	SyncState  string `json:"sync_state"`
+	LocalOnly  bool   `json:"local_only"`
 }
 
 // SyncStatusRequest represents a request for sync status.
@@ -24,6 +25,7 @@ type SyncStatusResponse struct {
 	LastSyncAt string `json:"last_sync_at"`
 	LastError  string `json:"last_error,omitempty"`
 	SyncState  string `json:"sync_state"`
+	LocalOnly  bool   `json:"local_only"`
 }
 
 // SyncForce triggers an immediate sync.
@@ -53,6 +55,10 @@ func SyncStatus(client *Client) (*SyncStatusResponse, error) {
 // FormatSyncForce formats the sync force response for display.
 func FormatSyncForce(result *SyncForceResponse) string {
 	output := "✓ Sync triggered\n"
+
+	if result.LocalOnly {
+		output += "  Mode:       local-only (remote sync disabled)\n"
+	}
 
 	// Show sync state
 	switch result.SyncState {
@@ -91,6 +97,13 @@ func FormatSyncStatus(result *SyncStatusResponse) string {
 		output += "Sync loop:  ✓ running\n"
 	} else {
 		output += "Sync loop:  ✗ stopped\n"
+	}
+
+	// Mode
+	if result.LocalOnly {
+		output += "Mode:       local-only\n"
+	} else {
+		output += "Mode:       normal\n"
 	}
 
 	// Sync state

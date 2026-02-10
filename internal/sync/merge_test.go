@@ -16,7 +16,7 @@ func setupMergeTestRepo(t *testing.T) string {
 	setupThrumFiles(t, repoPath)
 
 	// Create a-sync branch and worktree
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 	if err := bm.CreateSyncBranch(); err != nil {
 		t.Fatalf("failed to create a-sync branch: %v", err)
 	}
@@ -42,7 +42,7 @@ func setupMergeTestRepo(t *testing.T) string {
 
 func TestNewMerger(t *testing.T) {
 	repoPath := "/test/repo"
-	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"))
+	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), false)
 
 	if m == nil {
 		t.Fatal("NewMerger returned nil")
@@ -60,7 +60,7 @@ func TestNewMerger(t *testing.T) {
 
 func TestMerger_Fetch_NoRemote(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
-	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"))
+	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), false)
 
 	// Should succeed with no remote
 	if err := m.Fetch(); err != nil {
@@ -92,7 +92,7 @@ func TestMerger_Fetch_WithRemote(t *testing.T) {
 	cmd.Dir = repoPath
 	_ = cmd.Run() // Best effort
 
-	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"))
+	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), false)
 
 	// Should succeed with remote
 	if err := m.Fetch(); err != nil {
@@ -176,7 +176,7 @@ func TestExtractEventID(t *testing.T) {
 }
 
 func TestMerger_MergeEvents_Deduplication(t *testing.T) {
-	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync")
+	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync", false)
 
 	local := []*Event{
 		{
@@ -228,7 +228,7 @@ func TestMerger_MergeEvents_Deduplication(t *testing.T) {
 }
 
 func TestMerger_MergeEvents_Sorting(t *testing.T) {
-	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync")
+	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync", false)
 
 	// Events in reverse chronological order
 	local := []*Event{
@@ -265,7 +265,7 @@ func TestMerger_MergeEvents_Sorting(t *testing.T) {
 }
 
 func TestParseEvents(t *testing.T) {
-	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync")
+	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync", false)
 
 	messages := []json.RawMessage{
 		json.RawMessage(`{"type":"message.create","timestamp":"2026-02-03T10:00:00Z","event_id":"evt_001","message_id":"msg_001"}`),
@@ -309,7 +309,7 @@ func TestContains(t *testing.T) {
 }
 
 func TestMerger_ParseEvents_AllEventTypes(t *testing.T) {
-	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync")
+	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync", false)
 
 	messages := []json.RawMessage{
 		json.RawMessage(`{"type":"message.create","timestamp":"2026-02-03T10:00:00Z","event_id":"evt_MC1","message_id":"msg_001"}`),
@@ -420,7 +420,7 @@ func TestExtractEventID_WithEventIDField(t *testing.T) {
 // TestMerger_MergeEvents_MessageEditPreserved tests that message.create and message.edit
 // with same message_id but different event_id are both preserved (the original bug fix).
 func TestMerger_MergeEvents_MessageEditPreserved(t *testing.T) {
-	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync")
+	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync", false)
 
 	// Local has message.create
 	local := []*Event{
@@ -480,7 +480,7 @@ func TestMerger_MergeEvents_MessageEditPreserved(t *testing.T) {
 // TestMerger_MergeEvents_SameEventIDDeduped tests that events with same event_id
 // are correctly deduplicated.
 func TestMerger_MergeEvents_SameEventIDDeduped(t *testing.T) {
-	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync")
+	m := NewMerger("/test/repo", "/test/repo/.git/thrum-sync/a-sync", false)
 
 	// Both local and remote have same event
 	local := []*Event{
@@ -524,7 +524,7 @@ func TestMerger_MergeEvents_SameEventIDDeduped(t *testing.T) {
 // TestMerger_MergeAll tests the multi-file merge orchestration.
 func TestMerger_MergeAll(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
-	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"))
+	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), false)
 
 	// Create local files in the sync worktree (not .thrum/ root)
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
@@ -584,7 +584,7 @@ func TestMerger_ListLocalMessageFiles(t *testing.T) {
 		}
 	}
 
-	m := NewMerger(tmpDir, tmpDir)
+	m := NewMerger(tmpDir, tmpDir, false)
 
 	result, err := m.listLocalMessageFiles(messagesDir)
 	if err != nil {
@@ -610,7 +610,7 @@ func TestMerger_ListLocalMessageFiles(t *testing.T) {
 // TestMerger_MergeFile tests merging a single file.
 func TestMerger_MergeFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	m := NewMerger(tmpDir, tmpDir)
+	m := NewMerger(tmpDir, tmpDir, false)
 
 	// Create local file
 	localPath := filepath.Join(tmpDir, "test.jsonl")

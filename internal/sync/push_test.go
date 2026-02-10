@@ -10,7 +10,7 @@ import (
 
 func TestNewSyncer(t *testing.T) {
 	repoPath := "/test/repo"
-	s := NewSyncer(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"))
+	s := NewSyncer(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), false)
 
 	if s == nil {
 		t.Fatal("NewSyncer returned nil")
@@ -32,7 +32,7 @@ func TestNewSyncer(t *testing.T) {
 func TestSyncer_HasChanges_NoChanges(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	s := NewSyncer(repoPath, syncDir)
+	s := NewSyncer(repoPath, syncDir, false)
 
 	// Commit the initial files in the sync worktree
 	cmd := exec.Command("git", "add", ".")
@@ -56,7 +56,7 @@ func TestSyncer_HasChanges_NoChanges(t *testing.T) {
 func TestSyncer_HasChanges_WithChanges(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	s := NewSyncer(repoPath, syncDir)
+	s := NewSyncer(repoPath, syncDir, false)
 
 	// Commit the initial state in the worktree
 	cmd := exec.Command("git", "add", ".")
@@ -89,7 +89,7 @@ func TestSyncer_HasChanges_WithChanges(t *testing.T) {
 func TestSyncer_StageChanges(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	s := NewSyncer(repoPath, syncDir)
+	s := NewSyncer(repoPath, syncDir, false)
 
 	// Commit initial state in worktree
 	cmd := exec.Command("git", "add", ".")
@@ -154,7 +154,7 @@ func TestSyncer_StageChanges(t *testing.T) {
 func TestSyncer_CommitChanges(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	s := NewSyncer(repoPath, syncDir)
+	s := NewSyncer(repoPath, syncDir, false)
 
 	// Make a change in the worktree
 	eventsPath := filepath.Join(syncDir, "events.jsonl")
@@ -189,7 +189,7 @@ func TestSyncer_CommitChanges(t *testing.T) {
 func TestSyncer_CommitChanges_NothingToCommit(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	s := NewSyncer(repoPath, syncDir)
+	s := NewSyncer(repoPath, syncDir, false)
 
 	// Commit initial state so worktree is clean
 	cmd := exec.Command("git", "add", ".")
@@ -209,7 +209,7 @@ func TestSyncer_CommitChanges_NothingToCommit(t *testing.T) {
 
 func TestSyncer_Push_NoRemote(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
-	s := NewSyncer(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"))
+	s := NewSyncer(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), false)
 
 	// Should succeed (no-op) when no remote
 	if err := s.push(); err != nil {
@@ -244,7 +244,7 @@ func TestSyncer_Push_WithRemote(t *testing.T) {
 		t.Fatalf("commit failed: %v", err)
 	}
 
-	s := NewSyncer(repoPath, syncDir)
+	s := NewSyncer(repoPath, syncDir, false)
 
 	// Push should succeed
 	if err := s.push(); err != nil {
@@ -308,7 +308,7 @@ func TestIsPushRejected(t *testing.T) {
 func TestSyncer_CommitAndPush_NoChanges(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	s := NewSyncer(repoPath, syncDir)
+	s := NewSyncer(repoPath, syncDir, false)
 
 	// Commit initial state in worktree
 	cmd := exec.Command("git", "add", ".")
@@ -328,7 +328,7 @@ func TestSyncer_CommitAndPush_NoChanges(t *testing.T) {
 func TestSyncer_CommitAndPush_WithChanges(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	s := NewSyncer(repoPath, syncDir)
+	s := NewSyncer(repoPath, syncDir, false)
 
 	// Commit initial state in worktree
 	cmd := exec.Command("git", "add", ".")
@@ -373,7 +373,7 @@ func TestSyncer_CommitAndPush_WithChanges(t *testing.T) {
 
 func TestSyncer_GetSyncBranchRef(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
-	s := NewSyncer(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"))
+	s := NewSyncer(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), false)
 
 	ref, err := s.GetSyncBranchRef()
 	if err != nil {

@@ -24,7 +24,8 @@ type DaemonStatusResult struct {
 }
 
 // DaemonStart starts the daemon in the background.
-func DaemonStart(repoPath string) error {
+// When localOnly is true, the --local flag is passed to the daemon subprocess.
+func DaemonStart(repoPath string, localOnly bool) error {
 	// Convert to absolute path so the daemon knows where to run
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
@@ -62,7 +63,11 @@ func DaemonStart(repoPath string) error {
 	}
 
 	// Build command to start daemon
-	cmd := exec.Command(executable, "daemon", "run", "--repo", repoPath) //nolint:gosec // executable from os.Executable(), repoPath validated above
+	args := []string{"daemon", "run", "--repo", repoPath}
+	if localOnly {
+		args = append(args, "--local")
+	}
+	cmd := exec.Command(executable, args...) //nolint:gosec // executable from os.Executable(), repoPath validated above
 
 	// Detach from current process - daemon runs independently
 	cmd.Stdout = nil
@@ -205,7 +210,8 @@ func DaemonStatus(repoPath string) (*DaemonStatusResult, error) {
 }
 
 // DaemonRestart restarts the daemon (stop + start).
-func DaemonRestart(repoPath string) error {
+// When localOnly is true, the restarted daemon runs in local-only mode.
+func DaemonRestart(repoPath string, localOnly bool) error {
 	// Try to stop daemon (ignore error if not running)
 	_ = DaemonStop(repoPath)
 
@@ -213,7 +219,7 @@ func DaemonRestart(repoPath string) error {
 	time.Sleep(500 * time.Millisecond)
 
 	// Start daemon
-	return DaemonStart(repoPath)
+	return DaemonStart(repoPath, localOnly)
 }
 
 // FormatDaemonStatus formats the daemon status for display.

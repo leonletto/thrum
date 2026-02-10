@@ -15,13 +15,16 @@ const (
 
 // BranchManager manages the a-sync branch for message synchronization.
 type BranchManager struct {
-	repoPath string
+	repoPath  string
+	localOnly bool // when true, skip remote operations (ls-remote, push -u)
 }
 
 // NewBranchManager creates a new BranchManager for the given repository path.
-func NewBranchManager(repoPath string) *BranchManager {
+// When localOnly is true, EnsureSyncBranch skips remote operations.
+func NewBranchManager(repoPath string, localOnly bool) *BranchManager {
 	return &BranchManager{
-		repoPath: repoPath,
+		repoPath:  repoPath,
+		localOnly: localOnly,
 	}
 }
 
@@ -44,10 +47,15 @@ func (b *BranchManager) CreateSyncBranch() error {
 }
 
 // EnsureSyncBranch ensures the branch exists locally and remotely.
+// When localOnly is true, only the local branch is created; remote operations are skipped.
 func (b *BranchManager) EnsureSyncBranch() error {
 	// First, ensure the branch exists locally
 	if err := b.CreateSyncBranch(); err != nil {
 		return fmt.Errorf("creating sync branch: %w", err)
+	}
+
+	if b.localOnly {
+		return nil
 	}
 
 	// Check if remote exists

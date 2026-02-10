@@ -19,10 +19,10 @@ func TestSyncLoop_StartStop(t *testing.T) {
 	tmpDir := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, tmpDir)
 
-	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"))
+	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
 
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 100*time.Millisecond)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 100*time.Millisecond, false)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
@@ -50,11 +50,11 @@ func TestSyncLoop_ManualTrigger(t *testing.T) {
 	tmpDir := setupMergeTestRepo(t)
 	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
 
-	syncer := NewSyncer(tmpDir, syncDir)
+	syncer := NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
 
 	// Use a long interval so manual trigger is the only way it runs
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, false)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
@@ -88,10 +88,10 @@ func TestSyncLoop_Status(t *testing.T) {
 	tmpDir := setupMergeTestRepo(t)
 	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
 
-	syncer := NewSyncer(tmpDir, syncDir)
+	syncer := NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
 
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
 
 	// Check status before start
 	status := loop.GetStatus()
@@ -130,10 +130,10 @@ func TestSyncLoop_NotifyChannel(t *testing.T) {
 	tmpDir := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, tmpDir)
 
-	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"))
+	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
 
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 100*time.Millisecond)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 100*time.Millisecond, false)
 
 	// Get notify channel before starting
 	notifyCh := loop.NotifyChannel()
@@ -154,11 +154,11 @@ func TestSyncLoop_DefaultInterval(t *testing.T) {
 	tmpDir := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, tmpDir)
 
-	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"))
+	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
 
 	// Pass 0 interval to get default
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 0)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 0, false)
 
 	if loop.interval != 60*time.Second {
 		t.Errorf("Expected default interval of 60s, got %v", loop.interval)
@@ -302,9 +302,9 @@ func TestLoop_SetError(t *testing.T) {
 	tmpDir := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, tmpDir)
 
-	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"))
+	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 1*time.Second)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
 
 	// Set an error
 	testErr := fmt.Errorf("test error")
@@ -369,9 +369,9 @@ func TestUpdateProjection(t *testing.T) {
 	tmpDir := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, tmpDir)
 
-	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"))
+	syncer := NewSyncer(tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 1*time.Second)
+	loop := NewSyncLoop(syncer, projector, tmpDir, filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync"), filepath.Join(tmpDir, ".thrum"), 1*time.Second, false)
 
 	// Write some test events to JSONL
 	jsonlPath := filepath.Join(tmpDir, ".thrum", "messages.jsonl")

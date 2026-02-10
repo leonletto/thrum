@@ -156,7 +156,7 @@ func migrationNeeded(repoPath, thrumDir string) (bool, []string) {
 // Delegates entirely to BranchManager which handles health checks, idempotency,
 // and recreation of broken worktrees.
 func ensureSyncWorktree(repoPath, syncDir string) error {
-	bm := sync.NewBranchManager(repoPath)
+	bm := sync.NewBranchManager(repoPath, false)
 
 	if err := bm.CreateSyncBranch(); err != nil {
 		return fmt.Errorf("create sync branch: %w", err)

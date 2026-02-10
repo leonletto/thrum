@@ -469,16 +469,21 @@ func extractAgentName(agentID string) string {
 }
 
 func daemonCmd() *cobra.Command {
+	var flagLocal bool
+
 	cmd := &cobra.Command{
 		Use:   "daemon",
 		Short: "Manage the Thrum daemon",
 	}
 
+	cmd.PersistentFlags().BoolVar(&flagLocal, "local", false,
+		"Local-only mode: skip git push/fetch in sync loop")
+
 	cmd.AddCommand(&cobra.Command{
 		Use:   "start",
 		Short: "Start the daemon in the background",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cli.DaemonStart(flagRepo); err != nil {
+			if err := cli.DaemonStart(flagRepo, flagLocal); err != nil {
 				return err
 			}
 
@@ -537,7 +542,7 @@ func daemonCmd() *cobra.Command {
 		Use:   "restart",
 		Short: "Restart the daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cli.DaemonRestart(flagRepo); err != nil {
+			if err := cli.DaemonRestart(flagRepo, flagLocal); err != nil {
 				return err
 			}
 
@@ -549,19 +554,18 @@ func daemonCmd() *cobra.Command {
 		},
 	})
 
-	cmd.AddCommand(daemonRunCmd())
+	cmd.AddCommand(daemonRunCmd(&flagLocal))
 
 	return cmd
 }
 
-func daemonRunCmd() *cobra.Command {
+func daemonRunCmd(flagLocal *bool) *cobra.Command {
 	return &cobra.Command{
 		Use:    "run",
 		Short:  "Run the daemon in the foreground (internal use)",
 		Hidden: true, // Hidden from help - used internally by daemon start
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Import daemon package only when needed
-			return runDaemon(flagRepo)
+			return runDaemon(flagRepo, *flagLocal)
 		},
 	}
 }
@@ -2330,7 +2334,7 @@ func resolveLocalMentionRole() string {
 }
 
 // runDaemon runs the daemon server in the foreground.
-func runDaemon(repoPath string) error {
+func runDaemon(repoPath string, flagLocal bool) error {
 	// Resolve to absolute path
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
@@ -2389,12 +2393,31 @@ func runDaemon(repoPath string) error {
 		fmt.Fprintf(os.Stderr, "Warning: sync worktree not found at %s (sync disabled)\n", syncDir)
 	}
 
+	// Resolve local-only mode: CLI flag > env var > config file > default
+	localOnly := flagLocal
+	if !localOnly {
+		if env := os.Getenv("THRUM_LOCAL"); env == "1" || env == "true" {
+			localOnly = true
+		}
+	}
+	if !localOnly {
+		thrumCfg, cfgErr := config.LoadThrumConfig(thrumDir)
+		if cfgErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to read config.json: %v\n", cfgErr)
+		} else if thrumCfg.Daemon.LocalOnly {
+			localOnly = true
+		}
+	}
+	if localOnly {
+		fmt.Fprintf(os.Stderr, "  Mode:        local-only (remote sync disabled)\n")
+	}
+
 	// Create sync loop for periodic git sync
 	ctx := context.Background()
 	var syncLoop *thrumSync.SyncLoop
 	if _, err := os.Stat(syncDir); err == nil {
-		syncer := thrumSync.NewSyncer(absPath, syncDir)
-		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, 60*time.Second)
+		syncer := thrumSync.NewSyncer(absPath, syncDir, localOnly)
+		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, 60*time.Second, localOnly)
 		if err := syncLoop.Start(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to start sync loop: %v\n", err)
 		} else {

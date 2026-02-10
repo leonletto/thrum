@@ -14,15 +14,18 @@ import (
 
 // Merger handles fetching and merging JSONL files from the sync branch.
 type Merger struct {
-	repoPath string
-	syncDir  string // Worktree directory containing JSONL files
+	repoPath  string
+	syncDir   string // Worktree directory containing JSONL files
+	localOnly bool   // when true, skip git fetch operations
 }
 
 // NewMerger creates a new Merger for the given repository path.
-func NewMerger(repoPath string, syncDir string) *Merger {
+// When localOnly is true, Fetch() is a no-op.
+func NewMerger(repoPath string, syncDir string, localOnly bool) *Merger {
 	return &Merger{
-		repoPath: repoPath,
-		syncDir:  syncDir,
+		repoPath:  repoPath,
+		syncDir:   syncDir,
+		localOnly: localOnly,
 	}
 }
 
@@ -45,6 +48,10 @@ type Event struct {
 
 // Fetch fetches the remote a-sync branch.
 func (m *Merger) Fetch() error {
+	if m.localOnly {
+		return nil
+	}
+
 	// Check if remote exists
 	cmd := exec.Command("git", "remote")
 	cmd.Dir = m.syncDir

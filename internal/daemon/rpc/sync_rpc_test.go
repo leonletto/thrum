@@ -19,9 +19,9 @@ func TestSyncForceHandler_Handle(t *testing.T) {
 	setupThrumFiles(t, tmpDir)
 	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
 
-	syncer := sync.NewSyncer(tmpDir, syncDir)
+	syncer := sync.NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second)
+	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, false)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
@@ -79,9 +79,9 @@ func TestSyncStatusHandler_Handle(t *testing.T) {
 	setupThrumFiles(t, tmpDir)
 	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
 
-	syncer := sync.NewSyncer(tmpDir, syncDir)
+	syncer := sync.NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second)
+	loop := sync.NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, false)
 
 	ctx := context.Background()
 	handler := NewSyncStatusHandler(loop)
@@ -247,7 +247,7 @@ func setupThrumFiles(t *testing.T, repoPath string) {
 	}
 
 	// Create a-sync branch and worktree
-	bm := sync.NewBranchManager(repoPath)
+	bm := sync.NewBranchManager(repoPath, false)
 	if err := bm.CreateSyncBranch(); err != nil {
 		t.Fatalf("failed to create a-sync branch: %v", err)
 	}

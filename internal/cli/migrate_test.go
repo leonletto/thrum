@@ -512,7 +512,7 @@ func TestMigrateSyncWorktreeLocation_Idempotent(t *testing.T) {
 // newTestBranchManager creates a BranchManager for testing, ensuring a-sync branch exists.
 func newTestBranchManager(t *testing.T, repoPath string) *syncpkg.BranchManager {
 	t.Helper()
-	bm := syncpkg.NewBranchManager(repoPath)
+	bm := syncpkg.NewBranchManager(repoPath, false)
 	if err := bm.CreateSyncBranch(); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}

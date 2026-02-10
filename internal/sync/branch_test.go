@@ -117,7 +117,7 @@ func getCurrentBranch(t *testing.T, repoPath string) string {
 
 func TestNewBranchManager(t *testing.T) {
 	repoPath := "/test/repo"
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	if bm == nil {
 		t.Fatal("NewBranchManager returned nil")
@@ -132,7 +132,7 @@ func TestBranchManager_CreateSyncBranch_WithExistingCommits(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, repoPath)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Save the original branch name
 	originalBranch := getCurrentBranch(t, repoPath)
@@ -161,7 +161,7 @@ func TestBranchManager_CreateSyncBranch_AlreadyExists(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, repoPath)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch first time
 	if err := bm.CreateSyncBranch(); err != nil {
@@ -183,7 +183,7 @@ func TestBranchManager_CreateSyncBranch_NoCommits(t *testing.T) {
 	repoPath := setupTestRepo(t)
 	setupThrumFiles(t, repoPath)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Get initial git status to verify working tree is not modified
 	cmd := exec.Command("git", "status", "--porcelain")
@@ -231,7 +231,7 @@ func TestBranchManager_CreateSyncBranch_NoCommits(t *testing.T) {
 func TestBranchManager_CreateSyncBranch_NotGitRepo(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	bm := NewBranchManager(tmpDir)
+	bm := NewBranchManager(tmpDir, false)
 
 	// Should fail because it's not a git repo
 	err := bm.CreateSyncBranch()
@@ -248,7 +248,7 @@ func TestBranchManager_GetSyncBranchRef(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, repoPath)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch
 	if err := bm.CreateSyncBranch(); err != nil {
@@ -274,7 +274,7 @@ func TestBranchManager_GetSyncBranchRef(t *testing.T) {
 func TestBranchManager_GetSyncBranchRef_NotExists(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Try to get ref of non-existent branch
 	_, err := bm.GetSyncBranchRef()
@@ -287,7 +287,7 @@ func TestBranchManager_EnsureSyncBranch_LocalOnly(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, repoPath)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Ensure sync branch (no remote configured)
 	if err := bm.EnsureSyncBranch(); err != nil {
@@ -325,7 +325,7 @@ func TestBranchManager_EnsureSyncBranch_WithRemote(t *testing.T) {
 	cmd.Dir = repoPath
 	_ = cmd.Run() // Best effort, might fail if branch isn't called master
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Ensure sync branch (should push to remote)
 	if err := bm.EnsureSyncBranch(); err != nil {
@@ -344,7 +344,7 @@ func TestBranchManager_EnsureSyncBranch_WithRemote(t *testing.T) {
 func TestBranchManager_checkGitRepo(t *testing.T) {
 	t.Run("valid git repo", func(t *testing.T) {
 		repoPath := setupTestRepo(t)
-		bm := NewBranchManager(repoPath)
+		bm := NewBranchManager(repoPath, false)
 
 		if err := bm.checkGitRepo(); err != nil {
 			t.Errorf("checkGitRepo failed for valid repo: %v", err)
@@ -353,7 +353,7 @@ func TestBranchManager_checkGitRepo(t *testing.T) {
 
 	t.Run("not a git repo", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		bm := NewBranchManager(tmpDir)
+		bm := NewBranchManager(tmpDir, false)
 
 		err := bm.checkGitRepo()
 		if err == nil {
@@ -364,7 +364,7 @@ func TestBranchManager_checkGitRepo(t *testing.T) {
 
 func TestBranchManager_branchExists(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	t.Run("existing branch", func(t *testing.T) {
 		// Get the current branch name (HEAD)
@@ -391,7 +391,7 @@ func TestBranchManager_CreateSyncBranch_AlwaysOrphan(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, repoPath)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch
 	if err := bm.CreateSyncBranch(); err != nil {
@@ -430,7 +430,7 @@ func TestBranchManager_CreateSyncWorktree(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, repoPath)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch first
 	if err := bm.CreateSyncBranch(); err != nil {
@@ -476,7 +476,7 @@ func TestBranchManager_CreateSyncWorktree_SparseCheckout(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, repoPath)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	if err := bm.CreateSyncBranch(); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
@@ -512,7 +512,7 @@ func TestBranchManager_CreateSyncWorktree_NoSparseCheckoutLeak(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, repoPath)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	if err := bm.CreateSyncBranch(); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
@@ -540,7 +540,7 @@ func TestBranchManager_CreateSyncWorktree_Idempotent(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, repoPath)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch
 	if err := bm.CreateSyncBranch(); err != nil {
@@ -577,7 +577,7 @@ func TestBranchManager_CreateSyncWorktree_RecoverBroken(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, repoPath)
 
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch
 	if err := bm.CreateSyncBranch(); err != nil {
@@ -627,7 +627,7 @@ func TestBranchManager_CreateSyncWorktree_RecoverBroken(t *testing.T) {
 
 func TestBranchManager_removeSyncWorktree_AcceptsBothPaths(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
-	bm := NewBranchManager(repoPath)
+	bm := NewBranchManager(repoPath, false)
 
 	// Test that removeSyncWorktree doesn't panic for .git paths
 	gitPath := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
@@ -642,7 +642,7 @@ func TestBranchManager_removeSyncWorktree_AcceptsBothPaths(t *testing.T) {
 }
 
 func TestBranchManager_isWorktreeRegistered(t *testing.T) {
-	bm := NewBranchManager("/tmp/test")
+	bm := NewBranchManager("/tmp/test", false)
 
 	porcelain := "worktree /tmp/main\nHEAD abc123\nbranch refs/heads/main\n\nworktree /tmp/sync\nHEAD def456\nbranch refs/heads/a-sync\n"
 

@@ -11,17 +11,20 @@ import (
 type Syncer struct {
 	repoPath      string
 	syncDir       string // sync worktree directory (.git/thrum-sync/a-sync)
+	localOnly     bool   // when true, skip all git push/fetch operations
 	branchManager *BranchManager
 	merger        *Merger
 }
 
 // NewSyncer creates a new Syncer for the given repository path.
-func NewSyncer(repoPath string, syncDir string) *Syncer {
+// When localOnly is true, all remote git operations (push/fetch) are skipped.
+func NewSyncer(repoPath string, syncDir string, localOnly bool) *Syncer {
 	return &Syncer{
 		repoPath:      repoPath,
 		syncDir:       syncDir,
-		branchManager: NewBranchManager(repoPath),
-		merger:        NewMerger(repoPath, syncDir),
+		localOnly:     localOnly,
+		branchManager: NewBranchManager(repoPath, localOnly),
+		merger:        NewMerger(repoPath, syncDir, localOnly),
 	}
 }
 
@@ -138,6 +141,10 @@ func (s *Syncer) commitChanges(message string) error {
 
 // push pushes the a-sync branch to origin.
 func (s *Syncer) push() error {
+	if s.localOnly {
+		return nil
+	}
+
 	// Check if remote exists
 	cmd := exec.Command("git", "remote")
 	cmd.Dir = s.syncDir

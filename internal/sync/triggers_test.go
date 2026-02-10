@@ -11,9 +11,9 @@ func TestTriggers_SyncOnWrite(t *testing.T) {
 	tmpDir := setupMergeTestRepo(t)
 	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
 
-	syncer := NewSyncer(tmpDir, syncDir)
+	syncer := NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, false)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {
@@ -46,9 +46,9 @@ func TestTriggers_SyncManual(t *testing.T) {
 	tmpDir := setupMergeTestRepo(t)
 	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
 
-	syncer := NewSyncer(tmpDir, syncDir)
+	syncer := NewSyncer(tmpDir, syncDir, false)
 	projector := setupTestProjector(t, tmpDir)
-	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, false)
 
 	ctx := context.Background()
 	if err := loop.Start(ctx); err != nil {

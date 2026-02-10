@@ -21,6 +21,7 @@ type SyncLoop struct {
 	repoPath     string
 	syncDir      string // Path to sync worktree (.git/thrum-sync/a-sync)
 	thrumDir     string // Path to .thrum/ directory (used for lock path)
+	localOnly    bool   // when true, skip all remote git operations
 	stopCh       chan struct{}
 	stoppedCh    chan struct{}
 	notifyCh     chan []string // Channel to notify of new event IDs
@@ -37,8 +38,9 @@ type SyncLoop struct {
 // - repoPath: path to the git repository
 // - syncDir: path to sync worktree (.git/thrum-sync/a-sync)
 // - thrumDir: path to .thrum/ directory (used for lock path)
-// - interval: how often to sync (default: 60 seconds).
-func NewSyncLoop(syncer *Syncer, projector *projection.Projector, repoPath string, syncDir string, thrumDir string, interval time.Duration) *SyncLoop {
+// - interval: how often to sync (default: 60 seconds)
+// - localOnly: when true, skip all remote git operations (push/fetch).
+func NewSyncLoop(syncer *Syncer, projector *projection.Projector, repoPath string, syncDir string, thrumDir string, interval time.Duration, localOnly bool) *SyncLoop {
 	if interval == 0 {
 		interval = 60 * time.Second
 	}
@@ -50,6 +52,7 @@ func NewSyncLoop(syncer *Syncer, projector *projection.Projector, repoPath strin
 		repoPath:     repoPath,
 		syncDir:      syncDir,
 		thrumDir:     thrumDir,
+		localOnly:    localOnly,
 		stopCh:       make(chan struct{}),
 		stoppedCh:    make(chan struct{}),
 		notifyCh:     make(chan []string, 100), // Buffered for async notifications
@@ -113,6 +116,11 @@ func (l *SyncLoop) NotifyChannel() <-chan []string {
 	return l.notifyCh
 }
 
+// IsLocalOnly returns whether the sync loop is in local-only mode.
+func (l *SyncLoop) IsLocalOnly() bool {
+	return l.localOnly
+}
+
 // GetStatus returns the current sync status.
 func (l *SyncLoop) GetStatus() SyncStatus {
 	l.mu.Lock()
@@ -120,6 +128,7 @@ func (l *SyncLoop) GetStatus() SyncStatus {
 
 	status := SyncStatus{
 		Running:    l.running,
+		LocalOnly:  l.localOnly,
 		LastSyncAt: l.lastSyncAt,
 	}
 
@@ -133,6 +142,7 @@ func (l *SyncLoop) GetStatus() SyncStatus {
 // SyncStatus contains the current status of the sync loop.
 type SyncStatus struct {
 	Running    bool      `json:"running"`
+	LocalOnly  bool      `json:"local_only"`
 	LastSyncAt time.Time `json:"last_sync_at"`
 	LastError  string    `json:"last_error,omitempty"`
 }

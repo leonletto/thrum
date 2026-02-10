@@ -180,7 +180,7 @@ func updateGitignore(repoPath string) error {
 
 // initASyncBranch creates the a-sync branch and worktree for message synchronization.
 func initASyncBranch(repoPath string) error {
-	bm := sync.NewBranchManager(repoPath)
+	bm := sync.NewBranchManager(repoPath, false)
 
 	// Create orphan a-sync branch (safe plumbing — no working tree touch)
 	if err := bm.CreateSyncBranch(); err != nil {
