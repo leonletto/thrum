@@ -26,8 +26,8 @@ type SyncStatusResponse struct {
 	Running    bool   `json:"running"`      // Whether sync loop is running
 	LastSyncAt string `json:"last_sync_at"` // ISO 8601 timestamp of last sync
 	LastError  string `json:"last_error,omitempty"`
-	SyncState  string `json:"sync_state"`  // "running", "idle", "error"
-	LocalOnly  bool   `json:"local_only"`  // Whether running in local-only mode
+	SyncState  string `json:"sync_state"` // "running", "idle", "error"
+	LocalOnly  bool   `json:"local_only"` // Whether running in local-only mode
 }
 
 // SyncForceHandler handles forced sync requests.
