@@ -14,6 +14,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
+	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
@@ -2052,6 +2053,7 @@ func contextCmd() *cobra.Command {
 	cmd.AddCommand(contextClearCmd())
 	cmd.AddCommand(contextSyncCmd())
 	cmd.AddCommand(contextUpdateCmd())
+	cmd.AddCommand(contextPreambleCmd())
 
 	return cmd
 }
@@ -2168,6 +2170,8 @@ Examples:
 
 func contextShowCmd() *cobra.Command {
 	var flagAgent string
+	var flagRaw bool
+	var flagNoPreamble bool
 
 	cmd := &cobra.Command{
 		Use:   "show",
@@ -2176,7 +2180,9 @@ func contextShowCmd() *cobra.Command {
 
 Examples:
   thrum context show
-  thrum context show --agent coordinator`,
+  thrum context show --agent coordinator
+  thrum context show --raw
+  thrum context show --no-preamble`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			agentID, err := resolveLocalAgentID()
 			if err != nil && flagAgent == "" {
@@ -2192,25 +2198,63 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
+			includePreamble := !flagNoPreamble
 			var resp rpc.ContextShowResponse
 			if err := client.Call("context.show", rpc.ContextShowRequest{
-				AgentName: agentID,
+				AgentName:       agentID,
+				IncludePreamble: &includePreamble,
 			}, &resp); err != nil {
 				return err
 			}
 
-			if !resp.HasContext {
+			if !resp.HasContext && !resp.HasPreamble {
 				fmt.Printf("No context saved for %s\n", resp.AgentName)
 				return nil
 			}
 
-			fmt.Printf("# Context for %s (%d bytes, updated %s)\n\n", resp.AgentName, resp.Size, resp.UpdatedAt)
-			fmt.Print(string(resp.Content))
+			if flagRaw {
+				// Raw mode: no header, file boundary markers
+				if resp.HasPreamble {
+					fmt.Printf("<!-- preamble: .thrum/context/%s_preamble.md -->\n", resp.AgentName)
+					fmt.Print(string(resp.Preamble))
+					if len(resp.Preamble) > 0 && resp.Preamble[len(resp.Preamble)-1] != '\n' {
+						fmt.Println()
+					}
+					fmt.Println("<!-- end preamble -->")
+					if resp.HasContext {
+						fmt.Println()
+					}
+				}
+				if resp.HasContext {
+					fmt.Print(string(resp.Content))
+				}
+			} else {
+				// Normal mode: header + seamless content
+				if resp.HasContext {
+					fmt.Printf("# Context for %s (%d bytes, updated %s)\n\n", resp.AgentName, resp.Size, resp.UpdatedAt)
+				} else {
+					fmt.Printf("# Context for %s\n\n", resp.AgentName)
+				}
+				if resp.HasPreamble {
+					fmt.Print(string(resp.Preamble))
+					if len(resp.Preamble) > 0 && resp.Preamble[len(resp.Preamble)-1] != '\n' {
+						fmt.Println()
+					}
+					if resp.HasContext {
+						fmt.Println()
+					}
+				}
+				if resp.HasContext {
+					fmt.Print(string(resp.Content))
+				}
+			}
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&flagAgent, "agent", "", "Override agent name")
+	cmd.Flags().BoolVar(&flagRaw, "raw", false, "Raw output with file boundary markers, no header")
+	cmd.Flags().BoolVar(&flagNoPreamble, "no-preamble", false, "Exclude preamble from output")
 
 	return cmd
 }
@@ -2254,6 +2298,94 @@ Examples:
 	}
 
 	cmd.Flags().StringVar(&flagAgent, "agent", "", "Override agent name")
+
+	return cmd
+}
+
+func contextPreambleCmd() *cobra.Command {
+	var flagAgent string
+	var flagInit bool
+	var flagFile string
+
+	cmd := &cobra.Command{
+		Use:   "preamble",
+		Short: "Manage agent preamble",
+		Long: `Show or manage the preamble for the current agent (or --agent NAME).
+
+The preamble is a stable, user-editable header prepended when showing context.
+It persists across context save operations.
+
+Examples:
+  thrum context preamble              Show current preamble
+  thrum context preamble --init       Create/reset to default preamble
+  thrum context preamble --file PATH  Set preamble from file
+  thrum context preamble --agent NAME Override agent name`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentID, err := resolveLocalAgentID()
+			if err != nil && flagAgent == "" {
+				return fmt.Errorf("failed to resolve agent identity: %w", err)
+			}
+			if flagAgent != "" {
+				agentID = flagAgent
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			if flagInit {
+				// Reset to default preamble
+				var resp rpc.PreambleSaveResponse
+				if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
+					AgentName: agentID,
+					Content:   agentcontext.DefaultPreamble(),
+				}, &resp); err != nil {
+					return err
+				}
+				fmt.Println(resp.Message)
+				return nil
+			}
+
+			if flagFile != "" {
+				// Set preamble from file
+				data, err := os.ReadFile(flagFile) //nolint:gosec // G304 - user-specified file path
+				if err != nil {
+					return fmt.Errorf("read preamble file: %w", err)
+				}
+				var resp rpc.PreambleSaveResponse
+				if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
+					AgentName: agentID,
+					Content:   data,
+				}, &resp); err != nil {
+					return err
+				}
+				fmt.Println(resp.Message)
+				return nil
+			}
+
+			// Show current preamble
+			var resp rpc.PreambleShowResponse
+			if err := client.Call("context.preamble.show", rpc.PreambleShowRequest{
+				AgentName: agentID,
+			}, &resp); err != nil {
+				return err
+			}
+
+			if !resp.HasPreamble {
+				fmt.Printf("No preamble for %s (use --init to create default)\n", resp.AgentName)
+				return nil
+			}
+
+			fmt.Print(string(resp.Content))
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&flagAgent, "agent", "", "Override agent name")
+	cmd.Flags().BoolVar(&flagInit, "init", false, "Create or reset to default preamble")
+	cmd.Flags().StringVar(&flagFile, "file", "", "Set preamble from file")
 
 	return cmd
 }
