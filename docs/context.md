@@ -73,6 +73,177 @@ when showing context via `thrum context show`, providing a persistent reference
 **Wait for messages:** `thrum wait --all --after -30s --timeout 5m`
 ```
 
+### Suggestions & Examples
+
+The preamble acts as a persistent system prompt that survives session resets. Custom preambles can encode project conventions, role-specific instructions, team rosters, or boot sequences.
+
+**Use cases:**
+
+- **Project-specific instructions** — Encode coding standards, preferred tools, repo structure hints
+- **Role-based preambles** — Different instructions for coordinator vs implementer vs reviewer agents
+- **Team coordination** — Team roster, communication protocols, escalation paths
+- **Session recovery** — Boot sequence that tells the agent what to check on startup
+
+#### Example 1: Project-Specific Preamble
+
+```markdown
+## Project Conventions
+
+**Architecture:** Hexagonal (ports/adapters)
+**Preferred tools:** `rg` for search, `fd` for files, `jq` for JSON
+**Repo structure:**
+- `cmd/` — CLI entrypoints
+- `internal/` — Private application code
+- `pkg/` — Public libraries
+
+**Testing:** Always run `make test` before committing. Use table-driven tests.
+**Commits:** Follow Conventional Commits (feat:, fix:, docs:, etc.)
+
+## Thrum Quick Reference
+
+**Check messages:** `thrum inbox --unread`
+**Send message:** `thrum send "message" --to @role`
+**Who's online:** `thrum agent list --context`
+```
+
+**Setup:**
+
+```bash
+# Save to file
+cat > project-preamble.md <<'EOF'
+## Project Conventions
+...
+EOF
+
+# Install for all agents in this repo
+thrum context preamble --file project-preamble.md
+```
+
+#### Example 2: Role-Based Preamble (Coordinator)
+
+```markdown
+## Coordinator Boot Sequence
+
+On session start:
+1. `thrum inbox --unread` — Check pending messages
+2. `thrum agent list --context` — See who's online
+3. `thrum overview` — Get full team status
+4. Review context from last session
+
+**Responsibilities:**
+- Triage incoming work
+- Assign tasks to implementers and reviewers
+- Resolve blockers
+- Escalate critical issues to @lead
+
+**Communication:**
+- Daily status to @lead at 9am, 5pm
+- Broadcast critical blockers immediately
+- Reply to all agent messages within 15min
+
+## Team Roster
+
+- @lead (Alice) — Overall direction
+- @implementer (Bob, Carol) — Feature work
+- @reviewer (Dave) — Code review, security
+- @tester (Eve) — Integration tests
+
+## Thrum Quick Reference
+
+**Send to team:** `thrum send "message" --to @implementer`
+**Broadcast:** `thrum send "urgent message" --to @all --priority high`
+**Wait for replies:** `thrum wait --mention @coordinator --timeout 5m`
+```
+
+**Setup (coordinator-specific):**
+
+```bash
+# Coordinator gets this preamble
+export THRUM_NAME=coordinator
+thrum context preamble --file coordinator-preamble.md
+
+# Implementers get a different preamble
+export THRUM_NAME=implementer
+thrum context preamble --file implementer-preamble.md
+```
+
+#### Example 3: Session Recovery Preamble
+
+```markdown
+## Session Recovery Checklist
+
+Run these commands at the start of every session:
+
+```bash
+# 1. Check for messages
+thrum inbox --unread
+
+# 2. See who's online
+thrum agent list --context
+
+# 3. Review last session's context
+thrum context show
+
+# 4. Check git status
+git status
+
+# 5. See recent commits
+git log --oneline -5
+
+# 6. Check for failing tests
+make test || echo "Tests failing - investigate"
+```
+
+If continuing work:
+- Reply to any pending messages first
+- Update intent: `thrum agent set-intent "..."`
+- Send status to @coordinator
+
+If starting new work:
+- Check backlog: `bd list --status open`
+- Coordinate with @coordinator before claiming
+- Set intent when starting
+
+## Thrum Quick Reference
+
+**Update intent:** `thrum agent set-intent "Working on auth module"`
+**Save context:** `thrum context save --file notes.md`
+**Heartbeat:** `thrum agent heartbeat`
+```
+
+#### Version-Controlled Preamble Templates
+
+Store preamble templates in the repo and load them dynamically:
+
+```bash
+# Directory structure
+.thrum-templates/
+├── preamble-coordinator.md
+├── preamble-implementer.md
+└── preamble-reviewer.md
+
+# Load from template
+thrum context preamble --file .thrum-templates/preamble-coordinator.md
+```
+
+**Tip:** Add preamble setup to onboarding scripts:
+
+```bash
+#!/bin/bash
+# scripts/setup-agent.sh
+
+ROLE="${1:-implementer}"
+PREAMBLE_FILE=".thrum-templates/preamble-${ROLE}.md"
+
+if [[ ! -f "$PREAMBLE_FILE" ]]; then
+  echo "No template for role: $ROLE"
+  exit 1
+fi
+
+thrum context preamble --file "$PREAMBLE_FILE"
+echo "Preamble installed for $ROLE"
+```
+
 ## CLI Commands
 
 ### thrum context save

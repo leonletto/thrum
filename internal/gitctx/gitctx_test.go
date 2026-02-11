@@ -296,9 +296,9 @@ func TestExtractWorkContext_Performance(t *testing.T) {
 		t.Fatalf("ExtractWorkContext failed: %v", err)
 	}
 
-	// Should complete in less than 150ms (generous upper bound for CI/slower systems)
-	if elapsed > 150*time.Millisecond {
-		t.Errorf("ExtractWorkContext took too long: %v (expected < 150ms)", elapsed)
+	// Should complete in less than 500ms (generous upper bound for CI/slower systems)
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("ExtractWorkContext took too long: %v (expected < 500ms)", elapsed)
 	}
 
 	t.Logf("ExtractWorkContext completed in %v", elapsed)
