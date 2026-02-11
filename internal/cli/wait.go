@@ -9,11 +9,11 @@ import (
 // WaitOptions contains options for waiting for messages.
 type WaitOptions struct {
 	Timeout       time.Duration
-	Scope         string // Format: "type:value"
-	Mention       string // Format: "@role"
-	All           bool   // Subscribe to all messages (broadcasts + directed)
+	Scope         string    // Format: "type:value"
+	Mention       string    // Format: "@role"
+	All           bool      // Subscribe to all messages (broadcasts + directed)
 	After         time.Time // Only return messages created after this time (zero = no filter)
-	CallerAgentID string // Caller's resolved agent ID (for worktree identity)
+	CallerAgentID string    // Caller's resolved agent ID (for worktree identity)
 }
 
 // Wait blocks until a matching message arrives or timeout occurs.
