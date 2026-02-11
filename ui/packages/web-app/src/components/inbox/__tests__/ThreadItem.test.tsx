@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThreadItem } from '../ThreadItem';
 import * as hooks from '@thrum/shared-logic';
@@ -124,10 +123,7 @@ describe('ThreadItem', () => {
       expect(screen.getByText(/This is a preview/)).toBeInTheDocument();
     });
 
-    it.skip('should call onToggle when clicked', async () => {
-      // Skip: Test environment click handling issue
-      // Functionality verified by integration tests
-      const user = userEvent.setup({ delay: null });
+    it('should call onToggle when clicked', () => {
       renderWithProvider(
         <ThreadItem
           thread={mockThread}
@@ -138,11 +134,9 @@ describe('ThreadItem', () => {
         />
       );
 
-      // Find the header by its role="button" attribute
-      const buttons = screen.getAllByRole('button');
-      // The CardHeader is the second button (first is the chevron icon button)
-      const headerButton = buttons[1];
-      await user.click(headerButton);
+      // Click the thread header (CardHeader with role="button")
+      const header = screen.getByRole('button', { name: /Thread: Test Thread/ });
+      fireEvent.click(header);
 
       expect(mockOnToggle).toHaveBeenCalledTimes(1);
     });
