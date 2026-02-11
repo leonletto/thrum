@@ -225,6 +225,17 @@ identity.
 - **Comprehensive tests**: Unit tests for `internal/context` (12 cases) and RPC
   handler tests (6 cases), all passing with `-race`.
 
+### Fixed
+
+- **Remove vestigial subscriptions from `thrum wait`** (thrum-4ski/thrum-nm2i):
+  `thrum wait` previously called subscribe/unsubscribe RPCs that were never used
+  for message delivery — it polled `message.list` directly. These dead
+  subscribe calls caused identity resolution failures in multi-agent worktrees
+  (daemon auto-selection fails when 4+ identities exist). Removed all
+  subscription calls and moved `mention_role` filtering into the `message.list`
+  poll params where it actually takes effect. Tests simplified to reflect the
+  polling-only architecture.
+
 ## [0.2.0] - 2026-02-10
 
 ### Added
