@@ -15,10 +15,22 @@ type TestDaemonConfig struct {
 	WSPortFile string
 }
 
+// TestDaemon wraps a Lifecycle with a ready channel for deterministic testing.
+type TestDaemon struct {
+	*Lifecycle
+	ready chan struct{}
+}
+
+// Ready returns a channel that will be closed when the daemon is ready to accept connections.
+func (td *TestDaemon) Ready() <-chan struct{} {
+	return td.ready
+}
+
 // StartTestDaemon creates and starts a lifecycle in a goroutine,
 // registering t.Cleanup to force-kill on test exit.
 // This prevents test orphan processes when tests timeout or panic.
-func StartTestDaemon(t *testing.T, cfg *TestDaemonConfig) *Lifecycle {
+// Returns a TestDaemon with a Ready() channel for deterministic synchronization.
+func StartTestDaemon(t *testing.T, cfg *TestDaemonConfig) *TestDaemon {
 	t.Helper()
 
 	tmpDir := t.TempDir()
@@ -44,6 +56,7 @@ func StartTestDaemon(t *testing.T, cfg *TestDaemonConfig) *Lifecycle {
 	}
 
 	l := NewLifecycle(server, pidPath, wsServer, wsPortFile)
+	ready := make(chan struct{})
 
 	// Start lifecycle in goroutine
 	errCh := make(chan error, 1)
@@ -51,14 +64,22 @@ func StartTestDaemon(t *testing.T, cfg *TestDaemonConfig) *Lifecycle {
 		errCh <- l.Run(context.Background())
 	}()
 
-	// Wait for socket to appear (with timeout)
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(socketPath); err == nil {
-			break
+	// Wait for socket to appear (with timeout) and signal ready
+	go func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(socketPath); err == nil {
+				close(ready)
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		// If we reach here, startup failed - ready channel will never close
+		// and test will fail when it tries to use the daemon
+	}()
+
+	// Wait for ready signal before continuing
+	<-ready
 
 	// Verify socket exists (fail test if startup failed)
 	if _, err := os.Stat(socketPath); os.IsNotExist(err) {
@@ -88,5 +109,8 @@ func StartTestDaemon(t *testing.T, cfg *TestDaemonConfig) *Lifecycle {
 		}
 	})
 
-	return l
+	return &TestDaemon{
+		Lifecycle: l,
+		ready:     ready,
+	}
 }
