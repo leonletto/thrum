@@ -52,8 +52,9 @@ messaging system for AI agent coordination.
 | `thrum session set-intent` | Set session work intent                              |
 | `thrum session set-task`   | Set current task identifier                          |
 | `thrum context save`       | Save agent context from file or stdin                |
-| `thrum context show`       | Show agent context                                   |
-| `thrum context clear`      | Clear agent context                                  |
+| `thrum context show`       | Show agent context (with preamble by default)        |
+| `thrum context clear`      | Clear agent context (preamble preserved)             |
+| `thrum context preamble`   | Show or manage agent preamble                        |
 | `thrum context sync`       | Sync context to a-sync branch                        |
 | `thrum context update`     | Install/update the /update-context skill             |
 | `thrum who-has`            | Check which agents are editing a file                |
@@ -907,33 +908,43 @@ Example:
 
 ### thrum context show
 
-Display the saved context for the current agent.
+Display the saved context for the current agent. By default, includes the
+preamble (stable header) followed by the session context.
 
     thrum context show [flags]
 
-| Flag      | Description                                         | Default |
-| --------- | --------------------------------------------------- | ------- |
-| `--agent` | Override agent name (defaults to current identity) |         |
-| `--raw`   | Output raw content without decoration               | `false` |
+| Flag              | Description                                         | Default |
+| ----------------- | --------------------------------------------------- | ------- |
+| `--agent`         | Override agent name (defaults to current identity)  |         |
+| `--raw`           | No header, file boundary markers for piping         | `false` |
+| `--no-preamble`   | Exclude preamble from output                        | `false` |
 
 Example:
 
     $ thrum context show
-    Context for furiosa (1.2 KB, updated 5m ago):
+    # Context for furiosa (1234 bytes, updated 2026-02-11T10:00:00Z)
+
+    ## Thrum Quick Reference
+    ...
 
     # Current Work
     - Implementing JWT token refresh
-    - Investigating rate limiting bug
 
-    # Get raw output
-    $ thrum context show --raw > backup.md
+    # Raw output with file boundaries
+    $ thrum context show --raw
+
+    # Context only, no preamble
+    $ thrum context show --no-preamble
+
+    # Raw context only (for piping)
+    $ thrum context show --raw --no-preamble > backup.md
 
 ---
 
 ### thrum context clear
 
 Remove the context file for the current agent. Idempotent — running clear when
-no context exists is a no-op.
+no context exists is a no-op. The preamble is preserved.
 
     thrum context clear [flags]
 
@@ -973,6 +984,36 @@ Example:
     $ thrum context sync
     ✓ Context synced for furiosa
       Committed and pushed to a-sync branch
+
+---
+
+### thrum context preamble
+
+Show or manage the preamble for the current agent. The preamble is a stable,
+user-editable header that persists across context saves.
+
+    thrum context preamble [flags]
+
+| Flag       | Description                                         | Default  |
+| ---------- | --------------------------------------------------- | -------- |
+| `--agent`  | Override agent name (defaults to current identity)  |          |
+| `--init`   | Create or reset to default preamble                |          |
+| `--file`   | Set preamble from file                              |          |
+
+Example:
+
+    # Show current preamble
+    $ thrum context preamble
+
+    # Create/reset to default
+    $ thrum context preamble --init
+    Preamble saved for furiosa (256 bytes)
+
+    # Set from custom file
+    $ thrum context preamble --file my-preamble.md
+
+The preamble is auto-created with default content on the first
+`thrum context save`.
 
 ---
 
