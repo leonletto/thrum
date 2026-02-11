@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -76,7 +77,7 @@ func TestFindAvailablePort(t *testing.T) {
 		// Actually occupy ports 9200-9202
 		listeners = nil
 		for port := 9200; port <= 9202; port++ {
-			l, err := net.Listen("tcp", "localhost:"+itoa(port))
+			l, err := net.Listen("tcp", "localhost:"+strconv.Itoa(port))
 			if err != nil {
 				t.Skipf("could not occupy port %d for test: %v", port, err)
 			}
@@ -87,15 +88,6 @@ func TestFindAvailablePort(t *testing.T) {
 		if err == nil {
 			t.Error("expected error when all ports occupied")
 		}
-	})
-}
-
-func itoa(n int) string {
-	return string([]byte{
-		byte('0' + n/1000%10),
-		byte('0' + n/100%10),
-		byte('0' + n/10%10),
-		byte('0' + n%10),
 	})
 }
 
