@@ -263,36 +263,51 @@ func TestWriter_AppendConcurrent(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "concurrent.jsonl")
 
-	w, _ := jsonl.NewWriter(path)
+	w, err := jsonl.NewWriter(path)
+	if err != nil {
+		t.Fatalf("NewWriter() failed: %v", err)
+	}
 	defer func() { _ = w.Close() }()
 
 	// Write concurrently from multiple goroutines
 	const numGoroutines = 5
 	const numEventsPerGoroutine = 20
 
-	done := make(chan bool, numGoroutines)
+	done := make(chan error, numGoroutines)
 
 	for i := 0; i < numGoroutines; i++ {
-		go func(_ int) {
+		go func(id int) {
 			for j := 0; j < numEventsPerGoroutine; j++ {
 				event := testEvent{
 					Type: "concurrent",
 					Data: "test",
 				}
-				_ = w.Append(event)
+				if err := w.Append(event); err != nil {
+					done <- err
+					return
+				}
 			}
-			done <- true
+			done <- nil
 		}(i)
 	}
 
-	// Wait for all goroutines
+	// Wait for all goroutines and check for errors
 	for i := 0; i < numGoroutines; i++ {
-		<-done
+		if err := <-done; err != nil {
+			t.Fatalf("Concurrent write failed: %v", err)
+		}
 	}
 
 	// Verify total count
-	r, _ := jsonl.NewReader(path)
-	messages, _ := r.ReadAll()
+	r, err := jsonl.NewReader(path)
+	if err != nil {
+		t.Fatalf("NewReader() failed: %v", err)
+	}
+
+	messages, err := r.ReadAll()
+	if err != nil {
+		t.Fatalf("ReadAll() failed: %v", err)
+	}
 
 	expected := numGoroutines * numEventsPerGoroutine
 	if len(messages) != expected {
