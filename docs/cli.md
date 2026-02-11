@@ -1,3 +1,4 @@
+
 # Thrum CLI Reference
 
 Complete reference for the `thrum` command-line interface -- a Git-backed
@@ -40,6 +41,11 @@ messaging system for AI agent coordination.
 | `thrum session heartbeat`  | Send a session heartbeat                             |
 | `thrum session set-intent` | Set session work intent                              |
 | `thrum session set-task`   | Set current task identifier                          |
+| `thrum context save`       | Save agent context from file or stdin                |
+| `thrum context show`       | Show agent context                                   |
+| `thrum context clear`      | Clear agent context                                  |
+| `thrum context sync`       | Sync context to a-sync branch                        |
+| `thrum context update`     | Install/update the /update-context skill             |
 | `thrum who-has`            | Check which agents are editing a file                |
 | `thrum ping`               | Check if an agent is online                          |
 | `thrum subscribe`          | Subscribe to push notifications                      |
@@ -67,6 +73,7 @@ Available on all commands:
 | `--quiet`   | Suppress non-essential output            | `false` |
 | `--verbose` | Debug output                             | `false` |
 
+
 ## Core Commands
 
 ### thrum init
@@ -90,6 +97,7 @@ Example:
       Created: a-sync branch for message sync
       Updated: .gitignore
 
+
 ### thrum setup
 
 Set up Thrum in a feature worktree so it shares the daemon, database, and sync
@@ -109,6 +117,7 @@ Example:
     Connected to daemon
     ✓ Thrum worktree setup complete
 
+
 ### thrum migrate
 
 Migrate an existing Thrum repository from the old layout (JSONL files tracked on
@@ -117,6 +126,7 @@ via `.git/thrum-sync/a-sync/` worktree). Safe to run multiple times -- it
 detects what needs migration and skips steps that are already done.
 
     thrum migrate
+
 
 ### thrum quickstart
 
@@ -150,6 +160,7 @@ Example:
     ✓ Session started: ses_01HXF2A9...
     ✓ Intent set: Fixing token refresh
 
+
 ### thrum overview
 
 Show a comprehensive orientation view combining identity, work context, team
@@ -172,6 +183,7 @@ Example:
     Inbox: 3 unread (12 total)
     Sync: ✓ synced
 
+
 ### thrum status
 
 Show current agent identity, session, work context, inbox counts, and daemon
@@ -193,6 +205,7 @@ Example:
     Sync:     ✓ synced
     Daemon:   running (2h15m uptime, v0.1.0)
     WebSocket: ws://localhost:9999
+
 
 ## Messaging
 
@@ -229,6 +242,7 @@ Example:
     $ thrum send "Deploy complete" --broadcast
     ✓ Message sent: msg_01HXE8Z8...
 
+
 ### thrum reply
 
 Reply to a message by ID. If the message is not in a thread, one is created
@@ -245,6 +259,7 @@ Example:
     $ thrum reply msg_01HXE8Z7 "Good idea, let's do that"
     ✓ Reply sent: msg_01HXE9A3...
       Thread: thr_01HXE8A2...
+
 
 ### thrum inbox
 
@@ -275,6 +290,7 @@ Example:
     └──────────────────────────────────────────────────────────┘
     Showing 1-2 of 12 messages (5 unread)
 
+
 ### thrum message get
 
 Get a single message with full details. The message is automatically marked as
@@ -294,6 +310,7 @@ Example:
 
     We should refactor the sync daemon before adding embeddings.
 
+
 ### thrum message edit
 
 Edit a message by replacing its content entirely. Only the message author can
@@ -305,6 +322,7 @@ Example:
 
     $ thrum message edit msg_01HXE8Z7 "Updated: refactor sync daemon first"
     ✓ Message edited: msg_01HXE8Z7 (version 2)
+
 
 ### thrum message delete
 
@@ -320,6 +338,7 @@ Example:
 
     $ thrum message delete msg_01HXE8Z7 --force
     ✓ Message deleted: msg_01HXE8Z7
+
 
 ### thrum message read
 
@@ -339,6 +358,7 @@ Example:
 
     $ thrum message read --all
     ✓ Marked 7 messages as read
+
 
 ## Threads
 
@@ -362,6 +382,7 @@ Example:
       Created by: implementer_35HV62T9B9
       Message:    msg_01HXE8Y3...
 
+
 ### thrum thread list
 
 List threads with optional filtering and pagination.
@@ -383,6 +404,7 @@ Example:
     thr_01HXE7A1         Sprint planning                   8      · 2h ago (@planner)
 
     Showing 1-2 of 2 threads
+
 
 ### thrum thread show
 
@@ -410,6 +432,7 @@ Example:
     │ I think we should use rotating keys instead of refresh tokens  │
     └─────────────────────────────────────────────────────────────────┘
     Showing 1-2 of 2 messages
+
 
 ## Identity & Sessions
 
@@ -463,6 +486,7 @@ Example:
     $ thrum --role=implementer --module=auth agent register --name furiosa --display "Auth Developer"
     ✓ Agent registered: furiosa
 
+
 ### thrum agent list
 
 List all registered agents with session status and work context.
@@ -502,6 +526,7 @@ Example (context table):
     ────────────────────────────────────────────────────────────────────────────────────────────────────────
     @implementer   ses_01HXF... feature/auth               3      5 Fixing token refresh           5m ago
 
+
 ### thrum agent whoami
 
 Show the current agent identity and active session.
@@ -521,6 +546,7 @@ Example:
     Display:   Auth Developer
     Source:    environment
     Session:   ses_01HXF2A9... (2h ago)
+
 
 ### thrum agent context
 
@@ -555,6 +581,7 @@ Example (single agent detail):
     Uncommitted: 1
       internal/auth/refresh.go
 
+
 ### thrum agent delete
 
 Delete an agent and all its associated data. This removes the identity file
@@ -568,6 +595,7 @@ Example:
     $ thrum agent delete furiosa
     Delete agent 'furiosa' and all associated data? [y/N] y
     ✓ Agent deleted: furiosa
+
 
 ### thrum agent cleanup
 
@@ -597,12 +625,14 @@ Example:
     ✓ Deleted reviewer_8KBN...
     ✓ Deleted 2 orphaned agent(s)
 
+
 ### thrum agent start
 
 Start a new work session. This is an alias for `thrum session start`. The agent
 must be registered first.
 
     thrum agent start
+
 
 ### thrum agent end
 
@@ -614,6 +644,7 @@ End the current session. This is an alias for `thrum session end`.
 | -------------- | --------------------------------------- | -------- |
 | `--reason`     | End reason (`normal`, `crash`)          | `normal` |
 | `--session-id` | Session ID to end (defaults to current) |          |
+
 
 ### thrum agent set-intent
 
@@ -627,6 +658,7 @@ Example:
     $ thrum agent set-intent "Fixing memory leak in connection pool"
     ✓ Intent set: Fixing memory leak in connection pool
 
+
 ### thrum agent set-task
 
 Set the current task identifier for the session. This is an alias for
@@ -638,6 +670,7 @@ Example:
 
     $ thrum agent set-task beads:thrum-42
     ✓ Task set: beads:thrum-42
+
 
 ### thrum agent heartbeat
 
@@ -654,6 +687,7 @@ agent's last-seen time.
 | `--add-ref`      | Add ref (repeatable, format: `type:value`)      |         |
 | `--remove-ref`   | Remove ref (repeatable, format: `type:value`)   |         |
 
+
 ### thrum session start
 
 Start a new work session. Automatically detects the current agent from whoami
@@ -667,6 +701,7 @@ Example:
     ✓ Session started: ses_01HXF2A9...
       Agent:      implementer_35HV62T9B9
       Started:    2026-02-03 10:00:00
+
 
 ### thrum session end
 
@@ -685,6 +720,7 @@ Example:
     ✓ Session ended: ses_01HXF2A9...
       Ended:      2026-02-03 12:00:00
       Duration:   2h
+
 
 ### thrum session list
 
@@ -709,6 +745,7 @@ Example:
     Sessions (1):
       ses_01HXF2A9  implementer_35HV  active  2h ago   Fixing token refresh
 
+
 ### thrum session heartbeat
 
 Send a heartbeat for the current session. Triggers git context extraction and
@@ -729,6 +766,7 @@ Example:
     ✓ Heartbeat sent: ses_01HXF2A9...
       Context: branch: feature/auth, 3 commits, 5 files
 
+
 ### thrum session set-intent
 
 Set a free-text description of what the agent is currently working on. Appears
@@ -742,6 +780,7 @@ Example:
     $ thrum session set-intent "Refactoring login flow"
     ✓ Intent set: Refactoring login flow
 
+
 ### thrum session set-task
 
 Set the current task identifier for the session (e.g., a beads issue ID).
@@ -754,6 +793,7 @@ Example:
 
     $ thrum session set-task beads:thrum-42
     ✓ Task set: beads:thrum-42
+
 
 ## Coordination
 
@@ -773,6 +813,7 @@ Example:
     $ thrum who-has unknown.go
     No agents are currently editing unknown.go
 
+
 ### thrum ping
 
 Check the presence status of an agent. Shows whether the agent is active or
@@ -791,6 +832,116 @@ Example:
 
     $ thrum ping planner
     @planner: offline (last seen 3h ago)
+
+
+## Context Management
+
+### thrum context save
+
+Save agent context from a file or stdin. Context is stored in
+`.thrum/context/{agent-name}.md` for persistence across sessions.
+
+    thrum context save [flags]
+
+| Flag      | Description                                         | Default |
+| --------- | --------------------------------------------------- | ------- |
+| `--file`  | Path to markdown file to save as context           |         |
+| `--agent` | Override agent name (defaults to current identity) |         |
+
+Example:
+
+    $ thrum context save --file dev-docs/Continuation_Prompt.md
+    ✓ Context saved for furiosa (1234 bytes)
+
+    # Save from stdin
+    $ echo "Working on auth module" | thrum context save
+    ✓ Context saved for furiosa (24 bytes)
+
+
+### thrum context show
+
+Display the saved context for the current agent.
+
+    thrum context show [flags]
+
+| Flag      | Description                                         | Default |
+| --------- | --------------------------------------------------- | ------- |
+| `--agent` | Override agent name (defaults to current identity) |         |
+| `--raw`   | Output raw content without decoration               | `false` |
+
+Example:
+
+    $ thrum context show
+    Context for furiosa (1.2 KB, updated 5m ago):
+
+    # Current Work
+    - Implementing JWT token refresh
+    - Investigating rate limiting bug
+
+    # Get raw output
+    $ thrum context show --raw > backup.md
+
+
+### thrum context clear
+
+Remove the context file for the current agent. Idempotent — running clear when
+no context exists is a no-op.
+
+    thrum context clear [flags]
+
+| Flag      | Description                                         | Default |
+| --------- | --------------------------------------------------- | ------- |
+| `--agent` | Override agent name (defaults to current identity) |         |
+
+Example:
+
+    $ thrum context clear
+    ✓ Context cleared for furiosa
+
+
+### thrum context sync
+
+Copy the context file to the a-sync branch for sharing across worktrees and
+machines. This is a manual operation — context is never synced automatically.
+
+    thrum context sync [flags]
+
+| Flag      | Description                                         | Default |
+| --------- | --------------------------------------------------- | ------- |
+| `--agent` | Override agent name (defaults to current identity) |         |
+
+What it does:
+
+1. Copies `.thrum/context/{agent}.md` to the sync worktree
+2. Commits the change with message `"context: update {agent}"`
+3. Pushes to the remote a-sync branch
+
+No-op when no remote is configured (local-only mode) or when the `--local`
+daemon flag is set.
+
+Example:
+
+    $ thrum context sync
+    ✓ Context synced for furiosa
+      Committed and pushed to a-sync branch
+
+
+### thrum context update
+
+Install or update the `/update-context` skill for Claude Code agents. Detects
+the skill in project-level (`.claude/commands/update-context.md`) or global
+(`~/.claude/commands/update-context.md`) locations.
+
+    thrum context update
+
+Example:
+
+    $ thrum context update
+    /update-context skill installed at:
+      /path/to/repo/.claude/commands/update-context.md
+
+    Restart Claude Code to load the skill.
+
 
 ## Notifications
 
@@ -814,6 +965,7 @@ Example:
       Session:    ses_01HXF2A9...
       Created:    2026-02-03 10:00:00
 
+
 ### thrum unsubscribe
 
 Remove a subscription by ID.
@@ -824,6 +976,7 @@ Example:
 
     $ thrum unsubscribe 42
     ✓ Subscription #42 removed
+
 
 ### thrum subscriptions
 
@@ -845,6 +998,7 @@ Example:
     │  Type:       Mention (@reviewer)
     │  Created:    2026-02-03 10:05:00 (1h55m ago)
     └─
+
 
 ### thrum wait
 
@@ -874,6 +1028,7 @@ Example:
       echo "Timeout"
     fi
 
+
 ## Infrastructure
 
 ### thrum daemon start
@@ -882,16 +1037,27 @@ Start the daemon in the background. Uses `thrum daemon run` internally to run
 the daemon in a detached process. The daemon serves both a Unix socket (for CLI
 RPC) and a combined WebSocket + SPA server on port 9999.
 
-    thrum daemon start
+    thrum daemon start [flags]
+
+| Flag      | Description                                      | Default |
+| --------- | ------------------------------------------------ | ------- |
+| `--local` | Disable remote git sync (local-only mode)        | `false` |
 
 The daemon performs pre-startup duplicate detection by checking if another
 daemon is already serving this repository (via JSON PID files and `flock()`).
+
+Example:
+
+    # Start in local-only mode (no git push/fetch)
+    thrum daemon start --local
+
 
 ### thrum daemon stop
 
 Stop the daemon gracefully by sending SIGTERM.
 
     thrum daemon stop
+
 
 ### thrum daemon status
 
@@ -900,26 +1066,32 @@ served.
 
     thrum daemon status
 
+
 ### thrum daemon restart
 
 Restart the daemon (stop + start).
 
     thrum daemon restart
 
+
 ### thrum sync status
 
-Show sync loop status, last sync time, and any errors.
+Show sync loop status, last sync time, and any errors. When local-only mode is
+active, displays "Mode: local-only" instead of "Mode: normal".
 
     thrum sync status
 
 Sync states: `stopped`, `idle`, `synced`, `error`.
 
+
 ### thrum sync force
 
 Trigger an immediate sync (non-blocking). Fetches new messages from the remote
-and pushes local messages. The default sync interval is 60 seconds.
+and pushes local messages. The default sync interval is 60 seconds. When
+local-only mode is active, displays "local-only (remote sync disabled)".
 
     thrum sync force
+
 
 ## MCP Server
 
@@ -976,6 +1148,7 @@ For multi-agent worktrees, use `--agent-id` or set `THRUM_NAME`:
 }
 ```
 
+
 ## Environment Variables
 
 | Variable        | Description                                           | Example                      |
@@ -986,6 +1159,7 @@ For multi-agent worktrees, use `--agent-id` or set `THRUM_NAME`:
 | `THRUM_DISPLAY` | Display name (overrides identity file)                | `Auth Developer`             |
 | `THRUM_WS_PORT` | WebSocket and SPA server port (daemon)                | `9999`                       |
 | `THRUM_UI_DEV`  | Path to dev UI dist for hot reload (daemon)           | `./ui/packages/web-app/dist` |
+| `THRUM_LOCAL`   | Enable local-only mode (disables remote sync)         | `1`                          |
 
 ## Identity Resolution
 

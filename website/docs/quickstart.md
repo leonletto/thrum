@@ -189,6 +189,22 @@ thrum sync status
 thrum sync force
 ```
 
+### Context Management
+
+```bash
+# Save context for session continuity
+thrum context save --file continuation-notes.md
+
+# View saved context
+thrum context show
+
+# Clear context
+thrum context clear
+
+# Share context across worktrees (manual sync)
+thrum context sync
+```
+
 ### Agent Management
 
 ```bash

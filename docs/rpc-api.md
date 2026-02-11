@@ -1,3 +1,4 @@
+
 # Thrum Daemon RPC API
 
 ## Overview
@@ -69,6 +70,7 @@ exception:
 - `user.register` is only available over WebSocket (returns `-32001` on Unix
   socket)
 
+
 ## Method Reference
 
 ### health
@@ -94,6 +96,7 @@ Health check and daemon status.
 **Errors:**
 
 - No method-specific errors.
+
 
 ### agent.register
 
@@ -127,6 +130,7 @@ Register or update an agent identity.
 - `role is required`: Missing `role` field
 - `module is required`: Missing `module` field
 
+
 ### agent.list
 
 List registered agents with optional filters.
@@ -155,6 +159,7 @@ List registered agents with optional filters.
 
 - `invalid request`: Malformed JSON params
 
+
 ### agent.whoami
 
 Get current agent identity and active session.
@@ -181,6 +186,7 @@ Get current agent identity and active session.
 
 - `resolve identity`: Could not determine agent identity from environment or
   identity file
+
 
 ### agent.listContext
 
@@ -218,6 +224,7 @@ List agent work contexts (branch, commits, files, intent, task).
 
 - `invalid request`: Malformed JSON params
 
+
 ### agent.delete
 
 Delete an agent by name. Removes the identity file, per-agent JSONL message
@@ -242,6 +249,7 @@ file, and SQLite record. Emits an `agent.cleanup` event.
 - `agent name is required`: Missing `name` field
 - `invalid agent name`: Name does not match validation regex
 - `agent not found`: No agent with given name
+
 
 ### agent.cleanup
 
@@ -280,6 +288,7 @@ inactive beyond the threshold.
 
 - `invalid request`: Malformed JSON params
 
+
 ### session.start
 
 Start a new work session for an agent. Automatically recovers any orphaned
@@ -306,6 +315,7 @@ sessions for the same agent.
 - `agent_id is required`: Missing `agent_id` field
 - `agent not found`: Agent with given ID is not registered
 
+
 ### session.end
 
 End an active work session. Syncs work contexts to JSONL on end.
@@ -329,6 +339,7 @@ End an active work session. Syncs work contexts to JSONL on end.
 
 - `session_id is required`: Missing `session_id` field
 - `get session`: Session ID not found
+
 
 ### session.heartbeat
 
@@ -358,6 +369,7 @@ Extracts git work context if a `worktree` ref is set.
 - `session not found`: Session ID does not exist
 - `session has already ended`: Session was previously ended
 
+
 ### session.setIntent
 
 Set a free-text intent describing what the agent is working on.
@@ -383,6 +395,7 @@ Set a free-text intent describing what the agent is working on.
 - `session not found`: Session ID does not exist
 - `session has already ended`: Session was previously ended
 
+
 ### session.setTask
 
 Set the current task identifier for the session.
@@ -407,6 +420,7 @@ Set the current task identifier for the session.
 - `session_id is required`: Missing `session_id` field
 - `session not found`: Session ID does not exist
 - `session has already ended`: Session was previously ended
+
 
 ### session.list
 
@@ -436,6 +450,7 @@ List sessions with optional filters.
 **Errors:**
 
 - `invalid request`: Malformed JSON params
+
 
 ### message.send
 
@@ -472,6 +487,7 @@ Send a message to the messaging system. Triggers subscription notifications.
 - `no active session found`: Agent does not have an active session
 - `only users can impersonate agents`: Non-user tried to use `acting_as`
 - `target agent does not exist`: `acting_as` references nonexistent agent
+
 
 ### message.get
 
@@ -510,6 +526,7 @@ Retrieve a single message by ID with full details.
 
 - `message_id is required`: Missing `message_id` field
 - `message not found`: No message with given ID
+
 
 ### message.list
 
@@ -555,6 +572,7 @@ List messages with filtering, pagination, and sorting.
 - `invalid sort_by`: Must be `"created_at"` or `"updated_at"`
 - `invalid sort_order`: Must be `"asc"` or `"desc"`
 
+
 ### message.edit
 
 Edit a message's content or structured data. Only the original author can edit.
@@ -584,6 +602,7 @@ Edit a message's content or structured data. Only the original author can edit.
 - `only message author can edit`: Current agent is not the message author
 - `no active session found`: Agent does not have an active session
 
+
 ### message.delete
 
 Soft-delete a message. The message remains in the database and JSONL log but is
@@ -609,6 +628,7 @@ marked as deleted.
 - `message not found`: No message with given ID
 - `message already deleted`: Message was already soft-deleted
 
+
 ### message.markRead
 
 Batch mark messages as read for the current agent and session. Returns
@@ -632,6 +652,7 @@ collaboration info (other agents who also read the messages).
 - `message_ids is required and must not be empty`: Missing or empty
   `message_ids` array
 - `no active session found`: Agent does not have an active session
+
 
 ### thread.create
 
@@ -665,6 +686,7 @@ call.
 - `title is required`: Missing `title` field
 - `recipient and message must both be provided or both be nil`: Only one of
   `recipient`/`message` given
+
 
 ### thread.list
 
@@ -702,6 +724,7 @@ List threads with pagination. Includes unread counts, last sender, and preview.
 - `resolve agent and session`: Could not determine current agent (needed for
   unread counts)
 
+
 ### thread.get
 
 Get a thread's details and its paginated messages.
@@ -734,6 +757,7 @@ Get a thread's details and its paginated messages.
 - `thread_id is required`: Missing `thread_id` field
 - `thread not found`: No thread with given ID
 
+
 ### subscribe
 
 Subscribe to push notifications for messages matching a scope, mention, or all
@@ -763,6 +787,7 @@ Exactly one of `scope`, `mention_role`, or `all` must be provided.
   subscription type given
 - `no active session found`: Agent does not have an active session
 
+
 ### unsubscribe
 
 Remove a subscription by ID.
@@ -783,6 +808,7 @@ Remove a subscription by ID.
 
 - `subscription_id is required`: Missing or zero `subscription_id`
 - `no active session found`: Agent does not have an active session
+
 
 ### subscriptions.list
 
@@ -809,6 +835,7 @@ List all subscriptions for the current session.
 **Errors:**
 
 - `no active session found`: Agent does not have an active session
+
 
 ### user.register
 
@@ -844,6 +871,7 @@ Register a human user identity. Only available over WebSocket.
 - Registration is idempotent: if the user already exists, returns the existing
   info with a fresh token and status `"existing"`.
 
+
 ### user.identify
 
 Get the current user's identity from git config. Used for browser
@@ -867,6 +895,7 @@ auto-registration.
 
 - `git config user.name not set`: Git user.name is not configured in the
   repository
+
 
 ## Push Notifications
 
@@ -912,6 +941,7 @@ When a message matches a subscription, the daemon sends a JSON-RPC notification
 4. Clients disconnected at notification time will see messages via
    `message.list` when reconnecting
 
+
 ### sync.status
 
 Get current sync loop status and health. Available when the sync loop is active
@@ -937,6 +967,7 @@ Get current sync loop status and health. Available when the sync loop is active
 - This method is only registered when the sync loop is initialized (i.e., the
   repository has a remote origin). Returns method-not-found (`-32601`)
   otherwise.
+
 
 ### sync.force
 
@@ -964,6 +995,7 @@ Trigger an immediate sync (non-blocking). Available when the sync loop is active
   otherwise.
 - The sync loop runs every 60 seconds by default (configurable via
   `--sync-interval`).
+
 
 ## Using the API
 
@@ -1069,6 +1101,7 @@ callRPC("health").then((result) => {
 });
 ```
 
+
 ## Best Practices
 
 ### Connection Management
@@ -1088,6 +1121,7 @@ callRPC("health").then((result) => {
 1. **Use unique IDs** - Helps correlate requests and responses
 2. **Can be strings or numbers** - Both are valid per JSON-RPC 2.0
 3. **Optional for notifications** - Omit ID if you don't need a response
+
 
 ## Troubleshooting
 
@@ -1117,6 +1151,7 @@ Common causes:
 - Check method name spelling (case-sensitive)
 - Verify daemon version supports the method
 - See available methods section above
+
 
 ## References
 

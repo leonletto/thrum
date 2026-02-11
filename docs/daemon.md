@@ -1,3 +1,4 @@
+
 # Thrum Daemon Architecture
 
 > **See also:** [System Overview](overview.md) for how the daemon fits into the
@@ -341,6 +342,52 @@ Extracts git-derived work context from a worktree path:
 - `FilterStaleContexts(contexts, now)` - In-memory filter (same rules, for sync)
 - Runs at daemon startup and before sync
 
+## Local-Only Mode
+
+When your repository is public, the daemon's sync loop pushes the `a-sync`
+branch to `origin`, which would expose private agent messages. Local-only mode
+disables all remote git operations while keeping everything else working.
+
+### Enable local-only mode
+
+```bash
+# Via CLI flag
+thrum daemon start --local
+
+# Via environment variable
+THRUM_LOCAL=1 thrum daemon start
+```
+
+The setting persists in `.thrum/config.json`:
+
+```json
+{ "local_only": true }
+```
+
+**Priority order:** CLI flag > environment variable > config file > default (false).
+
+### What changes in local-only mode
+
+| Component | Normal mode | Local-only mode |
+|-----------|-------------|-----------------|
+| Messaging | Works | Works |
+| Sessions | Works | Works |
+| SQLite projection | Works | Works |
+| WebSocket / MCP | Works | Works |
+| `git push origin a-sync` | Every 60s | **Skipped** |
+| `git fetch origin a-sync` | Every 60s | **Skipped** |
+| Remote branch setup | Automatic | **Skipped** |
+
+### Check if local-only mode is active
+
+```bash
+thrum sync status
+# Shows "Mode: local-only" or "Mode: normal"
+
+thrum sync force
+# Shows "local-only (remote sync disabled)" when active
+```
+
 ### 9. State Management
 
 **Location:** `internal/daemon/state/`
@@ -401,15 +448,7 @@ Client library for connecting to the daemon.
 
 ## Daemon Lifecycle
 
-### Starting the Daemon
-
-```bash
-# Manual start (for testing)
-thrum daemon start
-
-# Auto-start (happens automatically)
-thrum send "Hello"  # Daemon starts if not running
-```
+For setup instructions, see [Quickstart Guide](quickstart.md).
 
 ### Daemon States
 
@@ -599,6 +638,7 @@ rm .thrum/var/thrum.pid
 | Agent Naming   | Human-readable agent names (`--name`, `THRUM_NAME`)         | Complete |
 | Agent Cleanup  | `agent.delete`, `agent.cleanup` (orphan detection)          | Complete |
 | Browser Auth   | Browser auto-registration via git config                    | Complete |
+| Local-Only Mode | Disable remote sync for public repos                        | Complete |
 
 ## References
 

@@ -1,3 +1,4 @@
+
 # MCP Server
 
 > **See also:** [Daemon Architecture](daemon.md) for the underlying daemon the
@@ -176,6 +177,7 @@ Send a message to another agent via `@role` addressing.
 
 **Daemon RPC:** `message.send`
 
+
 ### check_messages
 
 Poll for unread messages mentioning this agent. Messages are automatically
@@ -217,6 +219,7 @@ ID.
    call)
 
 **Daemon RPC:** `message.list` + `message.markRead`
+
 
 ### wait_for_message
 
@@ -261,6 +264,7 @@ connect, this tool returns an error.
 
 **Daemon RPC:** WebSocket notifications + `message.get` + `message.markRead`
 
+
 ### list_agents
 
 List all registered agents and their status.
@@ -294,6 +298,7 @@ List all registered agents and their status.
 - 2+ minutes ago or missing: `offline`
 
 **Daemon RPC:** `agent.list`
+
 
 ### broadcast_message
 

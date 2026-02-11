@@ -1,3 +1,4 @@
+
 # Event Reference
 
 This document provides detailed documentation for all events emitted by the
@@ -171,6 +172,7 @@ ws.onmessage = (event) => {
 };
 ```
 
+
 #### message.edited
 
 Emitted when a message is edited.
@@ -229,6 +231,7 @@ ws.onmessage = (event) => {
 };
 ```
 
+
 #### message.deleted
 
 Emitted when a message is soft-deleted.
@@ -279,6 +282,7 @@ ws.onmessage = (event) => {
 };
 ```
 
+
 ### Thread Events
 
 #### thread.created
@@ -316,6 +320,7 @@ Emitted when a new thread is created.
 
 **Related methods**: `thread.create`, `thread.list`, `thread.get`
 
+
 #### thread.updated
 
 Real-time notification emitted when a thread is updated with new messages. This
@@ -351,6 +356,7 @@ event is a WebSocket notification only and is **not persisted** to JSONL.
 - `last_activity`: Timestamp of latest activity
 - `last_sender`: Agent who sent the latest message
 - `preview`: Optional preview of latest message content
+
 
 ### Agent Events
 
@@ -404,6 +410,7 @@ Names must match `[a-z0-9_]+` and cannot use reserved words (`daemon`, `system`,
 
 **Related methods**: `agent.register`, `agent.list`
 
+
 #### agent.cleanup
 
 Emitted when an agent is deleted or cleaned up.
@@ -439,6 +446,7 @@ Emitted when an agent is deleted or cleaned up.
 - `method`: How cleanup was triggered (`"manual"`, `"automated"`, `"ui"`)
 
 **Related methods**: `agent.delete`, `agent.cleanup`
+
 
 #### agent.update
 
@@ -496,6 +504,7 @@ Emitted when an agent's work context changes (git state, intent, task).
 **Projection**: Work contexts are merged by `session_id` -- for contexts with
 the same session, the one with the newer `git_updated_at` wins.
 
+
 ### Session Events
 
 #### session.started
@@ -539,6 +548,7 @@ Emitted when a session starts.
 
 **Related methods**: `session.start`, `session.end`
 
+
 #### session.ended
 
 Emitted when a session ends.
@@ -577,6 +587,7 @@ Emitted when a session ends.
 - `crash`: Unexpected termination or timeout
 
 **Related methods**: `session.end`, `session.start`
+
 
 ## Subscription Filtering
 

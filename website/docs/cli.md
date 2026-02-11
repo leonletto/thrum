@@ -51,6 +51,11 @@ messaging system for AI agent coordination.
 | `thrum session heartbeat`  | Send a session heartbeat                             |
 | `thrum session set-intent` | Set session work intent                              |
 | `thrum session set-task`   | Set current task identifier                          |
+| `thrum context save`       | Save agent context from file or stdin                |
+| `thrum context show`       | Show agent context                                   |
+| `thrum context clear`      | Clear agent context                                  |
+| `thrum context sync`       | Sync context to a-sync branch                        |
+| `thrum context update`     | Install/update the /update-context skill             |
 | `thrum who-has`            | Check which agents are editing a file                |
 | `thrum ping`               | Check if an agent is online                          |
 | `thrum subscribe`          | Subscribe to push notifications                      |
@@ -872,6 +877,120 @@ Example:
 
     $ thrum ping planner
     @planner: offline (last seen 3h ago)
+
+---
+
+## Context Management
+
+### thrum context save
+
+Save agent context from a file or stdin. Context is stored in
+`.thrum/context/{agent-name}.md` for persistence across sessions.
+
+    thrum context save [flags]
+
+| Flag      | Description                                         | Default |
+| --------- | --------------------------------------------------- | ------- |
+| `--file`  | Path to markdown file to save as context           |         |
+| `--agent` | Override agent name (defaults to current identity) |         |
+
+Example:
+
+    $ thrum context save --file dev-docs/Continuation_Prompt.md
+    ✓ Context saved for furiosa (1234 bytes)
+
+    # Save from stdin
+    $ echo "Working on auth module" | thrum context save
+    ✓ Context saved for furiosa (24 bytes)
+
+---
+
+### thrum context show
+
+Display the saved context for the current agent.
+
+    thrum context show [flags]
+
+| Flag      | Description                                         | Default |
+| --------- | --------------------------------------------------- | ------- |
+| `--agent` | Override agent name (defaults to current identity) |         |
+| `--raw`   | Output raw content without decoration               | `false` |
+
+Example:
+
+    $ thrum context show
+    Context for furiosa (1.2 KB, updated 5m ago):
+
+    # Current Work
+    - Implementing JWT token refresh
+    - Investigating rate limiting bug
+
+    # Get raw output
+    $ thrum context show --raw > backup.md
+
+---
+
+### thrum context clear
+
+Remove the context file for the current agent. Idempotent — running clear when
+no context exists is a no-op.
+
+    thrum context clear [flags]
+
+| Flag      | Description                                         | Default |
+| --------- | --------------------------------------------------- | ------- |
+| `--agent` | Override agent name (defaults to current identity) |         |
+
+Example:
+
+    $ thrum context clear
+    ✓ Context cleared for furiosa
+
+---
+
+### thrum context sync
+
+Copy the context file to the a-sync branch for sharing across worktrees and
+machines. This is a manual operation — context is never synced automatically.
+
+    thrum context sync [flags]
+
+| Flag      | Description                                         | Default |
+| --------- | --------------------------------------------------- | ------- |
+| `--agent` | Override agent name (defaults to current identity) |         |
+
+What it does:
+
+1. Copies `.thrum/context/{agent}.md` to the sync worktree
+2. Commits the change with message `"context: update {agent}"`
+3. Pushes to the remote a-sync branch
+
+No-op when no remote is configured (local-only mode) or when the `--local`
+daemon flag is set.
+
+Example:
+
+    $ thrum context sync
+    ✓ Context synced for furiosa
+      Committed and pushed to a-sync branch
+
+---
+
+### thrum context update
+
+Install or update the `/update-context` skill for Claude Code agents. Detects
+the skill in project-level (`.claude/commands/update-context.md`) or global
+(`~/.claude/commands/update-context.md`) locations.
+
+    thrum context update
+
+Example:
+
+    $ thrum context update
+    /update-context skill installed at:
+      /path/to/repo/.claude/commands/update-context.md
+
+    Restart Claude Code to load the skill.
 
 ---
 

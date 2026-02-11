@@ -1,3 +1,4 @@
+
 # Sync Protocol
 
 The sync protocol keeps message logs synchronized across repository clones using
@@ -277,6 +278,19 @@ The daemon uses platform-specific file locking:
 
 The sync protocol is designed for offline-first operation:
 
+### Local-Only Mode
+
+For public repositories where you don't want to expose agent messages, enable
+local-only mode to disable all remote sync:
+
+```bash
+thrum daemon start --local
+```
+
+In local-only mode, the sync loop still runs but skips `git fetch` and
+`git push`. Local JSONL files and the SQLite projection continue to update
+normally. See [Daemon Architecture](daemon.md#local-only-mode) for details.
+
 ### No Remote
 
 When no remote is configured:
@@ -386,7 +400,8 @@ Use `thrum migrate` to upgrade to the worktree layout. This command:
   "running": true,
   "last_sync_at": "2024-01-15T10:30:00Z",
   "last_error": "",
-  "sync_state": "synced"
+  "sync_state": "synced",
+  "local_only": false
 }
 ```
 

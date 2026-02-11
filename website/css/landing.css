@@ -207,6 +207,17 @@
   margin-bottom: 0;
 }
 
+a.feature-card-link {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+a.feature-card-link:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
+}
+
 .feature-icon {
   font-family: var(--font-mono);
   font-size: 28px;

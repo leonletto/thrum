@@ -1,3 +1,4 @@
+
 # Thrum Quickstart Guide
 
 Get up and running with Thrum in 5 minutes.
@@ -178,6 +179,22 @@ thrum sync status
 thrum sync force
 ```
 
+### Context Management
+
+```bash
+# Save context for session continuity
+thrum context save --file continuation-notes.md
+
+# View saved context
+thrum context show
+
+# Clear context
+thrum context clear
+
+# Share context across worktrees (manual sync)
+thrum context sync
+```
+
 ### Agent Management
 
 ```bash
@@ -316,6 +333,44 @@ The `thrum setup` command creates a `.thrum/redirect` file pointing to the main
 worktree's `.thrum/` directory. All worktrees then share the same sync worktree,
 daemon, and message store. Messages sync across all worktrees and machines
 through Git.
+
+### Use the setup scripts for batch configuration
+
+Two shell scripts automate redirect file creation for all your worktrees at once:
+
+```bash
+# Set up Thrum redirects for all worktrees
+./scripts/setup-worktree-thrum.sh
+
+# Set up Beads redirects for all worktrees
+./scripts/setup-worktree-beads.sh
+```
+
+Both scripts auto-detect worktrees via `git worktree list` and create the
+appropriate redirect files. They skip worktrees that are already configured.
+
+#### Set up a single worktree
+
+```bash
+# Thrum redirect for one worktree
+./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/my-feature
+
+# Beads redirect for one worktree
+./scripts/setup-worktree-beads.sh ~/.workspaces/thrum/my-feature
+```
+
+#### What the scripts create
+
+Each script creates a redirect file pointing to the main repository:
+
+```
+# In the worktree:
+.thrum/redirect    → /path/to/main/repo/.thrum
+.beads/redirect    → /path/to/main/repo/.beads
+```
+
+This ensures all worktrees share the same daemon, message store, and issue
+tracker. The scripts are idempotent — run them as many times as you need.
 
 ## Automation with Hooks
 
@@ -510,4 +565,4 @@ shell-outs.
 5. **Check sync status** if messages aren't appearing
 6. **Use `--json` flag** for scripting and automation
 
-Happy collaborating! 🚀
+Happy collaborating!

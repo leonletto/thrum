@@ -161,6 +161,8 @@ branch, accessed via a sync worktree at `.git/thrum-sync/a-sync/`:
 │   └── sync.lock         ← Sync lock
 ├── identities/           ← Per-worktree agent identities
 │   └── {agent_name}.json
+├── context/              ← Per-agent context storage
+│   └── {agent_name}.md
 └── redirect              ← (feature worktrees only) points to main .thrum/
 ```
 
@@ -344,7 +346,35 @@ thrum ping @reviewer            # Is an agent online? Show last-seen time
 These query agent work contexts to provide quick answers without full status
 output.
 
-### 9. Composite Commands and Agent Aliases
+### 9. Agent Context Management
+
+Agents can save and retrieve volatile project state that doesn't belong in git
+commits but needs to survive session boundaries:
+
+```bash
+# Save context from a file or stdin
+thrum context save --file continuation-notes.md
+echo "Next steps: finish JWT implementation" | thrum context save
+
+# View saved context
+thrum context show
+
+# Share context across worktrees (manual sync)
+thrum context sync
+```
+
+Context files are stored at `.thrum/context/{agent-name}.md` and integrated into
+`thrum status` output. Use the `/update-context` skill in Claude Code for guided
+context updates.
+
+**Use cases:**
+
+- Documenting architectural decisions under consideration
+- Tracking partial investigation results
+- Recording TODOs or questions for the next session
+- Preserving context when handing off work
+
+### 10. Composite Commands and Agent Aliases
 
 Composite commands combine multiple steps into a single invocation:
 
@@ -508,6 +538,7 @@ thrum wait --scope module:feature --timeout 5m
 | [Event Streaming](event-streaming.md)       | Notifications and subscriptions             |
 | [CLI Reference](cli.md)                     | All CLI commands                            |
 | [Identity System](identity.md)              | Agent identity and registration             |
+| [Context Management](context.md)            | Agent context storage and persistence       |
 | [Agent Coordination](agent-coordination.md) | Multi-agent workflows and Beads integration |
 | [Architecture](architecture.md)             | Foundation packages                         |
 

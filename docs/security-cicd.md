@@ -1,3 +1,4 @@
+
 # Security & CI/CD
 
 Thrum uses GitHub Actions for continuous integration, security scanning, and
@@ -32,16 +33,7 @@ gh workflow run deploy-pages.yml
 
 ### Security Scanning
 
-> **Note:** Security CI/CD workflows are being added. This section will be
-> updated with specific workflow details, scan types, and configuration options
-> once they are merged.
-
-Planned security checks include:
-
-- **Dependency scanning** — automated checks for known vulnerabilities in Go and
-  Node.js dependencies
-- **Static analysis** — code quality and security linting
-- **Secret detection** — prevent accidental credential commits
+Additional security scanning workflows are planned for a future release.
 
 ## Branch Protection
 
@@ -67,7 +59,7 @@ npm run build-docs
 
 ```bash
 cd website
-./dev-up.sh
+npm run serve
 # Visit http://localhost:8080
 ```
 
