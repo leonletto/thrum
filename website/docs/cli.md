@@ -1061,11 +1061,13 @@ and hooks.
 
     thrum wait [flags]
 
-| Flag        | Description                                 | Default |
-| ----------- | ------------------------------------------- | ------- |
-| `--timeout` | Max wait time (e.g., `30s`, `5m`, `1h`)     | `30s`   |
-| `--scope`   | Filter by scope (format: `type:value`)      |         |
-| `--mention` | Wait for mentions of role (format: `@role`) |         |
+| Flag        | Description                                                    | Default            |
+| ----------- | -------------------------------------------------------------- | ------------------ |
+| `--timeout` | Max wait time (e.g., `30s`, `5m`, `1h`)                        | `30s`              |
+| `--scope`   | Filter by scope (format: `type:value`)                         |                    |
+| `--mention` | Wait for mentions of role (format: `@role`)                    |                    |
+| `--all`     | Wait for all messages (broadcasts + directed)                  | `false`            |
+| `--after`   | Only return messages after relative time (e.g., `-30s`, `-5m`) | now (when `--all`) |
 
 Exit codes: `0` = message received, `1` = timeout, `2` = error.
 
@@ -1074,6 +1076,9 @@ Example:
     $ thrum wait --scope module:auth --timeout=5m
     ✓ Message received: msg_01HXE8Z7 from @planner
       We should refactor the sync daemon before adding embeddings.
+
+    # Wait for any message (broadcasts + directed), skip old ones
+    $ thrum wait --all --after -30s --timeout=5m
 
     # Use in scripts
     if thrum wait --timeout=30s; then
