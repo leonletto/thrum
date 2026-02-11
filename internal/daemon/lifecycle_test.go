@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -119,10 +118,9 @@ func TestLifecycleSignalHandling(t *testing.T) {
 		}
 	})
 
-	// Send SIGTERM to trigger shutdown
-	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
-		t.Fatalf("failed to send SIGTERM: %v", err)
-	}
+	// Trigger shutdown directly instead of sending SIGTERM to entire test process
+	// (sending SIGTERM to os.Getpid() would affect all tests, not just this daemon)
+	lifecycle.Shutdown()
 
 	// Wait for shutdown to complete
 	select {
