@@ -37,6 +37,7 @@ func TestTriggers_SyncOnWrite(t *testing.T) {
 		case <-deadline:
 			t.Fatal("Timeout waiting for LastSyncAt to be updated after SyncOnWrite")
 		default:
+			// Poll interval - waiting for async sync operation to complete
 			time.Sleep(20 * time.Millisecond)
 		}
 	}
@@ -72,6 +73,7 @@ func TestTriggers_SyncManual(t *testing.T) {
 		case <-deadline:
 			t.Fatal("Timeout waiting for LastSyncAt to be updated after SyncManual")
 		default:
+			// Poll interval - waiting for async sync operation to complete
 			time.Sleep(20 * time.Millisecond)
 		}
 	}

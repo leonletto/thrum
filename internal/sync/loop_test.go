@@ -29,7 +29,7 @@ func TestSyncLoop_StartStop(t *testing.T) {
 		t.Fatalf("Start failed: %v", err)
 	}
 
-	// Let it run for a bit
+	// Let loop run through a few cycles (intentional - testing start/stop/restart behavior)
 	time.Sleep(250 * time.Millisecond)
 
 	if err := loop.Stop(); err != nil {
@@ -79,6 +79,7 @@ func TestSyncLoop_ManualTrigger(t *testing.T) {
 		case <-deadline:
 			t.Fatal("Expected lastSyncAt to be set")
 		default:
+			// Poll interval - waiting for async sync operation to complete
 			time.Sleep(20 * time.Millisecond)
 		}
 	}
@@ -116,6 +117,7 @@ func TestSyncLoop_Status(t *testing.T) {
 		case <-deadline:
 			t.Fatal("Expected lastSyncAt to be set after initial sync")
 		default:
+			// Poll interval - waiting for async sync operation to complete
 			time.Sleep(20 * time.Millisecond)
 		}
 	}
@@ -354,6 +356,7 @@ func TestSyncLoop_LocalOnly_StatusReportsMode(t *testing.T) {
 		case <-deadline:
 			t.Fatal("Expected lastSyncAt to be set after initial sync")
 		default:
+			// Poll interval - waiting for async sync operation to complete
 			time.Sleep(20 * time.Millisecond)
 		}
 	}

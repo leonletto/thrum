@@ -94,7 +94,7 @@ func TestWaiterSingleActive(t *testing.T) {
 		_, _ = w.WaitForMessage(context.Background(), 2, "")
 	}()
 
-	// Give it time to start
+	// Give goroutine time to start waiting (intentional - ensuring operation is in-flight)
 	time.Sleep(50 * time.Millisecond)
 
 	// Second wait should fail
@@ -127,7 +127,7 @@ func TestWaiterChannelSignal(t *testing.T) {
 		resultCh <- result
 	}()
 
-	// Give it time to start
+	// Give goroutine time to start waiting (intentional - ensuring operation is in-flight)
 	time.Sleep(50 * time.Millisecond)
 
 	// Simulate notification arrival

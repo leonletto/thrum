@@ -5,6 +5,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -101,8 +102,8 @@ func (td *testDaemon) start(t *testing.T) {
 		t.Fatalf("failed to start daemon server: %v", err)
 	}
 
-	// Give server time to bind socket
-	time.Sleep(20 * time.Millisecond)
+	// Wait for socket to be ready
+	waitForSocketReady(t, td.socketPath)
 
 	// TODO: Start WebSocket server for wait_for_message tests
 	// For now, skip WS server - we'll test without it first
@@ -570,7 +571,7 @@ func TestWaitForMessageReceivesMessage(t *testing.T) {
 		resultCh <- waitResult{output, err}
 	}()
 
-	// Give waiter time to connect to WebSocket
+	// Give waiter time to connect to WebSocket (intentional - ensuring operation is in-flight)
 	time.Sleep(500 * time.Millisecond)
 
 	// Send a message to waiter
@@ -609,4 +610,23 @@ func TestWaitForMessageReceivesMessage(t *testing.T) {
 	}
 
 	// Should return in < 2 seconds (we waited 500ms + send time)
+}
+
+// waitForSocketReady waits for a Unix socket to become available and accept connections, with timeout.
+func waitForSocketReady(t *testing.T, socketPath string) {
+	t.Helper()
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		// Check if socket file exists
+		if _, err := os.Stat(socketPath); err == nil {
+			// Try to actually connect to verify server is ready
+			conn, err := net.Dial("unix", socketPath)
+			if err == nil {
+				_ = conn.Close()
+				return
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("socket %s did not become available", socketPath)
 }
