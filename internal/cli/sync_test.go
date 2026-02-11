@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net"
 	"testing"
-	"time"
 )
 
 func TestSyncForce(t *testing.T) {
@@ -49,7 +48,7 @@ func TestSyncForce(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)
@@ -116,7 +115,7 @@ func TestSyncStatus(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)

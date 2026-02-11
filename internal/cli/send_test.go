@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net"
 	"testing"
-	"time"
 )
 
 func TestSend(t *testing.T) {
@@ -55,7 +54,7 @@ func TestSend(t *testing.T) {
 		}
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -117,7 +116,7 @@ func TestSend_WithScopes(t *testing.T) {
 		_ = encoder.Encode(response)
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -194,7 +193,7 @@ func TestSend_WithRefs(t *testing.T) {
 		_ = encoder.Encode(response)
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -271,7 +270,7 @@ func TestSend_WithStructured(t *testing.T) {
 		_ = encoder.Encode(response)
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {

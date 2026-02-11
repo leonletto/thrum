@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net"
 	"testing"
-	"time"
 )
 
 func TestSessionStart(t *testing.T) {
@@ -49,7 +48,7 @@ func TestSessionStart(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)
@@ -119,7 +118,7 @@ func TestSessionEnd(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)
@@ -211,7 +210,7 @@ func TestSessionHeartbeat(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)

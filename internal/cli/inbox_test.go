@@ -68,7 +68,7 @@ func TestInbox(t *testing.T) {
 		}
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -139,7 +139,7 @@ func TestInbox_WithFilters(t *testing.T) {
 		_ = encoder.Encode(response)
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {

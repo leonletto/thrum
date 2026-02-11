@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net"
 	"testing"
-	"time"
 
 	"github.com/leonletto/thrum/internal/types"
 )
@@ -51,7 +50,7 @@ func TestSubscribe(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)
@@ -116,7 +115,7 @@ func TestUnsubscribe(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)
@@ -188,7 +187,7 @@ func TestListSubscriptions(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)

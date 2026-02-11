@@ -51,7 +51,7 @@ func TestThreadCreate(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)
@@ -162,7 +162,7 @@ func TestThreadList(t *testing.T) {
 		_ = encoder.Encode(response)
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -305,7 +305,7 @@ func TestThreadShow(t *testing.T) {
 		_ = encoder.Encode(response)
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {

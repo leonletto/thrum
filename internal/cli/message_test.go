@@ -56,7 +56,7 @@ func TestMessageGet(t *testing.T) {
 		_ = encoder.Encode(response)
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -253,7 +253,7 @@ func TestMessageEdit(t *testing.T) {
 		_ = encoder.Encode(response)
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -304,7 +304,7 @@ func TestMessageDelete(t *testing.T) {
 		_ = encoder.Encode(response)
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -354,7 +354,7 @@ func TestMessageMarkRead(t *testing.T) {
 		_ = encoder.Encode(response)
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {

@@ -88,7 +88,7 @@ func TestStatus(t *testing.T) {
 		}
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
