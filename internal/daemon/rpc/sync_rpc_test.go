@@ -69,6 +69,7 @@ func TestSyncForceHandler_Handle(t *testing.T) {
 		case <-deadline:
 			t.Fatal("Expected non-empty LastSyncAt after sync")
 		default:
+			// Poll interval - waiting for async sync operation to complete
 			time.Sleep(20 * time.Millisecond)
 		}
 	}
@@ -131,6 +132,7 @@ func TestSyncStatusHandler_Handle(t *testing.T) {
 		case <-deadline:
 			t.Fatal("Expected non-empty LastSyncAt after sync")
 		default:
+			// Poll interval - waiting for async sync operation to complete
 			time.Sleep(20 * time.Millisecond)
 		}
 	}
@@ -176,6 +178,7 @@ func TestSyncForceHandler_LocalOnlyMode(t *testing.T) {
 		case <-deadline:
 			t.Fatal("sync did not complete")
 		default:
+			// Poll interval - waiting for async sync operation to complete
 			time.Sleep(20 * time.Millisecond)
 		}
 	}
@@ -237,6 +240,7 @@ func TestSyncStatusHandler_LocalOnlyMode(t *testing.T) {
 		case <-deadline:
 			t.Fatal("sync did not complete")
 		default:
+			// Poll interval - waiting for async sync operation to complete
 			time.Sleep(20 * time.Millisecond)
 		}
 	}

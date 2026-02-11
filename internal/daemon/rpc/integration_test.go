@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -18,8 +19,9 @@ func TestHealthCheckIntegration(t *testing.T) {
 	// Create server
 	server := daemon.NewServer(socketPath)
 
-	// Register health handler
-	healthHandler := NewHealthHandler(time.Now(), "1.0.0-test", "test-repo-123")
+	// Register health handler with a start time in the past to ensure positive uptime
+	startTime := time.Now().Add(-10 * time.Millisecond)
+	healthHandler := NewHealthHandler(startTime, "1.0.0-test", "test-repo-123")
 	server.RegisterHandler("health", healthHandler.Handle)
 
 	// Start server
@@ -29,8 +31,8 @@ func TestHealthCheckIntegration(t *testing.T) {
 	}
 	defer func() { _ = server.Stop() }()
 
-	// Give server time to start
-	time.Sleep(10 * time.Millisecond)
+	// Wait for socket to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Connect to server
 	conn, err := net.Dial("unix", socketPath)
@@ -105,4 +107,23 @@ func TestHealthCheckIntegration(t *testing.T) {
 	if healthResp.SyncState != "synced" {
 		t.Errorf("expected sync state 'synced', got %s", healthResp.SyncState)
 	}
+}
+
+// waitForSocketReady waits for a Unix socket to become available and accept connections, with timeout.
+func waitForSocketReady(t *testing.T, socketPath string) {
+	t.Helper()
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		// Check if socket file exists
+		if _, err := os.Stat(socketPath); err == nil {
+			// Try to actually connect to verify server is ready
+			conn, err := net.Dial("unix", socketPath)
+			if err == nil {
+				_ = conn.Close()
+				return
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("socket %s did not become available", socketPath)
 }

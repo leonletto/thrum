@@ -367,7 +367,7 @@ func TestSessionHeartbeat(t *testing.T) {
 			t.Fatalf("query last_seen_at: %v", err)
 		}
 
-		// Wait a bit to ensure timestamp changes
+		// Wait a bit to ensure timestamp changes (intentional timing test)
 		time.Sleep(10 * time.Millisecond)
 
 		// Send heartbeat
@@ -631,7 +631,7 @@ func TestHeartbeat_WorkContext(t *testing.T) {
 		t.Fatalf("heartbeat: %v", err)
 	}
 
-	// Wait a bit for async processing
+	// Wait for async work context extraction to complete
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify work context was stored
@@ -1087,7 +1087,7 @@ func TestSessionList(t *testing.T) {
 	}
 	sessionID1 := startResp1Typed.SessionID
 
-	// Wait a bit to ensure different timestamps
+	// Wait to ensure different timestamps (intentional timing test)
 	time.Sleep(10 * time.Millisecond)
 
 	// Start second session for agentID

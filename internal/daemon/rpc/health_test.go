@@ -14,7 +14,7 @@ func TestHealthHandler(t *testing.T) {
 
 	handler := NewHealthHandler(startTime, version, repoID)
 
-	// Wait a bit to accumulate uptime
+	// Wait a bit to accumulate uptime (intentional timing test)
 	time.Sleep(10 * time.Millisecond)
 
 	// Call handler
