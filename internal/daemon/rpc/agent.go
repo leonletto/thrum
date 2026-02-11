@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
@@ -666,6 +667,12 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 	contextPath := filepath.Join(thrumDir, "context", req.Name+".md")
 	if err := os.Remove(contextPath); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("delete context file: %w", err)
+	}
+
+	// Delete preamble file (if exists)
+	preamblePath := agentcontext.PreamblePath(thrumDir, req.Name)
+	if err := os.Remove(preamblePath); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("delete preamble file: %w", err)
 	}
 
 	// Delete agent from SQLite
