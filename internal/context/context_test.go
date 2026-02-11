@@ -16,7 +16,7 @@ func TestSave(t *testing.T) {
 
 	// Verify file exists
 	path := filepath.Join(thrumDir, "context", "test_agent.md")
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304 - test helper reading temp file
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestSaveBadDir(t *testing.T) {
 	// Use a file as the "thrumDir" so MkdirAll fails
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "notadir")
-	if err := os.WriteFile(filePath, []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -199,7 +199,7 @@ func TestClearRemoveError(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Put a file inside so rmdir fails
-	if err := os.WriteFile(filepath.Join(mdDir, "child"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(mdDir, "child"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 

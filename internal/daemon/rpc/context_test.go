@@ -47,7 +47,7 @@ func TestContextHandleSave(t *testing.T) {
 	}
 
 	// Verify file was written
-	data, err := os.ReadFile(filepath.Join(thrumDir, "context", "test_agent.md"))
+	data, err := os.ReadFile(filepath.Join(thrumDir, "context", "test_agent.md")) //nolint:gosec // G304 - test helper reading temp file
 	if err != nil {
 		t.Fatalf("read context file: %v", err)
 	}

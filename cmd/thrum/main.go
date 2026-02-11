@@ -2339,9 +2339,10 @@ Examples:
 
 			// Push (skip in local-only mode - check for remote)
 			remoteCmd := exec.Command("git", "-C", syncDir, "remote", "get-url", "origin") //nolint:gosec // G204 - internal path construction
-			if _, err := remoteCmd.Output(); err != nil {
+			if _, remoteErr := remoteCmd.Output(); remoteErr != nil {
+				// No remote configured is not an error — local-only sync is valid
 				fmt.Printf("Context synced locally for %s (no remote configured).\n", agentID)
-				return nil
+				return nil //nolint:nilerr // intentional: no remote means local-only mode, not a failure
 			}
 
 			pushCmd := exec.Command("git", "-C", syncDir, "push", "origin", "a-sync") //nolint:gosec // G204 - internal path construction
