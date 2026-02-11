@@ -6,8 +6,6 @@ description: >
   multi-session coordination, and context recovery after compaction.
 ---
 
-> **Note:** Copy this file to your project's `.claude/agents/` directory to use it in Claude Code.
-
 # Beads Integration Guide
 
 Git-backed, dependency-aware issue tracker for AI-supervised coding workflows.
@@ -89,8 +87,19 @@ bd sync
 - **`discovered-from`** - Track side quests discovered during work (preserves
   context).
 
-**Direction matters for blocks:** `bd dep add prerequisite-id blocked-id` means
-prerequisite blocks blocked.
+**Direction:** `bd dep add <issue> <depends-on>` — first arg depends on second
+arg. So `bd dep add blocked-id prerequisite-id` means "blocked depends on
+prerequisite" (prerequisite blocks blocked).
+
+**Epic/task pattern:** Tasks depend on their epic (epic is the parent). Write:
+`bd dep add <task-id> <epic-id>`. This produces:
+- Epic shows `CHILDREN ↳ task` (or `BLOCKS ← task`)
+- Task shows `PARENT ↑ epic` (or `DEPENDS ON → epic`)
+- bdui renders the task nested under the epic
+
+**Common mistake:** Writing `bd dep add <epic-id> <task-id>` — this makes the
+epic depend on the task, which is backwards. bdui will show the epic as empty
+with no children.
 
 ### Hash-Based IDs
 
@@ -132,9 +141,10 @@ bd create "Task title" -t task -p 1 \
 # Create and link discovered work
 bd create "Found bug" -t bug -p 1 --deps discovered-from:<parent-id> --json
 
-# Create epic with children
-bd create "Auth System" -t epic -p 1 --json         # Returns: bd-a3f8
-bd create "Login UI" -p 1 --parent bd-a3f8 --json   # Returns: bd-a3f8.1
+# Create epic, then tasks, then link them
+bd create --title="Auth System" --type=epic --priority=1 --json   # Returns: bd-a3f8
+bd create --title="Login UI" --type=task --priority=1 --json      # Returns: bd-c2d4
+bd dep add bd-c2d4 bd-a3f8                                        # task depends on epic
 ```
 
 ### Updating Issues
@@ -157,14 +167,14 @@ bd reopen <id> --reason "Reopening" --json
 ### Dependencies
 
 ```bash
-# Add hard blocker (affects bd ready)
-bd dep add <prerequisite> <blocked> --type blocks --json
+# Add hard blocker: blocked depends on prerequisite (affects bd ready)
+bd dep add <blocked> <prerequisite> --type blocks --json
 
 # Add soft link (informational)
 bd dep add <task1> <task2> --type related --json
 
 # Track discovery
-bd dep add <original> <discovered> --type discovered-from --json
+bd dep add <discovered> <original> --type discovered-from --json
 
 # View dependency tree
 bd dep tree <id>
@@ -236,15 +246,15 @@ bd sync
 
 ```bash
 # Create prerequisite
-bd create "Create DB schema" -t task -p 1 --json
+bd create --title="Create DB schema" --type=task --priority=1 --json
 # Returns: bd-789
 
 # Create dependent task
-bd create "Add API endpoints" -t task -p 1 --json
+bd create --title="Add API endpoints" --type=task --priority=1 --json
 # Returns: bd-790
 
-# Link dependency
-bd dep add bd-789 bd-790 --type blocks --json
+# Link: bd-790 depends on bd-789 (bd-789 must finish first)
+bd dep add bd-790 bd-789 --type blocks --json
 
 # Check ready work
 bd ready --json  # Shows bd-789 only (bd-790 blocked)
@@ -256,32 +266,41 @@ bd close bd-789 --reason "Schema complete" --json
 bd ready --json  # Now shows bd-790 (unblocked)
 ```
 
-### Workflow 4: Epic-Driven Work
+### Workflow 4: Epic with Tasks
 
 ```bash
-# Create epic
-bd create "Implement OAuth" -t epic -p 1 -e 480 --json
-# Returns: bd-oauth
+# 1. Create the epic
+bd create --title="v1.0 Auth System" --type=epic --priority=1 --json
+# Returns: thrum-abc1
 
-# Add children (auto-numbered)
-bd create "Set up credentials" -t task -p 1 --parent bd-oauth -e 60 --json
-bd create "Implement auth flow" -t task -p 1 --parent bd-oauth -e 180 --json
-bd create "Add token refresh" -t task -p 1 --parent bd-oauth -e 120 --json
-bd create "Create login UI" -t task -p 1 --parent bd-oauth -e 120 --json
+# 2. Create tasks
+bd create --title="Set up credentials" --type=task --priority=1 --json
+# Returns: thrum-abc2
+bd create --title="Implement auth flow" --type=task --priority=1 --json
+# Returns: thrum-abc3
+bd create --title="Add token refresh" --type=task --priority=1 --json
+# Returns: thrum-abc4
 
-# Work through children
-bd ready --json  # Shows all children (no dependencies yet)
+# 3. Link tasks to epic (task depends on epic = epic is parent)
+bd dep add thrum-abc2 thrum-abc1    # task depends on epic
+bd dep add thrum-abc3 thrum-abc1    # task depends on epic
+bd dep add thrum-abc4 thrum-abc1    # task depends on epic
 
-# Complete children
-bd close bd-oauth.1 --reason "Credentials configured" --json
-bd close bd-oauth.2 --reason "Auth flow implemented" --json
-# ...
+# Verify: epic should show CHILDREN/BLOCKS, tasks should show PARENT/DEPENDS ON
+bd show thrum-abc1
+# BLOCKS
+#   ← thrum-abc2: Set up credentials
+#   ← thrum-abc3: Implement auth flow
+#   ← thrum-abc4: Add token refresh
 
-# Check epic progress
-bd epic status --json
+# 4. Work through tasks
+bd ready --json
+bd close thrum-abc2 --reason "Credentials configured" --json
+bd close thrum-abc3 --reason "Auth flow implemented" --json
+bd close thrum-abc4 --reason "Token refresh done" --json
 
-# Close epic when all children complete
-bd epic close-eligible --json
+# 5. Close epic when all tasks complete
+bd close thrum-abc1 --reason "All tasks done" --json
 ```
 
 ## Adding Notes for Context
@@ -357,6 +376,8 @@ bd show <id> --json | jq '.[0].parent != null'
 
 - Skip `bd sync` (leaves work stranded)
 - Use `blocks` for soft relationships (use `related`)
+- Reverse epic dependency direction (`bd dep add epic task` is WRONG —
+  use `bd dep add task epic` so the task depends on the epic as its parent)
 - Create duplicate issues (search first)
 - Leave tasks `in_progress` when switching work
 - Use vague titles ("Fix auth" → "Add JWT auth")
