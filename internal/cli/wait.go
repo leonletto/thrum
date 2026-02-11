@@ -11,6 +11,8 @@ type WaitOptions struct {
 	Timeout       time.Duration
 	Scope         string // Format: "type:value"
 	Mention       string // Format: "@role"
+	All           bool   // Subscribe to all messages (broadcasts + directed)
+	After         time.Time // Only return messages created after this time (zero = no filter)
 	CallerAgentID string // Caller's resolved agent ID (for worktree identity)
 }
 
@@ -39,6 +41,9 @@ func Wait(client *Client, opts WaitOptions) (*Message, error) {
 	}
 	if opts.CallerAgentID != "" {
 		subscribeParams["caller_agent_id"] = opts.CallerAgentID
+	}
+	if opts.All {
+		subscribeParams["all"] = true
 	}
 
 	// Subscribe to notifications
@@ -90,7 +95,15 @@ func Wait(client *Client, opts WaitOptions) (*Message, error) {
 			}
 
 			if len(inbox.Messages) > 0 {
-				return &inbox.Messages[0], nil
+				msg := &inbox.Messages[0]
+				// Apply --after filter: skip messages created before threshold
+				if !opts.After.IsZero() && msg.CreatedAt != "" {
+					createdAt, parseErr := time.Parse(time.RFC3339Nano, msg.CreatedAt)
+					if parseErr == nil && !createdAt.After(opts.After) {
+						continue // Message is too old, keep waiting
+					}
+				}
+				return msg, nil
 			}
 		}
 	}

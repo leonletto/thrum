@@ -431,6 +431,14 @@ func waitCmd() *cobra.Command {
 
 Useful for automation and hooks that need to wait for specific messages.
 
+Use --all to subscribe to all messages including broadcasts.
+Use --after to only accept messages created after a relative time offset:
+  -30s  = messages from the last 30 seconds
+  -5m   = messages from the last 5 minutes
+  +60s  = messages arriving at least 60 seconds from now
+
+When --all is used without --after, defaults to "now" (only new messages).
+
 Exit codes:
   0 = message received
   1 = timeout
@@ -444,6 +452,36 @@ Exit codes:
 
 			scope, _ := cmd.Flags().GetString("scope")
 			mention, _ := cmd.Flags().GetString("mention")
+			allMsgs, _ := cmd.Flags().GetBool("all")
+			afterStr, _ := cmd.Flags().GetString("after")
+
+			// Parse --after relative time
+			var afterTime time.Time
+			if afterStr != "" {
+				// Parse as relative duration from now
+				// "-30s" = 30s ago, "30s" or "+30s" = 30s from now
+				durationStr := afterStr
+				negate := false
+				if strings.HasPrefix(durationStr, "-") {
+					negate = true
+					durationStr = durationStr[1:]
+				} else if strings.HasPrefix(durationStr, "+") {
+					durationStr = durationStr[1:]
+				}
+				d, parseErr := time.ParseDuration(durationStr)
+				if parseErr != nil {
+					return fmt.Errorf("invalid --after duration %q: %w (examples: -30s, -5m, +60s)", afterStr, parseErr)
+				}
+				if negate {
+					afterTime = time.Now().Add(-d)
+				} else {
+					afterTime = time.Now().Add(d)
+				}
+			} else if allMsgs {
+				// Default: when --all without --after, default to now
+				// (only show messages arriving after this point)
+				afterTime = time.Now()
+			}
 
 			agentID, err := resolveLocalAgentID()
 			if err != nil {
@@ -454,7 +492,13 @@ Exit codes:
 				Timeout:       timeout,
 				Scope:         scope,
 				Mention:       mention,
+				All:           allMsgs,
+				After:         afterTime,
 				CallerAgentID: agentID,
+			}
+
+			if flagVerbose && !afterTime.IsZero() {
+				fmt.Fprintf(os.Stderr, "Listening for messages after %s\n", afterTime.Format(time.RFC3339))
 			}
 
 			client, err := getClient()
@@ -492,6 +536,8 @@ Exit codes:
 	cmd.Flags().String("timeout", "30s", "Max wait time (e.g., 30s, 5m)")
 	cmd.Flags().String("scope", "", "Filter by scope (format: type:value)")
 	cmd.Flags().String("mention", "", "Wait for mentions of role (format: @role)")
+	cmd.Flags().Bool("all", false, "Subscribe to all messages (broadcasts + directed)")
+	cmd.Flags().String("after", "", "Only return messages after this relative time (e.g., -30s, -5m, +60s)")
 
 	return cmd
 }
