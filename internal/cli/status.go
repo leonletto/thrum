@@ -32,8 +32,8 @@ type WhoamiResult struct {
 // ContextInfo contains agent context file metadata for status display.
 type ContextInfo struct {
 	HasContext bool   `json:"has_context"`
-	Size      int64  `json:"size,omitempty"`
-	UpdatedAt string `json:"updated_at,omitempty"`
+	Size       int64  `json:"size,omitempty"`
+	UpdatedAt  string `json:"updated_at,omitempty"`
 }
 
 // StatusResult contains combined status information.
@@ -84,8 +84,8 @@ func Status(client *Client) (*StatusResult, error) {
 		if err := client.Call("context.show", map[string]any{"agent_name": whoami.AgentID}, &ctxShow); err == nil && ctxShow.HasContext {
 			result.Context = &ContextInfo{
 				HasContext: true,
-				Size:      ctxShow.Size,
-				UpdatedAt: ctxShow.UpdatedAt,
+				Size:       ctxShow.Size,
+				UpdatedAt:  ctxShow.UpdatedAt,
 			}
 		}
 
