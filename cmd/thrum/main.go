@@ -2174,12 +2174,15 @@ func contextShowCmd() *cobra.Command {
 	var flagNoPreamble bool
 
 	cmd := &cobra.Command{
-		Use:   "show",
-		Short: "Show agent context",
+		Use:     "show",
+		Aliases: []string{"load"},
+		Short:   "Show agent context",
 		Long: `Show saved context for the current agent (or --agent NAME).
+Also available as 'thrum context load'.
 
 Examples:
   thrum context show
+  thrum context load
   thrum context show --agent coordinator
   thrum context show --raw
   thrum context show --no-preamble`,
