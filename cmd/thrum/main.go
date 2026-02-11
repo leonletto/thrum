@@ -2051,7 +2051,58 @@ func contextCmd() *cobra.Command {
 	cmd.AddCommand(contextShowCmd())
 	cmd.AddCommand(contextClearCmd())
 	cmd.AddCommand(contextSyncCmd())
+	cmd.AddCommand(contextUpdateCmd())
 
+	return cmd
+}
+
+func contextUpdateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Update agent context (delegates to /update-context skill)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Determine search paths for the skill file
+			var searchPaths []string
+
+			// Project-level: relative to repo root (.thrum/ directory)
+			cwd, err := os.Getwd()
+			if err == nil {
+				if repoRoot, err := paths.FindThrumRoot(cwd); err == nil {
+					searchPaths = append(searchPaths, filepath.Join(repoRoot, ".claude", "commands", "update-context.md"))
+				}
+			}
+
+			// Global: ~/.claude/commands/
+			if homeDir, err := os.UserHomeDir(); err == nil {
+				searchPaths = append(searchPaths, filepath.Join(homeDir, ".claude", "commands", "update-context.md"))
+			}
+
+			for _, p := range searchPaths {
+				if _, err := os.Stat(p); err == nil {
+					fmt.Printf("Context update skill found at %s\n", p)
+					fmt.Println("Run /update-context in Claude Code to update your agent context.")
+					return nil
+				}
+			}
+
+			// Not found — print installation instructions
+			fmt.Println("The /update-context skill is not installed.")
+			fmt.Println()
+			fmt.Println("This skill guides agents to compose structured context and save it")
+			fmt.Println("via 'thrum context save'. Install it from the thrum toolkit:")
+			fmt.Println()
+			fmt.Println("  # Project-level (this repo only)")
+			fmt.Println("  mkdir -p .claude/commands")
+			fmt.Println("  cp toolkit/commands/update-context.md .claude/commands/")
+			fmt.Println()
+			fmt.Println("  # Global (all projects)")
+			fmt.Println("  mkdir -p ~/.claude/commands")
+			fmt.Println("  cp toolkit/commands/update-context.md ~/.claude/commands/")
+			fmt.Println()
+			fmt.Println("See toolkit/commands/README.md for details.")
+			return nil
+		},
+	}
 	return cmd
 }
 
