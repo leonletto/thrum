@@ -36,6 +36,7 @@ type IdentityFile struct {
 	Agent       AgentConfig `json:"agent"`
 	Worktree    string      `json:"worktree"` // Worktree name (e.g., "daemon", "foundation")
 	ConfirmedBy string      `json:"confirmed_by"`
+	ContextFile string      `json:"context_file,omitempty"` // Relative path from .thrum/ (e.g., "context/coordinator.md")
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 

@@ -129,6 +129,12 @@ func IdentitiesDir(repoPath string) string {
 	return filepath.Join(repoPath, ".thrum", "identities")
 }
 
+// ContextDir returns the path to the context directory.
+// Like identities, context is local to the worktree (not redirected).
+func ContextDir(repoPath string) string {
+	return filepath.Join(repoPath, ".thrum", "context")
+}
+
 // IsRedirected returns true if the given repo path uses a redirect file.
 func IsRedirected(repoPath string) bool {
 	redirectPath := filepath.Join(repoPath, ".thrum", "redirect")
