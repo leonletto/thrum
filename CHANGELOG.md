@@ -8,30 +8,6 @@ and this project adheres to
 
 ## [Unreleased]
 
-### Added - Epic: Auto-detect worktree for identity resolution
-
-#### Identity Resolution Improvements
-
-- **Worktree-based identity filtering**: When multiple identity files exist,
-  thrum now automatically filters by the current git worktree name
-- **Git-based worktree detection**: Uses `git rev-parse --show-toplevel` for
-  accurate worktree name detection regardless of current directory
-- **Improved error messages**: Clear error messages listing available identity
-  names and suggesting fixes when auto-selection fails
-- **Backward compatibility**: Solo-agent repos and THRUM_NAME env var continue
-  to work as before
-
-#### Migration Notes
-
-If you have existing identity files with incorrect worktree fields (created
-before this update), you can fix them by:
-
-1. Navigate to the correct worktree: `cd ~/.workspaces/thrum/<worktree-name>`
-2. Re-register the agent: `thrum quickstart --role <role> --module <module>`
-
-This will update the identity file with the correct worktree name, enabling
-auto-selection without THRUM_NAME.
-
 ### Added - Epic 11: UI Core
 
 #### Component System
@@ -199,6 +175,79 @@ auto-selection without THRUM_NAME.
 ### Fixed
 
 - Schema migration logic handles incremental upgrades from v3 to v4
+
+## [0.2.0] - 2026-02-10
+
+### Added
+
+#### Identity Resolution & Wait Command Epic (thrum-fw9k)
+
+Complete overhaul of agent identity resolution for multi-worktree repositories,
+plus efficient blocking-based message listening.
+
+- **Most-recent-wins auto-selection** (thrum-l814): When multiple identity files
+  exist for a worktree, automatically selects the one with the latest UpdatedAt
+  timestamp. Eliminates "cannot auto-select identity" errors.
+
+- **Worktree identity guard** (thrum-nod7): Running from a redirected worktree
+  with no registered identities now returns a clear error ("no agent identities
+  registered in this worktree") instead of silently falling through to the main
+  repo's identities.
+
+- **Wait command --all and --after flags** (thrum-7vhf):
+  - `--all` flag subscribes to all messages (broadcasts + directed)
+  - `--after` flag filters by relative time (e.g., `--after -30s`, `--after
+    -5m`)
+  - Defaults to `--after=now` when `--all` is used
+  - Enables efficient blocking-based message listening without polling loops
+
+- **Beads agent guide documentation** (thrum-ts2h): Updated agent configuration
+  documentation with Beads mapping conventions and troubleshooting.
+
+#### Message-Listener Agent Rewrite
+
+- Replaced 60-cycle polling loop (inbox + sleep 30s) with 6-cycle blocking wait
+  using `thrum wait --all --timeout 5m`
+- Cost reduced from 120 Bash calls to 12 calls for ~30 minute coverage
+- More responsive to incoming messages (no sleep delays)
+
+#### Documentation Updates
+
+- **thrum-agent guide expansion**: Added Beads mapping convention table, 4 new
+  common patterns (Task Assignment, Blocked Notification, Review Request,
+  Context Compaction Recovery)
+- Expanded troubleshooting section (4 issues documented)
+- Added Resources section with git artifact structure reference
+
+### Changed
+
+- **Error-aware resolveLocalAgentID** (thrum-zft3): Internal identity resolution
+  function now returns `(string, error)` instead of just string
+- Updated all 17 CLI call sites to fail early with a "register first" error
+- Commands `send`, `inbox`, `reply`, `wait` now fail fast when no identity is
+  found
+- `message get` degrades gracefully with a stderr warning
+
+- **Inbox auto-filter by worktree identity** (thrum-mkjs): Inbox now
+  automatically filters messages based on the current worktree's identity,
+  preventing message leakage across worktrees
+
+### Fixed
+
+- Formatting alignment in wait.go (gofmt)
+
+### Migration Notes
+
+If you have existing identity files with incorrect worktree fields (created
+before this update), you can fix them by:
+
+1. Navigate to the correct worktree: `cd ~/.workspaces/thrum/<worktree-name>`
+2. Re-register the agent: `thrum quickstart --role <role> --module <module>`
+
+This will update the identity file with the correct worktree name, enabling
+auto-selection without THRUM_NAME.
+
+**Commits:** bf195ec, 8cb92b4
 
 ## [0.1.0] - Earlier Development
 

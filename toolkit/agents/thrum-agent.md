@@ -6,8 +6,6 @@ description: >
   integration, message-listener pattern, CLI usage, and Beads integration.
 ---
 
-> **Note:** Copy this file to your project's `.claude/agents/` directory to use it in Claude Code.
-
 # Thrum - Multi-Agent Coordination via Git
 
 ## Overview
@@ -249,7 +247,7 @@ thrum ping @name
 thrum quickstart --name planner --role planner --module website --intent "Coordinating website development"
 
 # Assign task via message
-thrum send "Please implement build script (task bd-123). Design spec in docs/plans/. Check beads for details." --to @implementer --priority high
+thrum send "Please implement build script (task thrum-235d.3). Design spec in docs/plans/. Check beads for details." --to @implementer --priority high
 
 # Check for updates
 thrum inbox
@@ -318,7 +316,7 @@ thrum send "Build script complete (commit abc123). Please review:
 - Search index generation
 - Error handling
 
-Tests passing. Beads task: bd-123" --to @reviewer --priority high
+Tests passing. Beads task: thrum-235d.3" --to @reviewer --priority high
 ```
 
 **Reviewer:**
@@ -335,7 +333,7 @@ thrum reply <msg-id> "Reviewed. Found 2 issues:
 1. Missing error handling in parseMarkdown()
 2. Search index doesn't handle compound terms
 
-See beads: bd-456 (bug filed). Otherwise looks good."
+See beads: thrum-abc (bug filed). Otherwise looks good."
 ```
 
 ### Workflow 4: Multi-Worktree Coordination
@@ -596,6 +594,17 @@ bd sync
 # (Thrum auto-syncs via daemon)
 ```
 
+### Mapping Convention
+
+| Concept    | Beads                              | Thrum                                   |
+| ---------- | ---------------------------------- | --------------------------------------- |
+| Task ID    | `bd-123`                           | Include in message: "Working on bd-123" |
+| Status     | `bd update --status`               | Send message with update                |
+| Priority   | `bd update --priority`             | `--priority` flag on messages           |
+| Assignment | `bd update --assignee`             | Send message to specific agent          |
+| Completion | `bd close bd-123`                  | Send completion message                 |
+| Discovery  | `bd create --deps discovered-from` | Notify via message                      |
+
 ## Best Practices
 
 ### DO ✅
@@ -621,6 +630,82 @@ bd sync
 - **Don't skip registration** - System won't route messages correctly
 - **Don't leave sessions open** - End when done to avoid stale status
 - **Don't use vague intents** - Be specific about current work
+
+## Common Patterns
+
+### Pattern 1: Task Assignment
+
+**Coordinator:**
+
+```bash
+# Find ready work in Beads
+bd ready --json
+
+# Assign via Thrum
+thrum send "Task bd-456 is ready for implementation. See design spec in docs/plans/. Estimated 2-3 hours." --to @implementer --priority high
+```
+
+**Implementer (MCP):**
+
+```typescript
+// Listener notifies of high-priority message
+const messages = await mcp.thrum.check_messages();
+const task = messages.find((m) => m.content.includes("bd-456"));
+
+// Claim in Beads
+await bash("bd update bd-456 --status in_progress --json");
+
+// Acknowledge via Thrum
+await mcp.thrum.send_message({
+  to: "@coordinator",
+  content: "Claimed bd-456. Starting implementation.",
+});
+```
+
+### Pattern 2: Blocked Notification
+
+```bash
+# Hit blocker
+bd update bd-789 --status blocked --json
+
+# Notify team
+thrum send "Blocked on bd-789: Need API credentials for Stripe integration. @coordinator can you help?" --to @coordinator --priority high
+```
+
+### Pattern 3: Review Request
+
+```bash
+# Complete work
+git commit -m "feat: Add JWT auth (bd-123)"
+bd close bd-123 --reason "Complete with tests" --json
+
+# Request review
+thrum send "bd-123 complete (commit a1b2c3d). Please review:
+- JWT generation (src/auth/jwt.ts)
+- Middleware (src/auth/middleware.ts)
+- Tests (tests/auth.test.ts)
+
+All tests passing. Ready to merge." --to @reviewer --priority high
+```
+
+### Pattern 4: Context Compaction Recovery
+
+After conversation compaction, agents can recover context via Thrum:
+
+```bash
+# Check inbox for recent context
+thrum inbox --unread
+
+# Check what others are working on
+thrum agent list
+
+# Review thread history
+thrum thread list
+
+# Check Beads for task state
+bd ready --json
+bd list --status in_progress --json
+```
 
 ## Session Workflow Template
 
@@ -697,7 +782,28 @@ thrum inbox
 3. **Wrong agent name** - Check `THRUM_NAME` env var
 4. **Sync issues** - Run `git pull` to get latest messages
 
-### Issue 2: Messages not syncing
+### Issue 2: Message listener not working
+
+**Symptom:** MCP `wait_for_message` fails or hangs
+
+**Diagnosis:**
+
+```bash
+# Check MCP server is configured
+cat .claude/settings.json | grep thrum
+
+# Test MCP server directly
+thrum mcp serve --help
+```
+
+**Solutions:**
+
+1. **MCP not configured** - Add to `.claude/settings.json`
+2. **Daemon not running** - Start with `thrum daemon start`
+3. **WebSocket issues** - Check `http://localhost:9999` is accessible
+4. **Fallback to CLI** - Use `thrum inbox` polling instead
+
+### Issue 3: Messages not syncing
 
 **Symptom:** Other agents don't see my messages
 
@@ -720,6 +826,66 @@ git log --oneline -10 a-sync
 2. **Not committed** - Daemon auto-commits after 60s, or run `thrum sync`
 3. **Not pushed** - Run `thrum sync` to force push
 4. **Branch diverged** - Pull and retry
+
+### Issue 4: Multiple agents with same name
+
+**Symptom:** Messages routing to wrong agent
+
+**Diagnosis:**
+
+```bash
+# List all agents
+thrum agent list
+
+# Check identity files
+ls -la .thrum/identities/
+```
+
+**Solutions:**
+
+1. **Use unique names** - Each agent needs unique name
+2. **Delete duplicates** - `thrum agent delete <name>`
+3. **Use THRUM_NAME** - Set different names per worktree
+
+## Resources
+
+### Documentation
+
+- **CLAUDE.md** - (this file) Complete agent integration guide
+- `docs/mcp-server.md` - MCP server technical details
+- `docs/messaging.md` - Message concepts and workflows
+- `docs/identity.md` - Agent identity system
+- `docs/cli.md` - Complete CLI reference
+
+### Web UI
+
+View messages in browser:
+
+```bash
+# Check UI URL
+thrum status
+# Open: http://localhost:9999
+```
+
+### Git Artifacts
+
+All messages stored in Git:
+
+```
+.git/thrum-sync/a-sync/
+├── events.jsonl              # Agent lifecycle events
+└── messages/
+    ├── agent1.jsonl          # Agent 1's messages
+    ├── agent2.jsonl          # Agent 2's messages
+    └── ...
+
+.thrum/
+├── identities/
+│   ├── agent1.json           # Agent 1's identity
+│   └── agent2.json           # Agent 2's identity
+└── var/
+    └── messages.db           # SQLite cache (gitignored)
+```
 
 ## Quick Reference
 
@@ -785,3 +951,34 @@ Thrum provides:
 - **Send status updates** - Keep team informed
 - **Handle priorities** - Respect critical/high messages
 - **End sessions cleanly** - `thrum session end`
+
+**Quick Start:**
+
+```bash
+# 1. Register
+thrum quickstart --name my_agent --role implementer --module website --intent "Building website"
+
+# 2. Launch listener (if MCP available)
+# Task(subagent_type="message-listener", ...)
+
+# 3. Send message
+thrum send "Starting work" --to @coordinator
+
+# 4. Check inbox
+thrum inbox
+
+# 5. End session
+thrum session end
+```
+
+---
+
+**Version:** 1.2 **Last Updated:** 2026-02-09 **Status:** Production-Ready
+
+**Changes in v1.2:** `thrum wait --mention` fixed — maps to `mention_role` RPC
+param, strips `@` prefix. Added `thrum message read --all` for batch
+mark-as-read. All messaging bugs resolved.
+
+**Changes in v1.1:** Message echo in inbox fixed — `exclude_self` server-side.
+Inbox `--unread` filtering fixed — proper `is_read` via LEFT JOIN, auto
+mark-as-read.
