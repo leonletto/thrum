@@ -662,6 +662,12 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("delete message file: %w", err)
 	}
 
+	// Delete context file (if exists)
+	contextPath := filepath.Join(thrumDir, "context", req.Name+".md")
+	if err := os.Remove(contextPath); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("delete context file: %w", err)
+	}
+
 	// Delete agent from SQLite
 	_, err = h.state.DB().Exec("DELETE FROM agents WHERE agent_id = ?", req.Name)
 	if err != nil {

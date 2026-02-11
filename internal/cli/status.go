@@ -29,11 +29,19 @@ type WhoamiResult struct {
 	SessionStart string `json:"session_start,omitempty"`
 }
 
+// ContextInfo contains agent context file metadata for status display.
+type ContextInfo struct {
+	HasContext bool   `json:"has_context"`
+	Size      int64  `json:"size,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
 // StatusResult contains combined status information.
 type StatusResult struct {
 	Health      HealthResult      `json:"health"`
 	Agent       *WhoamiResult     `json:"agent,omitempty"`
 	WorkContext *AgentWorkContext `json:"work_context,omitempty"`
+	Context     *ContextInfo      `json:"context,omitempty"`
 	Inbox       *struct {
 		Total  int `json:"total"`
 		Unread int `json:"unread"`
@@ -64,6 +72,20 @@ func Status(client *Client) (*StatusResult, error) {
 			}{
 				Total:  inbox.Total,
 				Unread: inbox.Unread,
+			}
+		}
+
+		// Get context file info
+		var ctxShow struct {
+			HasContext bool   `json:"has_context"`
+			Size       int64  `json:"size,omitempty"`
+			UpdatedAt  string `json:"updated_at,omitempty"`
+		}
+		if err := client.Call("context.show", map[string]any{"agent_name": whoami.AgentID}, &ctxShow); err == nil && ctxShow.HasContext {
+			result.Context = &ContextInfo{
+				HasContext: true,
+				Size:      ctxShow.Size,
+				UpdatedAt: ctxShow.UpdatedAt,
 			}
 		}
 
@@ -148,6 +170,17 @@ func FormatStatus(result *StatusResult) string {
 		}
 	} else {
 		output.WriteString("Agent:    not registered (use 'thrum agent register')\n")
+	}
+
+	// Context info
+	if result.Context != nil && result.Context.HasContext {
+		age := ""
+		if result.Context.UpdatedAt != "" {
+			if t, err := time.Parse(time.RFC3339, result.Context.UpdatedAt); err == nil {
+				age = fmt.Sprintf(" (updated %s ago)", formatDuration(time.Since(t)))
+			}
+		}
+		output.WriteString(fmt.Sprintf("Context:  %d bytes%s\n", result.Context.Size, age))
 	}
 
 	// Inbox info

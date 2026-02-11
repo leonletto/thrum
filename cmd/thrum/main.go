@@ -2050,6 +2050,7 @@ func contextCmd() *cobra.Command {
 	cmd.AddCommand(contextSaveCmd())
 	cmd.AddCommand(contextShowCmd())
 	cmd.AddCommand(contextClearCmd())
+	cmd.AddCommand(contextSyncCmd())
 
 	return cmd
 }
@@ -2204,6 +2205,120 @@ Examples:
 	cmd.Flags().StringVar(&flagAgent, "agent", "", "Override agent name")
 
 	return cmd
+}
+
+func contextSyncCmd() *cobra.Command {
+	var flagAgent string
+
+	cmd := &cobra.Command{
+		Use:   "sync",
+		Short: "Sync agent context to the a-sync branch",
+		Long: `Copy context file to the a-sync branch for sharing across worktrees.
+
+This copies .thrum/context/{agent}.md to the sync worktree, commits, and pushes.
+No-op when no remote is configured (local-only mode).
+
+Examples:
+  thrum context sync
+  thrum context sync --agent coordinator`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentID, err := resolveLocalAgentID()
+			if err != nil && flagAgent == "" {
+				return fmt.Errorf("failed to resolve agent identity: %w", err)
+			}
+			if flagAgent != "" {
+				agentID = flagAgent
+			}
+
+			// Resolve paths
+			repoPath := flagRepo
+			if repoPath == "" {
+				repoPath, err = os.Getwd()
+				if err != nil {
+					return fmt.Errorf("get working directory: %w", err)
+				}
+			}
+
+			syncDir, err := paths.SyncWorktreePath(repoPath)
+			if err != nil {
+				return fmt.Errorf("resolve sync worktree: %w", err)
+			}
+
+			// Check if sync worktree exists
+			if _, err := os.Stat(syncDir); os.IsNotExist(err) {
+				fmt.Println("No sync worktree found. Context sync requires 'thrum sync' to be configured.")
+				return nil
+			}
+
+			// Read context file
+			thrumDir := filepath.Join(repoPath, ".thrum")
+			content, loadErr := readContextFile(thrumDir, agentID)
+			if loadErr != nil {
+				return loadErr
+			}
+			if content == nil {
+				fmt.Printf("No context file for %s, nothing to sync.\n", agentID)
+				return nil
+			}
+
+			// Write to sync worktree
+			syncContextDir := filepath.Join(syncDir, "context")
+			if err := os.MkdirAll(syncContextDir, 0750); err != nil {
+				return fmt.Errorf("create sync context directory: %w", err)
+			}
+
+			destPath := filepath.Join(syncContextDir, agentID+".md")
+			if err := os.WriteFile(destPath, content, 0644); err != nil { //nolint:gosec // G306 - markdown file
+				return fmt.Errorf("write context to sync worktree: %w", err)
+			}
+
+			// Stage and commit in sync worktree
+			stageCmd := exec.Command("git", "-C", syncDir, "add", filepath.Join("context", agentID+".md")) //nolint:gosec // G204 - internal path construction
+			if out, err := stageCmd.CombinedOutput(); err != nil {
+				return fmt.Errorf("stage context file: %s: %w", string(out), err)
+			}
+
+			commitCmd := exec.Command("git", "-C", syncDir, "commit", "-m", fmt.Sprintf("context: sync %s", agentID), "--allow-empty") //nolint:gosec // G204 - internal path construction
+			if out, err := commitCmd.CombinedOutput(); err != nil {
+				// "nothing to commit" is OK
+				if !strings.Contains(string(out), "nothing to commit") {
+					return fmt.Errorf("commit context: %s: %w", string(out), err)
+				}
+			}
+
+			// Push (skip in local-only mode - check for remote)
+			remoteCmd := exec.Command("git", "-C", syncDir, "remote", "get-url", "origin") //nolint:gosec // G204 - internal path construction
+			if _, err := remoteCmd.Output(); err != nil {
+				fmt.Printf("Context synced locally for %s (no remote configured).\n", agentID)
+				return nil
+			}
+
+			pushCmd := exec.Command("git", "-C", syncDir, "push", "origin", "a-sync") //nolint:gosec // G204 - internal path construction
+			if out, err := pushCmd.CombinedOutput(); err != nil {
+				return fmt.Errorf("push context: %s: %w", string(out), err)
+			}
+
+			fmt.Printf("Context synced for %s.\n", agentID)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&flagAgent, "agent", "", "Override agent name")
+
+	return cmd
+}
+
+// readContextFile reads a context file from the thrum directory.
+func readContextFile(thrumDir, agentName string) ([]byte, error) {
+	path := filepath.Join(thrumDir, "context", agentName+".md")
+	data, err := os.ReadFile(path) //nolint:gosec // G304 - path from internal context directory
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read context file: %w", err)
+	}
+	return data, nil
 }
 
 func syncCmd() *cobra.Command {
