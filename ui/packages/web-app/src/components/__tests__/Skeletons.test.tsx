@@ -11,7 +11,7 @@ describe('Skeleton Components', () => {
 
       const skeletons = container.querySelectorAll('.animate-pulse');
       // 5 threads * 2 skeletons per thread = 10 total
-      expect(skeletons.length).toBeGreaterThanOrEqual(10);
+      expect(skeletons).toHaveLength(10);
     });
 
     it('renders within Card components', () => {
@@ -28,7 +28,7 @@ describe('Skeleton Components', () => {
 
       const skeletons = container.querySelectorAll('.animate-pulse');
       // 1 header + (4 agents * 2 skeletons) = 9 total
-      expect(skeletons.length).toBeGreaterThanOrEqual(9);
+      expect(skeletons).toHaveLength(9);
     });
 
     it('has proper spacing', () => {
@@ -89,9 +89,9 @@ describe('Skeleton Components', () => {
       const agentSkeletons = agentContainer.querySelectorAll('.animate-pulse');
       const messageSkeletons = messageContainer.querySelectorAll('.animate-pulse');
 
-      expect(threadSkeletons.length).toBeGreaterThan(0);
-      expect(agentSkeletons.length).toBeGreaterThan(0);
-      expect(messageSkeletons.length).toBeGreaterThan(0);
+      expect(threadSkeletons).toHaveLength(10);
+      expect(agentSkeletons).toHaveLength(9);
+      expect(messageSkeletons).toHaveLength(3);
     });
   });
 });
