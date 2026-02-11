@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-
 func TestLifecycleRun(t *testing.T) {
 	tmpDir := t.TempDir()
 	socketPath := filepath.Join(tmpDir, "test.sock")
