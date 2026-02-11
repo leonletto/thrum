@@ -1,6 +1,6 @@
 {
   "name": "@thrum/tui-app",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Thrum Terminal UI Application (TUI) - Ink-based interface",
   "main": "src/index.tsx",

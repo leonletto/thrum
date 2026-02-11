@@ -176,6 +176,55 @@ and this project adheres to
 
 - Schema migration logic handles incremental upgrades from v3 to v4
 
+## [0.3.0] - 2026-02-11
+
+### Added
+
+#### Agent Context Management Epic (thrum-fdco)
+
+Per-agent context storage for persisting volatile project state across sessions.
+Agents can save, view, clear, and sync markdown context files tied to their
+identity.
+
+- **`internal/context` package**: Core Save/Load/Clear/ContextPath functions for
+  `.thrum/context/{agent-name}.md` files. Format-agnostic markdown storage with
+  proper file permissions (0750 dirs, 0644 files).
+
+- **RPC handlers** (`internal/daemon/rpc/context.go`): `context.save`,
+  `context.show`, `context.clear` methods with proper locking (Lock for writes,
+  RLock for reads) following existing handler patterns.
+
+- **CLI commands**: `thrum context save|show|clear|sync|update`
+  - `save`: Read from `--file` or stdin, store as agent's context
+  - `show`: Display context with `--raw` option for undecorated output
+  - `clear`: Remove context file (idempotent)
+  - `sync`: Push context to a-sync branch for cross-machine sharing (manual
+    only, respects local-only mode)
+  - `update`: Detect and guide installation of the `/update-context` skill
+
+- **Status integration** (`internal/cli/status.go`): `thrum status` now shows
+  context file size and age when context exists.
+
+- **Agent cleanup integration** (`internal/daemon/rpc/agent.go`): `thrum agent
+  delete` now removes the agent's context file alongside identity and messages.
+
+- **`ContextFile` field** on `IdentityFile` struct (`internal/config/config.go`):
+  Optional pointer from identity to context file (omitempty JSON).
+
+- **`ContextDir()` helper** (`internal/paths/paths.go`): Directory resolution
+  for `.thrum/context/`, local to worktree (not redirected).
+
+- **`/update-context` skill** (`toolkit/commands/update-context.md`): A Claude
+  Code slash command that guides agents through saving context via a two-step
+  workflow — agent writes narrative summary, subagent gathers mechanical state
+  and merges both into structured markdown saved via `thrum context save`.
+
+- **Toolkit commands README** (`toolkit/commands/README.md`): Documents available
+  skills and installation instructions.
+
+- **Comprehensive tests**: Unit tests for `internal/context` (12 cases) and RPC
+  handler tests (6 cases), all passing with `-race`.
+
 ## [0.2.0] - 2026-02-10
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "@thrum/shared-logic",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Shared business logic, API clients, and state management for Thrum UI",
   "main": "./src/index.ts",
