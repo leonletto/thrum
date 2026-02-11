@@ -13,6 +13,7 @@ import (
 type mockDaemon struct {
 	listener net.Listener
 	stopChan chan struct{}
+	ready    chan struct{}
 }
 
 func newMockDaemon(t *testing.T) (*mockDaemon, string) {
@@ -30,6 +31,7 @@ func newMockDaemon(t *testing.T) (*mockDaemon, string) {
 	daemon := &mockDaemon{
 		listener: listener,
 		stopChan: make(chan struct{}),
+		ready:    make(chan struct{}),
 	}
 
 	return daemon, socketPath
@@ -39,6 +41,8 @@ func (d *mockDaemon) start(t *testing.T, handler func(conn net.Conn)) {
 	t.Helper()
 
 	go func() {
+		// Signal ready immediately since listener is already created and listening
+		close(d.ready)
 		for {
 			select {
 			case <-d.stopChan:
@@ -57,6 +61,11 @@ func (d *mockDaemon) start(t *testing.T, handler func(conn net.Conn)) {
 	}()
 }
 
+// Ready returns a channel that will be closed when the daemon is ready to accept connections.
+func (d *mockDaemon) Ready() <-chan struct{} {
+	return d.ready
+}
+
 func (d *mockDaemon) stop() {
 	close(d.stopChan)
 	_ = d.listener.Close() // Best effort close
@@ -71,7 +80,7 @@ func TestNewClient(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -135,7 +144,7 @@ func TestClient_Call(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -187,7 +196,7 @@ func TestClient_Call_Error(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -248,7 +257,7 @@ func TestClient_Close(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {
@@ -293,7 +302,7 @@ func TestClient_CallWithParams(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	client, err := NewClient(socketPath)
 	if err != nil {

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net"
 	"testing"
-	"time"
 )
 
 func TestAgentRegister(t *testing.T) {
@@ -48,7 +47,7 @@ func TestAgentRegister(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)
@@ -134,7 +133,7 @@ func TestAgentList(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)
@@ -200,7 +199,7 @@ func TestAgentWhoami(t *testing.T) {
 	})
 
 	// Wait for daemon to be ready
-	time.Sleep(50 * time.Millisecond)
+	<-daemon.Ready()
 
 	// Create client
 	client, err := NewClient(socketPath)
