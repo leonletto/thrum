@@ -20,7 +20,6 @@ func TestWait_MessageReceived(t *testing.T) {
 		decoder := json.NewDecoder(conn)
 		encoder := json.NewEncoder(conn)
 
-		// Handle multiple requests on same connection
 		for {
 			var request map[string]any
 			if err := decoder.Decode(&request); err != nil {
@@ -34,52 +33,36 @@ func TestWait_MessageReceived(t *testing.T) {
 				return
 			}
 
-			var response map[string]any
+			if method != "message.list" {
+				t.Errorf("Expected only message.list calls, got %s", method)
+				return
+			}
 
-			switch method {
-			case "subscribe":
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result": map[string]any{
-						"subscription_id": "sub_123",
+			// Return a message on the second poll (simulating arrival)
+			messages := []map[string]any{}
+			if callCount > 1 {
+				messages = append(messages, map[string]any{
+					"message_id": "msg_01HXE8Z7",
+					"agent_id":   "agent:implementer:ABC123",
+					"body": map[string]any{
+						"format":  "markdown",
+						"content": "Test message",
 					},
-				}
+					"created_at": time.Now().Format(time.RFC3339),
+				})
+			}
 
-			case "message.list":
-				// Return a message on the second call (simulating arrival)
-				messages := []map[string]any{}
-				if callCount > 2 {
-					messages = append(messages, map[string]any{
-						"message_id": "msg_01HXE8Z7",
-						"agent_id":   "agent:implementer:ABC123",
-						"body": map[string]any{
-							"format":  "markdown",
-							"content": "Test message",
-						},
-						"created_at": time.Now().Format(time.RFC3339),
-					})
-				}
-
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result": map[string]any{
-						"messages":    messages,
-						"total":       len(messages),
-						"unread":      len(messages),
-						"page":        1,
-						"page_size":   1,
-						"total_pages": 1,
-					},
-				}
-
-			case "unsubscribe":
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result":  map[string]any{},
-				}
+			response := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      request["id"],
+				"result": map[string]any{
+					"messages":    messages,
+					"total":       len(messages),
+					"unread":      len(messages),
+					"page":        1,
+					"page_size":   1,
+					"total_pages": 1,
+				},
 			}
 
 			if err := encoder.Encode(response); err != nil {
@@ -124,52 +107,24 @@ func TestWait_Timeout(t *testing.T) {
 		decoder := json.NewDecoder(conn)
 		encoder := json.NewEncoder(conn)
 
-		// Handle multiple requests on same connection
 		for {
 			var request map[string]any
 			if err := decoder.Decode(&request); err != nil {
 				return
 			}
 
-			method, ok := request["method"].(string)
-			if !ok {
-				t.Error("method should be string")
-				return
-			}
-
-			var response map[string]any
-
-			switch method {
-			case "subscribe":
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result": map[string]any{
-						"subscription_id": "sub_123",
-					},
-				}
-
-			case "message.list":
-				// Never return messages
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result": map[string]any{
-						"messages":    []map[string]any{},
-						"total":       0,
-						"unread":      0,
-						"page":        1,
-						"page_size":   1,
-						"total_pages": 0,
-					},
-				}
-
-			case "unsubscribe":
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result":  map[string]any{},
-				}
+			// Only message.list calls expected — never return messages
+			response := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      request["id"],
+				"result": map[string]any{
+					"messages":    []map[string]any{},
+					"total":       0,
+					"unread":      0,
+					"page":        1,
+					"page_size":   1,
+					"total_pages": 0,
+				},
 			}
 
 			if err := encoder.Encode(response); err != nil {
@@ -208,7 +163,7 @@ func TestWait_WithFilters(t *testing.T) {
 	daemon, socketPath := newMockDaemon(t)
 	defer daemon.stop()
 
-	var subscribeParams map[string]any
+	var listParams map[string]any
 
 	daemon.start(t, func(conn net.Conn) {
 		defer func() { _ = conn.Close() }()
@@ -216,68 +171,36 @@ func TestWait_WithFilters(t *testing.T) {
 		decoder := json.NewDecoder(conn)
 		encoder := json.NewEncoder(conn)
 
-		// Handle multiple requests on same connection
 		for {
 			var request map[string]any
 			if err := decoder.Decode(&request); err != nil {
 				return
 			}
 
-			method, ok := request["method"].(string)
-			if !ok {
-				t.Error("method should be string")
-				return
-			}
+			// Capture message.list params for verification
+			listParams, _ = request["params"].(map[string]any)
 
-			var response map[string]any
-
-			switch method {
-			case "subscribe":
-				var ok bool
-				subscribeParams, ok = request["params"].(map[string]any)
-				if !ok {
-					t.Error("params should be map[string]any")
-					return
-				}
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result": map[string]any{
-						"subscription_id": "sub_123",
-					},
-				}
-
-			case "message.list":
-				// Return a message immediately
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result": map[string]any{
-						"messages": []map[string]any{
-							{
-								"message_id": "msg_01HXE8Z7",
-								"agent_id":   "agent:implementer:ABC123",
-								"body": map[string]any{
-									"format":  "markdown",
-									"content": "Test message",
-								},
-								"created_at": time.Now().Format(time.RFC3339),
+			response := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      request["id"],
+				"result": map[string]any{
+					"messages": []map[string]any{
+						{
+							"message_id": "msg_01HXE8Z7",
+							"agent_id":   "agent:implementer:ABC123",
+							"body": map[string]any{
+								"format":  "markdown",
+								"content": "Test message",
 							},
+							"created_at": time.Now().Format(time.RFC3339),
 						},
-						"total":       1,
-						"unread":      1,
-						"page":        1,
-						"page_size":   1,
-						"total_pages": 1,
 					},
-				}
-
-			case "unsubscribe":
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result":  map[string]any{},
-				}
+					"total":       1,
+					"unread":      1,
+					"page":        1,
+					"page_size":   1,
+					"total_pages": 1,
+				},
 			}
 
 			if err := encoder.Encode(response); err != nil {
@@ -305,25 +228,23 @@ func TestWait_WithFilters(t *testing.T) {
 		t.Fatalf("Wait failed: %v", err)
 	}
 
-	// Verify subscribe params included filters
-	if scope, ok := subscribeParams["scope"].(map[string]any); !ok {
-		t.Error("Expected scope in subscribe params")
+	// Verify message.list params include filters
+	if scope, ok := listParams["scope"].(map[string]any); !ok {
+		t.Error("Expected scope in message.list params")
 	} else {
 		if scope["type"] != "module" || scope["value"] != "auth" {
 			t.Errorf("Expected scope module:auth, got %v:%v", scope["type"], scope["value"])
 		}
 	}
 
-	if mention, ok := subscribeParams["mention_role"].(string); !ok || mention != "reviewer" {
-		t.Errorf("Expected mention_role 'reviewer', got %v", subscribeParams["mention_role"])
+	if mention, ok := listParams["mention_role"].(string); !ok || mention != "reviewer" {
+		t.Errorf("Expected mention_role 'reviewer' in message.list params, got %v", listParams["mention_role"])
 	}
 }
 
 func TestWait_WithAllFlag(t *testing.T) {
 	daemon, socketPath := newMockDaemon(t)
 	defer daemon.stop()
-
-	var subscribeParams map[string]any
 
 	daemon.start(t, func(conn net.Conn) {
 		defer func() { _ = conn.Close() }()
@@ -337,51 +258,27 @@ func TestWait_WithAllFlag(t *testing.T) {
 				return
 			}
 
-			method, _ := request["method"].(string)
-
-			var response map[string]any
-
-			switch method {
-			case "subscribe":
-				subscribeParams, _ = request["params"].(map[string]any)
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result": map[string]any{
-						"subscription_id": "sub_123",
-					},
-				}
-
-			case "message.list":
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result": map[string]any{
-						"messages": []map[string]any{
-							{
-								"message_id": "msg_broadcast",
-								"agent_id":   "agent:coordinator:XYZ",
-								"body": map[string]any{
-									"format":  "markdown",
-									"content": "Broadcast message",
-								},
-								"created_at": time.Now().Format(time.RFC3339Nano),
+			response := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      request["id"],
+				"result": map[string]any{
+					"messages": []map[string]any{
+						{
+							"message_id": "msg_broadcast",
+							"agent_id":   "agent:coordinator:XYZ",
+							"body": map[string]any{
+								"format":  "markdown",
+								"content": "Broadcast message",
 							},
+							"created_at": time.Now().Format(time.RFC3339Nano),
 						},
-						"total":       1,
-						"unread":      1,
-						"page":        1,
-						"page_size":   1,
-						"total_pages": 1,
 					},
-				}
-
-			case "unsubscribe":
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result":  map[string]any{},
-				}
+					"total":       1,
+					"unread":      1,
+					"page":        1,
+					"page_size":   1,
+					"total_pages": 1,
+				},
 			}
 
 			if err := encoder.Encode(response); err != nil {
@@ -411,11 +308,6 @@ func TestWait_WithAllFlag(t *testing.T) {
 	if message.MessageID != "msg_broadcast" {
 		t.Errorf("Expected message_id 'msg_broadcast', got %s", message.MessageID)
 	}
-
-	// Verify "all" was passed in subscribe params
-	if allVal, ok := subscribeParams["all"]; !ok || allVal != true {
-		t.Errorf("Expected all=true in subscribe params, got %v", subscribeParams["all"])
-	}
 }
 
 func TestWait_WithAfterFilter(t *testing.T) {
@@ -438,69 +330,47 @@ func TestWait_WithAfterFilter(t *testing.T) {
 			}
 
 			callCount++
-			method, _ := request["method"].(string)
 
-			var response map[string]any
-
-			switch method {
-			case "subscribe":
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result": map[string]any{
-						"subscription_id": "sub_123",
+			// First poll: return old message (before threshold)
+			// Second poll: return new message (after threshold)
+			var messages []map[string]any
+			if callCount <= 2 {
+				messages = []map[string]any{
+					{
+						"message_id": "msg_old",
+						"agent_id":   "agent:old:XYZ",
+						"body": map[string]any{
+							"format":  "markdown",
+							"content": "Old message",
+						},
+						"created_at": afterTime.Add(-1 * time.Minute).Format(time.RFC3339Nano),
 					},
 				}
-
-			case "message.list":
-				// First poll: return old message (before threshold)
-				// Second poll: return new message (after threshold)
-				var messages []map[string]any
-				if callCount <= 3 {
-					messages = []map[string]any{
-						{
-							"message_id": "msg_old",
-							"agent_id":   "agent:old:XYZ",
-							"body": map[string]any{
-								"format":  "markdown",
-								"content": "Old message",
-							},
-							"created_at": afterTime.Add(-1 * time.Minute).Format(time.RFC3339Nano),
+			} else {
+				messages = []map[string]any{
+					{
+						"message_id": "msg_new",
+						"agent_id":   "agent:new:XYZ",
+						"body": map[string]any{
+							"format":  "markdown",
+							"content": "New message",
 						},
-					}
-				} else {
-					messages = []map[string]any{
-						{
-							"message_id": "msg_new",
-							"agent_id":   "agent:new:XYZ",
-							"body": map[string]any{
-								"format":  "markdown",
-								"content": "New message",
-							},
-							"created_at": time.Now().Format(time.RFC3339Nano),
-						},
-					}
-				}
-
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result": map[string]any{
-						"messages":    messages,
-						"total":       len(messages),
-						"unread":      len(messages),
-						"page":        1,
-						"page_size":   1,
-						"total_pages": 1,
+						"created_at": time.Now().Format(time.RFC3339Nano),
 					},
 				}
+			}
 
-			case "unsubscribe":
-				response = map[string]any{
-					"jsonrpc": "2.0",
-					"id":      request["id"],
-					"result":  map[string]any{},
-				}
+			response := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      request["id"],
+				"result": map[string]any{
+					"messages":    messages,
+					"total":       len(messages),
+					"unread":      len(messages),
+					"page":        1,
+					"page_size":   1,
+					"total_pages": 1,
+				},
 			}
 
 			if err := encoder.Encode(response); err != nil {

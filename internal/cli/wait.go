@@ -11,7 +11,7 @@ type WaitOptions struct {
 	Timeout       time.Duration
 	Scope         string    // Format: "type:value"
 	Mention       string    // Format: "@role"
-	All           bool      // Subscribe to all messages (broadcasts + directed)
+	All           bool      // Wait for all messages (broadcasts + directed)
 	After         time.Time // Only return messages created after this time (zero = no filter)
 	CallerAgentID string    // Caller's resolved agent ID (for worktree identity)
 }
@@ -30,40 +30,6 @@ func Wait(client *Client, opts WaitOptions) (*Message, error) {
 			"value": parts[1],
 		}
 	}
-
-	// Build subscribe params
-	subscribeParams := map[string]any{}
-	if scope != nil {
-		subscribeParams["scope"] = scope
-	}
-	if opts.Mention != "" {
-		subscribeParams["mention_role"] = strings.TrimPrefix(opts.Mention, "@")
-	}
-	if opts.CallerAgentID != "" {
-		subscribeParams["caller_agent_id"] = opts.CallerAgentID
-	}
-	if opts.All {
-		subscribeParams["all"] = true
-	}
-
-	// Subscribe to notifications
-	var subscribeResult struct {
-		SubscriptionID string `json:"subscription_id"`
-	}
-	if err := client.Call("subscribe", subscribeParams, &subscribeResult); err != nil {
-		return nil, fmt.Errorf("failed to subscribe: %w", err)
-	}
-
-	// Unsubscribe when done
-	defer func() {
-		unsubParams := map[string]any{
-			"subscription_id": subscribeResult.SubscriptionID,
-		}
-		if opts.CallerAgentID != "" {
-			unsubParams["caller_agent_id"] = opts.CallerAgentID
-		}
-		_ = client.Call("unsubscribe", unsubParams, nil)
-	}()
 
 	// Start timeout timer
 	timeout := time.After(opts.Timeout)
@@ -85,6 +51,9 @@ func Wait(client *Client, opts WaitOptions) (*Message, error) {
 			}
 			if scope != nil {
 				listParams["scope"] = scope
+			}
+			if opts.Mention != "" {
+				listParams["mention_role"] = strings.TrimPrefix(opts.Mention, "@")
 			}
 			if opts.CallerAgentID != "" {
 				listParams["caller_agent_id"] = opts.CallerAgentID
