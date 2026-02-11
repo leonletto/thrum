@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ErrorBoundary } from '../ErrorBoundary';
+import { useState } from 'react';
 
 // Component that throws an error
 function ThrowError({ shouldThrow }: { shouldThrow: boolean }) {
@@ -9,6 +10,7 @@ function ThrowError({ shouldThrow }: { shouldThrow: boolean }) {
   }
   return <div>No error</div>;
 }
+
 
 describe('ErrorBoundary', () => {
   // Suppress console.error for these tests
@@ -54,16 +56,14 @@ describe('ErrorBoundary', () => {
   });
 
   it('logs error to console', () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-
+    // Reuse the beforeAll mock instead of creating a new spy
     render(
       <ErrorBoundary>
         <ThrowError shouldThrow={true} />
       </ErrorBoundary>
     );
 
-    expect(consoleError).toHaveBeenCalled();
-    consoleError.mockRestore();
+    expect(console.error).toHaveBeenCalled();
   });
 
   it('resets error state on retry', () => {
@@ -75,16 +75,20 @@ describe('ErrorBoundary', () => {
 
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
 
+    // Click retry button to trigger the error boundary's onRetry callback
+    // This resets the boundary's internal error state
     const retryButton = screen.getByRole('button', { name: /try again/i });
     retryButton.click();
 
-    // After retry, re-render with shouldThrow=false
+    // Simulate the underlying condition being fixed (e.g., API recovered, data loaded)
+    // by re-rendering with non-throwing props
     rerender(
       <ErrorBoundary>
         <ThrowError shouldThrow={false} />
       </ErrorBoundary>
     );
 
+    // After retry + fix, the component should render successfully
     expect(screen.getByText('No error')).toBeInTheDocument();
   });
 });
