@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+
 func TestLifecycleRun(t *testing.T) {
 	tmpDir := t.TempDir()
 	socketPath := filepath.Join(tmpDir, "test.sock")
@@ -29,8 +30,8 @@ func TestLifecycleRun(t *testing.T) {
 		errCh <- lifecycle.Run(ctx)
 	}()
 
-	// Give server time to start
-	time.Sleep(20 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Register cleanup to ensure daemon stops even if test fails
 	t.Cleanup(func() {
@@ -99,8 +100,8 @@ func TestLifecycleSignalHandling(t *testing.T) {
 		errCh <- lifecycle.Run(ctx)
 	}()
 
-	// Give server time to start
-	time.Sleep(20 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Register cleanup to ensure daemon stops even if test fails
 	t.Cleanup(func() {
@@ -155,8 +156,8 @@ func TestLifecycleShutdownWithTimeout(t *testing.T) {
 		errCh <- lifecycle.Run(ctx)
 	}()
 
-	// Give server time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Shutdown with timeout
 	if err := lifecycle.ShutdownWithTimeout(5 * time.Second); err != nil {
@@ -204,8 +205,8 @@ func TestLifecycleInFlightRequests(t *testing.T) {
 		errCh <- lifecycle.Run(ctx)
 	}()
 
-	// Give server time to start
-	time.Sleep(20 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Start a slow request in background that will be in-flight during shutdown
 	requestErr := make(chan error, 1)
@@ -239,7 +240,7 @@ func TestLifecycleInFlightRequests(t *testing.T) {
 	}()
 
 	// Give request time to start processing
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond) // Brief sleep to ensure request is in-flight
 
 	// Trigger shutdown while request is in-flight
 	lifecycle.Shutdown()
@@ -289,8 +290,8 @@ func TestLifecycleDoubleShutdown(t *testing.T) {
 		errCh <- lifecycle.Run(ctx)
 	}()
 
-	// Give server time to start
-	time.Sleep(20 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Trigger shutdown twice
 	lifecycle.Shutdown()
@@ -364,8 +365,8 @@ func TestLifecycleWithWebSocket(t *testing.T) {
 		errCh <- lifecycle.Run(ctx)
 	}()
 
-	// Give servers time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Verify PID file was created
 	if _, err := os.Stat(pidPath); os.IsNotExist(err) {

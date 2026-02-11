@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
+
 
 func TestServerStartStop(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -57,8 +57,8 @@ func TestServerHandlerRegistration(t *testing.T) {
 	}
 	defer func() { _ = server.Stop() }()
 
-	// Give server time to start
-	time.Sleep(10 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Connect to server
 	conn, err := net.Dial("unix", socketPath)
@@ -123,8 +123,8 @@ func TestServerMethodNotFound(t *testing.T) {
 	}
 	defer func() { _ = server.Stop() }()
 
-	// Give server time to start
-	time.Sleep(10 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Connect to server
 	conn, err := net.Dial("unix", socketPath)
@@ -180,8 +180,8 @@ func TestServerInvalidJSONRPC(t *testing.T) {
 	}
 	defer func() { _ = server.Stop() }()
 
-	// Give server time to start
-	time.Sleep(10 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Connect to server
 	conn, err := net.Dial("unix", socketPath)
@@ -241,8 +241,8 @@ func TestServerHandlerError(t *testing.T) {
 	}
 	defer func() { _ = server.Stop() }()
 
-	// Give server time to start
-	time.Sleep(10 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Connect to server
 	conn, err := net.Dial("unix", socketPath)

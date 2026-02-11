@@ -3,12 +3,26 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 )
+
+// waitForSocket waits for a Unix socket to become available, with timeout.
+func waitForSocketReady(t *testing.T, socketPath string) {
+	t.Helper()
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(socketPath); err == nil {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("socket %s did not become available", socketPath)
+}
 
 func TestNewClient(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -22,8 +36,8 @@ func TestNewClient(t *testing.T) {
 	}
 	defer func() { _ = server.Stop() }()
 
-	// Give server time to start
-	time.Sleep(10 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Create client
 	client, err := NewClient(socketPath)
@@ -50,8 +64,8 @@ func TestClientCall(t *testing.T) {
 	}
 	defer func() { _ = server.Stop() }()
 
-	// Give server time to start
-	time.Sleep(10 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Create client
 	client, err := NewClient(socketPath)
@@ -90,8 +104,8 @@ func TestClientCallMethodNotFound(t *testing.T) {
 	}
 	defer func() { _ = server.Stop() }()
 
-	// Give server time to start
-	time.Sleep(10 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Create client
 	client, err := NewClient(socketPath)
@@ -169,8 +183,8 @@ func TestClientConnectAndCallHealth(t *testing.T) {
 	}
 	defer func() { _ = server.Stop() }()
 
-	// Give server time to start
-	time.Sleep(20 * time.Millisecond)
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
 
 	// Test that client can connect
 	client, err := NewClient(socketPath)
