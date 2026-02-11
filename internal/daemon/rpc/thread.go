@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
@@ -109,6 +110,7 @@ func (h *ThreadHandler) resolveAgentAndSession(callerAgentID string) (agentID st
 		agentID = callerAgentID
 	} else {
 		// Fallback: load identity from daemon's config (single-worktree backward compat)
+		log.Printf("WARNING: CallerAgentID not provided in thread RPC, falling back to daemon repo path: %s (CLI should resolve identity)", h.state.RepoPath())
 		cfg, loadErr := config.LoadWithPath(h.state.RepoPath(), "", "")
 		if loadErr != nil {
 			return "", "", fmt.Errorf("load config: %w", loadErr)

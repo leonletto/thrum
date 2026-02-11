@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -92,6 +93,10 @@ type ListMessagesRequest struct {
 	ExcludeSelf       bool   `json:"exclude_self,omitempty"`        // Exclude messages authored by the current agent (inbox mode)
 	CallerAgentID     string `json:"caller_agent_id,omitempty"`     // For worktree callers to pass their agent ID
 	CallerMentionRole string `json:"caller_mention_role,omitempty"` // For worktree callers to pass their role for mentions filter
+
+	// Auto-filter: show only messages addressed to this agent (mentions) + broadcasts (no mentions)
+	ForAgent     string `json:"for_agent,omitempty"`      // Agent name to filter for (messages mentioning this name + broadcasts)
+	ForAgentRole string `json:"for_agent_role,omitempty"` // Agent role to filter for (messages mentioning this role + broadcasts)
 
 	// Pagination
 	PageSize int `json:"page_size,omitempty"` // Default: 10
@@ -577,6 +582,20 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		args = append(args, unreadAgentID)
 	}
 
+	// For-agent filter: show messages addressed to this agent (mentions) + broadcasts (no mention refs)
+	forAgentValues := buildForAgentValues(req.ForAgent, req.ForAgentRole)
+	if len(forAgentValues) > 0 {
+		placeholders := make([]string, len(forAgentValues))
+		for i := range forAgentValues {
+			placeholders[i] = "?"
+		}
+		query += " AND (m.message_id NOT IN (SELECT mr_fa.message_id FROM message_refs mr_fa WHERE mr_fa.ref_type = 'mention')" +
+			" OR m.message_id IN (SELECT mr_fa2.message_id FROM message_refs mr_fa2 WHERE mr_fa2.ref_type = 'mention' AND mr_fa2.ref_value IN (" + strings.Join(placeholders, ",") + ")))"
+		for _, v := range forAgentValues {
+			args = append(args, v)
+		}
+	}
+
 	// Add sorting
 	query += fmt.Sprintf(" ORDER BY m.%s %s", sortBy, sortOrder)
 
@@ -610,6 +629,17 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	if unreadAgentID != "" {
 		countQuery += " AND m.message_id NOT IN (SELECT mrd.message_id FROM message_reads mrd WHERE mrd.agent_id = ?)"
 		countArgs = append(countArgs, unreadAgentID)
+	}
+	if len(forAgentValues) > 0 {
+		placeholders := make([]string, len(forAgentValues))
+		for i := range forAgentValues {
+			placeholders[i] = "?"
+		}
+		countQuery += " AND (m.message_id NOT IN (SELECT mr_fa.message_id FROM message_refs mr_fa WHERE mr_fa.ref_type = 'mention')" +
+			" OR m.message_id IN (SELECT mr_fa2.message_id FROM message_refs mr_fa2 WHERE mr_fa2.ref_type = 'mention' AND mr_fa2.ref_value IN (" + strings.Join(placeholders, ",") + ")))"
+		for _, v := range forAgentValues {
+			countArgs = append(countArgs, v)
+		}
 	}
 
 	var total int
@@ -931,12 +961,30 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	}, nil
 }
 
+// buildForAgentValues returns the unique set of values to match against mention refs
+// for the for-agent inbox filter. Returns nil if no filtering should be applied.
+func buildForAgentValues(forAgent, forAgentRole string) []string {
+	if forAgent == "" && forAgentRole == "" {
+		return nil
+	}
+	seen := map[string]bool{}
+	var values []string
+	for _, v := range []string{forAgent, forAgentRole} {
+		if v != "" && !seen[v] {
+			seen[v] = true
+			values = append(values, v)
+		}
+	}
+	return values
+}
+
 // resolveAgentAndSession returns the current agent ID and session ID.
 func (h *MessageHandler) resolveAgentAndSession(callerAgentID string) (agentID string, sessionID string, err error) {
 	if callerAgentID != "" {
 		agentID = callerAgentID
 	} else {
 		// Fallback: load identity from daemon's config (single-worktree backward compat)
+		log.Printf("WARNING: CallerAgentID not provided in message RPC, falling back to daemon repo path: %s (CLI should resolve identity)", h.state.RepoPath())
 		cfg, loadErr := config.LoadWithPath(h.state.RepoPath(), "", "")
 		if loadErr != nil {
 			return "", "", fmt.Errorf("load config: %w", loadErr)

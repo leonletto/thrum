@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -343,6 +344,7 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 		}
 	} else {
 		// Fallback: resolve from daemon's config
+		log.Printf("WARNING: CallerAgentID not provided in whoami request, falling back to daemon repo path: %s (CLI should resolve identity)", h.state.RepoPath())
 		cfg, err := config.LoadWithPath(h.state.RepoPath(), "", "")
 		if err != nil {
 			return nil, fmt.Errorf("resolve identity: %w", err)

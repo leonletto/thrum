@@ -238,8 +238,14 @@ The daemon must be running and you must have an active session.`,
 				Format:        format,
 				To:            to,
 				Broadcast:     broadcast,
-				CallerAgentID: resolveLocalAgentID(),
+				CallerAgentID: "", // set below
 			}
+
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+			opts.CallerAgentID = agentID
 
 			client, err := getClient()
 			if err != nil {
@@ -288,13 +294,26 @@ func inboxCmd() *cobra.Command {
 		Short: "List messages in your inbox",
 		Long: `List messages in your inbox with filtering and pagination.
 
+By default, inbox auto-filters to show messages addressed to you (via --to)
+plus broadcasts and general messages. Use --all to see all messages.
+
 The daemon must be running and you must have an active session.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			scope, _ := cmd.Flags().GetString("scope")
 			mentions, _ := cmd.Flags().GetBool("mentions")
 			unread, _ := cmd.Flags().GetBool("unread")
+			showAll, _ := cmd.Flags().GetBool("all")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 			page, _ := cmd.Flags().GetInt("page")
+
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+			agentRole, err := resolveLocalMentionRole()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent role: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
 
 			opts := cli.InboxOptions{
 				Scope:             scope,
@@ -302,8 +321,15 @@ The daemon must be running and you must have an active session.`,
 				Unread:            unread,
 				PageSize:          pageSize,
 				Page:              page,
-				CallerAgentID:     resolveLocalAgentID(),
-				CallerMentionRole: resolveLocalMentionRole(),
+				CallerAgentID:     agentID,
+				CallerMentionRole: agentRole,
+			}
+
+			// Auto-filter: when identity is resolved and --all is not set,
+			// show only messages addressed to this agent + broadcasts
+			if !showAll && agentID != "" {
+				opts.ForAgent = agentID
+				opts.ForAgentRole = agentRole
 			}
 
 			client, err := getClient()
@@ -325,6 +351,7 @@ The daemon must be running and you must have an active session.`,
 				// Human-readable formatted output with filter context
 				fmtOpts := cli.InboxFormatOptions{
 					ActiveScope: scope,
+					ForAgent:    opts.ForAgent,
 					Quiet:       flagQuiet,
 					JSON:        flagJSON,
 				}
@@ -341,7 +368,7 @@ The daemon must be running and you must have an active session.`,
 					ids[i] = m.MessageID
 				}
 				// Best-effort: don't fail the command if mark-read fails
-				_, _ = cli.MessageMarkRead(client, ids, resolveLocalAgentID())
+				_, _ = cli.MessageMarkRead(client, ids, agentID)
 			}
 
 			return nil
@@ -351,6 +378,7 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().String("scope", "", "Filter by scope (format: type:value)")
 	cmd.Flags().Bool("mentions", false, "Only messages mentioning me")
 	cmd.Flags().Bool("unread", false, "Only unread messages")
+	cmd.Flags().BoolP("all", "a", false, "Show all messages (disable auto-filtering)")
 	cmd.Flags().Int("page-size", 10, "Results per page")
 	cmd.Flags().Int("page", 1, "Page number")
 
@@ -417,11 +445,16 @@ Exit codes:
 			scope, _ := cmd.Flags().GetString("scope")
 			mention, _ := cmd.Flags().GetString("mention")
 
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+
 			opts := cli.WaitOptions{
 				Timeout:       timeout,
 				Scope:         scope,
 				Mention:       mention,
-				CallerAgentID: resolveLocalAgentID(),
+				CallerAgentID: agentID,
 			}
 
 			client, err := getClient()
@@ -783,7 +816,11 @@ Identity is resolved from:
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.AgentWhoami(client, resolveLocalAgentID())
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+			result, err := cli.AgentWhoami(client, agentID)
 			if err != nil {
 				return err
 			}
@@ -1070,7 +1107,11 @@ func sessionStartRunE(cmd *cobra.Command, args []string) error {
 	defer func() { _ = client.Close() }()
 
 	// Get current agent ID from whoami
-	whoami, err := cli.AgentWhoami(client, resolveLocalAgentID())
+	agentID, err := resolveLocalAgentID()
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+	}
+	whoami, err := cli.AgentWhoami(client, agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get agent identity: %w\n\nHint: Register first with 'thrum agent register'", err)
 	}
@@ -1113,7 +1154,11 @@ func sessionEndRunE(cmd *cobra.Command, args []string) error {
 
 	// If no session ID provided, get current session from whoami
 	if sessionID == "" {
-		whoami, err := cli.AgentWhoami(client, resolveLocalAgentID())
+		agentID, err := resolveLocalAgentID()
+		if err != nil {
+			return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+		}
+		whoami, err := cli.AgentWhoami(client, agentID)
 		if err != nil {
 			return fmt.Errorf("failed to get agent identity: %w", err)
 		}
@@ -1156,7 +1201,11 @@ func sessionSetIntentRunE(cmd *cobra.Command, args []string) error {
 	defer func() { _ = client.Close() }()
 
 	// Get current session from whoami
-	whoami, err := cli.AgentWhoami(client, resolveLocalAgentID())
+	agentID, err := resolveLocalAgentID()
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+	}
+	whoami, err := cli.AgentWhoami(client, agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get agent identity: %w", err)
 	}
@@ -1188,7 +1237,11 @@ func sessionSetTaskRunE(cmd *cobra.Command, args []string) error {
 	defer func() { _ = client.Close() }()
 
 	// Get current session from whoami
-	whoami, err := cli.AgentWhoami(client, resolveLocalAgentID())
+	agentID, err := resolveLocalAgentID()
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+	}
+	whoami, err := cli.AgentWhoami(client, agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get agent identity: %w", err)
 	}
@@ -1368,11 +1421,16 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+
 			opts := cli.ReplyOptions{
 				MessageID:     args[0],
 				Content:       args[1],
 				Format:        format,
-				CallerAgentID: resolveLocalAgentID(),
+				CallerAgentID: agentID,
 			}
 
 			result, err := cli.Reply(client, opts)
@@ -1381,7 +1439,7 @@ Examples:
 			}
 
 			// Auto mark-as-read: mark the replied-to message as read
-			_, _ = cli.MessageMarkRead(client, []string{opts.MessageID}, resolveLocalAgentID())
+			_, _ = cli.MessageMarkRead(client, []string{opts.MessageID}, agentID)
 
 			if flagJSON {
 				output, _ := json.MarshalIndent(result, "", "  ")
@@ -1424,8 +1482,15 @@ func messageCmd() *cobra.Command {
 				return err
 			}
 
-			// Auto mark-as-read
-			_, _ = cli.MessageMarkRead(client, []string{args[0]}, resolveLocalAgentID())
+			// Auto mark-as-read (best effort — don't fail if identity resolution fails)
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				if !flagQuiet {
+					fmt.Fprintf(os.Stderr, "Warning: Could not mark as read (no identity): %v\n", err)
+				}
+			} else {
+				_, _ = cli.MessageMarkRead(client, []string{args[0]}, agentID)
+			}
 
 			if flagJSON {
 				output, _ := json.MarshalIndent(result, "", "  ")
@@ -1536,12 +1601,21 @@ Examples:
 
 			messageIDs := args
 			if all {
+				agentID, err := resolveLocalAgentID()
+				if err != nil {
+					return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+				}
+				agentRole, err := resolveLocalMentionRole()
+				if err != nil {
+					return fmt.Errorf("failed to resolve agent role: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+				}
+
 				// Fetch all unread message IDs (capped at 100 per page)
 				inboxResult, err := cli.Inbox(client, cli.InboxOptions{
 					Unread:            true,
 					PageSize:          100,
-					CallerAgentID:     resolveLocalAgentID(),
-					CallerMentionRole: resolveLocalMentionRole(),
+					CallerAgentID:     agentID,
+					CallerMentionRole: agentRole,
 				})
 				if err != nil {
 					return fmt.Errorf("failed to list unread messages: %w", err)
@@ -1557,7 +1631,7 @@ Examples:
 					messageIDs[i] = m.MessageID
 				}
 
-				result, err := cli.MessageMarkRead(client, messageIDs, resolveLocalAgentID())
+				result, err := cli.MessageMarkRead(client, messageIDs, agentID)
 				if err != nil {
 					return err
 				}
@@ -1575,7 +1649,11 @@ Examples:
 				return nil
 			}
 
-			result, err := cli.MessageMarkRead(client, messageIDs, resolveLocalAgentID())
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+			result, err := cli.MessageMarkRead(client, messageIDs, agentID)
 			if err != nil {
 				return err
 			}
@@ -1622,11 +1700,16 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+
 			opts := cli.ThreadCreateOptions{
 				Title:         title,
 				To:            to,
 				Message:       message,
-				CallerAgentID: resolveLocalAgentID(),
+				CallerAgentID: agentID,
 			}
 
 			result, err := cli.ThreadCreate(client, opts)
@@ -1668,11 +1751,16 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+
 			opts := cli.ThreadListOptions{
 				Scope:         scope,
 				PageSize:      pageSize,
 				Page:          page,
-				CallerAgentID: resolveLocalAgentID(),
+				CallerAgentID: agentID,
 			}
 
 			result, err := cli.ThreadList(client, opts)
@@ -2228,7 +2316,11 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 	defer func() { _ = client.Close() }()
 
 	// Get current session from whoami
-	whoami, err := cli.AgentWhoami(client, resolveLocalAgentID())
+	agentID, err := resolveLocalAgentID()
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+	}
+	whoami, err := cli.AgentWhoami(client, agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get agent identity: %w", err)
 	}
@@ -2312,25 +2404,25 @@ func getClient() (*cli.Client, error) {
 // resolveLocalAgentID resolves the agent ID from the local worktree's identity file.
 // This is used to pass caller identity to the daemon, which may be running in a
 // different worktree (via .thrum/redirect). Returns empty string if resolution fails.
-func resolveLocalAgentID() string {
+func resolveLocalAgentID() (string, error) {
 	cfg, err := config.LoadWithPath(flagRepo, flagRole, flagModule)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	// For named agents, GenerateAgentID returns the name directly.
 	// For unnamed agents, it generates a deterministic hash-based ID.
 	repoID := cfg.RepoID
-	return identity.GenerateAgentID(repoID, cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name)
+	return identity.GenerateAgentID(repoID, cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name), nil
 }
 
 // resolveLocalMentionRole resolves the agent's role from the local worktree's identity file.
 // Used for the --mentions filter so the daemon filters by the correct role.
-func resolveLocalMentionRole() string {
+func resolveLocalMentionRole() (string, error) {
 	cfg, err := config.LoadWithPath(flagRepo, flagRole, flagModule)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return cfg.Agent.Role
+	return cfg.Agent.Role, nil
 }
 
 // runDaemon runs the daemon server in the foreground.

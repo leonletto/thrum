@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/paths"
 )
 
 // Config represents the resolved configuration for the thrum agent.
@@ -71,6 +72,11 @@ func LoadWithPath(repoPath, flagRole, flagModule string) (*Config, error) {
 		// propagate it — the user needs to resolve the ambiguity
 		if strings.Contains(err.Error(), "cannot auto-select identity") {
 			return nil, err
+		}
+		// If this is a redirected worktree, don't silently fall through —
+		// the user must register an identity here, not inherit from the main repo
+		if paths.IsRedirected(repoPath) {
+			return nil, fmt.Errorf("no agent identities registered in this worktree\n  Register with: thrum quickstart --name <name> --role <role> --module <module>")
 		}
 		// No identity file found - will rely on env vars or CLI flags
 	}
@@ -178,26 +184,28 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 	// Multiple identity files - try worktree-based filtering
 	currentWT := detectCurrentWorktree(dirPath)
 	if currentWT != "" {
-		var matches []string
+		var matches []*IdentityFile
 		for _, f := range jsonFiles {
 			id, err := loadIdentityFile(filepath.Join(dirPath, f))
 			if err != nil {
 				continue
 			}
 			if id.Worktree == currentWT {
-				matches = append(matches, f)
+				matches = append(matches, id)
 			}
 		}
 		if len(matches) == 1 {
-			return loadIdentityFile(filepath.Join(dirPath, matches[0]))
+			return matches[0], nil
 		}
 		if len(matches) > 1 {
-			matchNames := make([]string, 0, len(matches))
-			for _, f := range matches {
-				matchNames = append(matchNames, strings.TrimSuffix(f, ".json"))
+			// Most-recent-wins: pick the identity with the latest UpdatedAt
+			best := matches[0]
+			for _, m := range matches[1:] {
+				if m.UpdatedAt.After(best.UpdatedAt) {
+					best = m
+				}
 			}
-			return nil, fmt.Errorf("cannot auto-select identity: %d agents registered for worktree %q\n  Hint: set THRUM_NAME=<name> to select one\n  Available: %s",
-				len(matches), currentWT, strings.Join(matchNames, ", "))
+			return best, nil
 		}
 		// Zero matches: fall through to generic error
 	}

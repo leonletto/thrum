@@ -467,7 +467,7 @@ func TestLoad_WorktreeFiltering_SingleMatch(t *testing.T) {
 	}
 }
 
-func TestLoad_WorktreeFiltering_MultipleMatches(t *testing.T) {
+func TestLoad_WorktreeFiltering_MultipleMatches_MostRecentWins(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
@@ -479,6 +479,7 @@ func TestLoad_WorktreeFiltering_MultipleMatches(t *testing.T) {
 	worktreeName := filepath.Base(tmpDir)
 
 	// Create two identity files that both match the current worktree
+	// agent1 is older, agent2 is newer — agent2 should win
 	agent1 := &config.IdentityFile{
 		Version:  1,
 		RepoID:   "r_TEST123",
@@ -489,7 +490,7 @@ func TestLoad_WorktreeFiltering_MultipleMatches(t *testing.T) {
 			Role:   "implementer",
 			Module: "test",
 		},
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 	agent2 := &config.IdentityFile{
 		Version:  1,
@@ -501,27 +502,39 @@ func TestLoad_WorktreeFiltering_MultipleMatches(t *testing.T) {
 			Role:   "tester",
 			Module: "test",
 		},
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 
-	if err := config.SaveIdentityFile(thrumDir, agent1); err != nil {
-		t.Fatalf("Failed to save agent1 identity: %v", err)
+	// Write identity files directly to preserve explicit timestamps
+	// (SaveIdentityFile overwrites UpdatedAt with time.Now())
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0750); err != nil {
+		t.Fatalf("Failed to create identities dir: %v", err)
 	}
-	if err := config.SaveIdentityFile(thrumDir, agent2); err != nil {
-		t.Fatalf("Failed to save agent2 identity: %v", err)
+	for _, id := range []*config.IdentityFile{agent1, agent2} {
+		data, err := json.Marshal(id)
+		if err != nil {
+			t.Fatalf("Failed to marshal %s: %v", id.Agent.Name, err)
+		}
+		path := filepath.Join(identitiesDir, id.Agent.Name+".json")
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			t.Fatalf("Failed to write %s: %v", id.Agent.Name, err)
+		}
 	}
 
 	t.Setenv("THRUM_NAME", "")
 
-	// Should error with worktree-specific message
-	_, err := config.LoadWithPath(tmpDir, "", "")
-	if err == nil {
-		t.Fatal("Expected error when multiple identities match worktree, got nil")
+	// Should succeed with the most recently updated identity (agent2)
+	cfg, err := config.LoadWithPath(tmpDir, "", "")
+	if err != nil {
+		t.Fatalf("Expected success with most-recent-wins, got error: %v", err)
 	}
 
-	// Error should mention the worktree name
-	if !strings.Contains(err.Error(), worktreeName) {
-		t.Errorf("Error should mention worktree name %q, got: %v", worktreeName, err)
+	if cfg.Agent.Name != "agent2" {
+		t.Errorf("Expected most recent identity (agent2), got: %s", cfg.Agent.Name)
+	}
+	if cfg.Agent.Role != "tester" {
+		t.Errorf("Expected role 'tester' from agent2, got: %s", cfg.Agent.Role)
 	}
 }
 
@@ -698,6 +711,42 @@ func TestLoad_WorktreeFiltering_ThrumNameBypassesWorktreeFilter(t *testing.T) {
 	}
 	if cfg.Agent.Role != "tester" {
 		t.Errorf("Expected role 'tester', got '%s'", cfg.Agent.Role)
+	}
+}
+
+func TestLoad_RedirectedWorktree_NoIdentities_Errors(t *testing.T) {
+	// Simulate a redirected worktree with no local identities.
+	// LoadWithPath should error instead of silently falling through to env vars.
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		t.Fatalf("Failed to create .thrum dir: %v", err)
+	}
+
+	// Create a redirect file (marks this as a feature worktree)
+	redirectPath := filepath.Join(thrumDir, "redirect")
+	// Point to a target that exists (use tmpDir itself as a stand-in)
+	targetDir := filepath.Join(t.TempDir(), ".thrum")
+	if err := os.MkdirAll(targetDir, 0750); err != nil {
+		t.Fatalf("Failed to create target .thrum dir: %v", err)
+	}
+	if err := os.WriteFile(redirectPath, []byte(targetDir), 0600); err != nil {
+		t.Fatalf("Failed to write redirect file: %v", err)
+	}
+
+	// No identities directory — loadIdentityFromDir will fail with "read identities directory"
+	t.Setenv("THRUM_NAME", "")
+
+	_, err := config.LoadWithPath(tmpDir, "", "")
+	if err == nil {
+		t.Fatal("Expected error for redirected worktree with no identities, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "no agent identities registered in this worktree") {
+		t.Errorf("Expected worktree identity error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "thrum quickstart") {
+		t.Errorf("Expected actionable hint with quickstart command, got: %v", err)
 	}
 }
 

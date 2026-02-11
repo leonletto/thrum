@@ -17,6 +17,8 @@ type InboxOptions struct {
 	Page              int
 	CallerAgentID     string // Caller's resolved agent ID (for worktree identity)
 	CallerMentionRole string // Caller's role (for mentions filter)
+	ForAgent          string // Auto-filter: agent name (messages mentioning this name + broadcasts)
+	ForAgentRole      string // Auto-filter: agent role (messages mentioning this role + broadcasts)
 }
 
 // Message represents a message from the inbox.
@@ -80,6 +82,14 @@ func Inbox(client *Client, opts InboxOptions) (*InboxResult, error) {
 		params["caller_mention_role"] = opts.CallerMentionRole
 	}
 
+	if opts.ForAgent != "" {
+		params["for_agent"] = opts.ForAgent
+	}
+
+	if opts.ForAgentRole != "" {
+		params["for_agent_role"] = opts.ForAgentRole
+	}
+
 	if opts.PageSize > 0 {
 		params["page_size"] = opts.PageSize
 	}
@@ -105,6 +115,7 @@ func FormatInbox(result *InboxResult) string {
 // InboxFormatOptions contains options for formatting inbox output.
 type InboxFormatOptions struct {
 	ActiveScope string // The active filter scope (for empty state feedback)
+	ForAgent    string // The agent name being filtered for (for empty state / footer)
 	Quiet       bool
 	JSON        bool
 }
@@ -119,6 +130,11 @@ func FormatInboxWithOptions(result *InboxResult, opts InboxFormatOptions) string
 			output.WriteString(fmt.Sprintf("  Showing 0 of %d total messages (filter: scope=%s)\n", result.Total, opts.ActiveScope))
 			if !opts.Quiet && !opts.JSON {
 				output.WriteString(Hint("inbox.empty", opts.Quiet, opts.JSON))
+			}
+		} else if opts.ForAgent != "" {
+			output.WriteString(fmt.Sprintf("No messages for @%s.\n", opts.ForAgent))
+			if !opts.Quiet && !opts.JSON {
+				output.WriteString("  Tip: Use 'thrum inbox --all' to see all messages\n")
 			}
 		} else {
 			output.WriteString("No messages in inbox.\n")
@@ -191,6 +207,9 @@ func FormatInboxWithOptions(result *InboxResult, opts InboxFormatOptions) string
 	footer := fmt.Sprintf("Showing %d-%d of %d messages", start, end, result.Total)
 	if result.Unread > 0 {
 		footer += fmt.Sprintf(" (%d unread)", result.Unread)
+	}
+	if opts.ForAgent != "" {
+		footer += fmt.Sprintf(" (filtered for @%s)", opts.ForAgent)
 	}
 
 	output.WriteString(footer + "\n")
