@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -206,20 +207,44 @@ func TestLifecycleInFlightRequests(t *testing.T) {
 	// Give server time to start
 	time.Sleep(20 * time.Millisecond)
 
-	// Start a slow request in background
+	// Start a slow request in background that will be in-flight during shutdown
+	requestErr := make(chan error, 1)
 	go func() {
-		// This test doesn't actually verify the request completes,
-		// but demonstrates the pattern for testing in-flight requests
-		// In a real scenario, you would connect and send a request here
+		conn, err := net.Dial("unix", socketPath)
+		if err != nil {
+			requestErr <- fmt.Errorf("failed to connect: %w", err)
+			return
+		}
+		defer func() { _ = conn.Close() }()
+
+		// Send slow request
+		request := map[string]any{
+			"jsonrpc": "2.0",
+			"method":  "slow",
+			"id":      1,
+		}
+		if err := json.NewEncoder(conn).Encode(request); err != nil {
+			requestErr <- fmt.Errorf("failed to send request: %w", err)
+			return
+		}
+
+		// Read response
+		var response map[string]any
+		if err := json.NewDecoder(conn).Decode(&response); err != nil {
+			requestErr <- fmt.Errorf("failed to read response: %w", err)
+			return
+		}
+
+		requestErr <- nil
 	}()
 
-	// Give request time to start
+	// Give request time to start processing
 	time.Sleep(10 * time.Millisecond)
 
-	// Trigger shutdown
+	// Trigger shutdown while request is in-flight
 	lifecycle.Shutdown()
 
-	// Wait for shutdown
+	// Wait for shutdown - should wait for in-flight request
 	select {
 	case err := <-errCh:
 		if err != nil {
@@ -227,6 +252,24 @@ func TestLifecycleInFlightRequests(t *testing.T) {
 		}
 	case <-time.After(6 * time.Second):
 		t.Fatal("shutdown timed out (should wait for in-flight requests)")
+	}
+
+	// Verify the slow handler completed
+	select {
+	case <-slowHandlerDone:
+		// Good - handler completed
+	case <-time.After(100 * time.Millisecond):
+		t.Error("slow handler did not complete (shutdown may not have waited)")
+	}
+
+	// Verify request succeeded
+	select {
+	case err := <-requestErr:
+		if err != nil {
+			t.Errorf("in-flight request failed: %v", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("request did not complete")
 	}
 }
 
@@ -437,14 +480,59 @@ func (m *mockWSServerWithError) Port() int {
 // TestStartTestDaemonHelper verifies that the StartTestDaemon helper
 // correctly starts a daemon and cleans it up automatically.
 func TestStartTestDaemonHelper(t *testing.T) {
+	// Register a test handler to verify daemon functionality
+	called := false
+	handler := func(ctx context.Context, params json.RawMessage) (any, error) {
+		called = true
+		return map[string]string{"status": "ok"}, nil
+	}
+
+	cfg := &TestDaemonConfig{
+		Handlers: map[string]Handler{
+			"test.ping": handler,
+		},
+	}
+
 	// Start daemon using helper - cleanup is automatic via t.Cleanup
-	lifecycle := StartTestDaemon(t, nil)
+	daemon := StartTestDaemon(t, cfg)
 
-	// Daemon should be running
-	// We can trigger shutdown manually, or let t.Cleanup handle it
-	lifecycle.Shutdown()
+	// Verify daemon is ready
+	select {
+	case <-daemon.Ready():
+		// Good - daemon is ready
+	case <-time.After(1 * time.Second):
+		t.Fatal("daemon ready signal not received")
+	}
 
-	// No manual cleanup needed - helper registered t.Cleanup
+	// Verify we can connect and call a handler
+	conn, err := net.Dial("unix", daemon.server.socketPath)
+	if err != nil {
+		t.Fatalf("failed to connect to daemon: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	request := map[string]any{
+		"jsonrpc": "2.0",
+		"method":  "test.ping",
+		"id":      1,
+	}
+	if err := json.NewEncoder(conn).Encode(request); err != nil {
+		t.Fatalf("failed to send request: %v", err)
+	}
+
+	var response map[string]any
+	if err := json.NewDecoder(conn).Decode(&response); err != nil {
+		t.Fatalf("failed to read response: %v", err)
+	}
+
+	if !called {
+		t.Error("handler was not called")
+	}
+
+	// Trigger shutdown manually to verify cleanup
+	daemon.Shutdown()
+
+	// Additional cleanup will happen via t.Cleanup
 }
 
 // TestLifecycleDuplicateDaemonDetection verifies that pre-startup validation
