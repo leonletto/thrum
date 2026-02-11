@@ -60,7 +60,7 @@ Guide for Beads issue tracking. Teaches Claude the task lifecycle (create, claim
 
 ### message-listener
 
-Lightweight background polling agent. Runs on Haiku model for cost efficiency (~$0.00003/cycle). Checks inbox every 30 seconds, returns immediately when messages arrive, times out after 30 minutes.
+Lightweight background listener agent. Runs on Haiku model for cost efficiency (~$0.00003/cycle). Uses `thrum wait` for efficient blocking instead of polling loops. Returns immediately when messages arrive, covers ~30 minutes across 6 cycles.
 
 **Use when:**
 - You want async message notifications
@@ -68,10 +68,10 @@ Lightweight background polling agent. Runs on Haiku model for cost efficiency (~
 - Running long sessions that need message awareness
 
 **Key capabilities:**
-- Background polling loop (60 cycles max)
+- Blocking wait via `thrum wait --all --timeout 5m` (6 cycles max)
 - Immediate return on message arrival
-- Automatic read marking via `thrum inbox`
-- CLI-only (no MCP tools for simplicity)
+- Time-based filtering with `--after` flag (skips old messages)
+- CLI-only (no MCP tools — sub-agents can't access MCP)
 
 ## Configure the message listener
 
@@ -85,15 +85,17 @@ Task({
   subagent_type: "message-listener",
   model: "haiku",
   run_in_background: true,
-  prompt: "Listen for Thrum messages. THRUM_ROOT=/path/to/repo AGENT_NAME=your_agent_name"
+  prompt: "Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --all --timeout 5m --after -30s --json"
 });
 ```
 
-**Environment variables:**
-- `THRUM_NAME` or `AGENT_NAME` — Your registered agent name
-- `THRUM_ROOT` — Path to your repo (optional, defaults to cwd)
+**Wait command flags:**
+- `--all` — Subscribe to all messages (broadcasts + directed)
+- `--timeout 5m` — Block up to 5 minutes per cycle
+- `--after -30s` — Only return messages from the last 30 seconds (skips old)
+- `--json` — Machine-readable output
 
-The listener will check `thrum inbox --unread` every 30 seconds and return immediately when messages arrive. Re-arm it after processing messages to continue listening.
+The listener uses `thrum wait` which blocks until a message arrives or the timeout expires — no polling loops needed. Each cycle is a single Bash call. Re-arm the listener after processing messages to continue listening.
 
 ## Customize for your project
 
