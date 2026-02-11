@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -107,6 +108,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(subscribeCmd())
 	rootCmd.AddCommand(unsubscribeCmd())
 	rootCmd.AddCommand(subscriptionsCmd())
+	rootCmd.AddCommand(contextCmd())
 	rootCmd.AddCommand(syncCmd())
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(setupCmd())
@@ -2039,6 +2041,171 @@ func subscriptionsCmd() *cobra.Command {
 	}
 }
 
+func contextCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "context",
+		Short: "Manage agent context",
+	}
+
+	cmd.AddCommand(contextSaveCmd())
+	cmd.AddCommand(contextShowCmd())
+	cmd.AddCommand(contextClearCmd())
+
+	return cmd
+}
+
+func contextSaveCmd() *cobra.Command {
+	var flagFile string
+	var flagAgent string
+
+	cmd := &cobra.Command{
+		Use:   "save",
+		Short: "Save agent context from file or stdin",
+		Long: `Save context for the current agent (or --agent NAME).
+
+Examples:
+  thrum context save --file dev-docs/Continuation_Prompt.md
+  echo "context" | thrum context save
+  thrum context save --agent other_agent --file context.md`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentID, err := resolveLocalAgentID()
+			if err != nil && flagAgent == "" {
+				return fmt.Errorf("failed to resolve agent identity: %w", err)
+			}
+			if flagAgent != "" {
+				agentID = flagAgent
+			}
+
+			var content []byte
+			if flagFile != "" {
+				content, err = os.ReadFile(flagFile) //nolint:gosec // G304 - user-specified file path from CLI flag
+				if err != nil {
+					return fmt.Errorf("read context file: %w", err)
+				}
+			} else {
+				content, err = io.ReadAll(os.Stdin)
+				if err != nil {
+					return fmt.Errorf("read stdin: %w", err)
+				}
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			var resp rpc.ContextSaveResponse
+			if err := client.Call("context.save", rpc.ContextSaveRequest{
+				AgentName: agentID,
+				Content:   content,
+			}, &resp); err != nil {
+				return err
+			}
+
+			fmt.Println(resp.Message)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&flagFile, "file", "", "Read context from file (default: stdin)")
+	cmd.Flags().StringVar(&flagAgent, "agent", "", "Override agent name")
+
+	return cmd
+}
+
+func contextShowCmd() *cobra.Command {
+	var flagAgent string
+
+	cmd := &cobra.Command{
+		Use:   "show",
+		Short: "Show agent context",
+		Long: `Show saved context for the current agent (or --agent NAME).
+
+Examples:
+  thrum context show
+  thrum context show --agent coordinator`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentID, err := resolveLocalAgentID()
+			if err != nil && flagAgent == "" {
+				return fmt.Errorf("failed to resolve agent identity: %w", err)
+			}
+			if flagAgent != "" {
+				agentID = flagAgent
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			var resp rpc.ContextShowResponse
+			if err := client.Call("context.show", rpc.ContextShowRequest{
+				AgentName: agentID,
+			}, &resp); err != nil {
+				return err
+			}
+
+			if !resp.HasContext {
+				fmt.Printf("No context saved for %s\n", resp.AgentName)
+				return nil
+			}
+
+			fmt.Printf("# Context for %s (%d bytes, updated %s)\n\n", resp.AgentName, resp.Size, resp.UpdatedAt)
+			fmt.Print(string(resp.Content))
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&flagAgent, "agent", "", "Override agent name")
+
+	return cmd
+}
+
+func contextClearCmd() *cobra.Command {
+	var flagAgent string
+
+	cmd := &cobra.Command{
+		Use:   "clear",
+		Short: "Clear agent context",
+		Long: `Clear saved context for the current agent (or --agent NAME).
+
+Examples:
+  thrum context clear
+  thrum context clear --agent coordinator`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentID, err := resolveLocalAgentID()
+			if err != nil && flagAgent == "" {
+				return fmt.Errorf("failed to resolve agent identity: %w", err)
+			}
+			if flagAgent != "" {
+				agentID = flagAgent
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			var resp rpc.ContextClearResponse
+			if err := client.Call("context.clear", rpc.ContextClearRequest{
+				AgentName: agentID,
+			}, &resp); err != nil {
+				return err
+			}
+
+			fmt.Println(resp.Message)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&flagAgent, "agent", "", "Override agent name")
+
+	return cmd
+}
+
 func syncCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync",
@@ -2595,6 +2762,12 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("agent.listContext", agentHandler.HandleListContext)
 	server.RegisterHandler("agent.delete", agentHandler.HandleDelete)
 	server.RegisterHandler("agent.cleanup", agentHandler.HandleCleanup)
+
+	// Context management
+	contextHandler := rpc.NewContextHandler(st)
+	server.RegisterHandler("context.save", contextHandler.HandleSave)
+	server.RegisterHandler("context.show", contextHandler.HandleShow)
+	server.RegisterHandler("context.clear", contextHandler.HandleClear)
 
 	// Session management
 	sessionHandler := rpc.NewSessionHandler(st)
