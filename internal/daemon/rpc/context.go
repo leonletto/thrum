@@ -27,16 +27,20 @@ type ContextSaveResponse struct {
 
 // ContextShowRequest is the request for context.show.
 type ContextShowRequest struct {
-	AgentName string `json:"agent_name"`
+	AgentName       string `json:"agent_name"`
+	IncludePreamble *bool  `json:"include_preamble,omitempty"` // nil = true (default include)
 }
 
 // ContextShowResponse is the response for context.show.
 type ContextShowResponse struct {
-	AgentName  string `json:"agent_name"`
-	Content    []byte `json:"content"`
-	HasContext bool   `json:"has_context"`
-	Size       int64  `json:"size,omitempty"`
-	UpdatedAt  string `json:"updated_at,omitempty"`
+	AgentName    string `json:"agent_name"`
+	Preamble     []byte `json:"preamble,omitempty"`
+	Content      []byte `json:"content"`
+	HasContext   bool   `json:"has_context"`
+	HasPreamble  bool   `json:"has_preamble"`
+	PreambleSize int64  `json:"preamble_size,omitempty"`
+	Size         int64  `json:"size,omitempty"`
+	UpdatedAt    string `json:"updated_at,omitempty"`
 }
 
 // ContextClearRequest is the request for context.clear.
@@ -80,6 +84,9 @@ func (h *ContextHandler) HandleSave(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("save context: %w", err)
 	}
 
+	// Auto-create default preamble on first save (if missing)
+	_ = agentcontext.EnsurePreamble(thrumDir, req.AgentName)
+
 	return &ContextSaveResponse{
 		AgentName: req.AgentName,
 		Message:   fmt.Sprintf("Context saved for %s (%d bytes)", req.AgentName, len(req.Content)),
@@ -107,24 +114,32 @@ func (h *ContextHandler) HandleShow(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("load context: %w", err)
 	}
 
-	if len(content) == 0 {
-		return &ContextShowResponse{
-			AgentName:  req.AgentName,
-			HasContext: false,
-		}, nil
-	}
-
-	contextPath := agentcontext.ContextPath(thrumDir, req.AgentName)
-	stat, _ := os.Stat(contextPath)
-
 	resp := &ContextShowResponse{
 		AgentName:  req.AgentName,
 		Content:    content,
-		HasContext: true,
+		HasContext: len(content) > 0,
 	}
-	if stat != nil {
-		resp.Size = stat.Size()
-		resp.UpdatedAt = stat.ModTime().Format(time.RFC3339)
+
+	if resp.HasContext {
+		contextPath := agentcontext.ContextPath(thrumDir, req.AgentName)
+		if stat, _ := os.Stat(contextPath); stat != nil {
+			resp.Size = stat.Size()
+			resp.UpdatedAt = stat.ModTime().Format(time.RFC3339)
+		}
+	}
+
+	// Load preamble if requested (default: include)
+	includePreamble := req.IncludePreamble == nil || *req.IncludePreamble
+	if includePreamble {
+		preamble, err := agentcontext.LoadPreamble(thrumDir, req.AgentName)
+		if err != nil {
+			return nil, fmt.Errorf("load preamble: %w", err)
+		}
+		if len(preamble) > 0 {
+			resp.Preamble = preamble
+			resp.HasPreamble = true
+			resp.PreambleSize = int64(len(preamble))
+		}
 	}
 
 	return resp, nil
@@ -153,5 +168,83 @@ func (h *ContextHandler) HandleClear(ctx context.Context, params json.RawMessage
 	return &ContextClearResponse{
 		AgentName: req.AgentName,
 		Message:   fmt.Sprintf("Context cleared for %s", req.AgentName),
+	}, nil
+}
+
+// PreambleShowRequest is the request for context.preamble.show.
+type PreambleShowRequest struct {
+	AgentName string `json:"agent_name"`
+}
+
+// PreambleShowResponse is the response for context.preamble.show.
+type PreambleShowResponse struct {
+	AgentName   string `json:"agent_name"`
+	Content     []byte `json:"content"`
+	HasPreamble bool   `json:"has_preamble"`
+}
+
+// PreambleSaveRequest is the request for context.preamble.save.
+type PreambleSaveRequest struct {
+	AgentName string `json:"agent_name"`
+	Content   []byte `json:"content"`
+}
+
+// PreambleSaveResponse is the response for context.preamble.save.
+type PreambleSaveResponse struct {
+	AgentName string `json:"agent_name"`
+	Message   string `json:"message"`
+}
+
+// HandlePreambleShow handles the context.preamble.show RPC method.
+func (h *ContextHandler) HandlePreambleShow(ctx context.Context, params json.RawMessage) (any, error) {
+	var req PreambleShowRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	if req.AgentName == "" {
+		return nil, errors.New("agent_name is required")
+	}
+
+	h.state.RLock()
+	defer h.state.RUnlock()
+
+	thrumDir := filepath.Join(h.state.RepoPath(), ".thrum")
+
+	content, err := agentcontext.LoadPreamble(thrumDir, req.AgentName)
+	if err != nil {
+		return nil, fmt.Errorf("load preamble: %w", err)
+	}
+
+	return &PreambleShowResponse{
+		AgentName:   req.AgentName,
+		Content:     content,
+		HasPreamble: len(content) > 0,
+	}, nil
+}
+
+// HandlePreambleSave handles the context.preamble.save RPC method.
+func (h *ContextHandler) HandlePreambleSave(ctx context.Context, params json.RawMessage) (any, error) {
+	var req PreambleSaveRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	if req.AgentName == "" {
+		return nil, errors.New("agent_name is required")
+	}
+
+	h.state.Lock()
+	defer h.state.Unlock()
+
+	thrumDir := filepath.Join(h.state.RepoPath(), ".thrum")
+
+	if err := agentcontext.SavePreamble(thrumDir, req.AgentName, req.Content); err != nil {
+		return nil, fmt.Errorf("save preamble: %w", err)
+	}
+
+	return &PreambleSaveResponse{
+		AgentName: req.AgentName,
+		Message:   fmt.Sprintf("Preamble saved for %s (%d bytes)", req.AgentName, len(req.Content)),
 	}, nil
 }

@@ -2935,6 +2935,8 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("context.save", contextHandler.HandleSave)
 	server.RegisterHandler("context.show", contextHandler.HandleShow)
 	server.RegisterHandler("context.clear", contextHandler.HandleClear)
+	server.RegisterHandler("context.preamble.show", contextHandler.HandlePreambleShow)
+	server.RegisterHandler("context.preamble.save", contextHandler.HandlePreambleSave)
 
 	// Session management
 	sessionHandler := rpc.NewSessionHandler(st)
