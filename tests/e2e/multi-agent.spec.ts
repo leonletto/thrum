@@ -75,11 +75,11 @@ test.describe('Multi-Agent Scenarios', () => {
     await page.goto('/');
     await waitForWebSocket(page);
 
-    // Wait for data to load
-    await page.waitForTimeout(2000);
-
-    // Assert: human identity is shown in header (not "Unknown")
+    // Wait for header to load with identity (not "Unknown")
     const header = page.locator('header');
+    await expect(header).not.toContainText('Unknown', { timeout: 5000 });
+
+    // Assert: human identity is shown in header
     const headerText = await header.textContent();
     expect(headerText).not.toContain('Unknown');
 

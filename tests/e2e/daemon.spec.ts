@@ -63,6 +63,24 @@ async function waitForDaemonReady(repo: string, maxAttempts = 20): Promise<void>
   throw new Error('Daemon did not become ready');
 }
 
+/** Wait for process to exit. */
+async function waitForProcessExit(pid: number, maxAttempts = 20): Promise<void> {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      process.kill(pid, 0);
+      // Process still exists, wait longer
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (e: any) {
+      if (e.code === 'ESRCH') {
+        // Process doesn't exist, success
+        return;
+      }
+      throw e;
+    }
+  }
+  throw new Error(`Process ${pid} did not exit`);
+}
+
 /** Clean up temp repo dir. */
 function cleanupRepo(dir: string): void {
   fs.rmSync(dir, { recursive: true, force: true });
@@ -102,8 +120,8 @@ test.describe('Daemon Management', () => {
       // Stop the daemon
       thrumIn(repo, ['daemon', 'stop']);
 
-      // Give OS time to clean up the process
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Poll for process to exit
+      await waitForProcessExit(pid);
 
       // Verify process no longer exists
       let processExists = false;
@@ -160,7 +178,8 @@ test.describe('Daemon Management', () => {
       } catch {
         // If restart command fails, do manual stop+start
         thrumIn(repo, ['daemon', 'stop']);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Poll for old daemon to exit before starting new one
+        await waitForProcessExit(origPid);
         thrumIn(repo, ['daemon', 'start']);
       }
 
