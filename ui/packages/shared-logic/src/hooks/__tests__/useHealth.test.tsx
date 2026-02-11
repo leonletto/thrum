@@ -21,9 +21,12 @@ function createWrapper() {
       mutations: { retry: false },
     },
   });
-  return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
+  return {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+    queryClient,
+  };
 }
 
 describe('useHealth', () => {
@@ -42,9 +45,8 @@ describe('useHealth', () => {
 
     vi.mocked(wsClient.call).mockResolvedValue(mockResponse);
 
-    const { result } = renderHook(() => useHealth(), {
-      wrapper: createWrapper(),
-    });
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useHealth(), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -58,22 +60,36 @@ describe('useHealth', () => {
     const mockError = new Error('Health check failed');
     vi.mocked(wsClient.call).mockRejectedValue(mockError);
 
-    const { result } = renderHook(() => useHealth(), {
-      wrapper: createWrapper(),
-    });
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useHealth(), { wrapper });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(result.current.error).toEqual(mockError);
   });
 
-  it('uses correct staleTime of 10000ms', () => {
-    const { result } = renderHook(() => useHealth(), {
-      wrapper: createWrapper(),
+  it('uses correct staleTime of 10000ms', async () => {
+    const mockResponse: HealthResponse = {
+      status: 'ok',
+      uptime_ms: 9015000,
+      version: '0.1.0',
+      repo_id: 'thrum',
+      sync_state: 'synced',
+    };
+    vi.mocked(wsClient.call).mockResolvedValue(mockResponse);
+
+    const { wrapper, queryClient } = createWrapper();
+    renderHook(() => useHealth(), { wrapper });
+
+    await waitFor(() => {
+      const queryState = queryClient.getQueryState(['health']);
+      expect(queryState).toBeDefined();
     });
 
-    // The staleTime should be set in the query options
-    expect(result.current).toBeDefined();
+    // Verify the query has staleTime of 10000ms
+    const queryCache = queryClient.getQueryCache();
+    const query = queryCache.find({ queryKey: ['health'] });
+    expect(query?.options.staleTime).toBe(10000);
   });
 
   it('returns health data with all required fields', async () => {
@@ -87,9 +103,8 @@ describe('useHealth', () => {
 
     vi.mocked(wsClient.call).mockResolvedValue(mockResponse);
 
-    const { result } = renderHook(() => useHealth(), {
-      wrapper: createWrapper(),
-    });
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useHealth(), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
