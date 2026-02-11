@@ -3,6 +3,7 @@ package context
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -206,6 +207,114 @@ func TestClearRemoveError(t *testing.T) {
 	err := Clear(thrumDir, "agent")
 	if err == nil {
 		t.Fatal("expected error removing non-empty directory")
+	}
+}
+
+func TestPreamblePath(t *testing.T) {
+	path := PreamblePath("/repo/.thrum", "coordinator")
+	want := filepath.Join("/repo/.thrum", "context", "coordinator_preamble.md")
+	if path != want {
+		t.Errorf("PreamblePath: got %q, want %q", path, want)
+	}
+}
+
+func TestLoadPreambleExisting(t *testing.T) {
+	thrumDir := t.TempDir()
+	content := []byte("# Custom Preamble\n")
+
+	if err := SavePreamble(thrumDir, "test_agent", content); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := LoadPreamble(thrumDir, "test_agent")
+	if err != nil {
+		t.Fatalf("LoadPreamble failed: %v", err)
+	}
+	if string(data) != string(content) {
+		t.Errorf("content mismatch: got %q, want %q", data, content)
+	}
+}
+
+func TestLoadPreambleMissing(t *testing.T) {
+	thrumDir := t.TempDir()
+
+	data, err := LoadPreamble(thrumDir, "nonexistent")
+	if err != nil {
+		t.Fatalf("LoadPreamble should not error for missing file: %v", err)
+	}
+	if data != nil {
+		t.Errorf("expected nil for missing preamble, got %q", data)
+	}
+}
+
+func TestSavePreamble(t *testing.T) {
+	thrumDir := t.TempDir()
+	content := []byte("# My Preamble\n\nCustom instructions.\n")
+
+	if err := SavePreamble(thrumDir, "agent", content); err != nil {
+		t.Fatalf("SavePreamble failed: %v", err)
+	}
+
+	path := filepath.Join(thrumDir, "context", "agent_preamble.md")
+	data, err := os.ReadFile(path) //nolint:gosec // G304 - test helper reading temp file
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if string(data) != string(content) {
+		t.Errorf("content mismatch: got %q, want %q", data, content)
+	}
+}
+
+func TestEnsurePreambleCreatesDefault(t *testing.T) {
+	thrumDir := t.TempDir()
+
+	if err := EnsurePreamble(thrumDir, "agent"); err != nil {
+		t.Fatalf("EnsurePreamble failed: %v", err)
+	}
+
+	data, err := LoadPreamble(thrumDir, "agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data == nil {
+		t.Fatal("expected preamble to be created")
+	}
+	if string(data) != string(DefaultPreamble()) {
+		t.Errorf("expected default preamble, got %q", data)
+	}
+}
+
+func TestEnsurePreambleNoOverwrite(t *testing.T) {
+	thrumDir := t.TempDir()
+	custom := []byte("# Custom\n")
+
+	if err := SavePreamble(thrumDir, "agent", custom); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsurePreamble(thrumDir, "agent"); err != nil {
+		t.Fatalf("EnsurePreamble failed: %v", err)
+	}
+
+	data, err := LoadPreamble(thrumDir, "agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != string(custom) {
+		t.Errorf("EnsurePreamble overwrote existing: got %q, want %q", data, custom)
+	}
+}
+
+func TestDefaultPreambleContent(t *testing.T) {
+	content := DefaultPreamble()
+	if len(content) == 0 {
+		t.Fatal("DefaultPreamble should not be empty")
+	}
+	s := string(content)
+	for _, keyword := range []string{"thrum inbox", "thrum send", "thrum reply", "thrum status", "thrum context save"} {
+		if !strings.Contains(s, keyword) {
+			t.Errorf("DefaultPreamble missing keyword %q", keyword)
+		}
 	}
 }
 
