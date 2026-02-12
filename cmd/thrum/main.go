@@ -112,6 +112,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(subscriptionsCmd())
 	rootCmd.AddCommand(contextCmd())
 	rootCmd.AddCommand(groupCmd())
+	rootCmd.AddCommand(runtimeGroupCmd())
 	rootCmd.AddCommand(syncCmd())
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(setupCmd())
@@ -2432,6 +2433,7 @@ func contextCmd() *cobra.Command {
 	cmd.AddCommand(contextSyncCmd())
 	cmd.AddCommand(contextUpdateCmd())
 	cmd.AddCommand(contextPreambleCmd())
+	cmd.AddCommand(contextPrimeCmd())
 
 	return cmd
 }
@@ -2767,6 +2769,109 @@ Examples:
 	cmd.Flags().StringVar(&flagAgent, "agent", "", "Override agent name")
 	cmd.Flags().BoolVar(&flagInit, "init", false, "Create or reset to default preamble")
 	cmd.Flags().StringVar(&flagFile, "file", "", "Set preamble from file")
+
+	return cmd
+}
+
+func contextPrimeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "prime",
+		Short: "Gather comprehensive session context for agent initialization",
+		Long: `Collect all context needed for agent session initialization or recovery.
+
+Gathers identity, session info, agent list, unread messages, and git
+work context into a single output. Gracefully handles missing sections.
+
+Examples:
+  thrum context prime          # Human-readable summary
+  thrum context prime --json   # Structured JSON output`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result := cli.ContextPrime(client)
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatPrimeContext(result))
+			}
+
+			return nil
+		},
+	}
+}
+
+func runtimeGroupCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "runtime",
+		Short: "Manage runtime presets",
+		Long: `Manage AI coding runtime presets.
+
+Thrum supports multiple AI coding runtimes (Claude, Codex, Cursor,
+Gemini, Auggie, Amp). Each runtime has a preset with configuration
+defaults. Use these commands to list, inspect, and configure runtimes.`,
+	}
+
+	// thrum runtime list
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all runtime presets",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			result := cli.RuntimeList()
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatRuntimeList(result))
+			}
+			return nil
+		},
+	}
+
+	// thrum runtime show <name>
+	showCmd := &cobra.Command{
+		Use:   "show <name>",
+		Short: "Show details for a runtime preset",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			preset, err := cli.RuntimeShow(args[0])
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(preset, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatRuntimeShow(preset))
+			}
+			return nil
+		},
+	}
+
+	// thrum runtime set-default <name>
+	setDefaultCmd := &cobra.Command{
+		Use:   "set-default <name>",
+		Short: "Set the default runtime preset",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := cli.RuntimeSetDefault(args[0]); err != nil {
+				return err
+			}
+			fmt.Printf("✓ Default runtime set to: %s\n", args[0])
+			return nil
+		},
+	}
+
+	cmd.AddCommand(listCmd)
+	cmd.AddCommand(showCmd)
+	cmd.AddCommand(setDefaultCmd)
 
 	return cmd
 }
