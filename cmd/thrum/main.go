@@ -3924,6 +3924,30 @@ func runDaemon(repoPath string, flagLocal bool) error {
 				}
 
 				fmt.Fprintf(os.Stderr, "  Tailscale:   %s:%d\n", tsCfg.Hostname, tsCfg.Port)
+
+				// Wire Tailscale sync info into health handler
+				if syncManager != nil {
+					tsHostname := tsCfg.Hostname
+					healthHandler.SetTailscaleInfoProvider(func() *rpc.TailscaleSyncInfo {
+						count, peers := syncManager.TailscaleSyncStatus(tsHostname)
+						tsPeers := make([]rpc.TailscalePeer, len(peers))
+						for i, p := range peers {
+							tsPeers[i] = rpc.TailscalePeer{
+								DaemonID: p.DaemonID,
+								Hostname: p.Hostname,
+								LastSync: p.LastSeen,
+								Status:   p.Status,
+							}
+						}
+						return &rpc.TailscaleSyncInfo{
+							Enabled:        true,
+							Hostname:       tsHostname,
+							ConnectedPeers: count,
+							Peers:          tsPeers,
+							SyncStatus:     "idle",
+						}
+					})
+				}
 			}
 		}
 	}

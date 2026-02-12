@@ -173,6 +173,37 @@ func (m *DaemonSyncManager) BroadcastNotify(daemonID string, latestSeq int64, ev
 	}
 }
 
+// TailscaleSyncStatus returns current sync status info for the health endpoint.
+func (m *DaemonSyncManager) TailscaleSyncStatus(hostname string) (int, []PeerStatusInfo) {
+	peerList := m.peers.ListPeers()
+	var statuses []PeerStatusInfo
+
+	for _, p := range peerList {
+		ago := time.Since(p.LastSeen).Truncate(time.Second)
+		lastSeen := ago.String() + " ago"
+		if ago > 24*time.Hour {
+			lastSeen = p.LastSeen.Format("2006-01-02 15:04")
+		}
+
+		var lastSeq int64
+		cp, err := checkpoint.GetCheckpoint(m.state.DB(), p.DaemonID)
+		if err == nil && cp != nil {
+			lastSeq = cp.LastSyncedSeq
+		}
+
+		statuses = append(statuses, PeerStatusInfo{
+			DaemonID: p.DaemonID,
+			Hostname: p.Hostname,
+			Port:     p.Port,
+			LastSeen: lastSeen,
+			Status:   p.Status,
+			LastSeq:  lastSeq,
+		})
+	}
+
+	return len(peerList), statuses
+}
+
 // Client returns the sync client.
 func (m *DaemonSyncManager) Client() *SyncClient {
 	return m.client
