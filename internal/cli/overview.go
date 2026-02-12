@@ -58,9 +58,19 @@ func Overview(client *Client, callerAgentID ...string) (*OverviewResult, error) 
 			}
 		}
 
-		// Step 5: Inbox counts
+		// Step 5: Inbox counts (scoped to this agent's actual inbox)
 		var inbox InboxResult
-		if err := client.Call("message.list", map[string]any{"page_size": 0}, &inbox); err == nil {
+		inboxParams := map[string]any{
+			"page_size":    0,
+			"exclude_self": true,
+		}
+		if whoami.AgentID != "" {
+			inboxParams["for_agent"] = whoami.AgentID
+		}
+		if whoami.Role != "" {
+			inboxParams["for_agent_role"] = whoami.Role
+		}
+		if err := client.Call("message.list", inboxParams, &inbox); err == nil {
 			result.Inbox = &struct {
 				Total  int `json:"total"`
 				Unread int `json:"unread"`

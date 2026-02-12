@@ -157,38 +157,20 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("iterate team members: %w", err)
 	}
 
-	// Query 2: Per-agent inbox counts
-	inboxQuery := `SELECT
-		a.agent_id,
-		COUNT(DISTINCT m.message_id) as total,
-		COUNT(DISTINCT CASE WHEN mr.message_id IS NULL THEN m.message_id END) as unread
-	FROM agents a
-	LEFT JOIN messages m ON m.deleted = 0 AND m.agent_id != a.agent_id
-	LEFT JOIN message_reads mr ON m.message_id = mr.message_id AND mr.agent_id = a.agent_id
-	GROUP BY a.agent_id`
+	// Query 2: Per-agent inbox counts (scoped to each agent's actual inbox)
+	for i, m := range members {
+		forAgentValues := buildForAgentValues(m.AgentID, m.Role)
+		forAgentClause, forAgentArgs := buildForAgentClause(forAgentValues, m.AgentID, m.Role)
 
-	inboxRows, err := h.state.DB().Query(inboxQuery)
-	if err != nil {
-		return nil, fmt.Errorf("query inbox counts: %w", err)
-	}
-	defer func() { _ = inboxRows.Close() }()
+		// Total: messages visible to this agent, excluding self-sent
+		totalQuery := "SELECT COUNT(*) FROM messages m WHERE m.deleted = 0 AND m.agent_id != ?" + forAgentClause
+		totalArgs := append([]any{m.AgentID}, forAgentArgs...)
+		_ = h.state.DB().QueryRow(totalQuery, totalArgs...).Scan(&members[i].InboxTotal)
 
-	for inboxRows.Next() {
-		var agentID string
-		var total, unread int
-
-		if err := inboxRows.Scan(&agentID, &total, &unread); err != nil {
-			return nil, fmt.Errorf("scan inbox count: %w", err)
-		}
-
-		if idx, ok := memberIndex[agentID]; ok {
-			members[idx].InboxTotal = total
-			members[idx].InboxUnread = unread
-		}
-	}
-
-	if err := inboxRows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate inbox counts: %w", err)
+		// Unread: same filter, minus messages already read
+		unreadQuery := totalQuery + " AND m.message_id NOT IN (SELECT message_id FROM message_reads WHERE agent_id = ?)"
+		unreadArgs := append(totalArgs, m.AgentID)
+		_ = h.state.DB().QueryRow(unreadQuery, unreadArgs...).Scan(&members[i].InboxUnread)
 	}
 
 	if members == nil {
