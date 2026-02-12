@@ -3289,15 +3289,8 @@ Examples:
 					UpdatedAt: time.Now(),
 				}
 
-				// Populate context_file with relative path when --preamble-file provided
-				if preambleFile != "" {
-					if relPath, err := filepath.Rel(flagRepo, preambleFile); err == nil {
-						idFile.ContextFile = relPath
-					} else {
-						idFile.ContextFile = preambleFile
-						fmt.Fprintf(os.Stderr, "Warning: could not compute relative path for preamble file: %v\n", err)
-					}
-				}
+				// Populate context_file with the agent's context file path
+				idFile.ContextFile = fmt.Sprintf("context/%s.md", savedName)
 
 				thrumDir := filepath.Join(flagRepo, ".thrum")
 				if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {

@@ -96,7 +96,7 @@ The script handles:
 |------|---------|---------|
 | `--identity <name>` | *(none)* | Agent identity name (triggers quickstart) |
 | `--role <role>` | `implementer` | Agent role |
-| `--module <module>` | branch name | Agent module (auto-strips `feature/` prefix) |
+| `--module <module>` | branch name (strips `feature/` prefix) | Agent module |
 | `--preamble <file>` | *(none)* | Custom preamble to compose with default |
 | `--base <branch>` | `main` | Base branch for new branch creation |
 

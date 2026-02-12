@@ -43,14 +43,39 @@ POSITIONAL=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --identity)
+            if [[ $# -lt 2 || "$2" == -* ]]; then
+                echo "Error: --identity requires a value"
+                echo "Run '$0 --help' for usage."
+                exit 1
+            fi
             IDENTITY="$2"; shift 2 ;;
         --role)
+            if [[ $# -lt 2 || "$2" == -* ]]; then
+                echo "Error: --role requires a value"
+                echo "Run '$0 --help' for usage."
+                exit 1
+            fi
             ROLE="$2"; shift 2 ;;
         --module)
+            if [[ $# -lt 2 || "$2" == -* ]]; then
+                echo "Error: --module requires a value"
+                echo "Run '$0 --help' for usage."
+                exit 1
+            fi
             MODULE="$2"; shift 2 ;;
         --preamble)
+            if [[ $# -lt 2 || "$2" == -* ]]; then
+                echo "Error: --preamble requires a value"
+                echo "Run '$0 --help' for usage."
+                exit 1
+            fi
             PREAMBLE="$2"; shift 2 ;;
         --base)
+            if [[ $# -lt 2 || "$2" == -* ]]; then
+                echo "Error: --base requires a value"
+                echo "Run '$0 --help' for usage."
+                exit 1
+            fi
             BASE_BRANCH="$2"; shift 2 ;;
         --help|-h)
             echo "Usage: $0 [<worktree-path> [<branch>]] [options]"
@@ -227,10 +252,18 @@ echo "Setting up worktree..."
 # Step 1: Branch & worktree creation
 if git -C "$MAIN_REPO" rev-parse --verify "$BRANCH" &>/dev/null; then
     echo "  Branch '$BRANCH' exists, creating worktree..."
-    git -C "$MAIN_REPO" worktree add "$WORKTREE_PATH" "$BRANCH"
+    if ! git -C "$MAIN_REPO" worktree add "$WORKTREE_PATH" "$BRANCH"; then
+        echo "Error: Failed to create worktree at $WORKTREE_PATH for branch '$BRANCH'"
+        echo "Check if the path already exists or is in use by another worktree."
+        exit 1
+    fi
 else
     echo "  Creating branch '$BRANCH' from '$BASE_BRANCH'..."
-    git -C "$MAIN_REPO" worktree add "$WORKTREE_PATH" -b "$BRANCH" "$BASE_BRANCH"
+    if ! git -C "$MAIN_REPO" worktree add "$WORKTREE_PATH" -b "$BRANCH" "$BASE_BRANCH"; then
+        echo "Error: Failed to create worktree at $WORKTREE_PATH"
+        echo "Check if branch '$BRANCH' already exists or base branch '$BASE_BRANCH' is valid."
+        exit 1
+    fi
 fi
 
 # Resolve worktree path to absolute
