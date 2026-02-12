@@ -63,12 +63,25 @@ func TestTeamHandleList(t *testing.T) {
 	}
 	session2ID := startResp2.(*SessionStartResponse).SessionID
 
-	// Insert a message from agent1 (should appear in agent2's inbox)
+	// Insert a directed message from agent1 to agent2 (mention ref)
 	_, err = s.DB().Exec(`INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content)
-		VALUES (?, ?, ?, datetime('now'), 'markdown', 'hello team')`,
-		"msg_test001", agent1ID, "ses_test001")
+		VALUES (?, ?, ?, datetime('now'), 'markdown', 'hey agent2')`,
+		"msg_directed001", agent1ID, "ses_test001")
 	if err != nil {
-		t.Fatalf("insert message: %v", err)
+		t.Fatalf("insert directed message: %v", err)
+	}
+	_, err = s.DB().Exec(`INSERT INTO message_refs (message_id, ref_type, ref_value) VALUES (?, 'mention', ?)`,
+		"msg_directed001", agent2ID)
+	if err != nil {
+		t.Fatalf("insert mention ref: %v", err)
+	}
+
+	// Insert a broadcast message (no mention refs, no group scopes — shows in shared footer)
+	_, err = s.DB().Exec(`INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content)
+		VALUES (?, ?, ?, datetime('now'), 'markdown', 'hello everyone')`,
+		"msg_broadcast001", agent1ID, "ses_test001")
+	if err != nil {
+		t.Fatalf("insert broadcast message: %v", err)
 	}
 
 	t.Run("default_active_only", func(t *testing.T) {
@@ -84,19 +97,32 @@ func TestTeamHandleList(t *testing.T) {
 			t.Fatalf("expected 2 members, got %d", len(result.Members))
 		}
 
-		// Find agent2 and check inbox
+		// Find agent2 and check directed inbox (should only count the mention, not broadcast)
 		for _, m := range result.Members {
 			if m.AgentID == agent2ID {
 				if m.InboxTotal != 1 {
-					t.Errorf("agent2 inbox total: want 1, got %d", m.InboxTotal)
+					t.Errorf("agent2 inbox total: want 1 (directed only), got %d", m.InboxTotal)
 				}
 				if m.InboxUnread != 1 {
 					t.Errorf("agent2 inbox unread: want 1, got %d", m.InboxUnread)
 				}
 			}
+			if m.AgentID == agent1ID {
+				if m.InboxTotal != 0 {
+					t.Errorf("agent1 inbox total: want 0 (no messages directed to agent1), got %d", m.InboxTotal)
+				}
+			}
 			if m.Status != "active" {
 				t.Errorf("expected active status for %s, got %s", m.AgentID, m.Status)
 			}
+		}
+
+		// Check shared messages footer
+		if result.SharedMessages == nil {
+			t.Fatal("expected shared messages in response")
+		}
+		if result.SharedMessages.BroadcastTotal != 1 {
+			t.Errorf("broadcast total: want 1, got %d", result.SharedMessages.BroadcastTotal)
 		}
 	})
 

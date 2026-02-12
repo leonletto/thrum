@@ -3538,7 +3538,7 @@ Examples:
 				output, _ := json.MarshalIndent(result, "", "  ")
 				fmt.Println(string(output))
 			} else {
-				fmt.Print(cli.FormatTeam(result.Members))
+				fmt.Print(cli.FormatTeam(&result))
 			}
 
 			return nil

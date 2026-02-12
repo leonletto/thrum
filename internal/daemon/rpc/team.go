@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/types"
@@ -17,7 +18,20 @@ type TeamListRequest struct {
 
 // TeamListResponse represents the response from team.list RPC.
 type TeamListResponse struct {
-	Members []TeamMember `json:"members"`
+	Members        []TeamMember      `json:"members"`
+	SharedMessages *SharedMessages   `json:"shared_messages,omitempty"`
+}
+
+// SharedMessages contains team-wide message counts (broadcasts + groups).
+type SharedMessages struct {
+	BroadcastTotal int                `json:"broadcast_total"`
+	Groups         []GroupMessageCount `json:"groups,omitempty"`
+}
+
+// GroupMessageCount contains message counts for an agent group.
+type GroupMessageCount struct {
+	Name  string `json:"name"`
+	Total int    `json:"total"`
 }
 
 // TeamMember represents a team member's full status.
@@ -157,25 +171,69 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("iterate team members: %w", err)
 	}
 
-	// Query 2: Per-agent inbox counts (scoped to each agent's actual inbox)
+	// Query 2: Per-agent directed message counts (mentions only, not broadcasts/groups)
 	for i, m := range members {
-		forAgentValues := buildForAgentValues(m.AgentID, m.Role)
-		forAgentClause, forAgentArgs := buildForAgentClause(forAgentValues, m.AgentID, m.Role)
+		values := buildForAgentValues(m.AgentID, m.Role)
+		if len(values) == 0 {
+			continue
+		}
+		placeholders := strings.Repeat("?,", len(values))
+		placeholders = placeholders[:len(placeholders)-1]
 
-		// Total: messages visible to this agent, excluding self-sent
-		totalQuery := "SELECT COUNT(*) FROM messages m WHERE m.deleted = 0 AND m.agent_id != ?" + forAgentClause
-		totalArgs := append([]any{m.AgentID}, forAgentArgs...)
-		_ = h.state.DB().QueryRow(totalQuery, totalArgs...).Scan(&members[i].InboxTotal)
+		mentionQuery := fmt.Sprintf(
+			`SELECT COUNT(*) FROM messages m
+			 WHERE m.deleted = 0 AND m.agent_id != ?
+			 AND m.message_id IN (
+				SELECT mr.message_id FROM message_refs mr
+				WHERE mr.ref_type = 'mention' AND mr.ref_value IN (%s)
+			 )`, placeholders)
+		args := []any{m.AgentID}
+		for _, v := range values {
+			args = append(args, v)
+		}
+		_ = h.state.DB().QueryRow(mentionQuery, args...).Scan(&members[i].InboxTotal)
 
 		// Unread: same filter, minus messages already read
-		unreadQuery := totalQuery + " AND m.message_id NOT IN (SELECT message_id FROM message_reads WHERE agent_id = ?)"
-		unreadArgs := append(totalArgs, m.AgentID)
+		unreadQuery := mentionQuery + " AND m.message_id NOT IN (SELECT message_id FROM message_reads WHERE agent_id = ?)"
+		unreadArgs := append(args, m.AgentID)
 		_ = h.state.DB().QueryRow(unreadQuery, unreadArgs...).Scan(&members[i].InboxUnread)
+	}
+
+	// Query 3: Shared message counts (broadcasts + per-group)
+	shared := &SharedMessages{}
+
+	// Broadcasts: messages with no mention refs and no group scopes
+	_ = h.state.DB().QueryRow(`SELECT COUNT(*) FROM messages m
+		WHERE m.deleted = 0
+		AND m.message_id NOT IN (SELECT mr.message_id FROM message_refs mr WHERE mr.ref_type = 'mention')
+		AND m.message_id NOT IN (SELECT ms.message_id FROM message_scopes ms WHERE ms.scope_type = 'group')`).Scan(&shared.BroadcastTotal)
+
+	// Per-group message counts
+	groupRows, err := h.state.DB().Query(`SELECT ms.scope_value, COUNT(DISTINCT m.message_id)
+		FROM messages m
+		JOIN message_scopes ms ON m.message_id = ms.message_id AND ms.scope_type = 'group'
+		WHERE m.deleted = 0
+		GROUP BY ms.scope_value
+		ORDER BY COUNT(DISTINCT m.message_id) DESC`)
+	if err == nil {
+		defer func() { _ = groupRows.Close() }()
+		for groupRows.Next() {
+			var gc GroupMessageCount
+			if err := groupRows.Scan(&gc.Name, &gc.Total); err == nil {
+				shared.Groups = append(shared.Groups, gc)
+			}
+		}
 	}
 
 	if members == nil {
 		members = []TeamMember{}
 	}
 
-	return &TeamListResponse{Members: members}, nil
+	// Only include shared messages if there are any
+	var sharedPtr *SharedMessages
+	if shared.BroadcastTotal > 0 || len(shared.Groups) > 0 {
+		sharedPtr = shared
+	}
+
+	return &TeamListResponse{Members: members, SharedMessages: sharedPtr}, nil
 }
