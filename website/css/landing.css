@@ -414,6 +414,140 @@ a.feature-card-link:hover {
 }
 
 /* ============================================================================
+   LIGHT MODE OVERRIDES
+   ========================================================================= */
+
+html[data-theme="light"] .site-header {
+  background: rgba(255, 255, 255, 0.9);
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] .logo-glyph {
+  text-shadow: none;
+  color: #0891b2;
+}
+
+html[data-theme="light"] .hero::after {
+  background: linear-gradient(90deg, transparent, #0891b2, transparent);
+}
+
+html[data-theme="light"] .hero-badge {
+  color: #0e7490;
+  background: rgba(8, 145, 178, 0.08);
+  border-color: rgba(8, 145, 178, 0.2);
+}
+
+html[data-theme="light"] .hero-title {
+  background: linear-gradient(135deg, #0f172a 0%, #0891b2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+html[data-theme="light"] .hero-install code {
+  background: rgba(8, 145, 178, 0.06);
+  border-color: rgba(15, 23, 42, 0.1);
+  color: var(--text-secondary);
+}
+
+html[data-theme="light"] .section-alt {
+  background: rgba(241, 245, 249, 0.6);
+  border-top-color: rgba(15, 23, 42, 0.06);
+  border-bottom-color: rgba(15, 23, 42, 0.06);
+}
+
+html[data-theme="light"] .feature-icon {
+  color: #0891b2;
+  text-shadow: none;
+}
+
+html[data-theme="light"] a.feature-card-link:hover {
+  border-color: #0891b2;
+  box-shadow: 0 4px 16px rgba(8, 145, 178, 0.1);
+}
+
+/* Code blocks stay dark in light mode */
+html[data-theme="light"] .code-block {
+  background: #1e293b;
+  border-color: rgba(15, 23, 42, 0.15);
+}
+
+html[data-theme="light"] .code-header {
+  background: rgba(15, 23, 42, 0.9);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="light"] .code-header-dot {
+  background: var(--text-subtle);
+  opacity: 0.5;
+}
+
+html[data-theme="light"] .code-header-title {
+  color: #94a3b8;
+}
+
+html[data-theme="light"] .code-block pre {
+  background: transparent;
+}
+
+html[data-theme="light"] .code-block pre code {
+  color: #e2e8f0;
+}
+
+html[data-theme="light"] .c-comment { color: #64748b; }
+html[data-theme="light"] .c-prompt { color: #38bdf8; }
+html[data-theme="light"] .c-output { color: #34d399; }
+html[data-theme="light"] .c-string { color: #fbbf24; }
+
+/* Architecture diagram */
+html[data-theme="light"] .arch-agent {
+  background: rgba(8, 145, 178, 0.1);
+  color: #0e7490;
+  border-color: rgba(8, 145, 178, 0.3);
+}
+
+html[data-theme="light"] .arch-daemon {
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.3);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
+}
+
+html[data-theme="light"] .arch-storage {
+  background: rgba(217, 119, 6, 0.08);
+  color: #b45309;
+  border-color: rgba(217, 119, 6, 0.2);
+}
+
+html[data-theme="light"] .arch-arrow {
+  color: var(--text-muted);
+}
+
+/* Theme toggle button */
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 1;
+  transition: all var(--transition-base);
+  color: var(--text-muted);
+}
+
+.theme-toggle:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: inline; }
+
+html[data-theme="light"] .theme-toggle .icon-sun { display: inline; }
+html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+
+/* ============================================================================
    RESPONSIVE
    ========================================================================= */
 

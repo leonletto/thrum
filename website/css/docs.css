@@ -426,6 +426,75 @@
 }
 
 /* ============================================================================
+   LIGHT MODE OVERRIDES
+   ========================================================================= */
+
+html[data-theme="light"] .site-header {
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] .logo-glyph {
+  text-shadow: none;
+  color: #0891b2;
+}
+
+html[data-theme="light"] .docs-sidebar {
+  background: #ffffff;
+  border-right-color: rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] .sidebar-search input {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.1);
+  color: var(--text-primary);
+}
+
+html[data-theme="light"] .sidebar-search input:focus {
+  border-color: #0891b2;
+  box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.1);
+}
+
+html[data-theme="light"] .search-results {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+html[data-theme="light"] .search-result-item {
+  border-bottom-color: rgba(15, 23, 42, 0.06);
+}
+
+html[data-theme="light"] .search-result-item:hover,
+html[data-theme="light"] .search-result-item.selected {
+  background: rgba(8, 145, 178, 0.06);
+}
+
+html[data-theme="light"] .sidebar-link:hover {
+  background: rgba(8, 145, 178, 0.05);
+}
+
+html[data-theme="light"] .sidebar-link.active {
+  color: #0891b2;
+  border-left-color: #0891b2;
+  background: rgba(8, 145, 178, 0.06);
+}
+
+html[data-theme="light"] .docs-content-inner h2 {
+  border-bottom-color: rgba(8, 145, 178, 0.1);
+}
+
+html[data-theme="light"] .docs-content-inner pre {
+  background: #1e293b;
+  border-color: rgba(15, 23, 42, 0.15);
+  color: #e2e8f0;
+}
+
+html[data-theme="light"] .docs-content-inner pre code {
+  color: #e2e8f0;
+}
+
+/* ============================================================================
    RESPONSIVE
    ========================================================================= */
 
