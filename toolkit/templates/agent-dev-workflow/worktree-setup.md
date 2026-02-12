@@ -66,41 +66,42 @@ bd ready    # Should show issues from the shared database
 
 ### Step 3b: Create a New Worktree
 
+Use the setup script to create branch, worktree, and all redirects in one
+command:
+
 ```bash
 # From the main repository root
 cd {{PROJECT_ROOT}}
 
-# Create the worktree with a new branch
-git worktree add {{WORKTREE_BASE}}/{{FEATURE_NAME}} \
-  -b feature/{{FEATURE_NAME}}
+# Full bootstrap — branch, worktree, thrum + beads redirects, identity, preamble
+./scripts/setup-worktree-thrum.sh \
+  {{WORKTREE_BASE}}/{{FEATURE_NAME}} \
+  feature/{{FEATURE_NAME}} \
+  --identity impl-{{FEATURE_NAME}} \
+  --role implementer \
+  --module {{FEATURE_NAME}} \
+  --preamble docs/preambles/implementer-preamble.md
 ```
 
----
+The script handles:
+1. Branch creation (new) or reuse (existing)
+2. Worktree creation at the specified path
+3. Thrum redirect → shared daemon and messages
+4. Beads redirect → shared issue database
+5. `thrum quickstart` → identity, empty context file, composed preamble
 
-## Beads Redirect Setup (Required for New Worktrees)
+**Flags reference:**
 
-Every new worktree MUST have beads configured to share the main issue database.
-Without this, `bd` commands will fail or use an isolated database.
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `--identity <name>` | *(none)* | Agent identity name (triggers quickstart) |
+| `--role <role>` | `implementer` | Agent role |
+| `--module <module>` | branch name | Agent module (auto-strips `feature/` prefix) |
+| `--preamble <file>` | *(none)* | Custom preamble to compose with default |
+| `--base <branch>` | `main` | Base branch for new branch creation |
 
-### Option 1: Use Setup Script (if available)
-
-```bash
-./scripts/setup-worktree-beads.sh {{WORKTREE_BASE}}/{{FEATURE_NAME}}
-```
-
-### Option 2: Manual Setup
-
-```bash
-# Create .beads directory in the worktree
-mkdir -p {{WORKTREE_BASE}}/{{FEATURE_NAME}}/.beads
-
-# Create redirect file with ABSOLUTE path to main .beads
-echo "{{PROJECT_ROOT}}/.beads" > \
-  {{WORKTREE_BASE}}/{{FEATURE_NAME}}/.beads/redirect
-```
-
-**Always use absolute paths.** Relative paths break if the worktree is outside
-the main repo tree.
+**Without `--identity`**, the script only creates the worktree and redirects
+(no quickstart, no identity/context/preamble files).
 
 ### Verify Setup
 
@@ -114,6 +115,10 @@ bd where
 # Verify issues are visible
 bd ready
 bd list --status=open
+
+# Verify context files were created
+ls -la .thrum/context/
+ls -la .thrum/identities/
 
 # Verify git state
 git --no-pager log --oneline -3
