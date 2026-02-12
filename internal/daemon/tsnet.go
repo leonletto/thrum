@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/leonletto/thrum/internal/config"
+	"tailscale.com/client/local"
 	"tailscale.com/tsnet"
 )
 
@@ -70,6 +71,12 @@ func (t *TsnetListener) Accept() (net.Conn, error) {
 // Addr returns the listener's network address.
 func (t *TsnetListener) Addr() net.Addr {
 	return t.listener.Addr()
+}
+
+// LocalClient returns the Tailscale LocalClient for this tsnet server.
+// Used for peer discovery and WhoIs lookups.
+func (t *TsnetListener) LocalClient() (*local.Client, error) {
+	return t.server.LocalClient()
 }
 
 // Close stops the tsnet server and listener.

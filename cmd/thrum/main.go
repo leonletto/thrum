@@ -3904,6 +3904,17 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					}
 				}()
 
+				// Start peer discovery (finds other thrum daemons on the tailnet)
+				if syncManager != nil {
+					tsLocalClient, lcErr := tsListener.LocalClient()
+					if lcErr != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to get LocalClient for peer discovery: %v\n", lcErr)
+					} else {
+						discoverer := daemon.NewPeerDiscoverer(tsLocalClient, syncManager.PeerRegistry(), syncManager.Client(), tsCfg.Port)
+						go discoverer.StartPeriodicDiscovery(ctx, daemon.DefaultDiscoveryInterval)
+					}
+				}
+
 				fmt.Fprintf(os.Stderr, "  Tailscale:   %s:%d\n", tsCfg.Hostname, tsCfg.Port)
 			}
 		}
