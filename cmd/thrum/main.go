@@ -3920,6 +3920,16 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
 				}
 
+				// Register pair.request handler for pairing flow
+				if syncManager != nil {
+					pairingMgr := daemon.NewPairingManager(syncManager.PeerRegistry(), st.DaemonID(), hostname)
+					pairHandler := rpc.NewPairRequestHandler(pairingMgr.HandlePairRequest)
+					_ = syncRegistry.Register("pair.request", pairHandler.Handle)
+
+					// Store pairing manager for CLI commands (will be wired in Task 5)
+					_ = pairingMgr // TODO: wire into peer CLI commands
+				}
+
 				// Accept loop for sync connections
 				go func() {
 					for {
