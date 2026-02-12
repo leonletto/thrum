@@ -81,6 +81,8 @@
    ========================================================================= */
 
 :root {
+  color-scheme: dark light;
+
   /* Background Colors */
   --bg-base: #0a0e1a;              /* Deep navy base */
   --bg-panel-dark: #0f172a;        /* Dark panel */
@@ -135,6 +137,162 @@
   --transition-fast: 0.15s ease;
   --transition-base: 0.2s ease;
   --transition-slow: 0.3s ease;
+}
+
+/* ============================================================================
+   LIGHT MODE OVERRIDES
+   ========================================================================= */
+
+html[data-theme="light"] {
+  /* Background Colors */
+  --bg-base: #f1f5f9;
+  --bg-panel-dark: #ffffff;
+  --bg-panel-light: #f8fafc;
+
+  /* Primary Accent (darker cyan for light-bg contrast) */
+  --primary: #0891b2;
+  --primary-dark: #0e7490;
+  --primary-light: #06b6d4;
+  --primary-hover: #0284c7;
+
+  /* Text Hierarchy */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  --text-subtle: #64748b;
+
+  /* Borders */
+  --border: rgba(15, 23, 42, 0.12);
+  --border-hover: rgba(15, 23, 42, 0.25);
+
+  /* Shadows (subtle, no glow) */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+  --shadow-glow: 0 4px 16px rgba(8, 145, 178, 0.15);
+}
+
+html[data-theme="light"] body {
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+html[data-theme="light"] body::before {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+  opacity: 0.5;
+}
+
+html[data-theme="light"] h1 {
+  text-shadow: none;
+}
+
+html[data-theme="light"] code {
+  background-color: rgba(8, 145, 178, 0.08);
+  border-color: rgba(8, 145, 178, 0.15);
+}
+
+html[data-theme="light"] pre {
+  background-color: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+html[data-theme="light"] blockquote {
+  background-color: rgba(241, 245, 249, 0.8);
+  border-left-color: var(--primary);
+  color: var(--text-secondary);
+}
+
+html[data-theme="light"] .btn-primary {
+  background: linear-gradient(135deg, #0e7490, #0891b2);
+  border-color: #0891b2;
+  box-shadow: 0 2px 8px rgba(8, 145, 178, 0.3);
+  color: #ffffff;
+}
+
+html[data-theme="light"] .btn-primary:hover {
+  box-shadow: 0 4px 16px rgba(8, 145, 178, 0.4);
+}
+
+html[data-theme="light"] .btn-outline {
+  color: #0891b2;
+  border-color: #0891b2;
+}
+
+html[data-theme="light"] .btn-outline:hover {
+  background: rgba(8, 145, 178, 0.08);
+}
+
+html[data-theme="light"] .btn-ghost:hover {
+  background: rgba(8, 145, 178, 0.06);
+}
+
+html[data-theme="light"] .card {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] .card:hover {
+  border-color: rgba(8, 145, 178, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] .panel {
+  background: #ffffff;
+}
+
+html[data-theme="light"] .badge-primary {
+  color: #0e7490;
+  background: rgba(8, 145, 178, 0.1);
+  border-color: rgba(8, 145, 178, 0.2);
+}
+
+html[data-theme="light"] .badge-success {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+html[data-theme="light"] .badge-destructive {
+  color: #dc2626;
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  box-shadow: none;
+}
+
+html[data-theme="light"] .nav-item:hover {
+  background: rgba(8, 145, 178, 0.06);
+}
+
+html[data-theme="light"] .nav-item.active {
+  background: rgba(8, 145, 178, 0.08);
+  box-shadow: none;
+}
+
+html[data-theme="light"] thead {
+  background-color: rgba(241, 245, 249, 0.8);
+}
+
+html[data-theme="light"] tbody tr:hover {
+  background-color: rgba(8, 145, 178, 0.04);
+}
+
+html[data-theme="light"] .status-dot.online {
+  box-shadow: 0 0 6px var(--success);
+}
+
+/* Light mode scrollbar */
+html[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.15);
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.25);
 }
 
 /* ============================================================================
