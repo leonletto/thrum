@@ -207,7 +207,7 @@ func TestIdentityConsistency(t *testing.T) {
 
 	// Generate keys multiple times in sequence
 	var fingerprints []string
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		pub, _, err := EnsureIdentityKeys(tmpDir)
 		if err != nil {
 			t.Fatalf("EnsureIdentityKeys (iteration %d) failed: %v", i, err)
