@@ -82,6 +82,12 @@ func runtimeTemplates(runtime string) []runtimeTemplate {
 			{"templates/gemini/settings.json.tmpl", ".gemini/settings.json", 0644},
 			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
 		}
+	case "auggie":
+		return []runtimeTemplate{
+			{"templates/auggie/settings.json.tmpl", ".augment/settings.json", 0644},
+			{"templates/auggie/rules.md.tmpl", ".augment/rules/thrum.md", 0644},
+			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
+		}
 	case "cli-only":
 		return []runtimeTemplate{
 			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
@@ -140,7 +146,7 @@ func RuntimeInit(opts RuntimeInitOptions) (*RuntimeInitResult, error) {
 	// Get runtimes to process
 	runtimes := []string{opts.Runtime}
 	if opts.Runtime == "all" {
-		runtimes = []string{"claude", "codex", "cursor", "gemini", "cli-only"}
+		runtimes = []string{"claude", "codex", "cursor", "gemini", "auggie", "cli-only"}
 	}
 
 	result := &RuntimeInitResult{

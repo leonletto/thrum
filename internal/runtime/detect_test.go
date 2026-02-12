@@ -57,6 +57,20 @@ func TestDetectRuntime(t *testing.T) {
 			expected: "gemini",
 		},
 		{
+			name: "Auggie via directory marker",
+			setup: func(dir string) {
+				os.MkdirAll(filepath.Join(dir, ".augment"), 0755)
+			},
+			expected: "auggie",
+		},
+		{
+			name: "Auggie via env var",
+			env: map[string]string{
+				"AUGMENT_AGENT": "1",
+			},
+			expected: "auggie",
+		},
+		{
 			name:     "CLI-only fallback",
 			setup:    func(dir string) {},
 			expected: "cli-only",
@@ -103,6 +117,7 @@ func TestIsValidRuntime(t *testing.T) {
 		{"codex", true},
 		{"cursor", true},
 		{"gemini", true},
+		{"auggie", true},
 		{"cli-only", true},
 		{"all", true},
 		{"nonexistent", false},
@@ -120,12 +135,12 @@ func TestIsValidRuntime(t *testing.T) {
 
 func TestSupportedRuntimes(t *testing.T) {
 	runtimes := SupportedRuntimes()
-	if len(runtimes) < 5 {
-		t.Errorf("expected at least 5 supported runtimes, got %d", len(runtimes))
+	if len(runtimes) < 6 {
+		t.Errorf("expected at least 6 supported runtimes, got %d", len(runtimes))
 	}
 
 	// Verify required runtimes are present
-	required := []string{"claude", "codex", "cursor", "gemini", "cli-only"}
+	required := []string{"claude", "codex", "cursor", "gemini", "auggie", "cli-only"}
 	for _, name := range required {
 		found := false
 		for _, r := range runtimes {
