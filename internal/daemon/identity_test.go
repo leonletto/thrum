@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"crypto/ed25519"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -220,5 +221,101 @@ func TestIdentityConsistency(t *testing.T) {
 		if fingerprints[i] != fingerprints[0] {
 			t.Errorf("fingerprint mismatch at iteration %d: %s vs %s", i, fingerprints[i], fingerprints[0])
 		}
+	}
+}
+
+func TestSignEvent(t *testing.T) {
+	tmpDir := t.TempDir()
+	pub, priv, err := EnsureIdentityKeys(tmpDir)
+	if err != nil {
+		t.Fatalf("EnsureIdentityKeys failed: %v", err)
+	}
+
+	event := map[string]any{
+		"event_id":      "evt_01ABC",
+		"type":          "message.create",
+		"timestamp":     "2026-01-01T00:00:00Z",
+		"origin_daemon": "d_test123",
+	}
+
+	// Sign the event
+	SignEvent(event, priv)
+
+	// Verify signature field was added
+	sigStr, ok := event["signature"].(string)
+	if !ok || sigStr == "" {
+		t.Fatal("signature field not set after SignEvent")
+	}
+
+	// Decode and verify the signature
+	sigBytes, err := base64.StdEncoding.DecodeString(sigStr)
+	if err != nil {
+		t.Fatalf("failed to decode signature: %v", err)
+	}
+
+	payload := CanonicalSigningPayload(event)
+	if !ed25519.Verify(pub, []byte(payload), sigBytes) {
+		t.Error("signature verification failed")
+	}
+}
+
+func TestSignEventDeterministic(t *testing.T) {
+	tmpDir := t.TempDir()
+	_, priv, err := EnsureIdentityKeys(tmpDir)
+	if err != nil {
+		t.Fatalf("EnsureIdentityKeys failed: %v", err)
+	}
+
+	// Ed25519 signing is deterministic — same input = same signature
+	event1 := map[string]any{
+		"event_id":      "evt_01ABC",
+		"type":          "message.create",
+		"timestamp":     "2026-01-01T00:00:00Z",
+		"origin_daemon": "d_test123",
+	}
+	event2 := map[string]any{
+		"event_id":      "evt_01ABC",
+		"type":          "message.create",
+		"timestamp":     "2026-01-01T00:00:00Z",
+		"origin_daemon": "d_test123",
+	}
+
+	SignEvent(event1, priv)
+	SignEvent(event2, priv)
+
+	if event1["signature"] != event2["signature"] {
+		t.Error("same event content should produce identical signatures")
+	}
+}
+
+func TestSignEventNilKey(t *testing.T) {
+	event := map[string]any{
+		"event_id":      "evt_01ABC",
+		"type":          "message.create",
+		"timestamp":     "2026-01-01T00:00:00Z",
+		"origin_daemon": "d_test123",
+	}
+
+	// SignEvent with nil key should be a no-op
+	SignEvent(event, nil)
+
+	if _, exists := event["signature"]; exists {
+		t.Error("signature should not be set when private key is nil")
+	}
+}
+
+func TestCanonicalSigningPayload(t *testing.T) {
+	event := map[string]any{
+		"event_id":      "evt_01ABC",
+		"type":          "message.create",
+		"timestamp":     "2026-01-01T00:00:00Z",
+		"origin_daemon": "d_test123",
+		"extra_field":   "ignored",
+	}
+
+	payload := CanonicalSigningPayload(event)
+	expected := "evt_01ABC|message.create|2026-01-01T00:00:00Z|d_test123"
+	if payload != expected {
+		t.Errorf("canonical payload = %q, want %q", payload, expected)
 	}
 }
