@@ -323,14 +323,15 @@ func (p *Projector) applyAgentRegister(data json.RawMessage) error {
 	}
 
 	_, err := p.db.Exec(`
-		INSERT OR REPLACE INTO agents (agent_id, kind, role, module, display, registered_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT OR REPLACE INTO agents (agent_id, kind, role, module, display, hostname, registered_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`,
 		event.AgentID,
 		event.Kind,
 		event.Role,
 		event.Module,
 		sqlNullString(event.Display),
+		sqlNullString(event.Hostname),
 		event.Timestamp,
 	)
 	if err != nil {
