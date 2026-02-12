@@ -401,13 +401,24 @@ func TestMigrate_V5toV7(t *testing.T) {
 		t.Fatalf("Migrate() failed: %v", err)
 	}
 
-	// Verify schema version is now 7
+	// Verify schema version is now current
 	version, err := schema.GetSchemaVersion(db)
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() failed: %v", err)
 	}
-	if version != 7 {
-		t.Errorf("Expected schema version 7, got %d", version)
+	if version != schema.CurrentVersion {
+		t.Errorf("Expected schema version %d, got %d", schema.CurrentVersion, version)
+	}
+
+	// Verify groups tables were created by v7→v8 migration
+	var tableName string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='groups'").Scan(&tableName)
+	if err != nil {
+		t.Errorf("groups table not created by migration: %v", err)
+	}
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='group_members'").Scan(&tableName)
+	if err != nil {
+		t.Errorf("group_members table not created by migration: %v", err)
 	}
 }
 
