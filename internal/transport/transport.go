@@ -12,6 +12,8 @@ const (
 	TransportUnixSocket
 	// TransportWebSocket represents a WebSocket connection.
 	TransportWebSocket
+	// TransportTailscale represents a Tailscale tsnet connection (sync only).
+	TransportTailscale
 )
 
 // String returns the string representation of a transport type.
@@ -21,6 +23,8 @@ func (t Transport) String() string {
 		return "unix_socket"
 	case TransportWebSocket:
 		return "websocket"
+	case TransportTailscale:
+		return "tailscale"
 	default:
 		return "unknown"
 	}
