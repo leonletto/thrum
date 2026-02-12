@@ -1,7 +1,7 @@
 
 # Tailscale Sync
 
-> See also: [Tailscale Security](tailscale-security.md) for the full security
+> See also: [Tailscale Security](tailscale-security.md) for the security
 > model, [Multi-Agent Support](multi-agent.md) for team coordination patterns,
 > [Sync Protocol](sync.md) for Git-based synchronization.
 
@@ -19,20 +19,17 @@ agent events, and session updates propagate automatically.
   encrypted WireGuard tunnels
 - **Push + pull** -- Immediate push notifications on new events, with periodic
   pull as a fallback
-- **Peer discovery** -- Automatic discovery of other Thrum daemons on your
-  tailnet via the Tailscale API
-- **Cryptographic security** -- Ed25519 event signing, WhoIs-based peer
-  authorization, per-peer rate limiting, and a quarantine system for invalid
-  events
+- **Human-mediated pairing** -- Simple 4-digit code to pair two machines (no
+  auto-discovery, no complex key management)
+- **Token authentication** -- Each peer pair shares a unique 32-byte token for
+  ongoing auth
 - **Zero config networking** -- No port forwarding, no firewall rules. Tailscale
   handles connectivity
 
 ## Prerequisites
 
 1. **Tailscale installed** on all machines running Thrum daemons
-2. **ACL tags configured** -- Thrum daemons should be tagged with `tag:thrum-daemon`
-   in your Tailscale ACL policy
-3. **Thrum v0.3.2+** installed on all machines
+2. **Thrum v0.3.2+** installed on all machines
 
 ## Getting Started
 
@@ -41,7 +38,7 @@ agent events, and session updates propagate automatically.
 Set the environment variable to enable Tailscale integration:
 
 ```bash
-export THRUM_TAILSCALE_ENABLED=true
+export THRUM_TS_ENABLED=true
 ```
 
 ### 2. Start the Daemon
@@ -52,33 +49,50 @@ thrum daemon start
 
 When Tailscale sync is enabled, the daemon:
 
-- Starts a tsnet listener on port 4200 (configurable)
-- Generates Ed25519 identity keys (stored at `.thrum/var/identity.key`)
-- Begins peer discovery on the tailnet
-- Registers sync RPC handlers (`sync.pull`, `sync.notify`, `sync.peer_info`)
+- Starts a tsnet listener on port 9100 (configurable)
+- Registers sync RPC handlers (`sync.pull`, `sync.notify`, `sync.peer_info`,
+  `pair.request`)
+- Waits for peer pairing via CLI
 
-### 3. Add Peers
+### 3. Pair Two Machines
 
-Peers are discovered automatically if tagged with `tag:thrum-daemon`, or you can
-add them manually:
+Pairing requires action on both machines simultaneously:
+
+**On Machine A** (the one you want to share with):
 
 ```bash
-# List discovered peers
-thrum tsync peers list
-
-# Manually add a peer
-thrum tsync peers add my-laptop:4200
-
-# Force an immediate sync
-thrum tsync force
+thrum peer add
+# Output: Waiting for connection... Pairing code: 7392
 ```
+
+**On Machine B** (the one joining):
+
+```bash
+thrum peer join my-laptop:9100
+# Prompts: Enter pairing code:
+# You type: 7392
+# Output: Paired with "my-laptop". Syncing started.
+```
+
+Machine A will also show success:
+
+```
+Paired with "office-server" (100.64.2.10:9100). Syncing started.
+```
+
+Both machines now sync events automatically.
 
 ### 4. Verify Sync
 
 ```bash
-# Check sync health and peer status
+# List paired peers
+thrum peer list
+
+# Detailed sync status
+thrum peer status
+
+# Check health endpoint
 thrum status
-# Shows Tailscale sync status, peer count, and last sync times
 ```
 
 ## Architecture
@@ -90,8 +104,7 @@ Machine A                           Machine B
 │  ├─ Event Log       │             │  ├─ Event Log       │
 │  ├─ tsnet Listener  │◄──────────►│  ├─ tsnet Listener  │
 │  ├─ Sync Manager    │  Tailscale  │  ├─ Sync Manager    │
-│  ├─ Peer Registry   │  (WireGuard)│  ├─ Peer Registry   │
-│  └─ Security Layer  │             │  └─ Security Layer  │
+│  └─ Peer Registry   │  (WireGuard)│  └─ Peer Registry   │
 └─────────────────────┘             └─────────────────────┘
          │                                    │
     ┌────┴────┐                          ┌────┴────┐
@@ -108,11 +121,10 @@ Machine A                           Machine B
 | **tsnet Listener** | Tailscale-native TCP listener (no port forwarding needed) |
 | **Sync Manager** | Orchestrates pull sync, push notifications, and the scheduler |
 | **Sync Client** | Pulls events from peers in batches with checkpointing |
-| **Sync Server** | Exposes `sync.*` RPC methods to peers (security-bounded) |
-| **Peer Registry** | Thread-safe registry of known peers with JSON persistence |
-| **Peer Discovery** | Auto-discovers peers via the Tailscale API (`tag:thrum-daemon`) |
+| **Sync Server** | Exposes `sync.*` and `pair.*` RPC methods to peers (token-authenticated) |
+| **Peer Registry** | Thread-safe registry of paired peers with JSON persistence |
+| **Pairing Manager** | Handles the 4-digit code pairing flow |
 | **Sync Scheduler** | Periodic fallback sync (5-minute interval, skips recently synced peers) |
-| **Security Layer** | Ed25519 signing, validation pipeline, WhoIs auth, rate limiting |
 
 ## Sync Protocol
 
@@ -122,8 +134,6 @@ Every event written to the daemon includes:
 
 - **`origin_daemon`** -- Unique daemon ID identifying the source machine
 - **`sequence`** -- Monotonically increasing per-daemon sequence number
-- **`signature`** -- Ed25519 signature over
-  `event_id|type|timestamp|origin_daemon`
 
 Events are stored in a SQLite `events` table with sequence-based pagination,
 enabling efficient delta sync.
@@ -136,14 +146,14 @@ sequence N."
 ```
 Daemon A                              Daemon B
    │                                      │
-   │ sync.pull(after_seq=42, limit=1000)  │
+   │ sync.pull(after_seq=42, token=...)   │
    ├─────────────────────────────────────►│
    │                                      │
    │  {events: [...], next_seq: 1042,     │
    │   more_available: true}              │
    │◄─────────────────────────────────────┤
    │                                      │
-   │ sync.pull(after_seq=1042, limit=1000)│
+   │ sync.pull(after_seq=1042, token=...) │
    ├─────────────────────────────────────►│
    │                                      │
    │  {events: [...], next_seq: 1500,     │
@@ -152,7 +162,8 @@ Daemon A                              Daemon B
 ```
 
 Batched pull with the `limit+1` trick to determine `more_available`. Checkpoints
-are persisted per-peer so sync resumes from where it left off.
+are persisted per-peer so sync resumes from where it left off. All requests
+include the peer's auth token.
 
 ### Push Notifications
 
@@ -162,14 +173,14 @@ peers:
 ```
 Daemon A writes event
    │
-   ├──► sync.notify(daemon_id, latest_seq, event_count) ──► Daemon B
-   ├──► sync.notify(daemon_id, latest_seq, event_count) ──► Daemon C
+   ├──► sync.notify(daemon_id, latest_seq, token) ──► Daemon B
+   ├──► sync.notify(daemon_id, latest_seq, token) ──► Daemon C
    │
    Daemons B and C pull new events from A
 ```
 
-Push notifications include per-peer debouncing to avoid notification storms.
-They are fire-and-forget -- failures are logged but do not block the writer.
+Push notifications are fire-and-forget -- failures are logged but do not block
+the writer.
 
 ### Periodic Sync Scheduler
 
@@ -183,46 +194,70 @@ Events are deduplicated by `event_id` (ULID-based, globally unique). The
 `HasEvent()` function provides O(1) dedup via the SQLite primary key index.
 Duplicate events from overlapping syncs are silently skipped.
 
+## Pairing Flow
+
+Pairing establishes mutual trust between two machines with a human in the loop.
+
+```
+Machine A (thrum peer add)           Machine B (thrum peer join)
+   │                                      │
+   │  1. Generate 4-digit code + token    │
+   │  2. Display code to user             │
+   │                                      │
+   │        (human shares code)           │
+   │                                      │
+   │  pair.request(code, id, name, addr)  │
+   │◄─────────────────────────────────────┤ 3. User enters code
+   │                                      │
+   │  4. Verify code                      │
+   │  5. Store peer B + token             │
+   │                                      │
+   │  {status: paired, token, id, name}   │
+   ├─────────────────────────────────────►│ 6. Store peer A + token
+   │                                      │
+   │  Both peers now authenticate with    │
+   │  the shared token on every request   │
+```
+
+- The pairing code is a random 4-digit number (3 attempts allowed)
+- The token is a random 32-byte hex string
+- Pairing sessions expire after 5 minutes
+- Both peers store each other's info in `peers.json`
+
 ## Configuration
 
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `THRUM_TAILSCALE_ENABLED` | `false` | Enable Tailscale sync |
-| `THRUM_TAILSCALE_HOSTNAME` | (auto) | Hostname for the tsnet listener |
-| `THRUM_TAILSCALE_PORT` | `4200` | Port for the sync RPC listener |
-| `THRUM_TAILSCALE_AUTH_KEY` | (none) | Tailscale auth key for headless setup |
-| `THRUM_TAILSCALE_CONTROL_URL` | (default) | Custom control server URL |
-| `THRUM_TAILSCALE_STATE_DIR` | `.thrum/var/tsnet` | tsnet state directory |
-
-### Security Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `THRUM_SECURITY_REQUIRE_SIGNATURES` | `false` | Reject unsigned events |
-| `THRUM_SECURITY_ALLOWED_PEERS` | (all) | Comma-separated list of allowed peer hostnames |
-| `THRUM_SECURITY_REQUIRED_TAGS` | `tag:thrum-daemon` | Required Tailscale ACL tags |
-| `THRUM_SECURITY_ALLOWED_DOMAINS` | (all) | Allowed Tailscale login domains |
-| `THRUM_SECURITY_RATE_LIMIT_ENABLED` | `false` | Enable per-peer rate limiting |
-| `THRUM_SECURITY_MAX_REQUESTS_PER_SEC` | `10` | Max sync requests per second per peer |
-| `THRUM_SECURITY_BURST_SIZE` | `20` | Rate limiter burst size |
+| `THRUM_TS_ENABLED` | `false` | Enable Tailscale sync |
+| `THRUM_TS_HOSTNAME` | (auto) | Hostname for the tsnet listener |
+| `THRUM_TS_PORT` | `9100` | Port for the sync RPC listener |
+| `THRUM_TS_AUTH_KEY` | (none) | Tailscale auth key for headless setup |
+| `THRUM_TS_CONTROL_URL` | (default) | Custom control server URL |
+| `THRUM_TS_STATE_DIR` | `.thrum/var/tsnet` | tsnet state directory |
 
 ## CLI Commands
 
-### `thrum tsync`
+### `thrum peer`
 
-Manage Tailscale sync operations:
+Manage sync peers:
 
 ```bash
-# Force an immediate sync with all peers
-thrum tsync force
+# Start pairing on this machine (displays 4-digit code)
+thrum peer add
 
-# List known peers and their sync status
-thrum tsync peers list
+# Join a remote peer (prompts for pairing code)
+thrum peer join <address:port>
 
-# Manually add a peer by address
-thrum tsync peers add <hostname:port>
+# List all paired peers
+thrum peer list
+
+# Remove a peer
+thrum peer remove <name>
+
+# Detailed sync status for all peers
+thrum peer status
 ```
 
 ### `thrum status`
@@ -231,91 +266,53 @@ When Tailscale sync is enabled, `thrum status` includes sync information:
 
 ```
 Tailscale Sync: enabled
-  Peers: 3 connected
+  Peers: 2 connected
   Last sync: 30s ago
   Hostname: my-laptop
 ```
 
 ## Security Model
 
-Tailscale sync employs defense in depth with four layers:
+Tailscale sync uses a simple three-layer security model:
 
-### 1. Ed25519 Event Signing
+### 1. Tailscale Encryption (Network Layer)
 
-Every daemon generates an Ed25519 key pair on first start. All events are signed
-with a canonical payload: `event_id|type|timestamp|origin_daemon`. Signatures
-are base64-encoded and stored in the event's `signature` field.
+All traffic between daemons flows over Tailscale's WireGuard tunnels. This
+provides end-to-end encryption and identity verification at the network level.
+No data travels over the public internet unencrypted.
 
-```bash
-# Key location
-.thrum/var/identity.key   # PEM-encoded Ed25519 private key (0600 perms)
+### 2. Pairing Code (Trust Establishment)
 
-# Fingerprint logged on startup
-identity: generated new keys at .thrum/var/identity.key
-  (fingerprint: SHA256:e1pqx9idRwTP4Uvda7vwKnrnM5Kie+HWCGozTmXkpyU=)
-```
+A human-mediated 4-digit code establishes initial trust between two machines.
+The pairing code must be shared out-of-band (verbally, chat, etc.), ensuring
+both sides consent to the peering relationship.
 
-### 2. Validation Pipeline
+- 4-digit random code (10,000 possibilities)
+- 3 attempts allowed before the session is locked
+- 5-minute timeout on pairing sessions
 
-Incoming sync events pass through a three-stage validation pipeline:
+### 3. Token Authentication (Ongoing Auth)
 
-| Stage | Checks | Action on Failure |
-|-------|--------|-------------------|
-| **Schema** | Required fields present, valid types | Reject + quarantine |
-| **Signature** | Ed25519 signature valid (if present) | Reject + quarantine |
-| **Business Logic** | Timestamp within 24h, origin_daemon set | Reject + quarantine |
+After pairing, each request includes a 32-byte hex token. The receiving daemon
+validates the token against its peer registry before processing any sync
+request. The `pair.request` method is the only RPC exempt from token
+authentication (it's how new peers establish their tokens).
 
-### 3. WhoIs Authorization
-
-When a peer connects, the daemon uses the Tailscale WhoIs API to verify the
-peer's identity. Authorization checks (in order):
-
-1. **Allowed peers** -- Is the hostname in the allowed list?
-2. **Required tags** -- Does the peer have `tag:thrum-daemon`?
-3. **Allowed domains** -- Is the login from an allowed domain?
-
-If any configured check fails, the connection is rejected with a detailed log.
-
-### 4. Rate Limiting and Quarantine
-
-- **Per-peer rate limiting** -- Token bucket algorithm (default 10 req/s, burst
-  20). Returns 429 when exceeded, 503 when the global queue is full
-- **Quarantine system** -- Invalid events are stored in a `quarantined_events`
-  SQLite table with the rejection reason. An alert fires when a peer exceeds
-  10 quarantined events per hour
-
-For detailed security documentation, see
-[Tailscale Security](tailscale-security.md).
+- Token validation is centralized in the sync server
+- Invalid or missing tokens are rejected immediately
+- Peer's `last_sync` is updated on each successful authenticated request
 
 ## Peer Management
-
-### Automatic Discovery
-
-When Tailscale sync is enabled, the daemon queries the Tailscale API for peers
-tagged with `tag:thrum-daemon`. Discovered peers are added to the peer registry
-automatically.
-
-### Manual Peer Management
-
-```bash
-# Add a peer explicitly
-thrum tsync peers add workstation.tailnet:4200
-
-# List all known peers with sync status
-thrum tsync peers list
-# PEER             DAEMON_ID        LAST_SYNC    STATUS
-# my-laptop:4200   d_abc123         30s ago      idle
-# ci-runner:4200   d_def456         2m ago       idle
-```
 
 ### Peer Registry
 
 The peer registry is stored as JSON at `.thrum/var/peers.json` and persists
 across daemon restarts. It tracks:
 
-- Daemon ID and hostname
-- Last sync time and status
-- Tailscale IP address
+- Daemon ID and name
+- Network address (Tailscale IP + port)
+- Auth token
+- Paired-at timestamp and last sync time
 
 ## Monitoring
 
@@ -328,13 +325,12 @@ The daemon's `health` RPC method includes Tailscale sync status when enabled:
   "tailscale_sync": {
     "enabled": true,
     "hostname": "my-laptop",
-    "peer_count": 3,
+    "peer_count": 2,
     "peers": [
       {
         "daemon_id": "d_abc123",
-        "hostname": "workstation",
-        "last_sync": "2026-02-11T15:30:00Z",
-        "status": "idle"
+        "name": "office-server",
+        "last_sync": "30s ago"
       }
     ]
   }
@@ -346,29 +342,40 @@ The daemon's `health` RPC method includes Tailscale sync status when enabled:
 Tailscale sync logs are prefixed for easy filtering:
 
 ```
-[sync_auth] ALLOWED peer workstation (login: alice@company.com, tags: [tag:thrum-daemon])
-[quarantine] event evt_01HXE... from d_unknown quarantined: signature verification failed
+[pairing] Session started, code=7392, timeout=5m0s
+[pairing] Paired with office-server (d_abc123) at 100.64.2.10:9100
 sync.notify: synced from d_abc123 — applied=5 skipped=0
 periodic_sync: starting with interval=5m0s, recent_threshold=2m0s
 ```
+
+## Troubleshooting
+
+### Cannot reach peer
+
+1. Verify both machines are on the same Tailscale network
+2. Check that both daemons are running (`thrum daemon start`)
+3. Verify the address format is `hostname:port` (default port: 9100)
+4. Test connectivity: `tailscale ping <hostname>`
+
+### Pairing code rejected
+
+- Ensure you're entering the code displayed on the other machine
+- Codes expire after 5 minutes -- run `thrum peer add` again if expired
+- After 3 failed attempts, the session locks -- restart with `thrum peer add`
+
+### Sync not working after pairing
+
+1. Check `thrum peer status` for connection details
+2. Verify both daemons have Tailscale enabled (`THRUM_TS_ENABLED=true`)
+3. Check daemon logs for sync errors
 
 ## Best Practices
 
 ### Network Setup
 
-- **Tag all Thrum daemons** with `tag:thrum-daemon` in your Tailscale ACL
-  policy for automatic discovery
-- **Use auth keys** (`THRUM_TAILSCALE_AUTH_KEY`) for headless CI/CD runners
-- **Keep the default port** (4200) unless you have a conflict
-
-### Security
-
-- **Enable signature verification** (`THRUM_SECURITY_REQUIRE_SIGNATURES=true`)
-  once all peers are running v0.3.2+
-- **Restrict allowed domains** in multi-tenant Tailscale networks
-- **Enable rate limiting** for internet-exposed or high-traffic deployments
-- **Monitor quarantine alerts** -- 10+ quarantined events/hour from a peer
-  indicates a problem
+- **Use auth keys** (`THRUM_TS_AUTH_KEY`) for headless CI/CD runners
+- **Keep the default port** (9100) unless you have a conflict
+- **Use Tailscale ACLs** to restrict which machines can communicate
 
 ### Performance
 
@@ -380,8 +387,7 @@ periodic_sync: starting with interval=5m0s, recent_threshold=2m0s
 
 ## See Also
 
-- [Tailscale Security](tailscale-security.md) -- Full security model
-  documentation
+- [Tailscale Security](tailscale-security.md) -- Security model documentation
 - [Multi-Agent Support](multi-agent.md) -- Groups, runtime presets, and team
   coordination
 - [Agent Coordination](agent-coordination.md) -- Workflow patterns and Beads
