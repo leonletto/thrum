@@ -84,6 +84,29 @@ func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, onBatch func
 	}
 }
 
+// SendNotify sends a sync.notify RPC to a peer, signaling that new events are available.
+// This is fire-and-forget — errors are returned but callers typically ignore them.
+func (c *SyncClient) SendNotify(peerAddr string, daemonID string, latestSeq int64, eventCount int) error {
+	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
+	if err != nil {
+		return fmt.Errorf("connect to %s: %w", peerAddr, err)
+	}
+	defer conn.Close()
+
+	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return fmt.Errorf("set deadline: %w", err)
+	}
+
+	params := map[string]any{
+		"daemon_id":   daemonID,
+		"latest_seq":  latestSeq,
+		"event_count": eventCount,
+	}
+
+	_, err = c.callRPC(conn, "sync.notify", params)
+	return err
+}
+
 // QueryPeerInfo calls sync.peer_info on a peer and returns daemon identity.
 func (c *SyncClient) QueryPeerInfo(peerAddr string) (*PeerInfoResult, error) {
 	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
