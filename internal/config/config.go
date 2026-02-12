@@ -227,6 +227,25 @@ func detectCurrentWorktree(identitiesDir string) string {
 	return filepath.Base(strings.TrimSpace(string(out)))
 }
 
+// LoadIdentityWithPath loads the identity file and returns both the parsed identity
+// and the relative file path. Useful for commands that need to display which file was loaded.
+func LoadIdentityWithPath(repoPath string) (*IdentityFile, string, error) {
+	thrumName := os.Getenv("THRUM_NAME")
+	identitiesDir := filepath.Join(repoPath, ".thrum", "identities")
+
+	idFile, err := loadIdentityFromDir(identitiesDir, thrumName)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Reconstruct relative path from repo root
+	filename := idFile.Agent.Name + ".json"
+	identityPath := filepath.Join(identitiesDir, filename)
+	relPath, _ := filepath.Rel(repoPath, identityPath)
+
+	return idFile, relPath, nil
+}
+
 // SaveIdentityFile writes an identity file to disk in the identities directory.
 // The filename is derived from the agent name (e.g., "furiosa.json" or "coordinator_1B9K.json").
 func SaveIdentityFile(thrumDir string, identity *IdentityFile) error {

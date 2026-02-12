@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 )
@@ -14,7 +15,8 @@ type WorkContext struct {
 	WorktreePath     string          `json:"worktree_path"`
 	UnmergedCommits  []CommitSummary `json:"unmerged_commits"`
 	UncommittedFiles []string        `json:"uncommitted_files"`
-	ChangedFiles     []string        `json:"changed_files"`
+	ChangedFiles     []string        `json:"changed_files"` // Kept for backward compatibility
+	FileChanges      []FileChange    `json:"file_changes"`  // NEW: rich per-file data
 	ExtractedAt      time.Time       `json:"extracted_at"`
 }
 
@@ -25,6 +27,15 @@ type CommitSummary struct {
 	Files   []string `json:"files"`
 }
 
+// FileChange represents detailed information about a changed file.
+type FileChange struct {
+	Path         string    `json:"path"`
+	LastModified time.Time `json:"last_modified"`
+	Additions    int       `json:"additions"`
+	Deletions    int       `json:"deletions"`
+	Status       string    `json:"status"` // "modified", "added", "deleted", "renamed"
+}
+
 // ExtractWorkContext extracts git state for a worktree.
 // If the path is not a git repository, returns an empty context (not an error).
 func ExtractWorkContext(worktreePath string) (*WorkContext, error) {
@@ -33,6 +44,7 @@ func ExtractWorkContext(worktreePath string) (*WorkContext, error) {
 		UnmergedCommits:  []CommitSummary{},
 		UncommittedFiles: []string{},
 		ChangedFiles:     []string{},
+		FileChanges:      []FileChange{},
 	}
 
 	// Check if git is available
@@ -68,6 +80,12 @@ func ExtractWorkContext(worktreePath string) (*WorkContext, error) {
 		changedFiles, err := runGitCommand(worktreePath, "diff", "--name-only", baseBranch+"...HEAD")
 		if err == nil {
 			ctx.ChangedFiles = parseLines(changedFiles)
+		}
+
+		// Extract per-file changes with diffstat and timestamps
+		fileChanges, err := extractFileChanges(worktreePath, baseBranch)
+		if err == nil {
+			ctx.FileChanges = fileChanges
 		}
 	}
 
@@ -189,4 +207,108 @@ func parseStatusOutput(output string) []string {
 	}
 
 	return files
+}
+
+// extractFileChanges extracts per-file metadata (diffstat, timestamps) for files changed
+// between baseBranch and HEAD. Returns files sorted by most-recent-first.
+func extractFileChanges(worktreePath, baseBranch string) ([]FileChange, error) {
+	// Step 1: Get diffstat for all changed files (additions/deletions)
+	diffstatOutput, err := runGitCommand(worktreePath, "diff", "--numstat", baseBranch+"...HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("git diff --numstat: %w", err)
+	}
+
+	// Parse diffstat into a map: filename -> (additions, deletions)
+	diffstatMap := make(map[string]struct{ additions, deletions int })
+	for _, line := range parseLines(diffstatOutput) {
+		// Format: "additions\tdeletions\tfilename"
+		parts := strings.Split(line, "\t")
+		if len(parts) < 3 {
+			continue
+		}
+
+		additions := 0
+		deletions := 0
+		filename := parts[2]
+
+		// Handle binary files (shows "-" for additions/deletions)
+		if parts[0] != "-" {
+			fmt.Sscanf(parts[0], "%d", &additions)
+		}
+		if parts[1] != "-" {
+			fmt.Sscanf(parts[1], "%d", &deletions)
+		}
+
+		diffstatMap[filename] = struct{ additions, deletions int }{additions, deletions}
+	}
+
+	// Step 2: Get timestamps for each file (batch extraction)
+	// Use git log to walk commits and find the most recent modification time per file
+	logOutput, err := runGitCommand(worktreePath, "log", baseBranch+"...HEAD", "--format=%aI", "--name-only")
+	if err != nil {
+		return nil, fmt.Errorf("git log --name-only: %w", err)
+	}
+
+	// Parse log output to extract timestamps per file
+	timestampMap := make(map[string]time.Time)
+	lines := parseLines(logOutput)
+	var currentTimestamp time.Time
+
+	for _, line := range lines {
+		// Try to parse as timestamp (ISO 8601 format)
+		if t, err := time.Parse(time.RFC3339, line); err == nil {
+			currentTimestamp = t
+			continue
+		}
+
+		// Otherwise, it's a filename
+		filename := line
+		if filename == "" {
+			continue
+		}
+
+		// Record timestamp for this file (only if not already recorded)
+		// Since log is in reverse chronological order, first occurrence = most recent
+		if _, exists := timestampMap[filename]; !exists {
+			timestampMap[filename] = currentTimestamp
+		}
+	}
+
+	// Step 3: Combine diffstat and timestamps into FileChange structs
+	fileChanges := make([]FileChange, 0, len(diffstatMap))
+	for filename, diffstat := range diffstatMap {
+		timestamp := timestampMap[filename]
+		if timestamp.IsZero() {
+			// Fallback to current time if timestamp not found
+			timestamp = time.Now().UTC()
+		}
+
+		// Determine status based on diffstat
+		status := "modified"
+		if diffstat.additions > 0 && diffstat.deletions == 0 {
+			status = "added"
+		} else if diffstat.additions == 0 && diffstat.deletions > 0 {
+			status = "deleted"
+		}
+
+		fileChanges = append(fileChanges, FileChange{
+			Path:         filename,
+			LastModified: timestamp,
+			Additions:    diffstat.additions,
+			Deletions:    diffstat.deletions,
+			Status:       status,
+		})
+	}
+
+	// Step 4: Sort by LastModified descending (most recent first)
+	sortFileChangesByTime(fileChanges)
+
+	return fileChanges, nil
+}
+
+// sortFileChangesByTime sorts FileChange slice by LastModified descending (most recent first).
+func sortFileChangesByTime(changes []FileChange) {
+	sort.Slice(changes, func(i, j int) bool {
+		return changes[i].LastModified.After(changes[j].LastModified)
+	})
 }

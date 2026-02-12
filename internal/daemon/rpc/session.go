@@ -551,23 +551,29 @@ func (h *SessionHandler) updateWorkContext(sessionID, agentID string, ctx *gitct
 		return fmt.Errorf("marshal changed files: %w", err)
 	}
 
+	fileChangesJSON, err := json.Marshal(ctx.FileChanges)
+	if err != nil {
+		return fmt.Errorf("marshal file changes: %w", err)
+	}
+
 	gitUpdatedAt := ctx.ExtractedAt.Format(time.RFC3339Nano)
 
 	// Upsert work context
 	_, err = h.state.DB().Exec(`
 		INSERT INTO agent_work_contexts (
 			session_id, agent_id, branch, worktree_path,
-			unmerged_commits, uncommitted_files, changed_files, git_updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			unmerged_commits, uncommitted_files, changed_files, file_changes, git_updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(session_id) DO UPDATE SET
 			branch = excluded.branch,
 			worktree_path = excluded.worktree_path,
 			unmerged_commits = excluded.unmerged_commits,
 			uncommitted_files = excluded.uncommitted_files,
 			changed_files = excluded.changed_files,
+			file_changes = excluded.file_changes,
 			git_updated_at = excluded.git_updated_at
 	`, sessionID, agentID, ctx.Branch, ctx.WorktreePath,
-		string(unmergedCommitsJSON), string(uncommittedFilesJSON), string(changedFilesJSON), gitUpdatedAt)
+		string(unmergedCommitsJSON), string(uncommittedFilesJSON), string(changedFilesJSON), string(fileChangesJSON), gitUpdatedAt)
 
 	return err
 }
@@ -666,7 +672,7 @@ func (h *SessionHandler) HandleSetTask(ctx context.Context, params json.RawMessa
 func (h *SessionHandler) syncWorkContexts(agentID string) error {
 	// Collect all work contexts for this agent
 	query := `SELECT session_id, branch, worktree_path,
-	                 unmerged_commits, uncommitted_files, changed_files, git_updated_at,
+	                 unmerged_commits, uncommitted_files, changed_files, file_changes, git_updated_at,
 	                 current_task, task_updated_at, intent, intent_updated_at
 	          FROM agent_work_contexts
 	          WHERE agent_id = ?
@@ -683,7 +689,7 @@ func (h *SessionHandler) syncWorkContexts(agentID string) error {
 
 	for rows.Next() {
 		var ctx types.SessionWorkContext
-		var branch, worktreePath, unmergedCommitsJSON, uncommittedFilesJSON, changedFilesJSON, gitUpdatedAt sql.NullString
+		var branch, worktreePath, unmergedCommitsJSON, uncommittedFilesJSON, changedFilesJSON, fileChangesJSON, gitUpdatedAt sql.NullString
 		var currentTask, taskUpdatedAt, intent, intentUpdatedAt sql.NullString
 
 		err := rows.Scan(
@@ -693,6 +699,7 @@ func (h *SessionHandler) syncWorkContexts(agentID string) error {
 			&unmergedCommitsJSON,
 			&uncommittedFilesJSON,
 			&changedFilesJSON,
+			&fileChangesJSON,
 			&gitUpdatedAt,
 			&currentTask,
 			&taskUpdatedAt,
@@ -745,6 +752,13 @@ func (h *SessionHandler) syncWorkContexts(agentID string) error {
 			var files []string
 			if err := json.Unmarshal([]byte(changedFilesJSON.String), &files); err == nil {
 				ctx.ChangedFiles = files
+			}
+		}
+
+		if fileChangesJSON.Valid && fileChangesJSON.String != "" {
+			var fc []types.FileChange
+			if err := json.Unmarshal([]byte(fileChangesJSON.String), &fc); err == nil {
+				ctx.FileChanges = fc
 			}
 		}
 
