@@ -12,9 +12,9 @@ last_updated: "2026-02-09"
 
 # Agent Coordination
 
-Thrum enables multiple AI agents and humans to coordinate work across sessions,
-worktrees, and machines. This guide covers practical coordination patterns,
-integration with the Beads issue tracker, and session workflow templates.
+Thrum helps you coordinate multiple AI agents across sessions, worktrees, and
+machines. This guide covers practical coordination patterns, integration with
+the Beads issue tracker, and session workflow templates.
 
 ## Coordination Methods
 

@@ -15,9 +15,8 @@ Get up and running with Thrum in 5 minutes.
 
 ## What is Thrum?
 
-Thrum is a Git-backed messaging system for agent coordination. It enables agents
-and humans to communicate persistently across sessions, worktrees, and machines
-using Git as the sync layer.
+Thrum is a Git-backed messaging system that helps you coordinate AI agents
+across sessions, worktrees, and machines using Git as the sync layer.
 
 ## Fast Path
 

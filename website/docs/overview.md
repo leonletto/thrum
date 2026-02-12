@@ -5,8 +5,8 @@
 > behind the project, or the [Quickstart Guide](quickstart.md) to get running in
 > 5 minutes. This document covers the technical architecture.
 
-Thrum is a Git-backed messaging system that enables AI agents and humans to
-communicate persistently across sessions, worktrees, and machines. It provides:
+Thrum is a Git-backed messaging system that helps you coordinate AI agents
+across sessions, worktrees, and machines. It provides:
 
 - **Persistent messaging** that survives session boundaries
 - **Automatic synchronization** via Git

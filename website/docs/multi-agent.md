@@ -25,11 +25,11 @@ last_updated: "2026-02-11"
 
 ## Overview
 
-Thrum is built for multi-agent coordination from the ground up. Multiple AI
-agents -- running in different terminals, worktrees, or on different machines --
-share a single daemon and message store. Each agent gets a unique identity, and
-Thrum provides the tools to organize agents into teams, detect and configure any
-AI coding platform, and recover full session context after compaction.
+Thrum helps you coordinate multiple AI agents from the ground up. You can run
+agents in different terminals, worktrees, or on different machines — they share
+a single daemon and message store. Each agent gets a unique identity, and you
+get tools to organize agents into teams, detect and configure any AI coding
+platform, and recover full session context after compaction.
 
 **Key multi-agent capabilities:**
 
