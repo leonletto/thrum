@@ -14,7 +14,20 @@ type TeamListRequest struct {
 
 // TeamListResponse represents the response from team.list RPC.
 type TeamListResponse struct {
-	Members []TeamMember `json:"members"`
+	Members        []TeamMember    `json:"members"`
+	SharedMessages *SharedMessages `json:"shared_messages,omitempty"`
+}
+
+// SharedMessages contains team-wide message counts (broadcasts + groups).
+type SharedMessages struct {
+	BroadcastTotal int                 `json:"broadcast_total"`
+	Groups         []GroupMessageCount `json:"groups,omitempty"`
+}
+
+// GroupMessageCount contains message counts for an agent group.
+type GroupMessageCount struct {
+	Name  string `json:"name"`
+	Total int    `json:"total"`
 }
 
 // TeamMember represents a team member's full status for display.
@@ -48,14 +61,14 @@ type FileChange struct {
 }
 
 // FormatTeam formats the team list for display.
-func FormatTeam(members []TeamMember) string {
-	if len(members) == 0 {
+func FormatTeam(resp *TeamListResponse) string {
+	if len(resp.Members) == 0 {
 		return "No active agents. Use --all to include offline agents.\n"
 	}
 
 	var out strings.Builder
 
-	for i, m := range members {
+	for i, m := range resp.Members {
 		if i > 0 {
 			out.WriteString("\n")
 		}
@@ -147,6 +160,17 @@ func FormatTeam(members []TeamMember) string {
 			}
 		} else if m.Status == "active" {
 			out.WriteString("Files:    (no changes)\n")
+		}
+	}
+
+	// Footer: shared messages (broadcasts + groups)
+	if sm := resp.SharedMessages; sm != nil {
+		out.WriteString("\n--- Shared ---\n")
+		if sm.BroadcastTotal > 0 {
+			out.WriteString(fmt.Sprintf("Broadcasts: %d messages\n", sm.BroadcastTotal))
+		}
+		for _, g := range sm.Groups {
+			out.WriteString(fmt.Sprintf("@%s: %d messages\n", g.Name, g.Total))
 		}
 	}
 
