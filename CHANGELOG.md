@@ -53,6 +53,24 @@ platform.
 - Auto-detects runtime and generates config files during quickstart
 - Dry-run mode previews generated files without daemon connection
 
+#### Worktree Bootstrap Enhancement (Spec)
+
+Spec and templates for one-command worktree setup with full agent bootstrapping.
+
+- `thrum quickstart` will auto-create empty context file and default preamble on
+  registration
+- New `--preamble-file` flag for quickstart composes default preamble with custom
+  project-specific content
+- `scripts/setup-worktree-thrum.sh` enhanced with `--identity`, `--role`,
+  `--module`, `--preamble` flags and branch creation support
+- New `preamble-agent.md` template for planning agents to create per-agent
+  preamble files with ownership scope, architectural constraints, and
+  coordination rules
+- Three-layer context model documented: prompt (session) → preamble (persistent)
+  → context (volatile)
+- `toolkit/templates/` restructured into extensible subfolder layout with
+  `agent-dev-workflow/` template set containing sanitized CLAUDE.md
+
 #### Context Prime
 
 - `thrum context prime` gathers identity, session, agents, inbox, and git work

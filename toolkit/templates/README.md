@@ -1,135 +1,58 @@
 # Workflow Templates for AI Agent Development
 
-This directory contains templates for the three-phase workflow used to plan and implement features with AI agents.
+Thrum ships reusable template sets for common agent workflows. Each subfolder is a self-contained template set with its own CLAUDE.md explaining usage.
 
-## What These Are
+## Available Template Sets
 
-These templates encode a proven workflow for agent-driven development:
+| Name | Folder | Description |
+|------|--------|-------------|
+| Agent Dev Workflow | [`agent-dev-workflow/`](agent-dev-workflow/) | Three-phase workflow (Plan → Prepare → Implement) for feature development with AI agents using Beads for task tracking and git worktrees for isolation |
 
-1. **PLAN** - Brainstorm, design, and decompose work into tasks
-2. **PREPARE** - Set up an isolated git worktree with shared issue tracking
-3. **IMPLEMENT** - Execute tasks autonomously, with resume support after context loss
+## How to Use
 
-The workflow uses **Beads** for task tracking and **Git worktrees** for isolated branches.
+1. **Browse template sets** — Each subfolder contains a complete workflow template set
+2. **Read the CLAUDE.md** — Each set's CLAUDE.md explains the workflow, placeholders, and how templates fit together
+3. **Copy into your project** — Copy a template set into your project's docs/ or reference directly
+4. **Fill in placeholders** — All templates use `{{PLACEHOLDER}}` syntax for project-specific values
+5. **Hand off to agents** — Give filled-in templates to planning or implementation agents
 
-## Files
+## What's Inside Each Template Set
 
-### `CLAUDE.md`
-Overview document explaining the three-phase process, how to fill in placeholders, and the source-of-truth hierarchy. Start here.
+Template sets typically include:
 
-### `planning-agent.md`
-Phase 1 template. Give this to a planning agent to:
-- Explore the codebase and clarify requirements
-- Propose architectural approaches
-- Write a design spec
-- Create Beads epics with detailed task descriptions
+- **CLAUDE.md** — Overview of the workflow, how to fill placeholders, and the relationship between templates
+- **Phase templates** — Individual markdown files for each phase of the workflow (e.g., planning, preparation, implementation)
+- **Supporting files** — Additional templates for coordination, preambles, or specialized tasks
 
-### `worktree-setup.md`
-Phase 2 guide. Use this to:
-- Choose or create a git worktree for isolated development
-- Configure Beads redirect so all worktrees share the same issue database
-- Verify the setup before handing off to implementation
+## Agent Dev Workflow
 
-### `implementation-agent.md`
-Phase 3 template. Give this to an implementation agent to:
-- Orient from Beads status and git history (works for both fresh starts and resumes)
-- Work through tasks in dependency order
-- Run quality gates and merge to main
-- Handle blockers and coordinate with other agents
+The `agent-dev-workflow/` template set implements a proven three-phase process:
 
-## Quick Start
+1. **Plan** — Brainstorm, write design specs, create Beads epics and tasks with detailed descriptions
+2. **Prepare** — Set up isolated git worktrees with shared issue tracking via Beads redirects
+3. **Implement** — Execute tasks autonomously with support for resuming after context loss
 
-1. **Fill in placeholders:** All templates use `{{PLACEHOLDER}}` syntax. Replace these with your project-specific values before using.
+This workflow is designed for:
+- Feature development requiring multiple implementation sessions
+- Work that benefits from isolation (separate branches per epic)
+- Teams using Beads for issue tracking and Thrum for agent coordination
+- Scenarios where agents need to resume work after hitting context limits
 
-2. **Plan the work:**
-   ```bash
-   # Give planning-agent.md to your planning agent
-   # It will create epics and tasks in Beads
-   ```
+See [`agent-dev-workflow/CLAUDE.md`](agent-dev-workflow/CLAUDE.md) for complete documentation.
 
-3. **Set up a worktree:**
-   ```bash
-   # Follow worktree-setup.md to create/select a workspace
-   git worktree add ~/.workspaces/myproject/feature -b feature/auth
-   ```
+## Creating Custom Template Sets
 
-4. **Implement:**
-   ```bash
-   # Give implementation-agent.md to your implementation agent
-   # It will work through tasks autonomously
-   ```
+To contribute a new template set:
 
-5. **Resume after context loss:**
-   ```bash
-   # Restart the implementation agent with the same prompt
-   # The "Orient" phase recovers state from Beads and git
-   # No work is duplicated
-   ```
-
-## Key Concepts
-
-### Beads as Source of Truth
-
-Task descriptions in Beads contain:
-- File paths to create/modify
-- Function signatures or code examples
-- Acceptance criteria
-- Verification commands
-
-The planning agent front-loads detail so implementing agents can work autonomously without conversation history.
-
-### Worktree + Beads Redirect
-
-All worktrees MUST share a single Beads database via redirect files:
-
-```bash
-# In each worktree
-echo "/absolute/path/to/main/.beads" > .beads/redirect
-```
-
-This ensures all agents see the same tasks, regardless of which worktree they're in.
-
-### Resume-Friendly Implementation
-
-The implementation template is designed to recover from context loss:
-1. Agent hits context limit or session ends
-2. Restart with the same filled-in template
-3. "Orient" phase reads Beads status and git commits
-4. Agent picks up from the first incomplete task
-
-Completed work is never redone because it's tracked in Beads and committed to git.
-
-## Customization
-
-### Adjust Detail Level
-
-- **Backend/API work:** Include function signatures and type definitions in task descriptions
-- **UI/CSS work:** Include full code examples and visual verification steps
-- **Integration work:** Specify connection points and data flow
-
-### Add Project Conventions
-
-- Testing requirements (e.g., "every public function needs a test")
-- Code style (e.g., "use JSDoc for all exports")
-- Commit message format (e.g., "type(scope): description")
-
-### Integrate with Thrum
-
-If using Thrum for agent messaging, add registration steps:
-
-```bash
-# At start of implementation
-thrum quickstart --name {{AGENT_NAME}} --role implementer --intent "Working on {{EPIC_ID}}"
-
-# During work
-thrum send "Progress update: completed task X" --to @coordinator
-
-# At completion
-thrum send "Completed {{EPIC_ID}}, ready for review" --to @coordinator
-```
+1. Create a new subfolder in `toolkit/templates/`
+2. Include a CLAUDE.md that explains the workflow
+3. Use `{{PLACEHOLDER}}` syntax for all project-specific values
+4. Keep templates generic (no hardcoded paths, names, or credentials)
+5. Document the workflow phases, placeholder meanings, and typical usage
+6. Update this README with a new table entry
 
 ## Learn More
 
-- See `../agents/` for Beads and Thrum agent integration guides
+- See `toolkit/agents/` for Beads and Thrum agent integration guides
 - See the Beads project repository for task tracking documentation
 - See the Thrum project repository for multi-agent coordination documentation
