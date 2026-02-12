@@ -988,16 +988,23 @@ func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string)
 		args = append(args, v)
 	}
 
-	// Part 2: group membership subquery
-	// Messages scoped to groups the agent belongs to (via agent name, role, or wildcard role:*)
+	// Part 2: group membership subquery (recursive CTE resolves nested groups)
+	// Messages scoped to groups the agent belongs to (via agent name, role, wildcard, or nested groups)
 	groupSubquery := `m.message_id IN (
 		SELECT ms_g.message_id FROM message_scopes ms_g
 		WHERE ms_g.scope_type = 'group'
 		AND ms_g.scope_value IN (
-			SELECT g.name FROM groups g
-			JOIN group_members gm ON g.group_id = gm.group_id
-			WHERE (gm.member_type = 'agent' AND gm.member_value = ?)
-			   OR (gm.member_type = 'role' AND (gm.member_value = ? OR gm.member_value = '*'))
+			WITH RECURSIVE agent_groups AS (
+				SELECT g.name, g.group_id FROM groups g
+				JOIN group_members gm ON g.group_id = gm.group_id
+				WHERE (gm.member_type = 'agent' AND gm.member_value = ?)
+				   OR (gm.member_type = 'role' AND (gm.member_value = ? OR gm.member_value = '*'))
+				UNION
+				SELECT g2.name, g2.group_id FROM groups g2
+				JOIN group_members gm2 ON g2.group_id = gm2.group_id
+				JOIN agent_groups ag ON gm2.member_type = 'group' AND gm2.member_value = ag.name
+			)
+			SELECT name FROM agent_groups
 		)
 	)`
 	// Use forAgent for agent match, forAgentRole for role match

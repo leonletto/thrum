@@ -98,3 +98,94 @@ type BroadcastOutput struct {
 	TotalSent  int      `json:"total_sent"`
 	MessageIDs []string `json:"message_ids" jsonschema:"IDs of sent messages"`
 }
+
+// -- Group tool types --
+
+// CreateGroupInput is the input for the create_group MCP tool.
+type CreateGroupInput struct {
+	Name        string `json:"name" jsonschema:"Group name (e.g. reviewers)"`
+	Description string `json:"description,omitempty" jsonschema:"Optional group description"`
+}
+
+// CreateGroupOutput is the output for the create_group MCP tool.
+type CreateGroupOutput struct {
+	GroupID string `json:"group_id" jsonschema:"ID of the created group"`
+	Name    string `json:"name" jsonschema:"Name of the created group"`
+}
+
+// DeleteGroupInput is the input for the delete_group MCP tool.
+type DeleteGroupInput struct {
+	Name string `json:"name" jsonschema:"Name of the group to delete"`
+}
+
+// DeleteGroupOutput is the output for the delete_group MCP tool.
+type DeleteGroupOutput struct {
+	Name   string `json:"name" jsonschema:"Name of the deleted group"`
+	Status string `json:"status" jsonschema:"Result: deleted"`
+}
+
+// AddGroupMemberInput is the input for the add_group_member MCP tool.
+type AddGroupMemberInput struct {
+	Group       string `json:"group" jsonschema:"Group name to add the member to"`
+	MemberType  string `json:"member_type" jsonschema:"Member type: agent, role, or group"`
+	MemberValue string `json:"member_value" jsonschema:"Member value: agent name, role name, or group name"`
+}
+
+// AddGroupMemberOutput is the output for the add_group_member MCP tool.
+type AddGroupMemberOutput struct {
+	Group       string `json:"group"`
+	MemberType  string `json:"member_type"`
+	MemberValue string `json:"member_value"`
+	Status      string `json:"status" jsonschema:"Result: added"`
+}
+
+// RemoveGroupMemberInput is the input for the remove_group_member MCP tool.
+type RemoveGroupMemberInput struct {
+	Group       string `json:"group" jsonschema:"Group name to remove the member from"`
+	MemberType  string `json:"member_type" jsonschema:"Member type: agent, role, or group"`
+	MemberValue string `json:"member_value" jsonschema:"Member value: agent name, role name, or group name"`
+}
+
+// RemoveGroupMemberOutput is the output for the remove_group_member MCP tool.
+type RemoveGroupMemberOutput struct {
+	Group       string `json:"group"`
+	MemberType  string `json:"member_type"`
+	MemberValue string `json:"member_value"`
+	Status      string `json:"status" jsonschema:"Result: removed"`
+}
+
+// ListGroupsInput is the input for the list_groups MCP tool.
+type ListGroupsInput struct{}
+
+// GroupSummaryMCP represents a group summary in MCP output.
+type GroupSummaryMCP struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	MemberCount int    `json:"member_count"`
+}
+
+// ListGroupsOutput is the output for the list_groups MCP tool.
+type ListGroupsOutput struct {
+	Groups []GroupSummaryMCP `json:"groups"`
+	Count  int               `json:"count"`
+}
+
+// GetGroupInput is the input for the get_group MCP tool.
+type GetGroupInput struct {
+	Name   string `json:"name" jsonschema:"Group name to look up"`
+	Expand bool   `json:"expand,omitempty" jsonschema:"Resolve nested groups and roles to agent IDs"`
+}
+
+// GroupMemberMCP represents a group member in MCP output.
+type GroupMemberMCP struct {
+	MemberType  string `json:"member_type"`
+	MemberValue string `json:"member_value"`
+}
+
+// GetGroupOutput is the output for the get_group MCP tool.
+type GetGroupOutput struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Members     []GroupMemberMCP `json:"members"`
+	Expanded    []string         `json:"expanded,omitempty" jsonschema:"Resolved agent IDs (when expand=true)"`
+}
