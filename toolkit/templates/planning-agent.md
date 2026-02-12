@@ -1,7 +1,5 @@
 # Planning Agent Template
 
-> **Note:** This is a distributable template. Fill in the `{{PLACEHOLDER}}` values with your project-specific information before using.
-
 ## Purpose
 
 Guide an agent through the full planning lifecycle: brainstorm a feature, write
@@ -17,17 +15,98 @@ a design spec, then decompose it into beads epics and detailed tasks.
 
 ---
 
+## Sub-Agent Strategy
+
+The planning agent is a **coordinator**, not a researcher. Delegate codebase
+exploration, document reading, and issue analysis to sub-agents. Keep your
+context clean for decision-making and design writing.
+
+### Principles
+
+1. **Research in parallel, design sequentially** — Sub-agents gather information
+   concurrently; you synthesize it into designs and plans
+2. **Write to disk** — Sub-agents write findings to `output/planning/`; you read
+   only the summaries, not raw code
+3. **Background execution** — Use `run_in_background=true` for all investigation
+   agents so you can continue working while they explore
+4. **Focused prompts** — Each sub-agent gets a specific question, an output file
+   path, and a format. Avoid open-ended "explore everything" prompts.
+
+### Agent Selection
+
+| Task                       | Agent Type                   | Model  |
+| -------------------------- | ---------------------------- | ------ |
+| Codebase architecture scan | `Explore`                    | sonnet |
+| Read & summarize docs      | `general-purpose`            | haiku  |
+| Beads issue scan           | `general-purpose`            | haiku  |
+| Deep code analysis         | `feature-dev:code-explorer`  | sonnet |
+| Bulk beads task creation   | `general-purpose` (parallel) | haiku  |
+| Design spec writing        | Direct (main agent)          | —      |
+
+### Parallel Research Pattern
+
+When Phase 1 requires understanding multiple independent areas, launch
+sub-agents in a single message:
+
+```
+# All launched in ONE message for parallel execution
+Task(subagent_type="Explore", run_in_background=true,
+  prompt="Explore {{PROJECT_ROOT}}. Map packages, interfaces, and patterns
+  relevant to: {{FEATURE_DESCRIPTION}}.
+  Write findings to output/planning/codebase-scan.md")
+
+Task(subagent_type="general-purpose", model="haiku", run_in_background=true,
+  prompt="Read {{REFERENCE_DOCS}}. Summarize patterns and conventions
+  relevant to {{FEATURE_DESCRIPTION}}.
+  Write to output/planning/reference-summary.md")
+
+Task(subagent_type="general-purpose", model="haiku", run_in_background=true,
+  prompt="Run: bd list --status=open, bd ready, bd blocked.
+  Identify work related to {{FEATURE_DESCRIPTION}}.
+  Write to output/planning/beads-context.md")
+```
+
+After all complete, read the output files to inform your design work.
+
+### Bulk Task Creation Pattern
+
+When creating many tasks (> 6), delegate to parallel sub-agents — one per epic.
+Pass the full task details (titles, descriptions, dependencies) in the prompt:
+
+```
+Task(subagent_type="general-purpose", model="haiku",
+  prompt="Create these beads tasks under epic {{EPIC_1_ID}}:
+  1. bd create --title='...' --type=task --priority=2 --description='...'
+  2. bd create --title='...' --type=task --priority=1 --description='...'
+  Then set ordering: bd dep add <later_id> <earlier_id>
+  Return the created task IDs and their titles.")
+
+Task(subagent_type="general-purpose", model="haiku",
+  prompt="Create these beads tasks under epic {{EPIC_2_ID}}:
+  ...")
+```
+
+After sub-agents return IDs, set **cross-epic dependencies** yourself (requires
+IDs from multiple sub-agents).
+
+---
+
 ## Phase 1: Brainstorm & Explore
 
 ### Step 1: Understand the Codebase
 
-Before designing anything, explore the existing project:
+Before designing anything, delegate exploration to sub-agents (see Sub-Agent
+Strategy above). Do NOT read source code directly into your context.
 
-1. Read the project's `CLAUDE.md` and any agent instructions in `.agents/`
-2. Use `auggie-mcp codebase-retrieval` to understand the current architecture
-3. Review `{{REFERENCE_DOCS}}` for existing patterns and conventions
-4. Check `bd list` for related or overlapping work already tracked
-5. Identify existing code that this feature touches or extends
+Launch parallel background agents to:
+
+1. **Scan the codebase** — architecture, relevant packages, existing patterns
+2. **Read reference docs** — `{{REFERENCE_DOCS}}` for conventions to follow
+3. **Check beads** — `bd list`, `bd ready`, `bd blocked` for related or
+   overlapping work
+
+After agents complete, read their output files in `output/planning/`. Use these
+summaries — not raw source — to inform your design.
 
 ### Step 2: Clarify Requirements
 
@@ -133,6 +212,9 @@ bd dep add {{TASK_ID}} {{EPIC_ID}}  # Link task to epic
 # Set task ordering dependencies within the epic
 bd dep add {{LATER_TASK_ID}} {{EARLIER_TASK_ID}}
 ```
+
+**Tip:** When creating > 6 tasks, use the Bulk Task Creation Pattern from the
+Sub-Agent Strategy section to parallelize creation across epics.
 
 ### Task Detail Calibration
 
