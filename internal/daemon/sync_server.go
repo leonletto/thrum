@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"strings"
 
 	"github.com/leonletto/thrum/internal/transport"
 )
@@ -24,18 +23,19 @@ func NewSyncRegistry() *SyncRegistry {
 	}
 }
 
-// allowedSyncMethods is the whitelist of RPC methods allowed on the sync endpoint.
+// allowedSyncMethods is the whitelist of RPC methods allowed on the Tailscale endpoint.
 var allowedSyncMethods = map[string]bool{
 	"sync.pull":      true,
 	"sync.peer_info": true,
 	"sync.notify":    true,
+	"pair.request":   true,
 }
 
 // Register registers a handler for a sync RPC method.
 // Returns an error if the method is not in the sync.* whitelist.
 func (r *SyncRegistry) Register(method string, handler Handler) error {
 	if !allowedSyncMethods[method] {
-		return fmt.Errorf("method %q is not allowed in sync registry; only sync.* methods are permitted", method)
+		return fmt.Errorf("method %q is not allowed in sync registry; only sync.*/pair.* methods are permitted", method)
 	}
 	r.handlers[method] = handler
 	return nil
@@ -72,8 +72,8 @@ func (r *SyncRegistry) ServeSyncRPC(ctx context.Context, conn net.Conn, peerID s
 			continue
 		}
 
-		// Security boundary: reject any non-sync method
-		if !strings.HasPrefix(req.Method, "sync.") || !allowedSyncMethods[req.Method] {
+		// Security boundary: only allow whitelisted methods
+		if !allowedSyncMethods[req.Method] {
 			resp := jsonRPCResponse{
 				JSONRPC: "2.0",
 				ID:      req.ID,

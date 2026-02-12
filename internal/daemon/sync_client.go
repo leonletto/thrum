@@ -138,6 +138,45 @@ type PeerInfoResult struct {
 	Name     string `json:"name"`
 }
 
+// PairResult represents the response from a pair.request RPC call.
+type PairResult struct {
+	Status   string `json:"status"`
+	Token    string `json:"token"`
+	DaemonID string `json:"daemon_id"`
+	Name     string `json:"name"`
+}
+
+// RequestPairing sends a pair.request to a remote peer with the given code and local info.
+func (c *SyncClient) RequestPairing(peerAddr, code, localDaemonID, localName, localAddress string) (*PairResult, error) {
+	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("cannot reach %s: %w", peerAddr, err)
+	}
+	defer conn.Close()
+
+	if err := conn.SetDeadline(time.Now().Add(30 * time.Second)); err != nil {
+		return nil, fmt.Errorf("set deadline: %w", err)
+	}
+
+	params := map[string]string{
+		"code":      code,
+		"daemon_id": localDaemonID,
+		"name":      localName,
+		"address":   localAddress,
+	}
+
+	resp, err := c.callRPC(conn, "pair.request", params)
+	if err != nil {
+		return nil, err
+	}
+
+	var result PairResult
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal pair result: %w", err)
+	}
+	return &result, nil
+}
+
 // pullBatch sends a sync.pull request on an existing connection and reads the response.
 func (c *SyncClient) pullBatch(conn net.Conn, afterSeq int64, maxBatch int) (*PullResponse, error) {
 	params := map[string]any{
