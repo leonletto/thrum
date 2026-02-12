@@ -77,6 +77,21 @@ One-command worktree setup with full agent context bootstrapping.
 - Graceful degradation when daemon, session, or git are unavailable
 - Both human-readable and `--json` output
 
+#### Team Command
+
+Rich per-agent status for all active agents, powered by a single server-side
+SQL JOIN query.
+
+- `thrum team` shows `thrum status`-like detail for every active agent
+- Per-agent display: location, session duration, intent, inbox counts, branch,
+  and per-file change details with diff stats
+- `--all` flag includes offline agents
+- `--json` flag for machine-readable output
+- Schema migration v11: hostname tracking on agent registration
+- `THRUM_HOSTNAME` env var override for friendly machine names
+- `team.list` RPC handler with two-query architecture (agents+contexts, inbox
+  counts)
+
 #### Tailscale Sync
 
 Cross-machine event synchronization over Tailscale's encrypted mesh network.
