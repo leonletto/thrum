@@ -14,6 +14,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/runtime"
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
@@ -130,33 +131,97 @@ func initCmd() *cobra.Command {
 		Short: "Initialize Thrum in the current repository",
 		Long: `Initialize Thrum in the current repository.
 
-This command creates the .thrum/ directory structure, sets up the
-a-sync branch for message synchronization, and updates .gitignore.`,
+Creates the .thrum/ directory structure, sets up the a-sync branch for
+message synchronization, and updates .gitignore.
+
+When --runtime is specified, also generates runtime-specific configuration
+files (MCP settings, startup hooks, instructions) for the target AI coding
+agent. Supported runtimes: claude, codex, cursor, gemini, cli-only, all.
+
+Examples:
+  thrum init                          # Initialize repo only
+  thrum init --runtime claude         # Init + generate Claude configs
+  thrum init --runtime codex --force  # Init + overwrite Codex configs
+  thrum init --runtime all --dry-run  # Preview all runtime configs`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			force, _ := cmd.Flags().GetBool("force")
+			runtimeFlag, _ := cmd.Flags().GetString("runtime")
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			agentName, _ := cmd.Flags().GetString("agent-name")
+			agentRole, _ := cmd.Flags().GetString("agent-role")
+			agentModule, _ := cmd.Flags().GetString("agent-module")
 
-			opts := cli.InitOptions{
-				RepoPath: flagRepo,
-				Force:    force,
+			// Validate runtime flag if specified
+			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
+				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, cli-only, all", runtimeFlag)
 			}
 
-			if err := cli.Init(opts); err != nil {
-				return err
+			// Step 1: Repo initialization (unless dry-run or runtime-only)
+			if !dryRun {
+				opts := cli.InitOptions{
+					RepoPath: flagRepo,
+					Force:    force,
+				}
+
+				if err := cli.Init(opts); err != nil {
+					// If already initialized and we have a runtime flag, continue
+					if runtimeFlag != "" && strings.Contains(err.Error(), "already exists") {
+						// Repo exists, just generate runtime configs
+					} else {
+						return err
+					}
+				} else if !flagQuiet {
+					fmt.Println("✓ Thrum initialized successfully")
+					fmt.Printf("  Repository: %s\n", flagRepo)
+					fmt.Println("  Created: .thrum/ directory structure")
+					fmt.Println("  Created: a-sync branch for message sync")
+					fmt.Println("  Updated: .gitignore")
+				}
 			}
 
-			if !flagQuiet {
-				fmt.Println("✓ Thrum initialized successfully")
-				fmt.Printf("  Repository: %s\n", flagRepo)
-				fmt.Println("  Created: .thrum/ directory structure")
-				fmt.Println("  Created: a-sync branch for message sync")
-				fmt.Println("  Updated: .gitignore")
+			// Step 2: Runtime config generation
+			if runtimeFlag != "" {
+				// Auto-detect if not specified explicitly
+				if runtimeFlag == "" {
+					runtimeFlag = runtime.DetectRuntime(flagRepo)
+				}
+
+				rtOpts := cli.RuntimeInitOptions{
+					RepoPath:  flagRepo,
+					Runtime:   runtimeFlag,
+					DryRun:    dryRun,
+					Force:     force,
+					AgentName: agentName,
+					AgentRole: agentRole,
+					AgentMod:  agentModule,
+				}
+
+				result, err := cli.RuntimeInit(rtOpts)
+				if err != nil {
+					return err
+				}
+
+				if flagJSON {
+					output, _ := json.MarshalIndent(result, "", "  ")
+					fmt.Println(string(output))
+				} else if !flagQuiet {
+					if !dryRun {
+						fmt.Println()
+					}
+					fmt.Print(cli.FormatRuntimeInit(result))
+				}
 			}
 
 			return nil
 		},
 	}
 
-	cmd.Flags().Bool("force", false, "Force reinitialization if already initialized")
+	cmd.Flags().Bool("force", false, "Force reinitialization / overwrite existing files")
+	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files")
+	cmd.Flags().String("runtime", "", "Generate runtime-specific configs (claude|codex|cursor|gemini|cli-only|all)")
+	cmd.Flags().String("agent-name", "", "Agent name for templates (default: default_agent)")
+	cmd.Flags().String("agent-role", "", "Agent role for templates (default: implementer)")
+	cmd.Flags().String("agent-module", "", "Agent module for templates (default: main)")
 
 	return cmd
 }
