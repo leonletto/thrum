@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/leonletto/thrum/internal/daemon/eventlog"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/projection"
@@ -306,6 +307,12 @@ func (s *State) RepoID() string {
 // DaemonID returns the daemon's unique identifier for sync origin tracking.
 func (s *State) DaemonID() string {
 	return s.daemonID
+}
+
+// GetEventsSince returns events with sequence > afterSeq, up to limit.
+// Delegates to the eventlog package.
+func (s *State) GetEventsSince(afterSeq int64, limit int) ([]eventlog.Event, int64, bool, error) {
+	return eventlog.GetEventsSince(s.db, afterSeq, limit)
 }
 
 // RepoPath returns the path to the repository root.
