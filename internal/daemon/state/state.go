@@ -1,6 +1,7 @@
 package state
 
 import (
+	"crypto/ed25519"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,13 +10,19 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
+	"github.com/leonletto/thrum/internal/daemon/eventlog"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/schema"
 	_ "modernc.org/sqlite"
 )
+
+// EventWriteHook is called after a successful event write with the daemon ID and sequence number.
+// It is called synchronously but should not block — use goroutines for async work.
+type EventWriteHook func(daemonID string, sequence int64, eventCount int)
 
 // State manages the daemon's persistent state (JSONL log and SQLite projection).
 type State struct {
@@ -25,10 +32,15 @@ type State struct {
 	db             *sql.DB
 	projector      *projection.Projector
 	repoID         string
+	daemonID       string       // Unique identifier for this daemon instance (for sync origin tracking)
+	sequence       atomic.Int64 // Monotonically increasing event sequence counter
 	repoPath       string       // Path to the repository root
 	thrumDir       string       // Path to .thrum directory (runtime: var/, identities/)
 	syncDir        string       // Path to sync worktree (JSONL data on a-sync branch)
 	mu             sync.RWMutex // Protects agent/session operations
+	onEventWrite   EventWriteHook // Optional hook called after successful event write
+	signingKey     ed25519.PrivateKey // Optional Ed25519 key for signing events
+	signEvent      func(event map[string]any, key ed25519.PrivateKey) // Injected signing function
 }
 
 // NewState creates a new state manager for the given .thrum directory.
@@ -88,16 +100,43 @@ func NewState(thrumDir string, syncDir string, repoID string) (*State, error) {
 	// Compute repo path from thrumDir (parent of .thrum)
 	repoPath := filepath.Dir(thrumDir)
 
-	return &State{
+	// Load the current max sequence from the events table
+	var maxSeq int64
+	err = db.QueryRow("SELECT COALESCE(MAX(sequence), 0) FROM events").Scan(&maxSeq)
+	if err != nil {
+		_ = eventsWriter.Close()
+		_ = db.Close()
+		return nil, fmt.Errorf("load max sequence: %w", err)
+	}
+
+	s := &State{
 		eventsWriter:   eventsWriter,
 		messageWriters: make(map[string]*jsonl.Writer),
 		db:             db,
 		projector:      projector,
 		repoID:         repoID,
+		daemonID:       identity.GenerateDaemonID(),
 		repoPath:       repoPath,
 		thrumDir:       thrumDir,
 		syncDir:        syncDir,
-	}, nil
+	}
+	s.sequence.Store(maxSeq)
+
+	return s, nil
+}
+
+// SetOnEventWrite sets a hook that is called after each successful event write.
+// The hook receives the daemon ID, the assigned sequence number, and event count (always 1).
+func (s *State) SetOnEventWrite(hook EventWriteHook) {
+	s.onEventWrite = hook
+}
+
+// SetSigningKey configures Ed25519 event signing. When set, all new events are signed
+// before being written to JSONL. The signFunc is called with (eventMap, privateKey)
+// and should add a "signature" field to the event map.
+func (s *State) SetSigningKey(key ed25519.PrivateKey, signFunc func(event map[string]any, key ed25519.PrivateKey)) {
+	s.signingKey = key
+	s.signEvent = signFunc
 }
 
 // Close closes the state manager and its resources.
@@ -149,6 +188,17 @@ func (s *State) WriteEvent(event any) error {
 		eventMap["v"] = 1
 	}
 
+	// Add origin_daemon if not present or empty
+	originDaemon, _ := eventMap["origin_daemon"].(string)
+	if originDaemon == "" {
+		eventMap["origin_daemon"] = s.daemonID
+	}
+
+	// Sign event if signing key is configured
+	if s.signingKey != nil && s.signEvent != nil {
+		s.signEvent(eventMap, s.signingKey)
+	}
+
 	// Route event to appropriate JSONL file based on type
 	eventType, _ := eventMap["type"].(string)
 	var writer *jsonl.Writer
@@ -169,6 +219,10 @@ func (s *State) WriteEvent(event any) error {
 		writer = s.eventsWriter
 	}
 
+	// Assign next sequence number
+	seq := s.sequence.Add(1)
+	eventMap["sequence"] = seq
+
 	// Append enriched event to JSONL (source of truth)
 	if err := writer.Append(eventMap); err != nil {
 		return fmt.Errorf("append to JSONL: %w", err)
@@ -180,9 +234,27 @@ func (s *State) WriteEvent(event any) error {
 		return fmt.Errorf("marshal enriched event: %w", err)
 	}
 
+	// Insert into events table for sequence-based queries
+	evtID, _ := eventMap["event_id"].(string)
+	evtType, _ := eventMap["type"].(string)
+	evtTimestamp, _ := eventMap["timestamp"].(string)
+	evtOrigin, _ := eventMap["origin_daemon"].(string)
+	_, err = s.db.Exec(
+		`INSERT OR IGNORE INTO events (event_id, sequence, type, timestamp, origin_daemon, event_json) VALUES (?, ?, ?, ?, ?, ?)`,
+		evtID, seq, evtType, evtTimestamp, evtOrigin, string(eventJSON),
+	)
+	if err != nil {
+		return fmt.Errorf("insert into events table: %w", err)
+	}
+
 	// Apply to projector (update SQLite)
 	if err := s.projector.Apply(eventJSON); err != nil {
 		return fmt.Errorf("apply to projector: %w", err)
+	}
+
+	// Notify sync hook (e.g., to broadcast sync.notify to peers)
+	if s.onEventWrite != nil {
+		s.onEventWrite(s.daemonID, seq, 1)
 	}
 
 	return nil
@@ -262,6 +334,17 @@ func (s *State) DB() *sql.DB {
 // RepoID returns the repository ID.
 func (s *State) RepoID() string {
 	return s.repoID
+}
+
+// DaemonID returns the daemon's unique identifier for sync origin tracking.
+func (s *State) DaemonID() string {
+	return s.daemonID
+}
+
+// GetEventsSince returns events with sequence > afterSeq, up to limit.
+// Delegates to the eventlog package.
+func (s *State) GetEventsSince(afterSeq int64, limit int) ([]eventlog.Event, int64, bool, error) {
+	return eventlog.GetEventsSince(s.db, afterSeq, limit)
 }
 
 // RepoPath returns the path to the repository root.

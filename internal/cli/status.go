@@ -11,11 +11,29 @@ import (
 
 // HealthResult contains daemon health information.
 type HealthResult struct {
-	Status    string `json:"status"`
-	UptimeMs  int64  `json:"uptime_ms"`
-	Version   string `json:"version"`
-	RepoID    string `json:"repo_id"`
-	SyncState string `json:"sync_state"`
+	Status    string              `json:"status"`
+	UptimeMs  int64               `json:"uptime_ms"`
+	Version   string              `json:"version"`
+	RepoID    string              `json:"repo_id"`
+	SyncState string              `json:"sync_state"`
+	Tailscale *TailscaleSyncInfo  `json:"tailscale,omitempty"`
+}
+
+// TailscaleSyncInfo mirrors the RPC type for CLI deserialization.
+type TailscaleSyncInfo struct {
+	Enabled        bool             `json:"enabled"`
+	Hostname       string           `json:"hostname"`
+	ConnectedPeers int              `json:"connected_peers"`
+	Peers          []TailscalePeer  `json:"peers,omitempty"`
+	SyncStatus     string           `json:"sync_status"`
+}
+
+// TailscalePeer represents a peer in the Tailscale sync status.
+type TailscalePeer struct {
+	DaemonID string `json:"daemon_id"`
+	Hostname string `json:"hostname"`
+	LastSync string `json:"last_sync"`
+	Status   string `json:"status"`
 }
 
 // WhoamiResult contains current agent information.
@@ -198,6 +216,14 @@ func FormatStatus(result *StatusResult) string {
 		output.WriteString("Sync:     ✓ synced\n")
 	} else {
 		output.WriteString(fmt.Sprintf("Sync:     %s\n", syncStatus))
+	}
+
+	// Tailscale sync info
+	if ts := result.Health.Tailscale; ts != nil && ts.Enabled {
+		output.WriteString(fmt.Sprintf("Tailscale: %s (%d peers)\n", ts.Hostname, ts.ConnectedPeers))
+		for _, peer := range ts.Peers {
+			output.WriteString(fmt.Sprintf("  - %s (last sync: %s)\n", peer.Hostname, peer.LastSync))
+		}
 	}
 
 	// Daemon info
