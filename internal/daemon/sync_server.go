@@ -14,8 +14,7 @@ import (
 // SyncRegistry is a handler registry that only allows sync.* RPC methods.
 // This provides a security boundary — application RPCs are never exposed over Tailscale.
 type SyncRegistry struct {
-	handlers    map[string]Handler
-	rateLimiter *SyncRateLimiter // optional per-peer rate limiting
+	handlers map[string]Handler
 }
 
 // NewSyncRegistry creates a new sync-only handler registry.
@@ -23,11 +22,6 @@ func NewSyncRegistry() *SyncRegistry {
 	return &SyncRegistry{
 		handlers: make(map[string]Handler),
 	}
-}
-
-// SetRateLimiter configures per-peer rate limiting for sync requests.
-func (r *SyncRegistry) SetRateLimiter(rl *SyncRateLimiter) {
-	r.rateLimiter = rl
 }
 
 // allowedSyncMethods is the whitelist of RPC methods allowed on the sync endpoint.
@@ -87,23 +81,6 @@ func (r *SyncRegistry) ServeSyncRPC(ctx context.Context, conn net.Conn, peerID s
 			}
 			_ = writeSyncResponse(writer, resp)
 			continue
-		}
-
-		// Per-peer rate limiting
-		if r.rateLimiter != nil {
-			if rlErr := r.rateLimiter.Allow(peerID); rlErr != nil {
-				code := -32000
-				if rle, ok := rlErr.(*RateLimitError); ok {
-					code = -rle.Code // Use negative HTTP code as JSON-RPC error
-				}
-				resp := jsonRPCResponse{
-					JSONRPC: "2.0",
-					ID:      req.ID,
-					Error:   &jsonRPCError{Code: code, Message: rlErr.Error()},
-				}
-				_ = writeSyncResponse(writer, resp)
-				continue
-			}
 		}
 
 		handler, ok := r.handlers[req.Method]
