@@ -47,26 +47,41 @@ do — it lets them communicate while you direct the work.
 Here's what a typical day looks like when using Thrum with a tool like Beads for
 issue tracking:
 
-**1. Research.** You explore the problem. Read the code, understand the
-constraints, talk to stakeholders. This is your job and no agent does it better.
+**1. Research.** You work with an agent to research a problem or feature. The
+agent does all the boring heavy lifting — reading through the codebase, tracing
+dependencies, understanding the current state of things — and comes back to you
+with a proposed solution. You can chat about it, ask questions, and make changes
+until you like it.
 
-**2. Plan.** You decide the architecture. Which approach? What tradeoffs? You
-write a brief design doc or just think it through. The decisions are yours.
+**2. Plan.** You ask the agent to investigate the codebase, docs, or whatever
+needs changing. It does the boring detailed slog of finding all the dependencies,
+figuring out what will break, and adding that to the plan. Rewriting the docs to
+fit the new code, etc. Then it gives you a spec that you can read and understand
+and approve or change as you see fit.
 
-**3. Document.** You create issues in your tracker with clear descriptions. You
-write prompts — specific instructions that tell an agent exactly what to build,
-which files to touch, what tests to write. These prompts are your record of
-intent. Save them and you can always trace back what you decided and why.
+**3. Document.** Now you have an agreed-on plan so you tell the agent to break it
+down into idempotent steps, optimized for making it very organized and
+parallelizable where possible. Then it uses the Beads issue tracker to create
+Epics and Tasks which are the full record of what to do. Then the agent writes a
+prompt file which you give to a different agent to implement. It has all the
+details needed — the spec is referenced, the Epics and Tasks are talked about, it
+has directions on how you like it to execute (use sub-agents, make sure test
+coverage is 80%, run all tests, code review when you are done, etc.). Now you can
+read this if you like, or don't trust the agent yet, and you can see exactly what
+is going to happen.
 
-**4. Implement.** You hand a prompt to an agent on a worktree. It claims tasks,
-writes code, runs tests, commits. Thrum lets you see what it's doing (`thrum
-team`, `thrum who-has`). If you're running multiple agents on different features,
-Thrum lets them message each other and stay coordinated without you relaying
-information manually.
+**4. Implement.** You hand that prompt to an agent on a worktree. It claims
+tasks, writes code, runs tests, commits. Thrum lets you see what it's doing
+(`thrum team`, `thrum who-has`). If you're running multiple agents on different
+features, Thrum lets them message each other and stay coordinated without you
+relaying information manually.
 
-**5. Review and merge.** You read the diff. You run the tests. You check the
-code against your plan. When you're satisfied, you merge. The code that hits main
-is code you've reviewed and approved.
+**5. Review and merge.** Now the code is written and the tests pass and the work
+is isolated in a worktree on a branch. You ask your coordinator agent — probably
+the one you worked with to research and write the spec and the prompt — to do a
+code review against the spec and deal with any findings. It tells you what it
+found and usually asks if you want it to fix them. When you are satisfied, you
+tell it to merge and you are done.
 
 This cycle repeats. Research, plan, document, implement, review. You get the
 speed of parallel agents with the confidence of understanding every change.
