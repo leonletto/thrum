@@ -107,6 +107,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	// Composite commands
 	rootCmd.AddCommand(quickstartCmd())
 	rootCmd.AddCommand(overviewCmd())
+	rootCmd.AddCommand(teamCmd())
 
 	// Coordination commands
 	rootCmd.AddCommand(whoHasCmd())
@@ -3499,6 +3500,52 @@ Examples:
 			return nil
 		},
 	}
+}
+
+func teamCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "team",
+		Short: "Show status of all active agents",
+		Long: `Show a rich, multi-line status report for every active agent.
+
+Displays session info, work context, inbox counts, branch status,
+and per-file change details for all agents with active sessions.
+
+Examples:
+  thrum team
+  thrum team --all
+  thrum team --json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			includeAll, _ := cmd.Flags().GetBool("all")
+			req := cli.TeamListRequest{
+				IncludeOffline: includeAll,
+			}
+
+			var result cli.TeamListResponse
+			if err := client.Call("team.list", req, &result); err != nil {
+				return fmt.Errorf("team.list RPC failed: %w", err)
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatTeam(result.Members))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().Bool("all", false, "Include offline agents")
+
+	return cmd
 }
 
 func whoHasCmd() *cobra.Command {
