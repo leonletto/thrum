@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 11
+const CurrentVersion = 12
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -585,6 +585,18 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 			if err != nil {
 				return fmt.Errorf("add hostname column: %w", err)
 			}
+		}
+	}
+
+	// Migration from version 11 to 12: Remove threads table and thread index
+	if startVersion < 12 && endVersion >= 12 {
+		_, err = tx.Exec(`DROP TABLE IF EXISTS threads`)
+		if err != nil {
+			return fmt.Errorf("drop threads table: %w", err)
+		}
+		_, err = tx.Exec(`DROP INDEX IF EXISTS idx_messages_thread`)
+		if err != nil {
+			return fmt.Errorf("drop idx_messages_thread: %w", err)
 		}
 	}
 

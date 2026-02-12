@@ -127,8 +127,8 @@ type DeleteGroupOutput struct {
 // AddGroupMemberInput is the input for the add_group_member MCP tool.
 type AddGroupMemberInput struct {
 	Group       string `json:"group" jsonschema:"Group name to add the member to"`
-	MemberType  string `json:"member_type" jsonschema:"Member type: agent, role, or group"`
-	MemberValue string `json:"member_value" jsonschema:"Member value: agent name, role name, or group name"`
+	MemberType  string `json:"member_type" jsonschema:"Member type: agent or role"`
+	MemberValue string `json:"member_value" jsonschema:"Member value: agent name or role name"`
 }
 
 // AddGroupMemberOutput is the output for the add_group_member MCP tool.
@@ -142,8 +142,8 @@ type AddGroupMemberOutput struct {
 // RemoveGroupMemberInput is the input for the remove_group_member MCP tool.
 type RemoveGroupMemberInput struct {
 	Group       string `json:"group" jsonschema:"Group name to remove the member from"`
-	MemberType  string `json:"member_type" jsonschema:"Member type: agent, role, or group"`
-	MemberValue string `json:"member_value" jsonschema:"Member value: agent name, role name, or group name"`
+	MemberType  string `json:"member_type" jsonschema:"Member type: agent or role"`
+	MemberValue string `json:"member_value" jsonschema:"Member value: agent name or role name"`
 }
 
 // RemoveGroupMemberOutput is the output for the remove_group_member MCP tool.

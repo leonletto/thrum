@@ -155,7 +155,7 @@ func (s *Server) registerTools() {
 
 	gomcp.AddTool(s.server, &gomcp.Tool{
 		Name:        "add_group_member",
-		Description: "Add an agent, role, or nested group as a member of a group",
+		Description: "Add an agent or role as a member of a group",
 	}, s.handleAddGroupMember)
 
 	gomcp.AddTool(s.server, &gomcp.Tool{
@@ -170,6 +170,6 @@ func (s *Server) registerTools() {
 
 	gomcp.AddTool(s.server, &gomcp.Tool{
 		Name:        "get_group",
-		Description: "Get group details including members. Use expand=true to resolve nested groups and roles to agent IDs",
+		Description: "Get group details including members. Use expand=true to resolve roles to agent IDs",
 	}, s.handleGetGroup)
 }

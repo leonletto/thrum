@@ -118,7 +118,6 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(agentCmd())
 	rootCmd.AddCommand(sessionCmd())
 	rootCmd.AddCommand(messageCmd())
-	rootCmd.AddCommand(threadCmd())
 	rootCmd.AddCommand(subscribeCmd())
 	rootCmd.AddCommand(unsubscribeCmd())
 	rootCmd.AddCommand(subscriptionsCmd())
@@ -474,16 +473,14 @@ func groupAddCmd() *cobra.Command {
 		Long: `Add a member to a group. Members can be agents, roles, or nested groups.
 
 By default, the member is treated as an agent name (strip @ prefix).
-Use --role to add a role-based member, or --group to add a nested group.
+Use --role to add a role-based member.
 
 Examples:
   thrum group add reviewers @alice          # Add agent alice
-  thrum group add reviewers --role reviewer # Add all agents with role "reviewer"
-  thrum group add reviewers --group leads   # Add nested group "leads"`,
+  thrum group add reviewers --role reviewer # Add all agents with role "reviewer"`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			roleFlag, _ := cmd.Flags().GetString("role")
-			groupFlag, _ := cmd.Flags().GetString("group")
 
 			// Determine member from args or flags
 			var member string
@@ -491,12 +488,12 @@ Examples:
 				member = args[1]
 			}
 
-			// Validate: must have member arg or --role/--group flag
-			if member == "" && roleFlag == "" && groupFlag == "" {
-				return fmt.Errorf("provide a member argument, --role, or --group flag")
+			// Validate: must have member arg or --role flag
+			if member == "" && roleFlag == "" {
+				return fmt.Errorf("provide a member argument or --role flag")
 			}
 
-			memberType, memberValue := cli.ResolveMemberType(member, roleFlag, groupFlag)
+			memberType, memberValue := cli.ResolveMemberType(member, roleFlag)
 
 			agentID, err := resolveLocalAgentID()
 			if err != nil {
@@ -529,7 +526,6 @@ Examples:
 	}
 
 	cmd.Flags().String("role", "", "Add a role-based member")
-	cmd.Flags().String("group", "", "Add a nested group member")
 	return cmd
 }
 
@@ -540,22 +536,21 @@ func groupRemoveCmd() *cobra.Command {
 		Long: `Remove a member from a group.
 
 By default, the member is treated as an agent name (strip @ prefix).
-Use --role or --group to specify other member types.`,
+Use --role to specify role-based members.`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			roleFlag, _ := cmd.Flags().GetString("role")
-			groupFlag, _ := cmd.Flags().GetString("group")
 
 			var member string
 			if len(args) >= 2 {
 				member = args[1]
 			}
 
-			if member == "" && roleFlag == "" && groupFlag == "" {
-				return fmt.Errorf("provide a member argument, --role, or --group flag")
+			if member == "" && roleFlag == "" {
+				return fmt.Errorf("provide a member argument or --role flag")
 			}
 
-			memberType, memberValue := cli.ResolveMemberType(member, roleFlag, groupFlag)
+			memberType, memberValue := cli.ResolveMemberType(member, roleFlag)
 
 			agentID, err := resolveLocalAgentID()
 			if err != nil {
@@ -588,7 +583,6 @@ Use --role or --group to specify other member types.`,
 	}
 
 	cmd.Flags().String("role", "", "Remove a role-based member")
-	cmd.Flags().String("group", "", "Remove a nested group member")
 	return cmd
 }
 
@@ -2338,162 +2332,6 @@ Examples:
 	return cmd
 }
 
-func threadCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "thread",
-		Short: "Manage threads",
-	}
-
-	createCmd := &cobra.Command{
-		Use:   "create TITLE",
-		Short: "Create a new thread",
-		Long: `Create a new thread with an optional initial message.
-
-Examples:
-  thrum thread create "Auth discussion"
-  thrum thread create "Code review" --message "Please review PR #42" --to @reviewer`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			title := args[0]
-			message, _ := cmd.Flags().GetString("message")
-			to, _ := cmd.Flags().GetString("to")
-
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			agentID, err := resolveLocalAgentID()
-			if err != nil {
-				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
-			}
-
-			opts := cli.ThreadCreateOptions{
-				Title:         title,
-				To:            to,
-				Message:       message,
-				CallerAgentID: agentID,
-			}
-
-			result, err := cli.ThreadCreate(client, opts)
-			if err != nil {
-				return err
-			}
-
-			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatThreadCreate(result))
-			}
-
-			return nil
-		},
-	}
-	createCmd.Flags().String("message", "", "Initial message content")
-	createCmd.Flags().String("to", "", "Recipient for initial message (format: @role)")
-	cmd.AddCommand(createCmd)
-
-	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List threads",
-		Long: `List threads with optional filtering and pagination.
-
-Examples:
-  thrum thread list
-  thrum thread list --scope module:auth
-  thrum thread list --page-size 20`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			scope, _ := cmd.Flags().GetString("scope")
-			pageSize, _ := cmd.Flags().GetInt("page-size")
-			page, _ := cmd.Flags().GetInt("page")
-
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			agentID, err := resolveLocalAgentID()
-			if err != nil {
-				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
-			}
-
-			opts := cli.ThreadListOptions{
-				Scope:         scope,
-				PageSize:      pageSize,
-				Page:          page,
-				CallerAgentID: agentID,
-			}
-
-			result, err := cli.ThreadList(client, opts)
-			if err != nil {
-				return err
-			}
-
-			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatThreadList(result))
-			}
-
-			return nil
-		},
-	}
-	listCmd.Flags().String("scope", "", "Filter by scope (format: type:value)")
-	listCmd.Flags().Int("page-size", 10, "Results per page")
-	listCmd.Flags().Int("page", 1, "Page number")
-	cmd.AddCommand(listCmd)
-
-	showCmd := &cobra.Command{
-		Use:   "show THREAD_ID",
-		Short: "Show thread with messages",
-		Long: `Show a thread's details and paginated messages.
-
-Examples:
-  thrum thread show thr_01HXE...
-  thrum thread show thr_01HXE... --page-size 20`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			pageSize, _ := cmd.Flags().GetInt("page-size")
-			page, _ := cmd.Flags().GetInt("page")
-
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			opts := cli.ThreadShowOptions{
-				ThreadID: args[0],
-				PageSize: pageSize,
-				Page:     page,
-			}
-
-			result, err := cli.ThreadShow(client, opts)
-			if err != nil {
-				return err
-			}
-
-			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatThreadShow(result))
-			}
-
-			return nil
-		},
-	}
-	showCmd.Flags().Int("page-size", 10, "Messages per page")
-	showCmd.Flags().Int("page", 1, "Page number")
-	cmd.AddCommand(showCmd)
-
-	return cmd
-}
-
 func subscribeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "subscribe",
@@ -3935,12 +3773,6 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("message.edit", messageHandler.HandleEdit)
 	server.RegisterHandler("message.markRead", messageHandler.HandleMarkRead)
 
-	// Thread management
-	threadHandler := rpc.NewThreadHandler(st)
-	server.RegisterHandler("thread.create", threadHandler.HandleCreate)
-	server.RegisterHandler("thread.list", threadHandler.HandleList)
-	server.RegisterHandler("thread.get", threadHandler.HandleGet)
-
 	// Subscription management
 	subscriptionHandler := rpc.NewSubscriptionHandler(st)
 	server.RegisterHandler("subscribe", subscriptionHandler.HandleSubscribe)
@@ -4034,9 +3866,6 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsRegistry.Register("message.delete", websocket.Handler(messageHandler.HandleDelete))
 	wsRegistry.Register("message.edit", websocket.Handler(messageHandler.HandleEdit))
 	wsRegistry.Register("message.markRead", websocket.Handler(messageHandler.HandleMarkRead))
-	wsRegistry.Register("thread.create", websocket.Handler(threadHandler.HandleCreate))
-	wsRegistry.Register("thread.list", websocket.Handler(threadHandler.HandleList))
-	wsRegistry.Register("thread.get", websocket.Handler(threadHandler.HandleGet))
 	wsRegistry.Register("subscribe", websocket.Handler(subscriptionHandler.HandleSubscribe))
 	wsRegistry.Register("unsubscribe", websocket.Handler(subscriptionHandler.HandleUnsubscribe))
 	wsRegistry.Register("subscriptions.list", websocket.Handler(subscriptionHandler.HandleList))

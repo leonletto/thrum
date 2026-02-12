@@ -229,12 +229,9 @@ func GroupMembers(client *Client, opts GroupMembersOptions) (*GroupMembersResult
 
 // ResolveMemberType auto-detects member type from the value and flags.
 // Returns (memberType, memberValue).
-func ResolveMemberType(member string, roleFlag string, groupFlag string) (string, string) {
+func ResolveMemberType(member string, roleFlag string) (string, string) {
 	if roleFlag != "" {
 		return "role", roleFlag
-	}
-	if groupFlag != "" {
-		return "group", groupFlag
 	}
 	// Default: treat as agent, strip @ prefix
 	value := strings.TrimPrefix(member, "@")
