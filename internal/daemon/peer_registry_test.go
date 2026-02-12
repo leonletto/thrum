@@ -16,9 +16,8 @@ func TestPeerRegistry_AddAndGet(t *testing.T) {
 
 	info := &PeerInfo{
 		DaemonID: "d_alice",
-		Hostname: "alice-laptop",
-		FQDN:     "alice-laptop.tailnet.ts.net",
-		Port:     9100,
+		Name:     "alice-laptop",
+		Address:  "alice-laptop.tailnet.ts.net:9100",
 	}
 	if err := reg.AddPeer(info); err != nil {
 		t.Fatalf("AddPeer: %v", err)
@@ -28,11 +27,8 @@ func TestPeerRegistry_AddAndGet(t *testing.T) {
 	if got == nil {
 		t.Fatal("GetPeer returned nil")
 	}
-	if got.Hostname != "alice-laptop" {
-		t.Errorf("Hostname = %q, want %q", got.Hostname, "alice-laptop")
-	}
-	if got.Status != "active" {
-		t.Errorf("Status = %q, want %q", got.Status, "active")
+	if got.Name != "alice-laptop" {
+		t.Errorf("Name = %q, want %q", got.Name, "alice-laptop")
 	}
 }
 
@@ -43,7 +39,7 @@ func TestPeerRegistry_AddRequiresDaemonID(t *testing.T) {
 		t.Fatalf("NewPeerRegistry: %v", err)
 	}
 
-	err = reg.AddPeer(&PeerInfo{Hostname: "test"})
+	err = reg.AddPeer(&PeerInfo{Name: "test"})
 	if err == nil {
 		t.Error("expected error for empty DaemonID")
 	}
@@ -56,8 +52,8 @@ func TestPeerRegistry_ListPeers(t *testing.T) {
 		t.Fatalf("NewPeerRegistry: %v", err)
 	}
 
-	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_a", Hostname: "a", Port: 9100})
-	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_b", Hostname: "b", Port: 9100})
+	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_a", Name: "a", Address: "a:9100"})
+	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_b", Name: "b", Address: "b:9100"})
 
 	peers := reg.ListPeers()
 	if len(peers) != 2 {
@@ -72,7 +68,7 @@ func TestPeerRegistry_RemovePeer(t *testing.T) {
 		t.Fatalf("NewPeerRegistry: %v", err)
 	}
 
-	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_alice", Hostname: "alice", Port: 9100})
+	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_alice", Name: "alice", Address: "alice:9100"})
 	if err := reg.RemovePeer("d_alice"); err != nil {
 		t.Fatalf("RemovePeer: %v", err)
 	}
@@ -82,25 +78,25 @@ func TestPeerRegistry_RemovePeer(t *testing.T) {
 	}
 }
 
-func TestPeerRegistry_UpdateLastSeen(t *testing.T) {
+func TestPeerRegistry_UpdateLastSync(t *testing.T) {
 	dir := t.TempDir()
 	reg, err := NewPeerRegistry(filepath.Join(dir, "peers.json"))
 	if err != nil {
 		t.Fatalf("NewPeerRegistry: %v", err)
 	}
 
-	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_alice", Hostname: "alice", Port: 9100, Status: "stale"})
-	if err := reg.UpdatePeerLastSeen("d_alice"); err != nil {
-		t.Fatalf("UpdatePeerLastSeen: %v", err)
+	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_alice", Name: "alice", Address: "alice:9100"})
+	if err := reg.UpdateLastSync("d_alice"); err != nil {
+		t.Fatalf("UpdateLastSync: %v", err)
 	}
 
 	got := reg.GetPeer("d_alice")
-	if got.Status != "active" {
-		t.Errorf("Status = %q, want %q", got.Status, "active")
+	if got.LastSync.IsZero() {
+		t.Error("LastSync should be updated")
 	}
 
 	// Non-existent peer
-	if err := reg.UpdatePeerLastSeen("d_unknown"); err == nil {
+	if err := reg.UpdateLastSync("d_unknown"); err == nil {
 		t.Error("expected error for unknown peer")
 	}
 }
@@ -112,14 +108,14 @@ func TestPeerRegistry_RemoveStalePeers(t *testing.T) {
 		t.Fatalf("NewPeerRegistry: %v", err)
 	}
 
-	// Add a peer with old LastSeen
-	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_old", Hostname: "old", Port: 9100})
+	// Add a peer with old LastSync
+	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_old", Name: "old", Address: "old:9100"})
 	// Manually set old timestamp
 	reg.mu.Lock()
-	reg.peers["d_old"].LastSeen = time.Now().Add(-2 * time.Hour)
+	reg.peers["d_old"].LastSync = time.Now().Add(-2 * time.Hour)
 	reg.mu.Unlock()
 
-	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_new", Hostname: "new", Port: 9100})
+	_ = reg.AddPeer(&PeerInfo{DaemonID: "d_new", Name: "new", Address: "new:9100"})
 
 	removed := reg.RemoveStalePeers(1 * time.Hour)
 	if removed != 1 {
@@ -143,7 +139,7 @@ func TestPeerRegistry_Persistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPeerRegistry: %v", err)
 	}
-	_ = reg1.AddPeer(&PeerInfo{DaemonID: "d_persist", Hostname: "persist", FQDN: "persist.ts.net", Port: 9100})
+	_ = reg1.AddPeer(&PeerInfo{DaemonID: "d_persist", Name: "persist", Address: "persist.ts.net:9100"})
 
 	// Create a new registry from the same file — should load persisted data
 	reg2, err := NewPeerRegistry(peersFile)
@@ -155,8 +151,8 @@ func TestPeerRegistry_Persistence(t *testing.T) {
 	if got == nil {
 		t.Fatal("peer should be loaded from disk")
 	}
-	if got.FQDN != "persist.ts.net" {
-		t.Errorf("FQDN = %q, want %q", got.FQDN, "persist.ts.net")
+	if got.Address != "persist.ts.net:9100" {
+		t.Errorf("Address = %q, want %q", got.Address, "persist.ts.net:9100")
 	}
 }
 
@@ -173,7 +169,7 @@ func TestPeerRegistry_ConcurrentAccess(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			id := "d_" + string(rune('a'+i%26))
-			_ = reg.AddPeer(&PeerInfo{DaemonID: id, Hostname: id, Port: 9100})
+			_ = reg.AddPeer(&PeerInfo{DaemonID: id, Name: id, Address: id + ":9100"})
 			_ = reg.ListPeers()
 			_ = reg.GetPeer(id)
 		}(i)
@@ -187,14 +183,14 @@ func TestPeerRegistry_ConcurrentAccess(t *testing.T) {
 }
 
 func TestPeerInfo_Addr(t *testing.T) {
-	// With FQDN
-	p := &PeerInfo{Hostname: "alice", FQDN: "alice.tailnet.ts.net", Port: 9100}
+	// Addr() now just returns the Address field
+	p := &PeerInfo{Name: "alice", Address: "alice.tailnet.ts.net:9100"}
 	if got := p.Addr(); got != "alice.tailnet.ts.net:9100" {
 		t.Errorf("Addr = %q, want %q", got, "alice.tailnet.ts.net:9100")
 	}
 
-	// Without FQDN, falls back to Hostname
-	p2 := &PeerInfo{Hostname: "alice", Port: 9100}
+	// Simple hostname:port
+	p2 := &PeerInfo{Name: "alice", Address: "alice:9100"}
 	if got := p2.Addr(); got != "alice:9100" {
 		t.Errorf("Addr = %q, want %q", got, "alice:9100")
 	}

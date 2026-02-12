@@ -430,8 +430,8 @@ func TestPullSyncPeerInfo(t *testing.T) {
 	if info.DaemonID != daemonA.state.DaemonID() {
 		t.Errorf("DaemonID = %q, want %q", info.DaemonID, daemonA.state.DaemonID())
 	}
-	if info.Hostname != "alice" {
-		t.Errorf("Hostname = %q, want %q", info.Hostname, "alice")
+	if info.Name != "alice" {
+		t.Errorf("Name = %q, want %q", info.Name, "alice")
 	}
 }
 

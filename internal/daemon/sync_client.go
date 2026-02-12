@@ -134,9 +134,8 @@ func (c *SyncClient) QueryPeerInfo(peerAddr string) (*PeerInfoResult, error) {
 
 // PeerInfoResult represents peer identity information.
 type PeerInfoResult struct {
-	DaemonID  string `json:"daemon_id"`
-	Hostname  string `json:"hostname"`
-	PublicKey string `json:"public_key"`
+	DaemonID string `json:"daemon_id"`
+	Name     string `json:"name"`
 }
 
 // pullBatch sends a sync.pull request on an existing connection and reads the response.

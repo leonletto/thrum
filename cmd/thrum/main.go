@@ -3804,10 +3804,9 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			for i, p := range infos {
 				peers[i] = rpc.PeerStatus{
 					DaemonID: p.DaemonID,
-					Hostname: p.Hostname,
-					Port:     p.Port,
-					LastSeen: p.LastSeen,
-					Status:   p.Status,
+					Name:     p.Name,
+					Address:  p.Address,
+					LastSync: p.LastSync,
 					LastSeq:  p.LastSeq,
 				}
 			}
@@ -3954,9 +3953,8 @@ func runDaemon(repoPath string, flagLocal bool) error {
 						for i, p := range peers {
 							tsPeers[i] = rpc.TailscalePeer{
 								DaemonID: p.DaemonID,
-								Hostname: p.Hostname,
-								LastSync: p.LastSeen,
-								Status:   p.Status,
+								Name:     p.Name,
+								LastSync: p.LastSync,
 							}
 						}
 						return &rpc.TailscaleSyncInfo{

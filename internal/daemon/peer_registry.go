@@ -3,34 +3,28 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 )
 
-// PeerInfo represents a known sync peer daemon.
+// PeerInfo represents a paired sync peer.
 type PeerInfo struct {
-	DaemonID  string    `json:"daemon_id"`
-	Hostname  string    `json:"hostname"`
-	FQDN      string    `json:"fqdn"`
-	Port      int       `json:"port"`
-	PublicKey string    `json:"public_key,omitempty"` // Ed25519 public key (placeholder — Epic 4)
-	LastSeen  time.Time `json:"last_seen"`
-	Status    string    `json:"status"` // "active", "stale", "offline"
+	Name     string    `json:"name"`
+	Address  string    `json:"address"`
+	DaemonID string    `json:"daemon_id"`
+	Token    string    `json:"token,omitempty"`
+	PairedAt time.Time `json:"paired_at"`
+	LastSync time.Time `json:"last_sync"`
 }
 
-// Addr returns the network address for connecting to this peer (FQDN:Port).
+// Addr returns the network address for connecting to this peer.
 func (p *PeerInfo) Addr() string {
-	host := p.FQDN
-	if host == "" {
-		host = p.Hostname
-	}
-	return fmt.Sprintf("%s:%d", host, p.Port)
+	return p.Address
 }
 
-// PeerRegistry tracks known peer daemons for sync.
+// PeerRegistry tracks paired peer daemons for sync.
 // Thread-safe and persisted to disk.
 type PeerRegistry struct {
 	mu       sync.RWMutex
@@ -56,9 +50,6 @@ func NewPeerRegistry(filePath string) (*PeerRegistry, error) {
 }
 
 // AddPeer adds or updates a peer in the registry and persists to disk.
-// If the peer already exists with a public key and the new key differs,
-// the key change is rejected (TOFU: trust on first use) and an error is returned.
-// Use ForceUpdatePeerKey for manual key rotation after verification.
 func (r *PeerRegistry) AddPeer(info *PeerInfo) error {
 	if info.DaemonID == "" {
 		return fmt.Errorf("peer daemon_id is required")
@@ -67,60 +58,16 @@ func (r *PeerRegistry) AddPeer(info *PeerInfo) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	info.LastSeen = time.Now()
-	if info.Status == "" {
-		info.Status = "active"
+	if info.PairedAt.IsZero() {
+		info.PairedAt = time.Now()
 	}
-
-	// TOFU key pinning: reject public key changes
-	if existing, ok := r.peers[info.DaemonID]; ok {
-		if existing.PublicKey != "" && info.PublicKey != "" && existing.PublicKey != info.PublicKey {
-			log.Printf("[peer_registry] WARNING: Public key change REJECTED for peer %s (daemon_id=%s). "+
-				"Existing key fingerprint differs from new key. "+
-				"If this is a legitimate key rotation, use 'thrum daemon peers trust %s' to update.",
-				info.Hostname, info.DaemonID, info.DaemonID)
-			return fmt.Errorf("public key change rejected for peer %s (TOFU): use ForceUpdatePeerKey for manual rotation", info.DaemonID)
-		}
-		// Preserve existing key if new info doesn't include one
-		if info.PublicKey == "" && existing.PublicKey != "" {
-			info.PublicKey = existing.PublicKey
-		}
-	} else if info.PublicKey != "" {
-		// First time seeing this peer's key — log fingerprint for verification
-		log.Printf("[peer_registry] TOFU: Pinning public key for peer %s (daemon_id=%s): key=%s...",
-			info.Hostname, info.DaemonID, truncateKey(info.PublicKey))
+	if info.LastSync.IsZero() {
+		info.LastSync = time.Now()
 	}
 
 	r.peers[info.DaemonID] = info
 
 	return r.saveLocked()
-}
-
-// ForceUpdatePeerKey updates the public key for a peer, bypassing TOFU protection.
-// Use this for manual key rotation after out-of-band verification.
-func (r *PeerRegistry) ForceUpdatePeerKey(daemonID string, newPublicKey string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	p, ok := r.peers[daemonID]
-	if !ok {
-		return fmt.Errorf("peer %s not found", daemonID)
-	}
-
-	log.Printf("[peer_registry] Public key FORCE UPDATED for peer %s (daemon_id=%s): old=%s... new=%s...",
-		p.Hostname, daemonID, truncateKey(p.PublicKey), truncateKey(newPublicKey))
-	p.PublicKey = newPublicKey
-	p.LastSeen = time.Now()
-
-	return r.saveLocked()
-}
-
-// truncateKey returns the first 16 characters of a key for safe logging.
-func truncateKey(key string) string {
-	if len(key) > 16 {
-		return key[:16]
-	}
-	return key
 }
 
 // GetPeer returns the peer info for the given daemon ID, or nil if not found.
@@ -136,6 +83,24 @@ func (r *PeerRegistry) GetPeer(daemonID string) *PeerInfo {
 	// Return a copy to avoid race conditions
 	copy := *p
 	return &copy
+}
+
+// FindPeerByToken returns the peer with the given auth token, or nil if not found.
+func (r *PeerRegistry) FindPeerByToken(token string) *PeerInfo {
+	if token == "" {
+		return nil
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, p := range r.peers {
+		if p.Token == token {
+			copy := *p
+			return &copy
+		}
+	}
+	return nil
 }
 
 // ListPeers returns a snapshot of all peers.
@@ -160,8 +125,8 @@ func (r *PeerRegistry) RemovePeer(daemonID string) error {
 	return r.saveLocked()
 }
 
-// UpdatePeerLastSeen updates the last seen timestamp for a peer and sets status to active.
-func (r *PeerRegistry) UpdatePeerLastSeen(daemonID string) error {
+// UpdateLastSync updates the last sync timestamp for a peer.
+func (r *PeerRegistry) UpdateLastSync(daemonID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -170,12 +135,11 @@ func (r *PeerRegistry) UpdatePeerLastSeen(daemonID string) error {
 		return fmt.Errorf("peer %s not found", daemonID)
 	}
 
-	p.LastSeen = time.Now()
-	p.Status = "active"
+	p.LastSync = time.Now()
 	return r.saveLocked()
 }
 
-// RemoveStalePeers removes peers whose LastSeen is older than the given timeout.
+// RemoveStalePeers removes peers whose LastSync is older than the given timeout.
 // Returns the number of peers removed.
 func (r *PeerRegistry) RemoveStalePeers(timeout time.Duration) int {
 	r.mu.Lock()
@@ -184,7 +148,7 @@ func (r *PeerRegistry) RemoveStalePeers(timeout time.Duration) int {
 	cutoff := time.Now().Add(-timeout)
 	removed := 0
 	for id, p := range r.peers {
-		if p.LastSeen.Before(cutoff) {
+		if p.LastSync.Before(cutoff) {
 			delete(r.peers, id)
 			removed++
 		}

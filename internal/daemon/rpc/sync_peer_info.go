@@ -7,30 +7,28 @@ import (
 
 // PeerInfoResponse represents the result of a sync.peer_info RPC call.
 type PeerInfoResponse struct {
-	DaemonID  string `json:"daemon_id"`
-	Hostname  string `json:"hostname"`
-	PublicKey string `json:"public_key"` // Placeholder — Epic 4 adds real Ed25519 keys
+	DaemonID string `json:"daemon_id"`
+	Name     string `json:"name"`
 }
 
 // PeerInfoHandler handles the sync.peer_info RPC method.
 type PeerInfoHandler struct {
 	daemonID string
-	hostname string
+	name     string
 }
 
 // NewPeerInfoHandler creates a new sync.peer_info handler.
-func NewPeerInfoHandler(daemonID, hostname string) *PeerInfoHandler {
+func NewPeerInfoHandler(daemonID, name string) *PeerInfoHandler {
 	return &PeerInfoHandler{
 		daemonID: daemonID,
-		hostname: hostname,
+		name:     name,
 	}
 }
 
 // Handle handles a sync.peer_info request.
 func (h *PeerInfoHandler) Handle(_ context.Context, _ json.RawMessage) (any, error) {
 	return PeerInfoResponse{
-		DaemonID:  h.daemonID,
-		Hostname:  h.hostname,
-		PublicKey: "", // Placeholder — Epic 4 will add Ed25519 key exchange
+		DaemonID: h.daemonID,
+		Name:     h.name,
 	}, nil
 }

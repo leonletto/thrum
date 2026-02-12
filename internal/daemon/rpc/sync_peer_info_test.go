@@ -20,11 +20,7 @@ func TestPeerInfoHandler(t *testing.T) {
 	if resp.DaemonID != "d_alice123" {
 		t.Errorf("DaemonID = %q, want %q", resp.DaemonID, "d_alice123")
 	}
-	if resp.Hostname != "alice-laptop" {
-		t.Errorf("Hostname = %q, want %q", resp.Hostname, "alice-laptop")
-	}
-	// PublicKey is placeholder for now
-	if resp.PublicKey != "" {
-		t.Errorf("PublicKey = %q, want empty (placeholder)", resp.PublicKey)
+	if resp.Name != "alice-laptop" {
+		t.Errorf("Name = %q, want %q", resp.Name, "alice-laptop")
 	}
 }

@@ -29,9 +29,8 @@ type TailscaleSyncInfo struct {
 // TailscalePeer represents a peer in the Tailscale sync status.
 type TailscalePeer struct {
 	DaemonID string `json:"daemon_id"`
-	Hostname string `json:"hostname"`
+	Name     string `json:"name"`
 	LastSync string `json:"last_sync"`
-	Status   string `json:"status"`
 }
 
 // TailscaleSyncInfoProvider is called to get current Tailscale sync info.
