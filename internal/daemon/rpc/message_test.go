@@ -1844,3 +1844,154 @@ func TestMessageMarkRead(t *testing.T) {
 		}
 	})
 }
+
+func TestHandleSend_GroupScope(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("create .thrum dir: %v", err)
+	}
+
+	repoID := "r_GROUPSCOPE_TEST"
+	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	t.Setenv("THRUM_ROLE", "coordinator")
+	t.Setenv("THRUM_MODULE", "core")
+
+	agentID := identity.GenerateAgentID(repoID, "coordinator", "core", "")
+	agentHandler := NewAgentHandler(st)
+	registerParams, _ := json.Marshal(RegisterRequest{Role: "coordinator", Module: "core"})
+	if _, err := agentHandler.HandleRegister(context.Background(), registerParams); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+
+	sessionHandler := NewSessionHandler(st)
+	sessionParams, _ := json.Marshal(SessionStartRequest{AgentID: agentID})
+	if _, err := sessionHandler.HandleStart(context.Background(), sessionParams); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	// Create a group
+	groupHandler := NewGroupHandler(st)
+	createReq, _ := json.Marshal(GroupCreateRequest{Name: "reviewers", Description: "Code reviewers"})
+	if _, err := groupHandler.HandleCreate(context.Background(), createReq); err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+
+	handler := NewMessageHandler(st)
+
+	t.Run("send_to_group_stores_group_scope", func(t *testing.T) {
+		sendReq, _ := json.Marshal(SendRequest{
+			Content:       "Please review",
+			Mentions:      []string{"@reviewers"},
+			CallerAgentID: agentID,
+		})
+
+		resp, err := handler.HandleSend(context.Background(), sendReq)
+		if err != nil {
+			t.Fatalf("HandleSend: %v", err)
+		}
+		sendResp := resp.(*SendResponse)
+
+		// Check scopes — should have group scope
+		var scopeType, scopeValue string
+		err = st.DB().QueryRow(
+			"SELECT scope_type, scope_value FROM message_scopes WHERE message_id = ?",
+			sendResp.MessageID,
+		).Scan(&scopeType, &scopeValue)
+		if err != nil {
+			t.Fatalf("query scope: %v", err)
+		}
+		if scopeType != "group" || scopeValue != "reviewers" {
+			t.Errorf("expected scope group:reviewers, got %s:%s", scopeType, scopeValue)
+		}
+
+		// Check refs — should have group ref (not mention ref)
+		var refType, refValue string
+		err = st.DB().QueryRow(
+			"SELECT ref_type, ref_value FROM message_refs WHERE message_id = ?",
+			sendResp.MessageID,
+		).Scan(&refType, &refValue)
+		if err != nil {
+			t.Fatalf("query ref: %v", err)
+		}
+		if refType != "group" || refValue != "reviewers" {
+			t.Errorf("expected ref group:reviewers, got %s:%s", refType, refValue)
+		}
+	})
+
+	t.Run("send_to_non_group_stores_mention_ref", func(t *testing.T) {
+		sendReq, _ := json.Marshal(SendRequest{
+			Content:       "Hey alice",
+			Mentions:      []string{"@alice"},
+			CallerAgentID: agentID,
+		})
+
+		resp, err := handler.HandleSend(context.Background(), sendReq)
+		if err != nil {
+			t.Fatalf("HandleSend: %v", err)
+		}
+		sendResp := resp.(*SendResponse)
+
+		// Should have mention ref, not group scope
+		var refType, refValue string
+		err = st.DB().QueryRow(
+			"SELECT ref_type, ref_value FROM message_refs WHERE message_id = ?",
+			sendResp.MessageID,
+		).Scan(&refType, &refValue)
+		if err != nil {
+			t.Fatalf("query ref: %v", err)
+		}
+		if refType != "mention" || refValue != "alice" {
+			t.Errorf("expected ref mention:alice, got %s:%s", refType, refValue)
+		}
+
+		// No group scopes
+		var scopeCount int
+		err = st.DB().QueryRow(
+			"SELECT COUNT(*) FROM message_scopes WHERE message_id = ? AND scope_type = 'group'",
+			sendResp.MessageID,
+		).Scan(&scopeCount)
+		if err != nil {
+			t.Fatalf("count scopes: %v", err)
+		}
+		if scopeCount != 0 {
+			t.Errorf("expected 0 group scopes, got %d", scopeCount)
+		}
+	})
+
+	t.Run("send_to_everyone_stores_group_scope", func(t *testing.T) {
+		// Create @everyone
+		if err := EnsureEveryoneGroup(st); err != nil {
+			t.Fatalf("ensure everyone: %v", err)
+		}
+
+		sendReq, _ := json.Marshal(SendRequest{
+			Content:       "Hello everyone",
+			Mentions:      []string{"@everyone"},
+			CallerAgentID: agentID,
+		})
+
+		resp, err := handler.HandleSend(context.Background(), sendReq)
+		if err != nil {
+			t.Fatalf("HandleSend: %v", err)
+		}
+		sendResp := resp.(*SendResponse)
+
+		var scopeType, scopeValue string
+		err = st.DB().QueryRow(
+			"SELECT scope_type, scope_value FROM message_scopes WHERE message_id = ?",
+			sendResp.MessageID,
+		).Scan(&scopeType, &scopeValue)
+		if err != nil {
+			t.Fatalf("query scope: %v", err)
+		}
+		if scopeType != "group" || scopeValue != "everyone" {
+			t.Errorf("expected scope group:everyone, got %s:%s", scopeType, scopeValue)
+		}
+	})
+}
