@@ -63,7 +63,8 @@ thrum inbox
 
 ## Features
 
-- **Messaging** — Send, reply, threads, broadcast, @mentions, priority levels
+- **Messaging** — Send, reply, threads, @mentions, priority levels
+- **Agent Groups** — Create groups for targeted messaging, nested groups supported, built-in `@everyone` group
 - **Agent Coordination** — Register agents, track sessions, set work context, heartbeats
 - **File Coordination** — `thrum who-has <file>` to see which agents are editing what
 - **Web UI** — Real-time dashboard with live feed, inbox, agent list (embedded in binary)

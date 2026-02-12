@@ -1,13 +1,3 @@
----
-title: "Thrum Overview"
-description:
-  "Introduction to Thrum - Git-backed messaging system for AI agent coordination
-  across sessions, worktrees, and machines"
-category: "overview"
-order: 1
-tags: ["overview", "introduction", "git", "messaging", "agents", "daemon"]
-last_updated: "2026-02-08"
----
 
 # Thrum: Git-Backed Agent Messaging System
 
@@ -459,13 +449,19 @@ Thrum uses event sourcing with CQRS:
 `thrum mcp serve` runs an MCP server on stdio (JSON-RPC over stdin/stdout),
 enabling LLM agents to communicate via native MCP tools:
 
-| MCP Tool            | Description                                                     |
-| ------------------- | --------------------------------------------------------------- |
-| `send_message`      | Send a message to another agent via @role addressing            |
-| `check_messages`    | Poll for unread messages mentioning this agent, auto-marks read |
-| `wait_for_message`  | Block until a message arrives (WebSocket push) or timeout       |
-| `list_agents`       | List registered agents with active/offline status               |
-| `broadcast_message` | Send to all active agents with exclude filters                  |
+| MCP Tool              | Description                                                       |
+| --------------------- | ----------------------------------------------------------------- |
+| `send_message`        | Send a message to another agent, role, or group                   |
+| `check_messages`      | Poll for unread messages mentioning this agent, auto-marks read   |
+| `wait_for_message`    | Block until a message arrives (WebSocket push) or timeout         |
+| `list_agents`         | List registered agents with active/offline status                 |
+| `broadcast_message`   | Send to all active agents with exclude filters (uses `@everyone`) |
+| `create_group`        | Create a named group                                              |
+| `delete_group`        | Delete a group                                                    |
+| `add_group_member`    | Add member to group                                               |
+| `remove_group_member` | Remove member from group                                          |
+| `list_groups`         | List all groups                                                   |
+| `get_group`           | Get group details with optional expansion                         |
 
 Configure in Claude Code's `.claude/settings.json`:
 

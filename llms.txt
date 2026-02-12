@@ -152,6 +152,29 @@ All commands accept these flags:
   thrum subscriptions
     List active subscriptions for current session.
 
+### Groups
+
+  thrum group create NAME [--description TEXT]
+    Create a named group.
+
+  thrum group delete NAME
+    Delete a group (cannot delete @everyone).
+
+  thrum group add GROUP MEMBER
+    Add member to group (auto-detects: @agent, --role, --group).
+
+  thrum group remove GROUP MEMBER
+    Remove member from group.
+
+  thrum group list [--json]
+    List all groups.
+
+  thrum group info NAME [--json]
+    Show group details.
+
+  thrum group members NAME [--expand] [--json]
+    List group members (--expand resolves nested groups/roles to agent IDs).
+
 ### Coordination
 
   thrum who-has FILE
@@ -219,6 +242,7 @@ All commands accept these flags:
   Role        Agent's function (e.g., implementer, reviewer, planner).
   Module      Component the agent is responsible for (e.g., auth, db, ui).
   Thread      A named conversation grouping messages.
+  Group       Named collection of agents, roles, or other groups for targeted messaging.
   Scope       Routing metadata on messages (format: type:value, e.g., module:auth).
   Ref         Reference metadata (format: type:value, e.g., pr:42, mention:reviewer).
   Mention     Tag another agent by role: @role. Stored as ref type "mention".
@@ -236,7 +260,13 @@ All commands accept these flags:
     check_messages    Poll for unread messages mentioning this agent, auto-marks read
     wait_for_message  Block until a message arrives (WebSocket push) or timeout
     list_agents       List registered agents with active/offline status
-    broadcast_message Send to all active agents with exclude filters
+    broadcast_message Send to all active agents with exclude filters (uses @everyone)
+    create_group      Create a named group
+    delete_group      Delete a group
+    add_group_member  Add member to group
+    remove_group_member Remove member from group
+    list_groups       List all groups
+    get_group         Get group details (supports expand=true for nested resolution)
 
 ## Daemon
 

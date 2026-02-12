@@ -34,9 +34,10 @@ Multi-agent coordination system for persistent messaging across sessions and wor
 - Multiple agents need to communicate
 - Working across different worktrees or machines
 - Requesting code reviews or assigning tasks
+- Sending messages to teams via groups
 - Broadcasting status updates to the team
 
-Key commands: `thrum quickstart`, `thrum send`, `thrum inbox`, `thrum status`
+Key commands: `thrum quickstart`, `thrum send`, `thrum inbox`, `thrum group`, `thrum status`
 
 ### `message-listener.md`
 Background sub-agent that polls for incoming Thrum messages and notifies you when they arrive. Designed to run on Haiku model for cost efficiency (~$0.00003/cycle).

@@ -1,13 +1,3 @@
----
-title: "Foundation Architecture"
-description:
-  "Core packages powering Thrum - configuration, identity generation, JSONL
-  storage, SQLite schema, and event projection"
-category: "development"
-order: 1
-tags: ["architecture", "foundation", "packages", "identity", "jsonl", "sqlite"]
-last_updated: "2026-02-10"
----
 
 # Thrum Foundation Architecture
 
@@ -296,12 +286,14 @@ session_scopes      # Session context scopes
 session_refs        # Session context references
 subscriptions       # Push notification subscriptions
 agent_work_contexts # Live git state per session
+groups              # Named collections for targeted messaging
+group_members       # Group membership (agents, roles, nested groups)
 schema_version      # Migration tracking
 ```
 
 ### Schema Version
 
-Current version: **7**
+Current version: **8**
 
 Key migrations:
 
@@ -309,6 +301,7 @@ Key migrations:
 - v5 -> v6: Agent work contexts table, message reads, session scopes/refs
 - v6 -> v7: Event ID backfill (ULID `event_id` on all JSONL events), JSONL
   sharding migration
+- v7 -> v8: Groups feature (`groups` and `group_members` tables), `@everyone` built-in group
 
 ### Initialization
 
@@ -379,6 +372,8 @@ ordering.
 | `message.edit`        | Update body_content, updated_at, record edit history |
 | `message.delete`      | Set deleted=1, deleted_at, delete_reason             |
 | `thread.create`       | Insert into threads                                  |
+| `group.create`        | Insert into groups                                   |
+| `group.delete`        | Delete group and members                             |
 | `agent.register`      | Insert/replace agent                                 |
 | `agent.update`        | Merge work contexts for agent                        |
 | `agent.session.start` | Insert session                                       |
@@ -398,6 +393,8 @@ Shared Go structs for all event types:
 - `MessageEditEvent` - Message body edit
 - `MessageDeleteEvent` - Soft delete with reason
 - `ThreadCreateEvent` - Thread creation
+- `GroupCreateEvent` - Group creation with name and description
+- `GroupDeleteEvent` - Group deletion
 - `AgentRegisterEvent` - Agent registration (kind: "agent" or "user")
 - `AgentUpdateEvent` - Agent work context updates
 - `AgentCleanupEvent` - Agent cleanup/deletion

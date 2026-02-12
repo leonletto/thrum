@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - Unreleased
+
+### Added
+
+#### Agent Groups
+
+Named groups for organizing agents and targeting messages. Groups support nested
+membership (groups containing other groups) with automatic cycle detection.
+
+- `thrum group create|delete|add|remove|list|info|members` CLI commands
+- Auto-detection of member type (`@alice` = agent, `--role` = role, `--group` =
+  group)
+- `@everyone` built-in group auto-created on daemon startup
+- Recursive group resolution via SQL recursive CTE for inbox queries
+- Nested group support with cycle detection
+- JSON output via `--json` flag on all group commands
+- Schema migration v7 to v8 with `groups` and `group_members` tables
+
+#### MCP Group Tools
+
+Six new MCP tools for group management in native agent workflows.
+
+- `create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
+  `list_groups`, `get_group`
+- `get_group` supports `expand=true` to resolve nested groups and roles to agent
+  IDs
+
+### Changed
+
+- `--broadcast` flag on `thrum send` now maps to `--to @everyone` with a
+  deprecation notice
+- `broadcast_message` MCP tool simplified to send via `@everyone` group
+
 ## [0.3.1] - 2026-02-11
 
 ### Added

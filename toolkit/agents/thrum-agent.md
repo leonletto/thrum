@@ -215,6 +215,31 @@ Threads group related messages:
 - **List** - `thrum thread list`
 - **Show** - `thrum thread show <thread-id>`
 
+### Groups
+
+Groups enable sending messages to collections of agents:
+
+- **Built-in @everyone** - Auto-created group containing all agents
+- **Custom groups** - Create groups for teams, roles, or projects
+- **Member types** - Groups can contain agents (`@alice`), roles (`--role planner`), or other groups (`--group team`)
+- **Nesting** - Groups can contain other groups (with cycle detection)
+- **Pull model** - Group membership resolved at read time (receivers query)
+
+**Group examples:**
+
+```bash
+# Create team group
+thrum group create backend-team
+
+# Add members
+thrum group add backend-team @alice       # Add specific agent
+thrum group add backend-team --role implementer  # Add all with role
+thrum group add leads --group backend-team      # Nest groups
+
+# Send to group
+thrum send "Team meeting at 3pm" --to @backend-team
+```
+
 ### Work Context
 
 Agents can track what they're working on:
@@ -360,6 +385,40 @@ thrum quickstart --name feature_agent --role implementer --module feature --inte
 thrum inbox
 ```
 
+### Workflow 5: Team Groups
+
+**Coordinator sets up groups:**
+
+```bash
+# Create team groups
+thrum group create backend-team --description "Backend developers"
+thrum group create frontend-team --description "Frontend developers"
+thrum group create leads --description "Team leads"
+
+# Add members by role
+thrum group add backend-team --role implementer
+thrum group add frontend-team --role implementer
+
+# Add specific agents to leads
+thrum group add leads @coordinator
+thrum group add leads @senior-dev
+
+# Nest groups (leads includes both teams)
+thrum group add leads --group backend-team
+thrum group add leads --group frontend-team
+
+# Send to entire team
+thrum send "Sprint planning meeting at 2pm" --to @backend-team
+```
+
+**Agent receives group message:**
+
+```bash
+# Messages to groups show up in inbox
+thrum inbox --unread
+# Output includes: "Sprint planning meeting at 2pm" (from @coordinator to @backend-team)
+```
+
 ## MCP Server Integration (DETAILED)
 
 ### Message Listener Pattern
@@ -476,10 +535,63 @@ const agents = await mcp.thrum.list_agents({
 **broadcast_message:**
 
 ```typescript
+// DEPRECATED: Use send_message with to="@everyone" instead
 await mcp.thrum.broadcast_message({
   content: "Deploy complete",
   priority: "normal",
-  exclude: ["@system"], // Optional: agents to exclude
+});
+
+// PREFERRED: Send to @everyone group
+await mcp.thrum.send_message({
+  to: "@everyone",
+  content: "Deploy complete",
+  priority: "normal",
+});
+```
+
+**Group Management Tools:**
+
+```typescript
+// Create a group
+await mcp.thrum.create_group({
+  name: "backend-team",
+  description: "Backend developers",
+});
+
+// Add members (auto-detects type: agent, role, or group)
+await mcp.thrum.add_group_member({
+  group: "backend-team",
+  member: "@alice", // Add specific agent
+});
+
+await mcp.thrum.add_group_member({
+  group: "backend-team",
+  member: "--role implementer", // Add all agents with role
+});
+
+await mcp.thrum.add_group_member({
+  group: "leads",
+  member: "--group backend-team", // Add another group (nesting)
+});
+
+// Remove member
+await mcp.thrum.remove_group_member({
+  group: "backend-team",
+  member: "@alice",
+});
+
+// List all groups
+const groups = await mcp.thrum.list_groups();
+
+// Get group details (with expansion to agent IDs)
+const group = await mcp.thrum.get_group({
+  name: "backend-team",
+  expand: true, // Resolves nested groups/roles to agent IDs
+});
+
+// Delete a group
+await mcp.thrum.delete_group({
+  name: "old-team",
 });
 ```
 
@@ -505,7 +617,8 @@ thrum status
 
 ```bash
 thrum send "message" --to @name [--priority normal]
-thrum send "message" --broadcast
+thrum send "message" --to @groupname            # Send to group
+thrum send "message" --broadcast                # DEPRECATED: use --to @everyone
 thrum inbox [--unread]                          # Auto-excludes own messages, marks displayed as read
 thrum reply <msg-id> "response"
 thrum message get <msg-id>
@@ -513,6 +626,18 @@ thrum message edit <msg-id> "new-text"
 thrum message delete <msg-id>
 thrum message read <msg-id> [<msg-id>...]       # Mark specific messages as read
 thrum message read --all                         # Mark all unread messages as read
+```
+
+**Groups:**
+
+```bash
+thrum group create <name> [--description "text"]
+thrum group delete <name>
+thrum group add <group> <member>                # Auto-detects: @alice = agent, --role planner = role, --group team = group
+thrum group remove <group> <member>
+thrum group list [--json]
+thrum group info <name> [--json]
+thrum group members <name> [--expand] [--json]  # --expand resolves nested groups/roles to agent IDs
 ```
 
 **Threads:**
@@ -615,10 +740,11 @@ bd sync
 - **Handle priorities** - Respect critical/high/normal/low
 - **Send status updates** - Keep team informed
 - **Use @mentions** - Reference agents by name
+- **Use groups for team messaging** - Create groups for common recipient sets
 - **Include context** - Beads IDs, file paths, commit hashes
 - **End sessions** - Run `thrum session end` when done
 - **Set clear intents** - Describe what you're working on
-- **Broadcast milestones** - Share important progress with team
+- **Send to @everyone for broadcasts** - Use @everyone group instead of --broadcast flag
 
 ### DON'T ❌
 
@@ -630,6 +756,8 @@ bd sync
 - **Don't skip registration** - System won't route messages correctly
 - **Don't leave sessions open** - End when done to avoid stale status
 - **Don't use vague intents** - Be specific about current work
+- **Don't use --broadcast flag** - Deprecated, use `--to @everyone` instead
+- **Don't delete @everyone group** - It's protected and auto-created
 
 ## Common Patterns
 
@@ -897,12 +1025,18 @@ thrum quickstart --name <name> --role <role> --module <module> --intent "<descri
 
 # Send messages
 thrum send "message" --to @name                # Direct message
-thrum send "message" --broadcast               # Broadcast
+thrum send "message" --to @groupname           # Send to group
+thrum send "message" --to @everyone            # Send to all agents
 thrum reply <msg-id> "response"                # Reply in thread
 
 # Check messages
 thrum inbox                                    # View inbox (auto-excludes own messages)
 thrum inbox --unread                          # Only unread (marks displayed as read)
+
+# Groups
+thrum group create <name>                      # Create group
+thrum group add <group> <member>               # Add member (@agent, --role role, --group group)
+thrum group list                               # List all groups
 
 # Coordination
 thrum who-has <file>                          # Check file ownership
@@ -938,6 +1072,7 @@ Thrum provides:
 - ✅ **Multi-agent coordination** - Real-time communication between agents
 - ✅ **MCP Server integration** - Native tools with async notifications
 - ✅ **Message listener pattern** - Get notified when messages arrive
+- ✅ **Groups** - Send to teams, roles, or collections of agents
 - ✅ **Worktree support** - Agents in different worktrees can communicate
 - ✅ **Context preservation** - Messages survive conversation compaction
 - ✅ **Work context tracking** - See who's working on what files
@@ -973,7 +1108,9 @@ thrum session end
 
 ---
 
-**Version:** 1.2 **Last Updated:** 2026-02-09 **Status:** Production-Ready
+**Version:** 1.3 **Last Updated:** 2026-02-11 **Status:** Production-Ready
+
+**Changes in v1.3:** Agent Groups feature added — `thrum group create/add/remove/list/info/members`, 6 new MCP tools (`create_group`, `delete_group`, `add_group_member`, `remove_group_member`, `list_groups`, `get_group`). Built-in `@everyone` group for broadcasts. `--broadcast` flag deprecated in favor of `--to @everyone`. Groups support nesting (groups can contain other groups/roles) with cycle detection.
 
 **Changes in v1.2:** `thrum wait --mention` fixed — maps to `mention_role` RPC
 param, strips `@` prefix. Added `thrum message read --all` for batch

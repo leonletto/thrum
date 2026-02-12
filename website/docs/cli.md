@@ -1,13 +1,3 @@
----
-title: "CLI Reference"
-description:
-  "Complete command-line reference for thrum - messaging, sessions, threads,
-  sync, daemon control, and MCP server"
-category: "cli"
-order: 1
-tags: ["cli", "commands", "reference", "terminal", "usage"]
-last_updated: "2026-02-10"
----
 
 # Thrum CLI Reference
 
@@ -52,11 +42,17 @@ messaging system for AI agent coordination.
 | `thrum session set-intent` | Set session work intent                              |
 | `thrum session set-task`   | Set current task identifier                          |
 | `thrum context save`       | Save agent context from file or stdin                |
-| `thrum context show`       | Show agent context (with preamble by default)        |
-| `thrum context clear`      | Clear agent context (preamble preserved)             |
-| `thrum context preamble`   | Show or manage agent preamble                        |
+| `thrum context show`       | Show agent context                                   |
+| `thrum context clear`      | Clear agent context                                  |
 | `thrum context sync`       | Sync context to a-sync branch                        |
 | `thrum context update`     | Install/update the /update-context skill             |
+| `thrum group create`       | Create a named group                                 |
+| `thrum group delete`       | Delete a group                                       |
+| `thrum group add`          | Add member to a group                                |
+| `thrum group remove`       | Remove member from a group                           |
+| `thrum group list`         | List all groups                                      |
+| `thrum group info`         | Show group details                                   |
+| `thrum group members`      | List group members                                   |
 | `thrum who-has`            | Check which agents are editing a file                |
 | `thrum ping`               | Check if an agent is online                          |
 | `thrum subscribe`          | Subscribe to push notifications                      |
@@ -84,7 +80,6 @@ Available on all commands:
 | `--quiet`   | Suppress non-essential output            | `false` |
 | `--verbose` | Debug output                             | `false` |
 
----
 
 ## Core Commands
 
@@ -109,7 +104,6 @@ Example:
       Created: a-sync branch for message sync
       Updated: .gitignore
 
----
 
 ### thrum setup
 
@@ -130,7 +124,6 @@ Example:
     Connected to daemon
     ✓ Thrum worktree setup complete
 
----
 
 ### thrum migrate
 
@@ -141,7 +134,6 @@ detects what needs migration and skips steps that are already done.
 
     thrum migrate
 
----
 
 ### thrum quickstart
 
@@ -175,7 +167,6 @@ Example:
     ✓ Session started: ses_01HXF2A9...
     ✓ Intent set: Fixing token refresh
 
----
 
 ### thrum overview
 
@@ -199,7 +190,6 @@ Example:
     Inbox: 3 unread (12 total)
     Sync: ✓ synced
 
----
 
 ### thrum status
 
@@ -223,7 +213,6 @@ Example:
     Daemon:   running (2h15m uptime, v0.1.0)
     WebSocket: ws://localhost:9999
 
----
 
 ## Messaging
 
@@ -234,10 +223,10 @@ have an active session.
 
     thrum send MESSAGE [flags]
 
-| Flag                | Description                                             | Default    |
-| ------------------- | ------------------------------------------------------- | ---------- |
-| `--to`              | Direct recipient (format: `@role` or `@name`)           |            |
-| `--broadcast`, `-b` | Send as broadcast to all agents (no specific recipient) | `false`    |
+| Flag                | Description                                                                    | Default    |
+| ------------------- | ------------------------------------------------------------------------------ | ---------- |
+| `--to`              | Direct recipient (format: `@role`, `@name`, or `@groupname`)                  |            |
+| `--broadcast`, `-b` | Send as broadcast to all agents (deprecated: use `--to @everyone` instead)    | `false`    |
 | `--scope`           | Add scope (repeatable, format: `type:value`)            |            |
 | `--ref`             | Add reference (repeatable, format: `type:value`)        |            |
 | `--mention`         | Mention a role (repeatable, format: `@role`)            |            |
@@ -247,7 +236,10 @@ have an active session.
 | `--format`          | Message format (`markdown`, `plain`, `json`)            | `markdown` |
 
 The `--to` flag adds the recipient as a mention, making it a directed message.
+Recipients can be agents (`@alice`), roles (`@reviewer`), or groups (`@everyone`, `@backend`).
 The `--broadcast` and `--to` flags are mutually exclusive.
+
+The `--broadcast` flag is deprecated. Use `--to @everyone` instead to send to all agents.
 
 Example:
 
@@ -256,11 +248,14 @@ Example:
       Thread: thr_01HXE8A2...
       Created: 2026-02-03T10:00:00Z
 
-    # Broadcast to all agents
-    $ thrum send "Deploy complete" --broadcast
+    # Send to all agents via @everyone group
+    $ thrum send "Deploy complete" --to @everyone
     ✓ Message sent: msg_01HXE8Z8...
 
----
+    # Send to a custom group
+    $ thrum send "Backend review needed" --to @backend
+    ✓ Message sent: msg_01HXE8Z9...
+
 
 ### thrum reply
 
@@ -279,7 +274,6 @@ Example:
     ✓ Reply sent: msg_01HXE9A3...
       Thread: thr_01HXE8A2...
 
----
 
 ### thrum inbox
 
@@ -310,7 +304,6 @@ Example:
     └──────────────────────────────────────────────────────────┘
     Showing 1-2 of 12 messages (5 unread)
 
----
 
 ### thrum message get
 
@@ -331,7 +324,6 @@ Example:
 
     We should refactor the sync daemon before adding embeddings.
 
----
 
 ### thrum message edit
 
@@ -345,7 +337,6 @@ Example:
     $ thrum message edit msg_01HXE8Z7 "Updated: refactor sync daemon first"
     ✓ Message edited: msg_01HXE8Z7 (version 2)
 
----
 
 ### thrum message delete
 
@@ -362,7 +353,6 @@ Example:
     $ thrum message delete msg_01HXE8Z7 --force
     ✓ Message deleted: msg_01HXE8Z7
 
----
 
 ### thrum message read
 
@@ -383,7 +373,6 @@ Example:
     $ thrum message read --all
     ✓ Marked 7 messages as read
 
----
 
 ## Threads
 
@@ -407,7 +396,6 @@ Example:
       Created by: implementer_35HV62T9B9
       Message:    msg_01HXE8Y3...
 
----
 
 ### thrum thread list
 
@@ -431,7 +419,6 @@ Example:
 
     Showing 1-2 of 2 threads
 
----
 
 ### thrum thread show
 
@@ -460,7 +447,6 @@ Example:
     └─────────────────────────────────────────────────────────────────┘
     Showing 1-2 of 2 messages
 
----
 
 ## Identity & Sessions
 
@@ -514,7 +500,6 @@ Example:
     $ thrum --role=implementer --module=auth agent register --name furiosa --display "Auth Developer"
     ✓ Agent registered: furiosa
 
----
 
 ### thrum agent list
 
@@ -555,7 +540,6 @@ Example (context table):
     ────────────────────────────────────────────────────────────────────────────────────────────────────────
     @implementer   ses_01HXF... feature/auth               3      5 Fixing token refresh           5m ago
 
----
 
 ### thrum agent whoami
 
@@ -577,7 +561,6 @@ Example:
     Source:    environment
     Session:   ses_01HXF2A9... (2h ago)
 
----
 
 ### thrum agent context
 
@@ -612,7 +595,6 @@ Example (single agent detail):
     Uncommitted: 1
       internal/auth/refresh.go
 
----
 
 ### thrum agent delete
 
@@ -628,7 +610,6 @@ Example:
     Delete agent 'furiosa' and all associated data? [y/N] y
     ✓ Agent deleted: furiosa
 
----
 
 ### thrum agent cleanup
 
@@ -658,7 +639,6 @@ Example:
     ✓ Deleted reviewer_8KBN...
     ✓ Deleted 2 orphaned agent(s)
 
----
 
 ### thrum agent start
 
@@ -667,7 +647,6 @@ must be registered first.
 
     thrum agent start
 
----
 
 ### thrum agent end
 
@@ -680,7 +659,6 @@ End the current session. This is an alias for `thrum session end`.
 | `--reason`     | End reason (`normal`, `crash`)          | `normal` |
 | `--session-id` | Session ID to end (defaults to current) |          |
 
----
 
 ### thrum agent set-intent
 
@@ -694,7 +672,6 @@ Example:
     $ thrum agent set-intent "Fixing memory leak in connection pool"
     ✓ Intent set: Fixing memory leak in connection pool
 
----
 
 ### thrum agent set-task
 
@@ -708,7 +685,6 @@ Example:
     $ thrum agent set-task beads:thrum-42
     ✓ Task set: beads:thrum-42
 
----
 
 ### thrum agent heartbeat
 
@@ -725,7 +701,6 @@ agent's last-seen time.
 | `--add-ref`      | Add ref (repeatable, format: `type:value`)      |         |
 | `--remove-ref`   | Remove ref (repeatable, format: `type:value`)   |         |
 
----
 
 ### thrum session start
 
@@ -741,7 +716,6 @@ Example:
       Agent:      implementer_35HV62T9B9
       Started:    2026-02-03 10:00:00
 
----
 
 ### thrum session end
 
@@ -761,7 +735,6 @@ Example:
       Ended:      2026-02-03 12:00:00
       Duration:   2h
 
----
 
 ### thrum session list
 
@@ -786,7 +759,6 @@ Example:
     Sessions (1):
       ses_01HXF2A9  implementer_35HV  active  2h ago   Fixing token refresh
 
----
 
 ### thrum session heartbeat
 
@@ -808,7 +780,6 @@ Example:
     ✓ Heartbeat sent: ses_01HXF2A9...
       Context: branch: feature/auth, 3 commits, 5 files
 
----
 
 ### thrum session set-intent
 
@@ -823,7 +794,6 @@ Example:
     $ thrum session set-intent "Refactoring login flow"
     ✓ Intent set: Refactoring login flow
 
----
 
 ### thrum session set-task
 
@@ -838,7 +808,160 @@ Example:
     $ thrum session set-task beads:thrum-42
     ✓ Task set: beads:thrum-42
 
----
+
+## Groups
+
+### thrum group create
+
+Create a named group for targeted messaging. Groups can contain agents, roles, or other groups (nested).
+
+    thrum group create NAME [flags]
+
+| Flag            | Description                       | Default |
+| --------------- | --------------------------------- | ------- |
+| `--description` | Human-readable group description  |         |
+
+The `@everyone` group is created automatically on daemon startup and includes all agents.
+
+Example:
+
+    $ thrum group create reviewers --description "Code review team"
+    ✓ Group created: reviewers
+
+    $ thrum group create backend --description "Backend developers"
+    ✓ Group created: backend
+
+
+### thrum group delete
+
+Delete a group by name. The `@everyone` group is protected and cannot be deleted.
+
+    thrum group delete NAME
+
+Example:
+
+    $ thrum group delete reviewers
+    ✓ Group deleted: reviewers
+
+    $ thrum group delete @everyone
+    ✗ Cannot delete protected group: @everyone
+
+
+### thrum group add
+
+Add a member to a group. Members can be agents, roles, or other groups. The command auto-detects the member type based on format.
+
+    thrum group add GROUP MEMBER
+
+**Member types:**
+
+- `@alice` or `alice` — Specific agent by name
+- `--role planner` — All agents with role "planner"
+- `--group team` — Nested group reference
+
+Example:
+
+    # Add specific agent
+    $ thrum group add reviewers @alice
+    ✓ Added agent alice to group reviewers
+
+    # Add all agents with a role
+    $ thrum group add reviewers --role reviewer
+    ✓ Added role reviewer to group reviewers
+
+    # Add another group (nested)
+    $ thrum group add backend --group reviewers
+    ✓ Added group reviewers to group backend
+
+
+### thrum group remove
+
+Remove a member from a group.
+
+    thrum group remove GROUP MEMBER
+
+Uses the same member detection as `group add`.
+
+Example:
+
+    $ thrum group remove reviewers @alice
+    ✓ Removed agent alice from group reviewers
+
+
+### thrum group list
+
+List all groups in the system.
+
+    thrum group list
+
+Example:
+
+    $ thrum group list
+    Groups (3):
+
+    @everyone
+      Description: All registered agents
+      Members:     (implicit - all agents)
+      Created:     2026-02-09 10:00:00
+
+    reviewers
+      Description: Code review team
+      Members:     2
+      Created:     2026-02-09 10:15:00
+
+    backend
+      Description: Backend developers
+      Members:     1 group, 3 agents
+      Created:     2026-02-09 10:20:00
+
+
+### thrum group info
+
+Show detailed information about a specific group.
+
+    thrum group info NAME
+
+Example:
+
+    $ thrum group info reviewers
+    Group: reviewers
+      Description: Code review team
+      Created:     2026-02-09 10:15:00
+      Created by:  alice
+      Members:     2
+
+      Members:
+        - @alice (agent)
+        - reviewer (role)
+
+
+### thrum group members
+
+List members of a group. Use `--expand` to recursively resolve nested groups and roles to individual agent IDs.
+
+    thrum group members NAME [flags]
+
+| Flag       | Description                                                 | Default |
+| ---------- | ----------------------------------------------------------- | ------- |
+| `--expand` | Resolve nested groups/roles to agent IDs (recursive)       | `false` |
+
+Without `--expand`, shows direct members (agents, roles, groups). With `--expand`, recursively resolves to a flat list of agent IDs.
+
+Example:
+
+    # Show direct members
+    $ thrum group members reviewers
+    Members of reviewers (2):
+      - @alice (agent)
+      - reviewer (role)
+
+    # Expand to agent IDs
+    $ thrum group members reviewers --expand
+    Resolved members of reviewers (3 agents):
+      - alice
+      - bob
+      - charlie
+
 
 ## Coordination
 
@@ -858,7 +981,6 @@ Example:
     $ thrum who-has unknown.go
     No agents are currently editing unknown.go
 
----
 
 ### thrum ping
 
@@ -879,7 +1001,6 @@ Example:
     $ thrum ping planner
     @planner: offline (last seen 3h ago)
 
----
 
 ## Context Management
 
@@ -904,47 +1025,35 @@ Example:
     $ echo "Working on auth module" | thrum context save
     ✓ Context saved for furiosa (24 bytes)
 
----
 
 ### thrum context show
 
-Display the saved context for the current agent. By default, includes the
-preamble (stable header) followed by the session context.
+Display the saved context for the current agent.
 
     thrum context show [flags]
 
-| Flag              | Description                                         | Default |
-| ----------------- | --------------------------------------------------- | ------- |
-| `--agent`         | Override agent name (defaults to current identity)  |         |
-| `--raw`           | No header, file boundary markers for piping         | `false` |
-| `--no-preamble`   | Exclude preamble from output                        | `false` |
+| Flag      | Description                                         | Default |
+| --------- | --------------------------------------------------- | ------- |
+| `--agent` | Override agent name (defaults to current identity) |         |
+| `--raw`   | Output raw content without decoration               | `false` |
 
 Example:
 
     $ thrum context show
-    # Context for furiosa (1234 bytes, updated 2026-02-11T10:00:00Z)
-
-    ## Thrum Quick Reference
-    ...
+    Context for furiosa (1.2 KB, updated 5m ago):
 
     # Current Work
     - Implementing JWT token refresh
+    - Investigating rate limiting bug
 
-    # Raw output with file boundaries
-    $ thrum context show --raw
+    # Get raw output
+    $ thrum context show --raw > backup.md
 
-    # Context only, no preamble
-    $ thrum context show --no-preamble
-
-    # Raw context only (for piping)
-    $ thrum context show --raw --no-preamble > backup.md
-
----
 
 ### thrum context clear
 
 Remove the context file for the current agent. Idempotent — running clear when
-no context exists is a no-op. The preamble is preserved.
+no context exists is a no-op.
 
     thrum context clear [flags]
 
@@ -957,7 +1066,6 @@ Example:
     $ thrum context clear
     ✓ Context cleared for furiosa
 
----
 
 ### thrum context sync
 
@@ -985,37 +1093,6 @@ Example:
     ✓ Context synced for furiosa
       Committed and pushed to a-sync branch
 
----
-
-### thrum context preamble
-
-Show or manage the preamble for the current agent. The preamble is a stable,
-user-editable header that persists across context saves.
-
-    thrum context preamble [flags]
-
-| Flag       | Description                                         | Default  |
-| ---------- | --------------------------------------------------- | -------- |
-| `--agent`  | Override agent name (defaults to current identity)  |          |
-| `--init`   | Create or reset to default preamble                |          |
-| `--file`   | Set preamble from file                              |          |
-
-Example:
-
-    # Show current preamble
-    $ thrum context preamble
-
-    # Create/reset to default
-    $ thrum context preamble --init
-    Preamble saved for furiosa (256 bytes)
-
-    # Set from custom file
-    $ thrum context preamble --file my-preamble.md
-
-The preamble is auto-created with default content on the first
-`thrum context save`.
-
----
 
 ### thrum context update
 
@@ -1033,7 +1110,6 @@ Example:
 
     Restart Claude Code to load the skill.
 
----
 
 ## Notifications
 
@@ -1057,7 +1133,6 @@ Example:
       Session:    ses_01HXF2A9...
       Created:    2026-02-03 10:00:00
 
----
 
 ### thrum unsubscribe
 
@@ -1070,7 +1145,6 @@ Example:
     $ thrum unsubscribe 42
     ✓ Subscription #42 removed
 
----
 
 ### thrum subscriptions
 
@@ -1093,7 +1167,6 @@ Example:
     │  Created:    2026-02-03 10:05:00 (1h55m ago)
     └─
 
----
 
 ### thrum wait
 
@@ -1102,13 +1175,11 @@ and hooks.
 
     thrum wait [flags]
 
-| Flag        | Description                                                    | Default            |
-| ----------- | -------------------------------------------------------------- | ------------------ |
-| `--timeout` | Max wait time (e.g., `30s`, `5m`, `1h`)                        | `30s`              |
-| `--scope`   | Filter by scope (format: `type:value`)                         |                    |
-| `--mention` | Wait for mentions of role (format: `@role`)                    |                    |
-| `--all`     | Wait for all messages (broadcasts + directed)                  | `false`            |
-| `--after`   | Only return messages after relative time (e.g., `-30s`, `-5m`) | now (when `--all`) |
+| Flag        | Description                                 | Default |
+| ----------- | ------------------------------------------- | ------- |
+| `--timeout` | Max wait time (e.g., `30s`, `5m`, `1h`)     | `30s`   |
+| `--scope`   | Filter by scope (format: `type:value`)      |         |
+| `--mention` | Wait for mentions of role (format: `@role`) |         |
 
 Exit codes: `0` = message received, `1` = timeout, `2` = error.
 
@@ -1118,9 +1189,6 @@ Example:
     ✓ Message received: msg_01HXE8Z7 from @planner
       We should refactor the sync daemon before adding embeddings.
 
-    # Wait for any message (broadcasts + directed), skip old ones
-    $ thrum wait --all --after -30s --timeout=5m
-
     # Use in scripts
     if thrum wait --timeout=30s; then
       echo "New message received"
@@ -1128,7 +1196,6 @@ Example:
       echo "Timeout"
     fi
 
----
 
 ## Infrastructure
 
@@ -1152,7 +1219,6 @@ Example:
     # Start in local-only mode (no git push/fetch)
     thrum daemon start --local
 
----
 
 ### thrum daemon stop
 
@@ -1160,7 +1226,6 @@ Stop the daemon gracefully by sending SIGTERM.
 
     thrum daemon stop
 
----
 
 ### thrum daemon status
 
@@ -1169,7 +1234,6 @@ served.
 
     thrum daemon status
 
----
 
 ### thrum daemon restart
 
@@ -1177,7 +1241,6 @@ Restart the daemon (stop + start).
 
     thrum daemon restart
 
----
 
 ### thrum sync status
 
@@ -1188,7 +1251,6 @@ active, displays "Mode: local-only" instead of "Mode: normal".
 
 Sync states: `stopped`, `idle`, `synced`, `error`.
 
----
 
 ### thrum sync force
 
@@ -1198,7 +1260,6 @@ local-only mode is active, displays "local-only (remote sync disabled)".
 
     thrum sync force
 
----
 
 ## MCP Server
 
@@ -1255,7 +1316,6 @@ For multi-agent worktrees, use `--agent-id` or set `THRUM_NAME`:
 }
 ```
 
----
 
 ## Environment Variables
 
