@@ -969,7 +969,7 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 // It combines three conditions with OR:
 // 1. Messages with mention refs matching the agent (direct mentions)
 // 2. Messages scoped to groups the agent belongs to (group membership)
-// 3. Messages with no mention refs (old broadcast backward compat — remove in next release)
+// 3. Messages with no mention refs (old broadcast backward compat — remove in next release).
 func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string) (string, []any) {
 	if len(forAgentValues) == 0 {
 		return "", nil
