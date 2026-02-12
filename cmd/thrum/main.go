@@ -2995,6 +2995,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "Cleaned up %d stale work context(s)\n", deleted)
 	}
 
+	// Ensure @everyone group exists (auto-created on first startup)
+	if err := rpc.EnsureEveryoneGroup(st); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to ensure @everyone group: %v\n", err)
+	}
+
 	// Validate sync worktree exists
 	if _, err := os.Stat(syncDir); os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "Warning: sync worktree not found at %s (sync disabled)\n", syncDir)
@@ -3082,6 +3087,16 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("session.setIntent", sessionHandler.HandleSetIntent)
 	server.RegisterHandler("session.setTask", sessionHandler.HandleSetTask)
 
+	// Group management
+	groupHandler := rpc.NewGroupHandler(st)
+	server.RegisterHandler("group.create", groupHandler.HandleCreate)
+	server.RegisterHandler("group.delete", groupHandler.HandleDelete)
+	server.RegisterHandler("group.member.add", groupHandler.HandleMemberAdd)
+	server.RegisterHandler("group.member.remove", groupHandler.HandleMemberRemove)
+	server.RegisterHandler("group.list", groupHandler.HandleList)
+	server.RegisterHandler("group.info", groupHandler.HandleInfo)
+	server.RegisterHandler("group.members", groupHandler.HandleMembers)
+
 	// Message management
 	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher)
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
@@ -3140,6 +3155,13 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsRegistry.Register("session.heartbeat", websocket.Handler(sessionHandler.HandleHeartbeat))
 	wsRegistry.Register("session.setIntent", websocket.Handler(sessionHandler.HandleSetIntent))
 	wsRegistry.Register("session.setTask", websocket.Handler(sessionHandler.HandleSetTask))
+	wsRegistry.Register("group.create", websocket.Handler(groupHandler.HandleCreate))
+	wsRegistry.Register("group.delete", websocket.Handler(groupHandler.HandleDelete))
+	wsRegistry.Register("group.member.add", websocket.Handler(groupHandler.HandleMemberAdd))
+	wsRegistry.Register("group.member.remove", websocket.Handler(groupHandler.HandleMemberRemove))
+	wsRegistry.Register("group.list", websocket.Handler(groupHandler.HandleList))
+	wsRegistry.Register("group.info", websocket.Handler(groupHandler.HandleInfo))
+	wsRegistry.Register("group.members", websocket.Handler(groupHandler.HandleMembers))
 	wsRegistry.Register("message.send", websocket.Handler(messageHandler.HandleSend))
 	wsRegistry.Register("message.get", websocket.Handler(messageHandler.HandleGet))
 	wsRegistry.Register("message.list", websocket.Handler(messageHandler.HandleList))
