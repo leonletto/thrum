@@ -384,7 +384,7 @@ Delete a group by name. The `@everyone` group is protected and cannot be deleted
 
 ### add_group_member
 
-Add a member (agent, role, or nested group) to a group.
+Add a member (agent or role) to a group.
 
 **Input:**
 
@@ -456,14 +456,14 @@ List all groups in the system.
 
 ### get_group
 
-Get detailed information about a specific group. Supports recursive expansion to resolve nested groups and roles to individual agent IDs.
+Get detailed information about a specific group. Supports expansion to resolve roles to individual agent IDs.
 
 **Input:**
 
 | Parameter | Type    | Required | Description                                              |
 | --------- | ------- | -------- | -------------------------------------------------------- |
 | `name`    | string  | yes      | Group name                                               |
-| `expand`  | boolean | no       | Recursively resolve nested groups/roles to agent IDs     |
+| `expand`  | boolean | no       | Resolve roles to agent IDs                               |
 
 **Output:**
 
