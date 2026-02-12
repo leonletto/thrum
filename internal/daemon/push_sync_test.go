@@ -113,8 +113,8 @@ func TestPushSync_EndToEndEventSync(t *testing.T) {
 	// Add daemon A as a peer (use 127.0.0.1 since we're on localhost)
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
 		DaemonID: daemonA.state.DaemonID(),
-		Hostname: "127.0.0.1",
-		Port:     daemonA.listener.Addr().(*net.TCPAddr).Port,
+		Name:     "daemon-a",
+		Address:  daemonA.addr(),
 	})
 
 	// Simulate what happens when daemon B receives a sync.notify from daemon A:
@@ -161,13 +161,13 @@ func TestPushSync_BroadcastNotifyAllPeers(t *testing.T) {
 	// Add both peers
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
 		DaemonID: "d_peer-1",
-		Hostname: "127.0.0.1",
-		Port:     peer1.listener.Addr().(*net.TCPAddr).Port,
+		Name:     "peer-1",
+		Address:  peer1.addr(),
 	})
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
 		DaemonID: "d_peer-2",
-		Hostname: "127.0.0.1",
-		Port:     peer2.listener.Addr().(*net.TCPAddr).Port,
+		Name:     "peer-2",
+		Address:  peer2.addr(),
 	})
 
 	// Broadcast notification
@@ -203,8 +203,8 @@ func TestPushSync_EventWriteHookTriggersNotification(t *testing.T) {
 	// Add peer
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
 		DaemonID: "d_peer",
-		Hostname: "127.0.0.1",
-		Port:     peer.listener.Addr().(*net.TCPAddr).Port,
+		Name:     "peer",
+		Address:  peer.addr(),
 	})
 
 	// Wire event write hook (same as daemon main.go does)
@@ -235,8 +235,8 @@ func TestPushSync_NotifyFailureDoesNotBlockWrite(t *testing.T) {
 	// Add peer with unreachable address
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
 		DaemonID: "d_offline",
-		Hostname: "127.0.0.1",
-		Port:     1, // Almost certainly not listening
+		Name:     "offline",
+		Address:  "127.0.0.1:1", // Almost certainly not listening
 	})
 
 	// Wire hook
@@ -275,8 +275,8 @@ func TestPushSync_PeriodicSyncCatchesMissedNotifications(t *testing.T) {
 	// Add daemon A as peer
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
 		DaemonID: daemonA.state.DaemonID(),
-		Hostname: "127.0.0.1",
-		Port:     daemonA.listener.Addr().(*net.TCPAddr).Port,
+		Name:     "daemon-a",
+		Address:  daemonA.addr(),
 	})
 
 	// Create scheduler and run one sync cycle
@@ -308,8 +308,8 @@ func TestPushSync_PeriodicSyncSkipsRecentlySynced(t *testing.T) {
 
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
 		DaemonID: daemonA.state.DaemonID(),
-		Hostname: "127.0.0.1",
-		Port:     daemonA.listener.Addr().(*net.TCPAddr).Port,
+		Name:     "daemon-a",
+		Address:  daemonA.addr(),
 	})
 
 	// Sync once to set the checkpoint
@@ -414,8 +414,8 @@ func TestPushSync_HealthIncludesTailscaleInfo(t *testing.T) {
 			Hostname:       "thrum-test",
 			ConnectedPeers: 2,
 			Peers: []rpc.TailscalePeer{
-				{DaemonID: "d_peer1", Hostname: "peer1", LastSync: "5s ago", Status: "active"},
-				{DaemonID: "d_peer2", Hostname: "peer2", LastSync: "10s ago", Status: "active"},
+				{DaemonID: "d_peer1", Name: "peer1", LastSync: "5s ago"},
+				{DaemonID: "d_peer2", Name: "peer2", LastSync: "10s ago"},
 			},
 			SyncStatus: "idle",
 		}

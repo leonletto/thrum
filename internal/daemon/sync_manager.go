@@ -71,8 +71,8 @@ func (m *DaemonSyncManager) SyncFromPeer(peerAddr string, peerDaemonID string) (
 		return totalApplied, totalSkipped, err
 	}
 
-	// Update peer last seen
-	_ = m.peers.UpdatePeerLastSeen(peerDaemonID)
+	// Update peer last sync time
+	_ = m.peers.UpdateLastSync(peerDaemonID)
 
 	return totalApplied, totalSkipped, nil
 }
@@ -80,10 +80,9 @@ func (m *DaemonSyncManager) SyncFromPeer(peerAddr string, peerDaemonID string) (
 // PeerStatusInfo is the peer status returned to callers.
 type PeerStatusInfo struct {
 	DaemonID string
-	Hostname string
-	Port     int
-	LastSeen string
-	Status   string
+	Name     string
+	Address  string
+	LastSync string
 	LastSeq  int64
 }
 
@@ -93,10 +92,10 @@ func (m *DaemonSyncManager) ListPeers() []PeerStatusInfo {
 	var statuses []PeerStatusInfo
 
 	for _, p := range peerList {
-		ago := time.Since(p.LastSeen).Truncate(time.Second)
-		lastSeen := ago.String() + " ago"
+		ago := time.Since(p.LastSync).Truncate(time.Second)
+		lastSync := ago.String() + " ago"
 		if ago > 24*time.Hour {
-			lastSeen = p.LastSeen.Format("2006-01-02 15:04")
+			lastSync = p.LastSync.Format("2006-01-02 15:04")
 		}
 
 		var lastSeq int64
@@ -107,10 +106,9 @@ func (m *DaemonSyncManager) ListPeers() []PeerStatusInfo {
 
 		statuses = append(statuses, PeerStatusInfo{
 			DaemonID: p.DaemonID,
-			Hostname: p.Hostname,
-			Port:     p.Port,
-			LastSeen: lastSeen,
-			Status:   p.Status,
+			Name:     p.Name,
+			Address:  p.Address,
+			LastSync: lastSync,
 			LastSeq:  lastSeq,
 		})
 	}
@@ -128,19 +126,15 @@ func (m *DaemonSyncManager) AddPeer(hostname string, port int) error {
 		// Add with hostname-derived ID if we can't reach the peer
 		return m.peers.AddPeer(&PeerInfo{
 			DaemonID: "d_" + hostname,
-			Hostname: hostname,
-			Port:     port,
-			Status:   "offline",
+			Name:     hostname,
+			Address:  addr,
 		})
 	}
 
 	return m.peers.AddPeer(&PeerInfo{
-		DaemonID:  info.DaemonID,
-		Hostname:  hostname,
-		FQDN:      info.Hostname,
-		Port:      port,
-		PublicKey: info.PublicKey,
-		Status:    "active",
+		DaemonID: info.DaemonID,
+		Name:     info.Name,
+		Address:  addr,
 	})
 }
 
@@ -183,10 +177,10 @@ func (m *DaemonSyncManager) TailscaleSyncStatus(hostname string) (int, []PeerSta
 	var statuses []PeerStatusInfo
 
 	for _, p := range peerList {
-		ago := time.Since(p.LastSeen).Truncate(time.Second)
-		lastSeen := ago.String() + " ago"
+		ago := time.Since(p.LastSync).Truncate(time.Second)
+		lastSync := ago.String() + " ago"
 		if ago > 24*time.Hour {
-			lastSeen = p.LastSeen.Format("2006-01-02 15:04")
+			lastSync = p.LastSync.Format("2006-01-02 15:04")
 		}
 
 		var lastSeq int64
@@ -197,10 +191,9 @@ func (m *DaemonSyncManager) TailscaleSyncStatus(hostname string) (int, []PeerSta
 
 		statuses = append(statuses, PeerStatusInfo{
 			DaemonID: p.DaemonID,
-			Hostname: p.Hostname,
-			Port:     p.Port,
-			LastSeen: lastSeen,
-			Status:   p.Status,
+			Name:     p.Name,
+			Address:  p.Address,
+			LastSync: lastSync,
 			LastSeq:  lastSeq,
 		})
 	}

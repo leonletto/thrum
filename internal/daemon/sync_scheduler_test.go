@@ -51,9 +51,8 @@ func TestPeriodicSyncScheduler_SkipsRecentlySynced(t *testing.T) {
 	// Add a peer
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
 		DaemonID: "test-peer",
-		Hostname: "test-host",
-		Port:     9100,
-		Status:   "active",
+		Name:     "test-host",
+		Address:  "test-host:9100",
 	})
 
 	// No checkpoint exists, so wasRecentlySynced should return false

@@ -55,9 +55,8 @@ func TestSyncClient_PullEvents(t *testing.T) {
 
 	_ = reg.Register("sync.peer_info", func(_ context.Context, _ json.RawMessage) (any, error) {
 		return map[string]string{
-			"daemon_id":  "d_test",
-			"hostname":   "test-host",
-			"public_key": "",
+			"daemon_id": "d_test",
+			"name":      "test-host",
 		}, nil
 	})
 
@@ -109,9 +108,8 @@ func TestSyncClient_QueryPeerInfo(t *testing.T) {
 	reg := NewSyncRegistry()
 	_ = reg.Register("sync.peer_info", func(_ context.Context, _ json.RawMessage) (any, error) {
 		return map[string]string{
-			"daemon_id":  "d_alice",
-			"hostname":   "alice-laptop",
-			"public_key": "",
+			"daemon_id": "d_alice",
+			"name":      "alice-laptop",
 		}, nil
 	})
 
@@ -143,8 +141,8 @@ func TestSyncClient_QueryPeerInfo(t *testing.T) {
 	if info.DaemonID != "d_alice" {
 		t.Errorf("DaemonID = %q, want %q", info.DaemonID, "d_alice")
 	}
-	if info.Hostname != "alice-laptop" {
-		t.Errorf("Hostname = %q, want %q", info.Hostname, "alice-laptop")
+	if info.Name != "alice-laptop" {
+		t.Errorf("Name = %q, want %q", info.Name, "alice-laptop")
 	}
 }
 

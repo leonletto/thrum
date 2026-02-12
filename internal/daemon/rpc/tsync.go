@@ -9,10 +9,9 @@ import (
 // PeerStatus represents a peer's status for RPC responses.
 type PeerStatus struct {
 	DaemonID string `json:"daemon_id"`
-	Hostname string `json:"hostname"`
-	Port     int    `json:"port"`
-	LastSeen string `json:"last_seen"`
-	Status   string `json:"status"`
+	Name     string `json:"name"`
+	Address  string `json:"address"`
+	LastSync string `json:"last_sync"`
 	LastSeq  int64  `json:"last_synced_seq"`
 }
 
@@ -52,15 +51,11 @@ func (h *TsyncForceHandler) Handle(_ context.Context, params json.RawMessage) (a
 
 	var results []map[string]any
 	for _, peer := range peers {
-		if req.From != "" && peer.Hostname != req.From && peer.DaemonID != req.From {
+		if req.From != "" && peer.Name != req.From && peer.DaemonID != req.From {
 			continue
 		}
 
-		addr := peer.Hostname
-		if peer.Port > 0 {
-			addr = fmt.Sprintf("%s:%d", peer.Hostname, peer.Port)
-		}
-		applied, skipped, err := h.syncFromPeer(addr, peer.DaemonID)
+		applied, skipped, err := h.syncFromPeer(peer.Address, peer.DaemonID)
 		result := map[string]any{
 			"peer":    peer.DaemonID,
 			"applied": applied,
