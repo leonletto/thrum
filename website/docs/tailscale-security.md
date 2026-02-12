@@ -3,76 +3,33 @@
 > See also: [Tailscale Sync](tailscale-sync.md) for setup, architecture, and
 > CLI commands.
 
-Security features for the Tailscale-based sync protocol.
+Security model for the Tailscale-based sync protocol.
 
 ## Overview
 
-The sync protocol uses multiple layers of defense:
+The sync protocol uses three layers of defense:
 
-1. **Ed25519 Event Signing** — every event is cryptographically signed at creation
-2. **Validation Pipeline** — three-stage validation for incoming sync events
-3. **Tailscale WhoIs Authorization** — peer identity verification via Tailscale
-4. **Rate Limiting** — per-peer token bucket rate limiting
-5. **Quarantine System** — invalid events are isolated and tracked
+1. **Tailscale Encryption** -- WireGuard tunnels encrypt all traffic
+2. **Pairing Code** -- Human-mediated 4-digit code establishes trust
+3. **Token Authentication** -- 32-byte token authenticates every request
 
-## Event Signing
+This replaces the previous overengineered security stack (Ed25519 signing,
+validation pipeline, WhoIs authorization, rate limiting, quarantine system)
+with a simpler model that provides equivalent practical security.
 
-Events are signed with Ed25519 keys before being written to the event log.
+## Layer 1: Tailscale Encryption
 
-### Key Management
+All sync traffic flows over Tailscale's WireGuard mesh network. This provides:
 
-On first daemon start, an Ed25519 key pair is generated and stored at
-`.thrum/var/identity.key` (PEM format, 0600 permissions). The public key
-fingerprint is logged on startup for verification.
+- **End-to-end encryption** between peers
+- **Identity verification** via Tailscale's control plane
+- **NAT traversal** with no port forwarding or firewall configuration
+- **Network-level access control** via Tailscale ACLs
 
-### Canonical Signing Format
+Tailscale handles the hard parts of secure networking. Thrum doesn't need to
+implement its own transport encryption.
 
-The signature covers a canonical payload: `event_id|type|timestamp|origin_daemon`.
-This ensures the core identity of each event is tamper-proof while allowing
-non-critical fields to be modified.
-
-### Backward Compatibility
-
-Events without signatures are accepted by default. Set `THRUM_SECURITY_REQUIRE_SIGNATURES=true`
-to reject unsigned events (recommended after all daemons have been upgraded).
-
-## Validation Pipeline
-
-Incoming sync events pass through three validation stages:
-
-### Stage 1: Schema Validation
-- Required fields present (`event_id`, `type`, `timestamp`, `origin_daemon`)
-- Valid event type
-- Event size within `MaxEventSize` (default: 1MB)
-
-### Stage 2: Signature Verification
-- Ed25519 signature check against peer's public key
-- Invalid signatures are rejected
-- Missing signatures accepted unless `require_signatures` is enabled
-
-### Stage 3: Business Logic
-- Timestamp sanity: not more than 24h in the future
-- Message content size limit (default: 100KB)
-- Agent ID format validation
-
-Events that fail any stage are quarantined instead of applied.
-
-## Authorization
-
-### Tailscale WhoIs
-
-When enabled, every sync connection is verified via Tailscale's `WhoIs` API to
-confirm the peer's identity. Three authorization checks are available:
-
-| Check | Config | Description |
-|-------|--------|-------------|
-| Allowed Peers | `THRUM_SECURITY_ALLOWED_PEERS` | Comma-separated hostnames |
-| Required Tags | `THRUM_SECURITY_REQUIRED_TAGS` | Comma-separated ACL tags; at least one must match (e.g., `tag:thrum-daemon`) |
-| Allowed Domain | `THRUM_SECURITY_ALLOWED_DOMAIN` | Login name suffix (e.g., `@company.com`) |
-
-All configured checks must pass. Unconfigured checks are skipped.
-
-### ACL Setup
+### Recommended ACL Configuration
 
 #### Tailscale ACLs
 
@@ -104,89 +61,133 @@ acls:
     dst: ["group:thrum-daemons:9100"]
 ```
 
-## Rate Limiting
+## Layer 2: Pairing Code
 
-Per-peer token bucket rate limiting protects against abuse.
+Trust between two machines is established through a human-mediated pairing flow.
 
-| Parameter | Default | Environment Variable |
-|-----------|---------|---------------------|
-| Requests/sec | 10 | `THRUM_SECURITY_MAX_RPS` |
-| Burst size | 20 | `THRUM_SECURITY_BURST_SIZE` |
-| Queue depth | 1000 | `THRUM_SECURITY_MAX_QUEUE_DEPTH` |
+### How It Works
 
-- **429**: Rate limit exceeded (per-peer)
-- **503**: Sync queue full (global overload)
+1. Machine A generates a random 4-digit code and displays it to the user
+2. The user communicates the code to Machine B's operator (verbally, chat, etc.)
+3. Machine B sends the code to Machine A over Tailscale
+4. Machine A verifies the code and establishes the peer relationship
 
-## Quarantine
+### Security Properties
 
-Invalid events are stored in a quarantine table with:
-- Event ID and full JSON
-- Peer that sent it
-- Failure reason
-- Timestamp
+- **Human-in-the-loop**: A person must deliberately share the code, preventing
+  automated or accidental pairing
+- **Time-limited**: Pairing sessions expire after 5 minutes
+- **Attempt-limited**: Only 3 attempts per session before lockout
+- **One-time use**: Each code can only be used once
 
-An alert is logged when more than 10 invalid events are received from the same
-peer within one hour.
+### Threat Model
+
+The pairing code provides protection against:
+
+- **Unauthorized peers** -- Only someone with the code can pair
+- **Replay attacks** -- Codes expire and are single-use
+- **Brute force** -- 3-attempt limit makes guessing impractical within the
+  5-minute window
+
+The code does NOT protect against an attacker who can both observe the code
+being shared AND intercept the Tailscale connection. In practice, Tailscale's
+network security makes this extremely unlikely.
+
+## Layer 3: Token Authentication
+
+After pairing, a 32-byte hex token (256 bits of entropy) is shared between
+the two peers. Every sync request includes this token.
+
+### Token Lifecycle
+
+1. **Generation**: A random 32-byte token is generated during pairing
+2. **Distribution**: The token is sent to the joining peer in the pairing
+   response
+3. **Storage**: Both peers store the token in their `peers.json` file
+4. **Validation**: Every sync request is validated against the token before
+   processing
+
+### Validation Flow
+
+```
+Incoming sync request
+   │
+   ├─ Is method "pair.request"?  ──► Yes: Skip auth (pairing flow)
+   │
+   ├─ Extract token from params
+   │
+   ├─ Look up token in peer registry
+   │   ├─ Not found  ──► Reject (unauthorized)
+   │   └─ Found      ──► Allow + update last_sync
+   │
+   └─ Dispatch to handler
+```
+
+### Security Properties
+
+- **256 bits of entropy** -- Computationally infeasible to guess
+- **Per-peer tokens** -- Each peer relationship has its own token
+- **Central validation** -- All RPCs are authenticated in the sync server
+  before handler dispatch
+- **Exempt only pair.request** -- The pairing RPC is the only unauthenticated
+  method (protected by the pairing code instead)
 
 ## Configuration
 
-All security settings are configured via environment variables:
+No security-specific configuration is needed. The security model is built into
+the pairing and sync flow.
 
-```bash
-# Event validation
-THRUM_SECURITY_MAX_EVENT_SIZE=1048576      # 1 MB (default)
-THRUM_SECURITY_MAX_BATCH_SIZE=1000         # events per sync batch
-THRUM_SECURITY_MAX_MESSAGE_SIZE=102400     # 100 KB (default)
-THRUM_SECURITY_REQUIRE_SIGNATURES=false    # reject unsigned events
+| Aspect | Configuration |
+|--------|--------------|
+| Encryption | Automatic (Tailscale) |
+| Pairing timeout | 5 minutes (hardcoded) |
+| Pairing attempts | 3 per session (hardcoded) |
+| Token length | 32 bytes / 256 bits (hardcoded) |
+| Network ACLs | Configure in Tailscale admin console |
 
-# Rate limiting
-THRUM_SECURITY_RATE_LIMIT_ENABLED=true     # enable rate limiting
-THRUM_SECURITY_MAX_RPS=10                  # requests/sec per peer
-THRUM_SECURITY_BURST_SIZE=20               # burst allowance
-THRUM_SECURITY_MAX_QUEUE_DEPTH=1000        # max sync queue depth
+## Comparison with Previous Model
 
-# Authorization
-THRUM_SECURITY_REQUIRE_AUTH=false           # require WhoIs auth
-THRUM_SECURITY_ALLOWED_DOMAIN=@company.com # domain filter
-```
-
-### Example Configurations
-
-#### Development (permissive)
-
-```bash
-THRUM_SECURITY_REQUIRE_SIGNATURES=false
-THRUM_SECURITY_RATE_LIMIT_ENABLED=false
-THRUM_SECURITY_REQUIRE_AUTH=false
-```
-
-#### Production (hardened)
-
-```bash
-THRUM_SECURITY_REQUIRE_SIGNATURES=true
-THRUM_SECURITY_RATE_LIMIT_ENABLED=true
-THRUM_SECURITY_MAX_RPS=5
-THRUM_SECURITY_BURST_SIZE=10
-THRUM_SECURITY_REQUIRE_AUTH=true
-THRUM_SECURITY_ALLOWED_DOMAIN=@yourcompany.com
-```
+| Previous (Removed) | Current (Simplified) |
+|---------------------|---------------------|
+| Ed25519 event signing | Not needed -- Tailscale provides transport integrity |
+| 3-stage validation pipeline | Not needed -- token auth is sufficient |
+| WhoIs authorization | Not needed -- pairing code + Tailscale ACLs |
+| Per-peer rate limiting | Not needed -- Tailscale rate limits at network level |
+| Quarantine system | Not needed -- invalid tokens are simply rejected |
+| TOFU key pinning | Replaced by explicit human-mediated pairing |
+| ~1,074 lines of security code | ~40 lines of token validation |
 
 ## Troubleshooting
 
-### Events rejected with "invalid signature"
+### Peer rejected with "unauthorized"
 
-1. Verify both daemons are using the same version of thrum
-2. Check that the peer's public key is registered: look for `sync.peer_info` exchange in logs
-3. If upgrading, set `THRUM_SECURITY_REQUIRE_SIGNATURES=false` temporarily
+The peer's token doesn't match. This can happen if:
 
-### Rate limit errors (429)
+1. The peer was removed and re-paired (old token is invalid)
+2. The `peers.json` file was manually edited or corrupted
+3. The peer registry was reset on one side
 
-Increase `THRUM_SECURITY_MAX_RPS` or `THRUM_SECURITY_BURST_SIZE`. Check if a peer
-is generating excessive sync traffic.
+**Fix**: Remove the peer on both machines and re-pair:
 
-### Quarantined events
+```bash
+# On both machines:
+thrum peer remove <name>
 
-Check quarantined events for patterns:
-- Same peer repeatedly failing → possible misconfiguration or malicious peer
-- Schema violations → version mismatch between daemons
-- Signature failures → key rotation needed or man-in-the-middle
+# Then pair again:
+# Machine A: thrum peer add
+# Machine B: thrum peer join <address>
+```
+
+### Pairing fails with "no active pairing session"
+
+The pairing session on Machine A expired or was never started.
+
+**Fix**: Run `thrum peer add` on Machine A first, then `thrum peer join` on
+Machine B within 5 minutes.
+
+### Pairing fails with "too many failed attempts"
+
+Three incorrect codes were entered.
+
+**Fix**: Run `thrum peer add` again on Machine A to start a fresh session with
+a new code.

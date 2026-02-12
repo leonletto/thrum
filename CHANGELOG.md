@@ -131,32 +131,30 @@ Rich per-agent status for all active agents, powered by server-side SQL JOINs.
 #### Tailscale Sync
 
 Cross-machine event synchronization over Tailscale's encrypted mesh network.
-Daemons discover peers automatically and sync events in real-time via push
-notifications with a periodic fallback.
+Pair machines with a simple 4-digit code and sync events in real-time.
 
+- Human-mediated pairing flow: `thrum peer add` + `thrum peer join <address>`
+- 4-digit pairing code with 3-attempt limit and 5-minute timeout
+- Token-based authentication (32-byte hex token per peer pair)
 - tsnet listener for encrypted peer-to-peer sync on port 9100
 - `sync.pull` batched event pulling with sequence-based checkpoints and dedup
-- `sync.notify` push notifications with per-peer debouncing (fire-and-forget)
+- `sync.notify` push notifications (fire-and-forget)
 - Periodic sync scheduler (5-minute fallback for missed notifications)
-- Automatic peer discovery via Tailscale API filtering by `tag:thrum-daemon`
 - Peer registry with persistence to `.thrum/var/peers.json`
-- `thrum daemon sync`, `thrum daemon peers list|add` CLI commands
+- `thrum peer add|join|list|remove|status` CLI commands
 - Tailscale sync status in `thrum status` health endpoint
 - Supports both Tailscale SaaS and self-hosted Headscale control planes
 
 #### Tailscale Sync Security
 
-Defense-in-depth security for the sync protocol with five layers of protection.
+Three-layer security model: Tailscale encryption, pairing code, token auth.
 
-- Ed25519 event signing with canonical payload format
-- Three-stage validation pipeline (schema, signature, business logic)
-- Tailscale WhoIs authorization (hostname, ACL tags, domain checks)
-- Per-peer token bucket rate limiting (configurable RPS, burst, queue depth)
-- Quarantine system for invalid events with alert thresholds
-- TOFU (trust-on-first-use) key pinning for peer public keys
-- `THRUM_SECURITY_ALLOWED_PEERS`, `THRUM_SECURITY_REQUIRED_TAGS`,
-  `THRUM_SECURITY_ALLOWED_DOMAIN`, `THRUM_SECURITY_REQUIRE_AUTH`,
-  `THRUM_SECURITY_REQUIRE_SIGNATURES` environment variables
+- Tailscale WireGuard tunnels provide end-to-end encryption
+- Pairing code establishes human-mediated trust between machines
+- Per-peer 32-byte token authenticates all sync requests
+- Central token validation in sync server (pair.request exempt)
+- Replaces previous overengineered security stack (~1,074 lines removed):
+  Ed25519 signing, validation pipeline, WhoIs auth, rate limiting, quarantine
 
 ### Changed
 
