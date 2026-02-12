@@ -3766,6 +3766,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create sync manager: %v\n", err)
 	}
 	if syncManager != nil {
+		// Hook into event writes to broadcast sync.notify to peers
+		st.SetOnEventWrite(func(daemonID string, sequence int64, eventCount int) {
+			go syncManager.BroadcastNotify(daemonID, sequence, eventCount)
+		})
+
 		// Adapter: convert daemon.PeerStatusInfo → rpc.PeerStatus
 		listPeersFn := func() []rpc.PeerStatus {
 			infos := syncManager.ListPeers()

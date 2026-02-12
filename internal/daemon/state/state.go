@@ -19,6 +19,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// EventWriteHook is called after a successful event write with the daemon ID and sequence number.
+// It is called synchronously but should not block — use goroutines for async work.
+type EventWriteHook func(daemonID string, sequence int64, eventCount int)
+
 // State manages the daemon's persistent state (JSONL log and SQLite projection).
 type State struct {
 	eventsWriter   *jsonl.Writer            // Writer for events.jsonl (non-message events)
@@ -33,6 +37,7 @@ type State struct {
 	thrumDir       string       // Path to .thrum directory (runtime: var/, identities/)
 	syncDir        string       // Path to sync worktree (JSONL data on a-sync branch)
 	mu             sync.RWMutex // Protects agent/session operations
+	onEventWrite   EventWriteHook // Optional hook called after successful event write
 }
 
 // NewState creates a new state manager for the given .thrum directory.
@@ -115,6 +120,12 @@ func NewState(thrumDir string, syncDir string, repoID string) (*State, error) {
 	s.sequence.Store(maxSeq)
 
 	return s, nil
+}
+
+// SetOnEventWrite sets a hook that is called after each successful event write.
+// The hook receives the daemon ID, the assigned sequence number, and event count (always 1).
+func (s *State) SetOnEventWrite(hook EventWriteHook) {
+	s.onEventWrite = hook
 }
 
 // Close closes the state manager and its resources.
@@ -223,6 +234,11 @@ func (s *State) WriteEvent(event any) error {
 	// Apply to projector (update SQLite)
 	if err := s.projector.Apply(eventJSON); err != nil {
 		return fmt.Errorf("apply to projector: %w", err)
+	}
+
+	// Notify sync hook (e.g., to broadcast sync.notify to peers)
+	if s.onEventWrite != nil {
+		s.onEventWrite(s.daemonID, seq, 1)
 	}
 
 	return nil
