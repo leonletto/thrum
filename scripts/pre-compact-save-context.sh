@@ -70,4 +70,4 @@ CTXEOF
 echo "$CONTEXT" | thrum context save 2>/dev/null || true
 
 # Output brief summary for hook feedback
-echo "Pre-compact: saved git/beads/thrum state to agent context"
+echo "Pre-compact: saved git/beads/thrum state to agent context - you should run /update-context to save a richer narrative summary."
