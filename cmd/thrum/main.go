@@ -2961,21 +2961,32 @@ func quickstartCmd() *cobra.Command {
 		Short: "Register, start session, and set intent in one step",
 		Long: `Bootstrap an agent session with a single command.
 
-Chains together: agent register → session start → set intent (optional).
-If the agent is already registered, it re-registers automatically.
+Chains together: runtime detect → config generate → agent register →
+session start → set intent. If the agent is already registered, it
+re-registers automatically.
 
 Examples:
   thrum quickstart --role implementer --module auth
   thrum quickstart --role reviewer --module auth --intent "Reviewing PR #42"
-  thrum quickstart --role planner --module core --display "Core Planner"
-  thrum quickstart --name furiosa --role implementer --module auth`,
+  thrum quickstart --name alice --role impl --module auth --runtime codex
+  thrum quickstart --name bob --role tester --module api --dry-run
+  thrum quickstart --role planner --module core --no-init`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, _ := cmd.Flags().GetString("name")
 			display, _ := cmd.Flags().GetString("display")
 			intent, _ := cmd.Flags().GetString("intent")
+			runtimeFlag, _ := cmd.Flags().GetString("runtime")
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			noInit, _ := cmd.Flags().GetBool("no-init")
+			forceInit, _ := cmd.Flags().GetBool("force")
 
 			if flagRole == "" || flagModule == "" {
 				return fmt.Errorf("--role and --module are required (or set THRUM_ROLE and THRUM_MODULE env vars)")
+			}
+
+			// Validate runtime if specified
+			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
+				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, auggie, cli-only", runtimeFlag)
 			}
 
 			// Priority: THRUM_NAME env var > --name flag
@@ -2990,18 +3001,28 @@ Examples:
 				}
 			}
 
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
 			opts := cli.QuickstartOptions{
-				Name:    name,
-				Role:    flagRole,
-				Module:  flagModule,
-				Display: display,
-				Intent:  intent,
+				Name:     name,
+				Role:     flagRole,
+				Module:   flagModule,
+				Display:  display,
+				Intent:   intent,
+				Runtime:  runtimeFlag,
+				RepoPath: flagRepo,
+				DryRun:   dryRun,
+				NoInit:   noInit,
+				Force:    forceInit,
+			}
+
+			// In dry-run mode, we don't need a daemon connection
+			var client *cli.Client
+			if !dryRun {
+				var err error
+				client, err = getClient()
+				if err != nil {
+					return fmt.Errorf("failed to connect to daemon: %w", err)
+				}
+				defer func() { _ = client.Close() }()
 			}
 
 			result, err := cli.Quickstart(client, opts)
@@ -3057,6 +3078,10 @@ Examples:
 	cmd.Flags().String("name", "", "Human-readable agent name (optional, defaults to role_hash)")
 	cmd.Flags().String("display", "", "Display name for the agent")
 	cmd.Flags().String("intent", "", "Initial work intent")
+	cmd.Flags().String("runtime", "", "Runtime preset (claude, codex, cursor, gemini, auggie, cli-only)")
+	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files or registering")
+	cmd.Flags().Bool("no-init", false, "Skip runtime config generation, just register agent")
+	cmd.Flags().Bool("force", false, "Overwrite existing runtime config files")
 
 	return cmd
 }
