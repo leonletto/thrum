@@ -349,11 +349,11 @@ func TestPushSync_PeriodicSyncSkipsRecentlySynced(t *testing.T) {
 func TestPushSync_SendNotifyClient(t *testing.T) {
 	// Create a daemon with sync.notify handler
 	var received atomic.Int32
-	var receivedDaemonID string
+	var receivedDaemonID atomic.Value
 
 	daemon := newTestDaemonWithNotify(t, "test", func(daemonID string) {
 		received.Add(1)
-		receivedDaemonID = daemonID
+		receivedDaemonID.Store(daemonID)
 	})
 
 	// Send a notification
@@ -368,8 +368,8 @@ func TestPushSync_SendNotifyClient(t *testing.T) {
 	if received.Load() == 0 {
 		t.Error("notification not received")
 	}
-	if receivedDaemonID != "sender-daemon" {
-		t.Errorf("daemon_id = %q, want sender-daemon", receivedDaemonID)
+	if got, _ := receivedDaemonID.Load().(string); got != "sender-daemon" {
+		t.Errorf("daemon_id = %q, want sender-daemon", got)
 	}
 }
 

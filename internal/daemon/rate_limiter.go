@@ -26,7 +26,7 @@ type RateLimitConfig struct {
 
 // SyncRateLimiter provides per-peer rate limiting for sync requests.
 type SyncRateLimiter struct {
-	mu         sync.RWMutex
+	mu         sync.Mutex
 	limiters   map[string]*peerLimiter // keyed by peer daemon ID
 	config     RateLimitConfig
 	queueDepth int32 // atomic counter for current sync queue depth
@@ -128,23 +128,9 @@ func (r *SyncRateLimiter) CleanupStale(maxAge time.Duration) int {
 func (r *SyncRateLimiter) getLimiter(peerID string) *rate.Limiter {
 	now := time.Now()
 
-	// Fast path: check if limiter exists with read lock
-	r.mu.RLock()
-	if pl, ok := r.limiters[peerID]; ok {
-		r.mu.RUnlock()
-		// Update last access time with write lock
-		r.mu.Lock()
-		pl.lastAccess = now
-		r.mu.Unlock()
-		return pl.limiter
-	}
-	r.mu.RUnlock()
-
-	// Slow path: create new limiter with write lock
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Double-check after acquiring write lock
 	if pl, ok := r.limiters[peerID]; ok {
 		pl.lastAccess = now
 		return pl.limiter

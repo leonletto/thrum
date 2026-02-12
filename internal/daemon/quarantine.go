@@ -71,7 +71,8 @@ func (q *QuarantineStore) Quarantine(eventID, fromDaemon, reason, eventJSON stri
 		fromDaemon, oneHourAgo,
 	).Scan(&count)
 	if err != nil {
-		return nil // Don't fail the quarantine over an alert check
+		log.Printf("[quarantine] WARNING: failed to check alert threshold for %s: %v", fromDaemon, err)
+		return nil
 	}
 
 	if count > QuarantineAlertThreshold {

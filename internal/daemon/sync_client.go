@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/eventlog"
@@ -179,16 +180,16 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
-var rpcIDCounter int
+var rpcIDCounter atomic.Int64
 
 // callRPC sends a JSON-RPC request and reads the response on an existing connection.
 func (c *SyncClient) callRPC(conn net.Conn, method string, params any) (json.RawMessage, error) {
-	rpcIDCounter++
+	id := rpcIDCounter.Add(1)
 	req := rpcRequest{
 		JSONRPC: "2.0",
 		Method:  method,
 		Params:  params,
-		ID:      rpcIDCounter,
+		ID:      int(id),
 	}
 
 	data, err := json.Marshal(req)
