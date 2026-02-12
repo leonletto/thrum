@@ -1,0 +1,20 @@
+# Thrum Agent Coordination
+
+This project uses Thrum for multi-agent coordination.
+
+## Setup
+
+Register your agent:
+```bash
+thrum quickstart --name {{.AgentName}} --role {{.AgentRole}} --module {{.AgentModule}} --json
+```
+
+## Commands
+
+- **Send:** `thrum send "message" --to @agent --json`
+- **Inbox:** `thrum inbox --unread --json`
+- **Wait:** `thrum wait --all --timeout 5m --json`
+- **Agents:** `thrum agent list --json`
+
+All commands support `--json` for machine-parsable output.
+Exit codes: 0=success, 1=timeout, 2=error
