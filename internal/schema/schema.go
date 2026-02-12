@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 8
+const CurrentVersion = 9
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -226,6 +226,24 @@ func createTables(tx *sql.Tx) error {
 			FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE CASCADE
 		)`,
 
+		// Events table (for sync: sequence-ordered, deduplicated event log)
+		`CREATE TABLE IF NOT EXISTS events (
+			event_id TEXT PRIMARY KEY,
+			sequence INTEGER UNIQUE NOT NULL,
+			type TEXT NOT NULL,
+			timestamp TEXT NOT NULL,
+			origin_daemon TEXT NOT NULL,
+			event_json TEXT NOT NULL
+		)`,
+
+		// Sync checkpoints table (for tracking sync progress per peer)
+		`CREATE TABLE IF NOT EXISTS sync_checkpoints (
+			peer_daemon_id TEXT PRIMARY KEY,
+			last_synced_sequence INTEGER NOT NULL DEFAULT 0,
+			last_sync_timestamp INTEGER NOT NULL,
+			sync_status TEXT NOT NULL DEFAULT 'idle'
+		)`,
+
 		// Agent work contexts table (for live git state tracking)
 		`CREATE TABLE IF NOT EXISTS agent_work_contexts (
 			session_id        TEXT PRIMARY KEY,
@@ -288,6 +306,11 @@ func createIndexes(tx *sql.Tx) error {
 		"CREATE INDEX IF NOT EXISTS idx_groups_name ON groups(name)",
 		"CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id)",
 		"CREATE INDEX IF NOT EXISTS idx_group_members_lookup ON group_members(member_type, member_value)",
+
+		// Events table indexes (for sync)
+		"CREATE INDEX IF NOT EXISTS idx_events_sequence ON events(sequence)",
+		"CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)",
+		"CREATE INDEX IF NOT EXISTS idx_events_origin ON events(origin_daemon)",
 
 		// Work contexts indexes
 		"CREATE INDEX IF NOT EXISTS idx_work_contexts_agent ON agent_work_contexts(agent_id)",
@@ -498,6 +521,48 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_group_members_lookup ON group_members(member_type, member_value)`)
 		if err != nil {
 			return fmt.Errorf("create idx_group_members_lookup: %w", err)
+		}
+	}
+
+	// Migration from version 8 to 9: Add events table and sync_checkpoints for Tailscale sync
+	if startVersion < 9 && endVersion >= 9 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS events (
+				event_id TEXT PRIMARY KEY,
+				sequence INTEGER UNIQUE NOT NULL,
+				type TEXT NOT NULL,
+				timestamp TEXT NOT NULL,
+				origin_daemon TEXT NOT NULL,
+				event_json TEXT NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("create events table: %w", err)
+		}
+
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_events_sequence ON events(sequence)`)
+		if err != nil {
+			return fmt.Errorf("create idx_events_sequence: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)`)
+		if err != nil {
+			return fmt.Errorf("create idx_events_type: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_events_origin ON events(origin_daemon)`)
+		if err != nil {
+			return fmt.Errorf("create idx_events_origin: %w", err)
+		}
+
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS sync_checkpoints (
+				peer_daemon_id TEXT PRIMARY KEY,
+				last_synced_sequence INTEGER NOT NULL DEFAULT 0,
+				last_sync_timestamp INTEGER NOT NULL,
+				sync_status TEXT NOT NULL DEFAULT 'idle'
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("create sync_checkpoints table: %w", err)
 		}
 	}
 

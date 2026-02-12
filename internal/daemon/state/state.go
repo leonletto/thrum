@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/jsonl"
@@ -26,6 +27,7 @@ type State struct {
 	projector      *projection.Projector
 	repoID         string
 	daemonID       string       // Unique identifier for this daemon instance (for sync origin tracking)
+	sequence       atomic.Int64 // Monotonically increasing event sequence counter
 	repoPath       string       // Path to the repository root
 	thrumDir       string       // Path to .thrum directory (runtime: var/, identities/)
 	syncDir        string       // Path to sync worktree (JSONL data on a-sync branch)
@@ -89,7 +91,16 @@ func NewState(thrumDir string, syncDir string, repoID string) (*State, error) {
 	// Compute repo path from thrumDir (parent of .thrum)
 	repoPath := filepath.Dir(thrumDir)
 
-	return &State{
+	// Load the current max sequence from the events table
+	var maxSeq int64
+	err = db.QueryRow("SELECT COALESCE(MAX(sequence), 0) FROM events").Scan(&maxSeq)
+	if err != nil {
+		_ = eventsWriter.Close()
+		_ = db.Close()
+		return nil, fmt.Errorf("load max sequence: %w", err)
+	}
+
+	s := &State{
 		eventsWriter:   eventsWriter,
 		messageWriters: make(map[string]*jsonl.Writer),
 		db:             db,
@@ -99,7 +110,10 @@ func NewState(thrumDir string, syncDir string, repoID string) (*State, error) {
 		repoPath:       repoPath,
 		thrumDir:       thrumDir,
 		syncDir:        syncDir,
-	}, nil
+	}
+	s.sequence.Store(maxSeq)
+
+	return s, nil
 }
 
 // Close closes the state manager and its resources.
@@ -177,6 +191,10 @@ func (s *State) WriteEvent(event any) error {
 		writer = s.eventsWriter
 	}
 
+	// Assign next sequence number
+	seq := s.sequence.Add(1)
+	eventMap["sequence"] = seq
+
 	// Append enriched event to JSONL (source of truth)
 	if err := writer.Append(eventMap); err != nil {
 		return fmt.Errorf("append to JSONL: %w", err)
@@ -186,6 +204,19 @@ func (s *State) WriteEvent(event any) error {
 	eventJSON, err := json.Marshal(eventMap)
 	if err != nil {
 		return fmt.Errorf("marshal enriched event: %w", err)
+	}
+
+	// Insert into events table for sequence-based queries
+	evtID, _ := eventMap["event_id"].(string)
+	evtType, _ := eventMap["type"].(string)
+	evtTimestamp, _ := eventMap["timestamp"].(string)
+	evtOrigin, _ := eventMap["origin_daemon"].(string)
+	_, err = s.db.Exec(
+		`INSERT OR IGNORE INTO events (event_id, sequence, type, timestamp, origin_daemon, event_json) VALUES (?, ?, ?, ?, ?, ?)`,
+		evtID, seq, evtType, evtTimestamp, evtOrigin, string(eventJSON),
+	)
+	if err != nil {
+		return fmt.Errorf("insert into events table: %w", err)
 	}
 
 	// Apply to projector (update SQLite)
