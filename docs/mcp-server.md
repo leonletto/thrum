@@ -149,13 +149,13 @@ exposes its tools as `mcp__thrum__<tool_name>`.
 
 ### send_message
 
-Send a message to another agent via `@role` addressing.
+Send a message to another agent, role, or group.
 
 **Input:**
 
-| Parameter   | Type   | Required | Description                                                    |
-| ----------- | ------ | -------- | -------------------------------------------------------------- |
-| `to`        | string | yes      | Recipient: `@role`, agent name, or composite `agent:role:hash` |
+| Parameter   | Type   | Required | Description                                                                    |
+| ----------- | ------ | -------- | ------------------------------------------------------------------------------ |
+| `to`        | string | yes      | Recipient: `@role`, agent name, `@groupname`, or composite `agent:role:hash`  |
 | `content`   | string | yes      | Message text (markdown)                                        |
 | `priority`  | string | no       | `critical`, `high`, `normal` (default), or `low`               |
 | `thread_id` | string | no       | Thread ID to reply in                                          |
@@ -302,8 +302,7 @@ List all registered agents and their status.
 
 ### broadcast_message
 
-Send a message to all agents, with optional filtering. The sender is
-automatically excluded.
+Send a message to all agents via the `@everyone` group, with optional filtering. The sender is automatically excluded. This is a simplified wrapper around sending to `@everyone`.
 
 **Input:**
 
@@ -340,6 +339,148 @@ automatically excluded.
 5. Send individual messages to each remaining agent via `message.send` RPC
 
 **Daemon RPC:** `agent.list` + `message.send` (one per recipient)
+
+
+### create_group
+
+Create a named group for targeted messaging.
+
+**Input:**
+
+| Parameter     | Type   | Required | Description                      |
+| ------------- | ------ | -------- | -------------------------------- |
+| `name`        | string | yes      | Group name (e.g., `reviewers`)   |
+| `description` | string | no       | Human-readable group description |
+
+**Output:**
+
+| Field    | Type   | Description                 |
+| -------- | ------ | --------------------------- |
+| `status` | string | `created`                   |
+| `name`   | string | Name of the created group   |
+
+**Daemon RPC:** `group.create`
+
+
+### delete_group
+
+Delete a group by name. The `@everyone` group is protected and cannot be deleted.
+
+**Input:**
+
+| Parameter | Type   | Required | Description                     |
+| --------- | ------ | -------- | ------------------------------- |
+| `name`    | string | yes      | Group name to delete            |
+
+**Output:**
+
+| Field    | Type   | Description                 |
+| -------- | ------ | --------------------------- |
+| `status` | string | `deleted`                   |
+| `name`   | string | Name of the deleted group   |
+
+**Daemon RPC:** `group.delete`
+
+
+### add_group_member
+
+Add a member (agent, role, or nested group) to a group.
+
+**Input:**
+
+| Parameter     | Type   | Required | Description                                          |
+| ------------- | ------ | -------- | ---------------------------------------------------- |
+| `group`       | string | yes      | Group name to add member to                          |
+| `member_type` | string | yes      | `agent`, `role`, or `group`                          |
+| `member_id`   | string | yes      | Agent name, role name, or group name                 |
+
+**Output:**
+
+| Field         | Type   | Description                 |
+| ------------- | ------ | --------------------------- |
+| `status`      | string | `added`                     |
+| `group`       | string | Group name                  |
+| `member_type` | string | Type of member added        |
+| `member_id`   | string | ID of member added          |
+
+**Daemon RPC:** `group.member.add`
+
+
+### remove_group_member
+
+Remove a member from a group.
+
+**Input:**
+
+| Parameter     | Type   | Required | Description                                          |
+| ------------- | ------ | -------- | ---------------------------------------------------- |
+| `group`       | string | yes      | Group name to remove member from                     |
+| `member_type` | string | yes      | `agent`, `role`, or `group`                          |
+| `member_id`   | string | yes      | Agent name, role name, or group name                 |
+
+**Output:**
+
+| Field         | Type   | Description                 |
+| ------------- | ------ | --------------------------- |
+| `status`      | string | `removed`                   |
+| `group`       | string | Group name                  |
+| `member_type` | string | Type of member removed      |
+| `member_id`   | string | ID of member removed        |
+
+**Daemon RPC:** `group.member.remove`
+
+
+### list_groups
+
+List all groups in the system.
+
+**Input:**
+
+| Parameter | Type | Required | Description                 |
+| --------- | ---- | -------- | --------------------------- |
+| _(none)_  |      |          | Empty object or omit params |
+
+**Output:**
+
+| Field                     | Type   | Description                                   |
+| ------------------------- | ------ | --------------------------------------------- |
+| `groups`                  | array  | List of `GroupInfo` objects                   |
+| `groups[].name`           | string | Group name                                    |
+| `groups[].description`    | string | Group description (may be empty)              |
+| `groups[].created_at`     | string | ISO 8601 creation timestamp                   |
+| `groups[].created_by`     | string | Agent ID of creator                           |
+| `groups[].member_count`   | integer | Number of direct members                     |
+
+**Daemon RPC:** `group.list`
+
+
+### get_group
+
+Get detailed information about a specific group. Supports recursive expansion to resolve nested groups and roles to individual agent IDs.
+
+**Input:**
+
+| Parameter | Type    | Required | Description                                              |
+| --------- | ------- | -------- | -------------------------------------------------------- |
+| `name`    | string  | yes      | Group name                                               |
+| `expand`  | boolean | no       | Recursively resolve nested groups/roles to agent IDs     |
+
+**Output:**
+
+| Field                      | Type    | Description                                   |
+| -------------------------- | ------- | --------------------------------------------- |
+| `name`                     | string  | Group name                                    |
+| `description`              | string  | Group description (may be empty)              |
+| `created_at`               | string  | ISO 8601 creation timestamp                   |
+| `created_by`               | string  | Agent ID of creator                           |
+| `members`                  | array   | List of member objects                        |
+| `members[].type`           | string  | `agent`, `role`, or `group`                   |
+| `members[].id`             | string  | Agent name, role name, or group name          |
+| `expanded_agents`          | array   | (Only if `expand=true`) List of agent IDs     |
+| `expanded_agents_count`    | integer | (Only if `expand=true`) Count of agent IDs    |
+
+**Daemon RPC:** `group.info` (without expand) or `group.members` (with expand)
+
 
 ## Identity Resolution
 

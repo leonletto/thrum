@@ -46,6 +46,13 @@ messaging system for AI agent coordination.
 | `thrum context clear`      | Clear agent context                                  |
 | `thrum context sync`       | Sync context to a-sync branch                        |
 | `thrum context update`     | Install/update the /update-context skill             |
+| `thrum group create`       | Create a named group                                 |
+| `thrum group delete`       | Delete a group                                       |
+| `thrum group add`          | Add member to a group                                |
+| `thrum group remove`       | Remove member from a group                           |
+| `thrum group list`         | List all groups                                      |
+| `thrum group info`         | Show group details                                   |
+| `thrum group members`      | List group members                                   |
 | `thrum who-has`            | Check which agents are editing a file                |
 | `thrum ping`               | Check if an agent is online                          |
 | `thrum subscribe`          | Subscribe to push notifications                      |
@@ -216,10 +223,10 @@ have an active session.
 
     thrum send MESSAGE [flags]
 
-| Flag                | Description                                             | Default    |
-| ------------------- | ------------------------------------------------------- | ---------- |
-| `--to`              | Direct recipient (format: `@role` or `@name`)           |            |
-| `--broadcast`, `-b` | Send as broadcast to all agents (no specific recipient) | `false`    |
+| Flag                | Description                                                                    | Default    |
+| ------------------- | ------------------------------------------------------------------------------ | ---------- |
+| `--to`              | Direct recipient (format: `@role`, `@name`, or `@groupname`)                  |            |
+| `--broadcast`, `-b` | Send as broadcast to all agents (deprecated: use `--to @everyone` instead)    | `false`    |
 | `--scope`           | Add scope (repeatable, format: `type:value`)            |            |
 | `--ref`             | Add reference (repeatable, format: `type:value`)        |            |
 | `--mention`         | Mention a role (repeatable, format: `@role`)            |            |
@@ -229,7 +236,10 @@ have an active session.
 | `--format`          | Message format (`markdown`, `plain`, `json`)            | `markdown` |
 
 The `--to` flag adds the recipient as a mention, making it a directed message.
+Recipients can be agents (`@alice`), roles (`@reviewer`), or groups (`@everyone`, `@backend`).
 The `--broadcast` and `--to` flags are mutually exclusive.
+
+The `--broadcast` flag is deprecated. Use `--to @everyone` instead to send to all agents.
 
 Example:
 
@@ -238,9 +248,13 @@ Example:
       Thread: thr_01HXE8A2...
       Created: 2026-02-03T10:00:00Z
 
-    # Broadcast to all agents
-    $ thrum send "Deploy complete" --broadcast
+    # Send to all agents via @everyone group
+    $ thrum send "Deploy complete" --to @everyone
     ✓ Message sent: msg_01HXE8Z8...
+
+    # Send to a custom group
+    $ thrum send "Backend review needed" --to @backend
+    ✓ Message sent: msg_01HXE8Z9...
 
 
 ### thrum reply
@@ -793,6 +807,160 @@ Example:
 
     $ thrum session set-task beads:thrum-42
     ✓ Task set: beads:thrum-42
+
+
+## Groups
+
+### thrum group create
+
+Create a named group for targeted messaging. Groups can contain agents, roles, or other groups (nested).
+
+    thrum group create NAME [flags]
+
+| Flag            | Description                       | Default |
+| --------------- | --------------------------------- | ------- |
+| `--description` | Human-readable group description  |         |
+
+The `@everyone` group is created automatically on daemon startup and includes all agents.
+
+Example:
+
+    $ thrum group create reviewers --description "Code review team"
+    ✓ Group created: reviewers
+
+    $ thrum group create backend --description "Backend developers"
+    ✓ Group created: backend
+
+
+### thrum group delete
+
+Delete a group by name. The `@everyone` group is protected and cannot be deleted.
+
+    thrum group delete NAME
+
+Example:
+
+    $ thrum group delete reviewers
+    ✓ Group deleted: reviewers
+
+    $ thrum group delete @everyone
+    ✗ Cannot delete protected group: @everyone
+
+
+### thrum group add
+
+Add a member to a group. Members can be agents, roles, or other groups. The command auto-detects the member type based on format.
+
+    thrum group add GROUP MEMBER
+
+**Member types:**
+
+- `@alice` or `alice` — Specific agent by name
+- `--role planner` — All agents with role "planner"
+- `--group team` — Nested group reference
+
+Example:
+
+    # Add specific agent
+    $ thrum group add reviewers @alice
+    ✓ Added agent alice to group reviewers
+
+    # Add all agents with a role
+    $ thrum group add reviewers --role reviewer
+    ✓ Added role reviewer to group reviewers
+
+    # Add another group (nested)
+    $ thrum group add backend --group reviewers
+    ✓ Added group reviewers to group backend
+
+
+### thrum group remove
+
+Remove a member from a group.
+
+    thrum group remove GROUP MEMBER
+
+Uses the same member detection as `group add`.
+
+Example:
+
+    $ thrum group remove reviewers @alice
+    ✓ Removed agent alice from group reviewers
+
+
+### thrum group list
+
+List all groups in the system.
+
+    thrum group list
+
+Example:
+
+    $ thrum group list
+    Groups (3):
+
+    @everyone
+      Description: All registered agents
+      Members:     (implicit - all agents)
+      Created:     2026-02-09 10:00:00
+
+    reviewers
+      Description: Code review team
+      Members:     2
+      Created:     2026-02-09 10:15:00
+
+    backend
+      Description: Backend developers
+      Members:     1 group, 3 agents
+      Created:     2026-02-09 10:20:00
+
+
+### thrum group info
+
+Show detailed information about a specific group.
+
+    thrum group info NAME
+
+Example:
+
+    $ thrum group info reviewers
+    Group: reviewers
+      Description: Code review team
+      Created:     2026-02-09 10:15:00
+      Created by:  alice
+      Members:     2
+
+      Members:
+        - @alice (agent)
+        - reviewer (role)
+
+
+### thrum group members
+
+List members of a group. Use `--expand` to recursively resolve nested groups and roles to individual agent IDs.
+
+    thrum group members NAME [flags]
+
+| Flag       | Description                                                 | Default |
+| ---------- | ----------------------------------------------------------- | ------- |
+| `--expand` | Resolve nested groups/roles to agent IDs (recursive)       | `false` |
+
+Without `--expand`, shows direct members (agents, roles, groups). With `--expand`, recursively resolves to a flat list of agent IDs.
+
+Example:
+
+    # Show direct members
+    $ thrum group members reviewers
+    Members of reviewers (2):
+      - @alice (agent)
+      - reviewer (role)
+
+    # Expand to agent IDs
+    $ thrum group members reviewers --expand
+    Resolved members of reviewers (3 agents):
+      - alice
+      - bob
+      - charlie
 
 
 ## Coordination

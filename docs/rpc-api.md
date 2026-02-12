@@ -758,6 +758,205 @@ Get a thread's details and its paginated messages.
 - `thread not found`: No thread with given ID
 
 
+### group.create
+
+Create a named group for targeted messaging. Groups can contain agents, roles, or nested groups.
+
+**Request:**
+
+| Parameter     | Type   | Required | Description                      |
+| ------------- | ------ | -------- | -------------------------------- |
+| `name`        | string | yes      | Group name (e.g., `"reviewers"`) |
+| `description` | string | no       | Human-readable description       |
+
+**Response:**
+
+| Field        | Type   | Description                     |
+| ------------ | ------ | ------------------------------- |
+| `name`       | string | Group name                      |
+| `created_at` | string | ISO 8601 creation timestamp     |
+| `created_by` | string | Agent ID of creator             |
+
+**Errors:**
+
+- `name is required`: Missing `name` field
+- `group already exists`: Group with this name already exists
+
+
+### group.delete
+
+Delete a group by name. The `@everyone` group is protected and cannot be deleted.
+
+**Request:**
+
+| Parameter | Type   | Required | Description     |
+| --------- | ------ | -------- | --------------- |
+| `name`    | string | yes      | Group name      |
+
+**Response:**
+
+| Field        | Type   | Description                     |
+| ------------ | ------ | ------------------------------- |
+| `name`       | string | Name of deleted group           |
+| `deleted_at` | string | ISO 8601 deletion timestamp     |
+
+**Errors:**
+
+- `name is required`: Missing `name` field
+- `cannot delete protected group`: Attempted to delete `@everyone`
+- `group not found`: No group with given name
+
+
+### group.member.add
+
+Add a member to a group. Members can be agents (by name), roles, or nested groups.
+
+**Request:**
+
+| Parameter     | Type   | Required | Description                              |
+| ------------- | ------ | -------- | ---------------------------------------- |
+| `group_name`  | string | yes      | Group to add member to                   |
+| `member_type` | string | yes      | `"agent"`, `"role"`, or `"group"`        |
+| `member_id`   | string | yes      | Agent name, role name, or group name     |
+
+**Response:**
+
+| Field         | Type   | Description                     |
+| ------------- | ------ | ------------------------------- |
+| `group_name`  | string | Group name                      |
+| `member_type` | string | Type of member added            |
+| `member_id`   | string | ID of member added              |
+| `added_at`    | string | ISO 8601 timestamp              |
+
+**Errors:**
+
+- `group_name is required`: Missing `group_name` field
+- `member_type is required`: Missing `member_type` field
+- `member_id is required`: Missing `member_id` field
+- `group not found`: No group with given name
+- `invalid member_type`: Must be `"agent"`, `"role"`, or `"group"`
+
+
+### group.member.remove
+
+Remove a member from a group.
+
+**Request:**
+
+| Parameter     | Type   | Required | Description                              |
+| ------------- | ------ | -------- | ---------------------------------------- |
+| `group_name`  | string | yes      | Group to remove member from              |
+| `member_type` | string | yes      | `"agent"`, `"role"`, or `"group"`        |
+| `member_id`   | string | yes      | Agent name, role name, or group name     |
+
+**Response:**
+
+| Field         | Type   | Description                     |
+| ------------- | ------ | ------------------------------- |
+| `group_name`  | string | Group name                      |
+| `member_type` | string | Type of member removed          |
+| `member_id`   | string | ID of member removed            |
+| `removed_at`  | string | ISO 8601 timestamp              |
+
+**Errors:**
+
+- `group_name is required`: Missing `group_name` field
+- `member_type is required`: Missing `member_type` field
+- `member_id is required`: Missing `member_id` field
+- `group not found`: No group with given name
+- `member not found`: Member is not in the group
+
+
+### group.list
+
+List all groups in the system.
+
+**Request:**
+
+| Parameter | Type | Required | Description                 |
+| --------- | ---- | -------- | --------------------------- |
+| _(none)_  |      |          | Empty object or omit params |
+
+**Response:**
+
+| Field                      | Type    | Description                             |
+| -------------------------- | ------- | --------------------------------------- |
+| `groups`                   | array   | List of group objects                   |
+| `groups[].name`            | string  | Group name                              |
+| `groups[].description`     | string  | Group description (may be empty)        |
+| `groups[].created_at`      | string  | ISO 8601 creation timestamp             |
+| `groups[].created_by`      | string  | Agent ID of creator                     |
+| `groups[].member_count`    | integer | Number of direct members                |
+
+**Errors:**
+
+- No method-specific errors.
+
+
+### group.info
+
+Get detailed information about a specific group.
+
+**Request:**
+
+| Parameter | Type   | Required | Description |
+| --------- | ------ | -------- | ----------- |
+| `name`    | string | yes      | Group name  |
+
+**Response:**
+
+| Field                 | Type    | Description                             |
+| --------------------- | ------- | --------------------------------------- |
+| `name`                | string  | Group name                              |
+| `description`         | string  | Group description (may be empty)        |
+| `created_at`          | string  | ISO 8601 creation timestamp             |
+| `created_by`          | string  | Agent ID of creator                     |
+| `members`             | array   | List of member objects                  |
+| `members[].type`      | string  | `"agent"`, `"role"`, or `"group"`       |
+| `members[].id`        | string  | Agent name, role name, or group name    |
+| `members[].added_at`  | string  | ISO 8601 timestamp when member was added|
+
+**Errors:**
+
+- `name is required`: Missing `name` field
+- `group not found`: No group with given name
+
+
+### group.members
+
+Get members of a group with optional recursive expansion. When `expand` is `true`, recursively resolves nested groups and roles to individual agent IDs.
+
+**Request:**
+
+| Parameter | Type    | Required | Description                                          |
+| --------- | ------- | -------- | ---------------------------------------------------- |
+| `name`    | string  | yes      | Group name                                           |
+| `expand`  | boolean | no       | Recursively resolve to agent IDs (default: `false`)  |
+
+**Response (without expand):**
+
+| Field            | Type   | Description                           |
+| ---------------- | ------ | ------------------------------------- |
+| `name`           | string | Group name                            |
+| `members`        | array  | List of direct member objects         |
+| `members[].type` | string | `"agent"`, `"role"`, or `"group"`     |
+| `members[].id`   | string | Agent name, role name, or group name  |
+
+**Response (with expand=true):**
+
+| Field         | Type    | Description                           |
+| ------------- | ------- | ------------------------------------- |
+| `name`        | string  | Group name                            |
+| `agent_ids`   | array   | List of resolved agent IDs (strings)  |
+| `count`       | integer | Number of resolved agents             |
+
+**Errors:**
+
+- `name is required`: Missing `name` field
+- `group not found`: No group with given name
+- `circular group reference detected`: Nested groups form a cycle
+
+
 ### subscribe
 
 Subscribe to push notifications for messages matching a scope, mention, or all

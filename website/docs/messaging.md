@@ -1,13 +1,3 @@
----
-title: "Messaging System"
-description:
-  "Structured agent communication with threading, read tracking, scopes,
-  mentions, and message lifecycle management"
-category: "messaging"
-order: 1
-tags: ["messaging", "threads", "scopes", "mentions", "read-tracking", "inbox"]
-last_updated: "2026-02-08"
----
 
 # Thrum Messaging System
 
@@ -76,14 +66,20 @@ SQLite.
 
 ### Direct Messaging with --to
 
-The `--to` flag provides a shorthand for directing a message to a specific agent
-role. Under the hood, `--to @reviewer` appends `@reviewer` to the mentions list,
-which is stored as a `mention` ref on the message.
+The `--to` flag provides a shorthand for directing a message to a specific agent,
+role, or group. Under the hood, `--to @reviewer` appends `@reviewer` to the mentions
+list, which is stored as a `mention` ref on the message.
 
 ```bash
-# These two are equivalent:
+# These are equivalent:
 thrum send "Please review PR #42" --to @reviewer
 thrum send "Please review PR #42" --mention @reviewer
+
+# Send to a group
+thrum send "Deploy complete" --to @everyone
+
+# Send to a custom group
+thrum send "Backend review needed" --to @backend
 ```
 
 The `@` prefix is optional -- `--to reviewer` and `--to @reviewer` both work.
@@ -599,6 +595,87 @@ thrum send "Implemented feature from design doc, closes issue" \
   --ref issue:beads-123 \
   --ref commit:abc123def \
   --ref url:https://docs.example.com/design
+```
+
+## Groups
+
+Groups allow you to send messages to collections of agents, roles, or nested groups
+using a single `--to @groupname` address.
+
+### Built-in Groups
+
+**`@everyone`** — Automatically created on daemon startup. All registered agents are
+implicit members. This group cannot be deleted.
+
+```bash
+# Send to all agents
+thrum send "Deploy complete" --to @everyone
+```
+
+### Creating Custom Groups
+
+```bash
+# Create a group
+thrum group create reviewers --description "Code review team"
+
+# Add members (agents, roles, or nested groups)
+thrum group add reviewers @alice
+thrum group add reviewers --role reviewer
+thrum group add reviewers --group backend
+
+# Send to the group
+thrum send "PR ready for review" --to @reviewers
+```
+
+### Group Operations
+
+| Command                         | Description                                           |
+| ------------------------------- | ----------------------------------------------------- |
+| `thrum group create NAME`       | Create a new group                                    |
+| `thrum group delete NAME`       | Delete a group (cannot delete `@everyone`)            |
+| `thrum group add GROUP MEMBER`  | Add agent, role, or nested group                      |
+| `thrum group remove GROUP MEMBER` | Remove a member                                     |
+| `thrum group list`              | List all groups                                       |
+| `thrum group info NAME`         | Show group details                                    |
+| `thrum group members NAME`      | List members (`--expand` resolves to agent IDs)       |
+
+### Nested Groups
+
+Groups can contain other groups, enabling hierarchical organization:
+
+```bash
+thrum group create backend
+thrum group add backend --role implementer
+thrum group add backend --role tester
+
+thrum group create all-devs
+thrum group add all-devs --group backend
+thrum group add all-devs --group frontend
+
+# Message goes to all members of backend and frontend
+thrum send "Code freeze starts now" --to @all-devs
+```
+
+### Message Resolution
+
+When a message is sent to a group, the daemon resolves group membership at **read time**
+using a recursive SQL query (Common Table Expression). This means:
+
+- New agents added to a group automatically receive messages sent to that group
+- Nested groups are expanded recursively
+- Cycle detection prevents infinite loops
+- The `@everyone` group dynamically includes all registered agents
+
+### Broadcast Deprecation
+
+The `--broadcast` flag is deprecated. Use `--to @everyone` instead:
+
+```bash
+# Old (deprecated):
+thrum send "Deploy complete" --broadcast
+
+# New (recommended):
+thrum send "Deploy complete" --to @everyone
 ```
 
 ## Global Flags

@@ -233,6 +233,9 @@ thrum send "Completed task {{TASK_ID}}, moving to next" --to @coordinator
 # Ask for input when you need a decision
 thrum send "Need input: should X use approach A or B? Context: ..." --to @coordinator
 
+# Send to your team group
+thrum send "Found a blocker, need help from backend team" --to @backend-team
+
 # Update your intent when switching tasks
 thrum agent set-intent "Working on {{TASK_ID}}: <description>"
 ```
