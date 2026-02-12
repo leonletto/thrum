@@ -3909,8 +3909,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					}
 				}()
 
-				// Start peer discovery (finds other thrum daemons on the tailnet)
+				// Start peer discovery and periodic sync fallback
 				if syncManager != nil {
+					// Periodic sync fallback (safety net for missed notifications)
+					periodicSync := daemon.NewPeriodicSyncScheduler(syncManager, st)
+					go periodicSync.Start(ctx)
 					tsLocalClient, lcErr := tsListener.LocalClient()
 					if lcErr != nil {
 						fmt.Fprintf(os.Stderr, "Warning: failed to get LocalClient for peer discovery: %v\n", lcErr)
