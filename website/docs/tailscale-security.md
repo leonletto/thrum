@@ -67,7 +67,7 @@ confirm the peer's identity. Three authorization checks are available:
 | Check | Config | Description |
 |-------|--------|-------------|
 | Allowed Peers | `THRUM_SECURITY_ALLOWED_PEERS` | Comma-separated hostnames |
-| Required Tags | ACL tags | At least one tag must match (e.g., `tag:thrum-daemon`) |
+| Required Tags | `THRUM_SECURITY_REQUIRED_TAGS` | Comma-separated ACL tags; at least one must match (e.g., `tag:thrum-daemon`) |
 | Allowed Domain | `THRUM_SECURITY_ALLOWED_DOMAIN` | Login name suffix (e.g., `@company.com`) |
 
 All configured checks must pass. Unconfigured checks are skipped.
