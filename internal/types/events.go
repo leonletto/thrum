@@ -160,6 +160,63 @@ type AgentCleanupEvent struct {
 	Method    string `json:"method,omitempty"` // "manual", "automated", "ui"
 }
 
+// GroupCreateEvent represents a group.create event.
+type GroupCreateEvent struct {
+	Type        string `json:"type"`        // "group.create"
+	Timestamp   string `json:"timestamp"`
+	EventID     string `json:"event_id"`
+	Version     int    `json:"v"`
+	GroupID     string `json:"group_id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	CreatedBy   string `json:"created_by"`
+}
+
+// GroupMemberAddEvent represents a group.member.add event.
+type GroupMemberAddEvent struct {
+	Type        string `json:"type"` // "group.member.add"
+	Timestamp   string `json:"timestamp"`
+	EventID     string `json:"event_id"`
+	Version     int    `json:"v"`
+	GroupID     string `json:"group_id"`
+	MemberType  string `json:"member_type"`  // "agent", "role", "group"
+	MemberValue string `json:"member_value"`
+	AddedBy     string `json:"added_by"`
+}
+
+// GroupMemberRemoveEvent represents a group.member.remove event.
+type GroupMemberRemoveEvent struct {
+	Type        string `json:"type"` // "group.member.remove"
+	Timestamp   string `json:"timestamp"`
+	EventID     string `json:"event_id"`
+	Version     int    `json:"v"`
+	GroupID     string `json:"group_id"`
+	MemberType  string `json:"member_type"`
+	MemberValue string `json:"member_value"`
+	RemovedBy   string `json:"removed_by"`
+}
+
+// GroupUpdateEvent represents a group.update event.
+type GroupUpdateEvent struct {
+	Type      string            `json:"type"` // "group.update"
+	Timestamp string            `json:"timestamp"`
+	EventID   string            `json:"event_id"`
+	Version   int               `json:"v"`
+	GroupID   string            `json:"group_id"`
+	UpdatedBy string            `json:"updated_by"`
+	Fields    map[string]string `json:"fields"` // Changed fields
+}
+
+// GroupDeleteEvent represents a group.delete event.
+type GroupDeleteEvent struct {
+	Type      string `json:"type"` // "group.delete"
+	Timestamp string `json:"timestamp"`
+	EventID   string `json:"event_id"`
+	Version   int    `json:"v"`
+	GroupID   string `json:"group_id"`
+	DeletedBy string `json:"deleted_by"`
+}
+
 // CommitSummary represents a single commit.
 type CommitSummary struct {
 	SHA     string   `json:"sha"`
