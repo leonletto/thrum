@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "thrum": {
+      "type": "stdio",
+      "command": "{{.MCPCommand}}",
+      "args": ["mcp", "serve"]
+    }
+  },
+  "hooks": {
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "export THRUM_NAME={{.AgentName}} && bash scripts/thrum-startup.sh"
+      }]
+    }]
+  }
+}
