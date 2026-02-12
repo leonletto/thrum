@@ -39,9 +39,11 @@ func GetEventsSince(db *sql.DB, afterSeq int64, limit int) ([]Event, int64, bool
 	var events []Event
 	for rows.Next() {
 		var e Event
-		if err := rows.Scan(&e.EventID, &e.Sequence, &e.Type, &e.Timestamp, &e.OriginDaemon, &e.EventJSON); err != nil {
+		var eventJSONStr string
+		if err := rows.Scan(&e.EventID, &e.Sequence, &e.Type, &e.Timestamp, &e.OriginDaemon, &eventJSONStr); err != nil {
 			return nil, 0, false, fmt.Errorf("scan event: %w", err)
 		}
+		e.EventJSON = json.RawMessage(eventJSONStr)
 		events = append(events, e)
 	}
 	if err := rows.Err(); err != nil {
