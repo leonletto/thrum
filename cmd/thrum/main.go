@@ -3846,6 +3846,10 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("agent.delete", agentHandler.HandleDelete)
 	server.RegisterHandler("agent.cleanup", agentHandler.HandleCleanup)
 
+	// Team management
+	teamHandler := rpc.NewTeamHandler(st)
+	server.RegisterHandler("team.list", teamHandler.HandleList)
+
 	// Context management
 	contextHandler := rpc.NewContextHandler(st)
 	server.RegisterHandler("context.save", contextHandler.HandleSave)
