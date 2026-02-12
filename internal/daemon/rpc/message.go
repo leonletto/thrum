@@ -23,6 +23,7 @@ type SendRequest struct {
 	Format        string         `json:"format,omitempty"`     // default: "markdown"
 	Structured    map[string]any `json:"structured,omitempty"` // optional typed payload
 	ThreadID      string         `json:"thread_id,omitempty"`
+	ReplyTo       string         `json:"reply_to,omitempty"`
 	Scopes        []types.Scope  `json:"scopes,omitempty"`
 	Refs          []types.Ref    `json:"refs,omitempty"`
 	Mentions      []string       `json:"mentions,omitempty"` // e.g., ["@reviewer"]
@@ -54,6 +55,7 @@ type GetMessageResponse struct {
 type MessageDetail struct {
 	MessageID string            `json:"message_id"`
 	ThreadID  string            `json:"thread_id,omitempty"`
+	ReplyTo   string            `json:"reply_to,omitempty"`
 	Author    AuthorInfo        `json:"author"`
 	Body      types.MessageBody `json:"body"`
 	Scopes    []types.Scope     `json:"scopes"`
@@ -122,6 +124,7 @@ type ListMessagesResponse struct {
 type MessageSummary struct {
 	MessageID string            `json:"message_id"`
 	ThreadID  string            `json:"thread_id,omitempty"`
+	ReplyTo   string            `json:"reply_to,omitempty"`
 	AgentID   string            `json:"agent_id"`
 	Body      types.MessageBody `json:"body"`
 	CreatedAt string            `json:"created_at"`
@@ -280,6 +283,16 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 			// Not a group — treat as regular mention (push model)
 			refs = append(refs, types.Ref{Type: "mention", Value: role})
 		}
+	}
+
+	// Handle reply_to: validate parent message exists and add reply_to ref
+	if req.ReplyTo != "" {
+		var exists int
+		err := h.state.DB().QueryRow(`SELECT COUNT(1) FROM messages WHERE message_id = ?`, req.ReplyTo).Scan(&exists)
+		if err != nil || exists == 0 {
+			return nil, fmt.Errorf("reply_to message not found: %s", req.ReplyTo)
+		}
+		refs = append(refs, types.Ref{Type: "reply_to", Value: req.ReplyTo})
 	}
 
 	// Build message.create event
@@ -454,6 +467,9 @@ func (h *MessageHandler) HandleGet(ctx context.Context, params json.RawMessage) 
 		if err := rows.Scan(&ref.Type, &ref.Value); err != nil {
 			return nil, fmt.Errorf("scan ref: %w", err)
 		}
+		if ref.Type == "reply_to" {
+			msg.ReplyTo = ref.Value
+		}
 		msg.Refs = append(msg.Refs, ref)
 	}
 	if err := rows.Err(); err != nil {
@@ -516,13 +532,16 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	if currentAgentID != "" {
 		selectCols = `SELECT m.message_id, m.thread_id, m.agent_id, m.created_at, m.updated_at,
 		                     m.body_format, m.body_content, m.body_structured, m.deleted,
-		                     CASE WHEN EXISTS(SELECT 1 FROM message_reads WHERE message_id = m.message_id AND agent_id = ?) THEN 1 ELSE 0 END as is_read`
+		                     CASE WHEN EXISTS(SELECT 1 FROM message_reads WHERE message_id = m.message_id AND agent_id = ?) THEN 1 ELSE 0 END as is_read,
+		                     reply_ref.ref_value as reply_to`
 	} else {
 		selectCols = `SELECT m.message_id, m.thread_id, m.agent_id, m.created_at, m.updated_at,
 		                     m.body_format, m.body_content, m.body_structured, m.deleted,
-		                     0 as is_read`
+		                     0 as is_read,
+		                     reply_ref.ref_value as reply_to`
 	}
-	query := selectCols + "\n\t          FROM messages m"
+	query := selectCols + "\n\t          FROM messages m" +
+		"\n\t          LEFT JOIN message_refs reply_ref ON reply_ref.message_id = m.message_id AND reply_ref.ref_type = 'reply_to'"
 
 	// Add joins for filters
 	joins := ""
@@ -669,7 +688,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	messages := []MessageSummary{}
 	for rows.Next() {
 		var msg MessageSummary
-		var threadID, updatedAt, bodyStructured sql.NullString
+		var threadID, updatedAt, bodyStructured, replyTo sql.NullString
 		var deleted, isRead int
 
 		if err := rows.Scan(
@@ -683,12 +702,16 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 			&bodyStructured,
 			&deleted,
 			&isRead,
+			&replyTo,
 		); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 
 		if threadID.Valid {
 			msg.ThreadID = threadID.String
+		}
+		if replyTo.Valid {
+			msg.ReplyTo = replyTo.String
 		}
 		if bodyStructured.Valid {
 			msg.Body.Structured = bodyStructured.String
