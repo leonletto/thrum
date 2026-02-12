@@ -170,7 +170,7 @@ func TestRuntimeList_WithCustomPresets(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	configDir := filepath.Join(tmpDir, "thrum")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0750); err != nil {
 		t.Fatal(err)
 	}
 
@@ -184,7 +184,7 @@ func TestRuntimeList_WithCustomPresets(t *testing.T) {
 		},
 	}
 	data, _ := json.MarshalIndent(cfg, "", "  ")
-	if err := os.WriteFile(filepath.Join(configDir, "runtimes.json"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "runtimes.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 

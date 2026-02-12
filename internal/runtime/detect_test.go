@@ -16,22 +16,22 @@ func TestDetectRuntime(t *testing.T) {
 		{
 			name: "Claude via file marker",
 			setup: func(dir string) {
-				os.MkdirAll(filepath.Join(dir, ".claude"), 0755)
-				os.WriteFile(filepath.Join(dir, ".claude/settings.json"), []byte("{}"), 0644)
+				_ = os.MkdirAll(filepath.Join(dir, ".claude"), 0750)
+				_ = os.WriteFile(filepath.Join(dir, ".claude/settings.json"), []byte("{}"), 0600)
 			},
 			expected: "claude",
 		},
 		{
 			name: "Codex via directory",
 			setup: func(dir string) {
-				os.MkdirAll(filepath.Join(dir, ".codex"), 0755)
+				_ = os.MkdirAll(filepath.Join(dir, ".codex"), 0750)
 			},
 			expected: "codex",
 		},
 		{
 			name: "Cursor via file marker",
 			setup: func(dir string) {
-				os.WriteFile(filepath.Join(dir, ".cursorrules"), []byte("test"), 0644)
+				_ = os.WriteFile(filepath.Join(dir, ".cursorrules"), []byte("test"), 0600)
 			},
 			expected: "cursor",
 		},
@@ -59,7 +59,7 @@ func TestDetectRuntime(t *testing.T) {
 		{
 			name: "Auggie via directory marker",
 			setup: func(dir string) {
-				os.MkdirAll(filepath.Join(dir, ".augment"), 0755)
+				_ = os.MkdirAll(filepath.Join(dir, ".augment"), 0750)
 			},
 			expected: "auggie",
 		},
@@ -99,7 +99,7 @@ func TestDetectRuntime(t *testing.T) {
 func TestDetectRuntime_FileMarkerPrecedence(t *testing.T) {
 	// File markers should take precedence over env vars
 	tmpDir := t.TempDir()
-	os.MkdirAll(filepath.Join(tmpDir, ".codex"), 0755)
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".codex"), 0750)
 	t.Setenv("CLAUDE_SESSION_ID", "test_session")
 
 	result := DetectRuntime(tmpDir)

@@ -133,8 +133,14 @@ func getGitWorkContext() *WorkContextInfo {
 		}
 	}
 
-	// Unmerged commits count
-	countStr, err := gitOutput("rev-list", "--count", "origin/main..HEAD")
+	// Unmerged commits count — try upstream tracking branch, then origin/main, then origin/master.
+	countStr, err := gitOutput("rev-list", "--count", "@{upstream}..HEAD")
+	if err != nil {
+		countStr, err = gitOutput("rev-list", "--count", "origin/main..HEAD")
+	}
+	if err != nil {
+		countStr, err = gitOutput("rev-list", "--count", "origin/master..HEAD")
+	}
 	if err == nil {
 		var count int
 		if _, err := fmt.Sscanf(countStr, "%d", &count); err == nil {

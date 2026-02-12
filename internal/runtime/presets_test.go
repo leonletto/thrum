@@ -62,7 +62,7 @@ func TestGetPreset_Custom(t *testing.T) {
 
 	// Write custom preset config
 	configDir := filepath.Join(tmpDir, "thrum")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0750); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,7 +79,7 @@ func TestGetPreset_Custom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(configDir, "runtimes.json"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "runtimes.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -100,7 +100,7 @@ func TestGetPreset_CustomOverridesBuiltin(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	configDir := filepath.Join(tmpDir, "thrum")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0750); err != nil {
 		t.Fatal(err)
 	}
 
@@ -115,7 +115,7 @@ func TestGetPreset_CustomOverridesBuiltin(t *testing.T) {
 		},
 	}
 	data, _ := json.MarshalIndent(cfg, "", "  ")
-	if err := os.WriteFile(filepath.Join(configDir, "runtimes.json"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "runtimes.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -171,7 +171,7 @@ func TestListPresets_Merged(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	configDir := filepath.Join(tmpDir, "thrum")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0750); err != nil {
 		t.Fatal(err)
 	}
 
@@ -185,7 +185,7 @@ func TestListPresets_Merged(t *testing.T) {
 		},
 	}
 	data, _ := json.MarshalIndent(cfg, "", "  ")
-	if err := os.WriteFile(filepath.Join(configDir, "runtimes.json"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "runtimes.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 
