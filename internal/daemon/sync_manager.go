@@ -44,13 +44,17 @@ func (m *DaemonSyncManager) SyncFromPeer(peerAddr string, peerDaemonID string) (
 	}
 
 	// Set sync status
-	_ = checkpoint.UpdateSyncStatus(m.state.DB(), peerDaemonID, "syncing")
+	if statusErr := checkpoint.UpdateSyncStatus(m.state.DB(), peerDaemonID, "syncing"); statusErr != nil {
+		log.Printf("sync: failed to update status to 'syncing' for %s: %v", peerDaemonID, statusErr)
+	}
 	defer func() {
 		status := "idle"
 		if err != nil {
 			status = "error"
 		}
-		_ = checkpoint.UpdateSyncStatus(m.state.DB(), peerDaemonID, status)
+		if statusErr := checkpoint.UpdateSyncStatus(m.state.DB(), peerDaemonID, status); statusErr != nil {
+			log.Printf("sync: failed to update status to '%s' for %s: %v", status, peerDaemonID, statusErr)
+		}
 	}()
 
 	totalApplied := 0

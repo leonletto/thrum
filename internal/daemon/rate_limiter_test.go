@@ -237,11 +237,11 @@ func TestRateLimiter_CleanupStale(t *testing.T) {
 	}
 
 	// Verify all limiters were created
-	limiter.mu.RLock()
+	limiter.mu.Lock()
 	if len(limiter.limiters) != 4 {
 		t.Errorf("expected 4 limiters, got %d", len(limiter.limiters))
 	}
-	limiter.mu.RUnlock()
+	limiter.mu.Unlock()
 
 	// Wait a bit and access some peers
 	time.Sleep(50 * time.Millisecond)
@@ -257,7 +257,7 @@ func TestRateLimiter_CleanupStale(t *testing.T) {
 	}
 
 	// Verify only peer1 and peer2 remain
-	limiter.mu.RLock()
+	limiter.mu.Lock()
 	if len(limiter.limiters) != 2 {
 		t.Errorf("expected 2 limiters after cleanup, got %d", len(limiter.limiters))
 	}
@@ -277,7 +277,7 @@ func TestRateLimiter_CleanupStale(t *testing.T) {
 	if _, ok := limiter.limiters["peer4"]; ok {
 		t.Error("peer4 should have been removed")
 	}
-	limiter.mu.RUnlock()
+	limiter.mu.Unlock()
 }
 
 func TestRateLimiter_ConcurrentAccess(t *testing.T) {
@@ -308,9 +308,9 @@ func TestRateLimiter_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Verify no panics occurred and limiters were created
-	limiter.mu.RLock()
+	limiter.mu.Lock()
 	numLimiters := len(limiter.limiters)
-	limiter.mu.RUnlock()
+	limiter.mu.Unlock()
 
 	if numLimiters != 10 {
 		t.Errorf("expected 10 limiters after concurrent access, got %d", numLimiters)
