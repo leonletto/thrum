@@ -297,12 +297,11 @@ func TestFormatInbox_EmptyWithFilter(t *testing.T) {
 	}
 }
 
-func TestFormatInbox_ThreadAndReadStatus(t *testing.T) {
+func TestFormatInbox_ReplyAndReadStatus(t *testing.T) {
 	result := &InboxResult{
 		Messages: []Message{
 			{
 				MessageID: "msg_01HXE8Z7",
-				ThreadID:  "thr_01ABC",
 				AgentID:   "agent:planner:ABC123",
 				Body: struct {
 					Format     string `json:"format"`
@@ -310,13 +309,14 @@ func TestFormatInbox_ThreadAndReadStatus(t *testing.T) {
 					Structured string `json:"structured,omitempty"`
 				}{
 					Format:  "markdown",
-					Content: "Threaded message",
+					Content: "Parent message",
 				},
 				CreatedAt: time.Now().Add(-5 * time.Minute).Format(time.RFC3339),
 				IsRead:    true,
 			},
 			{
 				MessageID: "msg_01HXE8A2",
+				ReplyTo:   "msg_01HXE8Z7",
 				AgentID:   "agent:reviewer:XYZ789",
 				Body: struct {
 					Format     string `json:"format"`
@@ -324,7 +324,7 @@ func TestFormatInbox_ThreadAndReadStatus(t *testing.T) {
 					Structured string `json:"structured,omitempty"`
 				}{
 					Format:  "markdown",
-					Content: "Unread message",
+					Content: "Reply message",
 				},
 				CreatedAt: time.Now().Add(-2 * time.Minute).Format(time.RFC3339),
 				IsRead:    false,
@@ -339,9 +339,9 @@ func TestFormatInbox_ThreadAndReadStatus(t *testing.T) {
 
 	output := FormatInbox(result)
 
-	// Check thread reference
-	if !strings.Contains(output, "thread:thr_01ABC") {
-		t.Error("Output should contain thread reference")
+	// Check reply indicator (↳)
+	if !strings.Contains(output, "↳") {
+		t.Error("Output should contain reply indicator (↳)")
 	}
 
 	// Check read indicators (○ for read, ● for unread)

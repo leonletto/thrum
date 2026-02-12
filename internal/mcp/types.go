@@ -5,7 +5,7 @@ type SendMessageInput struct {
 	To       string            `json:"to" jsonschema:"Recipient: @role name or agent name"`
 	Content  string            `json:"content" jsonschema:"Message text"`
 	Priority string            `json:"priority,omitempty" jsonschema:"Message priority: critical, high, normal, or low. Default: normal"`
-	ThreadID string            `json:"thread_id,omitempty" jsonschema:"Thread ID to reply in"`
+	ReplyTo  string            `json:"reply_to,omitempty" jsonschema:"Message ID to reply to"`
 	Metadata map[string]string `json:"metadata,omitempty" jsonschema:"Optional key-value metadata"`
 }
 
@@ -29,7 +29,6 @@ type MessageInfo struct {
 	From      string `json:"from"`
 	Content   string `json:"content"`
 	Priority  string `json:"priority,omitempty"`
-	ThreadID  string `json:"thread_id,omitempty"`
 	Timestamp string `json:"timestamp"`
 }
 
@@ -127,8 +126,8 @@ type DeleteGroupOutput struct {
 // AddGroupMemberInput is the input for the add_group_member MCP tool.
 type AddGroupMemberInput struct {
 	Group       string `json:"group" jsonschema:"Group name to add the member to"`
-	MemberType  string `json:"member_type" jsonschema:"Member type: agent, role, or group"`
-	MemberValue string `json:"member_value" jsonschema:"Member value: agent name, role name, or group name"`
+	MemberType  string `json:"member_type" jsonschema:"Member type: agent or role"`
+	MemberValue string `json:"member_value" jsonschema:"Member value: agent name or role name"`
 }
 
 // AddGroupMemberOutput is the output for the add_group_member MCP tool.
@@ -142,8 +141,8 @@ type AddGroupMemberOutput struct {
 // RemoveGroupMemberInput is the input for the remove_group_member MCP tool.
 type RemoveGroupMemberInput struct {
 	Group       string `json:"group" jsonschema:"Group name to remove the member from"`
-	MemberType  string `json:"member_type" jsonschema:"Member type: agent, role, or group"`
-	MemberValue string `json:"member_value" jsonschema:"Member value: agent name, role name, or group name"`
+	MemberType  string `json:"member_type" jsonschema:"Member type: agent or role"`
+	MemberValue string `json:"member_value" jsonschema:"Member value: agent name or role name"`
 }
 
 // RemoveGroupMemberOutput is the output for the remove_group_member MCP tool.

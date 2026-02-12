@@ -305,7 +305,6 @@ The daemon serves the WebSocket API and embedded Web UI SPA on the same port
   `session.setIntent`, `session.setTask`
 - `message.send`, `message.get`, `message.list`, `message.edit`,
   `message.delete`, `message.markRead`
-- `thread.create`, `thread.list`, `thread.get`
 - `subscribe`, `unsubscribe`, `subscriptions.list`
 - `sync.force`, `sync.status`
 - `user.register`, `user.identify` (user.register is WebSocket-only)
@@ -439,7 +438,7 @@ Thrum uses event sourcing with CQRS:
 | Feature                | Daemon Feature Used                |
 | ---------------------- | ---------------------------------- |
 | Real-time message feed | WebSocket + `notification.message` |
-| Thread view            | `thread.get` RPC                   |
+| Message view           | `message.get` RPC                  |
 | Agent activity         | `agent.listContext` RPC            |
 | Unread counts          | `message.list` with `unread: true` |
 | Live updates           | WebSocket notifications            |

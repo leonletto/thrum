@@ -33,8 +33,7 @@ AI coding platform, and recover full session context after compaction.
 
 **Key multi-agent capabilities:**
 
-- **Agent Groups** -- Named collections of agents, roles, or nested groups for
-  targeted messaging
+- **Agent Groups** -- Named collections of agents and roles for targeted messaging
 - **Runtime Presets** -- Auto-detect and configure Claude Code, Codex, Cursor,
   Gemini, and other AI platforms
 - **Context Prime** -- Single command to gather full agent state for session
@@ -45,8 +44,7 @@ AI coding platform, and recover full session context after compaction.
 ## Agent Groups
 
 Groups let you send messages to collections of agents without addressing each
-one individually. Groups can contain specific agents, all agents with a role, or
-other groups (nesting).
+one individually. Groups can contain specific agents or all agents with a role.
 
 ### Quick Reference
 
@@ -54,7 +52,7 @@ other groups (nesting).
 | ------------------------------------ | ----------------------------------------------- |
 | `thrum group create NAME`            | Create a new group                              |
 | `thrum group delete NAME`            | Delete a group (cannot delete `@everyone`)      |
-| `thrum group add GROUP MEMBER`       | Add agent, role, or nested group                |
+| `thrum group add GROUP MEMBER`       | Add agent or role                               |
 | `thrum group remove GROUP MEMBER`    | Remove a member                                 |
 | `thrum group list`                   | List all groups                                 |
 | `thrum group info NAME`             | Show group details                              |
@@ -95,9 +93,6 @@ thrum group add reviewers @bob
 # Add all agents with a specific role
 thrum group add reviewers --role reviewer
 
-# Add a nested group (all members of 'leads' are also in 'reviewers')
-thrum group add reviewers --group leads
-
 # Remove a member
 thrum group remove reviewers @bob
 
@@ -110,13 +105,12 @@ thrum group info reviewers
 
 ### Member Types
 
-Groups support three member types:
+Groups support two member types:
 
 | Type    | Syntax               | Resolves To                           |
 | ------- | -------------------- | ------------------------------------- |
 | Agent   | `@alice`             | A specific agent by name              |
 | Role    | `--role reviewer`    | All agents registered with that role  |
-| Group   | `--group leads`      | All members of another group (nested) |
 
 ### Sending to Groups
 
@@ -126,16 +120,15 @@ Use `--to @groupname` just like sending to an individual agent:
 # Send to the review team
 thrum send "PR #42 ready for review" --to @reviewers
 
-# Send to a nested group hierarchy
+# Send to all developers
 thrum send "Code freeze starts now" --to @all-devs
 ```
 
-The daemon resolves group membership at **read time** using a recursive SQL
+The daemon resolves group membership at **read time** using an iterative SQL
 query. This means:
 
 - Agents added to a group after a message was sent still receive it
-- Nested groups are expanded recursively to all leaf agents
-- Cycle detection prevents infinite loops in nested group references
+- Roles are expanded to all matching agents at query time
 
 ### Expanding Group Membership
 

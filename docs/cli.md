@@ -15,15 +15,12 @@ messaging system for AI agent coordination.
 | `thrum overview`           | Show combined status, team, and inbox view           |
 | `thrum status`             | Show current agent status, session, and work context |
 | `thrum send`               | Send a message (direct or broadcast)                 |
-| `thrum reply`              | Reply to a message (creates thread if needed)        |
+| `thrum reply`              | Reply to a message (adds reply_to ref)               |
 | `thrum inbox`              | List messages in your inbox                          |
 | `thrum message get`        | Get a single message with full details               |
 | `thrum message edit`       | Edit a message (full replacement)                    |
 | `thrum message delete`     | Delete a message                                     |
 | `thrum message read`       | Mark messages as read                                |
-| `thrum thread create`      | Create a new thread                                  |
-| `thrum thread list`        | List threads with filtering and pagination           |
-| `thrum thread show`        | Show a thread with its messages                      |
 | `thrum agent register`     | Register this agent with the daemon                  |
 | `thrum agent list`         | List registered agents                               |
 | `thrum agent whoami`       | Show current agent identity                          |
@@ -372,80 +369,6 @@ Example:
 
     $ thrum message read --all
     ✓ Marked 7 messages as read
-
-
-## Threads
-
-### thrum thread create
-
-Create a new discussion thread, optionally with an initial message directed to a
-specific agent.
-
-    thrum thread create TITLE [flags]
-
-| Flag        | Description                                     | Default |
-| ----------- | ----------------------------------------------- | ------- |
-| `--message` | Initial message content                         |         |
-| `--to`      | Recipient for initial message (format: `@role`) |         |
-
-Example:
-
-    $ thrum thread create "Auth refactor discussion" --message "Let's plan the token refresh changes" --to @reviewer
-    ✓ Thread created: thr_01HXE8Y2...
-      Title:      Auth refactor discussion
-      Created by: implementer_35HV62T9B9
-      Message:    msg_01HXE8Y3...
-
-
-### thrum thread list
-
-List threads with optional filtering and pagination.
-
-    thrum thread list [flags]
-
-| Flag          | Description                            | Default |
-| ------------- | -------------------------------------- | ------- |
-| `--scope`     | Filter by scope (format: `type:value`) |         |
-| `--page-size` | Results per page                       | `10`    |
-| `--page`      | Page number                            | `1`     |
-
-Example:
-
-    $ thrum thread list
-    THREAD               TITLE                          MSGS UNREAD LAST ACTIVITY
-    ─────────────────────────────────────────────────────────────────────────────────
-    thr_01HXE8Y2         Auth refactor discussion          4      2 15m ago (@reviewer)
-    thr_01HXE7A1         Sprint planning                   8      · 2h ago (@planner)
-
-    Showing 1-2 of 2 threads
-
-
-### thrum thread show
-
-Show a thread's details and paginated messages.
-
-    thrum thread show THREAD_ID [flags]
-
-| Flag          | Description       | Default |
-| ------------- | ----------------- | ------- |
-| `--page-size` | Messages per page | `10`    |
-| `--page`      | Page number       | `1`     |
-
-Example:
-
-    $ thrum thread show thr_01HXE8Y2
-    Thread: thr_01HXE8Y2
-      Title:   Auth refactor discussion
-      Created: 2h ago by @implementer
-
-    ┌─────────────────────────────────────────────────────────────────┐
-    │ msg_01HXE8Y3  @implementer  2h ago                             │
-    │ Let's plan the token refresh changes                           │
-    ├─────────────────────────────────────────────────────────────────┤
-    │ msg_01HXE9A4  @reviewer  1h ago                                │
-    │ I think we should use rotating keys instead of refresh tokens  │
-    └─────────────────────────────────────────────────────────────────┘
-    Showing 1-2 of 2 messages
 
 
 ## Identity & Sessions
@@ -937,15 +860,15 @@ Example:
 
 ### thrum group members
 
-List members of a group. Use `--expand` to recursively resolve nested groups and roles to individual agent IDs.
+List members of a group. Use `--expand` to resolve roles to individual agent IDs.
 
     thrum group members NAME [flags]
 
-| Flag       | Description                                                 | Default |
-| ---------- | ----------------------------------------------------------- | ------- |
-| `--expand` | Resolve nested groups/roles to agent IDs (recursive)       | `false` |
+| Flag       | Description                                      | Default |
+| ---------- | ------------------------------------------------ | ------- |
+| `--expand` | Resolve roles to agent IDs                       | `false` |
 
-Without `--expand`, shows direct members (agents, roles, groups). With `--expand`, recursively resolves to a flat list of agent IDs.
+Without `--expand`, shows direct members (agents, roles). With `--expand`, resolves to a flat list of agent IDs.
 
 Example:
 

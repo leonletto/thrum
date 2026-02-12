@@ -8,19 +8,48 @@ and this project adheres to
 
 ## [0.3.2] - Unreleased
 
+### Removed
+
+#### Thread System
+
+- **Thread commands** — `thrum thread create`, `thrum thread list`, `thrum thread show` removed. Threads are replaced by the reply-to convention.
+- **Thread RPC handlers** — `thread.create`, `thread.list`, `thread.get` removed from daemon RPC API.
+- **Thread database table** — Schema migration v12 drops `threads` table and associated indexes.
+
+#### Nested Groups
+
+- **Group nesting** — Groups no longer support other groups as members. Only agents (`@name`) and roles (`--role name`) are accepted.
+- **Cycle detection** — Removed from group resolver (no longer needed with flat groups).
+- **`--group` flag** — Removed from `thrum group add` command (was used to add nested groups).
+
+### Changed
+
+#### Reply-to Convention
+
+- **`thrum reply MSG_ID`** — Now creates a `reply_to` ref on the new message instead of creating a thread. Copies audience (mentions) from parent message.
+- **Inbox display** — Replies are clustered with their parent messages and shown with `↳` prefix.
+- **Message refs** — Messages can reference a parent via `reply_to` type in `message_refs`.
+
+#### Group Resolver
+
+- **Flattened resolution** — Group resolver simplified from recursive to iterative (flat expansion only).
+- **SQL queries** — Removed recursive CTE from group expansion queries.
+
+#### MCP Tools
+
+- **`send_message`** — Accepts optional `reply_to` parameter (message ID to reply to).
+- **`add_group_member`** — Now only accepts `agent` or `role` member types (rejects `group`).
+
 ### Added
 
 #### Agent Groups
 
-Named groups for organizing agents and targeting messages. Groups support nested
-membership (groups containing other groups) with automatic cycle detection.
+Named groups for organizing agents and targeting messages. Groups are flat collections (agents and roles only).
 
 - `thrum group create|delete|add|remove|list|info|members` CLI commands
-- Auto-detection of member type (`@alice` = agent, `--role` = role, `--group` =
-  group)
+- Auto-detection of member type (`@alice` = agent, `--role` = role)
 - `@everyone` built-in group auto-created on daemon startup
-- Recursive group resolution via SQL recursive CTE for inbox queries
-- Nested group support with cycle detection
+- Iterative group resolution via SQL for inbox queries
 - JSON output via `--json` flag on all group commands
 - Schema migration v7 to v8 with `groups` and `group_members` tables
 
@@ -30,8 +59,7 @@ Six new MCP tools for group management in native agent workflows.
 
 - `create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
   `list_groups`, `get_group`
-- `get_group` supports `expand=true` to resolve nested groups and roles to agent
-  IDs
+- `get_group` supports `expand=true` to resolve roles to agent IDs
 
 #### Runtime Preset Registry
 
