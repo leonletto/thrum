@@ -85,9 +85,19 @@ func Status(client *Client, callerAgentID ...string) (*StatusResult, error) {
 	if err := client.Call("agent.whoami", params, &whoami); err == nil {
 		result.Agent = &whoami
 
-		// Get inbox counts if we have an agent
+		// Get inbox counts if we have an agent (scoped to this agent's actual inbox)
 		var inbox InboxResult
-		if err := client.Call("message.list", map[string]any{"page_size": 0}, &inbox); err == nil {
+		inboxParams := map[string]any{
+			"page_size":    0,
+			"exclude_self": true,
+		}
+		if whoami.AgentID != "" {
+			inboxParams["for_agent"] = whoami.AgentID
+		}
+		if whoami.Role != "" {
+			inboxParams["for_agent_role"] = whoami.Role
+		}
+		if err := client.Call("message.list", inboxParams, &inbox); err == nil {
 			result.Inbox = &struct {
 				Total  int `json:"total"`
 				Unread int `json:"unread"`
