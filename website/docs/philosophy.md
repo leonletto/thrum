@@ -12,35 +12,32 @@ last_updated: "2026-02-12"
 
 AI coding agents are genuinely productive. A single agent can implement a
 feature, write tests, and commit working code faster than most developers type.
-Run several agents in parallel across worktrees and you can move through an
-entire backlog in an afternoon.
+Run several in parallel across worktrees and you can move through an entire
+backlog in an afternoon.
 
-But there's a catch. The current trend in multi-agent tooling pushes toward full
-autonomy — give agents a goal, let them figure out the plan, and check in when
-they're done. That works for some workflows. It's not what Thrum is for.
+Most multi-agent tools are trying to solve a different problem than Thrum. They
+want full autonomy — you give the agents a goal, they figure out the plan, they
+ship code, you review it later. That's fine for some work. It's not what I built
+Thrum for.
 
-Thrum is for developers who want the productivity of multiple agents **without
-giving up understanding**. You stay in the loop. You make the decisions. You
-review the output. At the end of the day, the code that ships is code you
-understand and can stand behind.
+Thrum is for when you want the speed of multiple agents but you still want to
+understand what they built. You do the thinking. The agents do the typing.
 
 ## Two Approaches to Working with AI Agents
 
-There are broadly two philosophies for multi-agent work:
+There are two ways people work with AI agents.
 
-**Autonomous orchestration.** You describe a goal. The system decomposes it into
-tasks, assigns agents, resolves conflicts, and delivers results. Your role is to
-set objectives and review outcomes. This is powerful for large-scale batch work,
-rapid prototyping, or situations where speed matters more than deep understanding
-of every change.
+**Autonomous orchestration.** You describe a goal, the system breaks it into
+tasks, assigns agents, and delivers results. You set objectives and review
+outcomes.
 
-**Human-directed augmentation.** You do the research and planning. You make the
-architectural decisions. You write the instructions. Agents execute your plan in
-isolated workspaces. You review the code, run the tests, and merge. The agents
-are fast hands, not decision-makers.
+**Human-directed work.** You do the research. You make the decisions. You write
+the instructions. Agents execute your plan on separate branches. You review the
+code, run the tests, and merge.
 
-Thrum is infrastructure for the second approach. It doesn't tell agents what to
-do — it lets them communicate while you direct the work.
+Thrum is for the second approach. It doesn't assign tasks or plan work. It gives
+agents a way to message each other across worktrees and machines, so you can run
+several in parallel without being the message relay yourself.
 
 ## The Workflow
 
@@ -91,61 +88,54 @@ trail. The git history shows exactly what happened. Nothing is hidden.
 
 ## What Makes This Feel Different
 
-The difference isn't just workflow — it's how the work feels.
-
-When you research a problem, decide the approach, write clear instructions, and
-then review the implementation, it feels like **your work**. The agent was fast,
-but the thinking was yours. You can explain every decision to a colleague. You
-can debug the code six months later because you understood it when it was
-written.
-
-This matters. Software that works but that nobody understands is a liability. The
-goal isn't to produce code faster — it's to produce code faster **that you can
-maintain**.
+When you work this way, it still feels like you wrote the code. The agent was
+faster than you typing, but the decisions were yours. Six months later when
+something breaks, you remember why it works this way — because you approved the
+plan before the code got written.
 
 ## Inspectable by Design
 
-Everything in Thrum is something you can look at:
+No magic. Everything in Thrum is just files you can look at.
 
-- **Messages** are JSONL files on a Git branch. `cat` them. `grep` them. Pipe
-  them through `jq`.
-- **Agent identity** is a JSON file in `.thrum/identities/`. Read it with any
+- **Messages** are JSONL files on a Git branch. They're just text — `cat` them,
+  `grep` them, pipe them through `jq`.
+- **Agent identity** is a JSON file in `.thrum/identities/`. Open it with any
   text editor.
 - **Sync** is Git push and pull. Run `git log` on the `a-sync` branch to see
   exactly what synced and when.
-- **State** is a SQLite database you can query directly, rebuilt from the JSONL
-  source of truth at any time.
+- **State** is a SQLite database rebuilt from the JSONL source of truth. Query
+  it directly, or delete it — it rebuilds.
 
-There is no cloud service, no opaque API, no state you can't inspect. If
-something goes wrong, you can always figure out what happened by looking at
+There's no cloud service, no opaque API. If something goes wrong, you look at
 files.
 
 ## What Thrum Is Not
 
-**Thrum is not an orchestration engine.** It doesn't decompose goals into tasks.
-It doesn't assign work to agents. It doesn't decide what to build or how to
-build it. Those decisions are yours.
+Thrum doesn't plan your work - it makes planning your work easier and faster.
 
-**Thrum is not a framework.** It doesn't require agents to use a specific SDK or
-follow a specific protocol beyond basic messaging. Any agent that can run shell
-commands or use MCP tools can use Thrum.
+It won't break everythign down and make all the decisions fro you unless you
+tell it to.  You do that with the help of your agents and you can see what is
+going to happen before it happens - not after the damage is done.
 
-**Thrum is not trying to replace developers.** It's trying to make developers
-more productive while keeping them in control of their codebase.
+Thrum doesn't orchestrate your agents. It gives agents a way to message each
+other across worktrees and machines, so you can run several in parallel without
+being the message relay yourself.
 
-Thrum is **messaging infrastructure**. It solves a specific problem — AI agents
-lose context between sessions and can't communicate across worktrees or
-machines — and it solves it with tools developers already understand: Git, files,
-and a local daemon.
+It's not a framework either. Any agent that can run shell commands or use MCP
+tools can use Thrum. There's no SDK to integrate, no protocol to implement
+beyond basic messaging.
+
+And it's not trying to replace you. You're the one who understands the codebase.
+Thrum just makes it practical to direct multiple agents at once.  And the process
+keeps you in the loop as much as you want.  Transparent and auditable.  You
+are in control.
 
 ## For Working Developers
 
-Thrum is built for developers who ship production code. Not for AI researchers
-building novel agent architectures. Not for platform teams building orchestration
-systems. For people who have a feature to build, bugs to fix, and a codebase
-they need to understand and maintain.
+I built Thrum for myself — someone who ships production code and needs to
+understand the codebase they're working in. Not for AI researchers building novel
+agent architectures. Not for platform teams building orchestration systems.
 
 If you want agents to autonomously tackle your backlog while you do something
-else, there are good tools for that. If you want to stay in the driver's seat
-and use agents as leverage to move faster through work you direct, Thrum is
-the coordination layer that makes that practical.
+else, there are good tools for that. If you want to direct the work yourself and
+have agents execute faster than you can type, that's what Thrum is for.
