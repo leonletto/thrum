@@ -59,11 +59,13 @@ Thrum provides a three-layer context model for managing agent state at different
 
 | Layer | File | Persistence | Content | Maintained By |
 |-------|------|-------------|---------|---------------|
-| Prompt | `dev-docs/prompts/{epic}.md` | Given at session start | Full task instructions, phases, quality commands | Planning agent |
-| Preamble | `.thrum/context/{name}_preamble.md` | Persists across all sessions | Agent identity, project rules, architectural constraints | Planning agent (initial), human (updates) |
-| Context | `.thrum/context/{name}.md` | Updated each session | Current task, decisions made, blockers hit | `/update-context` skill |
+| Prompt | `dev-docs/prompts/{feature}.md` | Given at session start | Feature-specific: epic IDs, owned packages, design doc, architectural constraints, scoped quality commands | Planning agent |
+| Preamble | `.thrum/context/{name}_preamble.md` | Persists across features | Role and project-level: agent role, project conventions, general quality gates, communication protocol | Human (from `dev-docs/preambles/`) |
+| Context | `.thrum/context/{name}.md` | Updated each session | Volatile session state: current task, decisions made, blockers hit | `/update-context` skill |
 
-The **preamble** is the stable middle layer. It is automatically prepended when showing context via `thrum context show`, providing persistent project-specific instructions. The default thrum quick-reference is always included; custom content from `--preamble-file` is appended below.
+The **preamble** is the stable base layer. It defines the agent's role and project conventions — content that remains valid even when the worktree is reused for a different feature. The default thrum quick-reference is always included; custom content from `--preamble-file` is appended below. Preambles are per-role (e.g., one `implementer-preamble.md` reused across all implementer worktrees), stored in `dev-docs/preambles/`.
+
+The **prompt** (implementation template) contains all feature-specific instructions: which epic/tasks to implement, which packages to modify, design doc references, feature-specific constraints, and scoped quality commands. It is given directly to the agent at session start, not stored in thrum.
 
 The **context** file is volatile — rewritten each session by the `/update-context` skill with current task state, decisions, and blockers.
 
