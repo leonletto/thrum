@@ -654,6 +654,8 @@ thrum send "Auth complete, 15 tests passing" --to @coordinator
 
 ## See Also
 
+- [Tailscale Sync](tailscale-sync.md) -- Cross-machine sync via Tailscale with
+  Ed25519 signing and peer discovery
 - [Agent Coordination](agent-coordination.md) -- Workflow patterns and Beads
   integration
 - [Identity System](identity.md) -- Agent naming, registration, and conflict
