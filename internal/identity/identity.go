@@ -136,6 +136,12 @@ func GenerateEventID() string {
 	return "evt_" + generateULID()
 }
 
+// GenerateGroupID generates a unique group ID using ULID.
+// Format: "grp_" + ulid().
+func GenerateGroupID() string {
+	return "grp_" + generateULID()
+}
+
 var (
 	ulidMu      sync.Mutex
 	ulidEntropy = ulid.Monotonic(rand.Reader, 0)
