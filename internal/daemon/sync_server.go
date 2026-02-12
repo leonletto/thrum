@@ -14,7 +14,8 @@ import (
 // SyncRegistry is a handler registry that only allows sync.* RPC methods.
 // This provides a security boundary — application RPCs are never exposed over Tailscale.
 type SyncRegistry struct {
-	handlers map[string]Handler
+	handlers    map[string]Handler
+	rateLimiter *SyncRateLimiter // optional per-peer rate limiting
 }
 
 // NewSyncRegistry creates a new sync-only handler registry.
@@ -22,6 +23,11 @@ func NewSyncRegistry() *SyncRegistry {
 	return &SyncRegistry{
 		handlers: make(map[string]Handler),
 	}
+}
+
+// SetRateLimiter configures per-peer rate limiting for sync requests.
+func (r *SyncRegistry) SetRateLimiter(rl *SyncRateLimiter) {
+	r.rateLimiter = rl
 }
 
 // allowedSyncMethods is the whitelist of RPC methods allowed on the sync endpoint.
@@ -42,8 +48,9 @@ func (r *SyncRegistry) Register(method string, handler Handler) error {
 }
 
 // ServeSyncRPC reads JSON-RPC requests from a connection and dispatches only to sync handlers.
+// peerID identifies the remote peer for rate limiting (from WhoIs or connection info).
 // Application RPCs return "method not found". Uses the same wire format as the Unix socket server.
-func (r *SyncRegistry) ServeSyncRPC(ctx context.Context, conn net.Conn) {
+func (r *SyncRegistry) ServeSyncRPC(ctx context.Context, conn net.Conn, peerID string) {
 	ctx = transport.WithTransport(ctx, transport.TransportTailscale)
 
 	reader := bufio.NewReader(conn)
@@ -80,6 +87,23 @@ func (r *SyncRegistry) ServeSyncRPC(ctx context.Context, conn net.Conn) {
 			}
 			_ = writeSyncResponse(writer, resp)
 			continue
+		}
+
+		// Per-peer rate limiting
+		if r.rateLimiter != nil {
+			if rlErr := r.rateLimiter.Allow(peerID); rlErr != nil {
+				code := -32000
+				if rle, ok := rlErr.(*RateLimitError); ok {
+					code = -rle.Code // Use negative HTTP code as JSON-RPC error
+				}
+				resp := jsonRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Error:   &jsonRPCError{Code: code, Message: rlErr.Error()},
+				}
+				_ = writeSyncResponse(writer, resp)
+				continue
+			}
 		}
 
 		handler, ok := r.handlers[req.Method]

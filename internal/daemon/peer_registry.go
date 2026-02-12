@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -55,6 +56,9 @@ func NewPeerRegistry(filePath string) (*PeerRegistry, error) {
 }
 
 // AddPeer adds or updates a peer in the registry and persists to disk.
+// If the peer already exists with a public key and the new key differs,
+// the key change is rejected (TOFU: trust on first use) and an error is returned.
+// Use ForceUpdatePeerKey for manual key rotation after verification.
 func (r *PeerRegistry) AddPeer(info *PeerInfo) error {
 	if info.DaemonID == "" {
 		return fmt.Errorf("peer daemon_id is required")
@@ -67,9 +71,56 @@ func (r *PeerRegistry) AddPeer(info *PeerInfo) error {
 	if info.Status == "" {
 		info.Status = "active"
 	}
+
+	// TOFU key pinning: reject public key changes
+	if existing, ok := r.peers[info.DaemonID]; ok {
+		if existing.PublicKey != "" && info.PublicKey != "" && existing.PublicKey != info.PublicKey {
+			log.Printf("[peer_registry] WARNING: Public key change REJECTED for peer %s (daemon_id=%s). "+
+				"Existing key fingerprint differs from new key. "+
+				"If this is a legitimate key rotation, use 'thrum daemon peers trust %s' to update.",
+				info.Hostname, info.DaemonID, info.DaemonID)
+			return fmt.Errorf("public key change rejected for peer %s (TOFU): use ForceUpdatePeerKey for manual rotation", info.DaemonID)
+		}
+		// Preserve existing key if new info doesn't include one
+		if info.PublicKey == "" && existing.PublicKey != "" {
+			info.PublicKey = existing.PublicKey
+		}
+	} else if info.PublicKey != "" {
+		// First time seeing this peer's key — log fingerprint for verification
+		log.Printf("[peer_registry] TOFU: Pinning public key for peer %s (daemon_id=%s): key=%s...",
+			info.Hostname, info.DaemonID, truncateKey(info.PublicKey))
+	}
+
 	r.peers[info.DaemonID] = info
 
 	return r.saveLocked()
+}
+
+// ForceUpdatePeerKey updates the public key for a peer, bypassing TOFU protection.
+// Use this for manual key rotation after out-of-band verification.
+func (r *PeerRegistry) ForceUpdatePeerKey(daemonID string, newPublicKey string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p, ok := r.peers[daemonID]
+	if !ok {
+		return fmt.Errorf("peer %s not found", daemonID)
+	}
+
+	log.Printf("[peer_registry] Public key FORCE UPDATED for peer %s (daemon_id=%s): old=%s... new=%s...",
+		p.Hostname, daemonID, truncateKey(p.PublicKey), truncateKey(newPublicKey))
+	p.PublicKey = newPublicKey
+	p.LastSeen = time.Now()
+
+	return r.saveLocked()
+}
+
+// truncateKey returns the first 16 characters of a key for safe logging.
+func truncateKey(key string) string {
+	if len(key) > 16 {
+		return key[:16]
+	}
+	return key
 }
 
 // GetPeer returns the peer info for the given daemon ID, or nil if not found.

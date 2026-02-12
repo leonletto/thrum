@@ -65,7 +65,7 @@ func newTestDaemon(t *testing.T, name string) *testDaemon {
 			if err != nil {
 				return
 			}
-			go reg.ServeSyncRPC(ctx, conn)
+			go reg.ServeSyncRPC(ctx, conn, "test-peer")
 		}
 	}()
 

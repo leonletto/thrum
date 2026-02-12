@@ -77,7 +77,7 @@ func TestSyncClient_PullEvents(t *testing.T) {
 			if err != nil {
 				return
 			}
-			go reg.ServeSyncRPC(ctx, conn)
+			go reg.ServeSyncRPC(ctx, conn, "test-peer")
 		}
 	}()
 
@@ -130,7 +130,7 @@ func TestSyncClient_QueryPeerInfo(t *testing.T) {
 			if err != nil {
 				return
 			}
-			go reg.ServeSyncRPC(ctx, conn)
+			go reg.ServeSyncRPC(ctx, conn, "test-peer")
 		}
 	}()
 
