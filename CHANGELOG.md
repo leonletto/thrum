@@ -60,6 +60,36 @@ platform.
 - Graceful degradation when daemon, session, or git are unavailable
 - Both human-readable and `--json` output
 
+#### Tailscale Sync
+
+Cross-machine event synchronization over Tailscale's encrypted mesh network.
+Daemons discover peers automatically and sync events in real-time via push
+notifications with a periodic fallback.
+
+- tsnet listener for encrypted peer-to-peer sync on port 9100
+- `sync.pull` batched event pulling with sequence-based checkpoints and dedup
+- `sync.notify` push notifications with per-peer debouncing (fire-and-forget)
+- Periodic sync scheduler (5-minute fallback for missed notifications)
+- Automatic peer discovery via Tailscale API filtering by `tag:thrum-daemon`
+- Peer registry with persistence to `.thrum/var/peers.json`
+- `thrum daemon sync`, `thrum daemon peers list|add` CLI commands
+- Tailscale sync status in `thrum status` health endpoint
+- Supports both Tailscale SaaS and self-hosted Headscale control planes
+
+#### Tailscale Sync Security
+
+Defense-in-depth security for the sync protocol with five layers of protection.
+
+- Ed25519 event signing with canonical payload format
+- Three-stage validation pipeline (schema, signature, business logic)
+- Tailscale WhoIs authorization (hostname, ACL tags, domain checks)
+- Per-peer token bucket rate limiting (configurable RPS, burst, queue depth)
+- Quarantine system for invalid events with alert thresholds
+- TOFU (trust-on-first-use) key pinning for peer public keys
+- `THRUM_SECURITY_ALLOWED_PEERS`, `THRUM_SECURITY_REQUIRED_TAGS`,
+  `THRUM_SECURITY_ALLOWED_DOMAIN`, `THRUM_SECURITY_REQUIRE_AUTH`,
+  `THRUM_SECURITY_REQUIRE_SIGNATURES` environment variables
+
 ### Changed
 
 - `--broadcast` flag on `thrum send` now maps to `--to @everyone` with a
