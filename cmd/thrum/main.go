@@ -153,7 +153,7 @@ Examples:
 
 			// Validate runtime flag if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
-				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, cli-only, all", runtimeFlag)
+				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, auggie, cli-only, all", runtimeFlag)
 			}
 
 			// Step 1: Repo initialization (unless dry-run or runtime-only)

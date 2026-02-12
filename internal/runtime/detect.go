@@ -17,6 +17,7 @@ func DetectRuntime(repoPath string) string {
 		{".claude/settings.json", "claude"},
 		{".codex", "codex"},
 		{".cursorrules", "cursor"},
+		{".augment", "auggie"},
 	}
 	for _, c := range fileChecks {
 		path := filepath.Join(repoPath, c.marker)
@@ -33,6 +34,7 @@ func DetectRuntime(repoPath string) string {
 		{"CLAUDE_SESSION_ID", "claude"},
 		{"CURSOR_SESSION", "cursor"},
 		{"GEMINI_CLI", "gemini"},
+		{"AUGMENT_AGENT", "auggie"},
 	}
 	for _, c := range envChecks {
 		if os.Getenv(c.envVar) != "" {
@@ -45,7 +47,7 @@ func DetectRuntime(repoPath string) string {
 
 // SupportedRuntimes returns the list of all supported runtime names.
 func SupportedRuntimes() []string {
-	return []string{"claude", "codex", "cursor", "gemini", "cli-only", "all"}
+	return []string{"claude", "codex", "cursor", "gemini", "auggie", "cli-only", "all"}
 }
 
 // IsValidRuntime checks whether the given runtime name is valid.

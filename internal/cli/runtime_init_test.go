@@ -84,6 +84,26 @@ func TestRenderTemplate(t *testing.T) {
 			},
 		},
 		{
+			runtime:  "auggie",
+			template: "settings.json.tmpl",
+			contains: []string{
+				`"thrum"`,
+				"test_agent",
+				"mcp",
+				"SessionStart",
+			},
+		},
+		{
+			runtime:  "auggie",
+			template: "rules.md.tmpl",
+			contains: []string{
+				"test_agent",
+				"implementer",
+				"auth",
+				"type: always",
+			},
+		},
+		{
 			runtime:  "cli-only",
 			template: "polling-loop.sh.tmpl",
 			contains: []string{
@@ -290,6 +310,8 @@ func TestRuntimeInit_AllRuntimes(t *testing.T) {
 		"AGENTS.md",
 		".cursorrules",
 		".gemini/instructions.md",
+		".augment/settings.json",
+		".augment/rules/thrum.md",
 		"scripts/thrum-startup.sh",
 	}
 	for _, expected := range expectedFiles {
@@ -297,6 +319,68 @@ func TestRuntimeInit_AllRuntimes(t *testing.T) {
 		if _, err := os.Stat(outPath); os.IsNotExist(err) {
 			t.Errorf("expected file %s to exist for --runtime all", expected)
 		}
+	}
+}
+
+func TestRuntimeInit_Auggie(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	opts := RuntimeInitOptions{
+		RepoPath:  tmpDir,
+		Runtime:   "auggie",
+		Force:     true,
+		AgentName: "test_agent",
+		AgentRole: "implementer",
+		AgentMod:  "backend",
+	}
+
+	result, err := RuntimeInit(opts)
+	if err != nil {
+		t.Fatalf("RuntimeInit for auggie failed: %v", err)
+	}
+
+	if len(result.Files) != 3 {
+		t.Errorf("expected 3 files for auggie, got %d", len(result.Files))
+	}
+
+	// Verify .augment/settings.json
+	settingsPath := filepath.Join(tmpDir, ".augment", "settings.json")
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("failed to read .augment/settings.json: %v", err)
+	}
+	settingsStr := string(content)
+	if !strings.Contains(settingsStr, "thrum") {
+		t.Error(".augment/settings.json should contain MCP server config")
+	}
+	if !strings.Contains(settingsStr, "SessionStart") {
+		t.Error(".augment/settings.json should contain SessionStart hook")
+	}
+	if !strings.Contains(settingsStr, "test_agent") {
+		t.Error(".augment/settings.json should contain agent name")
+	}
+
+	// Verify .augment/rules/thrum.md
+	rulesPath := filepath.Join(tmpDir, ".augment", "rules", "thrum.md")
+	content, err = os.ReadFile(rulesPath)
+	if err != nil {
+		t.Fatalf("failed to read .augment/rules/thrum.md: %v", err)
+	}
+	rulesStr := string(content)
+	if !strings.Contains(rulesStr, "type: always") {
+		t.Error("rules file should have 'type: always' frontmatter")
+	}
+	if !strings.Contains(rulesStr, "test_agent") {
+		t.Error("rules file should contain agent name")
+	}
+	if !strings.Contains(rulesStr, "backend") {
+		t.Error("rules file should contain agent module")
+	}
+
+	// Verify startup script
+	startupPath := filepath.Join(tmpDir, "scripts", "thrum-startup.sh")
+	if _, err := os.Stat(startupPath); os.IsNotExist(err) {
+		t.Error("startup script should be created for auggie")
 	}
 }
 
@@ -378,7 +462,7 @@ func TestFormatRuntimeInit_DryRun(t *testing.T) {
 }
 
 func TestEachRuntimeTemplateSet(t *testing.T) {
-	runtimes := []string{"claude", "codex", "cursor", "gemini", "cli-only"}
+	runtimes := []string{"claude", "codex", "cursor", "gemini", "auggie", "cli-only"}
 
 	for _, rt := range runtimes {
 		t.Run(rt, func(t *testing.T) {
