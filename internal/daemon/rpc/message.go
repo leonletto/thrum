@@ -11,6 +11,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/groups"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	"github.com/leonletto/thrum/internal/types"
@@ -168,15 +169,17 @@ type MarkReadResponse struct {
 
 // MessageHandler handles message-related RPC methods.
 type MessageHandler struct {
-	state      *state.State
-	dispatcher *subscriptions.Dispatcher
+	state         *state.State
+	dispatcher    *subscriptions.Dispatcher
+	groupResolver *groups.Resolver
 }
 
 // NewMessageHandler creates a new message handler.
 func NewMessageHandler(state *state.State) *MessageHandler {
 	return &MessageHandler{
-		state:      state,
-		dispatcher: subscriptions.NewDispatcher(state.DB()),
+		state:         state,
+		dispatcher:    subscriptions.NewDispatcher(state.DB()),
+		groupResolver: groups.NewResolver(state.DB()),
 	}
 }
 
@@ -184,8 +187,9 @@ func NewMessageHandler(state *state.State) *MessageHandler {
 // The dispatcher should have the client notifier configured for push notifications.
 func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher) *MessageHandler {
 	return &MessageHandler{
-		state:      state,
-		dispatcher: dispatcher,
+		state:         state,
+		dispatcher:    dispatcher,
+		groupResolver: groups.NewResolver(state.DB()),
 	}
 }
 
@@ -251,18 +255,31 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		structuredJSON = string(data)
 	}
 
-	// Convert mentions to refs
+	// Convert mentions to refs (with group detection)
 	refs := req.Refs
+	scopes := req.Scopes
 	for _, mention := range req.Mentions {
 		// Remove @ prefix if present
 		role := mention
 		if len(role) > 0 && role[0] == '@' {
 			role = role[1:]
 		}
-		refs = append(refs, types.Ref{
-			Type:  "mention",
-			Value: role,
-		})
+
+		// Check if this mention is a group
+		isGroup, err := h.groupResolver.IsGroup(role)
+		if err != nil {
+			return nil, fmt.Errorf("check group %q: %w", role, err)
+		}
+
+		if isGroup {
+			// Group mention — store as group scope (pull model, no expansion)
+			scopes = append(scopes, types.Scope{Type: "group", Value: role})
+			// Also store audit ref for queryability
+			refs = append(refs, types.Ref{Type: "group", Value: role})
+		} else {
+			// Not a group — treat as regular mention (push model)
+			refs = append(refs, types.Ref{Type: "mention", Value: role})
+		}
 	}
 
 	// Build message.create event
@@ -278,7 +295,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 			Content:    req.Content,
 			Structured: structuredJSON,
 		},
-		Scopes:     req.Scopes,
+		Scopes:     scopes,
 		Refs:       refs,
 		AuthoredBy: authoredBy,
 		Disclosed:  disclosed,
