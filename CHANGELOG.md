@@ -79,18 +79,26 @@ One-command worktree setup with full agent context bootstrapping.
 
 #### Team Command
 
-Rich per-agent status for all active agents, powered by a single server-side
-SQL JOIN query.
+Rich per-agent status for all active agents, powered by server-side SQL JOINs.
 
 - `thrum team` shows `thrum status`-like detail for every active agent
 - Per-agent display: location, session duration, intent, inbox counts, branch,
   and per-file change details with diff stats
+- Per-agent inbox shows only directed messages (mentions); shared messages
+  (broadcasts + group counts) appear in a footer section
 - `--all` flag includes offline agents
 - `--json` flag for machine-readable output
 - Schema migration v11: hostname tracking on agent registration
 - `THRUM_HOSTNAME` env var override for friendly machine names
 - `team.list` RPC handler with two-query architecture (agents+contexts, inbox
   counts)
+
+#### Inbox Scoping Fixes
+
+- `thrum status` and `thrum overview` now show the agent's actual scoped inbox
+  count (was showing total system message count)
+- `thrum status` and `thrum overview` now resolve local worktree identity
+  instead of falling back to the main worktree's agent (worktree identity fix)
 
 #### Tailscale Sync
 
