@@ -22,15 +22,14 @@ Brainstorm           Select/create         Orient from beads
 Write spec           worktree              Implement tasks
 Create epics         Setup thrum +         Test → commit → close
 Create tasks         beads redirect        Quality gates
-Write preambles      Run quickstart        Merge to main
-Set deps             w/ --preamble
+Set deps             Run quickstart        Merge to main
 ```
 
-**Plan** — Explore codebase, propose approaches, write design spec, decompose into beads epics with detailed task descriptions. Create per-agent preamble files.
+**Plan** — Explore codebase, propose approaches, write design spec, decompose into beads epics with detailed task descriptions.
 
-**Prepare** — Select or create git worktree, configure thrum and beads redirects so all worktrees share the same daemon and issue database. Bootstrap agent identity with preamble.
+**Prepare** — Select or create git worktree, configure thrum and beads redirects so all worktrees share the same daemon and issue database. Bootstrap agent identity.
 
-**Implement** — Work through tasks in dependency order: claim → read → implement → test → commit → close. Orient phase reads beads status and git history for resume after context loss. Preamble persists project rules across sessions.
+**Implement** — Work through tasks in dependency order: claim → read → implement → test → commit → close. Orient phase reads beads status and git history for resume after context loss.
 
 ## Install the templates
 
@@ -62,17 +61,6 @@ Templates use `{{PLACEHOLDER}}` syntax for project-specific values. Replace thes
 {{PROJECT_ROOT}}  → /home/user/projects/myproject
 {{WORKTREE_BASE}} → ~/.workspaces/myproject
 {{FEATURE_NAME}}  → auth
-```
-
-### Preamble placeholders (role/project-level)
-
-```bash
-{{PROJECT_NAME}}             → MyProject
-{{AGENT_ROLE}}               → implementer
-{{TECH_STACK}}               → Go, TypeScript/React, SQLite, JSONL
-{{PROJECT_CONVENTIONS}}      → Coding patterns, error handling, testing approach
-{{GENERAL_QUALITY_COMMANDS}} → go test ./... -count=1 -race && go vet ./...
-{{COMMUNICATION_PROTOCOL}}   → When/how to use thrum messaging
 ```
 
 ### Implementation agent placeholders
@@ -109,44 +97,30 @@ Save the filled-in template as a file or paste it directly into your agent's pro
 
 Give `planning-agent.md` to a planning agent when you have a feature idea and need actionable tasks.
 
-**Produces:** Design spec, beads epics, detailed task descriptions, dependency relationships, per-agent preamble files.
+**Produces:** Design spec, beads epics, detailed task descriptions, dependency relationships.
 
 Planning agents front-load detail into task descriptions so implementation agents work autonomously without conversation history.
-
-### Use the preamble template
-
-The planning agent uses `preamble-agent.md` to create **role-level** preamble files that define an agent's role and project conventions. Preambles persist across features — they must NOT contain feature-specific details like epic IDs, owned packages, or design doc references. Those belong in the implementation prompt.
-
-**Creates:** Per-role preamble files saved to `dev-docs/preambles/{role}-preamble.md`.
-
-**Contains:** Agent role, project conventions, general quality gates, communication protocol.
-
-**Key principle:** Preambles are per-role, not per-feature. A single `implementer-preamble.md` is reused across all implementer worktrees. If the worktree is reused for a different feature, the preamble remains valid.
-
-Preambles are automatically prepended when showing context via `thrum context show`. See [Agent Context Management](context.md) for the three-layer context model.
 
 ## Use the worktree setup guide
 
 Follow `worktree-setup.md` when an epic needs an isolated workspace.
 
-**Does:** Check existing worktrees for reuse, create new worktree + branch if needed, configure thrum and beads redirects, bootstrap agent identity with preamble, verify with `bd where`, `bd ready`, and `thrum context show`.
+**Does:** Check existing worktrees for reuse, create new worktree + branch if needed, configure thrum and beads redirects, bootstrap agent identity, verify with `bd where`, `bd ready`, and `thrum context show`.
 
 Without redirect configuration, agents in different worktrees see different tasks and different daemon instances.
 
-### Enhanced setup script
+### Setup script
 
-The `setup-worktree-thrum.sh` script now supports full worktree bootstrapping with identity, role, module, and preamble in a single command:
+The `setup-worktree-thrum.sh` script handles full worktree bootstrapping in a single command:
 
 ```bash
-# Full worktree setup with identity and preamble
+# Full worktree setup with identity
 ./scripts/setup-worktree-thrum.sh ~/.workspaces/myproject/auth feature/auth \
   --identity impl-auth \
-  --role implementer \
-  --module auth \
-  --preamble dev-docs/preambles/implementer-preamble.md
+  --role implementer
 ```
 
-This creates the worktree, sets up redirects, registers the agent, and installs the preamble. The `thrum quickstart` command (used internally) now auto-creates empty context files and composes the default thrum preamble with custom content from `--preamble-file`.
+This creates the worktree, sets up thrum and beads redirects, and registers the agent identity. The `thrum quickstart` command (used internally) auto-creates a default preamble with thrum quick-reference commands.
 
 ## Use the implementation template
 
