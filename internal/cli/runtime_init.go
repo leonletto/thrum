@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 )
+
+// safeIdentifierRE validates template variables interpolated into shell commands.
+var safeIdentifierRE = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
 //go:embed templates/*
 var templateFS embed.FS
@@ -143,6 +147,17 @@ func RuntimeInit(opts RuntimeInitOptions) (*RuntimeInitResult, error) {
 		data.AgentModule = "main"
 	}
 
+	// Validate template variables before interpolation into shell commands.
+	for _, check := range []struct{ name, value string }{
+		{"agent name", data.AgentName},
+		{"agent role", data.AgentRole},
+		{"agent module", data.AgentModule},
+	} {
+		if !safeIdentifierRE.MatchString(check.value) {
+			return nil, fmt.Errorf("invalid %s %q: must contain only lowercase alphanumeric, underscore, or hyphen", check.name, check.value)
+		}
+	}
+
 	// Get runtimes to process
 	runtimes := []string{opts.Runtime}
 	if opts.Runtime == "all" {
@@ -190,7 +205,7 @@ func RuntimeInit(opts RuntimeInitOptions) (*RuntimeInitResult, error) {
 				}
 
 				// Create parent directory
-				if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+				if err := os.MkdirAll(filepath.Dir(outPath), 0750); err != nil {
 					return nil, fmt.Errorf("mkdir for %s: %w", outPath, err)
 				}
 

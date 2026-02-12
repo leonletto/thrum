@@ -198,7 +198,7 @@ func TestRuntimeInit_CreateFiles(t *testing.T) {
 
 	// Verify .claude/settings.json contains expected content
 	settingsPath := filepath.Join(tmpDir, ".claude", "settings.json")
-	content, err := os.ReadFile(settingsPath)
+	content, err := os.ReadFile(filepath.Clean(settingsPath))
 	if err != nil {
 		t.Fatalf("failed to read settings.json: %v", err)
 	}
@@ -215,8 +215,8 @@ func TestRuntimeInit_SkipExisting(t *testing.T) {
 
 	// Create a pre-existing file
 	claudeDir := filepath.Join(tmpDir, ".claude")
-	os.MkdirAll(claudeDir, 0755)
-	os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte("existing"), 0644)
+	_ = os.MkdirAll(claudeDir, 0750)
+	_ = os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte("existing"), 0600)
 
 	opts := RuntimeInitOptions{
 		RepoPath:  tmpDir,
@@ -242,7 +242,7 @@ func TestRuntimeInit_SkipExisting(t *testing.T) {
 	}
 
 	// Verify existing file was not modified
-	content, _ := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
+	content, _ := os.ReadFile(filepath.Clean(filepath.Join(claudeDir, "settings.json")))
 	if string(content) != "existing" {
 		t.Error("existing file should not be modified without --force")
 	}
@@ -253,8 +253,8 @@ func TestRuntimeInit_ForceOverwrite(t *testing.T) {
 
 	// Create a pre-existing file
 	claudeDir := filepath.Join(tmpDir, ".claude")
-	os.MkdirAll(claudeDir, 0755)
-	os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte("existing"), 0644)
+	_ = os.MkdirAll(claudeDir, 0750)
+	_ = os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte("existing"), 0600)
 
 	opts := RuntimeInitOptions{
 		RepoPath:  tmpDir,
@@ -276,7 +276,7 @@ func TestRuntimeInit_ForceOverwrite(t *testing.T) {
 	}
 
 	// Verify file was overwritten
-	content, _ := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
+	content, _ := os.ReadFile(filepath.Clean(filepath.Join(claudeDir, "settings.json")))
 	if string(content) == "existing" {
 		t.Error("file should be overwritten with --force")
 	}
@@ -345,7 +345,7 @@ func TestRuntimeInit_Auggie(t *testing.T) {
 
 	// Verify .augment/settings.json
 	settingsPath := filepath.Join(tmpDir, ".augment", "settings.json")
-	content, err := os.ReadFile(settingsPath)
+	content, err := os.ReadFile(filepath.Clean(settingsPath))
 	if err != nil {
 		t.Fatalf("failed to read .augment/settings.json: %v", err)
 	}
@@ -362,7 +362,7 @@ func TestRuntimeInit_Auggie(t *testing.T) {
 
 	// Verify .augment/rules/thrum.md
 	rulesPath := filepath.Join(tmpDir, ".augment", "rules", "thrum.md")
-	content, err = os.ReadFile(rulesPath)
+	content, err = os.ReadFile(filepath.Clean(rulesPath))
 	if err != nil {
 		t.Fatalf("failed to read .augment/rules/thrum.md: %v", err)
 	}
@@ -418,7 +418,7 @@ func TestRuntimeInit_DefaultValues(t *testing.T) {
 
 	// Verify startup script uses defaults
 	startupPath := filepath.Join(tmpDir, "scripts", "thrum-startup.sh")
-	content, err := os.ReadFile(startupPath)
+	content, err := os.ReadFile(filepath.Clean(startupPath))
 	if err != nil {
 		t.Fatalf("failed to read startup script: %v", err)
 	}

@@ -185,7 +185,7 @@ func loadUserConfig() (*userPresetsConfig, error) {
 		return &userPresetsConfig{}, err
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &userPresetsConfig{}, nil
@@ -208,7 +208,7 @@ func saveUserConfig(cfg *userPresetsConfig) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
@@ -217,5 +217,5 @@ func saveUserConfig(cfg *userPresetsConfig) error {
 		return fmt.Errorf("marshal config: %w", err)
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
