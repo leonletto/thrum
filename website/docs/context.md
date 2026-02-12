@@ -6,7 +6,7 @@ description:
 category: "context"
 order: 1
 tags: ["context", "agents", "persistence", "markdown", "state"]
-last_updated: "2026-02-11"
+last_updated: "2026-02-12"
 ---
 
 # Agent Context Management
@@ -52,6 +52,22 @@ Context files are stored in `.thrum/context/`:
 The `.thrum/` directory is gitignored, so context files are local by default.
 Use `thrum context sync` to manually share context across worktrees via the
 a-sync branch.
+
+## Context Layers
+
+Thrum provides a three-layer context model for managing agent state at different levels of persistence:
+
+| Layer | File | Persistence | Content | Maintained By |
+|-------|------|-------------|---------|---------------|
+| Prompt | `dev-docs/prompts/{epic}.md` | Given at session start | Full task instructions, phases, quality commands | Planning agent |
+| Preamble | `.thrum/context/{name}_preamble.md` | Persists across all sessions | Agent identity, project rules, architectural constraints | Planning agent (initial), human (updates) |
+| Context | `.thrum/context/{name}.md` | Updated each session | Current task, decisions made, blockers hit | `/update-context` skill |
+
+The **preamble** is the stable middle layer. It is automatically prepended when showing context via `thrum context show`, providing persistent project-specific instructions. The default thrum quick-reference is always included; custom content from `--preamble-file` is appended below.
+
+The **context** file is volatile — rewritten each session by the `/update-context` skill with current task state, decisions, and blockers.
+
+See [Workflow Templates](workflow-templates.md) for how these layers work together in the planning → prepare → implement workflow.
 
 ## Preamble
 
@@ -444,6 +460,8 @@ thrum context preamble --agent furiosa
 **Behavior:** The preamble is auto-created with default content on the first
 `thrum context save`. Use `--init` to reset to the default, or `--file` to set
 custom content.
+
+**Note:** Preambles can also be set during agent bootstrapping with `thrum quickstart --preamble-file <path>`. This composes the default preamble (thrum quick-reference) with custom content from the specified file.
 
 ---
 

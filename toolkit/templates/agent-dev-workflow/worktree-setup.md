@@ -1,7 +1,5 @@
 # Worktree & Branch Setup Guide
 
-> **Note:** This is a distributable template. Fill in the `{{PLACEHOLDER}}` values with your project-specific information before using.
-
 ## Purpose
 
 Guide for selecting an existing worktree or creating a new one for development
@@ -149,6 +147,19 @@ When assigning parallel epics to the same worktree, define ownership:
 - Build files (`Makefile`, `package.json`)
 - RPC routers or service registries
 - Shared documentation
+
+---
+
+## Updating CLAUDE.md
+
+After creating a new worktree, update the project's `CLAUDE.md` worktree table
+so other agents know it exists:
+
+```markdown
+| Worktree         | Branch                     | Path                                 |
+| ---------------- | -------------------------- | ------------------------------------ |
+| {{FEATURE_NAME}} | `feature/{{FEATURE_NAME}}` | `{{WORKTREE_BASE}}/{{FEATURE_NAME}}` |
+```
 
 ---
 

@@ -6,7 +6,7 @@ description:
 category: "quickstart"
 order: 1
 tags: ["quickstart", "getting-started", "installation", "setup", "tutorial"]
-last_updated: "2026-02-10"
+last_updated: "2026-02-12"
 ---
 
 # Thrum Quickstart Guide
@@ -29,6 +29,13 @@ If you want to skip the manual setup, use the quickstart command:
 This registers your agent with a human-readable name (re-registering
 automatically on conflict), starts a session, and optionally sets your work
 intent in one step. The sections below walk through each step individually.
+
+**New in v0.6:** The quickstart command now auto-creates empty context and preamble files on first run. You can also provide custom preamble content with `--preamble-file`:
+
+    $ thrum quickstart --name impl-auth --role implementer --module auth \
+        --preamble-file dev-docs/prompts/impl-auth-preamble.md
+
+The default thrum quick-reference is always included; custom content from the preamble file is appended below it. See [Agent Context Management](context.md) for details on the three-layer context model.
 
 ## Prerequisites
 

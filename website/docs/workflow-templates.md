@@ -4,7 +4,7 @@ description: "Three-phase development templates for planning, preparing, and imp
 category: "guides"
 order: 3
 tags: ["templates", "workflow", "planning", "implementation", "agents", "toolkit"]
-last_updated: "2026-02-10"
+last_updated: "2026-02-12"
 ---
 
 # Workflow Templates
@@ -20,16 +20,17 @@ Templates live in `toolkit/templates/` in the Thrum repository.
 ─────────────        ──────────────        ─────────────────────
 Brainstorm           Select/create         Orient from beads
 Write spec           worktree              Implement tasks
-Create epics         Setup beads           Test → commit → close
-Create tasks         redirect              Quality gates
-Set deps             Verify setup          Merge to main
+Create epics         Setup thrum +         Test → commit → close
+Create tasks         beads redirect        Quality gates
+Write preambles      Run quickstart        Merge to main
+Set deps             w/ --preamble
 ```
 
-**Plan** — Explore codebase, propose approaches, write design spec, decompose into beads epics with detailed task descriptions.
+**Plan** — Explore codebase, propose approaches, write design spec, decompose into beads epics with detailed task descriptions. Create per-agent preamble files.
 
-**Prepare** — Select or create git worktree, configure beads redirect so all worktrees share the same issue database.
+**Prepare** — Select or create git worktree, configure thrum and beads redirects so all worktrees share the same daemon and issue database. Bootstrap agent identity with preamble.
 
-**Implement** — Work through tasks in dependency order: claim → read → implement → test → commit → close. Orient phase reads beads status and git history for resume after context loss.
+**Implement** — Work through tasks in dependency order: claim → read → implement → test → commit → close. Orient phase reads beads status and git history for resume after context loss. Preamble persists project rules across sessions.
 
 ## Install the templates
 
@@ -61,6 +62,20 @@ Templates use `{{PLACEHOLDER}}` syntax for project-specific values. Replace thes
 {{PROJECT_ROOT}}  → /home/user/projects/myproject
 {{WORKTREE_BASE}} → ~/.workspaces/myproject
 {{FEATURE_NAME}}  → auth
+```
+
+### Preamble placeholders
+
+```bash
+{{AGENT_NAME}}                → impl-auth
+{{AGENT_ROLE}}                → implementer
+{{AGENT_MODULE}}              → auth
+{{WORKTREE_BRANCH}}           → feature/auth
+{{DESIGN_DOC}}                → dev-docs/plans/2026-02-12-auth-design.md
+{{OWNED_PACKAGES}}            → internal/auth/, internal/middleware/
+{{QUALITY_COMMANDS}}          → go test ./internal/auth/... -count=1 -race
+{{ARCHITECTURAL_CONSTRAINTS}} → Key design decisions
+{{COORDINATION_NOTES}}        → Agent interaction rules
 ```
 
 ### Implementation agent placeholders
@@ -97,17 +112,42 @@ Save the filled-in template as a file or paste it directly into your agent's pro
 
 Give `planning-agent.md` to a planning agent when you have a feature idea and need actionable tasks.
 
-**Produces:** Design spec, beads epics, detailed task descriptions, dependency relationships.
+**Produces:** Design spec, beads epics, detailed task descriptions, dependency relationships, per-agent preamble files.
 
 Planning agents front-load detail into task descriptions so implementation agents work autonomously without conversation history.
+
+### Use the preamble template
+
+The planning agent uses `preamble-agent.md` to create persistent, project-specific instructions for each implementation agent. These preambles persist across all sessions, providing agent identity, ownership scope, architectural constraints, and coordination rules.
+
+**Creates:** Per-agent preamble files saved to `dev-docs/prompts/{agent-name}-preamble.md`.
+
+**Contains:** Agent identity, ownership scope (which files/packages the agent owns), architectural constraints, coding patterns, quality gates, and coordination notes.
+
+Preambles are automatically prepended when showing context via `thrum context show`. They act as a stable middle layer between the session prompt (volatile) and the implementation template (given once per agent lifecycle). See [Agent Context Management](context.md) for the three-layer context model.
 
 ## Use the worktree setup guide
 
 Follow `worktree-setup.md` when an epic needs an isolated workspace.
 
-**Does:** Check existing worktrees for reuse, create new worktree + branch if needed, configure beads redirect, verify with `bd where` and `bd ready`.
+**Does:** Check existing worktrees for reuse, create new worktree + branch if needed, configure thrum and beads redirects, bootstrap agent identity with preamble, verify with `bd where`, `bd ready`, and `thrum context show`.
 
-Without redirect configuration, agents in different worktrees see different tasks.
+Without redirect configuration, agents in different worktrees see different tasks and different daemon instances.
+
+### Enhanced setup script
+
+The `setup-worktree-thrum.sh` script now supports full worktree bootstrapping with identity, role, module, and preamble in a single command:
+
+```bash
+# Full worktree setup with identity and preamble
+./scripts/setup-worktree-thrum.sh ~/.workspaces/myproject/auth feature/auth \
+  --identity impl-auth \
+  --role implementer \
+  --module auth \
+  --preamble dev-docs/prompts/impl-auth-preamble.md
+```
+
+This creates the worktree, sets up redirects, registers the agent, and installs the preamble. The `thrum quickstart` command (used internally) now auto-creates empty context files and composes the default thrum preamble with custom content from `--preamble-file`.
 
 ## Use the implementation template
 
