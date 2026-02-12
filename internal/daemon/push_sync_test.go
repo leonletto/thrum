@@ -83,7 +83,7 @@ func TestPushSync_NotifyTriggersSync(t *testing.T) {
 
 	// Send notification to daemon B
 	client := NewSyncClient()
-	err := client.SendNotify(daemonB.addr(), daemonA.state.DaemonID(), 1, 1)
+	err := client.SendNotify(daemonB.addr(), daemonA.state.DaemonID(), 1, 1, "")
 	if err != nil {
 		t.Fatalf("SendNotify: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestPushSync_SendNotifyClient(t *testing.T) {
 
 	// Send a notification
 	client := NewSyncClient()
-	err := client.SendNotify(daemon.addr(), "sender-daemon", 42, 5)
+	err := client.SendNotify(daemon.addr(), "sender-daemon", 42, 5, "")
 	if err != nil {
 		t.Fatalf("SendNotify: %v", err)
 	}

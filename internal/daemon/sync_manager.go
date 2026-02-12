@@ -37,6 +37,9 @@ func NewDaemonSyncManager(st *state.State, varDir string) (*DaemonSyncManager, e
 
 // SyncFromPeer pulls events from a specific peer and applies them.
 func (m *DaemonSyncManager) SyncFromPeer(peerAddr string, peerDaemonID string) (applied, skipped int, err error) {
+	// Look up peer token for authentication
+	token := m.getPeerToken(peerDaemonID)
+
 	// Get checkpoint for this peer
 	afterSeq, err := m.applier.GetCheckpoint(peerDaemonID)
 	if err != nil {
@@ -60,7 +63,7 @@ func (m *DaemonSyncManager) SyncFromPeer(peerAddr string, peerDaemonID string) (
 	totalApplied := 0
 	totalSkipped := 0
 
-	err = m.client.PullAllEvents(peerAddr, afterSeq, func(events []eventlog.Event, nextSeq int64) error {
+	err = m.client.PullAllEvents(peerAddr, afterSeq, token, func(events []eventlog.Event, nextSeq int64) error {
 		a, s, applyErr := m.applier.ApplyAndCheckpoint(peerDaemonID, events, nextSeq)
 		totalApplied += a
 		totalSkipped += s
@@ -75,6 +78,15 @@ func (m *DaemonSyncManager) SyncFromPeer(peerAddr string, peerDaemonID string) (
 	_ = m.peers.UpdateLastSync(peerDaemonID)
 
 	return totalApplied, totalSkipped, nil
+}
+
+// getPeerToken returns the stored auth token for a peer, or empty string if not found.
+func (m *DaemonSyncManager) getPeerToken(daemonID string) string {
+	peer := m.peers.GetPeer(daemonID)
+	if peer == nil {
+		return ""
+	}
+	return peer.Token
 }
 
 // PeerStatusInfo is the peer status returned to callers.
@@ -120,8 +132,8 @@ func (m *DaemonSyncManager) ListPeers() []PeerStatusInfo {
 func (m *DaemonSyncManager) AddPeer(hostname string, port int) error {
 	addr := fmt.Sprintf("%s:%d", hostname, port)
 
-	// Try to query peer info
-	info, err := m.client.QueryPeerInfo(addr)
+	// Try to query peer info (no token for initial discovery)
+	info, err := m.client.QueryPeerInfo(addr, "")
 	if err != nil {
 		// Add with hostname-derived ID if we can't reach the peer
 		return m.peers.AddPeer(&PeerInfo{
@@ -158,13 +170,14 @@ func (m *DaemonSyncManager) SyncFromPeerByID(daemonID string) {
 }
 
 // BroadcastNotify sends sync.notify to all known peers.
+// Each peer's stored token is included for authentication.
 // This is fire-and-forget — failures are logged but don't block.
 func (m *DaemonSyncManager) BroadcastNotify(daemonID string, latestSeq int64, eventCount int) {
 	peers := m.peers.ListPeers()
 	for _, peer := range peers {
 		go func(p *PeerInfo) {
 			addr := p.Addr()
-			if err := m.client.SendNotify(addr, daemonID, latestSeq, eventCount); err != nil {
+			if err := m.client.SendNotify(addr, daemonID, latestSeq, eventCount, p.Token); err != nil {
 				log.Printf("sync.notify: failed to notify %s at %s: %v", p.DaemonID, addr, err)
 			}
 		}(peer)

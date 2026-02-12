@@ -12,8 +12,10 @@ import (
 
 // SyncRegistry is a handler registry that only allows sync.* RPC methods.
 // This provides a security boundary — application RPCs are never exposed over Tailscale.
+// Token-based auth is enforced for sync.* methods; pair.request is exempt.
 type SyncRegistry struct {
 	handlers map[string]Handler
+	peers    *PeerRegistry // for token auth; nil disables auth
 }
 
 // NewSyncRegistry creates a new sync-only handler registry.
@@ -21,6 +23,23 @@ func NewSyncRegistry() *SyncRegistry {
 	return &SyncRegistry{
 		handlers: make(map[string]Handler),
 	}
+}
+
+// SetPeerRegistry enables token-based auth for sync.* RPCs.
+// When set, all sync.* methods require a valid peer token in params.
+// pair.request is exempt (it's how peers obtain tokens).
+func (r *SyncRegistry) SetPeerRegistry(peers *PeerRegistry) {
+	r.peers = peers
+}
+
+// tokenExtract is used to extract just the token field from RPC params.
+type tokenExtract struct {
+	Token string `json:"token"`
+}
+
+// methodRequiresAuth returns true if the method requires token authentication.
+func methodRequiresAuth(method string) bool {
+	return method != "pair.request"
 }
 
 // allowedSyncMethods is the whitelist of RPC methods allowed on the Tailscale endpoint.
@@ -94,6 +113,26 @@ func (r *SyncRegistry) ServeSyncRPC(ctx context.Context, conn net.Conn, peerID s
 			continue
 		}
 
+		// Token auth for sync.* methods (pair.request is exempt)
+		var authedPeerID string
+		if r.peers != nil && methodRequiresAuth(req.Method) {
+			var te tokenExtract
+			if req.Params != nil {
+				_ = json.Unmarshal(req.Params, &te)
+			}
+			peer := r.peers.FindPeerByToken(te.Token)
+			if peer == nil {
+				resp := jsonRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Error:   &jsonRPCError{Code: -32000, Message: "unauthorized: unknown peer token"},
+				}
+				_ = writeSyncResponse(writer, resp)
+				continue
+			}
+			authedPeerID = peer.DaemonID
+		}
+
 		result, err := handler(ctx, req.Params)
 		if err != nil {
 			resp := jsonRPCResponse{
@@ -103,6 +142,11 @@ func (r *SyncRegistry) ServeSyncRPC(ctx context.Context, conn net.Conn, peerID s
 			}
 			_ = writeSyncResponse(writer, resp)
 			continue
+		}
+
+		// Update last_sync for authenticated peers on successful requests
+		if authedPeerID != "" && r.peers != nil {
+			_ = r.peers.UpdateLastSync(authedPeerID)
 		}
 
 		resultJSON, err := json.Marshal(result)

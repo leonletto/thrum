@@ -82,7 +82,7 @@ func TestSyncClient_PullEvents(t *testing.T) {
 
 	// Test PullEvents
 	client := NewSyncClient()
-	resp, err := client.PullEvents(ln.Addr().String(), 0)
+	resp, err := client.PullEvents(ln.Addr().String(), 0, "")
 	if err != nil {
 		t.Fatalf("PullEvents: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestSyncClient_PullEvents(t *testing.T) {
 	}
 
 	// Pull after sequence 2 — should get only 1 event
-	resp, err = client.PullEvents(ln.Addr().String(), 2)
+	resp, err = client.PullEvents(ln.Addr().String(), 2, "")
 	if err != nil {
 		t.Fatalf("PullEvents(afterSeq=2): %v", err)
 	}
@@ -133,7 +133,7 @@ func TestSyncClient_QueryPeerInfo(t *testing.T) {
 	}()
 
 	client := NewSyncClient()
-	info, err := client.QueryPeerInfo(ln.Addr().String())
+	info, err := client.QueryPeerInfo(ln.Addr().String(), "")
 	if err != nil {
 		t.Fatalf("QueryPeerInfo: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestSyncClient_QueryPeerInfo(t *testing.T) {
 
 func TestSyncClient_ConnectionRefused(t *testing.T) {
 	client := NewSyncClient()
-	_, err := client.PullEvents("127.0.0.1:1", 0)
+	_, err := client.PullEvents("127.0.0.1:1", 0, "")
 	if err == nil {
 		t.Error("expected error for connection refused")
 	}

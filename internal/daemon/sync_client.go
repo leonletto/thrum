@@ -32,7 +32,8 @@ func NewSyncClient() *SyncClient {
 }
 
 // PullEvents connects to a peer and pulls events after the given sequence number.
-func (c *SyncClient) PullEvents(peerAddr string, afterSeq int64) (*PullResponse, error) {
+// Token is included in the RPC params for authentication.
+func (c *SyncClient) PullEvents(peerAddr string, afterSeq int64, token string) (*PullResponse, error) {
 	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("connect to %s: %w", peerAddr, err)
@@ -44,12 +45,12 @@ func (c *SyncClient) PullEvents(peerAddr string, afterSeq int64) (*PullResponse,
 		return nil, fmt.Errorf("set deadline: %w", err)
 	}
 
-	return c.pullBatch(conn, afterSeq, 1000)
+	return c.pullBatch(conn, afterSeq, 1000, token)
 }
 
 // PullAllEvents pulls all events from a peer in batches, continuing until no more are available.
-// Updates the checkpoint via the provided callback after each batch.
-func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, onBatch func(events []eventlog.Event, nextSeq int64) error) error {
+// Token is included in every RPC call for authentication.
+func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, token string, onBatch func(events []eventlog.Event, nextSeq int64) error) error {
 	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
 	if err != nil {
 		return fmt.Errorf("connect to %s: %w", peerAddr, err)
@@ -64,7 +65,7 @@ func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, onBatch func
 			return fmt.Errorf("set deadline: %w", err)
 		}
 
-		resp, err := c.pullBatch(conn, currentSeq, 1000)
+		resp, err := c.pullBatch(conn, currentSeq, 1000, token)
 		if err != nil {
 			return fmt.Errorf("pull batch after seq %d: %w", currentSeq, err)
 		}
@@ -86,8 +87,8 @@ func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, onBatch func
 }
 
 // SendNotify sends a sync.notify RPC to a peer, signaling that new events are available.
-// This is fire-and-forget — errors are returned but callers typically ignore them.
-func (c *SyncClient) SendNotify(peerAddr string, daemonID string, latestSeq int64, eventCount int) error {
+// Token is included for authentication. This is fire-and-forget.
+func (c *SyncClient) SendNotify(peerAddr string, daemonID string, latestSeq int64, eventCount int, token string) error {
 	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
 	if err != nil {
 		return fmt.Errorf("connect to %s: %w", peerAddr, err)
@@ -99,6 +100,7 @@ func (c *SyncClient) SendNotify(peerAddr string, daemonID string, latestSeq int6
 	}
 
 	params := map[string]any{
+		"token":       token,
 		"daemon_id":   daemonID,
 		"latest_seq":  latestSeq,
 		"event_count": eventCount,
@@ -109,7 +111,8 @@ func (c *SyncClient) SendNotify(peerAddr string, daemonID string, latestSeq int6
 }
 
 // QueryPeerInfo calls sync.peer_info on a peer and returns daemon identity.
-func (c *SyncClient) QueryPeerInfo(peerAddr string) (*PeerInfoResult, error) {
+// Token is included for authentication.
+func (c *SyncClient) QueryPeerInfo(peerAddr string, token string) (*PeerInfoResult, error) {
 	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("connect to %s: %w", peerAddr, err)
@@ -120,7 +123,11 @@ func (c *SyncClient) QueryPeerInfo(peerAddr string) (*PeerInfoResult, error) {
 		return nil, fmt.Errorf("set deadline: %w", err)
 	}
 
-	resp, err := c.callRPC(conn, "sync.peer_info", nil)
+	params := map[string]any{
+		"token": token,
+	}
+
+	resp, err := c.callRPC(conn, "sync.peer_info", params)
 	if err != nil {
 		return nil, err
 	}
@@ -178,8 +185,9 @@ func (c *SyncClient) RequestPairing(peerAddr, code, localDaemonID, localName, lo
 }
 
 // pullBatch sends a sync.pull request on an existing connection and reads the response.
-func (c *SyncClient) pullBatch(conn net.Conn, afterSeq int64, maxBatch int) (*PullResponse, error) {
+func (c *SyncClient) pullBatch(conn net.Conn, afterSeq int64, maxBatch int, token string) (*PullResponse, error) {
 	params := map[string]any{
+		"token":          token,
 		"after_sequence": afterSeq,
 		"max_batch":      maxBatch,
 	}

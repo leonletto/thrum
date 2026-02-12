@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"strings"
 	"testing"
 )
 
@@ -140,5 +141,174 @@ func TestSyncRegistry_ServeSyncRPC_RejectsNonWhitelisted(t *testing.T) {
 
 	if resp.Error == nil {
 		t.Error("expected error for sync.unknown")
+	}
+}
+
+// newTestPeerRegistry creates a PeerRegistry with a test peer for token auth tests.
+func newTestPeerRegistry(t *testing.T) *PeerRegistry {
+	t.Helper()
+	reg, err := NewPeerRegistry(t.TempDir() + "/peers.json")
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+	_ = reg.AddPeer(&PeerInfo{
+		DaemonID: "d_test_peer",
+		Name:     "test-peer",
+		Address:  "127.0.0.1:9999",
+		Token:    "valid-token-abc123",
+	})
+	return reg
+}
+
+// sendSyncRPC sends a JSON-RPC request and reads the response on a pipe.
+func sendSyncRPC(t *testing.T, conn net.Conn, method string, params any) jsonRPCResponse {
+	t.Helper()
+
+	req := map[string]any{
+		"jsonrpc": "2.0",
+		"method":  method,
+		"id":      1,
+	}
+	if params != nil {
+		req["params"] = params
+	}
+	data, _ := json.Marshal(req)
+	data = append(data, '\n')
+	if _, err := conn.Write(data); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(buf[:n], &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	return resp
+}
+
+func TestSyncRegistry_TokenAuth_ValidToken(t *testing.T) {
+	peers := newTestPeerRegistry(t)
+
+	r := NewSyncRegistry()
+	r.SetPeerRegistry(peers)
+	_ = r.Register("sync.peer_info", func(_ context.Context, _ json.RawMessage) (any, error) {
+		return map[string]string{"status": "ok"}, nil
+	})
+
+	client, server := net.Pipe()
+	defer client.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go r.ServeSyncRPC(ctx, server, "test-peer")
+
+	resp := sendSyncRPC(t, client, "sync.peer_info", map[string]string{"token": "valid-token-abc123"})
+
+	if resp.Error != nil {
+		t.Errorf("expected success with valid token, got error: %s", resp.Error.Message)
+	}
+}
+
+func TestSyncRegistry_TokenAuth_InvalidToken(t *testing.T) {
+	peers := newTestPeerRegistry(t)
+
+	r := NewSyncRegistry()
+	r.SetPeerRegistry(peers)
+	_ = r.Register("sync.peer_info", func(_ context.Context, _ json.RawMessage) (any, error) {
+		return map[string]string{"status": "ok"}, nil
+	})
+
+	client, server := net.Pipe()
+	defer client.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go r.ServeSyncRPC(ctx, server, "test-peer")
+
+	resp := sendSyncRPC(t, client, "sync.peer_info", map[string]string{"token": "wrong-token"})
+
+	if resp.Error == nil {
+		t.Fatal("expected error for invalid token, got success")
+	}
+	if !strings.Contains(resp.Error.Message, "unauthorized") {
+		t.Errorf("error message = %q, want something containing 'unauthorized'", resp.Error.Message)
+	}
+}
+
+func TestSyncRegistry_TokenAuth_MissingToken(t *testing.T) {
+	peers := newTestPeerRegistry(t)
+
+	r := NewSyncRegistry()
+	r.SetPeerRegistry(peers)
+	_ = r.Register("sync.pull", func(_ context.Context, _ json.RawMessage) (any, error) {
+		return map[string]string{"status": "ok"}, nil
+	})
+
+	client, server := net.Pipe()
+	defer client.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go r.ServeSyncRPC(ctx, server, "test-peer")
+
+	// No token in params
+	resp := sendSyncRPC(t, client, "sync.pull", map[string]any{"after_sequence": 0})
+
+	if resp.Error == nil {
+		t.Fatal("expected error for missing token, got success")
+	}
+	if !strings.Contains(resp.Error.Message, "unauthorized") {
+		t.Errorf("error message = %q, want something containing 'unauthorized'", resp.Error.Message)
+	}
+}
+
+func TestSyncRegistry_TokenAuth_PairRequestExempt(t *testing.T) {
+	peers := newTestPeerRegistry(t)
+
+	r := NewSyncRegistry()
+	r.SetPeerRegistry(peers)
+	_ = r.Register("pair.request", func(_ context.Context, _ json.RawMessage) (any, error) {
+		return map[string]string{"status": "ok"}, nil
+	})
+
+	client, server := net.Pipe()
+	defer client.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go r.ServeSyncRPC(ctx, server, "test-peer")
+
+	// No token — pair.request should still succeed
+	resp := sendSyncRPC(t, client, "pair.request", map[string]string{"code": "1234"})
+
+	if resp.Error != nil {
+		t.Errorf("pair.request should not require token auth, got error: %s", resp.Error.Message)
+	}
+}
+
+func TestSyncRegistry_TokenAuth_NoRegistryMeansNoAuth(t *testing.T) {
+	// Without SetPeerRegistry, auth is disabled (backward compat)
+	r := NewSyncRegistry()
+	_ = r.Register("sync.pull", func(_ context.Context, _ json.RawMessage) (any, error) {
+		return map[string]string{"status": "ok"}, nil
+	})
+
+	client, server := net.Pipe()
+	defer client.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go r.ServeSyncRPC(ctx, server, "test-peer")
+
+	// No token, no peer registry — should succeed
+	resp := sendSyncRPC(t, client, "sync.pull", map[string]any{"after_sequence": 0})
+
+	if resp.Error != nil {
+		t.Errorf("expected success without peer registry, got error: %s", resp.Error.Message)
 	}
 }

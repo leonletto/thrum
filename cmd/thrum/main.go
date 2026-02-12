@@ -3905,6 +3905,9 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 				// Create sync-only registry for Tailscale connections
 				syncRegistry := daemon.NewSyncRegistry()
+				if syncManager != nil {
+					syncRegistry.SetPeerRegistry(syncManager.PeerRegistry())
+				}
 
 				// Register sync handlers
 				syncPullHandler := rpc.NewSyncPullHandler(st)
