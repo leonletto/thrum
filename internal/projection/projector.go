@@ -47,6 +47,18 @@ func (p *Projector) Apply(event json.RawMessage) error {
 		return p.applySessionEnd(event)
 	case "agent.update":
 		return p.applyAgentUpdate(event)
+	case "agent.cleanup":
+		return p.applyAgentCleanup(event)
+	case "group.create":
+		return p.applyGroupCreate(event)
+	case "group.member.add":
+		return p.applyGroupMemberAdd(event)
+	case "group.member.remove":
+		return p.applyGroupMemberRemove(event)
+	case "group.update":
+		return p.applyGroupUpdate(event)
+	case "group.delete":
+		return p.applyGroupDelete(event)
 	default:
 		// Unknown event types are ignored (forward compatibility)
 		return nil
@@ -572,6 +584,113 @@ func mergeWorkContexts(a, b []types.SessionWorkContext) []types.SessionWorkConte
 	}
 
 	return result
+}
+
+func (p *Projector) applyAgentCleanup(data json.RawMessage) error {
+	var event types.AgentCleanupEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		return fmt.Errorf("unmarshal agent.cleanup: %w", err)
+	}
+
+	_, err := p.db.Exec(`DELETE FROM agents WHERE agent_id = ?`, event.AgentID)
+	if err != nil {
+		return fmt.Errorf("delete agent: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Projector) applyGroupCreate(data json.RawMessage) error {
+	var event types.GroupCreateEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		return fmt.Errorf("unmarshal group.create: %w", err)
+	}
+
+	_, err := p.db.Exec(`
+		INSERT OR IGNORE INTO groups (group_id, name, description, created_at, created_by)
+		VALUES (?, ?, ?, ?, ?)
+	`, event.GroupID, event.Name, sqlNullString(event.Description), event.Timestamp, event.CreatedBy)
+	if err != nil {
+		return fmt.Errorf("insert group: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Projector) applyGroupMemberAdd(data json.RawMessage) error {
+	var event types.GroupMemberAddEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		return fmt.Errorf("unmarshal group.member.add: %w", err)
+	}
+
+	_, err := p.db.Exec(`
+		INSERT OR IGNORE INTO group_members (group_id, member_type, member_value, added_at, added_by)
+		VALUES (?, ?, ?, ?, ?)
+	`, event.GroupID, event.MemberType, event.MemberValue, event.Timestamp, sqlNullString(event.AddedBy))
+	if err != nil {
+		return fmt.Errorf("insert group member: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Projector) applyGroupMemberRemove(data json.RawMessage) error {
+	var event types.GroupMemberRemoveEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		return fmt.Errorf("unmarshal group.member.remove: %w", err)
+	}
+
+	_, err := p.db.Exec(`
+		DELETE FROM group_members
+		WHERE group_id = ? AND member_type = ? AND member_value = ?
+	`, event.GroupID, event.MemberType, event.MemberValue)
+	if err != nil {
+		return fmt.Errorf("delete group member: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Projector) applyGroupUpdate(data json.RawMessage) error {
+	var event types.GroupUpdateEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		return fmt.Errorf("unmarshal group.update: %w", err)
+	}
+
+	if desc, ok := event.Fields["description"]; ok {
+		_, err := p.db.Exec(`
+			UPDATE groups SET description = ?, updated_at = ? WHERE group_id = ?
+		`, sqlNullString(desc), event.Timestamp, event.GroupID)
+		if err != nil {
+			return fmt.Errorf("update group description: %w", err)
+		}
+	}
+
+	if name, ok := event.Fields["name"]; ok {
+		_, err := p.db.Exec(`
+			UPDATE groups SET name = ?, updated_at = ? WHERE group_id = ?
+		`, name, event.Timestamp, event.GroupID)
+		if err != nil {
+			return fmt.Errorf("update group name: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (p *Projector) applyGroupDelete(data json.RawMessage) error {
+	var event types.GroupDeleteEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		return fmt.Errorf("unmarshal group.delete: %w", err)
+	}
+
+	// CASCADE will delete group_members too
+	_, err := p.db.Exec(`DELETE FROM groups WHERE group_id = ?`, event.GroupID)
+	if err != nil {
+		return fmt.Errorf("delete group: %w", err)
+	}
+
+	return nil
 }
 
 // sqlNullString returns a sql.NullString for optional string fields.
