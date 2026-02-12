@@ -25,6 +25,7 @@ type State struct {
 	db             *sql.DB
 	projector      *projection.Projector
 	repoID         string
+	daemonID       string       // Unique identifier for this daemon instance (for sync origin tracking)
 	repoPath       string       // Path to the repository root
 	thrumDir       string       // Path to .thrum directory (runtime: var/, identities/)
 	syncDir        string       // Path to sync worktree (JSONL data on a-sync branch)
@@ -94,6 +95,7 @@ func NewState(thrumDir string, syncDir string, repoID string) (*State, error) {
 		db:             db,
 		projector:      projector,
 		repoID:         repoID,
+		daemonID:       identity.GenerateDaemonID(),
 		repoPath:       repoPath,
 		thrumDir:       thrumDir,
 		syncDir:        syncDir,
@@ -147,6 +149,12 @@ func (s *State) WriteEvent(event any) error {
 	version, vExists := eventMap["v"].(float64)
 	if !vExists || version == 0 {
 		eventMap["v"] = 1
+	}
+
+	// Add origin_daemon if not present or empty
+	originDaemon, _ := eventMap["origin_daemon"].(string)
+	if originDaemon == "" {
+		eventMap["origin_daemon"] = s.daemonID
 	}
 
 	// Route event to appropriate JSONL file based on type
@@ -262,6 +270,11 @@ func (s *State) DB() *sql.DB {
 // RepoID returns the repository ID.
 func (s *State) RepoID() string {
 	return s.repoID
+}
+
+// DaemonID returns the daemon's unique identifier for sync origin tracking.
+func (s *State) DaemonID() string {
+	return s.daemonID
 }
 
 // RepoPath returns the path to the repository root.
