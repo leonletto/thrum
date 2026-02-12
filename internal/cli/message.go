@@ -186,37 +186,15 @@ type ReplyOptions struct {
 	CallerAgentID string // Caller's resolved agent ID (for worktree identity)
 }
 
-// Reply sends a reply to a message, creating a thread if needed.
+// Reply sends a reply to a message.
+// TODO: Rewrite to use reply-to refs (task thrum-wtfk)
 func Reply(client *Client, opts ReplyOptions) (*SendResult, error) {
-	// 1. Get the original message to find its thread
-	msg, err := MessageGet(client, opts.MessageID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get message: %w", err)
-	}
-
-	threadID := msg.Message.ThreadID
-
-	// 2. If no thread, create one from the original message
-	if threadID == "" {
-		createResp, err := ThreadCreate(client, ThreadCreateOptions{
-			Title:         "Reply to " + opts.MessageID,
-			CallerAgentID: opts.CallerAgentID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create thread: %w", err)
-		}
-		threadID = createResp.ThreadID
-	}
-
-	// 3. Send reply in the thread
 	sendOpts := SendOptions{
 		Content:       opts.Content,
-		Thread:        threadID,
 		CallerAgentID: opts.CallerAgentID,
 	}
 	if opts.Format != "" {
 		sendOpts.Format = opts.Format
 	}
-
 	return Send(client, sendOpts)
 }

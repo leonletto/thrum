@@ -58,7 +58,7 @@ type GroupDeleteResponse struct {
 // GroupMemberAddRequest is the request for group.member.add RPC.
 type GroupMemberAddRequest struct {
 	Group         string `json:"group"`
-	MemberType    string `json:"member_type"`  // "agent", "role", "group"
+	MemberType    string `json:"member_type"`  // "agent", "role"
 	MemberValue   string `json:"member_value"`
 	CallerAgentID string `json:"caller_agent_id,omitempty"`
 }
@@ -260,9 +260,9 @@ func (h *GroupHandler) HandleMemberAdd(_ context.Context, params json.RawMessage
 		return nil, fmt.Errorf("member_type and member_value are required")
 	}
 
-	// Validate member_type
-	if req.MemberType != "agent" && req.MemberType != "role" && req.MemberType != "group" {
-		return nil, fmt.Errorf("invalid member_type %q (must be 'agent', 'role', or 'group')", req.MemberType)
+	// Validate member_type (only agent and role are allowed)
+	if req.MemberType != "agent" && req.MemberType != "role" {
+		return nil, fmt.Errorf("invalid member_type %q (must be 'agent' or 'role')", req.MemberType)
 	}
 
 	// Prevent adding members to @everyone (protected)
