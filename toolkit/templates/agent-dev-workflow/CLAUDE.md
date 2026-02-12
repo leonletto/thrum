@@ -85,7 +85,7 @@ these before giving a template to an agent.
 | `{{FEATURE_DESCRIPTION}}` | "Add real-time sync between agents via WebSocket"         |
 | `{{PROJECT_ROOT}}`        | `{{PROJECT_ROOT}}`                                        |
 | `{{DESIGN_DOC_DIR}}`      | `docs/plans/`                                             |
-| `{{REFERENCE_DOCS}}`      | `.ref/beads_rust/`, `docs/design.md`                      |
+| `{{REFERENCE_DOCS}}`      | `.ref/reference_impl/`, `docs/design.md`                  |
 | `{{TECH_STACK}}`          | "Go backend, React/TypeScript UI, SQLite, JSONL"          |
 
 **Worktree setup placeholders:**
@@ -96,19 +96,16 @@ these before giving a template to an agent.
 | `{{WORKTREE_BASE}}` | `{{WORKTREE_BASE}}`  |
 | `{{FEATURE_NAME}}`  | `auth`               |
 
-**Preamble placeholders:**
+**Preamble placeholders** (role/project-level — no feature-specific content):
 
 | Placeholder                    | Example                                          |
 | ------------------------------ | ------------------------------------------------ |
-| `{{AGENT_NAME}}`               | `impl-auth`                                      |
+| `{{PROJECT_NAME}}`             | `Thrum`                                          |
 | `{{AGENT_ROLE}}`               | `implementer`                                    |
-| `{{AGENT_MODULE}}`             | `auth`                                           |
-| `{{WORKTREE_BRANCH}}`          | `feature/auth`                                   |
-| `{{DESIGN_DOC}}`               | `docs/plans/2026-02-12-auth-design.md`           |
-| `{{OWNED_PACKAGES}}`           | `internal/auth/`, `internal/middleware/`          |
-| `{{QUALITY_COMMANDS}}`         | `go test ./internal/auth/... -count=1 -race`     |
-| `{{ARCHITECTURAL_CONSTRAINTS}}`| Key design decisions and constraints              |
-| `{{COORDINATION_NOTES}}`       | How this agent interacts with other agents/epics  |
+| `{{TECH_STACK}}`               | `Go, TypeScript/React, SQLite, JSONL`            |
+| `{{PROJECT_CONVENTIONS}}`      | Coding patterns, error handling, testing approach |
+| `{{GENERAL_QUALITY_COMMANDS}}` | `go test ./... -count=1 -race && go vet ./...`   |
+| `{{COMMUNICATION_PROTOCOL}}`   | When/how to use thrum messaging                  |
 
 **Implementation agent placeholders:**
 
@@ -130,7 +127,7 @@ these before giving a template to an agent.
 #    with placeholders filled in. It will:
 #    - Brainstorm and write a spec
 #    - Create beads epics and tasks
-#    - Create preamble files (preamble-agent.md template)
+#    - Create role preamble if needed (preamble-agent.md template)
 
 # 2. PREPARE — Set up the workspace
 #    Use the setup script to create a worktree with full bootstrap:
@@ -139,7 +136,7 @@ these before giving a template to an agent.
   --identity impl-feature \
   --role implementer \
   --module feature \
-  --preamble docs/prompts/impl-feature-preamble.md
+  --preamble docs/preambles/implementer-preamble.md
 
 # 3. IMPLEMENT — Hand off to implementation agent
 #    Give the implementation-agent.md template with placeholders
@@ -182,17 +179,21 @@ volatile:
 
 | Layer | File | Persistence | Content | Maintained By |
 |-------|------|-------------|---------|---------------|
-| Prompt | `docs/prompts/{epic}.md` | Given at session start | Full task instructions, phases, quality commands | Planning agent |
-| Preamble | `.thrum/context/{name}_preamble.md` | Persists across all sessions | Agent identity, project rules, architectural constraints | Planning agent (initial), human (updates) |
-| Context | `.thrum/context/{name}.md` | Updated each session | Current task, decisions made, blockers hit | `/update-context` skill |
+| Prompt | `docs/prompts/{feature}.md` | Given at session start | Feature-specific: epic IDs, owned packages, design doc, architectural constraints, quality commands scoped to this feature | Planning agent |
+| Preamble | `.thrum/context/{name}_preamble.md` | Persists across features | Role and project-level: agent role, project conventions, general quality gates, communication protocol | Human (from `docs/preambles/`) |
+| Context | `.thrum/context/{name}.md` | Updated each session | Volatile session state: current task, decisions made, blockers hit | `/update-context` skill |
 
-The **preamble** is the stable middle layer. It is automatically prepended when
-showing context (`thrum context show`) so agents always see their project-specific
-rules. The default thrum quick-reference commands are always included at the top;
-custom preamble content (from `--preamble-file`) is appended below it.
+The **preamble** is the stable base layer. It defines the agent's role and
+project conventions — content that remains valid even when the worktree is reused
+for a different feature. The default thrum quick-reference is always included at
+the top; custom preamble content (from `--preamble-file`) is appended below it.
+Preambles are per-role (e.g., one `implementer-preamble.md` reused across all
+implementer worktrees), stored in `docs/preambles/`.
 
-The **prompt** (implementation template) is the full session instructions — it
-is not stored in thrum, it is given directly to the agent at session start.
+The **prompt** (implementation template) contains all feature-specific
+instructions: which epic/tasks to implement, which packages to modify, design
+doc references, feature-specific constraints, and scoped quality commands. It is
+given directly to the agent at session start, not stored in thrum.
 
 The **context** file is volatile — the `/update-context` skill rewrites it each
 session with current state (active task, decisions, blockers). It starts empty
@@ -206,7 +207,8 @@ and is populated at runtime.
 | Task details & acceptance criteria | Beads task descriptions                        | Implementation agent                 |
 | Epic structure & dependencies      | Beads epic + `bd dep` relationships            | All agents                           |
 | Implementation progress            | Beads task status + git commit history         | Implementation agent (orient phase)  |
-| Agent identity & project rules     | Preamble (`.thrum/context/{name}_preamble.md`) | Implementation agent (every session) |
+| Role & project conventions         | Preamble (`.thrum/context/{name}_preamble.md`) | Implementation agent (every session) |
+| Feature-specific instructions      | Prompt (`docs/prompts/{feature}.md`)           | Implementation agent (session start)   |
 | Session state & decisions          | Context (`.thrum/context/{name}.md`)           | Implementation agent (current session) |
 | Code                               | Git worktree                                   | Implementation agent                 |
 
@@ -220,6 +222,6 @@ duplicate the content.
 | Template | Purpose | Phase |
 |----------|---------|-------|
 | `planning-agent.md` | Brainstorm, spec, create epics & tasks | Plan |
-| `preamble-agent.md` | Create per-agent preamble files | Plan |
+| `preamble-agent.md` | Create per-role preamble files | Plan |
 | `worktree-setup.md` | Create/select worktree, set up redirects | Prepare |
 | `implementation-agent.md` | Implement tasks, verify, merge | Implement |

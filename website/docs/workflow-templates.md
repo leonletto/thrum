@@ -64,18 +64,15 @@ Templates use `{{PLACEHOLDER}}` syntax for project-specific values. Replace thes
 {{FEATURE_NAME}}  → auth
 ```
 
-### Preamble placeholders
+### Preamble placeholders (role/project-level)
 
 ```bash
-{{AGENT_NAME}}                → impl-auth
-{{AGENT_ROLE}}                → implementer
-{{AGENT_MODULE}}              → auth
-{{WORKTREE_BRANCH}}           → feature/auth
-{{DESIGN_DOC}}                → dev-docs/plans/2026-02-12-auth-design.md
-{{OWNED_PACKAGES}}            → internal/auth/, internal/middleware/
-{{QUALITY_COMMANDS}}          → go test ./internal/auth/... -count=1 -race
-{{ARCHITECTURAL_CONSTRAINTS}} → Key design decisions
-{{COORDINATION_NOTES}}        → Agent interaction rules
+{{PROJECT_NAME}}             → MyProject
+{{AGENT_ROLE}}               → implementer
+{{TECH_STACK}}               → Go, TypeScript/React, SQLite, JSONL
+{{PROJECT_CONVENTIONS}}      → Coding patterns, error handling, testing approach
+{{GENERAL_QUALITY_COMMANDS}} → go test ./... -count=1 -race && go vet ./...
+{{COMMUNICATION_PROTOCOL}}   → When/how to use thrum messaging
 ```
 
 ### Implementation agent placeholders
@@ -118,13 +115,15 @@ Planning agents front-load detail into task descriptions so implementation agent
 
 ### Use the preamble template
 
-The planning agent uses `preamble-agent.md` to create persistent, project-specific instructions for each implementation agent. These preambles persist across all sessions, providing agent identity, ownership scope, architectural constraints, and coordination rules.
+The planning agent uses `preamble-agent.md` to create **role-level** preamble files that define an agent's role and project conventions. Preambles persist across features — they must NOT contain feature-specific details like epic IDs, owned packages, or design doc references. Those belong in the implementation prompt.
 
-**Creates:** Per-agent preamble files saved to `dev-docs/prompts/{agent-name}-preamble.md`.
+**Creates:** Per-role preamble files saved to `dev-docs/preambles/{role}-preamble.md`.
 
-**Contains:** Agent identity, ownership scope (which files/packages the agent owns), architectural constraints, coding patterns, quality gates, and coordination notes.
+**Contains:** Agent role, project conventions, general quality gates, communication protocol.
 
-Preambles are automatically prepended when showing context via `thrum context show`. They act as a stable middle layer between the session prompt (volatile) and the implementation template (given once per agent lifecycle). See [Agent Context Management](context.md) for the three-layer context model.
+**Key principle:** Preambles are per-role, not per-feature. A single `implementer-preamble.md` is reused across all implementer worktrees. If the worktree is reused for a different feature, the preamble remains valid.
+
+Preambles are automatically prepended when showing context via `thrum context show`. See [Agent Context Management](context.md) for the three-layer context model.
 
 ## Use the worktree setup guide
 
@@ -144,7 +143,7 @@ The `setup-worktree-thrum.sh` script now supports full worktree bootstrapping wi
   --identity impl-auth \
   --role implementer \
   --module auth \
-  --preamble dev-docs/prompts/impl-auth-preamble.md
+  --preamble dev-docs/preambles/implementer-preamble.md
 ```
 
 This creates the worktree, sets up redirects, registers the agent, and installs the preamble. The `thrum quickstart` command (used internally) now auto-creates empty context files and composes the default thrum preamble with custom content from `--preamble-file`.
