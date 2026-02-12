@@ -4,12 +4,12 @@
 ## Overview
 
 The Thrum messaging system provides structured communication between agents with
-support for threading, direct messaging, read tracking, scoping, references, and
+support for replies, direct messaging, read tracking, scoping, references, and
 rich content formats. Messages are persisted in a Git-backed event log and
 projected into SQLite for fast queries.
 
 This document covers the CLI commands and behaviors for sending, receiving,
-replying to, and managing messages and threads.
+replying to, and managing messages.
 
 ## Quick Reference
 
@@ -18,7 +18,7 @@ replying to, and managing messages and threads.
 | Command                   | Description                                                            |
 | ------------------------- | ---------------------------------------------------------------------- |
 | `thrum send MESSAGE`      | Send a message (with optional `--to`, `--scope`, `--ref`, `--mention`) |
-| `thrum reply MSG_ID TEXT` | Reply to a message, creating a thread if needed                        |
+| `thrum reply MSG_ID TEXT` | Reply to a message (adds reply_to ref)                                 |
 | `thrum inbox`             | List messages with read/unread indicators                              |
 
 ### Message Subcommands
@@ -29,14 +29,6 @@ replying to, and managing messages and threads.
 | `thrum message edit MSG_ID TEXT`      | Replace a message's content (author only)   |
 | `thrum message delete MSG_ID --force` | Soft-delete a message                       |
 | `thrum message read MSG_ID [...]`     | Manually mark messages as read              |
-
-### Thread Subcommands
-
-| Command                       | Description                                              |
-| ----------------------------- | -------------------------------------------------------- |
-| `thrum thread create TITLE`   | Create a thread (optionally with `--message` and `--to`) |
-| `thrum thread list`           | List threads with unread counts and previews             |
-| `thrum thread show THREAD_ID` | Show a thread's messages with pagination                 |
 
 ## Sending Messages
 
@@ -59,7 +51,6 @@ SQLite.
 | `--scope`      | `type:value`            | Attach scope context (repeatable)       |
 | `--ref`        | `type:value`            | Attach reference (repeatable)           |
 | `--mention`    | `@role`                 | Mention an agent role (repeatable)      |
-| `--thread`     | `THREAD_ID`             | Post into an existing thread            |
 | `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)    |
 | `--priority`   | `low\|normal\|high`     | Message priority (default: `normal`)    |
 | `--structured` | JSON string             | Typed payload for machine-readable data |
@@ -103,12 +94,6 @@ thrum inbox --mentions
 This queries for messages where a `mention` ref matches the current agent's
 role.
 
-### Sending into a Thread
-
-```bash
-thrum send "Here's the updated approach" --thread thr_01HXE...
-```
-
 ### Example: Agent-to-Agent Coordination
 
 ```bash
@@ -121,14 +106,13 @@ thrum send "Auth module complete, all tests passing" \
 # Reviewer checks inbox for messages directed at them
 thrum inbox --mentions
 
-# Reviewer replies to the message (auto-creates thread)
+# Reviewer replies to the message (adds reply_to ref)
 thrum reply msg_01HXE... "Looks good, merging now"
 ```
 
 ## Replying to Messages
 
-The `reply` command is a convenience that handles thread resolution
-automatically:
+The `reply` command creates a new message with a `reply_to` reference to the parent message:
 
 ```bash
 thrum reply MSG_ID "Your reply text"
@@ -136,9 +120,9 @@ thrum reply MSG_ID "Your reply text"
 
 **What happens internally:**
 
-1. Fetches the original message to check if it belongs to a thread.
-2. If the message has no thread, creates a new thread titled "Reply to MSG_ID".
-3. Sends the reply into the resolved thread.
+1. Fetches the original message to copy its audience (mentions).
+2. Creates a new message with a `reply_to` ref pointing to the parent.
+3. Copies the parent's mentions to the reply (preserves conversation context).
 4. Marks the original message as read (auto mark-as-read).
 
 ### Flags
@@ -150,10 +134,10 @@ thrum reply MSG_ID "Your reply text"
 ### Example
 
 ```bash
-# Reply to a standalone message -- creates a new thread
+# Reply to a message
 thrum reply msg_01HXE... "Good idea, let's do that"
 
-# Reply to a message already in a thread -- posts in the same thread
+# Reply with plain text format
 thrum reply msg_01HXF... "Acknowledged" --format plain
 ```
 
@@ -161,8 +145,10 @@ thrum reply msg_01HXF... "Acknowledged" --format plain
 
 ```
 > Reply sent: msg_01HXG...
-  Thread: thr_01HXE...
+  Replying to: msg_01HXE...
 ```
+
+In the inbox, replies are clustered with their parent messages and displayed with a `↳` prefix.
 
 ## Inbox
 
@@ -193,11 +179,12 @@ Each message in the inbox shows a read-state indicator:
 The header line for each message follows this format:
 
 ```
-│ ● msg_01HXE...  @implementer  5m ago  thread:thr_01HX...│
+│ ● msg_01HXE...  @implementer  5m ago                     │
 │ ○ msg_01HXF...  @reviewer     1h ago  (edited)           │
+│ ↳ msg_01HXG...  @implementer  3m ago                     │
 ```
 
-Messages that have been edited show an `(edited)` tag in the header.
+Messages that have been edited show an `(edited)` tag in the header. Replies are clustered with their parent messages and shown with a `↳` prefix.
 
 ### Auto Mark-as-Read
 
@@ -332,134 +319,6 @@ Several commands mark messages as read automatically:
 All auto mark-as-read operations are best-effort: if they fail, the parent
 command still succeeds.
 
-## Threads
-
-Threads organize related messages into conversations. They are useful for
-multi-step implementations, code review discussions, and feature development.
-
-### Create
-
-Create a new thread with a title:
-
-```bash
-thrum thread create "Auth module discussion"
-```
-
-**Output:**
-
-```
-> Thread created: thr_01HXE...
-  Title:      Auth module discussion
-  Created by: agent:implementer:ABC123
-```
-
-#### Enhanced Create with Initial Message
-
-Create a thread and send an initial message in one step using `--message` and
-`--to`:
-
-```bash
-thrum thread create "Code review" --message "Please review PR #42" --to @reviewer
-```
-
-**Output:**
-
-```
-> Thread created: thr_01HXE...
-  Title:      Code review
-  Created by: agent:implementer:ABC123
-  Message:    msg_01HXF...
-```
-
-Both `--message` and `--to` must be provided together (or both omitted). The
-`--to` recipient is passed through to the message send, adding a `mention` ref.
-
-### List
-
-List threads with message counts, unread counts, last activity, and a preview of
-the most recent message:
-
-```bash
-thrum thread list
-thrum thread list --scope module:auth
-thrum thread list --page-size 20
-```
-
-| Flag                 | Description                    |
-| -------------------- | ------------------------------ |
-| `--scope type:value` | Filter by scope                |
-| `--page-size N`      | Results per page (default: 10) |
-| `--page N`           | Page number (default: 1)       |
-
-**Output:**
-
-```
-THREAD               TITLE                          MSGS UNREAD LAST ACTIVITY
-─────────────────────────────────────────────────────────────────────────────────────
-thr_01HXE...         Auth module discussion            8      2 5m ago (@implementer)
-thr_01HXF...         Code review                       3      · 1h ago (@reviewer)
-
-Showing 1-2 of 2 threads
-```
-
-The `UNREAD` column shows the count of messages not yet read by the current
-agent/session. A `·` indicates zero unread messages.
-
-### Show
-
-Display a thread's metadata and its messages with pagination:
-
-```bash
-thrum thread show thr_01HXE...
-thrum thread show thr_01HXE... --page-size 20
-```
-
-| Flag            | Description                     |
-| --------------- | ------------------------------- |
-| `--page-size N` | Messages per page (default: 10) |
-| `--page N`      | Page number (default: 1)        |
-
-**Output:**
-
-```
-Thread: thr_01HXE...
-  Title:   Auth module discussion
-  Created: 2h ago by @implementer
-
-┌─────────────────────────────────────────────────────────────────┐
-│ msg_01HXE...  @implementer  2h ago                             │
-│ Starting work on the auth module                               │
-├─────────────────────────────────────────────────────────────────┤
-│ msg_01HXF...  @reviewer     1h ago                             │
-│ Make sure to add rate limiting                                 │
-├─────────────────────────────────────────────────────────────────┤
-│ msg_01HXG...  @implementer  5m ago                             │
-│ Done, all tests passing with rate limiting                     │
-└─────────────────────────────────────────────────────────────────┘
-Showing 1-3 of 3 messages
-```
-
-Messages within a thread are ordered chronologically (oldest first).
-
-### Threading Model
-
-**Use threads for:**
-
-- Related work spanning multiple sessions
-- Multi-step implementations with back-and-forth
-- Collaborative discussions between agents
-- Feature development conversations
-
-**Use standalone messages for:**
-
-- Status updates and announcements
-- Single-event notifications
-- Independent log entries
-
-When you reply to a standalone message, Thrum automatically creates a thread and
-places the reply in it. Subsequent replies to any message in that thread
-continue the same conversation.
-
 ## Message Structure
 
 ### Core Fields
@@ -469,7 +328,6 @@ Every message has these core fields:
 ```json
 {
   "message_id": "msg_01HXE...",
-  "thread_id": "thr_01HXE...",
   "author": {
     "agent_id": "agent:role:HASH",
     "session_id": "ses_01HXE..."
@@ -563,7 +421,6 @@ thrum send "Fixed authentication bug" \
 
 ```bash
 thrum inbox --scope file:src/main.go
-thrum thread list --scope module:auth
 ```
 
 ## References (Refs)
@@ -599,7 +456,7 @@ thrum send "Implemented feature from design doc, closes issue" \
 
 ## Groups
 
-Groups allow you to send messages to collections of agents, roles, or nested groups
+Groups allow you to send messages to collections of agents and roles
 using a single `--to @groupname` address.
 
 ### Built-in Groups
@@ -618,10 +475,9 @@ thrum send "Deploy complete" --to @everyone
 # Create a group
 thrum group create reviewers --description "Code review team"
 
-# Add members (agents, roles, or nested groups)
+# Add members (agents or roles)
 thrum group add reviewers @alice
 thrum group add reviewers --role reviewer
-thrum group add reviewers --group backend
 
 # Send to the group
 thrum send "PR ready for review" --to @reviewers
@@ -633,37 +489,19 @@ thrum send "PR ready for review" --to @reviewers
 | ------------------------------- | ----------------------------------------------------- |
 | `thrum group create NAME`       | Create a new group                                    |
 | `thrum group delete NAME`       | Delete a group (cannot delete `@everyone`)            |
-| `thrum group add GROUP MEMBER`  | Add agent, role, or nested group                      |
+| `thrum group add GROUP MEMBER`  | Add agent or role                                     |
 | `thrum group remove GROUP MEMBER` | Remove a member                                     |
 | `thrum group list`              | List all groups                                       |
 | `thrum group info NAME`         | Show group details                                    |
 | `thrum group members NAME`      | List members (`--expand` resolves to agent IDs)       |
 
-### Nested Groups
-
-Groups can contain other groups, enabling hierarchical organization:
-
-```bash
-thrum group create backend
-thrum group add backend --role implementer
-thrum group add backend --role tester
-
-thrum group create all-devs
-thrum group add all-devs --group backend
-thrum group add all-devs --group frontend
-
-# Message goes to all members of backend and frontend
-thrum send "Code freeze starts now" --to @all-devs
-```
-
 ### Message Resolution
 
 When a message is sent to a group, the daemon resolves group membership at **read time**
-using a recursive SQL query (Common Table Expression). This means:
+using an iterative SQL query. This means:
 
 - New agents added to a group automatically receive messages sent to that group
-- Nested groups are expanded recursively
-- Cycle detection prevents infinite loops
+- Roles are expanded to all matching agents at query time
 - The `@everyone` group dynamically includes all registered agents
 
 ### Broadcast Deprecation
@@ -705,7 +543,7 @@ Messages are stored in two places:
      `agent.cleanup`)
    - `.git/thrum-sync/a-sync/messages/{agent_name}.jsonl` -- per-agent message
      events (`message.create`, `message.edit`, `message.delete`,
-     `thread.create`, `agent.update`)
+     `agent.update`)
 
 2. **SQLite Projection** (`.thrum/var/messages.db`) -- derived from the JSONL
    logs for query performance. Can be rebuilt from the logs. Contains the tables
@@ -718,7 +556,6 @@ Messages are stored in two places:
 ```sql
 CREATE TABLE messages (
   message_id TEXT PRIMARY KEY,
-  thread_id TEXT,
   agent_id TEXT NOT NULL,
   session_id TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -789,22 +626,10 @@ Read state is tracked per message per session. A message is considered read for
 an agent if any matching `session_id` or `agent_id` has a record. This means
 read state persists across session restarts for the same agent.
 
-#### threads
-
-```sql
-CREATE TABLE threads (
-  thread_id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  created_by TEXT NOT NULL,
-  created_at TEXT NOT NULL
-)
-```
-
 ### Indexes
 
 Optimized for common query patterns:
 
-- `idx_messages_thread` -- thread filtering
 - `idx_messages_time` -- time-based sorting
 - `idx_messages_agent` -- author filtering
 - `idx_messages_session` -- session filtering

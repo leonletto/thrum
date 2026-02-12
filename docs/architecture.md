@@ -287,7 +287,7 @@ session_refs        # Session context references
 subscriptions       # Push notification subscriptions
 agent_work_contexts # Live git state per session
 groups              # Named collections for targeted messaging
-group_members       # Group membership (agents, roles, nested groups)
+group_members       # Group membership (agents, roles)
 schema_version      # Migration tracking
 ```
 
@@ -371,7 +371,6 @@ ordering.
 | `message.create`      | Insert into messages, scopes, refs                   |
 | `message.edit`        | Update body_content, updated_at, record edit history |
 | `message.delete`      | Set deleted=1, deleted_at, delete_reason             |
-| `thread.create`       | Insert into threads                                  |
 | `group.create`        | Insert into groups                                   |
 | `group.delete`        | Delete group and members                             |
 | `agent.register`      | Insert/replace agent                                 |
