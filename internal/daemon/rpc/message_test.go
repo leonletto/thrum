@@ -1995,3 +1995,176 @@ func TestHandleSend_GroupScope(t *testing.T) {
 		}
 	})
 }
+
+func TestInboxGroupMembership(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("create .thrum dir: %v", err)
+	}
+
+	repoID := "r_INBOX_GROUP_TEST"
+	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	// Register sender agent
+	t.Setenv("THRUM_ROLE", "coordinator")
+	t.Setenv("THRUM_MODULE", "core")
+
+	senderID := identity.GenerateAgentID(repoID, "coordinator", "core", "")
+	agentHandler := NewAgentHandler(st)
+	registerParams, _ := json.Marshal(RegisterRequest{Role: "coordinator", Module: "core"})
+	if _, err := agentHandler.HandleRegister(context.Background(), registerParams); err != nil {
+		t.Fatalf("register sender: %v", err)
+	}
+
+	sessionHandler := NewSessionHandler(st)
+	sessionParams, _ := json.Marshal(SessionStartRequest{AgentID: senderID})
+	if _, err := sessionHandler.HandleStart(context.Background(), sessionParams); err != nil {
+		t.Fatalf("start sender session: %v", err)
+	}
+
+	// Register a reviewer agent
+	reviewerID := identity.GenerateAgentID(repoID, "reviewer", "auth", "")
+	registerParams2, _ := json.Marshal(RegisterRequest{
+		Role:   "reviewer",
+		Module: "auth",
+	})
+	if _, err := agentHandler.HandleRegister(context.Background(), registerParams2); err != nil {
+		t.Fatalf("register reviewer: %v", err)
+	}
+	sessionParams2, _ := json.Marshal(SessionStartRequest{AgentID: reviewerID})
+	if _, err := sessionHandler.HandleStart(context.Background(), sessionParams2); err != nil {
+		t.Fatalf("start reviewer session: %v", err)
+	}
+
+	// Create @everyone and @reviewers groups
+	if err := EnsureEveryoneGroup(st); err != nil {
+		t.Fatalf("ensure everyone: %v", err)
+	}
+
+	groupHandler := NewGroupHandler(st)
+	createReq, _ := json.Marshal(GroupCreateRequest{Name: "reviewers", Description: "Review team"})
+	if _, err := groupHandler.HandleCreate(context.Background(), createReq); err != nil {
+		t.Fatalf("create reviewers group: %v", err)
+	}
+	addReq, _ := json.Marshal(GroupMemberAddRequest{
+		Group:       "reviewers",
+		MemberType:  "agent",
+		MemberValue: reviewerID,
+	})
+	if _, err := groupHandler.HandleMemberAdd(context.Background(), addReq); err != nil {
+		t.Fatalf("add reviewer to group: %v", err)
+	}
+
+	msgHandler := NewMessageHandler(st)
+
+	// Send a message to @reviewers
+	sendReq, _ := json.Marshal(SendRequest{
+		Content:       "Please review auth module",
+		Mentions:      []string{"@reviewers"},
+		CallerAgentID: senderID,
+	})
+	resp, err := msgHandler.HandleSend(context.Background(), sendReq)
+	if err != nil {
+		t.Fatalf("send to reviewers: %v", err)
+	}
+	reviewMsgID := resp.(*SendResponse).MessageID
+
+	// Send a message to @everyone
+	sendReq2, _ := json.Marshal(SendRequest{
+		Content:       "Standup in 5",
+		Mentions:      []string{"@everyone"},
+		CallerAgentID: senderID,
+	})
+	resp, err = msgHandler.HandleSend(context.Background(), sendReq2)
+	if err != nil {
+		t.Fatalf("send to everyone: %v", err)
+	}
+	everyoneMsgID := resp.(*SendResponse).MessageID
+
+	// Send a direct mention to the reviewer
+	sendReq3, _ := json.Marshal(SendRequest{
+		Content:       "Hey reviewer, quick question",
+		Mentions:      []string{"@reviewer"},
+		CallerAgentID: senderID,
+	})
+	resp, err = msgHandler.HandleSend(context.Background(), sendReq3)
+	if err != nil {
+		t.Fatalf("send direct mention: %v", err)
+	}
+	directMsgID := resp.(*SendResponse).MessageID
+
+	t.Run("reviewer_sees_group_messages", func(t *testing.T) {
+		listReq, _ := json.Marshal(ListMessagesRequest{
+			ForAgent:     reviewerID,
+			ForAgentRole: "reviewer",
+			PageSize:     50,
+		})
+		resp, err := msgHandler.HandleList(context.Background(), listReq)
+		if err != nil {
+			t.Fatalf("HandleList: %v", err)
+		}
+		listResp := resp.(*ListMessagesResponse)
+
+		// Reviewer should see: @reviewers msg, @everyone msg, direct mention msg
+		foundReview := false
+		foundEveryone := false
+		foundDirect := false
+		for _, msg := range listResp.Messages {
+			switch msg.MessageID {
+			case reviewMsgID:
+				foundReview = true
+			case everyoneMsgID:
+				foundEveryone = true
+			case directMsgID:
+				foundDirect = true
+			}
+		}
+
+		if !foundReview {
+			t.Error("reviewer should see message to @reviewers group")
+		}
+		if !foundEveryone {
+			t.Error("reviewer should see message to @everyone group")
+		}
+		if !foundDirect {
+			t.Error("reviewer should see direct mention message")
+		}
+	})
+
+	t.Run("non_member_does_not_see_group_messages", func(t *testing.T) {
+		// Sender is not in @reviewers, should NOT see that message when filtering for_agent
+		listReq, _ := json.Marshal(ListMessagesRequest{
+			ForAgent:     senderID,
+			ForAgentRole: "coordinator",
+			PageSize:     50,
+		})
+		resp, err := msgHandler.HandleList(context.Background(), listReq)
+		if err != nil {
+			t.Fatalf("HandleList: %v", err)
+		}
+		listResp := resp.(*ListMessagesResponse)
+
+		foundReview := false
+		foundEveryone := false
+		for _, msg := range listResp.Messages {
+			switch msg.MessageID {
+			case reviewMsgID:
+				foundReview = true
+			case everyoneMsgID:
+				foundEveryone = true
+			}
+		}
+
+		if foundReview {
+			t.Error("coordinator should NOT see message to @reviewers (not a member)")
+		}
+		if !foundEveryone {
+			t.Error("coordinator should see message to @everyone (all agents are members)")
+		}
+	})
+}

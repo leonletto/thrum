@@ -599,18 +599,12 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		args = append(args, unreadAgentID)
 	}
 
-	// For-agent filter: show messages addressed to this agent (mentions) + broadcasts (no mention refs)
+	// For-agent filter: show messages mentioning me + messages scoped to my groups + old broadcasts (backward compat)
 	forAgentValues := buildForAgentValues(req.ForAgent, req.ForAgentRole)
-	if len(forAgentValues) > 0 {
-		placeholders := make([]string, len(forAgentValues))
-		for i := range forAgentValues {
-			placeholders[i] = "?"
-		}
-		query += " AND (m.message_id NOT IN (SELECT mr_fa.message_id FROM message_refs mr_fa WHERE mr_fa.ref_type = 'mention')" +
-			" OR m.message_id IN (SELECT mr_fa2.message_id FROM message_refs mr_fa2 WHERE mr_fa2.ref_type = 'mention' AND mr_fa2.ref_value IN (" + strings.Join(placeholders, ",") + ")))"
-		for _, v := range forAgentValues {
-			args = append(args, v)
-		}
+	forAgentClause, forAgentArgs := buildForAgentClause(forAgentValues, req.ForAgent, req.ForAgentRole)
+	if forAgentClause != "" {
+		query += forAgentClause
+		args = append(args, forAgentArgs...)
 	}
 
 	// Add sorting
@@ -647,16 +641,9 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		countQuery += " AND m.message_id NOT IN (SELECT mrd.message_id FROM message_reads mrd WHERE mrd.agent_id = ?)"
 		countArgs = append(countArgs, unreadAgentID)
 	}
-	if len(forAgentValues) > 0 {
-		placeholders := make([]string, len(forAgentValues))
-		for i := range forAgentValues {
-			placeholders[i] = "?"
-		}
-		countQuery += " AND (m.message_id NOT IN (SELECT mr_fa.message_id FROM message_refs mr_fa WHERE mr_fa.ref_type = 'mention')" +
-			" OR m.message_id IN (SELECT mr_fa2.message_id FROM message_refs mr_fa2 WHERE mr_fa2.ref_type = 'mention' AND mr_fa2.ref_value IN (" + strings.Join(placeholders, ",") + ")))"
-		for _, v := range forAgentValues {
-			countArgs = append(countArgs, v)
-		}
+	if forAgentClause != "" {
+		countQuery += forAgentClause
+		countArgs = append(countArgs, forAgentArgs...)
 	}
 
 	var total int
@@ -976,6 +963,61 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 		UpdatedAt: now,
 		Version:   editCount,
 	}, nil
+}
+
+// buildForAgentClause builds the SQL WHERE clause for the for-agent inbox filter.
+// It combines three conditions with OR:
+// 1. Messages with mention refs matching the agent (direct mentions)
+// 2. Messages scoped to groups the agent belongs to (group membership)
+// 3. Messages with no mention refs (old broadcast backward compat — remove in next release)
+func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string) (string, []any) {
+	if len(forAgentValues) == 0 {
+		return "", nil
+	}
+
+	var args []any
+
+	// Part 1: direct mention refs matching agent name/role
+	mentionPlaceholders := make([]string, len(forAgentValues))
+	for i := range forAgentValues {
+		mentionPlaceholders[i] = "?"
+	}
+	mentionSubquery := "m.message_id IN (SELECT mr_fa2.message_id FROM message_refs mr_fa2 WHERE mr_fa2.ref_type = 'mention' AND mr_fa2.ref_value IN (" +
+		strings.Join(mentionPlaceholders, ",") + "))"
+	for _, v := range forAgentValues {
+		args = append(args, v)
+	}
+
+	// Part 2: group membership subquery
+	// Messages scoped to groups the agent belongs to (via agent name, role, or wildcard role:*)
+	groupSubquery := `m.message_id IN (
+		SELECT ms_g.message_id FROM message_scopes ms_g
+		WHERE ms_g.scope_type = 'group'
+		AND ms_g.scope_value IN (
+			SELECT g.name FROM groups g
+			JOIN group_members gm ON g.group_id = gm.group_id
+			WHERE (gm.member_type = 'agent' AND gm.member_value = ?)
+			   OR (gm.member_type = 'role' AND (gm.member_value = ? OR gm.member_value = '*'))
+		)
+	)`
+	// Use forAgent for agent match, forAgentRole for role match
+	agentVal := forAgent
+	if agentVal == "" {
+		agentVal = forAgentRole
+	}
+	roleVal := forAgentRole
+	if roleVal == "" {
+		roleVal = forAgent
+	}
+	args = append(args, agentVal, roleVal)
+
+	// Part 3: backward compat — old broadcast messages (no mention refs AND no group scopes)
+	// TODO: remove in next release after groups are established
+	broadcastSubquery := "(m.message_id NOT IN (SELECT mr_fa.message_id FROM message_refs mr_fa WHERE mr_fa.ref_type = 'mention')" +
+		" AND m.message_id NOT IN (SELECT ms_bc.message_id FROM message_scopes ms_bc WHERE ms_bc.scope_type = 'group'))"
+
+	clause := " AND (" + mentionSubquery + " OR " + groupSubquery + " OR " + broadcastSubquery + ")"
+	return clause, args
 }
 
 // buildForAgentValues returns the unique set of values to match against mention refs
