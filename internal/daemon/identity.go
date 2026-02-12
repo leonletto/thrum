@@ -105,6 +105,30 @@ func loadIdentityKeys(keyPath string) (ed25519.PublicKey, ed25519.PrivateKey, er
 	return pub, ed25519Priv, nil
 }
 
+// SignEvent signs an event map using Ed25519 and adds the signature to the map.
+// The canonical signing payload is: event_id|type|timestamp|origin_daemon
+// The signature is base64-encoded and added as the "signature" field.
+// If the private key is nil, this is a no-op (backward compatibility).
+func SignEvent(event map[string]any, privateKey ed25519.PrivateKey) {
+	if privateKey == nil {
+		return
+	}
+
+	payload := CanonicalSigningPayload(event)
+	sig := ed25519.Sign(privateKey, []byte(payload))
+	event["signature"] = base64.StdEncoding.EncodeToString(sig)
+}
+
+// CanonicalSigningPayload returns the canonical string used for signing/verification.
+// Format: event_id|type|timestamp|origin_daemon
+func CanonicalSigningPayload(event map[string]any) string {
+	eventID, _ := event["event_id"].(string)
+	eventType, _ := event["type"].(string)
+	timestamp, _ := event["timestamp"].(string)
+	originDaemon, _ := event["origin_daemon"].(string)
+	return fmt.Sprintf("%s|%s|%s|%s", eventID, eventType, timestamp, originDaemon)
+}
+
 // saveIdentityKeys saves an Ed25519 private key to a PEM file with 0600 permissions.
 func saveIdentityKeys(keyPath string, priv ed25519.PrivateKey) error {
 	// Marshal private key to PKCS8 format

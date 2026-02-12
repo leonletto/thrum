@@ -1,6 +1,7 @@
 package state
 
 import (
+	"crypto/ed25519"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -38,6 +39,8 @@ type State struct {
 	syncDir        string       // Path to sync worktree (JSONL data on a-sync branch)
 	mu             sync.RWMutex // Protects agent/session operations
 	onEventWrite   EventWriteHook // Optional hook called after successful event write
+	signingKey     ed25519.PrivateKey // Optional Ed25519 key for signing events
+	signEvent      func(event map[string]any, key ed25519.PrivateKey) // Injected signing function
 }
 
 // NewState creates a new state manager for the given .thrum directory.
@@ -128,6 +131,14 @@ func (s *State) SetOnEventWrite(hook EventWriteHook) {
 	s.onEventWrite = hook
 }
 
+// SetSigningKey configures Ed25519 event signing. When set, all new events are signed
+// before being written to JSONL. The signFunc is called with (eventMap, privateKey)
+// and should add a "signature" field to the event map.
+func (s *State) SetSigningKey(key ed25519.PrivateKey, signFunc func(event map[string]any, key ed25519.PrivateKey)) {
+	s.signingKey = key
+	s.signEvent = signFunc
+}
+
 // Close closes the state manager and its resources.
 func (s *State) Close() error {
 	var errs []error
@@ -181,6 +192,11 @@ func (s *State) WriteEvent(event any) error {
 	originDaemon, _ := eventMap["origin_daemon"].(string)
 	if originDaemon == "" {
 		eventMap["origin_daemon"] = s.daemonID
+	}
+
+	// Sign event if signing key is configured
+	if s.signingKey != nil && s.signEvent != nil {
+		s.signEvent(eventMap, s.signingKey)
 	}
 
 	// Route event to appropriate JSONL file based on type
