@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 )
 
@@ -63,18 +64,9 @@ func (a *SyncAuthorizer) AuthorizePeer(peerHostname string, peerTags []string, p
 
 	// Check 2: Required tags
 	if len(a.requiredTags) > 0 {
-		hasRequiredTag := false
-		for _, requiredTag := range a.requiredTags {
-			for _, peerTag := range peerTags {
-				if peerTag == requiredTag {
-					hasRequiredTag = true
-					break
-				}
-			}
-			if hasRequiredTag {
-				break
-			}
-		}
+		hasRequiredTag := slices.ContainsFunc(a.requiredTags, func(tag string) bool {
+			return slices.Contains(peerTags, tag)
+		})
 		if !hasRequiredTag {
 			failedChecks = append(failedChecks, fmt.Sprintf("peer does not have any of the required tags %v (has: %v)", a.requiredTags, peerTags))
 		}

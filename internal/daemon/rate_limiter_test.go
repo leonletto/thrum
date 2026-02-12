@@ -16,7 +16,7 @@ func TestRateLimiter_DisabledAlwaysAllows(t *testing.T) {
 	limiter := NewSyncRateLimiter(cfg)
 
 	// Make many requests - all should succeed when disabled
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		if err := limiter.Allow("peer1"); err != nil {
 			t.Errorf("request %d was denied when limiter is disabled: %v", i, err)
 		}
@@ -34,7 +34,7 @@ func TestRateLimiter_BurstHandling(t *testing.T) {
 	limiter := NewSyncRateLimiter(cfg)
 
 	// First 5 requests (burst) should succeed immediately
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if err := limiter.Allow("peer1"); err != nil {
 			t.Errorf("burst request %d was denied: %v", i, err)
 		}
@@ -71,7 +71,7 @@ func TestRateLimiter_PerPeerIsolation(t *testing.T) {
 	limiter := NewSyncRateLimiter(cfg)
 
 	// Exhaust peer1's burst
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if err := limiter.Allow("peer1"); err != nil {
 			t.Errorf("peer1 burst request %d was denied: %v", i, err)
 		}
@@ -83,7 +83,7 @@ func TestRateLimiter_PerPeerIsolation(t *testing.T) {
 	}
 
 	// peer2 should still have full burst available
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if err := limiter.Allow("peer2"); err != nil {
 			t.Errorf("peer2 burst request %d was denied: %v", i, err)
 		}
@@ -106,7 +106,7 @@ func TestRateLimiter_QueueDepthEnforcement(t *testing.T) {
 	limiter := NewSyncRateLimiter(cfg)
 
 	// Increment queue to max
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		limiter.IncrementQueue()
 	}
 
@@ -148,7 +148,7 @@ func TestRateLimiter_DefaultConfigValues(t *testing.T) {
 
 	// Verify defaults were applied
 	if limiter.config.MaxRequestsPerSecond != float64(DefaultMaxRequestsPerSecond) {
-		t.Errorf("expected MaxRequestsPerSecond=%f, got %f",
+		t.Errorf("expected MaxRequestsPerSecond=%v, got %v",
 			float64(DefaultMaxRequestsPerSecond), limiter.config.MaxRequestsPerSecond)
 	}
 
@@ -163,7 +163,7 @@ func TestRateLimiter_DefaultConfigValues(t *testing.T) {
 	}
 
 	// Verify burst works with defaults (should allow DefaultBurstSize requests)
-	for i := 0; i < DefaultBurstSize; i++ {
+	for i := range DefaultBurstSize {
 		if err := limiter.Allow("peer1"); err != nil {
 			t.Errorf("burst request %d failed with default config: %v", i, err)
 		}
@@ -292,10 +292,10 @@ func TestRateLimiter_ConcurrentAccess(t *testing.T) {
 
 	// Simulate concurrent requests from multiple peers
 	done := make(chan bool, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		peerID := "peer" + string(rune('0'+i))
 		go func(id string) {
-			for j := 0; j < 100; j++ {
+			for range 100 {
 				limiter.Allow(id)
 			}
 			done <- true
@@ -303,7 +303,7 @@ func TestRateLimiter_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Wait for all goroutines
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 
