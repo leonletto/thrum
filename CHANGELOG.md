@@ -53,23 +53,22 @@ platform.
 - Auto-detects runtime and generates config files during quickstart
 - Dry-run mode previews generated files without daemon connection
 
-#### Worktree Bootstrap Enhancement (Spec)
+#### Worktree Bootstrap
 
-Spec and templates for one-command worktree setup with full agent bootstrapping.
+One-command worktree setup with full agent context bootstrapping.
 
-- `thrum quickstart` will auto-create empty context file and default preamble on
-  registration
-- New `--preamble-file` flag for quickstart composes default preamble with custom
+- `thrum quickstart --preamble-file` flag composes default preamble with custom
   project-specific content
+- `thrum quickstart` auto-creates empty context file and default preamble on
+  first registration (idempotent — preserves existing preambles)
 - `scripts/setup-worktree-thrum.sh` enhanced with `--identity`, `--role`,
-  `--module`, `--preamble` flags and branch creation support
-- New `preamble-agent.md` template for planning agents to create per-agent
-  preamble files with ownership scope, architectural constraints, and
-  coordination rules
-- Three-layer context model documented: prompt (session) → preamble (persistent)
-  → context (volatile)
-- `toolkit/templates/` restructured into extensible subfolder layout with
-  `agent-dev-workflow/` template set containing sanitized CLAUDE.md
+  `--module`, `--preamble`, `--base` flags for full single-command bootstrap
+- Flag value validation with helpful error messages on missing values
+- Error handling on `git worktree add` with contextual failure messages
+- 7 new Go tests for context bootstrapping, 13-case shell test harness
+- Three-layer context model: prompt (session) → preamble (persistent) → context
+  (volatile)
+- `toolkit/templates/` restructured into `agent-dev-workflow/` template set
 
 #### Context Prime
 
