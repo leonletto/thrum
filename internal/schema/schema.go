@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 7
+const CurrentVersion = 8
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -203,6 +203,29 @@ func createTables(tx *sql.Tx) error {
 			PRIMARY KEY (session_id, ref_type, ref_value)
 		)`,
 
+		// Groups table
+		`CREATE TABLE IF NOT EXISTS groups (
+			group_id    TEXT PRIMARY KEY,
+			name        TEXT UNIQUE NOT NULL,
+			description TEXT,
+			created_at  TEXT NOT NULL,
+			created_by  TEXT NOT NULL,
+			updated_at  TEXT,
+			metadata    TEXT
+		)`,
+
+		// Group members table
+		`CREATE TABLE IF NOT EXISTS group_members (
+			id           INTEGER PRIMARY KEY AUTOINCREMENT,
+			group_id     TEXT NOT NULL,
+			member_type  TEXT NOT NULL,
+			member_value TEXT NOT NULL,
+			added_at     TEXT NOT NULL,
+			added_by     TEXT,
+			UNIQUE(group_id, member_type, member_value),
+			FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE CASCADE
+		)`,
+
 		// Agent work contexts table (for live git state tracking)
 		`CREATE TABLE IF NOT EXISTS agent_work_contexts (
 			session_id        TEXT PRIMARY KEY,
@@ -260,6 +283,11 @@ func createIndexes(tx *sql.Tx) error {
 		// Message reads indexes
 		"CREATE INDEX IF NOT EXISTS idx_message_reads_agent ON message_reads(agent_id, message_id)",
 		"CREATE INDEX IF NOT EXISTS idx_message_reads_message ON message_reads(message_id)",
+
+		// Group indexes
+		"CREATE INDEX IF NOT EXISTS idx_groups_name ON groups(name)",
+		"CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id)",
+		"CREATE INDEX IF NOT EXISTS idx_group_members_lookup ON group_members(member_type, member_value)",
 
 		// Work contexts indexes
 		"CREATE INDEX IF NOT EXISTS idx_work_contexts_agent ON agent_work_contexts(agent_id)",
@@ -425,6 +453,53 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 	// which is called separately by the daemon during initialization.
 	// This migration just bumps the version number.
 	// (No SQL schema changes needed for v6→v7)
+
+	// Migration from version 7 to 8: Add groups
+	if startVersion < 8 && endVersion >= 8 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS groups (
+				group_id    TEXT PRIMARY KEY,
+				name        TEXT UNIQUE NOT NULL,
+				description TEXT,
+				created_at  TEXT NOT NULL,
+				created_by  TEXT NOT NULL,
+				updated_at  TEXT,
+				metadata    TEXT
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("create groups table: %w", err)
+		}
+
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS group_members (
+				id           INTEGER PRIMARY KEY AUTOINCREMENT,
+				group_id     TEXT NOT NULL,
+				member_type  TEXT NOT NULL,
+				member_value TEXT NOT NULL,
+				added_at     TEXT NOT NULL,
+				added_by     TEXT,
+				UNIQUE(group_id, member_type, member_value),
+				FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE CASCADE
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("create group_members table: %w", err)
+		}
+
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_groups_name ON groups(name)`)
+		if err != nil {
+			return fmt.Errorf("create idx_groups_name: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id)`)
+		if err != nil {
+			return fmt.Errorf("create idx_group_members_group: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_group_members_lookup ON group_members(member_type, member_value)`)
+		if err != nil {
+			return fmt.Errorf("create idx_group_members_lookup: %w", err)
+		}
+	}
 
 	// Update schema version
 	_, err = tx.Exec("UPDATE schema_version SET version = ?", endVersion)
