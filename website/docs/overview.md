@@ -529,27 +529,33 @@ thrum wait --scope module:feature --timeout 5m
 
 ## Design Principles
 
-### 1. Offline-First
+### You Stay in Control
+
+Thrum is infrastructure you can inspect, not a service you depend on. Everything
+is files, Git branches, and a local daemon. See [Why Thrum Exists](philosophy.md)
+for the full philosophy.
+
+### Offline-First
 
 Everything works locally. Network is optional for sync.
 
-### 2. Git as Infrastructure
+### Git as Infrastructure
 
 No additional servers. Uses existing Git authentication and hosting.
 
-### 3. Event Sourcing
+### Event Sourcing
 
 JSONL log is the source of truth. SQLite is a rebuildable projection.
 
-### 4. Conflict-Free
+### Conflict-Free
 
 Immutable events + unique IDs = conflict-free merging.
 
-### 5. Minimal Dependencies
+### Minimal Dependencies
 
 Pure Go with minimal external packages. No CGO.
 
-### 6. Graceful Degradation
+### Graceful Degradation
 
 Network failures, missing remotes, and partial sync all handled gracefully.
 
