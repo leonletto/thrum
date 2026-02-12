@@ -19,7 +19,9 @@ section.
 
 ```bash
 cd ~/.workspaces/thrum/team-fix
-thrum quickstart --name impl_team --role implementer --module team_command --intent "Implementing thrum-clze: thrum team command"
+thrum quickstart --name impl_team --role implementer --module team_command \
+  --preamble-file dev-docs/preambles/implementer-preamble.md \
+  --intent "Implementing thrum-clze: thrum team command"
 thrum inbox --unread
 thrum send "Starting work on thrum-clze (thrum team command)" --to @coordinator
 ```
@@ -180,7 +182,9 @@ Update CHANGELOG.md with a team command section under [0.3.2].
 
 ```bash
 cd ~/.workspaces/thrum/team-fix
-thrum quickstart --name impl_team --role implementer --module team_command --intent "Resuming thrum-clze"
+thrum quickstart --name impl_team --role implementer --module team_command \
+  --preamble-file dev-docs/preambles/implementer-preamble.md \
+  --intent "Resuming thrum-clze"
 thrum inbox --unread
 bd show thrum-clze
 bd list --status=in_progress
