@@ -56,7 +56,7 @@ func newTestDaemonWithNotify(t *testing.T, name string, notifyHandler rpc.SyncTr
 			if err != nil {
 				return
 			}
-			go reg.ServeSyncRPC(ctx, conn)
+			go reg.ServeSyncRPC(ctx, conn, "test-peer")
 		}
 	}()
 

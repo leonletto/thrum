@@ -51,15 +51,44 @@ func (a *SyncApplier) ApplyRemoteEvents(events []eventlog.Event) (applied, skipp
 }
 
 // ApplyAndCheckpoint applies remote events and updates the checkpoint for the peer.
+// The checkpoint is derived from the actual events received, not the peer's claimed
+// next_sequence, to prevent checkpoint manipulation attacks where a malicious peer
+// skips events by sending an inflated next_sequence value.
 func (a *SyncApplier) ApplyAndCheckpoint(peerID string, events []eventlog.Event, peerNextSeq int64) (applied, skipped int, err error) {
+	// Get current checkpoint to validate monotonic progress
+	currentSeq, err := a.GetCheckpoint(peerID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("get current checkpoint: %w", err)
+	}
+
+	// Reject checkpoint regression
+	if peerNextSeq < currentSeq {
+		return 0, 0, fmt.Errorf("checkpoint regression: peer sent next_seq=%d but current is %d", peerNextSeq, currentSeq)
+	}
+
+	// Derive safe checkpoint from actual events rather than trusting peer's claim
+	safeNextSeq := peerNextSeq
+	if len(events) > 0 {
+		maxEventSeq := events[0].Sequence
+		for _, evt := range events[1:] {
+			if evt.Sequence > maxEventSeq {
+				maxEventSeq = evt.Sequence
+			}
+		}
+		// Only advance to the max sequence we actually received
+		if peerNextSeq > maxEventSeq {
+			safeNextSeq = maxEventSeq
+		}
+	}
+
 	applied, skipped, err = a.ApplyRemoteEvents(events)
 	if err != nil {
 		return applied, skipped, err
 	}
 
-	// Update checkpoint
+	// Update checkpoint with safe sequence
 	if applied > 0 || skipped > 0 {
-		if err := checkpoint.UpdateCheckpoint(a.state.DB(), peerID, peerNextSeq, time.Now().Unix()); err != nil {
+		if err := checkpoint.UpdateCheckpoint(a.state.DB(), peerID, safeNextSeq, time.Now().Unix()); err != nil {
 			return applied, skipped, fmt.Errorf("update checkpoint: %w", err)
 		}
 	}

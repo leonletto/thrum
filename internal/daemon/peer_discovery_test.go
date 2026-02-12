@@ -70,7 +70,7 @@ func TestPeerDiscoverer_DiscoverPeers(t *testing.T) {
 			if err != nil {
 				return
 			}
-			go reg.ServeSyncRPC(ctx, conn)
+			go reg.ServeSyncRPC(ctx, conn, "test-peer")
 		}
 	}()
 

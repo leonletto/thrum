@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // SecurityConfig holds security-related configuration for sync.
@@ -92,6 +93,22 @@ func LoadSecurityConfig() SecurityConfig {
 	}
 	if v := os.Getenv("THRUM_SECURITY_ALLOWED_DOMAIN"); v != "" {
 		cfg.AllowedDomain = v
+	}
+	if v := os.Getenv("THRUM_SECURITY_ALLOWED_PEERS"); v != "" {
+		for _, peer := range strings.Split(v, ",") {
+			peer = strings.TrimSpace(peer)
+			if peer != "" {
+				cfg.AllowedPeers = append(cfg.AllowedPeers, peer)
+			}
+		}
+	}
+	if v := os.Getenv("THRUM_SECURITY_REQUIRED_TAGS"); v != "" {
+		for _, tag := range strings.Split(v, ",") {
+			tag = strings.TrimSpace(tag)
+			if tag != "" {
+				cfg.RequiredTags = append(cfg.RequiredTags, tag)
+			}
+		}
 	}
 
 	return cfg

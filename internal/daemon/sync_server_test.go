@@ -49,7 +49,7 @@ func TestSyncRegistry_ServeSyncRPC_SyncMethod(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go r.ServeSyncRPC(ctx, server)
+	go r.ServeSyncRPC(ctx, server, "test-peer")
 
 	// Send sync.peer_info request
 	req := `{"jsonrpc":"2.0","method":"sync.peer_info","id":1}` + "\n"
@@ -83,7 +83,7 @@ func TestSyncRegistry_ServeSyncRPC_RejectsAppRPC(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go r.ServeSyncRPC(ctx, server)
+	go r.ServeSyncRPC(ctx, server, "test-peer")
 
 	// Try calling message.send — must be rejected
 	req := `{"jsonrpc":"2.0","method":"message.send","params":{},"id":1}` + "\n"
@@ -119,7 +119,7 @@ func TestSyncRegistry_ServeSyncRPC_RejectsNonWhitelisted(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go r.ServeSyncRPC(ctx, server)
+	go r.ServeSyncRPC(ctx, server, "test-peer")
 
 	// Try calling sync.unknown — not in whitelist
 	req := `{"jsonrpc":"2.0","method":"sync.unknown","id":1}` + "\n"
