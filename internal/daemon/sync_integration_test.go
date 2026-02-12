@@ -126,7 +126,7 @@ func TestPullSyncBasic(t *testing.T) {
 	applier := NewSyncApplier(daemonB.state)
 	client := NewSyncClient()
 
-	resp, err := client.PullEvents(daemonA.addr(), 0)
+	resp, err := client.PullEvents(daemonA.addr(), 0, "")
 	if err != nil {
 		t.Fatalf("PullEvents: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestPullSyncDeduplication(t *testing.T) {
 	client := NewSyncClient()
 
 	// First sync
-	resp, err := client.PullEvents(daemonA.addr(), 0)
+	resp, err := client.PullEvents(daemonA.addr(), 0, "")
 	if err != nil {
 		t.Fatalf("PullEvents (first): %v", err)
 	}
@@ -207,7 +207,7 @@ func TestPullSyncDeduplication(t *testing.T) {
 	}
 
 	// Second sync (same events)
-	resp2, err := client.PullEvents(daemonA.addr(), 0)
+	resp2, err := client.PullEvents(daemonA.addr(), 0, "")
 	if err != nil {
 		t.Fatalf("PullEvents (second): %v", err)
 	}
@@ -245,7 +245,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 
 	// First sync with checkpoint
 	var totalApplied int
-	err := client.PullAllEvents(daemonA.addr(), 0, func(events []eventlog.Event, nextSeq int64) error {
+	err := client.PullAllEvents(daemonA.addr(), 0, "", func(events []eventlog.Event, nextSeq int64) error {
 		a, _, applyErr := applier.ApplyAndCheckpoint(peerID, events, nextSeq)
 		totalApplied += a
 		return applyErr
@@ -274,7 +274,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 
 	// Second sync using checkpoint
 	totalApplied = 0
-	err = client.PullAllEvents(daemonA.addr(), firstCheckpointSeq, func(events []eventlog.Event, nextSeq int64) error {
+	err = client.PullAllEvents(daemonA.addr(), firstCheckpointSeq, "", func(events []eventlog.Event, nextSeq int64) error {
 		a, _, applyErr := applier.ApplyAndCheckpoint(peerID, events, nextSeq)
 		totalApplied += a
 		return applyErr
@@ -320,7 +320,7 @@ func TestPullSyncBatching(t *testing.T) {
 
 	batchCount := 0
 	totalApplied := 0
-	err := client.PullAllEvents(daemonA.addr(), 0, func(events []eventlog.Event, nextSeq int64) error {
+	err := client.PullAllEvents(daemonA.addr(), 0, "", func(events []eventlog.Event, nextSeq int64) error {
 		batchCount++
 		a, _, applyErr := applier.ApplyRemoteEvents(events)
 		totalApplied += a
@@ -422,7 +422,7 @@ func TestPullSyncPeerInfo(t *testing.T) {
 	daemonA := newTestDaemon(t, "alice")
 	client := NewSyncClient()
 
-	info, err := client.QueryPeerInfo(daemonA.addr())
+	info, err := client.QueryPeerInfo(daemonA.addr(), "")
 	if err != nil {
 		t.Fatalf("QueryPeerInfo: %v", err)
 	}

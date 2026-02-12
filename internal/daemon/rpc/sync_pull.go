@@ -13,8 +13,9 @@ const MaxSyncBatchSize = 1000
 
 // SyncPullRequest represents the params for a sync.pull RPC call.
 type SyncPullRequest struct {
-	AfterSequence int64 `json:"after_sequence"`
-	MaxBatch      int   `json:"max_batch"`
+	Token         string `json:"token"`
+	AfterSequence int64  `json:"after_sequence"`
+	MaxBatch      int    `json:"max_batch"`
 }
 
 // SyncPullResponse represents the result of a sync.pull RPC call.

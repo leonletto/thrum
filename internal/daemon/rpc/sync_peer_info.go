@@ -5,6 +5,11 @@ import (
 	"encoding/json"
 )
 
+// PeerInfoRequest represents the params for a sync.peer_info RPC call.
+type PeerInfoRequest struct {
+	Token string `json:"token"`
+}
+
 // PeerInfoResponse represents the result of a sync.peer_info RPC call.
 type PeerInfoResponse struct {
 	DaemonID string `json:"daemon_id"`
