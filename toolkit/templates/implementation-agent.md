@@ -1,7 +1,5 @@
 # Implementation Agent Template
 
-> **Note:** This is a distributable template. Fill in the `{{PLACEHOLDER}}` values with your project-specific information before using.
-
 ## Purpose
 
 Guide an agent through implementing an epic's tasks in a designated worktree.
@@ -23,9 +21,69 @@ tasks in order, runs quality gates, and pushes completed work.
 
 ---
 
-## MANDATORY: Register Before Any Work (If Using Thrum)
+## Sub-Agent Strategy
 
-**If your project uses Thrum for agent coordination, run these commands before doing anything else.** If you're not using Thrum, skip this section.
+Delegate research, independent tasks, and verification to sub-agents. Your main
+context should focus on task coordination, dependency management, and
+cross-cutting decisions.
+
+### Principles
+
+1. **Parallelize independent tasks** — When multiple unblocked tasks touch
+   different files/packages, implement them simultaneously via sub-agents
+2. **Delegate research** — Spawn sub-agents to explore unfamiliar code before
+   implementing, rather than reading it into your context
+3. **Verify in background** — Run tests and lint via background sub-agents while
+   you continue with the next task
+4. **Focused prompts** — Give each sub-agent the full task description, worktree
+   path, quality commands, and expected deliverables
+
+### Agent Selection
+
+| Task                        | Agent Type                  | Model  | Background? |
+| --------------------------- | --------------------------- | ------ | ----------- |
+| Implement a complex task    | `general-purpose`           | sonnet | no*         |
+| Implement a simple task     | `general-purpose`           | haiku  | no*         |
+| Explore unfamiliar code     | `Explore`                   | sonnet | yes         |
+| Run tests / lint            | `general-purpose`           | haiku  | yes         |
+| Review implementation       | `feature-dev:code-reviewer` | sonnet | no          |
+| Doc updates / config tweaks | `general-purpose`           | haiku  | yes         |
+
+*Use foreground when you need the result before proceeding. Use background when
+you can continue other work while they run.
+
+### When to Parallelize vs. Work Sequentially
+
+**Parallel** (sub-agents):
+- Tasks touching different files/packages with no shared state
+- Independent verification (tests, lint, coverage)
+- Research into multiple unrelated code areas
+- Doc/config updates alongside implementation
+
+**Sequential** (direct work):
+- Tasks modifying shared files or depending on prior task output
+- Tasks requiring deep context from current session's changes
+- Tasks needing judgment calls mid-implementation
+- Single remaining task (no parallelism benefit)
+
+### Verifier Sub-Agent Pattern
+
+After completing a task, spawn a background sub-agent to independently verify:
+
+- Run the test suite and confirm all pass
+- Review implementation against the task description
+- Check code follows project conventions
+- Confirm acceptance criteria are met
+
+This lets you start the next task immediately while verification runs in
+parallel.
+
+---
+
+## MANDATORY: Register Before Any Work
+
+**STOP. Run these commands before doing anything else.** Do not skip this
+section.
 
 ```bash
 cd {{WORKTREE_PATH}}
@@ -34,10 +92,24 @@ thrum inbox --unread
 thrum send "Starting work on {{EPIC_ID}}" --to @coordinator
 ```
 
+**Verify registration succeeded** — you must see your agent name in the output
+of `thrum quickstart`. If it fails, check that the daemon is running with
+`thrum daemon status`.
+
+**Use the message listener** — Spawn a background listener to get async
+notifications. Re-arm it every time it returns (both MESSAGES_RECEIVED and
+NO_MESSAGES_TIMEOUT).
+
 When your work is complete (Phase 4), send a completion message:
 
 ```bash
 thrum send "Completed {{EPIC_ID}}. All tasks done, tests passing." --to @coordinator
+```
+
+If you hit a blocker from another agent's work, escalate:
+
+```bash
+thrum send "Blocked on {{TASK_ID}} by {{BLOCKER_ID}}" --to @coordinator
 ```
 
 ---
@@ -173,6 +245,68 @@ bd close {{TASK_ID_1}} {{TASK_ID_2}} {{TASK_ID_3}}
 
 ---
 
+### Parallel Task Implementation
+
+When multiple tasks are unblocked and independent, implement them simultaneously.
+This is the biggest context and time win.
+
+#### Identify Parallelizable Tasks
+
+After completing a task, check for unblocked work:
+
+```bash
+bd show {{EPIC_ID}}  # Which tasks are pending and unblocked?
+```
+
+Tasks are parallelizable when they touch different files/packages and don't
+depend on each other's output.
+
+#### Launch Pattern
+
+Give each sub-agent everything it needs to work autonomously:
+
+```
+# Launched in ONE message for parallel execution
+Task(subagent_type="general-purpose", model="sonnet",
+  prompt="Implement a task in {{WORKTREE_PATH}} on branch {{BRANCH_NAME}}.
+
+  ## Task Details
+  <paste full bd show output for task A>
+
+  ## Instructions
+  1. Read the task description — it is the source of truth
+  2. Implement following existing code patterns
+  3. Run tests: {{QUALITY_COMMANDS}}
+  4. Commit: git commit -m '{{EPIC_TITLE}}: <task summary>'
+  5. Return: what was built, test results, commit hash")
+
+Task(subagent_type="general-purpose", model="sonnet",
+  prompt="Implement a task in {{WORKTREE_PATH}} ...
+
+  ## Task Details
+  <paste full bd show output for task B>
+  ...")
+```
+
+#### After Sub-Agents Complete
+
+1. Review reported results (commit hashes, test output)
+2. Check for conflicts: `git --no-pager log --oneline -5`
+3. Close completed tasks: `bd close {{TASK_A}} {{TASK_B}}`
+4. Run unified quality gate: `{{QUALITY_COMMANDS}}`
+5. Check for newly unblocked tasks — repeat if more are available
+
+#### Guardrails
+
+- **2-3 concurrent sub-agents** is the sweet spot. More adds coordination
+  overhead without proportional speedup.
+- **Partition by file/package** to avoid git conflicts. If two tasks touch the
+  same file, run them sequentially.
+- **Always run a final unified test pass** after parallel work — concurrent
+  sub-agents may miss interaction bugs.
+
+---
+
 ### Tool Usage
 
 #### auggie-mcp (Code Retrieval)
@@ -184,28 +318,9 @@ packages.
 
 #### Subagents
 
-Use subagents to parallelize independent work and manage context:
-
-| Agent                 | Use For                                                                                |
-| --------------------- | -------------------------------------------------------------------------------------- |
-| **Claude Sonnet**     | Complex coding: implementation, refactoring, intricate logic, multi-file changes       |
-| **Claude Haiku**      | Simple tasks: documentation updates, formatting, straightforward edits, config changes |
-| **Verifier subagent** | After implementing a task, spawn a subagent to independently verify (see below)        |
-
-**Verifier subagent pattern:** After completing a task, spawn a subagent to:
-
-- Run the test suite and confirm all tests pass
-- Review the implementation against the task description
-- Check that code follows project conventions
-- Verify no regressions were introduced
-- Confirm acceptance criteria from the task description are met
-
-#### When to Use Subagents vs. Direct Work
-
-- **Direct work:** Sequential tasks, tasks that modify shared state, tasks
-  requiring deep context of prior changes in the same session
-- **Subagent:** Independent tasks, verification, documentation, tasks in
-  separate files/packages that don't need shared context
+See the **Sub-Agent Strategy** section at the top of this template for full
+guidance on agent selection, parallel vs. sequential decisions, and the verifier
+pattern.
 
 ---
 
@@ -220,9 +335,17 @@ If a task is blocked:
    blocked task and work on the next unblocked one
 4. Document the blocker:
    `bd update {{TASK_ID}} --notes="Blocked by {{BLOCKER_ID}}: <reason>"`
-5. **Notify via Thrum** (if using Thrum) so the coordinator or blocking agent is aware
+5. **Notify via Thrum** so the coordinator or blocking agent is aware:
 
-### Communicating During Work (If Using Thrum)
+```bash
+# Ask the blocking agent for help
+thrum send "Blocked on {{TASK_ID}} — waiting for {{BLOCKER_ID}}. Can you prioritize?" --mention @implementer
+
+# Or escalate to the coordinator
+thrum send "Blocked on {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @coordinator
+```
+
+### Communicating During Work
 
 Use Thrum to stay coordinated:
 
@@ -233,8 +356,8 @@ thrum send "Completed task {{TASK_ID}}, moving to next" --to @coordinator
 # Ask for input when you need a decision
 thrum send "Need input: should X use approach A or B? Context: ..." --to @coordinator
 
-# Send to your team group
-thrum send "Found a blocker, need help from backend team" --to @backend-team
+# If you realize your work affects another agent's files
+thrum send "Heads up: I'm modifying internal/daemon/rpc.go which may overlap with your work" --mention @implementer
 
 # Update your intent when switching tasks
 thrum agent set-intent "Working on {{TASK_ID}}: <description>"
@@ -319,7 +442,7 @@ git merge {{BRANCH_NAME}}
 git push origin main
 ```
 
-### Step 5: Report Completion (If Using Thrum)
+### Step 5: Report Completion via Thrum
 
 ```bash
 thrum send "Completed {{EPIC_ID}}. All tasks done, tests passing, merged to main." --to @coordinator
@@ -346,7 +469,7 @@ If you're resuming after context loss (compaction, new session, etc.), here's
 the minimal sequence:
 
 ```bash
-# 1. Re-register with Thrum (OPTIONAL — only if using Thrum)
+# 1. Re-register with Thrum (MANDATORY — do this first)
 cd {{WORKTREE_PATH}}
 thrum quickstart --name {{AGENT_NAME}} --role implementer --module {{BRANCH_NAME}} --intent "Resuming {{EPIC_ID}}"
 thrum inbox --unread
