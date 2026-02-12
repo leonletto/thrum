@@ -392,6 +392,19 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 	return response, nil
 }
 
+// resolveHostname returns a human-friendly hostname for this machine.
+// Prefers THRUM_HOSTNAME env var, otherwise uses os.Hostname() with .local suffix stripped.
+func resolveHostname() string {
+	if h := os.Getenv("THRUM_HOSTNAME"); h != "" {
+		return h
+	}
+	h, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSuffix(h, ".local")
+}
+
 // registerAgent writes an agent.register event and returns the response.
 func (h *AgentHandler) registerAgent(agentID, name, role, module, display, worktree, status string) (*RegisterResponse, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -407,6 +420,7 @@ func (h *AgentHandler) registerAgent(agentID, name, role, module, display, workt
 		Module:    module,
 		Worktree:  worktree,
 		Display:   display,
+		Hostname:  resolveHostname(),
 	}
 
 	// Write event to JSONL and SQLite

@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 10
+const CurrentVersion = 11
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -138,6 +138,7 @@ func createTables(tx *sql.Tx) error {
 			role       TEXT NOT NULL,
 			module     TEXT NOT NULL,
 			display    TEXT,
+			hostname   TEXT,
 			registered_at TEXT NOT NULL,
 			last_seen_at TEXT
 		)`,
@@ -572,6 +573,18 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`ALTER TABLE agent_work_contexts ADD COLUMN file_changes TEXT DEFAULT '[]'`)
 		if err != nil {
 			return fmt.Errorf("add file_changes column: %w", err)
+		}
+	}
+
+	// Migration from version 10 to 11: Add hostname column to agents table
+	if startVersion < 11 && endVersion >= 11 {
+		// Only ALTER if agents table exists (it may not in partial-schema test DBs)
+		var agentsExists string
+		if err := tx.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='agents'").Scan(&agentsExists); err == nil {
+			_, err = tx.Exec(`ALTER TABLE agents ADD COLUMN hostname TEXT`)
+			if err != nil {
+				return fmt.Errorf("add hostname column: %w", err)
+			}
 		}
 	}
 

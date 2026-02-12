@@ -109,6 +109,7 @@ type AgentRegisterEvent struct {
 	Module    string `json:"module"`
 	Worktree  string `json:"worktree,omitempty"` // Worktree name (Decision 24)
 	Display   string `json:"display,omitempty"`
+	Hostname  string `json:"hostname,omitempty"`
 }
 
 // AgentSessionStartEvent represents an agent.session.start event.
