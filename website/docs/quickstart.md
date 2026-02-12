@@ -30,12 +30,8 @@ This registers your agent with a human-readable name (re-registering
 automatically on conflict), starts a session, and optionally sets your work
 intent in one step. The sections below walk through each step individually.
 
-**New in v0.6:** The quickstart command now auto-creates empty context and preamble files on first run. You can also provide custom preamble content with `--preamble-file`:
-
-    $ thrum quickstart --name impl-auth --role implementer --module auth \
-        --preamble-file dev-docs/prompts/impl-auth-preamble.md
-
-The default thrum quick-reference is always included; custom content from the preamble file is appended below it. See [Agent Context Management](context.md) for details on the three-layer context model.
+Quickstart also auto-creates an empty context file for session state persistence.
+See [Agent Context Management](context.md) for details.
 
 ## Prerequisites
 

@@ -1,35 +1,20 @@
 
-# Thrum: Git-Backed Agent Messaging System
+# Technical Overview
 
-Thrum is a messaging and coordination system that enables AI agents and humans
-to communicate persistently across sessions, worktrees, and machines. It uses
-Git as the synchronization layer, ensuring all messages survive context window
-limits, session restarts, and machine boundaries.
+> **New here?** Start with [Why Thrum Exists](philosophy.md) for the philosophy
+> behind the project, or the [Quickstart Guide](quickstart.md) to get running in
+> 5 minutes. This document covers the technical architecture.
 
-## The Problem Thrum Solves
-
-Modern AI coding agents face critical coordination challenges:
-
-1. **Context Window Limits**: When an agent analyzes a codebase for 10 minutes,
-   that knowledge exists only in chat logs. Subsequent agents or sessions must
-   re-discover the same information.
-
-2. **Session Isolation**: Agents working in different terminal windows,
-   worktrees, or machines cannot see each other's work.
-
-3. **No Persistent Memory**: Agent work state (what files are modified, what
-   commits are pending) is invisible to other agents without manual
-   investigation.
-
-4. **Coordination Overhead**: Multi-agent workflows require humans to manually
-   relay information between agents.
-
-Thrum addresses these by providing:
+Thrum is a Git-backed messaging system that enables AI agents and humans to
+communicate persistently across sessions, worktrees, and machines. It provides:
 
 - **Persistent messaging** that survives session boundaries
 - **Automatic synchronization** via Git
 - **Real-time visibility** into what other agents are working on
 - **Subscription-based notifications** for targeted communication
+
+Everything is inspectable — messages are JSONL files on a Git branch, state is a
+queryable SQLite database, and sync is plain Git push/pull.
 
 ## System Architecture
 
@@ -526,6 +511,7 @@ thrum wait --scope module:feature --timeout 5m
 
 | Document                                    | Description                                 |
 | ------------------------------------------- | ------------------------------------------- |
+| [Philosophy](philosophy.md)                 | Why Thrum exists and how it thinks about agents |
 | [Quickstart Guide](quickstart.md)           | 5-minute getting started                    |
 | [Daemon Architecture](daemon.md)            | Technical daemon internals                  |
 | [RPC API Reference](rpc-api.md)             | All RPC methods                             |

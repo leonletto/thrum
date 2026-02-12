@@ -10,8 +10,6 @@ set -euo pipefail
 # Options:
 #   --identity <name>    Agent identity name (e.g., feature-implementer-1)
 #   --role <role>        Agent role (default: implementer)
-#   --module <module>    Agent module (default: derived from branch name)
-#   --preamble <file>    Preamble file to append to default preamble
 #   --base <branch>      Base branch to create from (default: main)
 #
 # Creates a .thrum/redirect file in each worktree pointing to the main
@@ -35,8 +33,6 @@ WORKTREE_PATH=""
 BRANCH=""
 IDENTITY=""
 ROLE="implementer"
-MODULE=""
-PREAMBLE=""
 BASE_BRANCH="main"
 
 POSITIONAL=()
@@ -56,20 +52,6 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ROLE="$2"; shift 2 ;;
-        --module)
-            if [[ $# -lt 2 || "$2" == -* ]]; then
-                echo "Error: --module requires a value"
-                echo "Run '$0 --help' for usage."
-                exit 1
-            fi
-            MODULE="$2"; shift 2 ;;
-        --preamble)
-            if [[ $# -lt 2 || "$2" == -* ]]; then
-                echo "Error: --preamble requires a value"
-                echo "Run '$0 --help' for usage."
-                exit 1
-            fi
-            PREAMBLE="$2"; shift 2 ;;
         --base)
             if [[ $# -lt 2 || "$2" == -* ]]; then
                 echo "Error: --base requires a value"
@@ -87,8 +69,6 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --identity <name>     Agent identity name"
             echo "  --role <role>         Agent role (default: implementer)"
-            echo "  --module <module>     Agent module (default: derived from branch name)"
-            echo "  --preamble <file>     Preamble file to compose with default preamble"
             echo "  --base <branch>       Base branch to create from (default: main)"
             echo "  --help, -h            Show this help message"
             echo ""
@@ -115,11 +95,6 @@ if [[ ${#POSITIONAL[@]} -ge 1 ]]; then
 fi
 if [[ ${#POSITIONAL[@]} -ge 2 ]]; then
     BRANCH="${POSITIONAL[1]}"
-fi
-
-# Default module to branch name (strip feature/ prefix if present)
-if [[ -z "$MODULE" && -n "$BRANCH" ]]; then
-    MODULE="${BRANCH#feature/}"
 fi
 
 # --- setup_worktree function (thrum redirect) ---
@@ -280,16 +255,9 @@ setup_beads "$WORKTREE_PATH"
 # Step 4: Quickstart delegation (if --identity provided)
 if [[ -n "$IDENTITY" ]]; then
     echo "  Running quickstart..."
-    QS_CMD=(thrum quickstart --name "$IDENTITY" --role "$ROLE" --module "$MODULE")
-    if [[ -n "$PREAMBLE" ]]; then
-        # Resolve preamble path relative to main repo if not absolute
-        if [[ "$PREAMBLE" != /* ]]; then
-            PREAMBLE="$MAIN_REPO/$PREAMBLE"
-        fi
-        QS_CMD+=(--preamble-file "$PREAMBLE")
-    fi
-
-    if (cd "$WORKTREE_PATH" && "${QS_CMD[@]}"); then
+    # Auto-derive module from branch name (strip feature/ prefix if present)
+    MODULE="${BRANCH#feature/}"
+    if (cd "$WORKTREE_PATH" && thrum quickstart --name "$IDENTITY" --role "$ROLE" --module "$MODULE"); then
         echo "  Quickstart: identity registered"
     else
         echo "Error: Quickstart failed. Worktree created but identity not configured."
@@ -315,7 +283,6 @@ fi
 if [[ -n "$IDENTITY" ]]; then
     echo "  Identity: $IDENTITY (.thrum/identities/$IDENTITY.json)"
     echo "  Context:  .thrum/context/$IDENTITY.md (empty, use /update-context)"
-    echo "  Preamble: .thrum/context/${IDENTITY}_preamble.md"
 fi
 
 # Step 6: Reminder
