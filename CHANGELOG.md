@@ -33,6 +33,33 @@ Six new MCP tools for group management in native agent workflows.
 - `get_group` supports `expand=true` to resolve nested groups and roles to agent
   IDs
 
+#### Runtime Preset Registry
+
+Multi-runtime support for any AI coding agent. Thrum auto-detects or accepts
+explicit runtime selection, generating the correct configuration files for each
+platform.
+
+- `thrum runtime list|show|set-default` CLI commands for managing runtime presets
+- 6 built-in presets: Claude Code, Codex, Cursor, Gemini, Auggie, Amp
+- User config override via `~/.config/thrum/runtimes.json` (XDG-aware)
+- `thrum init --runtime <name>` generates runtime-specific config files
+  (settings.json, AGENTS.md, .cursorrules, etc.)
+- Template engine with embedded templates for each runtime
+- Runtime auto-detection from file markers and environment variables
+
+#### Enhanced Quickstart
+
+- `thrum quickstart` gains `--runtime`, `--dry-run`, `--no-init`, `--force` flags
+- Auto-detects runtime and generates config files during quickstart
+- Dry-run mode previews generated files without daemon connection
+
+#### Context Prime
+
+- `thrum context prime` gathers identity, session, agents, inbox, and git work
+  context in a single command
+- Graceful degradation when daemon, session, or git are unavailable
+- Both human-readable and `--json` output
+
 ### Changed
 
 - `--broadcast` flag on `thrum send` now maps to `--to @everyone` with a
