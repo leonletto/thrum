@@ -110,6 +110,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(unsubscribeCmd())
 	rootCmd.AddCommand(subscriptionsCmd())
 	rootCmd.AddCommand(contextCmd())
+	rootCmd.AddCommand(groupCmd())
 	rootCmd.AddCommand(syncCmd())
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(setupCmd())
@@ -288,6 +289,318 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().String("to", "", "Direct recipient (format: @role)")
 	cmd.Flags().BoolP("broadcast", "b", false, "Send as broadcast to all agents (no specific recipient)")
 
+	return cmd
+}
+
+func groupCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "group",
+		Short: "Manage messaging groups",
+		Long: `Manage named messaging groups for multi-recipient addressing.
+
+Groups allow sending messages to multiple agents at once without
+individual mentions. Members see group messages in their inbox.`,
+	}
+
+	cmd.AddCommand(groupCreateCmd())
+	cmd.AddCommand(groupDeleteCmd())
+	cmd.AddCommand(groupAddCmd())
+	cmd.AddCommand(groupRemoveCmd())
+	cmd.AddCommand(groupListCmd())
+	cmd.AddCommand(groupInfoCmd())
+	cmd.AddCommand(groupMembersCmd())
+
+	return cmd
+}
+
+func groupCreateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create NAME",
+		Short: "Create a new group",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			description, _ := cmd.Flags().GetString("description")
+
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w", err)
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.GroupCreate(client, cli.GroupCreateOptions{
+				Name:          args[0],
+				Description:   description,
+				CallerAgentID: agentID,
+			})
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				fmt.Println(cli.MarshalJSONIndent(result))
+			} else if !flagQuiet {
+				fmt.Printf("✓ Group created: %s (%s)\n", result.Name, result.GroupID)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().String("description", "", "Group description")
+	return cmd
+}
+
+func groupDeleteCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete NAME",
+		Short: "Delete a group",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w", err)
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.GroupDelete(client, cli.GroupDeleteOptions{
+				Name:          args[0],
+				CallerAgentID: agentID,
+			})
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				fmt.Println(cli.MarshalJSONIndent(result))
+			} else if !flagQuiet {
+				fmt.Printf("✓ Group deleted: %s\n", result.Name)
+			}
+			return nil
+		},
+	}
+}
+
+func groupAddCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "add GROUP MEMBER",
+		Short: "Add a member to a group",
+		Long: `Add a member to a group. Members can be agents, roles, or nested groups.
+
+By default, the member is treated as an agent name (strip @ prefix).
+Use --role to add a role-based member, or --group to add a nested group.
+
+Examples:
+  thrum group add reviewers @alice          # Add agent alice
+  thrum group add reviewers --role reviewer # Add all agents with role "reviewer"
+  thrum group add reviewers --group leads   # Add nested group "leads"`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			roleFlag, _ := cmd.Flags().GetString("role")
+			groupFlag, _ := cmd.Flags().GetString("group")
+
+			// Determine member from args or flags
+			var member string
+			if len(args) >= 2 {
+				member = args[1]
+			}
+
+			// Validate: must have member arg or --role/--group flag
+			if member == "" && roleFlag == "" && groupFlag == "" {
+				return fmt.Errorf("provide a member argument, --role, or --group flag")
+			}
+
+			memberType, memberValue := cli.ResolveMemberType(member, roleFlag, groupFlag)
+
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w", err)
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.GroupAdd(client, cli.GroupAddOptions{
+				Group:         args[0],
+				MemberType:    memberType,
+				MemberValue:   memberValue,
+				CallerAgentID: agentID,
+			})
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				fmt.Println(cli.MarshalJSONIndent(result))
+			} else if !flagQuiet {
+				fmt.Printf("✓ Added %s to %s\n", cli.FormatMemberDisplay(result.MemberType, result.MemberValue), result.Group)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().String("role", "", "Add a role-based member")
+	cmd.Flags().String("group", "", "Add a nested group member")
+	return cmd
+}
+
+func groupRemoveCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "remove GROUP MEMBER",
+		Short: "Remove a member from a group",
+		Long: `Remove a member from a group.
+
+By default, the member is treated as an agent name (strip @ prefix).
+Use --role or --group to specify other member types.`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			roleFlag, _ := cmd.Flags().GetString("role")
+			groupFlag, _ := cmd.Flags().GetString("group")
+
+			var member string
+			if len(args) >= 2 {
+				member = args[1]
+			}
+
+			if member == "" && roleFlag == "" && groupFlag == "" {
+				return fmt.Errorf("provide a member argument, --role, or --group flag")
+			}
+
+			memberType, memberValue := cli.ResolveMemberType(member, roleFlag, groupFlag)
+
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w", err)
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.GroupRemove(client, cli.GroupRemoveOptions{
+				Group:         args[0],
+				MemberType:    memberType,
+				MemberValue:   memberValue,
+				CallerAgentID: agentID,
+			})
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				fmt.Println(cli.MarshalJSONIndent(result))
+			} else if !flagQuiet {
+				fmt.Printf("✓ Removed %s from %s\n", cli.FormatMemberDisplay(result.MemberType, result.MemberValue), result.Group)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().String("role", "", "Remove a role-based member")
+	cmd.Flags().String("group", "", "Remove a nested group member")
+	return cmd
+}
+
+func groupListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List all groups",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.GroupList(client, cli.GroupListOptions{})
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				fmt.Println(cli.MarshalJSONIndent(result))
+			} else if !flagQuiet {
+				fmt.Print(cli.FormatGroupList(result.Groups))
+			}
+			return nil
+		},
+	}
+}
+
+func groupInfoCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "info NAME",
+		Short: "Show detailed group info",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.GroupInfo(client, cli.GroupInfoOptions{Name: args[0]})
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				fmt.Println(cli.MarshalJSONIndent(result))
+			} else if !flagQuiet {
+				fmt.Print(cli.FormatGroupInfo(result))
+			}
+			return nil
+		},
+	}
+}
+
+func groupMembersCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "members NAME",
+		Short: "List group members",
+		Long: `List members of a group. Use --expand to resolve nested groups
+and roles to individual agent IDs.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			expand, _ := cmd.Flags().GetBool("expand")
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.GroupMembers(client, cli.GroupMembersOptions{
+				Name:   args[0],
+				Expand: expand,
+			})
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				fmt.Println(cli.MarshalJSONIndent(result))
+			} else if !flagQuiet {
+				fmt.Print(cli.FormatGroupMembers(result))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().Bool("expand", false, "Resolve nested groups and roles to agent IDs")
 	return cmd
 }
 

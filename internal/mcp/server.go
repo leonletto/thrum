@@ -119,7 +119,7 @@ func (s *Server) newDaemonClient() (*cli.Client, error) {
 func (s *Server) registerTools() {
 	gomcp.AddTool(s.server, &gomcp.Tool{
 		Name:        "send_message",
-		Description: "Send a message to another agent via Thrum",
+		Description: "Send a message to another agent or group via Thrum. Use to=@agent for direct messages or to=@groupname for group messages (e.g. to=@everyone for all agents)",
 	}, s.handleSendMessage)
 
 	gomcp.AddTool(s.server, &gomcp.Tool{
@@ -139,6 +139,37 @@ func (s *Server) registerTools() {
 
 	gomcp.AddTool(s.server, &gomcp.Tool{
 		Name:        "broadcast_message",
-		Description: "Broadcast a message to all active agents",
+		Description: "Deprecated: use send_message with to=@everyone instead. Sends a message to all agents via the @everyone group",
 	}, s.handleBroadcast)
+
+	// Group management tools
+	gomcp.AddTool(s.server, &gomcp.Tool{
+		Name:        "create_group",
+		Description: "Create a named messaging group for multi-recipient addressing",
+	}, s.handleCreateGroup)
+
+	gomcp.AddTool(s.server, &gomcp.Tool{
+		Name:        "delete_group",
+		Description: "Delete a messaging group",
+	}, s.handleDeleteGroup)
+
+	gomcp.AddTool(s.server, &gomcp.Tool{
+		Name:        "add_group_member",
+		Description: "Add an agent, role, or nested group as a member of a group",
+	}, s.handleAddGroupMember)
+
+	gomcp.AddTool(s.server, &gomcp.Tool{
+		Name:        "remove_group_member",
+		Description: "Remove a member from a group",
+	}, s.handleRemoveGroupMember)
+
+	gomcp.AddTool(s.server, &gomcp.Tool{
+		Name:        "list_groups",
+		Description: "List all messaging groups",
+	}, s.handleListGroups)
+
+	gomcp.AddTool(s.server, &gomcp.Tool{
+		Name:        "get_group",
+		Description: "Get group details including members. Use expand=true to resolve nested groups and roles to agent IDs",
+	}, s.handleGetGroup)
 }

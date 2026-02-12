@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -33,6 +34,12 @@ func Send(client *Client, opts SendOptions) (*SendResult, error) {
 	// Validate mutual exclusivity of --broadcast and --to
 	if opts.Broadcast && opts.To != "" {
 		return nil, fmt.Errorf("--broadcast and --to are mutually exclusive")
+	}
+
+	// Map --broadcast to --to @everyone (deprecated)
+	if opts.Broadcast {
+		opts.Mentions = append(opts.Mentions, "everyone")
+		fmt.Fprintln(os.Stderr, "Note: --broadcast is deprecated, use --to @everyone instead")
 	}
 
 	// Parse scopes
