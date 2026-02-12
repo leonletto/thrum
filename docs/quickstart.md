@@ -159,14 +159,14 @@ thrum subscribe --mention @implementer
 thrum subscriptions
 ```
 
-### Manage Threads
+### Reply to Messages
 
 ```bash
-# Create a discussion thread
-thrum thread create "Authentication refactor discussion"
+# Reply to a message
+thrum reply msg_01HXE... "I think we should use JWT"
 
-# Send message to thread
-thrum send "I think we should use JWT" --thread thr_01HXE...
+# Replies are clustered with their parent in the inbox
+thrum inbox
 ```
 
 ### Sync Control

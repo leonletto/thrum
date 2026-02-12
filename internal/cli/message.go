@@ -186,36 +186,46 @@ type ReplyOptions struct {
 	CallerAgentID string // Caller's resolved agent ID (for worktree identity)
 }
 
-// Reply sends a reply to a message, creating a thread if needed.
+// Reply sends a reply to a message.
+// It fetches the parent message to copy its audience (mentions/scopes) and sets reply_to ref.
 func Reply(client *Client, opts ReplyOptions) (*SendResult, error) {
-	// 1. Get the original message to find its thread
-	msg, err := MessageGet(client, opts.MessageID)
+	// Get the parent message to extract its audience
+	parentResp, err := MessageGet(client, opts.MessageID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get message: %w", err)
+		return nil, fmt.Errorf("failed to get parent message: %w", err)
 	}
+	parent := parentResp.Message
 
-	threadID := msg.Message.ThreadID
-
-	// 2. If no thread, create one from the original message
-	if threadID == "" {
-		createResp, err := ThreadCreate(client, ThreadCreateOptions{
-			Title:         "Reply to " + opts.MessageID,
-			CallerAgentID: opts.CallerAgentID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create thread: %w", err)
-		}
-		threadID = createResp.ThreadID
-	}
-
-	// 3. Send reply in the thread
+	// Build send options with reply_to ref
 	sendOpts := SendOptions{
 		Content:       opts.Content,
-		Thread:        threadID,
+		ReplyTo:       opts.MessageID,
 		CallerAgentID: opts.CallerAgentID,
 	}
+
 	if opts.Format != "" {
 		sendOpts.Format = opts.Format
+	}
+
+	// Copy audience from parent message:
+	// 1. Extract mentions from parent's refs (mention:agent_id refs)
+	var mentions []string
+	for _, ref := range parent.Refs {
+		if ref.Type == "mention" {
+			mentions = append(mentions, ref.Value)
+		}
+	}
+
+	// 2. Add group scopes as mentions (@group:value format)
+	for _, scope := range parent.Scopes {
+		if scope.Type == "group" {
+			mentions = append(mentions, "@"+scope.Type+":"+scope.Value)
+		}
+	}
+
+	// Set mentions if we found any
+	if len(mentions) > 0 {
+		sendOpts.Mentions = mentions
 	}
 
 	return Send(client, sendOpts)

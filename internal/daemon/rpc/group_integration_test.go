@@ -268,11 +268,11 @@ func TestGroupIntegration_DirectMention_StillWorks(t *testing.T) {
 	}
 }
 
-func TestGroupIntegration_NestedGroup(t *testing.T) {
-	groupH, msgH, _, aliceID, _, cleanup := setupGroupIntegrationTest(t)
+func TestGroupIntegration_NestedGroupRejected(t *testing.T) {
+	groupH, _, _, _, _, cleanup := setupGroupIntegrationTest(t)
 	defer cleanup()
 
-	// Create group A (watchers), group B (reviewers)
+	// Create two groups
 	createA, _ := json.Marshal(GroupCreateRequest{Name: "watchers"})
 	if _, err := groupH.HandleCreate(context.Background(), createA); err != nil {
 		t.Fatalf("create watchers: %v", err)
@@ -282,25 +282,11 @@ func TestGroupIntegration_NestedGroup(t *testing.T) {
 		t.Fatalf("create reviewers: %v", err)
 	}
 
-	// Add alice to reviewers
-	addAlice, _ := json.Marshal(GroupMemberAddRequest{Group: "reviewers", MemberType: "agent", MemberValue: "alice"})
-	if _, err := groupH.HandleMemberAdd(context.Background(), addAlice); err != nil {
-		t.Fatalf("add alice to reviewers: %v", err)
-	}
-
-	// Add reviewers group as member of watchers (nesting)
+	// Adding a group as member should be rejected (flat groups only)
 	addNested, _ := json.Marshal(GroupMemberAddRequest{Group: "watchers", MemberType: "group", MemberValue: "reviewers"})
-	if _, err := groupH.HandleMemberAdd(context.Background(), addNested); err != nil {
-		t.Fatalf("add reviewers to watchers: %v", err)
-	}
-
-	// Send to @watchers
-	msgID := sendMessage(t, msgH, "Watch this", []string{"@watchers"}, aliceID)
-
-	// Alice should see it (member of reviewers, which is nested in watchers)
-	aliceInbox := listInbox(t, msgH, aliceID, "reviewer")
-	if !containsID(aliceInbox, msgID) {
-		t.Errorf("alice should see message to @watchers via nested group, inbox: %v", aliceInbox)
+	_, err := groupH.HandleMemberAdd(context.Background(), addNested)
+	if err == nil {
+		t.Fatal("expected error when adding group as member, got nil")
 	}
 }
 

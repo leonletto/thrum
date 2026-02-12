@@ -14,7 +14,8 @@ type SendOptions struct {
 	Refs          []string // Format: "type:value"
 	Mentions      []string // Format: "@role"
 	Thread        string
-	Structured    string // JSON string
+	ReplyTo       string   // Message ID to reply to
+	Structured    string   // JSON string
 	Priority      string
 	Format        string
 	To            string // Direct recipient (e.g., "@reviewer")
@@ -86,6 +87,10 @@ func Send(client *Client, opts SendOptions) (*SendResult, error) {
 
 	if opts.Thread != "" {
 		params["thread_id"] = opts.Thread
+	}
+
+	if opts.ReplyTo != "" {
+		params["reply_to"] = opts.ReplyTo
 	}
 
 	if len(scopes) > 0 {

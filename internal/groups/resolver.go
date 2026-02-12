@@ -23,7 +23,7 @@ func (r *Resolver) IsGroup(name string) (bool, error) {
 	return exists, err
 }
 
-// IsMember checks if an agent belongs to a group (resolving roles and nested groups).
+// IsMember checks if an agent belongs to a group (resolving roles).
 func (r *Resolver) IsMember(groupName, agentID, agentRole string) (bool, error) {
 	members, err := r.ExpandMembers(groupName)
 	if err != nil {
@@ -38,19 +38,8 @@ func (r *Resolver) IsMember(groupName, agentID, agentRole string) (bool, error) 
 }
 
 // ExpandMembers resolves a group to a deduplicated list of agent IDs.
-// Handles agent, role, and nested group members with cycle detection.
+// Handles agent and role members (flat groups only, no nesting).
 func (r *Resolver) ExpandMembers(groupName string) ([]string, error) {
-	visited := make(map[string]bool)
-	seen := make(map[string]bool)
-	return r.expandWithVisited(groupName, visited, seen)
-}
-
-func (r *Resolver) expandWithVisited(groupName string, visited, seen map[string]bool) ([]string, error) {
-	if visited[groupName] {
-		return nil, nil // Cycle — skip silently
-	}
-	visited[groupName] = true
-
 	rows, err := r.db.Query(`
 		SELECT gm.member_type, gm.member_value
 		FROM group_members gm
@@ -63,36 +52,26 @@ func (r *Resolver) expandWithVisited(groupName string, visited, seen map[string]
 	defer func() { _ = rows.Close() }()
 
 	var agents []string
-	// Collect all members first to close rows before recursive queries
-	type member struct {
-		memberType  string
-		memberValue string
-	}
-	var members []member
+	seen := make(map[string]bool)
+
 	for rows.Next() {
-		var m member
-		if err := rows.Scan(&m.memberType, &m.memberValue); err != nil {
+		var memberType, memberValue string
+		if err := rows.Scan(&memberType, &memberValue); err != nil {
 			return nil, fmt.Errorf("scan member: %w", err)
 		}
-		members = append(members, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate members: %w", err)
-	}
 
-	for _, m := range members {
-		switch m.memberType {
+		switch memberType {
 		case "agent":
-			if !seen[m.memberValue] {
-				agents = append(agents, m.memberValue)
-				seen[m.memberValue] = true
+			if !seen[memberValue] {
+				agents = append(agents, memberValue)
+				seen[memberValue] = true
 			}
 		case "role":
 			var roleAgents []string
-			if m.memberValue == "*" {
+			if memberValue == "*" {
 				roleAgents, err = r.queryAllAgents()
 			} else {
-				roleAgents, err = r.queryAgentsByRole(m.memberValue)
+				roleAgents, err = r.queryAgentsByRole(memberValue)
 			}
 			if err != nil {
 				return nil, err
@@ -103,13 +82,10 @@ func (r *Resolver) expandWithVisited(groupName string, visited, seen map[string]
 					seen[a] = true
 				}
 			}
-		case "group":
-			nested, err := r.expandWithVisited(m.memberValue, visited, seen)
-			if err != nil {
-				return nil, err
-			}
-			agents = append(agents, nested...)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate members: %w", err)
 	}
 
 	return agents, nil

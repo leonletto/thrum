@@ -345,7 +345,6 @@ func (w *Waiter) fetchAndMark(messageID string) (*MessageInfo, error) {
 		MessageID: getResp.Message.MessageID,
 		From:      getResp.Message.Author.AgentID,
 		Content:   getResp.Message.Body.Content,
-		ThreadID:  getResp.Message.ThreadID,
 		Timestamp: getResp.Message.CreatedAt,
 	}
 
