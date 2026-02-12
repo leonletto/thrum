@@ -536,6 +536,7 @@ thrum wait --scope module:feature --timeout 5m
 | [Identity System](identity.md)              | Agent identity and registration             |
 | [Context Management](context.md)            | Agent context storage and persistence       |
 | [Multi-Agent Support](multi-agent.md)       | Groups, runtime presets, and team coordination |
+| [Tailscale Sync](tailscale-sync.md)         | Cross-machine sync via Tailscale with security |
 | [Agent Coordination](agent-coordination.md) | Multi-agent workflows and Beads integration |
 | [Architecture](architecture.md)             | Foundation packages                         |
 
