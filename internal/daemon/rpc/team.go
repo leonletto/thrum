@@ -1,0 +1,199 @@
+package rpc
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+
+	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/types"
+)
+
+// TeamListRequest represents the request for team.list RPC.
+type TeamListRequest struct {
+	IncludeOffline bool `json:"include_offline,omitempty"`
+}
+
+// TeamListResponse represents the response from team.list RPC.
+type TeamListResponse struct {
+	Members []TeamMember `json:"members"`
+}
+
+// TeamMember represents a team member's full status.
+type TeamMember struct {
+	AgentID         string             `json:"agent_id"`
+	Role            string             `json:"role"`
+	Module          string             `json:"module"`
+	Display         string             `json:"display,omitempty"`
+	Hostname        string             `json:"hostname,omitempty"`
+	WorktreePath    string             `json:"worktree_path,omitempty"`
+	SessionID       string             `json:"session_id,omitempty"`
+	SessionStart    string             `json:"session_start,omitempty"`
+	LastSeen        string             `json:"last_seen,omitempty"`
+	Intent          string             `json:"intent,omitempty"`
+	CurrentTask     string             `json:"current_task,omitempty"`
+	Branch          string             `json:"branch,omitempty"`
+	UnmergedCommits int                `json:"unmerged_commits"`
+	FileChanges     []types.FileChange `json:"file_changes,omitempty"`
+	InboxTotal      int                `json:"inbox_total"`
+	InboxUnread     int                `json:"inbox_unread"`
+	Status          string             `json:"status"` // "active", "offline"
+}
+
+// TeamHandler handles team-related RPC methods.
+type TeamHandler struct {
+	state *state.State
+}
+
+// NewTeamHandler creates a new team handler.
+func NewTeamHandler(state *state.State) *TeamHandler {
+	return &TeamHandler{state: state}
+}
+
+// HandleList handles the team.list RPC method.
+func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (any, error) {
+	var req TeamListRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	h.state.RLock()
+	defer h.state.RUnlock()
+
+	// Query 1: Agents + sessions + work contexts
+	query := `SELECT
+		a.agent_id, a.role, a.module, a.display, a.hostname,
+		s.session_id, s.started_at, s.last_seen_at,
+		wc.branch, wc.worktree_path, wc.intent, wc.current_task,
+		wc.unmerged_commits, wc.file_changes
+	FROM agents a
+	LEFT JOIN sessions s ON s.agent_id = a.agent_id AND s.ended_at IS NULL
+	LEFT JOIN agent_work_contexts wc ON wc.session_id = s.session_id
+	WHERE 1=1`
+
+	if !req.IncludeOffline {
+		query += " AND s.session_id IS NOT NULL"
+	}
+
+	query += " ORDER BY s.started_at DESC NULLS LAST"
+
+	rows, err := h.state.DB().Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query team members: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var members []TeamMember
+	memberIndex := make(map[string]int) // agent_id → index in members
+
+	for rows.Next() {
+		var m TeamMember
+		var display, hostname sql.NullString
+		var sessionID, sessionStart, lastSeen sql.NullString
+		var branch, worktreePath, intent, currentTask sql.NullString
+		var unmergedCommitsJSON, fileChangesJSON sql.NullString
+
+		if err := rows.Scan(
+			&m.AgentID, &m.Role, &m.Module, &display, &hostname,
+			&sessionID, &sessionStart, &lastSeen,
+			&branch, &worktreePath, &intent, &currentTask,
+			&unmergedCommitsJSON, &fileChangesJSON,
+		); err != nil {
+			return nil, fmt.Errorf("scan team member: %w", err)
+		}
+
+		if display.Valid {
+			m.Display = display.String
+		}
+		if hostname.Valid {
+			m.Hostname = hostname.String
+		}
+		if sessionID.Valid {
+			m.SessionID = sessionID.String
+			m.Status = "active"
+		} else {
+			m.Status = "offline"
+		}
+		if sessionStart.Valid {
+			m.SessionStart = sessionStart.String
+		}
+		if lastSeen.Valid {
+			m.LastSeen = lastSeen.String
+		}
+		if branch.Valid {
+			m.Branch = branch.String
+		}
+		if worktreePath.Valid {
+			m.WorktreePath = worktreePath.String
+		}
+		if intent.Valid {
+			m.Intent = intent.String
+		}
+		if currentTask.Valid {
+			m.CurrentTask = currentTask.String
+		}
+
+		// Unmarshal unmerged commits to get count
+		if unmergedCommitsJSON.Valid && unmergedCommitsJSON.String != "" {
+			var commits []json.RawMessage
+			if err := json.Unmarshal([]byte(unmergedCommitsJSON.String), &commits); err == nil {
+				m.UnmergedCommits = len(commits)
+			}
+		}
+
+		// Unmarshal file changes
+		if fileChangesJSON.Valid && fileChangesJSON.String != "" {
+			if err := json.Unmarshal([]byte(fileChangesJSON.String), &m.FileChanges); err != nil {
+				m.FileChanges = nil
+			}
+		}
+
+		memberIndex[m.AgentID] = len(members)
+		members = append(members, m)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate team members: %w", err)
+	}
+
+	// Query 2: Per-agent inbox counts
+	inboxQuery := `SELECT
+		a.agent_id,
+		COUNT(DISTINCT m.message_id) as total,
+		COUNT(DISTINCT CASE WHEN mr.message_id IS NULL THEN m.message_id END) as unread
+	FROM agents a
+	LEFT JOIN messages m ON m.deleted = 0 AND m.agent_id != a.agent_id
+	LEFT JOIN message_reads mr ON m.message_id = mr.message_id AND mr.agent_id = a.agent_id
+	GROUP BY a.agent_id`
+
+	inboxRows, err := h.state.DB().Query(inboxQuery)
+	if err != nil {
+		return nil, fmt.Errorf("query inbox counts: %w", err)
+	}
+	defer func() { _ = inboxRows.Close() }()
+
+	for inboxRows.Next() {
+		var agentID string
+		var total, unread int
+
+		if err := inboxRows.Scan(&agentID, &total, &unread); err != nil {
+			return nil, fmt.Errorf("scan inbox count: %w", err)
+		}
+
+		if idx, ok := memberIndex[agentID]; ok {
+			members[idx].InboxTotal = total
+			members[idx].InboxUnread = unread
+		}
+	}
+
+	if err := inboxRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate inbox counts: %w", err)
+	}
+
+	if members == nil {
+		members = []TeamMember{}
+	}
+
+	return &TeamListResponse{Members: members}, nil
+}
