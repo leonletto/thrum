@@ -43,14 +43,36 @@ autonomously.
 
 **What it does:**
 
-1. Checks existing worktrees for reuse candidates
-2. Creates a new worktree + branch if needed (or uses the setup script)
-3. Sets up thrum redirect, beads redirect, identity, and preamble
-4. Verifies the setup with `bd where`, `bd ready`, and `thrum context show`
+The setup script (`scripts/setup-worktree-thrum.sh`) handles everything in a
+single command:
+
+1. Creates git branch + worktree (or reuses existing branch)
+2. Sets up thrum redirect (shared daemon, messages, identities)
+3. Sets up beads redirect (shared issue database)
+4. Runs `thrum quickstart` to register the agent identity
+5. Auto-creates empty context file (`.thrum/context/{name}.md`)
+6. Auto-creates default preamble, or composes default + custom if
+   `--preamble` is provided
+
+```bash
+# Full single-command bootstrap:
+./scripts/setup-worktree-thrum.sh <worktree-path> <branch> \
+  --identity <name> --role <role> --module <module> \
+  --preamble <preamble-file> --base <base-branch>
+
+# Backwards-compatible modes still work:
+./scripts/setup-worktree-thrum.sh                    # auto-detect all worktrees
+./scripts/setup-worktree-thrum.sh <existing-path>    # redirect-only for existing worktree
+```
 
 **Key principle:** All worktrees MUST share a single beads database and thrum
-instance via redirect files. The setup script
-(`scripts/setup-worktree-thrum.sh`) handles all of this in one command.
+instance via redirect files. Never set up redirects manually — use the script.
+
+**Note:** `thrum quickstart` automatically creates empty context and default
+preamble files on every registration, even without `--preamble-file`. The
+`--preamble-file` flag composes `DefaultPreamble() + \n---\n\n + custom content`
+and overwrites any existing preamble. Without the flag, existing preambles are
+preserved (idempotent).
 
 ### Phase 3: Implement (`implementation-agent.md`)
 
@@ -128,15 +150,21 @@ these before giving a template to an agent.
 #    - Brainstorm and write a spec
 #    - Create beads epics and tasks
 #    - Create role preamble if needed (preamble-agent.md template)
+#    - Write an implementation prompt for each agent/worktree
 
-# 2. PREPARE — Set up the workspace
-#    Use the setup script to create a worktree with full bootstrap:
-./scripts/setup-worktree-thrum.sh {{WORKTREE_BASE}}/feature \
-  feature/feature-name \
-  --identity impl-feature \
+# 2. PREPARE — Single command creates everything:
+#    branch, worktree, thrum redirect, beads redirect, identity,
+#    empty context file, and composed preamble.
+./scripts/setup-worktree-thrum.sh {{WORKTREE_BASE}}/{{FEATURE_NAME}} \
+  feature/{{FEATURE_NAME}} \
+  --identity impl-{{FEATURE_NAME}} \
   --role implementer \
-  --module feature \
+  --module {{FEATURE_NAME}} \
   --preamble docs/preambles/implementer-preamble.md
+
+# The script prints a verification summary showing all created paths:
+#   Path, Branch, Thrum redirect, Beads redirect,
+#   Identity file, Context file, Preamble file
 
 # 3. IMPLEMENT — Hand off to implementation agent
 #    Give the implementation-agent.md template with placeholders
@@ -185,10 +213,12 @@ volatile:
 
 The **preamble** is the stable base layer. It defines the agent's role and
 project conventions — content that remains valid even when the worktree is reused
-for a different feature. The default thrum quick-reference is always included at
-the top; custom preamble content (from `--preamble-file`) is appended below it.
-Preambles are per-role (e.g., one `implementer-preamble.md` reused across all
-implementer worktrees), stored in `docs/preambles/`.
+for a different feature. `thrum quickstart` auto-creates a default preamble
+(thrum quick-reference commands) on every registration. When `--preamble-file`
+is provided, the default content is composed with custom content separated by
+`---`. Preambles are per-role (e.g., one `implementer-preamble.md` reused across
+all implementer worktrees), stored in `docs/preambles/`. The identity file
+records the source preamble path in its `context_file` field for traceability.
 
 The **prompt** (implementation template) contains all feature-specific
 instructions: which epic/tasks to implement, which packages to modify, design
@@ -196,8 +226,8 @@ doc references, feature-specific constraints, and scoped quality commands. It is
 given directly to the agent at session start, not stored in thrum.
 
 The **context** file is volatile — the `/update-context` skill rewrites it each
-session with current state (active task, decisions, blockers). It starts empty
-and is populated at runtime.
+session with current state (active task, decisions, blockers). It is auto-created
+as an empty file by `thrum quickstart` and populated at runtime by the skill.
 
 ## Source of Truth Hierarchy
 
