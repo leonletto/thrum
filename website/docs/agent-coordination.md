@@ -426,6 +426,7 @@ bd list --status=in_progress
 
 ## See Also
 
+- [Multi-Agent Support](multi-agent.md) -- groups, runtime presets, and team coordination
 - [CLI Reference](cli.md) -- complete command documentation
 - [MCP Server](mcp-server.md) -- MCP tools and message-listener details
 - [Messaging System](messaging.md) -- message structure and threading
