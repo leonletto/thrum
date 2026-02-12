@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -140,6 +141,19 @@ func GenerateEventID() string {
 // Format: "grp_" + ulid().
 func GenerateGroupID() string {
 	return "grp_" + generateULID()
+}
+
+// GenerateDaemonID generates a daemon ID from the machine hostname.
+// Format: "d_" + base32(sha256(hostname))[:12].
+// Falls back to a random ULID-based ID if hostname is unavailable.
+func GenerateDaemonID() string {
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" {
+		return "d_" + generateULID()
+	}
+	hash := sha256.Sum256([]byte(hostname))
+	encoded := strings.ToLower(crockfordBase32.EncodeToString(hash[:]))
+	return "d_" + encoded[:12]
 }
 
 var (

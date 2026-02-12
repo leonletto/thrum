@@ -1016,6 +1016,8 @@ func daemonCmd() *cobra.Command {
 	})
 
 	cmd.AddCommand(daemonRunCmd(&flagLocal))
+	cmd.AddCommand(daemonTsyncCmd())
+	cmd.AddCommand(daemonPeersCmd())
 
 	return cmd
 }
@@ -1029,6 +1031,128 @@ func daemonRunCmd(flagLocal *bool) *cobra.Command {
 			return runDaemon(flagRepo, *flagLocal)
 		},
 	}
+}
+
+func daemonTsyncCmd() *cobra.Command {
+	var flagFrom string
+
+	cmd := &cobra.Command{
+		Use:   "sync",
+		Short: "Trigger Tailscale peer sync",
+		Long: `Trigger sync from known Tailscale peers.
+
+Pulls events from all known peers (or a specific one with --from).
+Shows progress for each peer.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TsyncForce(client, flagFrom)
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatTsyncForce(result))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&flagFrom, "from", "", "Sync from a specific peer (hostname or daemon ID)")
+
+	return cmd
+}
+
+func daemonPeersCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "peers",
+		Short: "Manage Tailscale sync peers",
+		Long:  `List and manage Tailscale sync peers.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Default: list peers
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			peers, err := cli.TsyncPeersList(client)
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(peers, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatTsyncPeersList(peers))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List known peers",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			peers, err := cli.TsyncPeersList(client)
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(peers, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatTsyncPeersList(peers))
+			}
+
+			return nil
+		},
+	})
+
+	var flagPort int
+	addCmd := &cobra.Command{
+		Use:   "add <hostname>",
+		Short: "Add a peer manually",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			if err := cli.TsyncPeersAdd(client, args[0], flagPort); err != nil {
+				return err
+			}
+
+			if !flagQuiet {
+				fmt.Printf("Peer %s:%d added\n", args[0], flagPort)
+			}
+
+			return nil
+		},
+	}
+	addCmd.Flags().IntVar(&flagPort, "port", 9100, "Sync port")
+	cmd.AddCommand(addCmd)
+
+	return cmd
 }
 
 func agentCmd() *cobra.Command {
@@ -3636,6 +3760,43 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		server.RegisterHandler("sync.status", syncStatusHandler.Handle)
 	}
 
+	// Tailscale peer sync management
+	syncManager, err := daemon.NewDaemonSyncManager(st, varDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to create sync manager: %v\n", err)
+	}
+	if syncManager != nil {
+		// Hook into event writes to broadcast sync.notify to peers
+		st.SetOnEventWrite(func(daemonID string, sequence int64, eventCount int) {
+			go syncManager.BroadcastNotify(daemonID, sequence, eventCount)
+		})
+
+		// Adapter: convert daemon.PeerStatusInfo → rpc.PeerStatus
+		listPeersFn := func() []rpc.PeerStatus {
+			infos := syncManager.ListPeers()
+			peers := make([]rpc.PeerStatus, len(infos))
+			for i, p := range infos {
+				peers[i] = rpc.PeerStatus{
+					DaemonID: p.DaemonID,
+					Hostname: p.Hostname,
+					Port:     p.Port,
+					LastSeen: p.LastSeen,
+					Status:   p.Status,
+					LastSeq:  p.LastSeq,
+				}
+			}
+			return peers
+		}
+
+		tsyncForceHandler := rpc.NewTsyncForceHandler(syncManager.SyncFromPeer, listPeersFn)
+		tsyncPeersListHandler := rpc.NewTsyncPeersListHandler(listPeersFn)
+		tsyncPeersAddHandler := rpc.NewTsyncPeersAddHandler(syncManager.AddPeer)
+
+		server.RegisterHandler("tsync.force", tsyncForceHandler.Handle)
+		server.RegisterHandler("tsync.peers.list", tsyncPeersListHandler.Handle)
+		server.RegisterHandler("tsync.peers.add", tsyncPeersAddHandler.Handle)
+	}
+
 	// User management (for WebSocket connections)
 	userHandler := rpc.NewUserHandler(st)
 	server.RegisterHandler("user.register", userHandler.HandleRegister)
@@ -3707,6 +3868,89 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	}
 
 	wsServer := websocket.NewServer(wsAddr, wsRegistry, uiFS)
+
+	// Tailscale tsnet listener (optional — daemon works fine without it)
+	tsCfg := config.LoadTailscaleConfig(thrumDir)
+	if tsCfg.Enabled {
+		if err := tsCfg.Validate(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Tailscale config invalid: %v (tsnet disabled)\n", err)
+		} else {
+			tsListener, tsErr := daemon.NewTsnetServer(tsCfg)
+			if tsErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to start tsnet: %v (tsnet disabled)\n", tsErr)
+			} else {
+				defer func() { _ = tsListener.Close() }()
+
+				// Create sync-only registry for Tailscale connections
+				syncRegistry := daemon.NewSyncRegistry()
+
+				// Register sync handlers
+				syncPullHandler := rpc.NewSyncPullHandler(st)
+				hostname, _ := os.Hostname()
+				syncPeerInfoHandler := rpc.NewPeerInfoHandler(st.DaemonID(), hostname)
+
+				_ = syncRegistry.Register("sync.pull", syncPullHandler.Handle)
+				_ = syncRegistry.Register("sync.peer_info", syncPeerInfoHandler.Handle)
+
+				// Register sync.notify handler (triggers pull sync on notification)
+				if syncManager != nil {
+					syncNotifyHandler := rpc.NewSyncNotifyHandler(syncManager.SyncFromPeerByID)
+					_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
+				}
+
+				// Accept loop for sync connections
+				go func() {
+					for {
+						conn, err := tsListener.Accept()
+						if err != nil {
+							return // Listener closed
+						}
+						go syncRegistry.ServeSyncRPC(ctx, conn)
+					}
+				}()
+
+				// Start peer discovery and periodic sync fallback
+				if syncManager != nil {
+					// Periodic sync fallback (safety net for missed notifications)
+					periodicSync := daemon.NewPeriodicSyncScheduler(syncManager, st)
+					go periodicSync.Start(ctx)
+					tsLocalClient, lcErr := tsListener.LocalClient()
+					if lcErr != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to get LocalClient for peer discovery: %v\n", lcErr)
+					} else {
+						discoverer := daemon.NewPeerDiscoverer(tsLocalClient, syncManager.PeerRegistry(), syncManager.Client(), tsCfg.Port)
+						go discoverer.StartPeriodicDiscovery(ctx, daemon.DefaultDiscoveryInterval)
+					}
+				}
+
+				fmt.Fprintf(os.Stderr, "  Tailscale:   %s:%d\n", tsCfg.Hostname, tsCfg.Port)
+
+				// Wire Tailscale sync info into health handler
+				if syncManager != nil {
+					tsHostname := tsCfg.Hostname
+					healthHandler.SetTailscaleInfoProvider(func() *rpc.TailscaleSyncInfo {
+						count, peers := syncManager.TailscaleSyncStatus(tsHostname)
+						tsPeers := make([]rpc.TailscalePeer, len(peers))
+						for i, p := range peers {
+							tsPeers[i] = rpc.TailscalePeer{
+								DaemonID: p.DaemonID,
+								Hostname: p.Hostname,
+								LastSync: p.LastSeen,
+								Status:   p.Status,
+							}
+						}
+						return &rpc.TailscaleSyncInfo{
+							Enabled:        true,
+							Hostname:       tsHostname,
+							ConnectedPeers: count,
+							Peers:          tsPeers,
+							SyncStatus:     "idle",
+						}
+					})
+				}
+			}
+		}
+	}
 
 	fmt.Fprintf(os.Stderr, "Thrum daemon starting...\n")
 	fmt.Fprintf(os.Stderr, "  Unix socket: %s\n", socketPath)
