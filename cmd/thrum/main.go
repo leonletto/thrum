@@ -3207,6 +3207,7 @@ Examples:
 			display, _ := cmd.Flags().GetString("display")
 			intent, _ := cmd.Flags().GetString("intent")
 			runtimeFlag, _ := cmd.Flags().GetString("runtime")
+			preambleFile, _ := cmd.Flags().GetString("preamble-file")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			noInit, _ := cmd.Flags().GetBool("no-init")
 			forceInit, _ := cmd.Flags().GetBool("force")
@@ -3233,16 +3234,17 @@ Examples:
 			}
 
 			opts := cli.QuickstartOptions{
-				Name:     name,
-				Role:     flagRole,
-				Module:   flagModule,
-				Display:  display,
-				Intent:   intent,
-				Runtime:  runtimeFlag,
-				RepoPath: flagRepo,
-				DryRun:   dryRun,
-				NoInit:   noInit,
-				Force:    forceInit,
+				Name:         name,
+				Role:         flagRole,
+				Module:       flagModule,
+				Display:      display,
+				Intent:       intent,
+				PreambleFile: preambleFile,
+				Runtime:      runtimeFlag,
+				RepoPath:     flagRepo,
+				DryRun:       dryRun,
+				NoInit:       noInit,
+				Force:        forceInit,
 			}
 
 			// In dry-run mode, we don't need a daemon connection
@@ -3286,9 +3288,47 @@ Examples:
 					Worktree:  getWorktreeName(flagRepo),
 					UpdatedAt: time.Now(),
 				}
+
+				// Populate context_file with relative path when --preamble-file provided
+				if preambleFile != "" {
+					if relPath, err := filepath.Rel(flagRepo, preambleFile); err == nil {
+						idFile.ContextFile = relPath
+					} else {
+						idFile.ContextFile = preambleFile
+						fmt.Fprintf(os.Stderr, "Warning: could not compute relative path for preamble file: %v\n", err)
+					}
+				}
+
 				thrumDir := filepath.Join(flagRepo, ".thrum")
 				if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to save identity file: %v\n", err)
+				}
+
+				// Bootstrap context files
+				// Create empty context file if it doesn't already exist
+				ctxPath := agentcontext.ContextPath(thrumDir, savedName)
+				if _, statErr := os.Stat(ctxPath); os.IsNotExist(statErr) {
+					if err := agentcontext.Save(thrumDir, savedName, []byte("")); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to create context file: %v\n", err)
+					}
+				}
+
+				// Create default preamble if it doesn't already exist
+				if err := agentcontext.EnsurePreamble(thrumDir, savedName); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
+				}
+
+				// If --preamble-file provided, compose default + custom preamble
+				if preambleFile != "" {
+					customContent, err := os.ReadFile(preambleFile) //nolint:gosec // G304 - user-provided flag path
+					if err != nil {
+						return fmt.Errorf("failed to read preamble file %q: %w", preambleFile, err)
+					}
+					composed := append(agentcontext.DefaultPreamble(), []byte("\n---\n\n")...)
+					composed = append(composed, customContent...)
+					if err := agentcontext.SavePreamble(thrumDir, savedName, composed); err != nil {
+						return fmt.Errorf("failed to save composed preamble: %w", err)
+					}
 				}
 			}
 
@@ -3313,6 +3353,7 @@ Examples:
 	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files or registering")
 	cmd.Flags().Bool("no-init", false, "Skip runtime config generation, just register agent")
 	cmd.Flags().Bool("force", false, "Overwrite existing runtime config files")
+	cmd.Flags().String("preamble-file", "", "Custom preamble file to compose with default preamble")
 
 	return cmd
 }
