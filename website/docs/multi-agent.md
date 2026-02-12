@@ -19,9 +19,10 @@ last_updated: "2026-02-11"
 
 # Multi-Agent Support
 
-> See also: [Agent Coordination](agent-coordination.md) for workflow patterns
-> and Beads integration, [Identity System](identity.md) for agent naming and
-> registration.
+> See also: [Why Thrum Exists](philosophy.md) for the philosophy behind
+> human-directed coordination, [Agent Coordination](agent-coordination.md) for
+> workflow patterns and Beads integration, [Identity System](identity.md) for
+> agent naming and registration.
 
 ## Overview
 
@@ -296,9 +297,9 @@ Custom runtimes appear alongside built-in presets in `thrum runtime list`.
 
 ## Context Prime
 
-Context prime gathers all agent state into a single output for session
-initialization or recovery. It is especially useful after conversation
-compaction, when an agent needs to reconstruct its working context.
+After compaction or starting a new session, you want to quickly answer: what was
+I working on? Context prime gathers all agent state into a single output so an
+agent can pick up where it left off.
 
 ### Usage
 
