@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -3908,30 +3907,6 @@ func runDaemon(repoPath string, flagLocal bool) error {
 				// Create sync-only registry for Tailscale connections
 				syncRegistry := daemon.NewSyncRegistry()
 
-				// Load security config and wire in rate limiting
-				securityCfg := config.LoadSecurityConfig()
-				rateLimiter := daemon.NewSyncRateLimiter(daemon.RateLimitConfig{
-					MaxRequestsPerSecond: securityCfg.MaxRequestsPerSecond,
-					BurstSize:            securityCfg.BurstSize,
-					MaxSyncQueueDepth:    securityCfg.MaxSyncQueueDepth,
-					Enabled:              securityCfg.RateLimitEnabled,
-				})
-				syncRegistry.SetRateLimiter(rateLimiter)
-
-				// Create sync authorizer for WhoIs checks
-				syncAuthorizer := daemon.NewSyncAuthorizer(daemon.SyncAuthConfig{
-					AllowedPeers:  securityCfg.AllowedPeers,
-					RequiredTags:  securityCfg.RequiredTags,
-					AllowedDomain: securityCfg.AllowedDomain,
-					RequireAuth:   securityCfg.RequireAuth,
-				})
-
-				// Get LocalClient for WhoIs lookups on sync connections
-				tsLocalClientForAuth, lcAuthErr := tsListener.LocalClient()
-				if lcAuthErr != nil {
-					fmt.Fprintf(os.Stderr, "Warning: WhoIs auth unavailable: %v\n", lcAuthErr)
-				}
-
 				// Register sync handlers
 				syncPullHandler := rpc.NewSyncPullHandler(st)
 				hostname, _ := os.Hostname()
@@ -3946,7 +3921,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
 				}
 
-				// Accept loop for sync connections with WhoIs authorization
+				// Accept loop for sync connections
 				go func() {
 					for {
 						conn, err := tsListener.Accept()
@@ -3956,51 +3931,16 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 						go func(c net.Conn) {
 							defer c.Close()
-
 							peerID := c.RemoteAddr().String()
-
-							// WhoIs authorization check
-							if tsLocalClientForAuth != nil {
-								whois, whoisErr := tsLocalClientForAuth.WhoIs(ctx, c.RemoteAddr().String())
-								if whoisErr != nil {
-									log.Printf("[sync] WhoIs lookup failed for %s: %v", c.RemoteAddr(), whoisErr)
-									if securityCfg.RequireAuth {
-										return
-									}
-								} else {
-									peerHostname := whois.Node.ComputedName
-									peerLoginName := whois.UserProfile.LoginName
-									peerTags := whois.Node.Tags
-
-									if authErr := syncAuthorizer.AuthorizePeer(peerHostname, peerTags, peerLoginName); authErr != nil {
-										log.Printf("[sync] Authorization DENIED for %s: %v", peerHostname, authErr)
-										return
-									}
-
-									peerID = peerHostname
-								}
-							} else if securityCfg.RequireAuth {
-								log.Printf("[sync] Auth required but WhoIs unavailable, rejecting %s", c.RemoteAddr())
-								return
-							}
-
 							syncRegistry.ServeSyncRPC(ctx, c, peerID)
 						}(conn)
 					}
 				}()
 
-				// Start peer discovery and periodic sync fallback
+				// Start periodic sync fallback (safety net for missed notifications)
 				if syncManager != nil {
-					// Periodic sync fallback (safety net for missed notifications)
 					periodicSync := daemon.NewPeriodicSyncScheduler(syncManager, st)
 					go periodicSync.Start(ctx)
-					tsLocalClient, lcErr := tsListener.LocalClient()
-					if lcErr != nil {
-						fmt.Fprintf(os.Stderr, "Warning: failed to get LocalClient for peer discovery: %v\n", lcErr)
-					} else {
-						discoverer := daemon.NewPeerDiscoverer(tsLocalClient, syncManager.PeerRegistry(), syncManager.Client(), tsCfg.Port)
-						go discoverer.StartPeriodicDiscovery(ctx, daemon.DefaultDiscoveryInterval)
-					}
 				}
 
 				fmt.Fprintf(os.Stderr, "  Tailscale:   %s:%d\n", tsCfg.Hostname, tsCfg.Port)
