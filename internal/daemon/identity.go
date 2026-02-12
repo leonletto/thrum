@@ -129,6 +129,31 @@ func CanonicalSigningPayload(event map[string]any) string {
 	return fmt.Sprintf("%s|%s|%s|%s", eventID, eventType, timestamp, originDaemon)
 }
 
+// VerifyEventSignature verifies the Ed25519 signature on an event.
+// Returns true if the signature is valid, false otherwise.
+// Events without a signature field return true (backward compatibility during migration).
+// Events with an invalid or tampered signature return false.
+func VerifyEventSignature(event map[string]any, publicKey ed25519.PublicKey) bool {
+	sigStr, ok := event["signature"].(string)
+	if !ok || sigStr == "" {
+		// No signature — backward compatible (unsigned events accepted during migration)
+		return true
+	}
+
+	if publicKey == nil {
+		// No public key available — cannot verify, reject signed events without a key
+		return false
+	}
+
+	sigBytes, err := base64.StdEncoding.DecodeString(sigStr)
+	if err != nil {
+		return false
+	}
+
+	payload := CanonicalSigningPayload(event)
+	return ed25519.Verify(publicKey, []byte(payload), sigBytes)
+}
+
 // saveIdentityKeys saves an Ed25519 private key to a PEM file with 0600 permissions.
 func saveIdentityKeys(keyPath string, priv ed25519.PrivateKey) error {
 	// Marshal private key to PKCS8 format

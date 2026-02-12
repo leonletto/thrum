@@ -304,6 +304,117 @@ func TestSignEventNilKey(t *testing.T) {
 	}
 }
 
+func TestVerifyEventSignature_Valid(t *testing.T) {
+	tmpDir := t.TempDir()
+	pub, priv, err := EnsureIdentityKeys(tmpDir)
+	if err != nil {
+		t.Fatalf("EnsureIdentityKeys failed: %v", err)
+	}
+
+	event := map[string]any{
+		"event_id":      "evt_01ABC",
+		"type":          "message.create",
+		"timestamp":     "2026-01-01T00:00:00Z",
+		"origin_daemon": "d_test123",
+	}
+	SignEvent(event, priv)
+
+	if !VerifyEventSignature(event, pub) {
+		t.Error("valid signature should verify successfully")
+	}
+}
+
+func TestVerifyEventSignature_Tampered(t *testing.T) {
+	tmpDir := t.TempDir()
+	pub, priv, err := EnsureIdentityKeys(tmpDir)
+	if err != nil {
+		t.Fatalf("EnsureIdentityKeys failed: %v", err)
+	}
+
+	event := map[string]any{
+		"event_id":      "evt_01ABC",
+		"type":          "message.create",
+		"timestamp":     "2026-01-01T00:00:00Z",
+		"origin_daemon": "d_test123",
+	}
+	SignEvent(event, priv)
+
+	// Tamper with the event
+	event["type"] = "message.delete"
+
+	if VerifyEventSignature(event, pub) {
+		t.Error("tampered event should fail verification")
+	}
+}
+
+func TestVerifyEventSignature_NoSignature(t *testing.T) {
+	tmpDir := t.TempDir()
+	pub, _, err := EnsureIdentityKeys(tmpDir)
+	if err != nil {
+		t.Fatalf("EnsureIdentityKeys failed: %v", err)
+	}
+
+	event := map[string]any{
+		"event_id":      "evt_01ABC",
+		"type":          "message.create",
+		"timestamp":     "2026-01-01T00:00:00Z",
+		"origin_daemon": "d_test123",
+	}
+
+	// No signature — backward compatible, should return true
+	if !VerifyEventSignature(event, pub) {
+		t.Error("unsigned event should be accepted (backward compat)")
+	}
+}
+
+func TestVerifyEventSignature_WrongKey(t *testing.T) {
+	tmpDir1 := t.TempDir()
+	tmpDir2 := t.TempDir()
+
+	_, priv1, err := EnsureIdentityKeys(tmpDir1)
+	if err != nil {
+		t.Fatalf("EnsureIdentityKeys (1) failed: %v", err)
+	}
+	pub2, _, err := EnsureIdentityKeys(tmpDir2)
+	if err != nil {
+		t.Fatalf("EnsureIdentityKeys (2) failed: %v", err)
+	}
+
+	event := map[string]any{
+		"event_id":      "evt_01ABC",
+		"type":          "message.create",
+		"timestamp":     "2026-01-01T00:00:00Z",
+		"origin_daemon": "d_test123",
+	}
+	SignEvent(event, priv1)
+
+	// Verify with wrong public key
+	if VerifyEventSignature(event, pub2) {
+		t.Error("verification with wrong key should fail")
+	}
+}
+
+func TestVerifyEventSignature_NilKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	_, priv, err := EnsureIdentityKeys(tmpDir)
+	if err != nil {
+		t.Fatalf("EnsureIdentityKeys failed: %v", err)
+	}
+
+	event := map[string]any{
+		"event_id":      "evt_01ABC",
+		"type":          "message.create",
+		"timestamp":     "2026-01-01T00:00:00Z",
+		"origin_daemon": "d_test123",
+	}
+	SignEvent(event, priv)
+
+	// Verify with nil key — signed events with no key to verify should be rejected
+	if VerifyEventSignature(event, nil) {
+		t.Error("signed event with nil public key should fail verification")
+	}
+}
+
 func TestCanonicalSigningPayload(t *testing.T) {
 	event := map[string]any{
 		"event_id":      "evt_01ABC",
