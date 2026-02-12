@@ -240,6 +240,7 @@ func initTestSchema(db *sql.DB) error {
 		role TEXT NOT NULL,
 		module TEXT NOT NULL,
 		display TEXT,
+		hostname TEXT,
 		registered_at TEXT NOT NULL,
 		last_seen_at TEXT
 	);
