@@ -20,7 +20,7 @@ type OverviewResult struct {
 }
 
 // Overview fetches combined overview data from the daemon.
-func Overview(client *Client) (*OverviewResult, error) {
+func Overview(client *Client, callerAgentID ...string) (*OverviewResult, error) {
 	result := &OverviewResult{}
 
 	// Step 1: Health check
@@ -30,7 +30,11 @@ func Overview(client *Client) (*OverviewResult, error) {
 
 	// Step 2: Agent identity
 	var whoami WhoamiResult
-	if err := client.Call("agent.whoami", map[string]any{}, &whoami); err == nil {
+	whoamiParams := map[string]any{}
+	if len(callerAgentID) > 0 && callerAgentID[0] != "" {
+		whoamiParams["caller_agent_id"] = callerAgentID[0]
+	}
+	if err := client.Call("agent.whoami", whoamiParams, &whoami); err == nil {
 		result.Agent = &whoami
 
 		// Step 3: My work context (if session active)

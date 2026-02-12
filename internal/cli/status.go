@@ -68,7 +68,7 @@ type StatusResult struct {
 }
 
 // Status retrieves current status from the daemon.
-func Status(client *Client) (*StatusResult, error) {
+func Status(client *Client, callerAgentID ...string) (*StatusResult, error) {
 	result := &StatusResult{}
 
 	// Get health status
@@ -78,7 +78,11 @@ func Status(client *Client) (*StatusResult, error) {
 
 	// Get agent info (may fail if no agent registered)
 	var whoami WhoamiResult
-	if err := client.Call("agent.whoami", map[string]any{}, &whoami); err == nil {
+	params := map[string]any{}
+	if len(callerAgentID) > 0 && callerAgentID[0] != "" {
+		params["caller_agent_id"] = callerAgentID[0]
+	}
+	if err := client.Call("agent.whoami", params, &whoami); err == nil {
 		result.Agent = &whoami
 
 		// Get inbox counts if we have an agent

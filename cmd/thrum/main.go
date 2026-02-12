@@ -826,7 +826,8 @@ The daemon must be running to check status.`,
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.Status(client)
+			agentID, _ := resolveLocalAgentID()
+			result, err := cli.Status(client, agentID)
 			if err != nil {
 				return err
 			}
@@ -3479,7 +3480,8 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.Overview(client)
+			agentID, _ := resolveLocalAgentID()
+			result, err := cli.Overview(client, agentID)
 			if err != nil {
 				return err
 			}
