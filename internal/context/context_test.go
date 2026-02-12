@@ -334,3 +334,174 @@ func TestSaveEmptyContent(t *testing.T) {
 		t.Errorf("expected empty content, got %q", data)
 	}
 }
+
+// Tests for quickstart context bootstrapping behavior (thrum-epce)
+
+func TestBootstrapCreatesEmptyContextAndDefaultPreamble(t *testing.T) {
+	// Simulates quickstart without --preamble-file
+	thrumDir := t.TempDir()
+	agentName := "test-impl"
+
+	// Create empty context (only if not exists)
+	ctxPath := ContextPath(thrumDir, agentName)
+	if _, err := os.Stat(ctxPath); os.IsNotExist(err) {
+		if err := Save(thrumDir, agentName, []byte("")); err != nil {
+			t.Fatalf("Save empty context: %v", err)
+		}
+	}
+
+	// Create default preamble
+	if err := EnsurePreamble(thrumDir, agentName); err != nil {
+		t.Fatalf("EnsurePreamble: %v", err)
+	}
+
+	// Verify context file is empty
+	ctxData, err := Load(thrumDir, agentName)
+	if err != nil {
+		t.Fatalf("Load context: %v", err)
+	}
+	if len(ctxData) != 0 {
+		t.Errorf("context should be empty, got %q", ctxData)
+	}
+
+	// Verify preamble has default content
+	preambleData, err := LoadPreamble(thrumDir, agentName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(preambleData) != string(DefaultPreamble()) {
+		t.Errorf("preamble should be default, got %q", preambleData)
+	}
+}
+
+func TestBootstrapComposedPreamble(t *testing.T) {
+	// Simulates quickstart with --preamble-file
+	thrumDir := t.TempDir()
+	agentName := "test-impl"
+
+	// First create default (as quickstart does)
+	if err := EnsurePreamble(thrumDir, agentName); err != nil {
+		t.Fatal(err)
+	}
+
+	// Compose default + custom (as quickstart does with --preamble-file)
+	customContent := []byte("## Project Context\n\nThis is custom content.\n")
+	composed := append(DefaultPreamble(), []byte("\n---\n\n")...)
+	composed = append(composed, customContent...)
+
+	if err := SavePreamble(thrumDir, agentName, composed); err != nil {
+		t.Fatalf("SavePreamble composed: %v", err)
+	}
+
+	// Verify composed content
+	data, err := LoadPreamble(thrumDir, agentName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := string(data)
+	if !strings.Contains(s, "Thrum Quick Reference") {
+		t.Error("composed preamble missing default content")
+	}
+	if !strings.Contains(s, "\n---\n\n") {
+		t.Error("composed preamble missing separator")
+	}
+	if !strings.Contains(s, "Project Context") {
+		t.Error("composed preamble missing custom content")
+	}
+}
+
+func TestBootstrapEnsurePreambleNoOverwriteExisting(t *testing.T) {
+	// Re-running quickstart without --preamble-file should not overwrite
+	thrumDir := t.TempDir()
+	agentName := "test-impl"
+
+	custom := []byte("## Custom Preamble\n\nAlready set up.\n")
+	if err := SavePreamble(thrumDir, agentName, custom); err != nil {
+		t.Fatal(err)
+	}
+
+	// Quickstart calls EnsurePreamble — should be a no-op
+	if err := EnsurePreamble(thrumDir, agentName); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := LoadPreamble(thrumDir, agentName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != string(custom) {
+		t.Errorf("EnsurePreamble overwrote existing preamble: got %q, want %q", data, custom)
+	}
+}
+
+func TestBootstrapPreambleFileReplaces(t *testing.T) {
+	// Re-running with --preamble-file replaces the preamble
+	thrumDir := t.TempDir()
+	agentName := "test-impl"
+
+	// Initial preamble
+	initial := []byte("## Old Preamble\n")
+	if err := SavePreamble(thrumDir, agentName, initial); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-run with new custom content (SavePreamble overwrites)
+	newCustom := []byte("## New Project Context\n\nUpdated content.\n")
+	composed := append(DefaultPreamble(), []byte("\n---\n\n")...)
+	composed = append(composed, newCustom...)
+
+	if err := SavePreamble(thrumDir, agentName, composed); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := LoadPreamble(thrumDir, agentName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "New Project Context") {
+		t.Error("preamble should contain new custom content")
+	}
+	if strings.Contains(string(data), "Old Preamble") {
+		t.Error("preamble should not contain old content")
+	}
+}
+
+func TestBootstrapContextFileNotOverwritten(t *testing.T) {
+	// Re-running quickstart should not overwrite existing context
+	thrumDir := t.TempDir()
+	agentName := "test-impl"
+
+	existing := []byte("# Existing context data\n")
+	if err := Save(thrumDir, agentName, existing); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bootstrap checks: only create if not exists
+	ctxPath := ContextPath(thrumDir, agentName)
+	if _, err := os.Stat(ctxPath); os.IsNotExist(err) {
+		if err := Save(thrumDir, agentName, []byte("")); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify existing content preserved
+	data, err := Load(thrumDir, agentName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != string(existing) {
+		t.Errorf("context file overwritten: got %q, want %q", data, existing)
+	}
+}
+
+func TestBootstrapPreambleFileNotFound(t *testing.T) {
+	// Simulates --preamble-file pointing to non-existent file
+	_, err := os.ReadFile("/nonexistent/path/preamble.md")
+	if err == nil {
+		t.Fatal("expected error reading nonexistent preamble file")
+	}
+	if !os.IsNotExist(err) {
+		t.Errorf("expected IsNotExist error, got: %v", err)
+	}
+}

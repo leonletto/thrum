@@ -13,8 +13,9 @@ type QuickstartOptions struct {
 	Role       string
 	Module     string
 	Display    string
-	Intent     string
-	ReRegister bool
+	Intent       string
+	PreambleFile string // Path to custom preamble file to compose with default
+	ReRegister   bool
 
 	// Runtime options (Epic 2)
 	Runtime  string // Runtime preset name (overrides auto-detection)
