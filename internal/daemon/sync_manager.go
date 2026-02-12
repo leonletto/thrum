@@ -150,6 +150,31 @@ func (m *DaemonSyncManager) AddPeer(hostname string, port int) error {
 	})
 }
 
+// JoinPeer sends a pairing request to a remote peer and stores the result.
+// This is used by the CLI "peer join" command.
+func (m *DaemonSyncManager) JoinPeer(peerAddr, code, localDaemonID, localName, localAddress string) (*PeerInfo, error) {
+	result, err := m.client.RequestPairing(peerAddr, code, localDaemonID, localName, localAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Status != "paired" {
+		return nil, fmt.Errorf("pairing failed: status=%s", result.Status)
+	}
+
+	peer := &PeerInfo{
+		DaemonID: result.DaemonID,
+		Name:     result.Name,
+		Address:  peerAddr,
+		Token:    result.Token,
+	}
+	if err := m.peers.AddPeer(peer); err != nil {
+		return nil, fmt.Errorf("store peer: %w", err)
+	}
+
+	return peer, nil
+}
+
 // SyncFromPeerByID resolves a daemon ID to its address and triggers a pull sync.
 // This is used by the sync.notify handler to trigger syncs from notifications.
 func (m *DaemonSyncManager) SyncFromPeerByID(daemonID string) {
@@ -212,6 +237,49 @@ func (m *DaemonSyncManager) TailscaleSyncStatus(hostname string) (int, []PeerSta
 	}
 
 	return len(peerList), statuses
+}
+
+// DetailedPeerInfo is the detailed status of a single peer.
+type DetailedPeerInfo struct {
+	DaemonID string
+	Name     string
+	Address  string
+	HasToken bool
+	PairedAt string
+	LastSync string
+	LastSeq  int64
+}
+
+// DetailedPeerStatus returns detailed status for all known peers.
+func (m *DaemonSyncManager) DetailedPeerStatus() []DetailedPeerInfo {
+	peerList := m.peers.ListPeers()
+	var statuses []DetailedPeerInfo
+
+	for _, p := range peerList {
+		ago := time.Since(p.LastSync).Truncate(time.Second)
+		lastSync := ago.String() + " ago"
+		if ago > 24*time.Hour {
+			lastSync = p.LastSync.Format("2006-01-02 15:04")
+		}
+
+		var lastSeq int64
+		cp, err := checkpoint.GetCheckpoint(m.state.DB(), p.DaemonID)
+		if err == nil && cp != nil {
+			lastSeq = cp.LastSyncedSeq
+		}
+
+		statuses = append(statuses, DetailedPeerInfo{
+			DaemonID: p.DaemonID,
+			Name:     p.Name,
+			Address:  p.Address,
+			HasToken: p.Token != "",
+			PairedAt: p.PairedAt.Format(time.RFC3339),
+			LastSync: lastSync,
+			LastSeq:  lastSeq,
+		})
+	}
+
+	return statuses
 }
 
 // Client returns the sync client.

@@ -103,6 +103,24 @@ func (r *PeerRegistry) FindPeerByToken(token string) *PeerInfo {
 	return nil
 }
 
+// FindPeerByName returns the peer with the given name, or nil if not found.
+func (r *PeerRegistry) FindPeerByName(name string) *PeerInfo {
+	if name == "" {
+		return nil
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, p := range r.peers {
+		if p.Name == name {
+			copy := *p
+			return &copy
+		}
+	}
+	return nil
+}
+
 // ListPeers returns a snapshot of all peers.
 func (r *PeerRegistry) ListPeers() []*PeerInfo {
 	r.mu.RLock()

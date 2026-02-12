@@ -6,6 +6,7 @@ import (
 	"net"
 	"path/filepath"
 	"sync/atomic"
+	"time"
 
 	"github.com/leonletto/thrum/internal/paths"
 )
@@ -83,6 +84,17 @@ func (c *Client) Call(method string, params any, result any) error {
 	}
 
 	return nil
+}
+
+// CallWithTimeout is like Call but sets a deadline on the connection.
+// Useful for long-polling RPCs like peer.wait_pairing.
+func (c *Client) CallWithTimeout(method string, params any, result any, timeout time.Duration) error {
+	if err := c.conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return fmt.Errorf("set deadline: %w", err)
+	}
+	defer func() { _ = c.conn.SetDeadline(time.Time{}) }() // clear deadline
+
+	return c.Call(method, params, result)
 }
 
 // Close closes the connection to the daemon.

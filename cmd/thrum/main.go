@@ -124,6 +124,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(groupCmd())
 	rootCmd.AddCommand(runtimeGroupCmd())
 	rootCmd.AddCommand(syncCmd())
+	rootCmd.AddCommand(peerCmd())
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(setupCmd())
 	rootCmd.AddCommand(mcpCmd())
@@ -1121,8 +1122,7 @@ func daemonCmd() *cobra.Command {
 	})
 
 	cmd.AddCommand(daemonRunCmd(&flagLocal))
-	cmd.AddCommand(daemonTsyncCmd())
-	cmd.AddCommand(daemonPeersCmd())
+	// Old tsync/peers commands removed — replaced by top-level "thrum peer" commands
 
 	return cmd
 }
@@ -1138,76 +1138,20 @@ func daemonRunCmd(flagLocal *bool) *cobra.Command {
 	}
 }
 
-func daemonTsyncCmd() *cobra.Command {
-	var flagFrom string
-
+func peerCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "sync",
-		Short: "Trigger Tailscale peer sync",
-		Long: `Trigger sync from known Tailscale peers.
-
-Pulls events from all known peers (or a specific one with --from).
-Shows progress for each peer.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			result, err := cli.TsyncForce(client, flagFrom)
-			if err != nil {
-				return err
-			}
-
-			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatTsyncForce(result))
-			}
-
-			return nil
-		},
+		Use:   "peer",
+		Short: "Manage sync peers",
+		Long:  `Pair, list, and manage Tailscale sync peers.`,
 	}
 
-	cmd.Flags().StringVar(&flagFrom, "from", "", "Sync from a specific peer (hostname or daemon ID)")
-
-	return cmd
-}
-
-func daemonPeersCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "peers",
-		Short: "Manage Tailscale sync peers",
-		Long:  `List and manage Tailscale sync peers.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Default: list peers
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			peers, err := cli.TsyncPeersList(client)
-			if err != nil {
-				return err
-			}
-
-			if flagJSON {
-				output, _ := json.MarshalIndent(peers, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatTsyncPeersList(peers))
-			}
-
-			return nil
-		},
-	}
-
+	// thrum peer add — start pairing on this machine
 	cmd.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "List known peers",
+		Use:   "add",
+		Short: "Start pairing and wait for a peer to connect",
+		Long: `Starts a pairing session and displays a 4-digit code.
+Share this code with the person running 'thrum peer join' on the other machine.
+Blocks until a peer connects or the session times out (5 minutes).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
 			if err != nil {
@@ -1215,26 +1159,97 @@ func daemonPeersCmd() *cobra.Command {
 			}
 			defer func() { _ = client.Close() }()
 
-			peers, err := cli.TsyncPeersList(client)
+			result, err := cli.PeerStartPairing(client)
 			if err != nil {
 				return err
 			}
 
-			if flagJSON {
-				output, _ := json.MarshalIndent(peers, "", "  ")
-				fmt.Println(string(output))
+			fmt.Printf("Waiting for connection... Pairing code: %s\n", result.Code)
+
+			waitResult, err := cli.PeerWaitPairing(client)
+			if err != nil {
+				return err
+			}
+
+			if waitResult.Status == "paired" {
+				fmt.Printf("Paired with %q (%s). Syncing started.\n", waitResult.PeerName, waitResult.PeerAddress)
 			} else {
-				fmt.Print(cli.FormatTsyncPeersList(peers))
+				fmt.Println("Pairing timed out. Run 'thrum peer add' again.")
 			}
 
 			return nil
 		},
 	})
 
-	var flagPort int
-	addCmd := &cobra.Command{
-		Use:   "add <hostname>",
-		Short: "Add a peer manually",
+	// thrum peer join <address> — connect to a remote peer
+	cmd.AddCommand(&cobra.Command{
+		Use:   "join <address>",
+		Short: "Join a remote peer by entering a pairing code",
+		Long: `Connects to a remote daemon at the given Tailscale address.
+Prompts for the 4-digit pairing code displayed on the other machine.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			address := args[0]
+
+			// Prompt for pairing code
+			fmt.Print("Enter pairing code: ")
+			var code string
+			if _, err := fmt.Scanln(&code); err != nil {
+				return fmt.Errorf("failed to read code: %w", err)
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.PeerJoin(client, address, code)
+			if err != nil {
+				return err
+			}
+
+			if result.Status == "paired" {
+				fmt.Printf("Paired with %q. Syncing started.\n", result.PeerName)
+			} else {
+				fmt.Printf("Pairing failed: %s\n", result.Message)
+			}
+
+			return nil
+		},
+	})
+
+	// thrum peer list — show all peers
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List paired peers",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			peers, err := cli.PeerList(client)
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(peers, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatPeerList(peers))
+			}
+
+			return nil
+		},
+	})
+
+	// thrum peer remove <name> — remove a peer
+	cmd.AddCommand(&cobra.Command{
+		Use:   "remove <name>",
+		Short: "Remove a paired peer",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
@@ -1243,19 +1258,41 @@ func daemonPeersCmd() *cobra.Command {
 			}
 			defer func() { _ = client.Close() }()
 
-			if err := cli.TsyncPeersAdd(client, args[0], flagPort); err != nil {
+			if err := cli.PeerRemove(client, args[0]); err != nil {
 				return err
 			}
 
-			if !flagQuiet {
-				fmt.Printf("Peer %s:%d added\n", args[0], flagPort)
+			fmt.Printf("Removed peer %q. Sync stopped.\n", args[0])
+			return nil
+		},
+	})
+
+	// thrum peer status — detailed health per peer
+	cmd.AddCommand(&cobra.Command{
+		Use:   "status",
+		Short: "Show detailed sync status for all peers",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			peers, err := cli.PeerStatus(client)
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(peers, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatPeerStatus(peers))
 			}
 
 			return nil
 		},
-	}
-	addCmd.Flags().IntVar(&flagPort, "port", 9100, "Sync port")
-	cmd.AddCommand(addCmd)
+	})
 
 	return cmd
 }
@@ -3791,11 +3828,19 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create sync manager: %v\n", err)
 	}
+
+	var pairingMgr *daemon.PairingManager
+	var tsLocalAddr string // set when Tailscale listener starts
+	hostname, _ := os.Hostname()
+
 	if syncManager != nil {
 		// Hook into event writes to broadcast sync.notify to peers
 		st.SetOnEventWrite(func(daemonID string, sequence int64, eventCount int) {
 			go syncManager.BroadcastNotify(daemonID, sequence, eventCount)
 		})
+
+		// Create pairing manager (used by both Unix socket and Tailscale handlers)
+		pairingMgr = daemon.NewPairingManager(syncManager.PeerRegistry(), st.DaemonID(), hostname)
 
 		// Adapter: convert daemon.PeerStatusInfo → rpc.PeerStatus
 		listPeersFn := func() []rpc.PeerStatus {
@@ -3820,6 +3865,89 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		server.RegisterHandler("tsync.force", tsyncForceHandler.Handle)
 		server.RegisterHandler("tsync.peers.list", tsyncPeersListHandler.Handle)
 		server.RegisterHandler("tsync.peers.add", tsyncPeersAddHandler.Handle)
+
+		// --- Peer management RPCs (CLI: thrum peer add/join/list/remove/status) ---
+
+		// peer.start_pairing — begin pairing, return code
+		server.RegisterHandler("peer.start_pairing",
+			rpc.NewPeerStartPairingHandler(pairingMgr.StartPairing).Handle)
+
+		// peer.wait_pairing — block until pairing completes or times out
+		waitFn := func() (peerName, peerAddr, peerDaemonID string, err error) {
+			result, err := pairingMgr.WaitForPairing()
+			if err != nil {
+				return "", "", "", err
+			}
+			return result.PeerName, result.PeerAddress, result.PeerDaemonID, nil
+		}
+		server.RegisterHandler("peer.wait_pairing",
+			rpc.NewPeerWaitPairingHandler(waitFn).Handle)
+
+		// peer.join — send pairing code to remote peer
+		joinFn := func(peerAddr, code string) (peerName, peerDaemonID string, err error) {
+			if tsLocalAddr == "" {
+				return "", "", fmt.Errorf("Tailscale not configured or not started")
+			}
+			peer, err := syncManager.JoinPeer(peerAddr, code, st.DaemonID(), hostname, tsLocalAddr)
+			if err != nil {
+				return "", "", err
+			}
+			return peer.Name, peer.DaemonID, nil
+		}
+		server.RegisterHandler("peer.join",
+			rpc.NewPeerJoinHandler(joinFn).Handle)
+
+		// peer.list — compact peer list
+		peerListFn := func() []rpc.PeerListEntry {
+			infos := syncManager.ListPeers()
+			entries := make([]rpc.PeerListEntry, len(infos))
+			for i, p := range infos {
+				entries[i] = rpc.PeerListEntry{
+					DaemonID: p.DaemonID,
+					Name:     p.Name,
+					Address:  p.Address,
+					LastSync: p.LastSync,
+					LastSeq:  p.LastSeq,
+				}
+			}
+			return entries
+		}
+		server.RegisterHandler("peer.list",
+			rpc.NewPeerListHandler(peerListFn).Handle)
+
+		// peer.remove — remove a peer by name or daemon ID
+		removeFn := func(daemonID string) error {
+			return syncManager.PeerRegistry().RemovePeer(daemonID)
+		}
+		findByNameFn := func(name string) (string, bool) {
+			peer := syncManager.PeerRegistry().FindPeerByName(name)
+			if peer == nil {
+				return "", false
+			}
+			return peer.DaemonID, true
+		}
+		server.RegisterHandler("peer.remove",
+			rpc.NewPeerRemoveHandler(removeFn, findByNameFn).Handle)
+
+		// peer.status — detailed per-peer status
+		statusFn := func() []rpc.PeerDetailedStatus {
+			infos := syncManager.DetailedPeerStatus()
+			statuses := make([]rpc.PeerDetailedStatus, len(infos))
+			for i, p := range infos {
+				statuses[i] = rpc.PeerDetailedStatus{
+					DaemonID: p.DaemonID,
+					Name:     p.Name,
+					Address:  p.Address,
+					Token:    p.HasToken,
+					PairedAt: p.PairedAt,
+					LastSync: p.LastSync,
+					LastSeq:  p.LastSeq,
+				}
+			}
+			return statuses
+		}
+		server.RegisterHandler("peer.status",
+			rpc.NewPeerStatusHandler(statusFn).Handle)
 	}
 
 	// User management (for WebSocket connections)
@@ -3909,9 +4037,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					syncRegistry.SetPeerRegistry(syncManager.PeerRegistry())
 				}
 
+				// Set Tailscale address so peer.join knows our reachable address
+				tsLocalAddr = fmt.Sprintf("%s:%d", tsCfg.Hostname, tsCfg.Port)
+
 				// Register sync handlers
 				syncPullHandler := rpc.NewSyncPullHandler(st)
-				hostname, _ := os.Hostname()
 				syncPeerInfoHandler := rpc.NewPeerInfoHandler(st.DaemonID(), hostname)
 
 				_ = syncRegistry.Register("sync.pull", syncPullHandler.Handle)
@@ -3923,14 +4053,10 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
 				}
 
-				// Register pair.request handler for pairing flow
-				if syncManager != nil {
-					pairingMgr := daemon.NewPairingManager(syncManager.PeerRegistry(), st.DaemonID(), hostname)
+				// Register pair.request handler (uses PairingManager created earlier)
+				if pairingMgr != nil {
 					pairHandler := rpc.NewPairRequestHandler(pairingMgr.HandlePairRequest)
 					_ = syncRegistry.Register("pair.request", pairHandler.Handle)
-
-					// Store pairing manager for CLI commands (will be wired in Task 5)
-					_ = pairingMgr // TODO: wire into peer CLI commands
 				}
 
 				// Accept loop for sync connections
