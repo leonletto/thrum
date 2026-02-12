@@ -49,10 +49,10 @@ single command:
 1. Creates git branch + worktree (or reuses existing branch)
 2. Sets up thrum redirect (shared daemon, messages, identities)
 3. Sets up beads redirect (shared issue database)
-4. Runs `thrum quickstart` to register the agent identity
-5. Auto-creates empty context file (`.thrum/context/{name}.md`)
-6. Auto-creates default preamble, or composes default + custom if
-   `--preamble` is provided
+4. **If `--identity` is provided:** runs `thrum quickstart` to register the
+   agent identity, auto-creates empty context file (`.thrum/context/{name}.md`),
+   and creates default preamble (or composes default + custom if `--preamble`
+   is provided)
 
 ```bash
 # Full single-command bootstrap:
@@ -68,11 +68,11 @@ single command:
 **Key principle:** All worktrees MUST share a single beads database and thrum
 instance via redirect files. Never set up redirects manually — use the script.
 
-**Note:** `thrum quickstart` automatically creates empty context and default
-preamble files on every registration, even without `--preamble-file`. The
-`--preamble-file` flag composes `DefaultPreamble() + \n---\n\n + custom content`
-and overwrites any existing preamble. Without the flag, existing preambles are
-preserved (idempotent).
+**Note:** `thrum quickstart` automatically creates an empty context file and a
+default preamble on first registration. If the preamble already exists, it is
+preserved (idempotent). If `--preamble-file` is provided, quickstart composes
+`DefaultPreamble() + \n---\n\n + custom content` and **overwrites** any existing
+preamble.
 
 ### Phase 3: Implement (`implementation-agent.md`)
 
