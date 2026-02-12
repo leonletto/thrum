@@ -33,7 +33,7 @@ func (s *Server) handleSendMessage(
 		Format:   "markdown",
 		Mentions: []string{mentionRole},
 		Priority: input.Priority,
-		ThreadID: input.ThreadID,
+		ReplyTo:  input.ReplyTo,
 	}
 	if sendReq.Priority == "" {
 		sendReq.Priority = "normal"
@@ -115,7 +115,6 @@ func (s *Server) handleCheckMessages(
 			MessageID: msg.MessageID,
 			From:      msg.AgentID,
 			Content:   msg.Body.Content,
-			ThreadID:  msg.ThreadID,
 			Timestamp: msg.CreatedAt,
 		})
 		messageIDs = append(messageIDs, msg.MessageID)

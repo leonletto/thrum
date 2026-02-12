@@ -626,8 +626,13 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		args = append(args, forAgentArgs...)
 	}
 
-	// Add sorting
-	query += fmt.Sprintf(" ORDER BY m.%s %s", sortBy, sortOrder)
+	// Add sorting — cluster replies with parents when using inbox (for_agent) mode
+	if req.ForAgent != "" || req.ForAgentRole != "" {
+		// Inbox mode: group replies under their parent, then chronological within each cluster
+		query += " ORDER BY COALESCE(reply_ref.ref_value, m.message_id) ASC, m.created_at ASC"
+	} else {
+		query += fmt.Sprintf(" ORDER BY m.%s %s", sortBy, sortOrder)
+	}
 
 	// Count total matching messages (use same filters as main query)
 	countQuery := "SELECT COUNT(DISTINCT m.message_id) FROM messages m" + joins + " WHERE 1=1"
