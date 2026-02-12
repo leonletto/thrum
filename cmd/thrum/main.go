@@ -3887,6 +3887,12 @@ func runDaemon(repoPath string, flagLocal bool) error {
 				_ = syncRegistry.Register("sync.pull", syncPullHandler.Handle)
 				_ = syncRegistry.Register("sync.peer_info", syncPeerInfoHandler.Handle)
 
+				// Register sync.notify handler (triggers pull sync on notification)
+				if syncManager != nil {
+					syncNotifyHandler := rpc.NewSyncNotifyHandler(syncManager.SyncFromPeerByID)
+					_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
+				}
+
 				// Accept loop for sync connections
 				go func() {
 					for {

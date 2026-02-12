@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"log"
 	"path/filepath"
 	"time"
 
@@ -137,6 +138,44 @@ func (m *DaemonSyncManager) AddPeer(hostname string, port int) error {
 		PublicKey: info.PublicKey,
 		Status:    "active",
 	})
+}
+
+// SyncFromPeerByID resolves a daemon ID to its address and triggers a pull sync.
+// This is used by the sync.notify handler to trigger syncs from notifications.
+func (m *DaemonSyncManager) SyncFromPeerByID(daemonID string) {
+	peer := m.peers.GetPeer(daemonID)
+	if peer == nil {
+		log.Printf("sync.notify: unknown peer %s, ignoring", daemonID)
+		return
+	}
+
+	addr := peer.Addr()
+	applied, skipped, err := m.SyncFromPeer(addr, daemonID)
+	if err != nil {
+		log.Printf("sync.notify: sync from %s failed: %v", daemonID, err)
+		return
+	}
+
+	log.Printf("sync.notify: synced from %s — applied=%d skipped=%d", daemonID, applied, skipped)
+}
+
+// BroadcastNotify sends sync.notify to all known peers.
+// This is fire-and-forget — failures are logged but don't block.
+func (m *DaemonSyncManager) BroadcastNotify(daemonID string, latestSeq int64, eventCount int) {
+	peers := m.peers.ListPeers()
+	for _, peer := range peers {
+		go func(p *PeerInfo) {
+			addr := p.Addr()
+			if err := m.client.SendNotify(addr, daemonID, latestSeq, eventCount); err != nil {
+				log.Printf("sync.notify: failed to notify %s at %s: %v", p.DaemonID, addr, err)
+			}
+		}(peer)
+	}
+}
+
+// Client returns the sync client.
+func (m *DaemonSyncManager) Client() *SyncClient {
+	return m.client
 }
 
 // PeerRegistry returns the peer registry.
