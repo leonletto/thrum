@@ -187,14 +187,46 @@ type ReplyOptions struct {
 }
 
 // Reply sends a reply to a message.
-// TODO: Rewrite to use reply-to refs (task thrum-wtfk)
+// It fetches the parent message to copy its audience (mentions/scopes) and sets reply_to ref.
 func Reply(client *Client, opts ReplyOptions) (*SendResult, error) {
+	// Get the parent message to extract its audience
+	parentResp, err := MessageGet(client, opts.MessageID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parent message: %w", err)
+	}
+	parent := parentResp.Message
+
+	// Build send options with reply_to ref
 	sendOpts := SendOptions{
 		Content:       opts.Content,
+		ReplyTo:       opts.MessageID,
 		CallerAgentID: opts.CallerAgentID,
 	}
+
 	if opts.Format != "" {
 		sendOpts.Format = opts.Format
 	}
+
+	// Copy audience from parent message:
+	// 1. Extract mentions from parent's refs (mention:agent_id refs)
+	var mentions []string
+	for _, ref := range parent.Refs {
+		if ref.Type == "mention" {
+			mentions = append(mentions, ref.Value)
+		}
+	}
+
+	// 2. Add group scopes as mentions (@group:value format)
+	for _, scope := range parent.Scopes {
+		if scope.Type == "group" {
+			mentions = append(mentions, "@"+scope.Type+":"+scope.Value)
+		}
+	}
+
+	// Set mentions if we found any
+	if len(mentions) > 0 {
+		sendOpts.Mentions = mentions
+	}
+
 	return Send(client, sendOpts)
 }

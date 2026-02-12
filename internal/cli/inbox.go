@@ -25,6 +25,7 @@ type InboxOptions struct {
 type Message struct {
 	MessageID string `json:"message_id"`
 	ThreadID  string `json:"thread_id,omitempty"`
+	ReplyTo   string `json:"reply_to,omitempty"`
 	AgentID   string `json:"agent_id"`
 	Body      struct {
 		Format     string `json:"format"`
@@ -160,6 +161,8 @@ func FormatInboxWithOptions(result *InboxResult, opts InboxFormatOptions) string
 	output.WriteString("┌" + strings.Repeat("─", boxWidth) + "┐\n")
 
 	for i, msg := range result.Messages {
+		isReply := msg.ReplyTo != ""
+
 		// Message header line
 		agentName := extractAgentName(msg.AgentID)
 		relTime := formatRelativeTime(msg.CreatedAt)
@@ -170,26 +173,37 @@ func FormatInboxWithOptions(result *InboxResult, opts InboxFormatOptions) string
 			readIndicator = "○" // read
 		}
 
-		header := fmt.Sprintf("│ %s %s  %s  %s", readIndicator, msg.MessageID, agentName, relTime)
-
-		// Add thread reference
-		if msg.ThreadID != "" {
-			header += fmt.Sprintf("  thread:%s", truncateID(msg.ThreadID, 12))
+		// Indent replies with ↳ indicator
+		if isReply {
+			header := fmt.Sprintf("│   %s %s  ↳ %s  %s", readIndicator, msg.MessageID, agentName, relTime)
+			if msg.UpdatedAt != "" {
+				header += " (edited)"
+			}
+			header = padLine(header, boxWidth)
+			output.WriteString(header + "│\n")
+		} else {
+			header := fmt.Sprintf("│ %s %s  %s  %s", readIndicator, msg.MessageID, agentName, relTime)
+			if msg.UpdatedAt != "" {
+				header += " (edited)"
+			}
+			header = padLine(header, boxWidth)
+			output.WriteString(header + "│\n")
 		}
-
-		// Add "(edited)" indicator if message was edited
-		if msg.UpdatedAt != "" {
-			header += " (edited)"
-		}
-
-		// Pad to box width
-		header = padLine(header, boxWidth)
-		output.WriteString(header + "│\n")
 
 		// Message content (word wrap to fit in box)
-		content := wordWrap(msg.Body.Content, contentWidth)
-		for _, line := range strings.Split(content, "\n") {
-			output.WriteString("│ " + padLine(line, contentWidth) + "│\n")
+		prefix := ""
+		if isReply {
+			prefix = "  ↳ "
+		}
+		content := wordWrap(msg.Body.Content, contentWidth-len(prefix))
+		for j, line := range strings.Split(content, "\n") {
+			if j == 0 && isReply {
+				output.WriteString("│ " + padLine(prefix+line, contentWidth) + "│\n")
+			} else if isReply {
+				output.WriteString("│ " + padLine("    "+line, contentWidth) + "│\n")
+			} else {
+				output.WriteString("│ " + padLine(line, contentWidth) + "│\n")
+			}
 		}
 
 		// Separator or bottom border
@@ -215,14 +229,6 @@ func FormatInboxWithOptions(result *InboxResult, opts InboxFormatOptions) string
 	output.WriteString(footer + "\n")
 
 	return output.String()
-}
-
-// truncateID truncates an ID to a max length, adding ... If needed.
-func truncateID(id string, maxLen int) string {
-	if len(id) <= maxLen {
-		return id
-	}
-	return id[:maxLen-3] + "..."
 }
 
 // extractAgentName extracts a short name from agent ID for display.

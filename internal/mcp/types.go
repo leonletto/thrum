@@ -5,7 +5,7 @@ type SendMessageInput struct {
 	To       string            `json:"to" jsonschema:"Recipient: @role name or agent name"`
 	Content  string            `json:"content" jsonschema:"Message text"`
 	Priority string            `json:"priority,omitempty" jsonschema:"Message priority: critical, high, normal, or low. Default: normal"`
-	ThreadID string            `json:"thread_id,omitempty" jsonschema:"Thread ID to reply in"`
+	ReplyTo  string            `json:"reply_to,omitempty" jsonschema:"Message ID to reply to"`
 	Metadata map[string]string `json:"metadata,omitempty" jsonschema:"Optional key-value metadata"`
 }
 
@@ -29,7 +29,6 @@ type MessageInfo struct {
 	From      string `json:"from"`
 	Content   string `json:"content"`
 	Priority  string `json:"priority,omitempty"`
-	ThreadID  string `json:"thread_id,omitempty"`
 	Timestamp string `json:"timestamp"`
 }
 

@@ -2061,10 +2061,11 @@ Examples:
 func replyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reply MSG_ID TEXT",
-		Short: "Reply to a message (creates thread if needed)",
-		Long: `Reply to a message, creating a thread if one doesn't exist.
+		Short: "Reply to a message with same audience",
+		Long: `Reply to a message, copying the parent message's audience (mentions/scopes).
 
-This is a shortcut for: get message → resolve thread → send in thread.
+The reply will include a reply_to reference to the parent message and will be sent
+to the same recipients as the parent message.
 
 Examples:
   thrum reply msg_01HXE... "Good idea, let's do that"
@@ -2104,9 +2105,6 @@ Examples:
 				fmt.Println(string(output))
 			} else if !flagQuiet {
 				fmt.Printf("✓ Reply sent: %s\n", result.MessageID)
-				if result.ThreadID != "" {
-					fmt.Printf("  Thread: %s\n", result.ThreadID)
-				}
 			}
 
 			return nil
