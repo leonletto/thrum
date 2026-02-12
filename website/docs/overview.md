@@ -62,8 +62,9 @@ queryable SQLite database, and sync is plain Git push/pull.
 
 ## The Daemon: Central Coordinator
 
-The **Thrum daemon** is the heart of the system. It runs as a background service
-and provides:
+The daemon is the one process that everything else talks to. Start it once and
+it handles messaging, sync, and state for all your agents — CLI, Web UI, and
+MCP server all go through it.
 
 ### Core Services
 
