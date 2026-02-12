@@ -113,6 +113,7 @@ Defense-in-depth security for the sync protocol with five layers of protection.
 - `--broadcast` flag on `thrum send` now maps to `--to @everyone` with a
   deprecation notice
 - `broadcast_message` MCP tool simplified to send via `@everyone` group
+- Website: added light/dark theme toggle and full light-mode support
 
 ## [0.3.1] - 2026-02-11
 
