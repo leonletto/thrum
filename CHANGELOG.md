@@ -183,6 +183,8 @@ plus efficient blocking-based message listening.
 - **Worktree identity guard**: Running from a worktree with no registered
   identities now returns a clear error instead of falling through to the main
   repo's identities.
+- `thrum whoami` command displays current agent identity without daemon
+  connection (lightweight alternative to `thrum status`)
 - `thrum wait --all` subscribes to all messages (broadcasts + directed)
 - `thrum wait --after` filters by relative time (e.g., `--after -30s`)
 - Message-listener agent rewrite: replaced polling with blocking wait, reducing

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"time"
 
@@ -68,6 +69,12 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.PersistentFlags().BoolVar(&flagQuiet, "quiet", false, "Suppress non-essential output")
 	rootCmd.PersistentFlags().BoolVar(&flagVerbose, "verbose", false, "Debug output")
 
+	// Set version for --version flag
+	rootCmd.Version = Version
+	rootCmd.SetVersionTemplate("thrum v{{.Version}} (build: " + Build + ", " + goruntime.Version() + ")\n" +
+		"\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n" +
+		"\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
+
 	// Resolve flagRepo to the nearest parent containing .thrum/ (git-style traversal).
 	// Skip for "init" which creates .thrum/ and doesn't need it to exist.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
@@ -93,6 +100,8 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(replyCmd())
 	rootCmd.AddCommand(inboxCmd())
 	rootCmd.AddCommand(statusCmd())
+	rootCmd.AddCommand(whoamiCmd())
+	rootCmd.AddCommand(versionCmd())
 	rootCmd.AddCommand(waitCmd())
 
 	// Composite commands
@@ -769,6 +778,39 @@ The daemon must be running and you must have an active session.`,
 	return cmd
 }
 
+func versionCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "version",
+		Short: "Show thrum version",
+		Long:  `Display version information including version number, build hash, repository URL, and documentation URL.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if flagJSON {
+				// JSON output
+				output := map[string]string{
+					"version":     Version,
+					"build":       Build,
+					"go_version":  goruntime.Version(),
+					"repo_url":    "https://github.com/leonletto/thrum",
+					"website_url": "https://leonletto.github.io/thrum",
+				}
+				data, err := json.MarshalIndent(output, "", "  ")
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(data))
+			} else {
+				// Human-readable output with OSC 8 hyperlinks
+				// Format: ESC ] 8 ; ; URL ESC \ TEXT ESC ] 8 ; ; ESC \
+				fmt.Printf("thrum v%s (build: %s, %s)\n", Version, Build, goruntime.Version())
+				fmt.Printf("\x1b]8;;https://github.com/leonletto/thrum\x07https://github.com/leonletto/thrum\x1b]8;;\x07\n")
+				fmt.Printf("\x1b]8;;https://leonletto.github.io/thrum\x07https://leonletto.github.io/thrum\x1b]8;;\x07\n")
+			}
+			return nil
+		},
+	}
+	return cmd
+}
+
 func statusCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -798,6 +840,72 @@ The daemon must be running to check status.`,
 			} else {
 				// Human-readable formatted output
 				fmt.Print(cli.FormatStatus(result))
+			}
+
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+func whoamiCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "whoami",
+		Short: "Show current agent identity",
+		Long: `Show current agent identity information.
+
+This is a lightweight alternative to 'thrum status' - it shows just the
+identity without needing a daemon connection. Reads directly from
+.thrum/identities/*.json files.
+
+Examples:
+  thrum whoami
+  thrum whoami --json
+  THRUM_NAME=alice thrum whoami`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Load identity from .thrum/identities/ directory
+			identityFile, identityPath, err := config.LoadIdentityWithPath(flagRepo)
+			if err != nil {
+				// Check if .thrum/ directory exists
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+				if _, statErr := os.Stat(thrumDir); os.IsNotExist(statErr) {
+					return fmt.Errorf("thrum not initialized in this repository\n  Run 'thrum init' first")
+				}
+				// Check if identities directory exists
+				identitiesDir := filepath.Join(thrumDir, "identities")
+				if _, statErr := os.Stat(identitiesDir); os.IsNotExist(statErr) {
+					return fmt.Errorf("no agent identities registered\n  Run 'thrum quickstart --role <role> --module <module>' to register")
+				}
+				return err
+			}
+
+			if flagJSON {
+				// JSON output
+				output, err := json.MarshalIndent(map[string]any{
+					"agent_id":      identityFile.Agent.Name,
+					"role":          identityFile.Agent.Role,
+					"module":        identityFile.Agent.Module,
+					"display":       identityFile.Agent.Display,
+					"worktree":      identityFile.Worktree,
+					"identity_file": identityPath,
+					"repo_id":       identityFile.RepoID,
+					"updated_at":    identityFile.UpdatedAt.Format(time.RFC3339),
+				}, "", "  ")
+				if err != nil {
+					return fmt.Errorf("marshal JSON output: %w", err)
+				}
+				fmt.Println(string(output))
+			} else {
+				// Human-readable output
+				fmt.Printf("@%s (%s @ %s)\n", identityFile.Agent.Name, identityFile.Agent.Role, identityFile.Agent.Module)
+				if identityFile.Agent.Display != "" {
+					fmt.Printf("Display:  %s\n", identityFile.Agent.Display)
+				}
+				fmt.Printf("Identity: %s\n", identityPath)
+				if identityFile.Worktree != "" {
+					fmt.Printf("Worktree: %s\n", identityFile.Worktree)
+				}
 			}
 
 			return nil

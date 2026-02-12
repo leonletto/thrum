@@ -152,6 +152,7 @@ type SessionWorkContext struct {
 	UnmergedCommits  []CommitSummary `json:"unmerged_commits,omitempty"`
 	UncommittedFiles []string        `json:"uncommitted_files,omitempty"`
 	ChangedFiles     []string        `json:"changed_files,omitempty"`
+	FileChanges      []FileChange    `json:"file_changes,omitempty"`
 	GitUpdatedAt     string          `json:"git_updated_at,omitempty"`
 	CurrentTask      string          `json:"current_task,omitempty"`
 	TaskUpdatedAt    string          `json:"task_updated_at,omitempty"`
@@ -238,4 +239,13 @@ type CommitSummary struct {
 	SHA     string   `json:"sha"`
 	Message string   `json:"message"`
 	Files   []string `json:"files,omitempty"`
+}
+
+// FileChange represents detailed information about a changed file.
+type FileChange struct {
+	Path         string `json:"path"`
+	LastModified string `json:"last_modified"`
+	Additions    int    `json:"additions"`
+	Deletions    int    `json:"deletions"`
+	Status       string `json:"status"` // "modified", "added", "deleted", "renamed"
 }

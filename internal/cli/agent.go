@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
 )
 
@@ -473,18 +474,19 @@ type ListContextResponse struct {
 
 // AgentWorkContext represents an agent's work context.
 type AgentWorkContext struct {
-	SessionID        string          `json:"session_id"`
-	AgentID          string          `json:"agent_id"`
-	Branch           string          `json:"branch,omitempty"`
-	WorktreePath     string          `json:"worktree_path,omitempty"`
+	SessionID        string        `json:"session_id"`
+	AgentID          string        `json:"agent_id"`
+	Branch           string        `json:"branch,omitempty"`
+	WorktreePath     string        `json:"worktree_path,omitempty"`
 	UnmergedCommits  []CommitSummary `json:"unmerged_commits,omitempty"`
-	UncommittedFiles []string        `json:"uncommitted_files,omitempty"`
-	ChangedFiles     []string        `json:"changed_files,omitempty"`
-	GitUpdatedAt     string          `json:"git_updated_at,omitempty"`
-	CurrentTask      string          `json:"current_task,omitempty"`
-	TaskUpdatedAt    string          `json:"task_updated_at,omitempty"`
-	Intent           string          `json:"intent,omitempty"`
-	IntentUpdatedAt  string          `json:"intent_updated_at,omitempty"`
+	UncommittedFiles []string      `json:"uncommitted_files,omitempty"`
+	ChangedFiles     []string      `json:"changed_files,omitempty"`   // Kept for backward compatibility
+	FileChanges      []gitctx.FileChange `json:"file_changes,omitempty"`
+	GitUpdatedAt     string        `json:"git_updated_at,omitempty"`
+	CurrentTask      string        `json:"current_task,omitempty"`
+	TaskUpdatedAt    string        `json:"task_updated_at,omitempty"`
+	Intent           string        `json:"intent,omitempty"`
+	IntentUpdatedAt  string        `json:"intent_updated_at,omitempty"`
 }
 
 // CommitSummary represents a single commit.
@@ -676,13 +678,32 @@ func FormatWhoHas(file string, result *ListContextResponse) string {
 
 	for _, ctx := range result.Contexts {
 		role := extractRole(ctx.AgentID)
-		uncommitted := len(ctx.UncommittedFiles)
 		branch := ctx.Branch
 		if branch == "" {
 			branch = "unknown"
 		}
-		output.WriteString(fmt.Sprintf("%s is editing %s (%d uncommitted changes, branch: %s)\n",
-			role, file, uncommitted, branch))
+
+		// Try to find detailed file info from FileChanges
+		var fileDetails string
+		fileFound := false
+		for _, fc := range ctx.FileChanges {
+			if fc.Path == file {
+				// Format: (+413 -187, modified 5m ago)
+				timeAgo := formatTimeAgo(fc.LastModified)
+				fileDetails = fmt.Sprintf(" (+%d -%d, %s %s)", fc.Additions, fc.Deletions, fc.Status, timeAgo)
+				fileFound = true
+				break
+			}
+		}
+
+		// Fallback to legacy format if FileChanges not available
+		if !fileFound {
+			uncommitted := len(ctx.UncommittedFiles)
+			fileDetails = fmt.Sprintf(" (%d uncommitted changes)", uncommitted)
+		}
+
+		output.WriteString(fmt.Sprintf("@%s is editing %s%s, branch: %s\n",
+			role, file, fileDetails, branch))
 	}
 
 	return output.String()

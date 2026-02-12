@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 9
+const CurrentVersion = 10
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -253,6 +253,7 @@ func createTables(tx *sql.Tx) error {
 			unmerged_commits  TEXT,
 			uncommitted_files TEXT,
 			changed_files     TEXT,
+			file_changes      TEXT DEFAULT '[]',
 			git_updated_at    TEXT,
 			current_task      TEXT,
 			task_updated_at   TEXT,
@@ -563,6 +564,14 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		`)
 		if err != nil {
 			return fmt.Errorf("create sync_checkpoints table: %w", err)
+		}
+	}
+
+	// Migration from version 9 to 10: Add file_changes column to agent_work_contexts
+	if startVersion < 10 && endVersion >= 10 {
+		_, err = tx.Exec(`ALTER TABLE agent_work_contexts ADD COLUMN file_changes TEXT DEFAULT '[]'`)
+		if err != nil {
+			return fmt.Errorf("add file_changes column: %w", err)
 		}
 	}
 

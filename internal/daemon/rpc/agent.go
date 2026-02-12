@@ -139,7 +139,8 @@ type AgentWorkContext struct {
 	WorktreePath     string                 `json:"worktree_path,omitempty"`
 	UnmergedCommits  []gitctx.CommitSummary `json:"unmerged_commits,omitempty"`
 	UncommittedFiles []string               `json:"uncommitted_files,omitempty"`
-	ChangedFiles     []string               `json:"changed_files,omitempty"`
+	ChangedFiles     []string               `json:"changed_files,omitempty"`   // Kept for backward compatibility
+	FileChanges      []gitctx.FileChange    `json:"file_changes,omitempty"`    // NEW: rich per-file data
 	GitUpdatedAt     string                 `json:"git_updated_at,omitempty"`
 	CurrentTask      string                 `json:"current_task,omitempty"`
 	TaskUpdatedAt    string                 `json:"task_updated_at,omitempty"`
@@ -499,7 +500,7 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 
 	// Build query with filters
 	query := `SELECT session_id, agent_id, branch, worktree_path,
-	                 unmerged_commits, uncommitted_files, changed_files, git_updated_at,
+	                 unmerged_commits, uncommitted_files, changed_files, file_changes, git_updated_at,
 	                 current_task, task_updated_at, intent, intent_updated_at
 	          FROM agent_work_contexts
 	          WHERE 1=1`
@@ -537,7 +538,7 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 
 	for rows.Next() {
 		var ctx AgentWorkContext
-		var branch, worktreePath, unmergedCommitsJSON, uncommittedFilesJSON, changedFilesJSON, gitUpdatedAt sql.NullString
+		var branch, worktreePath, unmergedCommitsJSON, uncommittedFilesJSON, changedFilesJSON, fileChangesJSON, gitUpdatedAt sql.NullString
 		var currentTask, taskUpdatedAt, intent, intentUpdatedAt sql.NullString
 
 		err := rows.Scan(
@@ -548,6 +549,7 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 			&unmergedCommitsJSON,
 			&uncommittedFilesJSON,
 			&changedFilesJSON,
+			&fileChangesJSON,
 			&gitUpdatedAt,
 			&currentTask,
 			&taskUpdatedAt,
@@ -582,6 +584,14 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 			}
 		} else {
 			ctx.ChangedFiles = []string{}
+		}
+
+		if fileChangesJSON.Valid && fileChangesJSON.String != "" {
+			if err := json.Unmarshal([]byte(fileChangesJSON.String), &ctx.FileChanges); err != nil {
+				ctx.FileChanges = []gitctx.FileChange{}
+			}
+		} else {
+			ctx.FileChanges = []gitctx.FileChange{}
 		}
 
 		// Set optional string fields
