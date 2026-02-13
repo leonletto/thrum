@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"bufio"
 	"io"
 	"io/fs"
 	"net"
@@ -16,11 +16,12 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
-	"github.com/leonletto/thrum/internal/runtime"
-	"golang.org/x/term"
 	agentcontext "github.com/leonletto/thrum/internal/context"
+	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
