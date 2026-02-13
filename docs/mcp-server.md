@@ -153,13 +153,12 @@ Send a message to another agent, role, or group.
 
 **Input:**
 
-| Parameter   | Type   | Required | Description                                                                    |
-| ----------- | ------ | -------- | ------------------------------------------------------------------------------ |
-| `to`        | string | yes      | Recipient: `@role`, agent name, `@groupname`, or composite `agent:role:hash`  |
-| `content`   | string | yes      | Message text (markdown)                                        |
-| `priority`  | string | no       | `critical`, `high`, `normal` (default), or `low`               |
-| `thread_id` | string | no       | Thread ID to reply in                                          |
-| `metadata`  | object | no       | Key-value metadata (passed as structured data)                 |
+| Parameter  | Type   | Required | Description                                                                   |
+| ---------- | ------ | -------- | ----------------------------------------------------------------------------- |
+| `to`       | string | yes      | Recipient: `@role`, agent name, `@groupname`, or composite `agent:role:hash` |
+| `content`  | string | yes      | Message text (markdown)                                                       |
+| `priority` | string | no       | `critical`, `high`, `normal` (default), or `low`                              |
+| `metadata` | object | no       | Key-value metadata (passed as structured data)                                |
 
 **Output:**
 
@@ -202,14 +201,13 @@ ID.
 
 **MessageInfo:**
 
-| Field        | Type   | Description             |
-| ------------ | ------ | ----------------------- |
-| `message_id` | string | Message identifier      |
-| `from`       | string | Sender agent ID         |
-| `content`    | string | Message content         |
-| `priority`   | string | Message priority        |
-| `thread_id`  | string | Thread ID (if threaded) |
-| `timestamp`  | string | Creation timestamp      |
+| Field        | Type   | Description        |
+| ------------ | ------ | ------------------ |
+| `message_id` | string | Message identifier |
+| `from`       | string | Sender agent ID    |
+| `content`    | string | Message content    |
+| `priority`   | string | Message priority   |
+| `timestamp`  | string | Creation timestamp |
 
 **Behavior:**
 
@@ -388,11 +386,11 @@ Add a member (agent or role) to a group.
 
 **Input:**
 
-| Parameter     | Type   | Required | Description                                          |
-| ------------- | ------ | -------- | ---------------------------------------------------- |
-| `group`       | string | yes      | Group name to add member to                          |
-| `member_type` | string | yes      | `agent`, `role`, or `group`                          |
-| `member_id`   | string | yes      | Agent name, role name, or group name                 |
+| Parameter     | Type   | Required | Description                 |
+| ------------- | ------ | -------- | --------------------------- |
+| `group`       | string | yes      | Group name to add member to |
+| `member_type` | string | yes      | `agent` or `role`           |
+| `member_id`   | string | yes      | Agent name or role name     |
 
 **Output:**
 
@@ -412,11 +410,11 @@ Remove a member from a group.
 
 **Input:**
 
-| Parameter     | Type   | Required | Description                                          |
-| ------------- | ------ | -------- | ---------------------------------------------------- |
-| `group`       | string | yes      | Group name to remove member from                     |
-| `member_type` | string | yes      | `agent`, `role`, or `group`                          |
-| `member_id`   | string | yes      | Agent name, role name, or group name                 |
+| Parameter     | Type   | Required | Description                      |
+| ------------- | ------ | -------- | -------------------------------- |
+| `group`       | string | yes      | Group name to remove member from |
+| `member_type` | string | yes      | `agent` or `role`                |
+| `member_id`   | string | yes      | Agent name or role name          |
 
 **Output:**
 
@@ -460,24 +458,24 @@ Get detailed information about a specific group. Supports expansion to resolve r
 
 **Input:**
 
-| Parameter | Type    | Required | Description                                              |
-| --------- | ------- | -------- | -------------------------------------------------------- |
-| `name`    | string  | yes      | Group name                                               |
-| `expand`  | boolean | no       | Resolve roles to agent IDs                               |
+| Parameter | Type    | Required | Description                |
+| --------- | ------- | -------- | -------------------------- |
+| `name`    | string  | yes      | Group name                 |
+| `expand`  | boolean | no       | Resolve roles to agent IDs |
 
 **Output:**
 
-| Field                      | Type    | Description                                   |
-| -------------------------- | ------- | --------------------------------------------- |
-| `name`                     | string  | Group name                                    |
-| `description`              | string  | Group description (may be empty)              |
-| `created_at`               | string  | ISO 8601 creation timestamp                   |
-| `created_by`               | string  | Agent ID of creator                           |
-| `members`                  | array   | List of member objects                        |
-| `members[].type`           | string  | `agent`, `role`, or `group`                   |
-| `members[].id`             | string  | Agent name, role name, or group name          |
-| `expanded_agents`          | array   | (Only if `expand=true`) List of agent IDs     |
-| `expanded_agents_count`    | integer | (Only if `expand=true`) Count of agent IDs    |
+| Field                   | Type    | Description                                |
+| ----------------------- | ------- | ------------------------------------------ |
+| `name`                  | string  | Group name                                 |
+| `description`           | string  | Group description (may be empty)           |
+| `created_at`            | string  | ISO 8601 creation timestamp                |
+| `created_by`            | string  | Agent ID of creator                        |
+| `members`               | array   | List of member objects                     |
+| `members[].type`        | string  | `agent` or `role`                          |
+| `members[].id`          | string  | Agent name or role name                    |
+| `expanded_agents`       | array   | (Only if `expand=true`) List of agent IDs  |
+| `expanded_agents_count` | integer | (Only if `expand=true`) Count of agent IDs |
 
 **Daemon RPC:** `group.info` (without expand) or `group.members` (with expand)
 

@@ -1,3 +1,11 @@
+---
+title: "Agent Configurations"
+description: "Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking"
+category: "guides"
+order: 2
+tags: ["agents", "claude-code", "configuration", "setup", "toolkit"]
+last_updated: "2026-02-10"
+---
 
 # Agent Configurations
 
@@ -52,12 +60,16 @@ Guide for Beads issue tracking. Teaches Claude the task lifecycle (create, claim
 
 ### message-listener
 
-Lightweight background listener agent. Runs on Haiku model for cost efficiency (~$0.00003/cycle). Uses `thrum wait` for efficient blocking instead of polling loops. Returns immediately when messages arrive, covers ~30 minutes across 6 cycles.
+Lightweight background listener that watches for incoming Thrum messages so you
+don't have to manually check your inbox. Runs on Haiku for cost efficiency
+(~$0.00003/cycle). Uses `thrum wait` for efficient blocking instead of polling
+loops — returns immediately when messages arrive, covers ~30 minutes across 6
+cycles.
 
 **Use when:**
-- You want async message notifications
-- Working with Thrum via MCP server
-- Running long sessions that need message awareness
+- You're running multiple agents and want to know when they message you
+- Working long sessions where agents on other worktrees may send updates
+- You want incoming messages surfaced without manually running `thrum inbox`
 
 **Key capabilities:**
 - Blocking wait via `thrum wait --all --timeout 5m` (6 cycles max)
@@ -67,9 +79,10 @@ Lightweight background listener agent. Runs on Haiku model for cost efficiency (
 
 ## Configure the message listener
 
-The message-listener needs specific setup to run on Haiku and use your Thrum identity.
+The message-listener runs as a background task so your main agent session stays
+focused on work while messages are watched for you.
 
-Launch it as a background task at session start:
+Launch it at session start:
 
 ```typescript
 // In Claude Code with Thrum MCP configured

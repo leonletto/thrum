@@ -34,8 +34,8 @@ All commands accept these flags:
 
 ### Setup & Orientation
 
-  thrum init [--force]
-    Initialize Thrum in the current repository.
+  thrum init [--force] [--runtime claude|codex|cursor|gemini|cli-only|all] [--dry-run] [--agent-name NAME] [--agent-role ROLE] [--agent-module MODULE]
+    Initialize Thrum in the current repository. Optionally generate runtime-specific configs.
 
   thrum setup WORKTREE_PATH
     Configure a feature worktree with .thrum/redirect to share the main issue database.
@@ -43,8 +43,9 @@ All commands accept these flags:
   thrum migrate [--repo PATH]
     Migrate old-layout repos (JSONL on main branch) to worktree architecture.
 
-  thrum quickstart --role ROLE --module MODULE [--display NAME] [--intent TEXT]
-    Register agent, start session, and set intent in one step.
+  thrum quickstart --role ROLE --module MODULE [--name NAME] [--display NAME] [--intent TEXT] [--runtime PRESET] [--dry-run] [--force] [--no-init] [--preamble-file PATH]
+    Register agent, start session, generate runtime config, and set intent in one step.
+    Runtime presets: claude, codex, cursor, gemini, auggie, cli-only.
 
   thrum overview [--json]
     Show combined status: identity, work context, team, inbox, sync.
@@ -52,19 +53,30 @@ All commands accept these flags:
   thrum status [--json]
     Show current agent status and session info.
 
+  thrum whoami [--json]
+    Show current agent identity (lightweight, no daemon required).
+
+  thrum version
+    Show version, build hash, repository URL, and documentation URL.
+
+  thrum completion [bash|fish|powershell|zsh]
+    Generate shell autocompletion scripts.
+
 ### Messaging
 
-  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @role] [--priority low|normal|high] [--format markdown|plain|json] [--structured JSON]
-    Send a message.
+  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @role] [--broadcast|-b] [--priority low|normal|high] [--format markdown|plain|json] [--structured JSON]
+    Send a message. Use --broadcast to send to all agents. Use --to @group to send to a group.
 
   thrum reply MSG_ID TEXT [--format markdown|plain|json]
-    Reply to a message (creates thread if needed).
+    Reply to a message, copying the parent's audience (mentions/scopes). Includes reply_to reference.
 
-  thrum inbox [--scope type:value] [--mentions] [--unread] [--page-size N] [--page N]
-    List messages in your inbox. Auto-marks displayed messages as read.
+  thrum inbox [--scope type:value] [--mentions] [--unread] [--all|-a] [--page-size N] [--page N]
+    List messages in your inbox. Auto-filters to messages addressed to you + broadcasts.
+    Use --all to disable auto-filtering and show everything.
 
-  thrum wait [--timeout DURATION] [--scope type:value] [--mention @role]
-    Block until a matching message arrives. Exit 0=received, 1=timeout, 2=error.
+  thrum wait [--timeout DURATION] [--scope type:value] [--mention @role] [--all] [--after OFFSET]
+    Block until a matching message arrives. Use --all for broadcasts + directed.
+    --after accepts relative time: -30s, -5m, +60s. Exit 0=received, 1=timeout, 2=error.
 
 ### Message Management
 
@@ -77,13 +89,13 @@ All commands accept these flags:
   thrum message delete MSG_ID --force
     Delete a message.
 
-  thrum message read MSG_ID [MSG_ID...]
-    Mark one or more messages as read.
+  thrum message read [MSG_ID...] [--all]
+    Mark messages as read. Use --all to mark all unread messages as read.
 
 ### Agent Identity
 
-  thrum agent register --role ROLE --module MODULE [--display NAME] [--force] [--re-register]
-    Register this agent.
+  thrum agent register --role ROLE --module MODULE [--name NAME] [--display NAME] [--force] [--re-register]
+    Register this agent. Identity priority: THRUM_NAME env > --name flag > identity file.
 
   thrum agent whoami
     Show current agent identity and active session.
@@ -97,8 +109,8 @@ All commands accept these flags:
   thrum agent delete NAME
     Delete an agent (removes identity, messages, SQLite record).
 
-  thrum agent cleanup [--force] [--dry-run]
-    Detect and remove orphaned agents. --dry-run previews, --force deletes all.
+  thrum agent cleanup [--force] [--dry-run] [--threshold DAYS]
+    Detect and remove orphaned agents. --threshold sets stale cutoff (default: 30 days).
 
 ### Agent Session Aliases
 
@@ -116,8 +128,8 @@ All commands accept these flags:
   thrum session end [--reason normal|crash] [--session-id ID]
     End current session.
 
-  thrum session list
-    List all sessions.
+  thrum session list [--active] [--agent AGENT_ID]
+    List all sessions. --active shows only active sessions.
 
   thrum session heartbeat [--add-scope type:value] [--remove-scope type:value] [--add-ref type:value] [--remove-ref type:value]
     Send heartbeat. Triggers git context extraction, updates last-seen time.
@@ -127,17 +139,6 @@ All commands accept these flags:
 
   thrum session set-task TASK
     Set current task identifier. Pass "" to clear.
-
-### Threads
-
-  thrum thread create TITLE [--message TEXT] [--to @role]
-    Create a new thread with optional initial message.
-
-  thrum thread list [--scope type:value] [--page-size N] [--page N]
-    List threads.
-
-  thrum thread show THREAD_ID [--page-size N] [--page N]
-    Show thread with messages.
 
 ### Subscriptions
 
@@ -160,10 +161,10 @@ All commands accept these flags:
   thrum group delete NAME
     Delete a group (cannot delete @everyone).
 
-  thrum group add GROUP MEMBER
-    Add member to group (auto-detects: @agent, --role, --group).
+  thrum group add GROUP MEMBER [--role ROLE]
+    Add member to group. Default: agent name. Use --role for role-based membership.
 
-  thrum group remove GROUP MEMBER
+  thrum group remove GROUP MEMBER [--role ROLE]
     Remove member from group.
 
   thrum group list [--json]
@@ -174,6 +175,35 @@ All commands accept these flags:
 
   thrum group members NAME [--expand] [--json]
     List group members (--expand resolves nested groups/roles to agent IDs).
+
+### Team Overview
+
+  thrum team [--all] [--json]
+    Show rich status for all active agents (sessions, context, inbox, branches).
+    Use --all to include offline agents.
+
+### Context Management
+
+  thrum context save [--file PATH] [--agent NAME]
+    Save context for current agent from file or stdin.
+
+  thrum context show [--agent NAME] [--raw] [--no-preamble]
+    Show saved context for current agent. Alias: thrum context load.
+
+  thrum context clear [--agent NAME]
+    Clear saved context for current agent.
+
+  thrum context preamble [--init] [--file PATH] [--agent NAME]
+    Show or manage the preamble (stable header prepended to context).
+
+  thrum context prime [--json]
+    Gather comprehensive session context for agent initialization or recovery.
+
+  thrum context sync [--agent NAME]
+    Copy context to the a-sync branch for sharing across worktrees.
+
+  thrum context update
+    Update agent context (delegates to /update-context skill).
 
 ### Coordination
 
@@ -190,6 +220,39 @@ All commands accept these flags:
 
   thrum sync force
     Trigger immediate sync (non-blocking).
+
+### Peer Sync (Tailscale)
+
+  thrum peer add
+    Start a pairing session. Displays a 4-digit code. Blocks until peer connects (5min timeout).
+
+  thrum peer join <address>
+    Connect to a remote daemon at a Tailscale address. Prompts for 4-digit pairing code.
+
+  thrum peer list
+    List paired peers.
+
+  thrum peer remove <name>
+    Remove a paired peer.
+
+  thrum peer status
+    Show detailed sync status for all peers.
+
+### Runtime Presets
+
+  thrum runtime list
+    List all runtime presets (claude, codex, cursor, gemini, auggie, amp, cli-only).
+
+  thrum runtime show <name>
+    Show details for a runtime preset.
+
+  thrum runtime set-default <name>
+    Set the default runtime preset.
+
+### Configuration
+
+  thrum config show [--json]
+    Show effective configuration from all sources (config.json, env, defaults).
 
 ### Daemon
 
@@ -217,6 +280,14 @@ All commands accept these flags:
 
   thrum send "Auth module ready for review" --mention @reviewer --scope module:auth
 
+### Broadcast to all agents
+
+  thrum send "Stopping for lunch, back in 30" --broadcast
+
+### Send to a group
+
+  thrum send "API changes incoming" --to @backend-team
+
 ### Check inbox and reply
 
   thrum inbox --unread
@@ -227,6 +298,10 @@ All commands accept these flags:
   thrum who-has auth.go
   thrum agent list --context
 
+### Check team status
+
+  thrum team
+
 ### Check if an agent is online
 
   thrum ping @reviewer
@@ -235,38 +310,61 @@ All commands accept these flags:
 
   thrum overview
 
+### Manage groups
+
+  thrum group create backend-team --description "Backend developers"
+  thrum group add backend-team @alice
+  thrum group add backend-team --role implementer
+  thrum send "Deploy in 5 minutes" --to @backend-team
+
+### Peer sync across machines (Tailscale)
+
+  # Machine A
+  thrum peer add              # Displays pairing code
+  # Machine B
+  thrum peer join 100.x.y.z   # Enter pairing code
+  # Both machines now sync directly
+
+### Save and recover context
+
+  thrum context save --file session-notes.md
+  thrum context prime          # Gather all context for recovery
+
 ## Key Concepts
 
   Agent       An AI agent or human identified by role + module. ID: agent:role:hash.
   Session     A work period for an agent. Tracks scopes, refs, heartbeats.
   Role        Agent's function (e.g., implementer, reviewer, planner).
   Module      Component the agent is responsible for (e.g., auth, db, ui).
-  Thread      A named conversation grouping messages.
+  Thread      A named conversation grouping messages (RPC-only, no CLI commands).
   Group       Named collection of agents, roles, or other groups for targeted messaging.
   Scope       Routing metadata on messages (format: type:value, e.g., module:auth).
   Ref         Reference metadata (format: type:value, e.g., pr:42, mention:reviewer).
   Mention     Tag another agent by role: @role. Stored as ref type "mention".
   Sync        The `a-sync` orphan branch accessed via `.git/thrum-sync/a-sync` worktree.
   Heartbeat   Periodic signal from agent. Extracts git state, updates last-seen.
+  Context     Saved session state for recovery after compaction or session boundaries.
+  Peer        A Tailscale-connected remote daemon for direct machine-to-machine sync.
+  Runtime     AI coding tool preset (Claude, Codex, Cursor, Gemini, etc.) with config defaults.
 
 ## MCP Server
 
   thrum mcp serve [--agent-id NAME]
     Start MCP stdio server for native agent messaging (JSON-RPC over stdin/stdout).
-    Use --agent-id to override identity. Configure in .claude/settings.json.
+    Use --agent-id to select identity file. Configure in .claude/settings.json.
 
   MCP Tools:
-    send_message      Send a message to another agent via @role addressing
-    check_messages    Poll for unread messages mentioning this agent, auto-marks read
-    wait_for_message  Block until a message arrives (WebSocket push) or timeout
-    list_agents       List registered agents with active/offline status
-    broadcast_message Send to all active agents with exclude filters (uses @everyone)
-    create_group      Create a named group
-    delete_group      Delete a group
-    add_group_member  Add member to group
+    send_message        Send a message to another agent via @role or @group addressing
+    check_messages      Poll for unread messages mentioning this agent, auto-marks read
+    wait_for_message    Block until a message arrives (WebSocket push) or timeout
+    list_agents         List registered agents with active/offline status
+    broadcast_message   Deprecated -- use send_message with to="@everyone" instead
+    create_group        Create a named group
+    delete_group        Delete a group
+    add_group_member    Add member to group (agent, role, or nested group)
     remove_group_member Remove member from group
-    list_groups       List all groups
-    get_group         Get group details (supports expand=true for nested resolution)
+    list_groups         List all groups
+    get_group           Get group details (supports expand=true for nested resolution)
 
 ## Daemon
 
@@ -286,7 +384,7 @@ All commands accept these flags:
   THRUM_ROLE      Agent role (overrides identity file)
   THRUM_MODULE    Agent module (overrides identity file)
   THRUM_DISPLAY   Display name (overrides identity file)
-  THRUM_LOCAL     Enable local-only mode (disables remote sync) — set to "1"
+  THRUM_LOCAL     Enable local-only mode (disables remote sync) -- set to "1"
   THRUM_WS_PORT   WebSocket port (default: 9999)
 
 ## Local-Only Mode
@@ -311,7 +409,7 @@ All commands accept these flags:
   ./scripts/setup-worktree-beads.sh PATH          # Single worktree
 
   Creates .thrum/redirect and .beads/redirect pointing to the main repo.
-  Idempotent — skips already-configured worktrees.
+  Idempotent -- skips already-configured worktrees.
 
 ## Toolkit
 
@@ -335,8 +433,8 @@ All commands accept these flags:
   Beads (task tracking) and Thrum (messaging) together provide complete agent
   memory and coordination:
 
-  Beads: what agents were doing — tasks, status, dependencies, context recovery
-  Thrum: what agents said — messages, presence, notifications, session tracking
+  Beads: what agents were doing -- tasks, status, dependencies, context recovery
+  Thrum: what agents said -- messages, presence, notifications, session tracking
 
   Both use Git as persistence layer. State survives session boundaries,
   context compaction, and machine changes.
@@ -346,3 +444,6 @@ All commands accept these flags:
   1. CLI flags (--role, --module, --name)
   2. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_NAME)
   3. Identity files in .thrum/identities/ directory
+
+  Note: THRUM_NAME env var takes highest priority for name resolution,
+  overriding even the --name CLI flag.

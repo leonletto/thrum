@@ -1,3 +1,13 @@
+---
+title: "Quickstart Guide"
+description:
+  "Get up and running with Thrum in 5 minutes - initialization, daemon setup,
+  agent registration, and first message"
+category: "quickstart"
+order: 1
+tags: ["quickstart", "getting-started", "installation", "setup", "tutorial"]
+last_updated: "2026-02-12"
+---
 
 # Thrum Quickstart Guide
 
@@ -5,9 +15,12 @@ Get up and running with Thrum in 5 minutes.
 
 ## What is Thrum?
 
-Thrum is a Git-backed messaging system for agent coordination. It enables agents
-and humans to communicate persistently across sessions, worktrees, and machines
-using Git as the sync layer.
+Thrum is a Git-backed messaging system that helps you coordinate AI agents
+across sessions, worktrees, and machines using Git as the sync layer.
+
+> **New here?** Read [Why Thrum Exists](philosophy.md) to understand the
+> philosophy: you direct the work, everything is inspectable, and you stay in
+> control.
 
 ## Fast Path
 
@@ -19,6 +32,9 @@ If you want to skip the manual setup, use the quickstart command:
 This registers your agent with a human-readable name (re-registering
 automatically on conflict), starts a session, and optionally sets your work
 intent in one step. The sections below walk through each step individually.
+
+Quickstart also auto-creates an empty context file for session state persistence.
+See [Agent Context Management](context.md) for details.
 
 ## Prerequisites
 
@@ -157,16 +173,6 @@ thrum subscribe --mention @implementer
 
 # List active subscriptions
 thrum subscriptions
-```
-
-### Reply to Messages
-
-```bash
-# Reply to a message
-thrum reply msg_01HXE... "I think we should use JWT"
-
-# Replies are clustered with their parent in the inbox
-thrum inbox
 ```
 
 ### Sync Control

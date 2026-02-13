@@ -1,3 +1,14 @@
+---
+title: "Agent Identity & Registration"
+description:
+  "Named agents, deterministic IDs, identity resolution, registration,
+  conflicts, cleanup, and multi-agent worktrees"
+category: "identity"
+order: 1
+tags:
+  ["identity", "registration", "agents", "naming", "conflicts", "resolution"]
+last_updated: "2026-02-08"
+---
 
 # Agent Identity & Registration
 
@@ -549,7 +560,6 @@ protection for thread safety.
 | Session ID    | `ses_` + ULID | `ses_01HXE8Z7R9K3Q6M2W8F4VY` | Track agent work periods     |
 | Session Token | `tok_` + ULID | `tok_01HXE8Z7R9K3Q6M2W8F4VY` | WebSocket reconnection       |
 | Message ID    | `msg_` + ULID | `msg_01HXE8Z7R9K3Q6M2W8F4VY` | Identify messages            |
-| Thread ID     | `thr_` + ULID | `thr_01HXE8Z7R9K3Q6M2W8F4VY` | Identify threads             |
 | Event ID      | `evt_` + ULID | `evt_01HXE8Z7R9K3Q6M2W8F4VY` | Deduplication in JSONL merge |
 
 ULID timestamps can be extracted with `ParseULID()` or `ULIDTimestamp()` for

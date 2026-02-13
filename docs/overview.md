@@ -1,35 +1,20 @@
 
-# Thrum: Git-Backed Agent Messaging System
+# Technical Overview
 
-Thrum is a messaging and coordination system that enables AI agents and humans
-to communicate persistently across sessions, worktrees, and machines. It uses
-Git as the synchronization layer, ensuring all messages survive context window
-limits, session restarts, and machine boundaries.
+> **New here?** Start with [Why Thrum Exists](philosophy.md) for the philosophy
+> behind the project, or the [Quickstart Guide](quickstart.md) to get running in
+> 5 minutes. This document covers the technical architecture.
 
-## The Problem Thrum Solves
-
-Modern AI coding agents face critical coordination challenges:
-
-1. **Context Window Limits**: When an agent analyzes a codebase for 10 minutes,
-   that knowledge exists only in chat logs. Subsequent agents or sessions must
-   re-discover the same information.
-
-2. **Session Isolation**: Agents working in different terminal windows,
-   worktrees, or machines cannot see each other's work.
-
-3. **No Persistent Memory**: Agent work state (what files are modified, what
-   commits are pending) is invisible to other agents without manual
-   investigation.
-
-4. **Coordination Overhead**: Multi-agent workflows require humans to manually
-   relay information between agents.
-
-Thrum addresses these by providing:
+Thrum is a Git-backed messaging system that helps you coordinate AI agents
+across sessions, worktrees, and machines. It provides:
 
 - **Persistent messaging** that survives session boundaries
 - **Automatic synchronization** via Git
 - **Real-time visibility** into what other agents are working on
 - **Subscription-based notifications** for targeted communication
+
+Everything is inspectable — messages are JSONL files on a Git branch, state is a
+queryable SQLite database, and sync is plain Git push/pull.
 
 ## System Architecture
 
@@ -77,8 +62,9 @@ Thrum addresses these by providing:
 
 ## The Daemon: Central Coordinator
 
-The **Thrum daemon** is the heart of the system. It runs as a background service
-and provides:
+The daemon is the one process that everything else talks to. Start it once and
+it handles messaging, sync, and state for all your agents — CLI, Web UI, and
+MCP server all go through it.
 
 ### Core Services
 
@@ -118,8 +104,8 @@ and provides:
 commands go through the daemon via Unix socket.
 
 **Web UI** (Embedded React SPA): Provides a graphical interface for viewing
-threads, messages, and agent activity. Served from the same port as WebSocket
-(default 9999). Browser users are auto-registered via git config.
+messages and agent activity. Served from the same port as WebSocket (default
+9999). Browser users are auto-registered via git config.
 
 **MCP Server** (`thrum mcp serve`): Exposes Thrum functionality as native MCP
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
@@ -296,7 +282,7 @@ The daemon serves the WebSocket API and embedded Web UI SPA on the same port
 | **WebSocket**   | `ws://localhost:9999/ws` | Web UI, MCP waiter, real-time apps |
 | **HTTP**        | `http://localhost:9999/` | Embedded React SPA (Web UI)        |
 
-29 registered RPC methods on Unix socket (27 on WebSocket):
+26 registered RPC methods on Unix socket (24 on WebSocket):
 
 - `health` - Daemon status
 - `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`,
@@ -363,24 +349,65 @@ context updates.
 - Recording TODOs or questions for the next session
 - Preserving context when handing off work
 
-### 10. Composite Commands and Agent Aliases
+### 10. Understanding the CLI
 
-Composite commands combine multiple steps into a single invocation:
+Thrum has ~30 commands. Here's why that's not as many as it sounds.
 
-```bash
-thrum quickstart --name furiosa --role impl --module auth --intent "Working on auth"
-thrum overview                                # status + team + inbox in one view
-```
+#### Daily Drivers (8 commands)
 
-Agent-centric aliases provide intuitive shortcuts under `thrum agent`:
+These are the commands you'll actually use. If you're directing agents and
+checking on their work, this is your whole toolkit:
 
-```bash
-thrum agent start               # alias for session start
-thrum agent end                 # alias for session end
-thrum agent set-intent TEXT     # alias for session set-intent
-thrum agent set-task TASK       # alias for session set-task
-thrum agent heartbeat           # alias for session heartbeat
-```
+| Command    | What it does                                  |
+| ---------- | --------------------------------------------- |
+| `quickstart` | Register + start session + set intent — one step |
+| `send`       | Send a message                                |
+| `inbox`      | Check your messages                           |
+| `reply`      | Reply to a message                            |
+| `team`       | What's everyone working on?                   |
+| `overview`   | Status + team + inbox in one view             |
+| `status`     | Your current state                            |
+| `who-has`    | Who's editing this file?                      |
+
+That's it for daily use. Everything else is infrastructure.
+
+#### Designed for Agents (~16 commands)
+
+These commands exist because agents need programmatic lifecycle control. You
+rarely use them directly — `quickstart` handles the common case — but agents
+call them constantly:
+
+| Area          | Commands                           | Why agents need them                   |
+| ------------- | ---------------------------------- | -------------------------------------- |
+| Identity      | `agent register`, `agent whoami`   | Agents register on startup             |
+| Sessions      | `session start/end/heartbeat`      | Track work periods, extract git state  |
+| Work context  | `session set-intent/set-task`      | Declare what they're doing             |
+| Notifications | `subscribe`, `wait`                | Block until relevant messages arrive   |
+| Context       | `context save/show/clear`          | Persist state across compaction        |
+| Messages      | `message get/edit/delete/read`     | CRUD on individual messages            |
+| Groups        | `group create/add/remove/list`     | Organize teams programmatically        |
+| MCP           | `mcp serve`                        | Native tool access for Claude Code etc.|
+
+#### Setup & Admin (run once)
+
+`init`, `daemon start/stop`, `setup`, `migrate`, `agent delete/cleanup`,
+`sync force/status`, `runtime list/show`, `ping`
+
+#### Aliases (because agents get creative)
+
+AI agents are unpredictable in how they guess command names. An agent told to
+"start working" might try `thrum agent start` or `thrum session start`. Both
+work. These duplicates exist on purpose — they reduce friction for non-human
+users:
+
+| Alias              | Points to          | Why it exists                                 |
+| ------------------ | ------------------ | --------------------------------------------- |
+| `agent start`      | `session start`    | Agents think "I'm an agent, I should start"   |
+| `agent end`        | `session end`      | Same pattern                                  |
+| `agent set-intent` | `session set-intent` | Natural grouping under `agent`              |
+| `agent set-task`   | `session set-task`   | Same                                        |
+| `agent heartbeat`  | `session heartbeat`  | Same                                        |
+| `whoami`           | `agent whoami`     | Common enough to promote to top-level         |
 
 ## Storage Architecture
 
@@ -438,7 +465,6 @@ Thrum uses event sourcing with CQRS:
 | Feature                | Daemon Feature Used                |
 | ---------------------- | ---------------------------------- |
 | Real-time message feed | WebSocket + `notification.message` |
-| Message view           | `message.get` RPC                  |
 | Agent activity         | `agent.listContext` RPC            |
 | Unread counts          | `message.list` with `unread: true` |
 | Live updates           | WebSocket notifications            |
@@ -525,6 +551,7 @@ thrum wait --scope module:feature --timeout 5m
 
 | Document                                    | Description                                 |
 | ------------------------------------------- | ------------------------------------------- |
+| [Philosophy](philosophy.md)                 | Why Thrum exists and how it thinks about agents |
 | [Quickstart Guide](quickstart.md)           | 5-minute getting started                    |
 | [Daemon Architecture](daemon.md)            | Technical daemon internals                  |
 | [RPC API Reference](rpc-api.md)             | All RPC methods                             |
@@ -537,31 +564,38 @@ thrum wait --scope module:feature --timeout 5m
 | [Multi-Agent Support](multi-agent.md)       | Groups, runtime presets, and team coordination |
 | [Tailscale Sync](tailscale-sync.md)         | Cross-machine sync via Tailscale with security |
 | [Agent Coordination](agent-coordination.md) | Multi-agent workflows and Beads integration |
+| [Workflow Templates](workflow-templates.md) | Three-phase agent development templates     |
 | [Architecture](architecture.md)             | Foundation packages                         |
 
 ## Design Principles
 
-### 1. Offline-First
+### You Stay in Control
+
+Thrum is infrastructure you can inspect, not a service you depend on. Everything
+is files, Git branches, and a local daemon. See [Why Thrum Exists](philosophy.md)
+for the full philosophy.
+
+### Offline-First
 
 Everything works locally. Network is optional for sync.
 
-### 2. Git as Infrastructure
+### Git as Infrastructure
 
 No additional servers. Uses existing Git authentication and hosting.
 
-### 3. Event Sourcing
+### Event Sourcing
 
 JSONL log is the source of truth. SQLite is a rebuildable projection.
 
-### 4. Conflict-Free
+### Conflict-Free
 
 Immutable events + unique IDs = conflict-free merging.
 
-### 5. Minimal Dependencies
+### Minimal Dependencies
 
 Pure Go with minimal external packages. No CGO.
 
-### 6. Graceful Degradation
+### Graceful Degradation
 
 Network failures, missing remotes, and partial sync all handled gracefully.
 

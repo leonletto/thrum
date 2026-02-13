@@ -861,4 +861,5 @@ Or build the UI first: `make build-ui`
 - **Quickstart Guide**: `docs/quickstart.md`
 - **CLI Reference**: `docs/cli.md`
 - **Identity System**: `docs/identity.md`
+- **Workflow Templates**: `docs/workflow-templates.md` (structured feature development with AI agents)
 - **Agent Reference**: `llms.txt` (concise) and `llms-full.txt` (detailed)

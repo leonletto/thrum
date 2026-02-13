@@ -15,8 +15,7 @@ Write spec         ↓                 Implement → test → commit
   ↓              Setup thrum +       Close task, repeat
 Create epics     beads redirect        ↓
 Create tasks       ↓                 Quality gates
-Write preambles  Run quickstart      Merge to main, push
-Set deps         w/ --preamble
+Set deps         Run quickstart      Merge to main, push
 ```
 
 ### Phase 1: Plan (`planning-agent.md`)
@@ -30,8 +29,7 @@ actionable work.
 2. Proposes 2-3 architectural approaches with trade-offs
 3. Writes a design spec to `{{DESIGN_DOC_DIR}}`
 4. Decomposes the spec into beads epics with detailed child tasks
-5. Creates preamble files for each implementation agent (`preamble-agent.md`)
-6. Sets dependency relationships between epics and between tasks
+5. Sets dependency relationships between epics and between tasks
 
 **Key principle:** Beads task descriptions are the source of truth. The planning
 agent front-loads detail into task descriptions so implementing agents can work
@@ -49,16 +47,13 @@ single command:
 1. Creates git branch + worktree (or reuses existing branch)
 2. Sets up thrum redirect (shared daemon, messages, identities)
 3. Sets up beads redirect (shared issue database)
-4. **If `--identity` is provided:** runs `thrum quickstart` to register the
-   agent identity, auto-creates empty context file (`.thrum/context/{name}.md`),
-   and creates default preamble (or composes default + custom if `--preamble`
-   is provided)
+4. Runs `thrum quickstart` to register the agent identity
+5. Auto-creates empty context file (`.thrum/context/{name}.md`)
 
 ```bash
 # Full single-command bootstrap:
 ./scripts/setup-worktree-thrum.sh <worktree-path> <branch> \
-  --identity <name> --role <role> --module <module> \
-  --preamble <preamble-file> --base <base-branch>
+  --identity <name> --role <role> --base <base-branch>
 
 # Backwards-compatible modes still work:
 ./scripts/setup-worktree-thrum.sh                    # auto-detect all worktrees
@@ -68,11 +63,7 @@ single command:
 **Key principle:** All worktrees MUST share a single beads database and thrum
 instance via redirect files. Never set up redirects manually — use the script.
 
-**Note:** `thrum quickstart` automatically creates an empty context file and a
-default preamble on first registration. If the preamble already exists, it is
-preserved (idempotent). If `--preamble-file` is provided, quickstart composes
-`DefaultPreamble() + \n---\n\n + custom content` and **overwrites** any existing
-preamble.
+The module is auto-derived from the branch name (`feature/auth` → `auth`).
 
 ### Phase 3: Implement (`implementation-agent.md`)
 
@@ -105,39 +96,28 @@ these before giving a template to an agent.
 | Placeholder               | Example                                                   |
 | ------------------------- | --------------------------------------------------------- |
 | `{{FEATURE_DESCRIPTION}}` | "Add real-time sync between agents via WebSocket"         |
-| `{{PROJECT_ROOT}}`        | `{{PROJECT_ROOT}}`                                        |
+| `{{PROJECT_ROOT}}`        | `/Users/leon/dev/opensource/thrum`                        |
 | `{{DESIGN_DOC_DIR}}`      | `docs/plans/`                                             |
-| `{{REFERENCE_DOCS}}`      | `.ref/reference_impl/`, `docs/design.md`                  |
+| `{{REFERENCE_DOCS}}`      | `.ref/beads_rust/`, `dev-docs/2026-02-03-thrum-design.md` |
 | `{{TECH_STACK}}`          | "Go backend, React/TypeScript UI, SQLite, JSONL"          |
 
 **Worktree setup placeholders:**
 
-| Placeholder         | Example              |
-| ------------------- | -------------------- |
-| `{{PROJECT_ROOT}}`  | `{{PROJECT_ROOT}}`   |
-| `{{WORKTREE_BASE}}` | `{{WORKTREE_BASE}}`  |
-| `{{FEATURE_NAME}}`  | `auth`               |
-
-**Preamble placeholders** (role/project-level — no feature-specific content):
-
-| Placeholder                    | Example                                          |
-| ------------------------------ | ------------------------------------------------ |
-| `{{PROJECT_NAME}}`             | `Thrum`                                          |
-| `{{AGENT_ROLE}}`               | `implementer`                                    |
-| `{{TECH_STACK}}`               | `Go, TypeScript/React, SQLite, JSONL`            |
-| `{{PROJECT_CONVENTIONS}}`      | Coding patterns, error handling, testing approach |
-| `{{GENERAL_QUALITY_COMMANDS}}` | `go test ./... -count=1 -race && go vet ./...`   |
-| `{{COMMUNICATION_PROTOCOL}}`   | When/how to use thrum messaging                  |
+| Placeholder         | Example                            |
+| ------------------- | ---------------------------------- |
+| `{{PROJECT_ROOT}}`  | `/Users/leon/dev/opensource/thrum` |
+| `{{WORKTREE_BASE}}` | `~/.workspaces/thrum`              |
+| `{{FEATURE_NAME}}`  | `auth`                             |
 
 **Implementation agent placeholders:**
 
 | Placeholder            | Example                                      |
 | ---------------------- | -------------------------------------------- |
-| `{{EPIC_ID}}`          | `project-nf7`                                |
-| `{{WORKTREE_PATH}}`    | `{{WORKTREE_BASE}}/foundation`               |
+| `{{EPIC_ID}}`          | `thrum-nf7`                                  |
+| `{{WORKTREE_PATH}}`    | `~/.workspaces/thrum/foundation`             |
 | `{{BRANCH_NAME}}`      | `feature/foundation`                         |
 | `{{DESIGN_DOC}}`       | `docs/plans/2026-02-03-foundation-design.md` |
-| `{{REFERENCE_CODE}}`   | `.ref/reference_implementation/`             |
+| `{{REFERENCE_CODE}}`   | `.ref/beads_rust/`                           |
 | `{{QUALITY_COMMANDS}}` | `make test && make lint`                     |
 | `{{COVERAGE_TARGET}}`  | `>80%`                                       |
 
@@ -149,29 +129,29 @@ these before giving a template to an agent.
 #    with placeholders filled in. It will:
 #    - Brainstorm and write a spec
 #    - Create beads epics and tasks
-#    - Create role preamble if needed (preamble-agent.md template)
 #    - Write an implementation prompt for each agent/worktree
 
 # 2. PREPARE — Single command creates everything:
 #    branch, worktree, thrum redirect, beads redirect, identity,
-#    empty context file, and composed preamble.
-./scripts/setup-worktree-thrum.sh {{WORKTREE_BASE}}/{{FEATURE_NAME}} \
-  feature/{{FEATURE_NAME}} \
-  --identity impl-{{FEATURE_NAME}} \
-  --role implementer \
-  --module {{FEATURE_NAME}} \
-  --preamble docs/preambles/implementer-preamble.md
+#    and empty context file.
+./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/auth \
+  feature/auth \
+  --identity impl-auth \
+  --role implementer
 
-# The script prints a verification summary showing all created paths:
-#   Path, Branch, Thrum redirect, Beads redirect,
-#   Identity file, Context file, Preamble file
+# The script prints a verification summary:
+#   Path:     ~/.workspaces/thrum/auth
+#   Branch:   feature/auth
+#   Thrum:    redirect → /Users/leon/dev/opensource/thrum/.thrum
+#   Beads:    redirect → /Users/leon/dev/opensource/thrum/.beads
+#   Identity: impl-auth (.thrum/identities/impl-auth.json)
+#   Context:  .thrum/context/impl-auth.md (empty, use /update-context)
 
 # 3. IMPLEMENT — Hand off to implementation agent
 #    Give the implementation-agent.md template with placeholders
 #    filled in. It will work through tasks autonomously.
 #    If it runs out of context, restart it with the same prompt —
 #    the orient phase recovers state from beads and git.
-#    The preamble persists across sessions via thrum context.
 ```
 
 ### Running Multiple Epics in Parallel
@@ -202,23 +182,12 @@ the code. The agent doesn't need conversation history to resume.
 
 ## Agent Context Layers
 
-Each implementation agent has three layers of context, from most stable to most
-volatile:
+Each implementation agent has two layers of context:
 
 | Layer | File | Persistence | Content | Maintained By |
 |-------|------|-------------|---------|---------------|
-| Prompt | `docs/prompts/{feature}.md` | Given at session start | Feature-specific: epic IDs, owned packages, design doc, architectural constraints, quality commands scoped to this feature | Planning agent |
-| Preamble | `.thrum/context/{name}_preamble.md` | Persists across features | Role and project-level: agent role, project conventions, general quality gates, communication protocol | Human (from `docs/preambles/`) |
+| Prompt | `dev-docs/prompts/{feature}.md` | Given at session start | Feature-specific: epic IDs, owned packages, design doc, architectural constraints, quality commands | Planning agent |
 | Context | `.thrum/context/{name}.md` | Updated each session | Volatile session state: current task, decisions made, blockers hit | `/update-context` skill |
-
-The **preamble** is the stable base layer. It defines the agent's role and
-project conventions — content that remains valid even when the worktree is reused
-for a different feature. `thrum quickstart` auto-creates a default preamble
-(thrum quick-reference commands) on every registration. When `--preamble-file`
-is provided, the default content is composed with custom content separated by
-`---`. Preambles are per-role (e.g., one `implementer-preamble.md` reused across
-all implementer worktrees), stored in `docs/preambles/`. The identity file
-records the source preamble path in its `context_file` field for traceability.
 
 The **prompt** (implementation template) contains all feature-specific
 instructions: which epic/tasks to implement, which packages to modify, design
@@ -237,8 +206,7 @@ as an empty file by `thrum quickstart` and populated at runtime by the skill.
 | Task details & acceptance criteria | Beads task descriptions                        | Implementation agent                 |
 | Epic structure & dependencies      | Beads epic + `bd dep` relationships            | All agents                           |
 | Implementation progress            | Beads task status + git commit history         | Implementation agent (orient phase)  |
-| Role & project conventions         | Preamble (`.thrum/context/{name}_preamble.md`) | Implementation agent (every session) |
-| Feature-specific instructions      | Prompt (`docs/prompts/{feature}.md`)           | Implementation agent (session start)   |
+| Feature-specific instructions      | Prompt (`dev-docs/prompts/{feature}.md`)       | Implementation agent (session start)   |
 | Session state & decisions          | Context (`.thrum/context/{name}.md`)           | Implementation agent (current session) |
 | Code                               | Git worktree                                   | Implementation agent                 |
 
@@ -252,6 +220,18 @@ duplicate the content.
 | Template | Purpose | Phase |
 |----------|---------|-------|
 | `planning-agent.md` | Brainstorm, spec, create epics & tasks | Plan |
-| `preamble-agent.md` | Create per-role preamble files | Plan |
 | `worktree-setup.md` | Create/select worktree, set up redirects | Prepare |
 | `implementation-agent.md` | Implement tasks, verify, merge | Implement |
+
+## Completed Examples
+
+See `dev-docs/prompts/completed/` for real prompts that were used to build this
+project. These pre-date the template system but demonstrate the patterns that
+these templates formalize:
+
+- **Simple backend epic:** `epic-1-foundation.md` — function signatures, Go
+  conventions
+- **Parallel coordination:** `epic-5-sync-protocol.md` — file ownership rules
+  for shared worktree
+- **Detailed UI epic:** `epic-14-data-terminal-design.md` — full CSS/component
+  code inline

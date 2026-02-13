@@ -564,6 +564,7 @@ thrum wait --scope module:feature --timeout 5m
 | [Multi-Agent Support](multi-agent.md)       | Groups, runtime presets, and team coordination |
 | [Tailscale Sync](tailscale-sync.md)         | Cross-machine sync via Tailscale with security |
 | [Agent Coordination](agent-coordination.md) | Multi-agent workflows and Beads integration |
+| [Workflow Templates](workflow-templates.md) | Three-phase agent development templates     |
 | [Architecture](architecture.md)             | Foundation packages                         |
 
 ## Design Principles
