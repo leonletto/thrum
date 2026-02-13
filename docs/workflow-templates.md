@@ -1,3 +1,11 @@
+---
+title: "Workflow Templates"
+description: "Three-phase development templates for planning, preparing, and implementing features with AI agents"
+category: "guides"
+order: 3
+tags: ["templates", "workflow", "planning", "implementation", "agents", "toolkit"]
+last_updated: "2026-02-12"
+---
 
 # Workflow Templates
 
@@ -12,14 +20,14 @@ Templates live in `toolkit/templates/` in the Thrum repository.
 ─────────────        ──────────────        ─────────────────────
 Brainstorm           Select/create         Orient from beads
 Write spec           worktree              Implement tasks
-Create epics         Setup beads           Test → commit → close
-Create tasks         redirect              Quality gates
-Set deps             Verify setup          Merge to main
+Create epics         Setup thrum +         Test → commit → close
+Create tasks         beads redirect        Quality gates
+Set deps             Run quickstart        Merge to main
 ```
 
 **Plan** — Explore codebase, propose approaches, write design spec, decompose into beads epics with detailed task descriptions.
 
-**Prepare** — Select or create git worktree, configure beads redirect so all worktrees share the same issue database.
+**Prepare** — Select or create git worktree, configure thrum and beads redirects so all worktrees share the same daemon and issue database. Bootstrap agent identity.
 
 **Implement** — Work through tasks in dependency order: claim → read → implement → test → commit → close. Orient phase reads beads status and git history for resume after context loss.
 
@@ -97,9 +105,22 @@ Planning agents front-load detail into task descriptions so implementation agent
 
 Follow `worktree-setup.md` when an epic needs an isolated workspace.
 
-**Does:** Check existing worktrees for reuse, create new worktree + branch if needed, configure beads redirect, verify with `bd where` and `bd ready`.
+**Does:** Check existing worktrees for reuse, create new worktree + branch if needed, configure thrum and beads redirects, bootstrap agent identity, verify with `bd where`, `bd ready`, and `thrum context show`.
 
-Without redirect configuration, agents in different worktrees see different tasks.
+Without redirect configuration, agents in different worktrees see different tasks and different daemon instances.
+
+### Setup script
+
+The `setup-worktree-thrum.sh` script handles full worktree bootstrapping in a single command:
+
+```bash
+# Full worktree setup with identity
+./scripts/setup-worktree-thrum.sh ~/.workspaces/myproject/auth feature/auth \
+  --identity impl-auth \
+  --role implementer
+```
+
+This creates the worktree, sets up thrum and beads redirects, and registers the agent identity. The `thrum quickstart` command (used internally) auto-creates a default preamble with thrum quick-reference commands.
 
 ## Use the implementation template
 

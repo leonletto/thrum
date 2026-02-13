@@ -15,7 +15,7 @@ messaging system for AI agent coordination.
 | `thrum overview`           | Show combined status, team, and inbox view           |
 | `thrum status`             | Show current agent status, session, and work context |
 | `thrum send`               | Send a message (direct or broadcast)                 |
-| `thrum reply`              | Reply to a message (adds reply_to ref)               |
+| `thrum reply`              | Reply to a message                                   |
 | `thrum inbox`              | List messages in your inbox                          |
 | `thrum message get`        | Get a single message with full details               |
 | `thrum message edit`       | Edit a message (full replacement)                    |
@@ -266,7 +266,6 @@ have an active session.
 | `--scope`           | Add scope (repeatable, format: `type:value`)            |            |
 | `--ref`             | Add reference (repeatable, format: `type:value`)        |            |
 | `--mention`         | Mention a role (repeatable, format: `@role`)            |            |
-| `--thread`          | Reply to thread ID                                      |            |
 | `--structured`      | Structured payload (JSON string)                        |            |
 | `--priority`        | Message priority (`low`, `normal`, `high`)              | `normal`   |
 | `--format`          | Message format (`markdown`, `plain`, `json`)            | `markdown` |
@@ -281,7 +280,6 @@ Example:
 
     $ thrum send "PR ready for review" --to @reviewer --scope module:auth --ref pr:42
     ✓ Message sent: msg_01HXE8Z7...
-      Thread: thr_01HXE8A2...
       Created: 2026-02-03T10:00:00Z
 
     # Send to all agents via @everyone group
@@ -295,8 +293,9 @@ Example:
 
 ### thrum reply
 
-Reply to a message by ID. If the message is not in a thread, one is created
-automatically. The replied-to message is marked as read.
+Reply to a message by ID. Creates a reply-to reference so replies are grouped
+with the original message in your inbox. The replied-to message is marked as
+read.
 
     thrum reply MSG_ID TEXT [flags]
 
@@ -308,7 +307,7 @@ Example:
 
     $ thrum reply msg_01HXE8Z7 "Good idea, let's do that"
     ✓ Reply sent: msg_01HXE9A3...
-      Thread: thr_01HXE8A2...
+      In reply to: msg_01HXE8Z7
 
 
 ### thrum inbox
@@ -332,7 +331,7 @@ Example:
 
     $ thrum inbox --unread
     ┌──────────────────────────────────────────────────────────┐
-    │ ● msg_01HXE8Z7  @planner  2m ago  thread:thr_01H...    │
+    │ ● msg_01HXE8Z7  @planner  2m ago                       │
     │ We should refactor the sync daemon before adding embeds. │
     ├──────────────────────────────────────────────────────────┤
     │ ● msg_01HXE8A2  @reviewer  15m ago                      │
@@ -354,7 +353,6 @@ Example:
     Message: msg_01HXE8Z7
       From:    @planner
       Time:    2m ago
-      Thread:  thr_01HXE8A2
       Scopes:  module:auth
       Refs:    issue:thrum-42
 
@@ -775,7 +773,7 @@ Example:
 
 ### thrum group create
 
-Create a named group for targeted messaging. Groups can contain agents and roles.
+Create a named group for targeted messaging. Groups contain agents and roles.
 
     thrum group create NAME [flags]
 
@@ -811,7 +809,7 @@ Example:
 
 ### thrum group add
 
-Add a member to a group. Members can be agents or roles. The command auto-detects the member type based on format.
+Add a member to a group. Members can be agents or roles.
 
     thrum group add GROUP MEMBER
 
@@ -868,7 +866,7 @@ Example:
 
     backend
       Description: Backend developers
-      Members:     3 agents
+      Members:     3
       Created:     2026-02-09 10:20:00
 
 
@@ -894,30 +892,16 @@ Example:
 
 ### thrum group members
 
-List members of a group. Use `--expand` to resolve roles to individual agent IDs.
+List members of a group.
 
-    thrum group members NAME [flags]
-
-| Flag       | Description                                      | Default |
-| ---------- | ------------------------------------------------ | ------- |
-| `--expand` | Resolve roles to agent IDs                       | `false` |
-
-Without `--expand`, shows direct members (agents, roles). With `--expand`, resolves to a flat list of agent IDs.
+    thrum group members NAME
 
 Example:
 
-    # Show direct members
     $ thrum group members reviewers
     Members of reviewers (2):
       - @alice (agent)
       - reviewer (role)
-
-    # Expand to agent IDs
-    $ thrum group members reviewers --expand
-    Resolved members of reviewers (3 agents):
-      - alice
-      - bob
-      - charlie
 
 
 ## Coordination

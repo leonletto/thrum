@@ -1,3 +1,13 @@
+---
+title: "Development Guide"
+description:
+  "Setup, testing, building, contributing - complete guide for developing and
+  extending Thrum"
+category: "development"
+order: 2
+tags: ["development", "contributing", "testing", "building", "makefile", "go"]
+last_updated: "2026-02-08"
+---
 
 # Thrum Development Guide
 
@@ -58,7 +68,7 @@ thrum/
 │   │   ├── flock_other.go   # No-op stubs (non-Unix)
 │   │   └── testutil_test.go # StartTestDaemon() helper
 │   ├── gitctx/              # Git-derived work context (branch, uncommitted files)
-│   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, thread)
+│   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, event)
 │   ├── jsonl/               # JSONL reader/writer with file locking
 │   ├── mcp/                 # MCP stdio server (5 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
@@ -276,7 +286,6 @@ even when the UI has not been built.
 Current event types handled by the projector:
 
 - `message.create`, `message.edit`, `message.delete`
-- `thread.create`
 - `agent.register`
 - `agent.session.start`, `agent.session.end`
 - `agent.update`
@@ -852,4 +861,5 @@ Or build the UI first: `make build-ui`
 - **Quickstart Guide**: `docs/quickstart.md`
 - **CLI Reference**: `docs/cli.md`
 - **Identity System**: `docs/identity.md`
+- **Workflow Templates**: `docs/workflow-templates.md` (structured feature development with AI agents)
 - **Agent Reference**: `llms.txt` (concise) and `llms-full.txt` (detailed)

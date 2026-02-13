@@ -71,16 +71,14 @@ command:
 
 ```bash
 # From the main repository root
-cd {{PROJECT_ROOT}}
+cd /Users/leon/dev/opensource/thrum
 
-# Full bootstrap — branch, worktree, thrum + beads redirects, identity, preamble
+# Full bootstrap — branch, worktree, thrum + beads redirects, identity
 ./scripts/setup-worktree-thrum.sh \
-  {{WORKTREE_BASE}}/{{FEATURE_NAME}} \
+  ~/.workspaces/thrum/{{FEATURE_NAME}} \
   feature/{{FEATURE_NAME}} \
   --identity impl-{{FEATURE_NAME}} \
-  --role implementer \
-  --module {{FEATURE_NAME}} \
-  --preamble docs/preambles/implementer-preamble.md
+  --role implementer
 ```
 
 The script handles:
@@ -88,7 +86,7 @@ The script handles:
 2. Worktree creation at the specified path
 3. Thrum redirect → shared daemon and messages
 4. Beads redirect → shared issue database
-5. `thrum quickstart` → identity, empty context file, composed preamble
+5. `thrum quickstart` → identity and empty context file
 
 **Flags reference:**
 
@@ -96,29 +94,29 @@ The script handles:
 |------|---------|---------|
 | `--identity <name>` | *(none)* | Agent identity name (triggers quickstart) |
 | `--role <role>` | `implementer` | Agent role |
-| `--module <module>` | branch name (strips `feature/` prefix) | Agent module |
-| `--preamble <file>` | *(none)* | Custom preamble to compose with default |
 | `--base <branch>` | `main` | Base branch for new branch creation |
 
+Module is auto-derived from the branch name (`feature/auth` → `auth`).
+
 **Without `--identity`**, the script only creates the worktree and redirects
-(no quickstart, no identity/context/preamble files).
+(no quickstart, no identity/context files).
 
 ### Verify Setup
 
 ```bash
-cd {{WORKTREE_BASE}}/{{FEATURE_NAME}}
+cd ~/.workspaces/thrum/{{FEATURE_NAME}}
 
 # Verify beads points to shared database
 bd where
-# Expected output should reference: {{PROJECT_ROOT}}/.beads
+# Expected: /Users/leon/dev/opensource/thrum/.beads
 
 # Verify issues are visible
 bd ready
 bd list --status=open
 
-# Verify context files were created
-ls -la .thrum/context/
+# Verify identity and context files were created
 ls -la .thrum/identities/
+ls -la .thrum/context/
 
 # Verify git state
 git --no-pager log --oneline -3

@@ -4,9 +4,9 @@
 ## Overview
 
 The Thrum messaging system provides structured communication between agents with
-support for replies, direct messaging, read tracking, scoping, references, and
-rich content formats. Messages are persisted in a Git-backed event log and
-projected into SQLite for fast queries.
+support for direct messaging, read tracking, scoping, references, and rich content
+formats. Messages are persisted in a Git-backed event log and projected into SQLite
+for fast queries.
 
 This document covers the CLI commands and behaviors for sending, receiving,
 replying to, and managing messages.
@@ -18,7 +18,7 @@ replying to, and managing messages.
 | Command                   | Description                                                            |
 | ------------------------- | ---------------------------------------------------------------------- |
 | `thrum send MESSAGE`      | Send a message (with optional `--to`, `--scope`, `--ref`, `--mention`) |
-| `thrum reply MSG_ID TEXT` | Reply to a message (adds reply_to ref)                                 |
+| `thrum reply MSG_ID TEXT` | Reply to a message, creating a reply-to reference                      |
 | `thrum inbox`             | List messages with read/unread indicators                              |
 
 ### Message Subcommands
@@ -106,13 +106,14 @@ thrum send "Auth module complete, all tests passing" \
 # Reviewer checks inbox for messages directed at them
 thrum inbox --mentions
 
-# Reviewer replies to the message (adds reply_to ref)
+# Reviewer replies to the message
 thrum reply msg_01HXE... "Looks good, merging now"
 ```
 
 ## Replying to Messages
 
-The `reply` command creates a new message with a `reply_to` reference to the parent message:
+The `reply` command creates a reply-to reference linking your message to the
+original:
 
 ```bash
 thrum reply MSG_ID "Your reply text"
@@ -120,10 +121,9 @@ thrum reply MSG_ID "Your reply text"
 
 **What happens internally:**
 
-1. Fetches the original message to copy its audience (mentions).
-2. Creates a new message with a `reply_to` ref pointing to the parent.
-3. Copies the parent's mentions to the reply (preserves conversation context).
-4. Marks the original message as read (auto mark-as-read).
+1. Creates a new message with a `reply_to` ref pointing to the original message.
+2. The inbox groups replies with the original message using a `↳` prefix.
+3. Marks the original message as read (auto mark-as-read).
 
 ### Flags
 
@@ -145,10 +145,8 @@ thrum reply msg_01HXF... "Acknowledged" --format plain
 
 ```
 > Reply sent: msg_01HXG...
-  Replying to: msg_01HXE...
+  In reply to: msg_01HXE...
 ```
-
-In the inbox, replies are clustered with their parent messages and displayed with a `↳` prefix.
 
 ## Inbox
 
@@ -181,10 +179,11 @@ The header line for each message follows this format:
 ```
 │ ● msg_01HXE...  @implementer  5m ago                     │
 │ ○ msg_01HXF...  @reviewer     1h ago  (edited)           │
-│ ↳ msg_01HXG...  @implementer  3m ago                     │
+│ ↳ msg_01HXG...  @implementer  10m ago                    │
 ```
 
-Messages that have been edited show an `(edited)` tag in the header. Replies are clustered with their parent messages and shown with a `↳` prefix.
+Messages that have been edited show an `(edited)` tag in the header. Replies are
+displayed with a `↳` prefix and grouped with the original message.
 
 ### Auto Mark-as-Read
 
@@ -219,7 +218,7 @@ thrum inbox --scope module:auth
 ### Get
 
 Retrieve a single message with its full details: author, timestamps, scopes,
-refs, thread association, edit and delete status.
+refs, edit and delete status.
 
 ```bash
 thrum message get msg_01HXE...
@@ -231,7 +230,6 @@ thrum message get msg_01HXE...
 Message: msg_01HXE...
   From:    @implementer
   Time:    5m ago
-  Thread:  thr_01HXE...
   Scopes:  module:auth
   Refs:    issue:beads-42, mention:reviewer
   Edited:  2m ago
@@ -421,6 +419,7 @@ thrum send "Fixed authentication bug" \
 
 ```bash
 thrum inbox --scope file:src/main.go
+thrum inbox --scope module:auth
 ```
 
 ## References (Refs)
@@ -436,14 +435,15 @@ message reference?"
 
 ### Common Ref Types
 
-| Type      | Example                             | Use                                                     |
-| --------- | ----------------------------------- | ------------------------------------------------------- |
-| `issue`   | `issue:beads-123`                   | Links to a Beads issue                                  |
-| `commit`  | `commit:abc123def456`               | Links to a Git commit                                   |
-| `pr`      | `pr:42`                             | Links to a pull request                                 |
-| `ticket`  | `ticket:JIRA-456`                   | Links to an external ticket                             |
-| `url`     | `url:https://docs.example.com/page` | Links to a web page                                     |
-| `mention` | `mention:reviewer`                  | Created automatically from `--to` and `--mention` flags |
+| Type       | Example                             | Use                                                     |
+| ---------- | ----------------------------------- | ------------------------------------------------------- |
+| `issue`    | `issue:beads-123`                   | Links to a Beads issue                                  |
+| `commit`   | `commit:abc123def456`               | Links to a Git commit                                   |
+| `pr`       | `pr:42`                             | Links to a pull request                                 |
+| `ticket`   | `ticket:JIRA-456`                   | Links to an external ticket                             |
+| `url`      | `url:https://docs.example.com/page` | Links to a web page                                     |
+| `mention`  | `mention:reviewer`                  | Created automatically from `--to` and `--mention` flags |
+| `reply_to` | `reply_to:msg_01HXE...`             | Created by `thrum reply` to link to parent message      |
 
 ### Multiple Refs
 
@@ -456,8 +456,8 @@ thrum send "Implemented feature from design doc, closes issue" \
 
 ## Groups
 
-Groups allow you to send messages to collections of agents and roles
-using a single `--to @groupname` address.
+Groups allow you to send messages to collections of agents and roles using a
+single `--to @groupname` address.
 
 ### Built-in Groups
 
@@ -485,24 +485,24 @@ thrum send "PR ready for review" --to @reviewers
 
 ### Group Operations
 
-| Command                         | Description                                           |
-| ------------------------------- | ----------------------------------------------------- |
-| `thrum group create NAME`       | Create a new group                                    |
-| `thrum group delete NAME`       | Delete a group (cannot delete `@everyone`)            |
-| `thrum group add GROUP MEMBER`  | Add agent or role                                     |
-| `thrum group remove GROUP MEMBER` | Remove a member                                     |
-| `thrum group list`              | List all groups                                       |
-| `thrum group info NAME`         | Show group details                                    |
-| `thrum group members NAME`      | List members (`--expand` resolves to agent IDs)       |
+| Command                           | Description                                     |
+| --------------------------------- | ----------------------------------------------- |
+| `thrum group create NAME`         | Create a new group                              |
+| `thrum group delete NAME`         | Delete a group (cannot delete `@everyone`)      |
+| `thrum group add GROUP MEMBER`    | Add agent or role to group                      |
+| `thrum group remove GROUP MEMBER` | Remove a member                                 |
+| `thrum group list`                | List all groups                                 |
+| `thrum group info NAME`           | Show group details                              |
+| `thrum group members NAME`        | List members (`--expand` resolves to agent IDs) |
 
 ### Message Resolution
 
-When a message is sent to a group, the daemon resolves group membership at **read time**
-using an iterative SQL query. This means:
+When a message is sent to a group, the daemon resolves group membership at **read time**.
+This means:
 
 - New agents added to a group automatically receive messages sent to that group
-- Roles are expanded to all matching agents at query time
 - The `@everyone` group dynamically includes all registered agents
+- Role-based members are resolved to all agents with that role at query time
 
 ### Broadcast Deprecation
 
@@ -542,8 +542,7 @@ Messages are stored in two places:
      (`agent.register`, `agent.session.start`, `agent.session.end`,
      `agent.cleanup`)
    - `.git/thrum-sync/a-sync/messages/{agent_name}.jsonl` -- per-agent message
-     events (`message.create`, `message.edit`, `message.delete`,
-     `agent.update`)
+     events (`message.create`, `message.edit`, `message.delete`, `agent.update`)
 
 2. **SQLite Projection** (`.thrum/var/messages.db`) -- derived from the JSONL
    logs for query performance. Can be rebuilt from the logs. Contains the tables
@@ -634,7 +633,7 @@ Optimized for common query patterns:
 - `idx_messages_agent` -- author filtering
 - `idx_messages_session` -- session filtering
 - `idx_scopes_lookup` -- scope filtering
-- `idx_refs_lookup` -- ref filtering
+- `idx_refs_lookup` -- ref filtering (including reply_to references)
 - `idx_edits_message` -- edit history lookup by message and timestamp
 - `idx_message_reads_agent` -- read state by agent
 - `idx_message_reads_message` -- read state by message

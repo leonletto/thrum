@@ -1,11 +1,29 @@
+---
+title: "Event Streaming"
+description:
+  "Real-time push notifications via Broadcaster and Dispatcher - subscription
+  matching, delivery, and client registries"
+category: "api"
+order: 2
+tags:
+  [
+    "events",
+    "streaming",
+    "notifications",
+    "websocket",
+    "broadcaster",
+    "dispatcher",
+  ]
+last_updated: "2026-02-08"
+---
 
 # Event Streaming
 
 ## Overview
 
 Event streaming enables real-time push notifications to connected WebSocket and
-Unix socket clients. When significant events occur (new messages, thread
-updates), the daemon automatically pushes notifications to subscribed clients.
+Unix socket clients. When significant events occur (new messages), the daemon
+automatically pushes notifications to subscribed clients.
 
 The WebSocket server and embedded SPA are served on the same port (default 9999,
 configurable via `THRUM_WS_PORT`). WebSocket connections use the `/ws` endpoint
@@ -28,7 +46,6 @@ when the UI is active, or `/` when running without UI.
    - Filters events based on scopes, mentions (role-based and name-based), and
      subscription types
    - Pushes notifications to matched subscribers via the Broadcaster
-   - Also dispatches thread update notifications to all subscribed sessions
 
 3. **Event Streaming Setup** (`internal/daemon/event_streaming.go`)
    - Factory for wiring together Broadcaster and Dispatcher
@@ -63,8 +80,6 @@ Currently implemented:
 
 - **`notification.message`** - Pushed when a new message is created or edited,
   matching a subscription
-- **`notification.thread.updated`** - Pushed when a thread has new activity
-  (sent to all subscribed sessions)
 
 ### Notification Format
 
@@ -77,7 +92,6 @@ expected):
   "method": "notification.message",
   "params": {
     "message_id": "msg_...",
-    "thread_id": "thr_...",
     "author": {
       "agent_id": "furiosa",
       "name": "furiosa",
@@ -95,24 +109,6 @@ expected):
 }
 ```
 
-Thread update notifications:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "notification.thread.updated",
-  "params": {
-    "thread_id": "thr_...",
-    "message_count": 5,
-    "unread_count": 2,
-    "last_activity": "2026-02-03T10:00:00Z",
-    "last_sender": "furiosa",
-    "preview": "Latest message text...",
-    "timestamp": "2026-02-03T10:00:00Z"
-  }
-}
-```
-
 ### Subscription Filtering
 
 The dispatcher automatically filters events based on subscriptions:
@@ -122,9 +118,6 @@ The dispatcher automatically filters events based on subscriptions:
   name (supports both `@reviewer` and `@furiosa`)
 - **All subscriptions**: Notify for every message
 - **No subscription**: No notifications (client must poll inbox)
-
-Thread update notifications bypass subscription filtering and are sent to all
-sessions with any active subscription.
 
 ### Client Buffer Management
 
@@ -216,9 +209,6 @@ ws.onmessage = (event) => {
   if (notification.method === "notification.message") {
     console.log("New message:", notification.params.preview);
   }
-  if (notification.method === "notification.thread.updated") {
-    console.log("Thread updated:", notification.params.thread_id);
-  }
 };
 ```
 
@@ -248,7 +238,6 @@ Comprehensive test coverage includes:
    - Scope, mention, and "all" subscription matching
    - Name-based mention matching (@furiosa)
    - Multiple subscriptions per message
-   - Thread update notification dispatch
    - No subscriptions scenario
 
 Run tests:

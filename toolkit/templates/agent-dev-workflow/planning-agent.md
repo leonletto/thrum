@@ -269,10 +269,7 @@ When complete, the planning agent should have produced:
 2. **Beads epics** with dependency relationships
 3. **Beads tasks** under each epic with detailed descriptions
 4. **Dependency DAG** showing build order
-5. **Preamble file(s)** at `docs/preambles/{role}-preamble.md` (if not already
-   existing for this role) — created using the `preamble-agent.md` template
-6. **Implementation prompt(s)** at `docs/prompts/{feature-name}.md`
+5. **Implementation prompt(s)** at `dev-docs/prompts/{feature-name}.md`
 
 The implementing agent uses the beads tasks as its source of truth — not this
-prompt template. The preamble is loaded automatically during worktree setup via
-`--preamble` flag on the setup script.
+prompt template.

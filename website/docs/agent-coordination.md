@@ -426,6 +426,7 @@ bd list --status=in_progress
 
 ## See Also
 
+- [Workflow Templates](workflow-templates.md) -- three-phase agent development workflows (plan, prepare, implement)
 - [Multi-Agent Support](multi-agent.md) -- groups, runtime presets, and team coordination
 - [Tailscale Sync](tailscale-sync.md) -- cross-machine sync via Tailscale
 - [CLI Reference](cli.md) -- complete command documentation

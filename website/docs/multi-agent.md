@@ -21,8 +21,9 @@ last_updated: "2026-02-11"
 
 > See also: [Why Thrum Exists](philosophy.md) for the philosophy behind
 > human-directed coordination, [Agent Coordination](agent-coordination.md) for
-> workflow patterns and Beads integration, [Identity System](identity.md) for
-> agent naming and registration.
+> workflow patterns and Beads integration, [Workflow Templates](workflow-templates.md)
+> for structured planning and implementation workflows, [Identity System](identity.md)
+> for agent naming and registration.
 
 ## Overview
 

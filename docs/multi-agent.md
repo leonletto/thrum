@@ -19,21 +19,24 @@ last_updated: "2026-02-11"
 
 # Multi-Agent Support
 
-> See also: [Agent Coordination](agent-coordination.md) for workflow patterns
-> and Beads integration, [Identity System](identity.md) for agent naming and
-> registration.
+> See also: [Why Thrum Exists](philosophy.md) for the philosophy behind
+> human-directed coordination, [Agent Coordination](agent-coordination.md) for
+> workflow patterns and Beads integration, [Workflow Templates](workflow-templates.md)
+> for structured planning and implementation workflows, [Identity System](identity.md)
+> for agent naming and registration.
 
 ## Overview
 
-Thrum is built for multi-agent coordination from the ground up. Multiple AI
-agents -- running in different terminals, worktrees, or on different machines --
-share a single daemon and message store. Each agent gets a unique identity, and
-Thrum provides the tools to organize agents into teams, detect and configure any
-AI coding platform, and recover full session context after compaction.
+Thrum helps you coordinate multiple AI agents from the ground up. You can run
+agents in different terminals, worktrees, or on different machines — they share
+a single daemon and message store. Each agent gets a unique identity, and you
+get tools to organize agents into teams, detect and configure any AI coding
+platform, and recover full session context after compaction.
 
 **Key multi-agent capabilities:**
 
-- **Agent Groups** -- Named collections of agents and roles for targeted messaging
+- **Agent Groups** -- Named collections of agents and roles for targeted
+  messaging
 - **Runtime Presets** -- Auto-detect and configure Claude Code, Codex, Cursor,
   Gemini, and other AI platforms
 - **Context Prime** -- Single command to gather full agent state for session
@@ -48,15 +51,15 @@ one individually. Groups can contain specific agents or all agents with a role.
 
 ### Quick Reference
 
-| Command                              | Description                                     |
-| ------------------------------------ | ----------------------------------------------- |
-| `thrum group create NAME`            | Create a new group                              |
-| `thrum group delete NAME`            | Delete a group (cannot delete `@everyone`)      |
-| `thrum group add GROUP MEMBER`       | Add agent or role                               |
-| `thrum group remove GROUP MEMBER`    | Remove a member                                 |
-| `thrum group list`                   | List all groups                                 |
-| `thrum group info NAME`             | Show group details                              |
-| `thrum group members NAME`          | List members (`--expand` resolves to agent IDs) |
+| Command                            | Description                                     |
+| ---------------------------------- | ----------------------------------------------- |
+| `thrum group create NAME`          | Create a new group                              |
+| `thrum group delete NAME`          | Delete a group (cannot delete `@everyone`)      |
+| `thrum group add GROUP MEMBER`     | Add agent or role                               |
+| `thrum group remove GROUP MEMBER`  | Remove a member                                 |
+| `thrum group list`                 | List all groups                                 |
+| `thrum group info NAME`            | Show group details                              |
+| `thrum group members NAME`         | List members (`--expand` resolves to agent IDs) |
 
 ### Built-in @everyone Group
 
@@ -107,10 +110,10 @@ thrum group info reviewers
 
 Groups support two member types:
 
-| Type    | Syntax               | Resolves To                           |
-| ------- | -------------------- | ------------------------------------- |
-| Agent   | `@alice`             | A specific agent by name              |
-| Role    | `--role reviewer`    | All agents registered with that role  |
+| Type  | Syntax            | Resolves To                          |
+| ----- | ----------------- | ------------------------------------ |
+| Agent | `@alice`          | A specific agent by name             |
+| Role  | `--role reviewer` | All agents registered with that role |
 
 ### Sending to Groups
 
@@ -124,11 +127,8 @@ thrum send "PR #42 ready for review" --to @reviewers
 thrum send "Code freeze starts now" --to @all-devs
 ```
 
-The daemon resolves group membership at **read time** using an iterative SQL
-query. This means:
-
-- Agents added to a group after a message was sent still receive it
-- Roles are expanded to all matching agents at query time
+The daemon resolves group membership at **read time** using a SQL query. This
+means agents added to a group after a message was sent still receive it.
 
 ### Expanding Group Membership
 
@@ -144,10 +144,9 @@ Output:
 {
   "members": [
     {"type": "agent", "value": "alice"},
-    {"type": "role", "value": "reviewer"},
-    {"type": "group", "value": "leads"}
+    {"type": "role", "value": "reviewer"}
   ],
-  "expanded": ["alice", "bob", "carol", "lead_1"]
+  "expanded": ["alice", "bob", "carol"]
 }
 ```
 
@@ -289,9 +288,9 @@ Custom runtimes appear alongside built-in presets in `thrum runtime list`.
 
 ## Context Prime
 
-Context prime gathers all agent state into a single output for session
-initialization or recovery. It is especially useful after conversation
-compaction, when an agent needs to reconstruct its working context.
+After compaction or starting a new session, you want to quickly answer: what was
+I working on? Context prime gathers all agent state into a single output so an
+agent can pick up where it left off.
 
 ### Usage
 
@@ -620,8 +619,6 @@ thrum send "Auth complete, 15 tests passing" --to @coordinator
 - **Start simple** -- create groups as coordination needs emerge, not upfront
 - **Use role-based membership** when possible (`--role reviewer`) so new agents
   with that role are automatically included
-- **Nest groups** for hierarchical organization (e.g., `all-devs` containing
-  `backend` and `frontend`)
 - **Use `@everyone` sparingly** -- prefer targeted groups to reduce noise
 
 ### Runtime Configuration

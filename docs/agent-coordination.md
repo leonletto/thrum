@@ -1,9 +1,23 @@
+---
+title: "Agent Coordination"
+description:
+  "Multi-agent workflows, Beads integration, session templates, and coordination
+  patterns for AI agent teams"
+category: "guides"
+order: 1
+tags:
+  ["coordination", "multi-agent", "beads", "workflows", "patterns", "sessions"]
+last_updated: "2026-02-09"
+---
 
 # Agent Coordination
 
-Thrum enables multiple AI agents and humans to coordinate work across sessions,
-worktrees, and machines. This guide covers practical coordination patterns,
-integration with the Beads issue tracker, and session workflow templates.
+Thrum helps you coordinate multiple AI agents across sessions, worktrees, and
+machines. This guide covers practical coordination patterns, integration with
+the Beads issue tracker, and session workflow templates.
+
+> For the philosophy behind this approach — why you direct the work instead of
+> handing it off — see [Why Thrum Exists](philosophy.md).
 
 ## Coordination Methods
 
@@ -172,10 +186,12 @@ When messages are received:
 
 ```
 MESSAGES_RECEIVED
+---
 FROM: [sender]
 PRIORITY: [priority]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]
+---
 ```
 
 When timeout occurs with no messages:
@@ -410,10 +426,11 @@ bd list --status=in_progress
 
 ## See Also
 
+- [Workflow Templates](workflow-templates.md) -- three-phase agent development workflows (plan, prepare, implement)
 - [Multi-Agent Support](multi-agent.md) -- groups, runtime presets, and team coordination
 - [Tailscale Sync](tailscale-sync.md) -- cross-machine sync via Tailscale
 - [CLI Reference](cli.md) -- complete command documentation
 - [MCP Server](mcp-server.md) -- MCP tools and message-listener details
-- [Messaging System](messaging.md) -- message structure and threading
+- [Messaging System](messaging.md) -- message structure and scopes
 - [Quickstart Guide](quickstart.md) -- getting started in 5 minutes
 - [Identity System](identity.md) -- agent names and registration

@@ -1,3 +1,13 @@
+---
+title: "Daemon Architecture"
+description:
+  "Background service managing state, RPC handlers, sync loop, WebSocket server,
+  and embedded UI on single port"
+category: "daemon"
+order: 1
+tags: ["daemon", "background-service", "rpc", "websocket", "lifecycle", "sync"]
+last_updated: "2026-02-10"
+---
 
 # Thrum Daemon Architecture
 
@@ -210,7 +220,6 @@ on both the Unix socket and WebSocket servers unless noted.
 | **Agent**        | `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`, `agent.delete`, `agent.cleanup`        | `delete` and `cleanup` are Unix socket only       |
 | **Session**      | `session.start`, `session.end`, `session.list`, `session.heartbeat`, `session.setIntent`, `session.setTask` |                                                   |
 | **Message**      | `message.send`, `message.get`, `message.list`, `message.edit`, `message.delete`, `message.markRead`         |                                                   |
-| **Group**        | `group.create`, `group.delete`, `group.list`, `group.get`, `group.member.add`, `group.member.remove`        |                                                   |
 | **Subscription** | `subscribe`, `unsubscribe`, `subscriptions.list`                                                            |                                                   |
 | **Sync**         | `sync.force`, `sync.status`                                                                                 | Both Unix socket and WebSocket                    |
 | **User**         | `user.register`, `user.identify`                                                                            | `user.register` restricted to WebSocket transport |
