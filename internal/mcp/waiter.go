@@ -34,6 +34,7 @@ type MessageNotification struct {
 type Waiter struct {
 	wsConn     *websocket.Conn
 	socketPath string // for per-call RPC clients
+	agentID    string // composite agent ID for subscriptions
 	agentRole  string
 	nextID     atomic.Int64 // incrementing JSON-RPC request ID
 
@@ -47,7 +48,9 @@ type Waiter struct {
 }
 
 // NewWaiter creates a Waiter that connects to the daemon WebSocket.
-func NewWaiter(ctx context.Context, socketPath, agentRole, wsURL string) (*Waiter, error) {
+// agentID is the composite agent ID (e.g., "agent:implementer:abc123") used
+// for subscription lookup. If empty, falls back to role-based identity.
+func NewWaiter(ctx context.Context, socketPath, agentID, agentRole, wsURL string) (*Waiter, error) {
 	wCtx, cancel := context.WithCancel(ctx)
 
 	u, err := url.Parse(wsURL)
@@ -65,6 +68,7 @@ func NewWaiter(ctx context.Context, socketPath, agentRole, wsURL string) (*Waite
 	w := &Waiter{
 		wsConn:     conn,
 		socketPath: socketPath,
+		agentID:    agentID,
 		agentRole:  agentRole,
 		queue:      make([]MessageNotification, 0),
 		ctx:        wCtx,
@@ -84,39 +88,44 @@ func NewWaiter(ctx context.Context, socketPath, agentRole, wsURL string) (*Waite
 	return w, nil
 }
 
-// setup sends user.register, user.identify, and subscribe RPCs over WebSocket.
+// setup re-registers the agent and subscribes to role-based mentions over WebSocket.
+// The agent was already registered via CLI (thrum quickstart); this is a re-registration
+// so the MCP server shares the same identity and session. This is the normal workflow:
+// CLI registers first, then MCP server connects for real-time notifications.
 func (w *Waiter) setup() error {
-	// 1. user.identify (gets git user info)
-	identResp, err := w.wsRPC("user.identify", nil)
-	if err != nil {
-		return fmt.Errorf("user.identify: %w", err)
-	}
-
-	var identResult struct {
-		Username string `json:"username"`
-	}
-	if err := json.Unmarshal(identResp, &identResult); err != nil {
-		return fmt.Errorf("parse identify response: %w", err)
-	}
-
-	// 2. user.register with the username
-	_, err = w.wsRPC("user.register", map[string]string{
-		"username": identResult.Username,
+	// 1. Re-register agent (idempotent — returns existing info if already registered)
+	_, err := w.wsRPC("agent.register", map[string]any{
+		"role":        w.agentRole,
+		"module":      "mcp",
+		"re_register": true,
 	})
 	if err != nil {
-		return fmt.Errorf("user.register: %w", err)
+		return fmt.Errorf("agent.register: %w", err)
 	}
 
-	// 3. subscribe to mentions for this agent's role
-	mentionRole := w.agentRole
-	_, err = w.wsRPC("subscribe", map[string]any{
-		"mention_role": mentionRole,
-	})
+	// 2. Subscribe to mentions for this agent's role
+	subParams := map[string]any{
+		"mention_role": w.agentRole,
+	}
+	if w.agentID != "" {
+		subParams["caller_agent_id"] = w.agentID
+	}
+	_, err = w.wsRPC("subscribe", subParams)
 	if err != nil {
-		return fmt.Errorf("subscribe: %w", err)
+		// Subscription may already exist from a previous MCP serve in the same
+		// daemon session — treat "already exists" as non-fatal.
+		if !isAlreadyExistsError(err) {
+			return fmt.Errorf("subscribe: %w", err)
+		}
 	}
 
 	return nil
+}
+
+// isAlreadyExistsError checks if an error indicates a duplicate subscription.
+func isAlreadyExistsError(err error) bool {
+	return err != nil && (err.Error() == "subscribe: subscription already exists" ||
+		err.Error() == "RPC error -32000: subscribe: subscription already exists")
 }
 
 // wsRPC sends a JSON-RPC request over WebSocket and reads the response.

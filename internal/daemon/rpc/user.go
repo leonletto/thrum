@@ -144,14 +144,14 @@ func (h *UserHandler) getUserByID(userID string) (*AgentInfo, error) {
 	          FROM agents WHERE agent_id = ?`
 
 	var agent AgentInfo
-	var lastSeenAt sql.NullString
+	var display, lastSeenAt sql.NullString
 
 	err := h.state.DB().QueryRow(query, userID).Scan(
 		&agent.AgentID,
 		&agent.Kind,
 		&agent.Role,
 		&agent.Module,
-		&agent.Display,
+		&display,
 		&agent.RegisteredAt,
 		&lastSeenAt,
 	)
@@ -163,6 +163,9 @@ func (h *UserHandler) getUserByID(userID string) (*AgentInfo, error) {
 		return nil, fmt.Errorf("query user: %w", err)
 	}
 
+	if display.Valid {
+		agent.Display = display.String
+	}
 	if lastSeenAt.Valid {
 		agent.LastSeenAt = lastSeenAt.String
 	}
