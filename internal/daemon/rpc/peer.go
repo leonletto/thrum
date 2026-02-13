@@ -135,7 +135,7 @@ func (h *PeerWaitPairingHandler) Handle(_ context.Context, _ json.RawMessage) (a
 		return PeerWaitPairingResponse{
 			Status:  "timeout",
 			Message: err.Error(),
-		}, nil
+		}, err
 	}
 
 	return PeerWaitPairingResponse{
@@ -178,7 +178,7 @@ func (h *PeerJoinHandler) Handle(_ context.Context, params json.RawMessage) (any
 		return PeerJoinResponse{
 			Status:  "error",
 			Message: err.Error(),
-		}, nil
+		}, err
 	}
 
 	return PeerJoinResponse{

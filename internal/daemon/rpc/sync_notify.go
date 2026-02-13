@@ -26,7 +26,7 @@ type SyncNotifyHandler struct {
 }
 
 // NewSyncNotifyHandler creates a new sync.notify handler.
-// triggerSync is called asynchronously to pull events from the notifying peer.
+// TriggerSync is called asynchronously to pull events from the notifying peer.
 func NewSyncNotifyHandler(triggerSync SyncTriggerFunc) *SyncNotifyHandler {
 	return &SyncNotifyHandler{
 		triggerSync: triggerSync,

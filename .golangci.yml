@@ -56,6 +56,16 @@ linters:
         text: "G204"
         linters:
           - gosec
+      # Test files: allow file inclusion via variable (os.ReadFile(path))
+      - path: '_test\.go'
+        text: "G304"
+        linters:
+          - gosec
+      # Test files: allow unhandled errors (deferred cleanup, etc.)
+      - path: '_test\.go'
+        text: "G104"
+        linters:
+          - gosec
       # Test files: allow unused params (test helpers with consistent signatures)
       - path: '_test\.go'
         linters:

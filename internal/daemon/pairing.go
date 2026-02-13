@@ -114,7 +114,7 @@ func (pm *PairingManager) WaitForPairing() (*PairingResult, error) {
 	select {
 	case result := <-done:
 		if result == nil {
-			return nil, fmt.Errorf("pairing cancelled")
+			return nil, fmt.Errorf("pairing canceled")
 		}
 		return result, nil
 	case <-time.After(timeout):

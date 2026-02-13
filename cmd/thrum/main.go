@@ -4017,7 +4017,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		// peer.join — send pairing code to remote peer
 		joinFn := func(peerAddr, code string) (peerName, peerDaemonID string, err error) {
 			if tsLocalAddr == "" {
-				return "", "", fmt.Errorf("Tailscale not configured or not started")
+				return "", "", fmt.Errorf("tailscale not configured or not started")
 			}
 			peer, err := syncManager.JoinPeer(peerAddr, code, st.DaemonID(), hostname, tsLocalAddr)
 			if err != nil {
@@ -4097,7 +4097,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		if listenErr != nil {
 			return fmt.Errorf("failed to find free port for WebSocket: %w", listenErr)
 		}
-		wsPort = strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
+		tcpAddr, ok := listener.Addr().(*net.TCPAddr)
+		if !ok {
+			return fmt.Errorf("failed to get TCP address from listener")
+		}
+		wsPort = strconv.Itoa(tcpAddr.Port)
 		_ = listener.Close()
 	}
 	wsAddr := "localhost:" + wsPort
@@ -4208,7 +4212,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 						}
 
 						go func(c net.Conn) {
-							defer c.Close()
+							defer func() { _ = c.Close() }()
 							peerID := c.RemoteAddr().String()
 							syncRegistry.ServeSyncRPC(ctx, c, peerID)
 						}(conn)

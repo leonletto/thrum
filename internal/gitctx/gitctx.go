@@ -233,10 +233,10 @@ func extractFileChanges(worktreePath, baseBranch string) ([]FileChange, error) {
 
 		// Handle binary files (shows "-" for additions/deletions)
 		if parts[0] != "-" {
-			fmt.Sscanf(parts[0], "%d", &additions)
+			_, _ = fmt.Sscanf(parts[0], "%d", &additions)
 		}
 		if parts[1] != "-" {
-			fmt.Sscanf(parts[1], "%d", &deletions)
+			_, _ = fmt.Sscanf(parts[1], "%d", &deletions)
 		}
 
 		diffstatMap[filename] = struct{ additions, deletions int }{additions, deletions}

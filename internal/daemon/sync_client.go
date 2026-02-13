@@ -38,7 +38,7 @@ func (c *SyncClient) PullEvents(peerAddr string, afterSeq int64, token string) (
 	if err != nil {
 		return nil, fmt.Errorf("connect to %s: %w", peerAddr, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Set deadline for the entire exchange
 	if err := conn.SetDeadline(time.Now().Add(30 * time.Second)); err != nil {
@@ -55,7 +55,7 @@ func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, token string
 	if err != nil {
 		return fmt.Errorf("connect to %s: %w", peerAddr, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	currentSeq := afterSeq
 
@@ -93,7 +93,7 @@ func (c *SyncClient) SendNotify(peerAddr string, daemonID string, latestSeq int6
 	if err != nil {
 		return fmt.Errorf("connect to %s: %w", peerAddr, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
 		return fmt.Errorf("set deadline: %w", err)
@@ -117,7 +117,7 @@ func (c *SyncClient) QueryPeerInfo(peerAddr string, token string) (*PeerInfoResu
 	if err != nil {
 		return nil, fmt.Errorf("connect to %s: %w", peerAddr, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
 		return nil, fmt.Errorf("set deadline: %w", err)
@@ -159,7 +159,7 @@ func (c *SyncClient) RequestPairing(peerAddr, code, localDaemonID, localName, lo
 	if err != nil {
 		return nil, fmt.Errorf("cannot reach %s: %w", peerAddr, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if err := conn.SetDeadline(time.Now().Add(30 * time.Second)); err != nil {
 		return nil, fmt.Errorf("set deadline: %w", err)

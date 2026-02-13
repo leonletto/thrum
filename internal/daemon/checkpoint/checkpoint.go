@@ -70,7 +70,7 @@ func ListCheckpoints(db *sql.DB) ([]Checkpoint, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list checkpoints: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var checkpoints []Checkpoint
 	for rows.Next() {
