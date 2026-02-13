@@ -9,7 +9,7 @@ last_updated: "2026-02-10"
 
 # Agent Configurations
 
-Claude Code agent definitions teach Claude how to use Thrum and Beads effectively. These `.md` files with YAML frontmatter ship in `toolkit/agents/` and load into your project's `.claude/agents/` directory.
+Claude Code agent definitions teach Claude how to use Thrum effectively. These `.md` files with YAML frontmatter ship in `toolkit/agents/` and load into your project's `.claude/agents/` directory. For Beads task tracking, we recommend installing the [Beads plugin](#beads-plugin-recommended) instead.
 
 ## Install the agent configs
 
@@ -17,7 +17,8 @@ Copy the agent definitions to your project:
 
 ```bash
 mkdir -p .claude/agents
-cp toolkit/agents/*.md .claude/agents/
+cp toolkit/agents/thrum-agent.md .claude/agents/
+cp toolkit/agents/message-listener.md .claude/agents/
 ```
 
 Claude Code automatically detects and loads these files when you start a session.
@@ -41,22 +42,22 @@ Comprehensive guide for Thrum messaging. Teaches Claude how to register agents, 
 - Message priority handling (critical/high/normal/low)
 - Session management and heartbeats
 
-### beads-agent
+### Beads Plugin (recommended)
 
-Guide for Beads issue tracking. Teaches Claude the task lifecycle (create, claim, close), dependency management with `blocks` relationships, and context recovery after conversation compaction.
+For Beads issue tracking, **install the Beads plugin** instead of using a local agent file. The plugin provides richer functionality:
 
-**Use when:**
-- Managing feature epics with multiple subtasks
-- Tracking work across agent sessions
-- Coordinating parallel work with dependency graphs
-- Discovering side quests during implementation
+- **30+ slash commands** (`/beads:ready`, `/beads:create`, `/beads:close`, `/beads:sync`, etc.)
+- **15+ resource files** covering dependencies, workflows, troubleshooting, and more
+- **Hooks** that auto-run `bd prime` on session start for workflow context
+- **Session protocol** with CLI reference and resource links
 
-**Key capabilities:**
-- Finding ready work (unblocked tasks)
-- Creating tasks with dependencies
-- Epic-driven work breakdown
-- Git-backed sync for multi-agent coordination
-- Adding notes with documentation links
+Install the plugin in Claude Code:
+
+```
+/install-plugin beads
+```
+
+Or visit the [Beads project](https://github.com/steveyegge/beads) for details.
 
 ### message-listener
 

@@ -51,11 +51,12 @@
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
 <h1>Agent Configurations</h1>
-<p>Claude Code agent definitions teach Claude how to use Thrum and Beads effectively. These <code>.md</code> files with YAML frontmatter ship in <code>toolkit/agents/</code> and load into your project&#39;s <code>.claude/agents/</code> directory.</p>
+<p>Claude Code agent definitions teach Claude how to use Thrum effectively. These <code>.md</code> files with YAML frontmatter ship in <code>toolkit/agents/</code> and load into your project&#39;s <code>.claude/agents/</code> directory. For Beads task tracking, we recommend installing the <a href="#beads-plugin-recommended">Beads plugin</a> instead.</p>
 <h2>Install the agent configs</h2>
 <p>Copy the agent definitions to your project:</p>
 <pre><code class="language-bash hljs"><span class="hljs-built_in">mkdir</span> -p .claude/agents
-<span class="hljs-built_in">cp</span> toolkit/agents/*.md .claude/agents/</code></pre>
+<span class="hljs-built_in">cp</span> toolkit/agents/thrum-agent.md .claude/agents/
+<span class="hljs-built_in">cp</span> toolkit/agents/message-listener.md .claude/agents/</code></pre>
 <p>Claude Code automatically detects and loads these files when you start a session.</p>
 <h2>Available agents</h2>
 <h3>thrum-agent</h3>
@@ -75,23 +76,17 @@
 <li>Message priority handling (critical/high/normal/low)</li>
 <li>Session management and heartbeats</li>
 </ul>
-<h3>beads-agent</h3>
-<p>Guide for Beads issue tracking. Teaches Claude the task lifecycle (create, claim, close), dependency management with <code>blocks</code> relationships, and context recovery after conversation compaction.</p>
-<p><strong>Use when:</strong></p>
+<h3>Beads Plugin (recommended)</h3>
+<p>For Beads issue tracking, <strong>install the Beads plugin</strong> instead of using a local agent file. The plugin provides richer functionality:</p>
 <ul>
-<li>Managing feature epics with multiple subtasks</li>
-<li>Tracking work across agent sessions</li>
-<li>Coordinating parallel work with dependency graphs</li>
-<li>Discovering side quests during implementation</li>
+<li><strong>30+ slash commands</strong> (<code>/beads:ready</code>, <code>/beads:create</code>, <code>/beads:close</code>, <code>/beads:sync</code>, etc.)</li>
+<li><strong>15+ resource files</strong> covering dependencies, workflows, troubleshooting, and more</li>
+<li><strong>Hooks</strong> that auto-run <code>bd prime</code> on session start for workflow context</li>
+<li><strong>Session protocol</strong> with CLI reference and resource links</li>
 </ul>
-<p><strong>Key capabilities:</strong></p>
-<ul>
-<li>Finding ready work (unblocked tasks)</li>
-<li>Creating tasks with dependencies</li>
-<li>Epic-driven work breakdown</li>
-<li>Git-backed sync for multi-agent coordination</li>
-<li>Adding notes with documentation links</li>
-</ul>
+<p>Install the plugin in Claude Code:</p>
+<pre><code>/install-plugin beads</code></pre>
+<p>Or visit the <a href="https://github.com/steveyegge/beads">Beads project</a> for details.</p>
 <h3>message-listener</h3>
 <p>Lightweight background listener that watches for incoming Thrum messages so you<br>don&#39;t have to manually check your inbox. Runs on Haiku for cost efficiency<br>(~$0.00003/cycle). Uses <code>thrum wait</code> for efficient blocking instead of polling<br>loops — returns immediately when messages arrive, covers ~30 minutes across 6<br>cycles.</p>
 <p><strong>Use when:</strong></p>

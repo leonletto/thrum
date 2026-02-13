@@ -1,33 +1,27 @@
 # Thrum Agent Integration Files
 
-This directory contains Claude Code agent definition files for integrating Beads and Thrum into your AI-assisted development workflow.
+This directory contains Claude Code agent definition files for integrating Thrum into your AI-assisted development workflow.
 
 ## What These Are
 
-These are **agent definition files** that teach Claude Code how to use Beads (task tracking) and Thrum (agent messaging) in your project. They provide comprehensive guides on commands, workflows, and best practices.
+These are **agent definition files** that teach Claude Code how to use Thrum (agent messaging) in your project. They provide comprehensive guides on commands, workflows, and best practices.
+
+For **Beads** (task tracking), install the [Beads plugin](#beads-plugin) instead of using an agent file — the plugin provides richer functionality including 30+ slash commands, resource files, and hooks.
 
 ## Installation
 
-Copy these files to your project's `.claude/agents/` directory:
+Copy the Thrum agent files to your project's `.claude/agents/` directory:
 
 ```bash
 # From your project root
 mkdir -p .claude/agents
-cp toolkit/agents/*.md .claude/agents/
+cp toolkit/agents/thrum-agent.md .claude/agents/
+cp toolkit/agents/message-listener.md .claude/agents/
 ```
 
 Claude Code will automatically detect and load these agent definitions when you start a session.
 
 ## Files
-
-### `beads-agent.md`
-Git-backed issue tracker integration for managing complex multi-step tasks with dependencies. Use this when:
-- Managing feature epics with multiple subtasks
-- Tracking work across agent sessions
-- Coordinating parallel work with dependency graphs
-- Recovering context after session compaction
-
-Key commands: `bd ready`, `bd create`, `bd update`, `bd close`, `bd sync`
 
 ### `thrum-agent.md`
 Multi-agent coordination system for persistent messaging across sessions and worktrees. Use this when:
@@ -43,6 +37,23 @@ Key commands: `thrum quickstart`, `thrum send`, `thrum inbox`, `thrum group`, `t
 Background sub-agent that polls for incoming Thrum messages and notifies you when they arrive. Designed to run on Haiku model for cost efficiency (~$0.00003/cycle).
 
 Usage: Launch as a background task at session start to enable async message notifications.
+
+## Beads Plugin
+
+For Beads issue tracking, **install the Beads plugin** instead of using a local agent file. The plugin provides:
+
+- **SKILL.md** with session protocol, CLI reference, and resource links
+- **30+ slash commands** (`/beads:ready`, `/beads:create`, `/beads:close`, `/beads:sync`, etc.)
+- **15+ resource files** covering dependencies, workflows, troubleshooting, molecules, worktrees
+- **Hooks** that auto-run `bd prime` on session start for workflow context
+
+Install the plugin in Claude Code:
+
+```
+/install-plugin beads
+```
+
+Or visit the [Beads marketplace](https://github.com/steveyegge/beads) for manual installation.
 
 ## Integration Pattern
 
@@ -73,14 +84,14 @@ thrum send "Completed bd-123, ready for review" --to @reviewer
 
 ## Requirements
 
-- [Beads](https://github.com/beadifyio/beads) - Install with `cargo install beads-cli` or use binary releases
+- [Beads](https://github.com/steveyegge/beads) - Install the Beads plugin for Claude Code, or install the CLI with `cargo install beads-cli`
 - [Thrum](https://github.com/thrumdev/thrum) - Install with `go install github.com/thrumdev/thrum/cmd/thrum@latest` or use binary releases
 - Git repository with remote configured
 - Claude Code environment
 
 ## Customization
 
-You can edit these files to match your project's specific workflows, add custom commands, or adjust best practices for your team.
+You can edit the Thrum agent files to match your project's specific workflows, add custom commands, or adjust best practices for your team.
 
 ## Learn More
 
