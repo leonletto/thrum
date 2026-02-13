@@ -104,8 +104,8 @@ MCP server all go through it.
 commands go through the daemon via Unix socket.
 
 **Web UI** (Embedded React SPA): Provides a graphical interface for viewing
-threads, messages, and agent activity. Served from the same port as WebSocket
-(default 9999). Browser users are auto-registered via git config.
+messages and agent activity. Served from the same port as WebSocket (default
+9999). Browser users are auto-registered via git config.
 
 **MCP Server** (`thrum mcp serve`): Exposes Thrum functionality as native MCP
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
@@ -282,7 +282,7 @@ The daemon serves the WebSocket API and embedded Web UI SPA on the same port
 | **WebSocket**   | `ws://localhost:9999/ws` | Web UI, MCP waiter, real-time apps |
 | **HTTP**        | `http://localhost:9999/` | Embedded React SPA (Web UI)        |
 
-29 registered RPC methods on Unix socket (27 on WebSocket):
+26 registered RPC methods on Unix socket (24 on WebSocket):
 
 - `health` - Daemon status
 - `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`,
@@ -291,7 +291,6 @@ The daemon serves the WebSocket API and embedded Web UI SPA on the same port
   `session.setIntent`, `session.setTask`
 - `message.send`, `message.get`, `message.list`, `message.edit`,
   `message.delete`, `message.markRead`
-- `thread.create`, `thread.list`, `thread.get`
 - `subscribe`, `unsubscribe`, `subscriptions.list`
 - `sync.force`, `sync.status`
 - `user.register`, `user.identify` (user.register is WebSocket-only)
@@ -350,24 +349,65 @@ context updates.
 - Recording TODOs or questions for the next session
 - Preserving context when handing off work
 
-### 10. Composite Commands and Agent Aliases
+### 10. Understanding the CLI
 
-Composite commands combine multiple steps into a single invocation:
+Thrum has ~30 commands. Here's why that's not as many as it sounds.
 
-```bash
-thrum quickstart --name furiosa --role impl --module auth --intent "Working on auth"
-thrum overview                                # status + team + inbox in one view
-```
+#### Daily Drivers (8 commands)
 
-Agent-centric aliases provide intuitive shortcuts under `thrum agent`:
+These are the commands you'll actually use. If you're directing agents and
+checking on their work, this is your whole toolkit:
 
-```bash
-thrum agent start               # alias for session start
-thrum agent end                 # alias for session end
-thrum agent set-intent TEXT     # alias for session set-intent
-thrum agent set-task TASK       # alias for session set-task
-thrum agent heartbeat           # alias for session heartbeat
-```
+| Command    | What it does                                  |
+| ---------- | --------------------------------------------- |
+| `quickstart` | Register + start session + set intent — one step |
+| `send`       | Send a message                                |
+| `inbox`      | Check your messages                           |
+| `reply`      | Reply to a message                            |
+| `team`       | What's everyone working on?                   |
+| `overview`   | Status + team + inbox in one view             |
+| `status`     | Your current state                            |
+| `who-has`    | Who's editing this file?                      |
+
+That's it for daily use. Everything else is infrastructure.
+
+#### Designed for Agents (~16 commands)
+
+These commands exist because agents need programmatic lifecycle control. You
+rarely use them directly — `quickstart` handles the common case — but agents
+call them constantly:
+
+| Area          | Commands                           | Why agents need them                   |
+| ------------- | ---------------------------------- | -------------------------------------- |
+| Identity      | `agent register`, `agent whoami`   | Agents register on startup             |
+| Sessions      | `session start/end/heartbeat`      | Track work periods, extract git state  |
+| Work context  | `session set-intent/set-task`      | Declare what they're doing             |
+| Notifications | `subscribe`, `wait`                | Block until relevant messages arrive   |
+| Context       | `context save/show/clear`          | Persist state across compaction        |
+| Messages      | `message get/edit/delete/read`     | CRUD on individual messages            |
+| Groups        | `group create/add/remove/list`     | Organize teams programmatically        |
+| MCP           | `mcp serve`                        | Native tool access for Claude Code etc.|
+
+#### Setup & Admin (run once)
+
+`init`, `daemon start/stop`, `setup`, `migrate`, `agent delete/cleanup`,
+`sync force/status`, `runtime list/show`, `ping`
+
+#### Aliases (because agents get creative)
+
+AI agents are unpredictable in how they guess command names. An agent told to
+"start working" might try `thrum agent start` or `thrum session start`. Both
+work. These duplicates exist on purpose — they reduce friction for non-human
+users:
+
+| Alias              | Points to          | Why it exists                                 |
+| ------------------ | ------------------ | --------------------------------------------- |
+| `agent start`      | `session start`    | Agents think "I'm an agent, I should start"   |
+| `agent end`        | `session end`      | Same pattern                                  |
+| `agent set-intent` | `session set-intent` | Natural grouping under `agent`              |
+| `agent set-task`   | `session set-task`   | Same                                        |
+| `agent heartbeat`  | `session heartbeat`  | Same                                        |
+| `whoami`           | `agent whoami`     | Common enough to promote to top-level         |
 
 ## Storage Architecture
 
@@ -425,7 +465,6 @@ Thrum uses event sourcing with CQRS:
 | Feature                | Daemon Feature Used                |
 | ---------------------- | ---------------------------------- |
 | Real-time message feed | WebSocket + `notification.message` |
-| Thread view            | `thread.get` RPC                   |
 | Agent activity         | `agent.listContext` RPC            |
 | Unread counts          | `message.list` with `unread: true` |
 | Live updates           | WebSocket notifications            |

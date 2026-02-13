@@ -175,16 +175,6 @@ thrum subscribe --mention @implementer
 thrum subscriptions
 ```
 
-### Manage Threads
-
-```bash
-# Create a discussion thread
-thrum thread create "Authentication refactor discussion"
-
-# Send message to thread
-thrum send "I think we should use JWT" --thread thr_01HXE...
-```
-
 ### Sync Control
 
 ```bash

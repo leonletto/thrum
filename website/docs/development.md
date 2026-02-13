@@ -68,7 +68,7 @@ thrum/
 │   │   ├── flock_other.go   # No-op stubs (non-Unix)
 │   │   └── testutil_test.go # StartTestDaemon() helper
 │   ├── gitctx/              # Git-derived work context (branch, uncommitted files)
-│   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, thread)
+│   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, event)
 │   ├── jsonl/               # JSONL reader/writer with file locking
 │   ├── mcp/                 # MCP stdio server (5 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
@@ -286,7 +286,6 @@ even when the UI has not been built.
 Current event types handled by the projector:
 
 - `message.create`, `message.edit`, `message.delete`
-- `thread.create`
 - `agent.register`
 - `agent.session.start`, `agent.session.end`
 - `agent.update`

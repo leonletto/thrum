@@ -294,7 +294,6 @@ For each match, the dispatcher builds a notification payload:
   "method": "notification.message",
   "params": {
     "message_id": "msg_01HXE...",
-    "thread_id": "thr_01HXE...",
     "author": {
       "agent_id": "furiosa",
       "name": "furiosa",
@@ -324,30 +323,6 @@ For each match, the dispatcher builds a notification payload:
 
 - If content is 100 chars or less: Use as-is
 - If content exceeds 100 chars: Truncate to 100 chars and append `"..."`
-
-### Thread Update Notifications
-
-The dispatcher also sends `notification.thread.updated` events to all subscribed
-sessions when a thread is updated:
-
-```json
-{
-  "method": "notification.thread.updated",
-  "params": {
-    "thread_id": "thr_01HXE...",
-    "message_count": 5,
-    "unread_count": 2,
-    "last_activity": "2026-02-03T10:00:00Z",
-    "last_sender": "furiosa",
-    "preview": "Latest message text...",
-    "timestamp": "2026-02-03T10:00:00Z"
-  }
-}
-```
-
-Thread update notifications are sent to **all** sessions with any active
-subscription (not filtered by scope/mention). These are real-time only and not
-persisted to JSONL.
 
 ## Push Notifications
 
@@ -473,7 +448,6 @@ When the dispatcher finds matches, it calls `Broadcaster.Notify()` for each:
 9. Preview truncation (short, long, exact 100 chars)
 10. Disconnected client handling (auto-unregister)
 11. Broadcaster routing (Unix socket first, WebSocket fallback)
-12. Thread update notifications
 
 ### Test Patterns
 

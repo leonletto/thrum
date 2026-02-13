@@ -115,7 +115,7 @@ Both Beads and Thrum store state in Git, not in memory, databases, or external s
 
 **Offline operation.** No network dependency. Agents work in air-gapped environments, on planes, or when external services are down.
 
-**State travels with the repository.** Clone the repo, get all task history and message threads. No separate database to back up or migrate.
+**State travels with the repository.** Clone the repo, get all task history and message history. No separate database to back up or migrate.
 
 **Survives any session boundary.** Context window compaction, agent restart, machine crash, or branch switch — the state persists because it's committed to version control.
 

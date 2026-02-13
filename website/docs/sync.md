@@ -203,7 +203,7 @@ Events are sharded across multiple files:
 - `events.jsonl` -- agent lifecycle events (`agent.register`,
   `agent.session.start`, `agent.session.end`, `agent.cleanup`)
 - `messages/{agent_name}.jsonl` -- per-agent message events (`message.create`,
-  `message.edit`, `message.delete`, `thread.create`, `agent.update`)
+  `message.edit`, `message.delete`, `agent.update`)
 
 Each agent writes to its own message file (e.g., `messages/furiosa.jsonl`), so
 different agents never contend on the same file. Sharding reduces merge
@@ -358,7 +358,6 @@ The `Apply()` method dispatches on event type:
 | `message.create`      | Insert into messages, scopes, refs       |
 | `message.edit`        | Update body_content, insert edit history |
 | `message.delete`      | Set deleted=1, deleted_at                |
-| `thread.create`       | Insert into threads                      |
 | `agent.register`      | Insert/replace agent                     |
 | `agent.session.start` | Insert session                           |
 | `agent.session.end`   | Update ended_at, end_reason              |

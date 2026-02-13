@@ -463,7 +463,6 @@ Send a message to the messaging system. Triggers subscription notifications.
 | `content`    | string  | yes      | Message body text                                        |
 | `format`     | string  | no       | `"markdown"` (default), `"plain"`, or `"json"`           |
 | `structured` | object  | no       | Typed JSON payload                                       |
-| `thread_id`  | string  | no       | Thread to send message in                                |
 | `scopes`     | array   | no       | Message scopes (`[{"type": "...", "value": "..."}]`)     |
 | `refs`       | array   | no       | Message references (`[{"type": "...", "value": "..."}]`) |
 | `mentions`   | array   | no       | Mention roles (e.g., `["@reviewer"]`)                    |
@@ -477,7 +476,6 @@ Send a message to the messaging system. Triggers subscription notifications.
 | Field        | Type   | Description                                   |
 | ------------ | ------ | --------------------------------------------- |
 | `message_id` | string | Generated message ID (e.g., `"msg_01HXE..."`) |
-| `thread_id`  | string | Thread ID (present if message is in a thread) |
 | `created_at` | string | ISO 8601 creation timestamp                   |
 
 **Errors:**
@@ -505,7 +503,6 @@ Retrieve a single message by ID with full details.
 | -------------------------------- | ------- | ---------------------------------------------------- |
 | `message`                        | object  | Full message detail                                  |
 | `message.message_id`             | string  | Message ID                                           |
-| `message.thread_id`              | string  | Thread ID (empty if not in a thread)                 |
 | `message.author`                 | object  | Author information                                   |
 | `message.author.agent_id`        | string  | Author agent ID                                      |
 | `message.author.session_id`      | string  | Session ID that created the message                  |
@@ -538,7 +535,6 @@ List messages with filtering, pagination, and sorting.
 | ------------------ | ------- | -------- | -------------------------------------------------------------------------------------------------- |
 | `scope`            | object  | no       | Filter by scope (`{"type": "...", "value": "..."}`)                                                |
 | `ref`              | object  | no       | Filter by ref (`{"type": "...", "value": "..."}`)                                                  |
-| `thread_id`        | string  | no       | Filter by thread                                                                                   |
 | `author_id`        | string  | no       | Filter by author agent ID                                                                          |
 | `mentions`         | boolean | no       | Only messages mentioning current agent (resolved from config)                                      |
 | `unread`           | boolean | no       | Only unread messages (resolved from config)                                                        |
@@ -555,7 +551,6 @@ List messages with filtering, pagination, and sorting.
 | ----------------------- | ------- | ---------------------------------------------------------- |
 | `messages`              | array   | List of message summaries                                  |
 | `messages[].message_id` | string  | Message ID                                                 |
-| `messages[].thread_id`  | string  | Thread ID (empty if not in a thread)                       |
 | `messages[].agent_id`   | string  | Author agent ID                                            |
 | `messages[].body`       | object  | Message body (format, content, structured)                 |
 | `messages[].created_at` | string  | ISO 8601 creation timestamp                                |
@@ -654,113 +649,9 @@ collaboration info (other agents who also read the messages).
 - `no active session found`: Agent does not have an active session
 
 
-### thread.create
-
-Create a new conversation thread. Optionally send an initial message in the same
-call.
-
-**Request:**
-
-| Parameter            | Type    | Required | Description                                                |
-| -------------------- | ------- | -------- | ---------------------------------------------------------- |
-| `title`              | string  | yes      | Thread title                                               |
-| `scopes`             | array   | no       | Thread scopes (`[{"type": "...", "value": "..."}]`)        |
-| `recipient`          | string  | no       | Agent ID to direct initial message to (requires `message`) |
-| `message`            | object  | no       | Initial message content (requires `recipient`)             |
-| `message.content`    | string  | yes      | Message body text                                          |
-| `message.format`     | string  | no       | `"markdown"` (default), `"plain"`, or `"json"`             |
-| `message.structured` | object  | no       | Typed JSON payload                                         |
-| `acting_as`          | string  | no       | Impersonation agent ID for initial message                 |
-| `disclose`           | boolean | no       | Show via tag on initial message                            |
-
-**Response:**
-
-| Field        | Type   | Description                                                      |
-| ------------ | ------ | ---------------------------------------------------------------- |
-| `thread_id`  | string | Generated thread ID (e.g., `"thr_01HXE..."`)                     |
-| `created_at` | string | ISO 8601 creation timestamp                                      |
-| `message_id` | string | ID of initial message (present only when `message` was provided) |
-
-**Errors:**
-
-- `title is required`: Missing `title` field
-- `recipient and message must both be provided or both be nil`: Only one of
-  `recipient`/`message` given
-
-
-### thread.list
-
-List threads with pagination. Includes unread counts, last sender, and preview.
-
-**Request:**
-
-| Parameter   | Type    | Required | Description                                         |
-| ----------- | ------- | -------- | --------------------------------------------------- |
-| `scope`     | object  | no       | Filter by scope (`{"type": "...", "value": "..."}`) |
-| `page_size` | integer | no       | Items per page (default: 10, max: 100)              |
-| `page`      | integer | no       | Page number (default: 1)                            |
-
-**Response:**
-
-| Field                     | Type    | Description                                               |
-| ------------------------- | ------- | --------------------------------------------------------- |
-| `threads`                 | array   | List of thread summaries                                  |
-| `threads[].thread_id`     | string  | Thread ID                                                 |
-| `threads[].title`         | string  | Thread title                                              |
-| `threads[].message_count` | integer | Total messages in thread                                  |
-| `threads[].unread_count`  | integer | Messages not read by current agent/session                |
-| `threads[].last_activity` | string  | ISO 8601 timestamp of most recent message                 |
-| `threads[].last_sender`   | string  | Agent ID of most recent message author                    |
-| `threads[].preview`       | string  | First 100 characters of most recent message (may be null) |
-| `threads[].created_by`    | string  | Agent ID of thread creator                                |
-| `threads[].created_at`    | string  | ISO 8601 thread creation timestamp                        |
-| `total`                   | integer | Total matching threads                                    |
-| `page`                    | integer | Current page number                                       |
-| `page_size`               | integer | Items per page                                            |
-| `total_pages`             | integer | Total number of pages                                     |
-
-**Errors:**
-
-- `resolve agent and session`: Could not determine current agent (needed for
-  unread counts)
-
-
-### thread.get
-
-Get a thread's details and its paginated messages.
-
-**Request:**
-
-| Parameter   | Type    | Required | Description                               |
-| ----------- | ------- | -------- | ----------------------------------------- |
-| `thread_id` | string  | yes      | Thread ID                                 |
-| `page_size` | integer | no       | Messages per page (default: 10, max: 100) |
-| `page`      | integer | no       | Page number (default: 1)                  |
-
-**Response:**
-
-| Field               | Type    | Description                                                      |
-| ------------------- | ------- | ---------------------------------------------------------------- |
-| `thread`            | object  | Thread detail                                                    |
-| `thread.thread_id`  | string  | Thread ID                                                        |
-| `thread.title`      | string  | Thread title                                                     |
-| `thread.created_by` | string  | Agent ID of thread creator                                       |
-| `thread.created_at` | string  | ISO 8601 creation timestamp                                      |
-| `messages`          | array   | Paginated message summaries (same shape as `message.list` items) |
-| `total`             | integer | Total messages in thread                                         |
-| `page`              | integer | Current page number                                              |
-| `page_size`         | integer | Messages per page                                                |
-| `total_pages`       | integer | Total number of pages                                            |
-
-**Errors:**
-
-- `thread_id is required`: Missing `thread_id` field
-- `thread not found`: No thread with given ID
-
-
 ### group.create
 
-Create a named group for targeted messaging. Groups can contain agents, roles, or nested groups.
+Create a named group for targeted messaging. Groups can contain agents and roles.
 
 **Request:**
 
@@ -809,15 +700,15 @@ Delete a group by name. The `@everyone` group is protected and cannot be deleted
 
 ### group.member.add
 
-Add a member to a group. Members can be agents (by name), roles, or nested groups.
+Add a member to a group. Members can be agents (by name) or roles.
 
 **Request:**
 
 | Parameter     | Type   | Required | Description                              |
 | ------------- | ------ | -------- | ---------------------------------------- |
 | `group_name`  | string | yes      | Group to add member to                   |
-| `member_type` | string | yes      | `"agent"`, `"role"`, or `"group"`        |
-| `member_id`   | string | yes      | Agent name, role name, or group name     |
+| `member_type` | string | yes      | `"agent"` or `"role"`                    |
+| `member_id`   | string | yes      | Agent name or role name                  |
 
 **Response:**
 
@@ -834,7 +725,7 @@ Add a member to a group. Members can be agents (by name), roles, or nested group
 - `member_type is required`: Missing `member_type` field
 - `member_id is required`: Missing `member_id` field
 - `group not found`: No group with given name
-- `invalid member_type`: Must be `"agent"`, `"role"`, or `"group"`
+- `invalid member_type`: Must be `"agent"` or `"role"`
 
 
 ### group.member.remove
@@ -846,8 +737,8 @@ Remove a member from a group.
 | Parameter     | Type   | Required | Description                              |
 | ------------- | ------ | -------- | ---------------------------------------- |
 | `group_name`  | string | yes      | Group to remove member from              |
-| `member_type` | string | yes      | `"agent"`, `"role"`, or `"group"`        |
-| `member_id`   | string | yes      | Agent name, role name, or group name     |
+| `member_type` | string | yes      | `"agent"` or `"role"`                    |
+| `member_id`   | string | yes      | Agent name or role name                  |
 
 **Response:**
 
@@ -912,8 +803,8 @@ Get detailed information about a specific group.
 | `created_at`          | string  | ISO 8601 creation timestamp             |
 | `created_by`          | string  | Agent ID of creator                     |
 | `members`             | array   | List of member objects                  |
-| `members[].type`      | string  | `"agent"`, `"role"`, or `"group"`       |
-| `members[].id`        | string  | Agent name, role name, or group name    |
+| `members[].type`      | string  | `"agent"` or `"role"`                   |
+| `members[].id`        | string  | Agent name or role name                 |
 | `members[].added_at`  | string  | ISO 8601 timestamp when member was added|
 
 **Errors:**
@@ -924,14 +815,14 @@ Get detailed information about a specific group.
 
 ### group.members
 
-Get members of a group with optional recursive expansion. When `expand` is `true`, recursively resolves nested groups and roles to individual agent IDs.
+Get members of a group with optional expansion. When `expand` is `true`, resolves roles to individual agent IDs.
 
 **Request:**
 
 | Parameter | Type    | Required | Description                                          |
 | --------- | ------- | -------- | ---------------------------------------------------- |
 | `name`    | string  | yes      | Group name                                           |
-| `expand`  | boolean | no       | Recursively resolve to agent IDs (default: `false`)  |
+| `expand`  | boolean | no       | Resolve roles to agent IDs (default: `false`)        |
 
 **Response (without expand):**
 
@@ -939,8 +830,8 @@ Get members of a group with optional recursive expansion. When `expand` is `true
 | ---------------- | ------ | ------------------------------------- |
 | `name`           | string | Group name                            |
 | `members`        | array  | List of direct member objects         |
-| `members[].type` | string | `"agent"`, `"role"`, or `"group"`     |
-| `members[].id`   | string | Agent name, role name, or group name  |
+| `members[].type` | string | `"agent"` or `"role"`                 |
+| `members[].id`   | string | Agent name or role name               |
 
 **Response (with expand=true):**
 
@@ -954,7 +845,6 @@ Get members of a group with optional recursive expansion. When `expand` is `true
 
 - `name is required`: Missing `name` field
 - `group not found`: No group with given name
-- `circular group reference detected`: Nested groups form a cycle
 
 
 ### subscribe
@@ -1109,7 +999,6 @@ When a message matches a subscription, the daemon sends a JSON-RPC notification
   "method": "notification.message",
   "params": {
     "message_id": "msg_01HXE...",
-    "thread_id": "thr_01HXE...",
     "author": {
       "agent_id": "agent:implementer:auth:ABC",
       "role": "implementer",

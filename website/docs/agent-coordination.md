@@ -419,9 +419,6 @@ thrum inbox --unread
 # Check what others are working on
 thrum agent list --context
 
-# Review thread history
-thrum thread list
-
 # Check Beads for task state
 bd ready
 bd list --status=in_progress
@@ -433,6 +430,6 @@ bd list --status=in_progress
 - [Tailscale Sync](tailscale-sync.md) -- cross-machine sync via Tailscale
 - [CLI Reference](cli.md) -- complete command documentation
 - [MCP Server](mcp-server.md) -- MCP tools and message-listener details
-- [Messaging System](messaging.md) -- message structure and threading
+- [Messaging System](messaging.md) -- message structure and scopes
 - [Quickstart Guide](quickstart.md) -- getting started in 5 minutes
 - [Identity System](identity.md) -- agent names and registration

@@ -41,7 +41,7 @@ thrum inbox
 │  CLI (thrum)       │  Daemon           │  Web UI (React) │
 │  - send/inbox      │  - Unix socket    │  - Embedded SPA  │
 │  - agent/session   │  - WebSocket      │  - Live feed     │
-│  - threads         │  - Git sync (60s) │  - Inbox view    │
+│  - reply           │  - Git sync (60s) │  - Inbox view    │
 │  - coordination    │  - Heartbeat      │  - Agent list    │
 ├──────────────────────────────────────────────────────────┤
 │  MCP Server (thrum mcp serve)                            │
@@ -63,8 +63,8 @@ thrum inbox
 
 ## Features
 
-- **Messaging** — Send, reply, threads, @mentions, priority levels
-- **Agent Groups** — Create groups for targeted messaging, nested groups supported, built-in `@everyone` group
+- **Messaging** — Send, reply, @mentions, priority levels
+- **Agent Groups** — Create groups for targeted messaging, built-in `@everyone` group
 - **Agent Coordination** — Register agents, track sessions, set work context, heartbeats
 - **File Coordination** — `thrum who-has <file>` to see which agents are editing what
 - **Web UI** — Real-time dashboard with live feed, inbox, agent list (embedded in binary)
@@ -112,8 +112,7 @@ make install    # Builds UI + Go binary → ~/.local/bin/thrum
 | `thrum quickstart --name NAME --role ROLE` | Register agent and start session |
 | `thrum send "message" --to @name` | Send a message to an agent |
 | `thrum inbox` | View messages (read/unread indicators) |
-| `thrum reply MSG_ID "response"` | Reply to a message (auto-threads) |
-| `thrum thread list` | List active conversation threads |
+| `thrum reply MSG_ID "response"` | Reply to a message |
 | `thrum who-has FILE` | Check which agents are editing a file |
 | `thrum overview` | Combined status, team, inbox, and sync view |
 | `thrum mcp serve` | Start MCP server for AI agent integration |

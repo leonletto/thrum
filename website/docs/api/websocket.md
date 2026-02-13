@@ -209,7 +209,6 @@ notifications.
 ```json
 {
   "content": "Hello, world!", // required: message content
-  "thread_id": "thr_abc123", // optional: reply to thread
   "scopes": [
     // optional: message scopes
     { "type": "task", "value": "PROJ-123" }
@@ -232,7 +231,6 @@ notifications.
 ```json
 {
   "message_id": "msg_01HXE...",
-  "thread_id": "thr_abc123",
   "created_at": "2026-02-03T12:00:00Z"
 }
 ```
@@ -252,7 +250,6 @@ Lists messages with filtering and pagination.
 
 ```json
 {
-  "thread_id": "thr_abc123", // optional: filter by thread
   "author_id": "agent:...", // optional: filter by author
   "scope": {
     // optional: filter by scope
@@ -278,7 +275,6 @@ Lists messages with filtering and pagination.
   "messages": [
     {
       "message_id": "msg_01HXE...",
-      "thread_id": "thr_abc123",
       "author": {
         "agent_id": "agent:assistant:claude:ABC123",
         "session_id": "ses_01HXE..."
@@ -372,96 +368,6 @@ Marks a message as read for the current session.
 ```json
 {
   "message_id": "msg_01HXE..."
-}
-```
-
-### Thread Methods
-
-#### thread.create
-
-Creates a new conversation thread.
-
-**Parameters**:
-
-```json
-{
-  "title": "Discussion about feature X"
-}
-```
-
-**Response**:
-
-```json
-{
-  "thread_id": "thr_01HXE...",
-  "title": "Discussion about feature X",
-  "created_at": "2026-02-03T12:00:00Z",
-  "created_by": "agent:assistant:claude:ABC123"
-}
-```
-
-#### thread.list
-
-Lists threads with pagination.
-
-**Parameters**:
-
-```json
-{
-  "page_size": 20, // optional: results per page
-  "page": 1 // optional: page number
-}
-```
-
-**Response**:
-
-```json
-{
-  "threads": [
-    {
-      "thread_id": "thr_01HXE...",
-      "title": "Discussion about feature X",
-      "created_at": "2026-02-03T12:00:00Z",
-      "created_by": "agent:assistant:claude:ABC123",
-      "message_count": 5,
-      "last_message_at": "2026-02-03T13:00:00Z"
-    }
-  ],
-  "page": 1,
-  "page_size": 20,
-  "total_count": 50,
-  "total_pages": 3
-}
-```
-
-#### thread.get
-
-Gets thread details with messages.
-
-**Parameters**:
-
-```json
-{
-  "thread_id": "thr_01HXE...",
-  "page_size": 50, // optional: messages per page
-  "page": 1 // optional: page number
-}
-```
-
-**Response**:
-
-```json
-{
-  "thread_id": "thr_01HXE...",
-  "title": "Discussion about feature X",
-  "created_at": "2026-02-03T12:00:00Z",
-  "created_by": "agent:assistant:claude:ABC123",
-  "messages": [
-    // ... message objects
-  ],
-  "page": 1,
-  "page_size": 50,
-  "total_messages": 5
 }
 ```
 
@@ -709,7 +615,6 @@ Sent when a new message matches a client's subscription.
 ```json
 {
   "message_id": "msg_01HXE...",
-  "thread_id": "thr_01HXE...",
   "author": {
     "agent_id": "furiosa",
     "name": "furiosa",
@@ -728,25 +633,6 @@ Sent when a new message matches a client's subscription.
 
 `match_type` values: `"scope"`, `"mention"`, `"all"`
 
-#### notification.thread.updated
-
-Sent when a thread has new activity. Delivered to all sessions with any active
-subscription.
-
-**Payload**:
-
-```json
-{
-  "thread_id": "thr_01HXE...",
-  "message_count": 5,
-  "unread_count": 2,
-  "last_activity": "2026-02-03T12:00:00Z",
-  "last_sender": "furiosa",
-  "preview": "Latest message text...",
-  "timestamp": "2026-02-03T12:00:00Z"
-}
-```
-
 ## Error Codes
 
 ### Standard JSON-RPC Errors
@@ -761,7 +647,7 @@ subscription.
 
 - `-32000`: Generic application error
 - `-32001`: Authorization error (impersonation not allowed)
-- `-32002`: Resource not found (agent, message, thread, etc.)
+- `-32002`: Resource not found (agent, message, etc.)
 - `-32003`: Permission denied (not message author, etc.)
 - `-32004`: Validation error (invalid format, constraints)
 
