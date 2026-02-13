@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 12
+const CurrentVersion = 13
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -137,10 +137,10 @@ func createTables(tx *sql.Tx) error {
 			kind       TEXT NOT NULL,
 			role       TEXT NOT NULL,
 			module     TEXT NOT NULL,
-			display    TEXT,
-			hostname   TEXT,
+			display    TEXT NOT NULL DEFAULT '',
+			hostname   TEXT NOT NULL DEFAULT '',
 			registered_at TEXT NOT NULL,
-			last_seen_at TEXT
+			last_seen_at TEXT NOT NULL DEFAULT ''
 		)`,
 
 		// Sessions table
@@ -598,6 +598,28 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		if err != nil {
 			return fmt.Errorf("drop idx_messages_thread: %w", err)
 		}
+	}
+
+	// Migration from version 12 to 13: Backfill NULL display/hostname/last_seen_at in agents
+	if startVersion < 13 && endVersion >= 13 {
+		var agentsExists string
+		if err := tx.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='agents'").Scan(&agentsExists); err == nil {
+			_, err = tx.Exec(`UPDATE agents SET display = '' WHERE display IS NULL`)
+			if err != nil {
+				return fmt.Errorf("backfill agents display: %w", err)
+			}
+			_, err = tx.Exec(`UPDATE agents SET hostname = '' WHERE hostname IS NULL`)
+			if err != nil {
+				return fmt.Errorf("backfill agents hostname: %w", err)
+			}
+			_, err = tx.Exec(`UPDATE agents SET last_seen_at = '' WHERE last_seen_at IS NULL`)
+			if err != nil {
+				return fmt.Errorf("backfill agents last_seen_at: %w", err)
+			}
+		}
+		// Note: SQLite doesn't support ALTER COLUMN to add NOT NULL or DEFAULT
+		// to existing columns. New databases get the correct constraints from
+		// createTables(). Existing databases have NULLs backfilled above.
 	}
 
 	// Update schema version

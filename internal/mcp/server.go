@@ -90,7 +90,7 @@ func (s *Server) SetWaiter(w *Waiter) {
 // WsURL should be like "ws://localhost:9999/ws". If the WebSocket is not
 // available, the MCP server still works — wait_for_message returns an error.
 func (s *Server) InitWaiter(ctx context.Context, wsURL string) error {
-	w, err := NewWaiter(ctx, s.socketPath, s.agentRole, wsURL)
+	w, err := NewWaiter(ctx, s.socketPath, s.agentID, s.agentRole, wsURL)
 	if err != nil {
 		return err
 	}

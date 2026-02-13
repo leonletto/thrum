@@ -336,7 +336,6 @@ All commands accept these flags:
   Session     A work period for an agent. Tracks scopes, refs, heartbeats.
   Role        Agent's function (e.g., implementer, reviewer, planner).
   Module      Component the agent is responsible for (e.g., auth, db, ui).
-  Thread      A named conversation grouping messages (RPC-only, no CLI commands).
   Group       Named collection of agents, roles, or other groups for targeted messaging.
   Scope       Routing metadata on messages (format: type:value, e.g., module:auth).
   Ref         Reference metadata (format: type:value, e.g., pr:42, mention:reviewer).

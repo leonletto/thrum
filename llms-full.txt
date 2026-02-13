@@ -70,13 +70,6 @@ Both transports expose the same set of RPC methods.
   authored_by     string    Actual author if impersonating (users only)
   disclosed       bool      Whether to show impersonation in UI
 
-### Thread
-
-  thread_id       string    Unique ID (format: thr_ + ULID)
-  title           string    Thread title
-  created_by      string    Agent ID of creator
-  created_at      string    ISO 8601 timestamp
-
 ### Agent
 
   agent_id        string    Deterministic ID (format: agent:role:hash)
@@ -157,10 +150,9 @@ Both transports expose the same set of RPC methods.
   User:     user: + username
   Session:  ses_ + ULID
   Message:  msg_ + ULID
-  Thread:   thr_ + ULID
 
 Repo and Agent IDs are deterministic (same inputs = same ID).
-Session, Message, and Thread IDs use ULID (time-ordered, unique).
+Session and Message IDs use ULID (time-ordered, unique).
 
 ## Global Flags
 
@@ -825,27 +817,6 @@ All methods use JSON-RPC 2.0 protocol.
   Notes:     Batch support. also_read_by maps message_id to list of other agent_ids
              that also read the message.
 
-### thread.create (RPC only, no CLI command)
-
-  Request:   { title, scopes?, recipient?, message?, acting_as?, disclose? }
-  Response:  { thread_id, created_at, message_id? }
-  Notes:     recipient and message must both be provided or both omitted.
-             message: { content, format?, structured? }
-
-### thread.list (RPC only, no CLI command)
-
-  Request:   { scope?, page_size?, page? }
-  Response:  { threads: [{ thread_id, title, message_count, unread_count,
-               last_activity, last_sender, preview?, created_by, created_at }],
-               total, page, page_size, total_pages }
-
-### thread.get (RPC only, no CLI command)
-
-  Request:   { thread_id, page_size?, page? }
-  Response:  { thread: { thread_id, title, created_by, created_at },
-               messages: [MessageSummary], total, page, page_size, total_pages }
-  Notes:     Messages sorted chronologically (ASC).
-
 ### subscribe
 
   Request:   { scope?, mention_role?, all? }
@@ -933,9 +904,10 @@ All methods use JSON-RPC 2.0 protocol.
 
 ### user.identify (WebSocket only)
 
-  Request:   { token }
-  Response:  { user_id, username, display }
-  Notes:     Re-identifies a previously registered WebSocket user by token.
+  Request:   {} (no params)
+  Response:  { username, email, display }
+  Notes:     Returns the git user.name and user.email from the repo's git config.
+             Username is sanitized (lowercase, alphanumeric + hyphens).
 
 ## Event Types (JSONL)
 
@@ -951,7 +923,6 @@ Events stored in sharded JSONL files within `.git/thrum-sync/a-sync` worktree:
     message.create        New message
     message.edit          Message content update
     message.delete        Message soft-deletion
-    thread.create         New thread
     agent.update          Work context snapshot
     group.create          Group created
     group.delete          Group deleted
@@ -1130,9 +1101,6 @@ Unknown event types are silently ignored (forward compatibility).
 
   notification.message     Sent when a message matches a subscription
     { message_id, preview, matched_subscription: { match_type } }
-
-  thread.updated           Sent when a thread has new activity
-    { thread_id, message_count, unread_count, last_activity, last_sender, preview }
 
 ### Health Endpoint
 
@@ -1337,7 +1305,6 @@ Unknown event types are silently ignored (forward compatibility).
   message_refs        Message reference associations (many-to-many)
   message_reads       Read receipts (per message, per session/agent)
   message_edits       Edit history
-  threads             Thread metadata
   agents              Registered agents and users
   sessions            Agent work sessions
   session_scopes      Session scope associations
