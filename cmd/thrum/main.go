@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"bufio"
 	"io"
 	"io/fs"
 	"net"
@@ -11,12 +12,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/runtime"
+	"golang.org/x/term"
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
@@ -146,12 +149,11 @@ func initCmd() *cobra.Command {
 Creates the .thrum/ directory structure, sets up the a-sync branch for
 message synchronization, and updates .gitignore.
 
-When --runtime is specified, also generates runtime-specific configuration
-files (MCP settings, startup hooks, instructions) for the target AI coding
-agent. Supported runtimes: claude, codex, cursor, gemini, cli-only, all.
+Detects installed AI runtimes and prompts you to select one (interactive).
+When --runtime is specified, uses that runtime directly without prompting.
 
 Examples:
-  thrum init                          # Initialize repo only
+  thrum init                          # Init + interactive runtime selection
   thrum init --runtime claude         # Init + generate Claude configs
   thrum init --runtime codex --force  # Init + overwrite Codex configs
   thrum init --runtime all --dry-run  # Preview all runtime configs`,
@@ -169,6 +171,7 @@ Examples:
 			}
 
 			// Step 1: Repo initialization (unless dry-run or runtime-only)
+			alreadyInitialized := false
 			if !dryRun {
 				opts := cli.InitOptions{
 					RepoPath: flagRepo,
@@ -176,9 +179,9 @@ Examples:
 				}
 
 				if err := cli.Init(opts); err != nil {
-					// If already initialized and we have a runtime flag, continue
-					if runtimeFlag != "" && strings.Contains(err.Error(), "already exists") {
-						// Repo exists, just generate runtime configs
+					if strings.Contains(err.Error(), "already exists") {
+						alreadyInitialized = true
+						// Continue to runtime selection/config generation
 					} else {
 						return err
 					}
@@ -191,18 +194,77 @@ Examples:
 				}
 			}
 
-			// Step 2: Runtime config generation
-			if runtimeFlag != "" {
-				// Auto-detect if not specified explicitly
-				if runtimeFlag == "" {
-					runtimeFlag = runtime.DetectRuntime(flagRepo)
-				}
+			// Step 2: Runtime selection
+			selectedRuntime := runtimeFlag
+			if selectedRuntime == "" {
+				// Detect all runtimes
+				detected := runtime.DetectAllRuntimes(flagRepo)
 
+				if len(detected) > 0 && isInteractive() && !flagQuiet {
+					// Interactive prompt
+					fmt.Println()
+					fmt.Println("Detected AI runtimes:")
+					for i, d := range detected {
+						displayName := d.Name
+						if preset, err := runtime.GetPreset(d.Name); err == nil {
+							displayName = preset.DisplayName
+						}
+						fmt.Printf("  %d. %-14s (%s)\n", i+1, displayName, d.Source)
+					}
+					fmt.Println()
+					fmt.Printf("Which is your primary runtime? [1]: ")
+
+					reader := bufio.NewReader(os.Stdin)
+					input, _ := reader.ReadString('\n')
+					input = strings.TrimSpace(input)
+
+					choice := 1
+					if input != "" {
+						if n, err := strconv.Atoi(input); err == nil && n >= 1 && n <= len(detected) {
+							choice = n
+						} else {
+							return fmt.Errorf("invalid selection %q; enter a number 1-%d", input, len(detected))
+						}
+					}
+					selectedRuntime = detected[choice-1].Name
+				} else if len(detected) > 0 {
+					// Non-interactive: use first detected
+					selectedRuntime = detected[0].Name
+					if !flagQuiet {
+						fmt.Printf("✓ Auto-detected runtime: %s\n", selectedRuntime)
+					}
+				} else {
+					// No runtimes detected
+					selectedRuntime = "cli-only"
+					if !flagQuiet {
+						fmt.Println("✓ No AI runtimes detected, using cli-only mode")
+					}
+				}
+			}
+
+			// Step 3: Save runtime selection to config.json
+			if !dryRun && selectedRuntime != "" {
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+				cfg, err := config.LoadThrumConfig(thrumDir)
+				if err != nil {
+					cfg = &config.ThrumConfig{}
+				}
+				cfg.Runtime.Primary = selectedRuntime
+				if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+					return fmt.Errorf("failed to save config: %w", err)
+				}
+				if !flagQuiet {
+					fmt.Printf("✓ Runtime saved to .thrum/config.json (primary: %s)\n", selectedRuntime)
+				}
+			}
+
+			// Step 4: Runtime config generation (if not cli-only)
+			if selectedRuntime != "" && selectedRuntime != "cli-only" {
 				rtOpts := cli.RuntimeInitOptions{
 					RepoPath:  flagRepo,
-					Runtime:   runtimeFlag,
+					Runtime:   selectedRuntime,
 					DryRun:    dryRun,
-					Force:     force,
+					Force:     force || alreadyInitialized,
 					AgentName: agentName,
 					AgentRole: agentRole,
 					AgentMod:  agentModule,
@@ -217,11 +279,13 @@ Examples:
 					output, _ := json.MarshalIndent(result, "", "  ")
 					fmt.Println(string(output))
 				} else if !flagQuiet {
-					if !dryRun {
-						fmt.Println()
-					}
 					fmt.Print(cli.FormatRuntimeInit(result))
 				}
+			}
+
+			if !flagQuiet && !dryRun {
+				fmt.Println()
+				fmt.Println("Config saved to .thrum/config.json — edit anytime to change")
 			}
 
 			return nil
@@ -236,6 +300,11 @@ Examples:
 	cmd.Flags().String("agent-module", "", "Agent module for templates (default: main)")
 
 	return cmd
+}
+
+// isInteractive returns true if stdin is a terminal (not piped/redirected).
+func isInteractive() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 func migrateCmd() *cobra.Command {
@@ -3702,6 +3771,18 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "Warning: sync worktree not found at %s (sync disabled)\n", syncDir)
 	}
 
+	// Load config.json (used for local-only, sync interval, WS port)
+	thrumCfg, cfgErr := config.LoadThrumConfig(thrumDir)
+	if cfgErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to read config.json: %v\n", cfgErr)
+		thrumCfg = &config.ThrumConfig{
+			Daemon: config.DaemonConfig{
+				SyncInterval: config.DefaultSyncInterval,
+				WSPort:       config.DefaultWSPort,
+			},
+		}
+	}
+
 	// Resolve local-only mode: CLI flag > env var > config file > default
 	localOnly := flagLocal
 	localOnlyFromExplicit := flagLocal // track if set via flag or env (not config)
@@ -3711,18 +3792,13 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			localOnlyFromExplicit = true
 		}
 	}
-	if !localOnly {
-		thrumCfg, cfgErr := config.LoadThrumConfig(thrumDir)
-		if cfgErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to read config.json: %v\n", cfgErr)
-		} else if thrumCfg.Daemon.LocalOnly {
-			localOnly = true
-		}
+	if !localOnly && thrumCfg.Daemon.LocalOnly {
+		localOnly = true
 	}
 	// Persist to config.json when set explicitly via flag or env var
 	if localOnlyFromExplicit {
-		cfg := &config.ThrumConfig{Daemon: config.DaemonConfig{LocalOnly: true}}
-		if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+		thrumCfg.Daemon.LocalOnly = true
+		if err := config.SaveThrumConfig(thrumDir, thrumCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to save config.json: %v\n", err)
 		}
 	}
@@ -3730,12 +3806,20 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "  Mode:        local-only (remote sync disabled)\n")
 	}
 
+	// Resolve sync interval: env var > config.json > default
+	syncInterval := time.Duration(thrumCfg.Daemon.SyncInterval) * time.Second
+	if envInterval := os.Getenv("THRUM_SYNC_INTERVAL"); envInterval != "" {
+		if n, err := strconv.Atoi(envInterval); err == nil && n > 0 {
+			syncInterval = time.Duration(n) * time.Second
+		}
+	}
+
 	// Create sync loop for periodic git sync
 	ctx := context.Background()
 	var syncLoop *thrumSync.SyncLoop
 	if _, err := os.Stat(syncDir); err == nil {
 		syncer := thrumSync.NewSyncer(absPath, syncDir, localOnly)
-		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, 60*time.Second, localOnly)
+		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, syncInterval, localOnly)
 		if err := syncLoop.Start(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to start sync loop: %v\n", err)
 		} else {
@@ -3955,10 +4039,19 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("user.register", userHandler.HandleRegister)
 	server.RegisterHandler("user.identify", userHandler.HandleIdentify)
 
-	// Create WebSocket server (shares handlers with Unix socket)
+	// Resolve WS port: env var > config.json > default ("auto" = find free port)
 	wsPort := os.Getenv("THRUM_WS_PORT")
 	if wsPort == "" {
-		wsPort = "9999"
+		wsPort = thrumCfg.Daemon.WSPort
+	}
+	if wsPort == "" || wsPort == "auto" {
+		// Find a free port
+		listener, listenErr := net.Listen("tcp", "localhost:0")
+		if listenErr != nil {
+			return fmt.Errorf("failed to find free port for WebSocket: %w", listenErr)
+		}
+		wsPort = strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
+		_ = listener.Close()
 	}
 	wsAddr := "localhost:" + wsPort
 

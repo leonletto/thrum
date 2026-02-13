@@ -7,7 +7,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.2.0
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/time v0.12.0
+	golang.org/x/term v0.38.0
 	modernc.org/sqlite v1.44.3
 	tailscale.com v1.94.1
 )
@@ -73,8 +73,8 @@ require (
 	golang.org/x/oauth2 v0.32.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
-	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/time v0.12.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	gvisor.dev/gvisor v0.0.0-20250205023644-9414b50a5633 // indirect
