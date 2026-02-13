@@ -9,13 +9,27 @@ import (
 
 // ThrumConfig represents the top-level .thrum/config.json file.
 type ThrumConfig struct {
-	Daemon DaemonConfig `json:"daemon"`
+	Runtime RuntimeConfig `json:"runtime"`
+	Daemon  DaemonConfig  `json:"daemon"`
+}
+
+// RuntimeConfig holds runtime selection preferences.
+type RuntimeConfig struct {
+	Primary string `json:"primary,omitempty"` // "claude", "auggie", "cursor", etc.
 }
 
 // DaemonConfig holds daemon-specific settings.
 type DaemonConfig struct {
-	LocalOnly bool `json:"local_only"`
+	LocalOnly    bool   `json:"local_only,omitempty"`
+	SyncInterval int    `json:"sync_interval,omitempty"` // seconds; 0 means use default (60)
+	WSPort       string `json:"ws_port,omitempty"`       // "auto" or specific port number
 }
+
+// DefaultSyncInterval is the default git sync interval in seconds.
+const DefaultSyncInterval = 60
+
+// DefaultWSPort is the default WebSocket port strategy.
+const DefaultWSPort = "auto"
 
 // LoadThrumConfig reads .thrum/config.json from the given thrum directory.
 // Returns a zero-value ThrumConfig (all defaults) if the file doesn't exist.
@@ -25,7 +39,9 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 	data, err := os.ReadFile(configPath) //nolint:gosec // G304 - path from internal thrum directory
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return &ThrumConfig{}, nil
+			cfg := &ThrumConfig{}
+			applyDefaults(cfg)
+			return cfg, nil
 		}
 		return nil, err
 	}
@@ -35,7 +51,18 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 		return nil, err
 	}
 
+	applyDefaults(&cfg)
 	return &cfg, nil
+}
+
+// applyDefaults fills in sensible defaults for zero-value fields.
+func applyDefaults(cfg *ThrumConfig) {
+	if cfg.Daemon.SyncInterval == 0 {
+		cfg.Daemon.SyncInterval = DefaultSyncInterval
+	}
+	if cfg.Daemon.WSPort == "" {
+		cfg.Daemon.WSPort = DefaultWSPort
+	}
 }
 
 // SaveThrumConfig writes .thrum/config.json, merging with any existing content.
@@ -49,7 +76,18 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 		_ = json.Unmarshal(data, &existing) // best-effort; overwrite if corrupt
 	}
 
-	// Marshal the daemon section and merge it in
+	// Marshal and merge the runtime section (only if non-empty)
+	if cfg.Runtime.Primary != "" {
+		runtimeBytes, err := json.Marshal(cfg.Runtime)
+		if err != nil {
+			return err
+		}
+		var runtimeMap any
+		_ = json.Unmarshal(runtimeBytes, &runtimeMap)
+		existing["runtime"] = runtimeMap
+	}
+
+	// Marshal and merge the daemon section
 	daemonBytes, err := json.Marshal(cfg.Daemon)
 	if err != nil {
 		return err
