@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Coordination — Thrum</title>
+  <meta name="description" content="Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Agent Coordination — Thrum">
+  <meta property="og:description" content="Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/agent-coordination.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Agent Coordination — Thrum">
+  <meta name="twitter:description" content="Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#agent-coordination.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Agent Coordination</h1>
+<p>Thrum helps you coordinate multiple AI agents across sessions, worktrees, and<br>machines. This guide covers practical coordination patterns, integration with<br>the Beads issue tracker, and session workflow templates.</p>
+<blockquote>
+<p>For the philosophy behind this approach — why you direct the work instead of<br>handing it off — see <a href="philosophy.html">Why Thrum Exists</a>.</p>
+</blockquote>
+<h2>Coordination Methods</h2>
+<p>Thrum supports two integration methods for agent coordination:</p>
+<h3>MCP Server (Recommended)</h3>
+<p>Native tool integration with async message notifications. Best for Claude Code<br>agents.</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;mcpServers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;thrum&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;stdio&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;command&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;args&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;mcp&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;serve&quot;</span><span class="hljs-punctuation">]</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p>MCP tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, <code>list_agents</code>,<br><code>broadcast_message</code>.</p>
+<h3>CLI (Fallback)</h3>
+<p>Shell commands for basic messaging. Works everywhere.</p>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Starting work on task X&quot;</span> --to @coordinator
+thrum inbox --unread
+thrum reply &lt;msg-id&gt; <span class="hljs-string">&quot;Here&#x27;s my update&quot;</span></code></pre>
+<h2>Common Workflows</h2>
+<h3>Planner-Implementer Coordination</h3>
+<p>The most common pattern: a planner agent assigns work and an implementer<br>executes it.</p>
+<p><strong>Planner:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Register as planner</span>
+thrum quickstart --name planner --role planner --module website \
+  --intent <span class="hljs-string">&quot;Coordinating website development&quot;</span>
+
+<span class="hljs-comment"># Assign task via message</span>
+thrum send <span class="hljs-string">&quot;Please implement build script (task thrum-235d.3). \
+  Design spec in docs/plans/. Check beads for details.&quot;</span> \
+  --to @implementer --priority high
+
+<span class="hljs-comment"># Check for updates</span>
+thrum inbox</code></pre>
+<p><strong>Implementer:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Register</span>
+thrum quickstart --name implementer --role implementer --module website \
+  --intent <span class="hljs-string">&quot;Implementing website features&quot;</span>
+
+<span class="hljs-comment"># Check inbox for assignments</span>
+thrum inbox --unread
+
+<span class="hljs-comment"># Acknowledge and work</span>
+thrum reply &lt;msg-id&gt; <span class="hljs-string">&quot;Claimed task. Starting implementation.&quot;</span>
+
+<span class="hljs-comment"># Send completion update</span>
+thrum send <span class="hljs-string">&quot;Build script complete. Tests passing. Ready for review.&quot;</span> \
+  --to @planner</code></pre>
+<h3>Peer Collaboration</h3>
+<p>Agents working on related areas coordinate to avoid conflicts.</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Agent A: Announce work area</span>
+thrum send <span class="hljs-string">&quot;Starting work on auth module&quot;</span> --broadcast
+
+<span class="hljs-comment"># Agent B: Check file ownership before editing</span>
+thrum who-has src/auth/login.ts
+<span class="hljs-comment"># Output: @agent_a is editing src/auth/login.ts</span>
+
+<span class="hljs-comment"># Agent B: Coordinate via message</span>
+thrum send <span class="hljs-string">&quot;Need to edit login.ts for validation. ETA?&quot;</span> --to @agent_a</code></pre>
+<h3>Code Review</h3>
+<p>Request and respond to code reviews via messaging.</p>
+<p><strong>Implementer:</strong></p>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Build script complete (commit abc123). Please review:
+- Markdown processing
+- Search index generation
+- Error handling
+
+Tests passing. Beads task: thrum-235d.3&quot;</span> --to @reviewer --priority high</code></pre>
+<p><strong>Reviewer:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Check inbox</span>
+thrum inbox --unread
+
+<span class="hljs-comment"># Review the code, then respond</span>
+thrum reply &lt;msg-id&gt; <span class="hljs-string">&quot;Reviewed. Found 2 issues:
+1. Missing error handling in parseMarkdown()
+2. Search index doesn&#x27;t handle compound terms
+
+See beads: thrum-abc (bug filed). Otherwise looks good.&quot;</span></code></pre>
+<h3>Multi-Worktree Coordination</h3>
+<p>Agents in different git worktrees share the same daemon and message store.</p>
+<p><strong>Agent in main worktree:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> /path/to/repo
+<span class="hljs-built_in">export</span> THRUM_NAME=main_agent
+thrum quickstart --name main_agent --role coordinator --module main \
+  --intent <span class="hljs-string">&quot;Main branch coordination&quot;</span>
+
+thrum send <span class="hljs-string">&quot;Feature branch ready for integration testing&quot;</span> --to @feature_agent</code></pre>
+<p><strong>Agent in feature worktree:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> ~/.workspaces/repo/feature
+thrum setup --main-repo /path/to/repo
+<span class="hljs-built_in">export</span> THRUM_NAME=feature_agent
+thrum quickstart --name feature_agent --role implementer --module feature \
+  --intent <span class="hljs-string">&quot;Feature implementation&quot;</span>
+
+<span class="hljs-comment"># Check inbox (sees messages from main_agent)</span>
+thrum inbox</code></pre>
+<h2>Message-Listener Pattern</h2>
+<p>For async message handling, spawn a background sub-agent that listens for<br>incoming messages and notifies the main agent when they arrive.</p>
+<h3>How It Works</h3>
+<ol>
+<li>The main agent spawns a message-listener as a background task</li>
+<li>The listener polls <code>thrum inbox --unread</code> on a loop with sleep intervals</li>
+<li>When a message arrives, the listener returns immediately with the message<br>content</li>
+<li>The main agent processes the message and re-arms the listener</li>
+</ol>
+<h3>Return Format</h3>
+<p>When messages are received:</p>
+<pre><code>MESSAGES_RECEIVED
+---
+FROM: [sender]
+PRIORITY: [priority]
+CONTENT: [message content]
+TIMESTAMP: [timestamp]
+---</code></pre>
+<p>When timeout occurs with no messages:</p>
+<pre><code>NO_MESSAGES_TIMEOUT</code></pre>
+<h3>Priority Handling</h3>
+<p>When the main agent receives messages from the listener:</p>
+<table>
+<thead>
+<tr>
+<th>Priority</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>critical</code></td>
+<td>Stop current work immediately</td>
+</tr>
+<tr>
+<td><code>high</code></td>
+<td>Process at next breakpoint</td>
+</tr>
+<tr>
+<td><code>normal</code></td>
+<td>Process when current sub-task completes</td>
+</tr>
+<tr>
+<td><code>low</code></td>
+<td>Queue, process when convenient</td>
+</tr>
+</tbody></table>
+<h3>Context Management</h3>
+<ul>
+<li>Re-arm the listener after processing messages (the listener exits after<br>returning)</li>
+<li>After 5 consecutive timeouts with no pending work, send status to the<br>coordinator and stop the listener</li>
+<li>The listener is read-only; it never sends messages</li>
+</ul>
+<h2>Beads Integration</h2>
+<p>When both Thrum and <a href="https://github.com/leonletto/thrum">Beads</a> are available,<br>use them together for full coordination:</p>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Tool</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Real-time communication</td>
+<td>Thrum</td>
+<td>Messages, status updates, review requests</td>
+</tr>
+<tr>
+<td>Task management</td>
+<td>Beads</td>
+<td>Issues, dependencies, work discovery</td>
+</tr>
+<tr>
+<td>Progress tracking</td>
+<td>Beads</td>
+<td>Status fields, close with reason</td>
+</tr>
+<tr>
+<td>Notifications</td>
+<td>Thrum</td>
+<td>Alert team to progress or blockers</td>
+</tr>
+</tbody></table>
+<h3>Unified Workflow</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># 1. Register in Thrum</span>
+thrum quickstart --name implementer --role implementer --module auth \
+  --intent <span class="hljs-string">&quot;Implementing auth system&quot;</span>
+
+<span class="hljs-comment"># 2. Find work in Beads</span>
+bd ready
+
+<span class="hljs-comment"># 3. Claim in Beads</span>
+bd update bd-123 --status in_progress
+
+<span class="hljs-comment"># 4. Announce via Thrum</span>
+thrum send <span class="hljs-string">&quot;Starting bd-123: JWT authentication&quot;</span> --to @coordinator
+
+<span class="hljs-comment"># 5. Work on implementation...</span>
+
+<span class="hljs-comment"># 6. Discover issues -&gt; file in Beads</span>
+bd create --title=<span class="hljs-string">&quot;Found validation bug&quot;</span> --<span class="hljs-built_in">type</span>=bug --priority=1
+
+<span class="hljs-comment"># 7. Update coordinator via Thrum</span>
+thrum send <span class="hljs-string">&quot;Progress: JWT working, found validation bug (filed bd-456)&quot;</span> \
+  --to @coordinator
+
+<span class="hljs-comment"># 8. Complete in Beads</span>
+bd close bd-123 --reason=<span class="hljs-string">&quot;JWT auth complete with tests&quot;</span>
+
+<span class="hljs-comment"># 9. Announce via Thrum</span>
+thrum send <span class="hljs-string">&quot;Completed bd-123. Ready for review.&quot;</span> \
+  --to @reviewer --priority high
+
+<span class="hljs-comment"># 10. Sync both</span>
+bd <span class="hljs-built_in">sync</span>
+thrum <span class="hljs-built_in">sync</span> force</code></pre>
+<h3>Mapping Convention</h3>
+<table>
+<thead>
+<tr>
+<th>Concept</th>
+<th>Beads</th>
+<th>Thrum</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Task ID</td>
+<td><code>bd-123</code></td>
+<td>Include in message: &quot;Working on bd-123&quot;</td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>bd update --status</code></td>
+<td>Send message with update</td>
+</tr>
+<tr>
+<td>Priority</td>
+<td><code>bd update --priority</code></td>
+<td><code>--priority</code> flag on messages</td>
+</tr>
+<tr>
+<td>Assignment</td>
+<td><code>bd update --assignee</code></td>
+<td>Send message to specific agent</td>
+</tr>
+<tr>
+<td>Completion</td>
+<td><code>bd close</code></td>
+<td>Send completion message</td>
+</tr>
+<tr>
+<td>Discovery</td>
+<td><code>bd create</code></td>
+<td>Notify via message</td>
+</tr>
+</tbody></table>
+<h2>Session Workflow Template</h2>
+<p>Use this template for every agent session:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># === START OF SESSION ===</span>
+
+<span class="hljs-comment"># 1. Register and start session</span>
+thrum quickstart --name &lt;name&gt; --role &lt;role&gt; --module &lt;module&gt; \
+  --intent <span class="hljs-string">&quot;&lt;description&gt;&quot;</span>
+
+<span class="hljs-comment"># 2. Check inbox for any urgent messages</span>
+thrum inbox --unread
+
+<span class="hljs-comment"># 3. Find work (Beads)</span>
+bd ready
+
+<span class="hljs-comment"># 4. Claim task (Beads)</span>
+bd update &lt;<span class="hljs-built_in">id</span>&gt; --status in_progress
+
+<span class="hljs-comment"># 5. Announce start (Thrum)</span>
+thrum send <span class="hljs-string">&quot;Starting work on &lt;id&gt;: &lt;description&gt;&quot;</span> --to @coordinator
+
+<span class="hljs-comment"># === DURING SESSION ===</span>
+
+<span class="hljs-comment"># 6. Send periodic status updates</span>
+thrum send <span class="hljs-string">&quot;Progress: &lt;status&gt;&quot;</span> --to @coordinator
+
+<span class="hljs-comment"># 7. Handle incoming messages</span>
+thrum inbox --unread
+
+<span class="hljs-comment"># 8. Coordinate on blockers</span>
+thrum send <span class="hljs-string">&quot;Blocked: &lt;description&gt;&quot;</span> --to @coordinator --priority high
+
+<span class="hljs-comment"># === END OF SESSION ===</span>
+
+<span class="hljs-comment"># 9. Complete work (Beads)</span>
+bd close &lt;<span class="hljs-built_in">id</span>&gt; --reason <span class="hljs-string">&quot;Complete&quot;</span>
+bd <span class="hljs-built_in">sync</span>
+
+<span class="hljs-comment"># 10. Announce completion (Thrum)</span>
+thrum send <span class="hljs-string">&quot;Completed &lt;id&gt;. Tests passing. Ready for review.&quot;</span> \
+  --to @reviewer
+
+<span class="hljs-comment"># 11. End session</span>
+thrum session end</code></pre>
+<h2>Best Practices</h2>
+<h3>Do</h3>
+<ul>
+<li><strong>Register at session start</strong> -- always use <code>thrum quickstart</code></li>
+<li><strong>Use MCP server when available</strong> -- better than CLI polling</li>
+<li><strong>Handle priorities</strong> -- respect critical/high/normal/low</li>
+<li><strong>Send status updates</strong> -- keep the team informed</li>
+<li><strong>Use @mentions</strong> -- reference agents by name</li>
+<li><strong>Include context</strong> -- Beads IDs, file paths, commit hashes</li>
+<li><strong>End sessions cleanly</strong> -- run <code>thrum session end</code> when done</li>
+<li><strong>Set clear intents</strong> -- describe what you&#39;re working on</li>
+<li><strong>Broadcast milestones</strong> -- share important progress with the team</li>
+</ul>
+<h3>Don&#39;t</h3>
+<ul>
+<li><strong>Don&#39;t use Thrum for task management</strong> -- use Beads for that</li>
+<li><strong>Don&#39;t spam messages</strong> -- batch updates when possible</li>
+<li><strong>Don&#39;t forget to re-arm the listener</strong> -- after processing messages</li>
+<li><strong>Don&#39;t ignore critical messages</strong> -- stop work and respond</li>
+<li><strong>Don&#39;t skip registration</strong> -- the system won&#39;t route messages correctly</li>
+<li><strong>Don&#39;t leave sessions open</strong> -- end them when done to avoid stale status</li>
+<li><strong>Don&#39;t use vague intents</strong> -- be specific about current work</li>
+</ul>
+<h2>Troubleshooting</h2>
+<h3>Not receiving messages</h3>
+<p><strong>Diagnosis:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Check registration</span>
+thrum status
+
+<span class="hljs-comment"># Check daemon</span>
+thrum daemon status
+
+<span class="hljs-comment"># Check inbox manually</span>
+thrum inbox</code></pre>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><strong>Not registered</strong> -- run <code>thrum quickstart</code></li>
+<li><strong>Daemon not running</strong> -- run <code>thrum daemon start</code></li>
+<li><strong>Wrong agent name</strong> -- check <code>THRUM_NAME</code> env var</li>
+<li><strong>Sync issues</strong> -- run <code>thrum sync force</code> to pull latest messages</li>
+</ol>
+<h3>Messages not syncing</h3>
+<p><strong>Diagnosis:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Check sync status</span>
+thrum <span class="hljs-built_in">sync</span> status
+
+<span class="hljs-comment"># Check git remote</span>
+git remote -v</code></pre>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><strong>No remote</strong> -- add a git remote</li>
+<li><strong>Not committed</strong> -- daemon auto-commits after 60s, or run <code>thrum sync force</code></li>
+<li><strong>Not pushed</strong> -- run <code>thrum sync force</code> to push</li>
+<li><strong>Branch diverged</strong> -- pull and retry</li>
+</ol>
+<h3>Multiple agents with same name</h3>
+<p><strong>Diagnosis:</strong></p>
+<pre><code class="language-bash hljs">thrum agent list</code></pre>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><strong>Use unique names</strong> -- each agent needs a unique name</li>
+<li><strong>Delete duplicates</strong> -- <code>thrum agent delete &lt;name&gt;</code></li>
+<li><strong>Use THRUM_NAME</strong> -- set different names per worktree</li>
+</ol>
+<h3>Context recovery after compaction</h3>
+<p>After conversation compaction, agents can recover context:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Check inbox for recent messages</span>
+thrum inbox --unread
+
+<span class="hljs-comment"># Check what others are working on</span>
+thrum agent list --context
+
+<span class="hljs-comment"># Check Beads for task state</span>
+bd ready
+bd list --status=in_progress</code></pre>
+<h2>See Also</h2>
+<ul>
+<li><a href="multi-agent.html">Multi-Agent Support</a> -- groups, runtime presets, and team coordination</li>
+<li><a href="tailscale-sync.html">Tailscale Sync</a> -- cross-machine sync via Tailscale</li>
+<li><a href="cli.html">CLI Reference</a> -- complete command documentation</li>
+<li><a href="mcp-server.html">MCP Server</a> -- MCP tools and message-listener details</li>
+<li><a href="messaging.html">Messaging System</a> -- message structure and scopes</li>
+<li><a href="quickstart.html">Quickstart Guide</a> -- getting started in 5 minutes</li>
+<li><a href="identity.html">Identity System</a> -- agent names and registration</li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#agent-coordination.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#agent-coordination.html');
+    }
+  </script>
+</body>
+</html>

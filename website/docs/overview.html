@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>overview — Thrum</title>
+  <meta name="description" content="">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="overview — Thrum">
+  <meta property="og:description" content="">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/overview.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="overview — Thrum">
+  <meta name="twitter:description" content="">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#overview.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Technical Overview</h1>
+<blockquote>
+<p><strong>New here?</strong> Start with <a href="philosophy.html">Why Thrum Exists</a> for the philosophy<br>behind the project, or the <a href="quickstart.html">Quickstart Guide</a> to get running in<br>5 minutes. This document covers the technical architecture.</p>
+</blockquote>
+<p>Thrum is a Git-backed messaging system that helps you coordinate AI agents<br>across sessions, worktrees, and machines. It provides:</p>
+<ul>
+<li><strong>Persistent messaging</strong> that survives session boundaries</li>
+<li><strong>Automatic synchronization</strong> via Git</li>
+<li><strong>Real-time visibility</strong> into what other agents are working on</li>
+<li><strong>Subscription-based notifications</strong> for targeted communication</li>
+</ul>
+<p>Everything is inspectable — messages are JSONL files on a Git branch, state is a<br>queryable SQLite database, and sync is plain Git push/pull.</p>
+<h2>System Architecture</h2>
+<pre><code>                    ┌─────────────────────────────────────────────────────────┐
+                    │                     Thrum Daemon                         │
+                    │  (Background service managing coordination &amp; sync)       │
+                    ├─────────────────────────────────────────────────────────┤
+                    │                                                          │
+   ┌────────────┐   │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+   │   CLI      │◄──┼──┤ Unix Socket  │  │  Sync Loop   │  │  WebSocket   │  │
+   │  (thrum)   │   │  │ JSON-RPC 2.0 │  │  (60s)       │  │  + SPA (9999)│  │
+   └────────────┘   │  └──────────────┘  └──────────────┘  └──────────────┘  │
+                    │          │                │               │    │        │
+   ┌────────────┐   │          │                │               │    └──►Web UI
+   │ MCP Server │◄──┼──────────┘                │               │            │
+   │  (stdio)   │   │          │                ▼               │            │
+   └────────────┘   │          │  ┌─────────────────────────────────────┐   │
+                    │          ▼  │         State Management             │   │
+                    │             │  ┌─────────────┐  ┌──────────────┐  │   │
+                    │             │  │  JSONL Logs  │  │   SQLite     │  │   │
+                    │             │  │  (sharded)   │  │  Projection  │  │   │
+                    │             │  └─────────────┘  └──────────────┘  │   │
+                    │             └─────────────────────────────────────┘   │
+                    │                          │                             │
+                    └──────────────────────────┼─────────────────────────────┘
+                                               │
+                    ┌──────────────────────────┼──────────────────────────┐
+                    │                          ▼                          │
+                    │  .git/thrum-sync/a-sync/     .thrum/var/            │
+                    │  ├── events.jsonl            ├── messages.db        │
+                    │  └── messages/               ├── thrum.sock         │
+                    │      └── {agent}.jsonl       ├── thrum.pid (JSON)   │
+                    │                              ├── thrum.lock (flock) │
+                    │                              └── ws.port            │
+                    └──────────────────────────┬──────────────────────────┘
+                                               │ Git sync
+                                               ▼
+                                        ┌─────────────┐
+                                        │   Remote    │
+                                        │  (a-sync    │
+                                        │   branch)   │
+                                        └─────────────┘</code></pre>
+<h2>The Daemon: Central Coordinator</h2>
+<p>The daemon is the one process that everything else talks to. Start it once and<br>it handles messaging, sync, and state for all your agents — CLI, Web UI, and<br>MCP server all go through it.</p>
+<h3>Core Services</h3>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>Purpose</th>
+<th>Benefit</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>RPC Server</strong></td>
+<td>JSON-RPC 2.0 API over Unix socket</td>
+<td>CLI and programmatic access</td>
+</tr>
+<tr>
+<td><strong>WebSocket Server</strong></td>
+<td>Real-time bidirectional communication</td>
+<td>Web UI and live updates</td>
+</tr>
+<tr>
+<td><strong>Sync Loop</strong></td>
+<td>Automatic Git fetch/merge/push (60s interval)</td>
+<td>Cross-machine synchronization</td>
+</tr>
+<tr>
+<td><strong>Subscription Dispatcher</strong></td>
+<td>Route notifications to interested clients</td>
+<td>Targeted communication</td>
+</tr>
+<tr>
+<td><strong>State Management</strong></td>
+<td>JSONL log + SQLite projection</td>
+<td>Persistence + fast queries</td>
+</tr>
+</tbody></table>
+<h3>Everything Depends on the Daemon</h3>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│                     CLIENTS (Depend on Daemon)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐       │
+│   │    CLI      │   │   Web UI    │   │  MCP Server │       │
+│   │  (thrum)    │   │  (React)    │   │  (stdio)    │       │
+│   └──────┬──────┘   └──────┬──────┘   └──────┬──────┘       │
+│          │                 │                  │              │
+│          │ Unix Socket     │ WebSocket        │ Unix Socket  │
+│          │ JSON-RPC 2.0    │ JSON-RPC 2.0     │ + WebSocket  │
+│          │                 │                  │              │
+└──────────┼─────────────────┼──────────────────┼──────────────┘
+           │                 │                  │
+           ▼                 ▼                  ▼
+    ┌─────────────────────────────────────────────────┐
+    │                    DAEMON                        │
+    │  (Single source of truth for all clients)        │
+    └─────────────────────────────────────────────────┘</code></pre>
+<p><strong>CLI</strong> (<code>thrum</code> command): Sends messages, checks inbox, manages sessions. All<br>commands go through the daemon via Unix socket.</p>
+<p><strong>Web UI</strong> (Embedded React SPA): Provides a graphical interface for viewing<br>messages and agent activity. Served from the same port as WebSocket (default<br>9999). Browser users are auto-registered via git config.</p>
+<p><strong>MCP Server</strong> (<code>thrum mcp serve</code>): Exposes Thrum functionality as native MCP<br>tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate<br>directly through MCP protocol without CLI shell-outs. Connects to the daemon via<br>Unix socket for RPC and WebSocket for real-time push notifications. Tools:<br><code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, <code>list_agents</code>,<br><code>broadcast_message</code>.</p>
+<h2>Key Features</h2>
+<h3>1. Persistent Messaging</h3>
+<p>Messages are stored in append-only JSONL logs on a dedicated <code>a-sync</code> orphan<br>branch, accessed via a sync worktree at <code>.git/thrum-sync/a-sync/</code>:</p>
+<pre><code>.git/thrum-sync/a-sync/   ← Sync worktree on a-sync branch
+├── events.jsonl          ← Agent lifecycle events
+└── messages/
+    └── *.jsonl           ← Per-agent message logs
+
+.thrum/                   ← Gitignored entirely
+├── var/
+│   ├── messages.db       ← SQLite query cache
+│   ├── thrum.sock        ← Unix socket
+│   ├── thrum.pid         ← Process ID (JSON: PID, RepoPath, StartedAt, SocketPath)
+│   ├── thrum.lock        ← flock for SIGKILL resilience
+│   ├── ws.port           ← WebSocket port number
+│   └── sync.lock         ← Sync lock
+├── identities/           ← Per-worktree agent identities
+│   └── {agent_name}.json
+├── context/              ← Per-agent context storage
+│   └── {agent_name}.md
+└── redirect              ← (feature worktrees only) points to main .thrum/</code></pre>
+<p>Messages survive:</p>
+<ul>
+<li>Session restarts</li>
+<li>Machine reboots</li>
+<li>Context window compaction</li>
+<li>Agent replacement</li>
+</ul>
+<h3>2. Git-Based Synchronization</h3>
+<p>The daemon automatically syncs messages via the sync worktree at<br><code>.git/thrum-sync/a-sync/</code>, checked out on the <code>a-sync</code> orphan branch. No branch<br>switching is needed -- all git operations happen within the worktree:</p>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│          Sync Loop (60s) in .git/thrum-sync/a-sync/          │
+├─────────────────────────────────────────────────────────────┤
+│  1. Acquire lock (.thrum/var/sync.lock)                     │
+│  2. Fetch remote in worktree                                 │
+│  3. Merge JSONL (append-only dedup by event ID)             │
+│  4. Project new events into SQLite                           │
+│  5. Notify subscribers of new events                         │
+│  6. Commit &amp; push local changes in worktree                  │
+│  7. Release lock                                             │
+└─────────────────────────────────────────────────────────────┘</code></pre>
+<p><strong>Why Git?</strong></p>
+<ul>
+<li>Works offline (changes accumulate locally)</li>
+<li>Leverages existing authentication (SSH keys, HTTPS)</li>
+<li>Natural audit trail</li>
+<li>No additional infrastructure needed</li>
+</ul>
+<h3>3. Agent &amp; Session Management</h3>
+<p>Agents register with a human-readable name, role, and module:</p>
+<pre><code class="language-bash hljs">thrum agent register --name furiosa --role=implementer --module=auth</code></pre>
+<p>Agent names follow the pattern <code>[a-z0-9_]+</code> (lowercase alphanumeric and<br>underscores). Reserved names: <code>daemon</code>, <code>system</code>, <code>thrum</code>, <code>all</code>, <code>broadcast</code>.<br>Identity is resolved with the following priority: <code>THRUM_NAME</code> env var &gt;<br><code>--name</code> flag &gt; solo-agent auto-select.</p>
+<p>Each agent gets an identity file at <code>.thrum/identities/{name}.json</code>. Multiple<br>agents can coexist in a single worktree, each with their own identity file.<br>Legacy <code>agent:{role}:{hash}</code> IDs are still supported for backward compatibility.</p>
+<p>Sessions track active work periods:</p>
+<pre><code class="language-bash hljs">thrum session start   <span class="hljs-comment"># Begin working</span>
+<span class="hljs-comment"># ... do work ...</span>
+thrum session end     <span class="hljs-comment"># Finish</span></code></pre>
+<p>Agents can be deleted and orphaned agents cleaned up:</p>
+<pre><code class="language-bash hljs">thrum agent delete furiosa           <span class="hljs-comment"># Delete a specific agent</span>
+thrum agent cleanup --dry-run        <span class="hljs-comment"># Preview orphaned agents</span>
+thrum agent cleanup --force          <span class="hljs-comment"># Delete all orphaned agents</span></code></pre>
+<p>This enables:</p>
+<ul>
+<li>Identity tracking across sessions with human-readable names</li>
+<li>Multi-agent support per worktree</li>
+<li>Crash recovery (orphaned sessions auto-close)</li>
+<li>Orphan detection and cleanup</li>
+<li>Work context visibility</li>
+</ul>
+<h3>4. Subscription-Based Notifications</h3>
+<p>Agents subscribe to relevant events:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Subscribe to your module</span>
+thrum subscribe --scope module:auth
+
+<span class="hljs-comment"># Subscribe to @mentions</span>
+thrum subscribe --mention @reviewer</code></pre>
+<p>When matching messages arrive, subscribers receive real-time notifications:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;notification.message&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Auth implementation complete...&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;matched_subscription&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;match_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h3>5. Live Git State Tracking (Epic 21)</h3>
+<p>The daemon tracks what each agent is working on in real-time:</p>
+<pre><code class="language-sql hljs"><span class="hljs-comment">-- agent_work_contexts table</span>
+session_id        <span class="hljs-operator">|</span> agent_id        <span class="hljs-operator">|</span> branch      <span class="hljs-operator">|</span> unmerged_commits <span class="hljs-operator">|</span> uncommitted_files
+ses_01HXE...      <span class="hljs-operator">|</span> furiosa         <span class="hljs-operator">|</span> feature<span class="hljs-operator">/</span>auth<span class="hljs-operator">|</span> <span class="hljs-number">3</span>                <span class="hljs-operator">|</span> [&quot;src/auth.go&quot;]
+ses_02HXF...      <span class="hljs-operator">|</span> maximus         <span class="hljs-operator">|</span> feature<span class="hljs-operator">/</span>db  <span class="hljs-operator">|</span> <span class="hljs-number">1</span>                <span class="hljs-operator">|</span> []</code></pre>
+<p><strong>What it tracks:</strong></p>
+<ul>
+<li>Current branch</li>
+<li>Unmerged commits vs main</li>
+<li>Changed files</li>
+<li>Uncommitted modifications</li>
+<li>Agent-set task and intent</li>
+</ul>
+<p><strong>Why this matters:</strong></p>
+<ul>
+<li>Agent2 can see &quot;furiosa is working on auth.go with 3 unmerged commits&quot;</li>
+<li>No manual investigation needed</li>
+<li>Prevents duplicate work</li>
+<li>Enables intelligent handoffs</li>
+</ul>
+<h3>6. Dual-Transport API (Single Port)</h3>
+<p>The daemon serves the WebSocket API and embedded Web UI SPA on the same port<br>(default 9999, configurable via <code>THRUM_WS_PORT</code>). The WebSocket endpoint is at<br><code>/ws</code>, and all other paths serve the React SPA with SPA fallback routing.</p>
+<table>
+<thead>
+<tr>
+<th>Transport</th>
+<th>Endpoint</th>
+<th>Use Case</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Unix Socket</strong></td>
+<td><code>.thrum/var/thrum.sock</code></td>
+<td>CLI, MCP server, scripts</td>
+</tr>
+<tr>
+<td><strong>WebSocket</strong></td>
+<td><code>ws://localhost:9999/ws</code></td>
+<td>Web UI, MCP waiter, real-time apps</td>
+</tr>
+<tr>
+<td><strong>HTTP</strong></td>
+<td><code>http://localhost:9999/</code></td>
+<td>Embedded React SPA (Web UI)</td>
+</tr>
+</tbody></table>
+<p>26 registered RPC methods on Unix socket (24 on WebSocket):</p>
+<ul>
+<li><code>health</code> - Daemon status</li>
+<li><code>agent.register</code>, <code>agent.list</code>, <code>agent.whoami</code>, <code>agent.listContext</code>,<br><code>agent.delete</code>, <code>agent.cleanup</code></li>
+<li><code>session.start</code>, <code>session.end</code>, <code>session.list</code>, <code>session.heartbeat</code>,<br><code>session.setIntent</code>, <code>session.setTask</code></li>
+<li><code>message.send</code>, <code>message.get</code>, <code>message.list</code>, <code>message.edit</code>,<br><code>message.delete</code>, <code>message.markRead</code></li>
+<li><code>subscribe</code>, <code>unsubscribe</code>, <code>subscriptions.list</code></li>
+<li><code>sync.force</code>, <code>sync.status</code></li>
+<li><code>user.register</code>, <code>user.identify</code> (user.register is WebSocket-only)</li>
+</ul>
+<h3>7. Message Lifecycle</h3>
+<p>Full message lifecycle management beyond send/receive:</p>
+<pre><code class="language-bash hljs">thrum message get MSG_ID        <span class="hljs-comment"># Retrieve a message with full details</span>
+thrum message edit MSG_ID TEXT   <span class="hljs-comment"># Edit your own messages (full replacement)</span>
+thrum message delete MSG_ID     <span class="hljs-comment"># Delete a message (requires --force)</span></code></pre>
+<p>Messages are automatically marked as read when viewed via <code>thrum inbox</code> or<br><code>thrum message get</code>. Explicit mark-read is also available via the<br><code>message.markRead</code> RPC method.</p>
+<h3>8. Coordination Commands</h3>
+<p>Lightweight commands for checking team activity:</p>
+<pre><code class="language-bash hljs">thrum who-has auth.go           <span class="hljs-comment"># Which agents are editing a file?</span>
+thrum ping @reviewer            <span class="hljs-comment"># Is an agent online? Show last-seen time</span></code></pre>
+<p>These query agent work contexts to provide quick answers without full status<br>output.</p>
+<h3>9. Agent Context Management</h3>
+<p>Agents can save and retrieve volatile project state that doesn&#39;t belong in git<br>commits but needs to survive session boundaries:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Save context from a file or stdin</span>
+thrum context save --file continuation-notes.md
+<span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;Next steps: finish JWT implementation&quot;</span> | thrum context save
+
+<span class="hljs-comment"># View saved context</span>
+thrum context show
+
+<span class="hljs-comment"># Share context across worktrees (manual sync)</span>
+thrum context <span class="hljs-built_in">sync</span></code></pre>
+<p>Context files are stored at <code>.thrum/context/{agent-name}.md</code> and integrated into<br><code>thrum status</code> output. Use the <code>/update-context</code> skill in Claude Code for guided<br>context updates.</p>
+<p><strong>Use cases:</strong></p>
+<ul>
+<li>Documenting architectural decisions under consideration</li>
+<li>Tracking partial investigation results</li>
+<li>Recording TODOs or questions for the next session</li>
+<li>Preserving context when handing off work</li>
+</ul>
+<h3>10. Understanding the CLI</h3>
+<p>Thrum has ~30 commands. Here&#39;s why that&#39;s not as many as it sounds.</p>
+<h4>Daily Drivers (8 commands)</h4>
+<p>These are the commands you&#39;ll actually use. If you&#39;re directing agents and<br>checking on their work, this is your whole toolkit:</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>quickstart</code></td>
+<td>Register + start session + set intent — one step</td>
+</tr>
+<tr>
+<td><code>send</code></td>
+<td>Send a message</td>
+</tr>
+<tr>
+<td><code>inbox</code></td>
+<td>Check your messages</td>
+</tr>
+<tr>
+<td><code>reply</code></td>
+<td>Reply to a message</td>
+</tr>
+<tr>
+<td><code>team</code></td>
+<td>What&#39;s everyone working on?</td>
+</tr>
+<tr>
+<td><code>overview</code></td>
+<td>Status + team + inbox in one view</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>Your current state</td>
+</tr>
+<tr>
+<td><code>who-has</code></td>
+<td>Who&#39;s editing this file?</td>
+</tr>
+</tbody></table>
+<p>That&#39;s it for daily use. Everything else is infrastructure.</p>
+<h4>Designed for Agents (~16 commands)</h4>
+<p>These commands exist because agents need programmatic lifecycle control. You<br>rarely use them directly — <code>quickstart</code> handles the common case — but agents<br>call them constantly:</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Commands</th>
+<th>Why agents need them</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Identity</td>
+<td><code>agent register</code>, <code>agent whoami</code></td>
+<td>Agents register on startup</td>
+</tr>
+<tr>
+<td>Sessions</td>
+<td><code>session start/end/heartbeat</code></td>
+<td>Track work periods, extract git state</td>
+</tr>
+<tr>
+<td>Work context</td>
+<td><code>session set-intent/set-task</code></td>
+<td>Declare what they&#39;re doing</td>
+</tr>
+<tr>
+<td>Notifications</td>
+<td><code>subscribe</code>, <code>wait</code></td>
+<td>Block until relevant messages arrive</td>
+</tr>
+<tr>
+<td>Context</td>
+<td><code>context save/show/clear</code></td>
+<td>Persist state across compaction</td>
+</tr>
+<tr>
+<td>Messages</td>
+<td><code>message get/edit/delete/read</code></td>
+<td>CRUD on individual messages</td>
+</tr>
+<tr>
+<td>Groups</td>
+<td><code>group create/add/remove/list</code></td>
+<td>Organize teams programmatically</td>
+</tr>
+<tr>
+<td>MCP</td>
+<td><code>mcp serve</code></td>
+<td>Native tool access for Claude Code etc.</td>
+</tr>
+</tbody></table>
+<h4>Setup &amp; Admin (run once)</h4>
+<p><code>init</code>, <code>daemon start/stop</code>, <code>setup</code>, <code>migrate</code>, <code>agent delete/cleanup</code>,<br><code>sync force/status</code>, <code>runtime list/show</code>, <code>ping</code></p>
+<h4>Aliases (because agents get creative)</h4>
+<p>AI agents are unpredictable in how they guess command names. An agent told to<br>&quot;start working&quot; might try <code>thrum agent start</code> or <code>thrum session start</code>. Both<br>work. These duplicates exist on purpose — they reduce friction for non-human<br>users:</p>
+<table>
+<thead>
+<tr>
+<th>Alias</th>
+<th>Points to</th>
+<th>Why it exists</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent start</code></td>
+<td><code>session start</code></td>
+<td>Agents think &quot;I&#39;m an agent, I should start&quot;</td>
+</tr>
+<tr>
+<td><code>agent end</code></td>
+<td><code>session end</code></td>
+<td>Same pattern</td>
+</tr>
+<tr>
+<td><code>agent set-intent</code></td>
+<td><code>session set-intent</code></td>
+<td>Natural grouping under <code>agent</code></td>
+</tr>
+<tr>
+<td><code>agent set-task</code></td>
+<td><code>session set-task</code></td>
+<td>Same</td>
+</tr>
+<tr>
+<td><code>agent heartbeat</code></td>
+<td><code>session heartbeat</code></td>
+<td>Same</td>
+</tr>
+<tr>
+<td><code>whoami</code></td>
+<td><code>agent whoami</code></td>
+<td>Common enough to promote to top-level</td>
+</tr>
+</tbody></table>
+<h2>Storage Architecture</h2>
+<p>Thrum uses event sourcing with CQRS:</p>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│                    Event Sourcing + CQRS                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────────────┐     ┌─────────────────────────┐    │
+│  │   JSONL Event Logs  │     │   SQLite Projection     │    │
+│  │   (Source of Truth) │────▶│   (Query Model)         │    │
+│  │   in sync worktree  │     │   in .thrum/var/        │    │
+│  └─────────────────────┘     └─────────────────────────┘    │
+│        │                              │                      │
+│        │ On a-sync branch             │ Gitignored           │
+│        │ Append-only                  │ Rebuildable          │
+│        │ Conflict-free merge          │ Fast queries         │
+│        │                              │                      │
+└────────┼──────────────────────────────┼──────────────────────┘
+         │                              │
+         ▼                              ▼
+    Sync via worktree           Local CLI/UI queries</code></pre>
+<p><strong>Benefits:</strong></p>
+<ul>
+<li>JSONL can be merged conflict-free (immutable events with unique IDs)</li>
+<li>SQLite provides fast queries with indexes</li>
+<li>SQLite can be rebuilt from JSONL anytime</li>
+<li>Offline-first: works without network</li>
+</ul>
+<h2>What the Daemon Enables</h2>
+<h3>For the CLI</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Daemon Feature Used</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thrum send &quot;Hello&quot;</code></td>
+<td><code>message.send</code> RPC + auto-sync</td>
+</tr>
+<tr>
+<td><code>thrum inbox</code></td>
+<td><code>message.list</code> RPC with filtering</td>
+</tr>
+<tr>
+<td><code>thrum subscribe --scope module:auth</code></td>
+<td><code>subscribe</code> RPC + push notifications</td>
+</tr>
+<tr>
+<td><code>thrum agent list --context</code></td>
+<td><code>agent.listContext</code> RPC (live git state)</td>
+</tr>
+<tr>
+<td><code>thrum who-has FILE</code></td>
+<td><code>agent.listContext</code> RPC filtered by file</td>
+</tr>
+<tr>
+<td><code>thrum ping @role</code></td>
+<td><code>agent.list</code> + <code>agent.listContext</code> RPCs</td>
+</tr>
+<tr>
+<td><code>thrum quickstart --name NAME</code></td>
+<td><code>agent.register</code> + <code>session.start</code> + <code>session.setIntent</code> RPCs</td>
+</tr>
+<tr>
+<td><code>thrum overview</code></td>
+<td>Multiple RPCs combined into one view</td>
+</tr>
+<tr>
+<td><code>thrum sync force</code></td>
+<td><code>sync.force</code> RPC</td>
+</tr>
+<tr>
+<td><code>thrum sync status</code></td>
+<td><code>sync.status</code> RPC</td>
+</tr>
+<tr>
+<td><code>thrum agent delete NAME</code></td>
+<td><code>agent.delete</code> RPC</td>
+</tr>
+<tr>
+<td><code>thrum agent cleanup</code></td>
+<td><code>agent.cleanup</code> RPC</td>
+</tr>
+</tbody></table>
+<h3>For the Web UI</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Daemon Feature Used</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Real-time message feed</td>
+<td>WebSocket + <code>notification.message</code></td>
+</tr>
+<tr>
+<td>Agent activity</td>
+<td><code>agent.listContext</code> RPC</td>
+</tr>
+<tr>
+<td>Unread counts</td>
+<td><code>message.list</code> with <code>unread: true</code></td>
+</tr>
+<tr>
+<td>Live updates</td>
+<td>WebSocket notifications</td>
+</tr>
+</tbody></table>
+<h3>For MCP Integration</h3>
+<p><code>thrum mcp serve</code> runs an MCP server on stdio (JSON-RPC over stdin/stdout),<br>enabling LLM agents to communicate via native MCP tools:</p>
+<table>
+<thead>
+<tr>
+<th>MCP Tool</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>send_message</code></td>
+<td>Send a message to another agent, role, or group</td>
+</tr>
+<tr>
+<td><code>check_messages</code></td>
+<td>Poll for unread messages mentioning this agent, auto-marks read</td>
+</tr>
+<tr>
+<td><code>wait_for_message</code></td>
+<td>Block until a message arrives (WebSocket push) or timeout</td>
+</tr>
+<tr>
+<td><code>list_agents</code></td>
+<td>List registered agents with active/offline status</td>
+</tr>
+<tr>
+<td><code>broadcast_message</code></td>
+<td>Send to all active agents with exclude filters (uses <code>@everyone</code>)</td>
+</tr>
+<tr>
+<td><code>create_group</code></td>
+<td>Create a named group</td>
+</tr>
+<tr>
+<td><code>delete_group</code></td>
+<td>Delete a group</td>
+</tr>
+<tr>
+<td><code>add_group_member</code></td>
+<td>Add member to group</td>
+</tr>
+<tr>
+<td><code>remove_group_member</code></td>
+<td>Remove member from group</td>
+</tr>
+<tr>
+<td><code>list_groups</code></td>
+<td>List all groups</td>
+</tr>
+<tr>
+<td><code>get_group</code></td>
+<td>Get group details with optional expansion</td>
+</tr>
+</tbody></table>
+<p>Configure in Claude Code&#39;s <code>.claude/settings.json</code>:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;mcpServers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;thrum&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;stdio&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;command&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;args&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;mcp&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;serve&quot;</span><span class="hljs-punctuation">]</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p>Use <code>--agent-id NAME</code> to override the agent identity, or set <code>THRUM_NAME</code> env<br>var. The MCP server connects to the daemon via Unix socket for RPC and WebSocket<br>for real-time push notifications via the <code>wait_for_message</code> tool.</p>
+<h2>Getting Started</h2>
+<h3>Quick Start</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># 1. Initialize in your project</span>
+<span class="hljs-built_in">cd</span> your-project
+thrum init
+
+<span class="hljs-comment"># 2. Start the daemon</span>
+thrum daemon start
+
+<span class="hljs-comment"># 3. Register, start session, and set intent in one step</span>
+thrum quickstart --name myagent --role implementer --module feature --intent <span class="hljs-string">&quot;Working on feature X&quot;</span>
+
+<span class="hljs-comment"># 4. Send your first message</span>
+thrum send <span class="hljs-string">&quot;Starting work on feature X&quot;</span> --scope module:feature
+
+<span class="hljs-comment"># 5. Subscribe to your module</span>
+thrum subscribe --scope module:feature</code></pre>
+<h3>Check What Other Agents Are Working On</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># List all agent work contexts</span>
+thrum agent list --context
+
+<span class="hljs-comment"># Output:</span>
+<span class="hljs-comment"># AGENT      BRANCH         UNMERGED  FILES</span>
+<span class="hljs-comment"># furiosa    feature/auth   3         src/auth.go, src/auth_test.go</span>
+<span class="hljs-comment"># maximus    feature/db     1         internal/db/schema.go</span></code></pre>
+<h3>Monitor Messages in Real-Time</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Wait for relevant messages</span>
+thrum <span class="hljs-built_in">wait</span> --scope module:feature --<span class="hljs-built_in">timeout</span> 5m</code></pre>
+<h2>Documentation Index</h2>
+<table>
+<thead>
+<tr>
+<th>Document</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="philosophy.html">Philosophy</a></td>
+<td>Why Thrum exists and how it thinks about agents</td>
+</tr>
+<tr>
+<td><a href="quickstart.html">Quickstart Guide</a></td>
+<td>5-minute getting started</td>
+</tr>
+<tr>
+<td><a href="daemon.html">Daemon Architecture</a></td>
+<td>Technical daemon internals</td>
+</tr>
+<tr>
+<td><a href="rpc-api.html">RPC API Reference</a></td>
+<td>All RPC methods</td>
+</tr>
+<tr>
+<td><a href="sync.html">Sync Protocol</a></td>
+<td>Git synchronization details</td>
+</tr>
+<tr>
+<td><a href="api/websocket.html">WebSocket API</a></td>
+<td>WebSocket-specific docs</td>
+</tr>
+<tr>
+<td><a href="event-streaming.html">Event Streaming</a></td>
+<td>Notifications and subscriptions</td>
+</tr>
+<tr>
+<td><a href="cli.html">CLI Reference</a></td>
+<td>All CLI commands</td>
+</tr>
+<tr>
+<td><a href="identity.html">Identity System</a></td>
+<td>Agent identity and registration</td>
+</tr>
+<tr>
+<td><a href="context.html">Context Management</a></td>
+<td>Agent context storage and persistence</td>
+</tr>
+<tr>
+<td><a href="multi-agent.html">Multi-Agent Support</a></td>
+<td>Groups, runtime presets, and team coordination</td>
+</tr>
+<tr>
+<td><a href="tailscale-sync.html">Tailscale Sync</a></td>
+<td>Cross-machine sync via Tailscale with security</td>
+</tr>
+<tr>
+<td><a href="agent-coordination.html">Agent Coordination</a></td>
+<td>Multi-agent workflows and Beads integration</td>
+</tr>
+<tr>
+<td><a href="architecture.html">Architecture</a></td>
+<td>Foundation packages</td>
+</tr>
+</tbody></table>
+<h2>Design Principles</h2>
+<h3>You Stay in Control</h3>
+<p>Thrum is infrastructure you can inspect, not a service you depend on. Everything<br>is files, Git branches, and a local daemon. See <a href="philosophy.html">Why Thrum Exists</a><br>for the full philosophy.</p>
+<h3>Offline-First</h3>
+<p>Everything works locally. Network is optional for sync.</p>
+<h3>Git as Infrastructure</h3>
+<p>No additional servers. Uses existing Git authentication and hosting.</p>
+<h3>Event Sourcing</h3>
+<p>JSONL log is the source of truth. SQLite is a rebuildable projection.</p>
+<h3>Conflict-Free</h3>
+<p>Immutable events + unique IDs = conflict-free merging.</p>
+<h3>Minimal Dependencies</h3>
+<p>Pure Go with minimal external packages. No CGO.</p>
+<h3>Graceful Degradation</h3>
+<p>Network failures, missing remotes, and partial sync all handled gracefully.</p>
+<h2>Summary</h2>
+<p>Thrum&#39;s daemon is the foundation that enables:</p>
+<ul>
+<li><strong>Persistent communication</strong> across session boundaries</li>
+<li><strong>Automatic synchronization</strong> via Git (60s interval)</li>
+<li><strong>Real-time notifications</strong> for targeted messaging</li>
+<li><strong>Work context visibility</strong> so agents know what others are doing</li>
+<li><strong>Multiple access methods</strong> (CLI, WebSocket, MCP)</li>
+<li><strong>Full message lifecycle</strong> (get, edit, delete, mark-read)</li>
+<li><strong>Coordination shortcuts</strong> (who-has, ping, quickstart, overview)</li>
+<li><strong>Agent naming</strong> with human-readable identities and cleanup</li>
+<li><strong>Daemon lifecycle hardening</strong> (flock, JSON PID, defer cleanup)</li>
+</ul>
+<p>The CLI, Web UI, and MCP server are all thin clients that communicate through<br>the daemon. This architecture ensures consistency, enables real-time updates,<br>and provides a single point for synchronization and coordination.</p>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#overview.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#overview.html');
+    }
+  </script>
+</body>
+</html>

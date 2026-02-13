@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Philosophy — Thrum</title>
+  <meta name="description" content="Why Thrum exists and how it differs from agent orchestration engines">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Philosophy — Thrum">
+  <meta property="og:description" content="Why Thrum exists and how it differs from agent orchestration engines">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/philosophy.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Philosophy — Thrum">
+  <meta name="twitter:description" content="Why Thrum exists and how it differs from agent orchestration engines">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#philosophy.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Why Thrum Exists</h1>
+<p>AI coding agents are genuinely productive. A single agent can implement a<br>feature, write tests, and commit working code faster than most developers type.<br>Run several in parallel across worktrees and you can move through an entire<br>backlog in an afternoon.</p>
+<p>Most multi-agent tools are trying to solve a different problem than Thrum. They<br>want full autonomy — you give the agents a goal, they figure out the plan, they<br>ship code, you review it later. That&#39;s fine for some work. It&#39;s not what I built<br>Thrum for.</p>
+<p>Thrum is for when you want the speed of multiple agents but you still want to<br>understand what they built. You do the thinking. The agents do the typing.</p>
+<h2>Two Approaches to Working with AI Agents</h2>
+<p>There are two ways people work with AI agents.</p>
+<p><strong>Autonomous orchestration.</strong> You describe a goal, the system breaks it into<br>tasks, assigns agents, and delivers results. You set objectives and review<br>outcomes.</p>
+<p><strong>Human-directed work.</strong> You do the research. You make the decisions. You write<br>the instructions. Agents execute your plan on separate branches. You review the<br>code, run the tests, and merge.</p>
+<p>Thrum is for the second approach. It doesn&#39;t assign tasks or plan work. It gives<br>agents a way to message each other across worktrees and machines, so you can run<br>several in parallel without being the message relay yourself.</p>
+<h2>The Workflow</h2>
+<p>Here&#39;s what a typical day looks like when using Thrum with a tool like Beads for<br>issue tracking:</p>
+<p><strong>1. Research.</strong> You work with an agent to research a problem or feature. The<br>agent does all the boring heavy lifting — reading through the codebase, tracing<br>dependencies, understanding the current state of things — and comes back to you<br>with a proposed solution. You can chat about it, ask questions, and make changes<br>until you like it.</p>
+<p><strong>2. Plan.</strong> You ask the agent to investigate the codebase, docs, or whatever<br>needs changing. It does the boring detailed slog of finding all the dependencies,<br>figuring out what will break, and adding that to the plan. Rewriting the docs to<br>fit the new code, etc. Then it gives you a spec that you can read and understand<br>and approve or change as you see fit.</p>
+<p><strong>3. Document.</strong> Now you have an agreed-on plan so you tell the agent to break it<br>down into idempotent steps, optimized for making it very organized and<br>parallelizable where possible. Then it uses the Beads issue tracker to create<br>Epics and Tasks which are the full record of what to do. Then the agent writes a<br>prompt file which you give to a different agent to implement. It has all the<br>details needed — the spec is referenced, the Epics and Tasks are talked about, it<br>has directions on how you like it to execute (use sub-agents, make sure test<br>coverage is 80%, run all tests, code review when you are done, etc.). Now you can<br>read this if you like, or don&#39;t trust the agent yet, and you can see exactly what<br>is going to happen.</p>
+<p><strong>4. Implement.</strong> You hand that prompt to an agent on a worktree. It claims<br>tasks, writes code, runs tests, commits. Thrum lets you see what it&#39;s doing<br>(<code>thrum team</code>, <code>thrum who-has</code>). If you&#39;re running multiple agents on different<br>features, Thrum lets them message each other and stay coordinated without you<br>relaying information manually.</p>
+<p><strong>5. Review and merge.</strong> Now the code is written and the tests pass and the work<br>is isolated in a worktree on a branch. You ask your coordinator agent — probably<br>the one you worked with to research and write the spec and the prompt — to do a<br>code review against the spec and deal with any findings. It tells you what it<br>found and usually asks if you want it to fix them. When you are satisfied, you<br>tell it to merge and you are done.</p>
+<p>This cycle repeats. Research, plan, document, implement, review. You get the<br>speed of parallel agents with the confidence of understanding every change.</p>
+<p>The prompts you write are documentation. The issues you create are your audit<br>trail. The git history shows exactly what happened. Nothing is hidden.</p>
+<h2>What Makes This Feel Different</h2>
+<p>When you work this way, it still feels like you wrote the code. The agent was<br>faster than you typing, but the decisions were yours. Six months later when<br>something breaks, you remember why it works this way — because you approved the<br>plan before the code got written.</p>
+<h2>Inspectable by Design</h2>
+<p>No magic. Everything in Thrum is just files you can look at.</p>
+<ul>
+<li><strong>Messages</strong> are JSONL files on a Git branch. They&#39;re just text — <code>cat</code> them,<br><code>grep</code> them, pipe them through <code>jq</code>.</li>
+<li><strong>Agent identity</strong> is a JSON file in <code>.thrum/identities/</code>. Open it with any<br>text editor.</li>
+<li><strong>Sync</strong> is Git push and pull. Run <code>git log</code> on the <code>a-sync</code> branch to see<br>exactly what synced and when.</li>
+<li><strong>State</strong> is a SQLite database rebuilt from the JSONL source of truth. Query<br>it directly, or delete it — it rebuilds.</li>
+</ul>
+<p>There&#39;s no cloud service, no opaque API. If something goes wrong, you look at<br>files.</p>
+<h2>What Thrum Is Not</h2>
+<p>Thrum doesn&#39;t plan your work - it makes planning your work easier and faster.</p>
+<p>It won&#39;t break everythign down and make all the decisions fro you unless you<br>tell it to.  You do that with the help of your agents and you can see what is<br>going to happen before it happens - not after the damage is done.</p>
+<p>Thrum doesn&#39;t orchestrate your agents. It gives agents a way to message each<br>other across worktrees and machines, so you can run several in parallel without<br>being the message relay yourself.</p>
+<p>Thrum doesn&#39;t stop agents or interrupt their work. If you need to stop an agent,<br>you stop the process. Thrum provides the communication layer — you provide<br>the control.</p>
+<p>It&#39;s not a framework either. Any agent that can run shell commands or use MCP<br>tools can use Thrum. There&#39;s no SDK to integrate, no protocol to implement<br>beyond basic messaging.</p>
+<p>And it&#39;s not trying to replace you. You&#39;re the one who understands the codebase.<br>Thrum just makes it practical to direct multiple agents at once.  And the process<br>keeps you in the loop as much as you want.  Transparent and auditable.  You<br>are in control.</p>
+<h2>For Working Developers</h2>
+<p>I built Thrum for myself — someone who ships production code and needs to<br>understand the codebase they&#39;re working in. Not for AI researchers building novel<br>agent architectures. Not for platform teams building orchestration systems.</p>
+<p>If you want agents to autonomously tackle your backlog while you do something<br>else, there are good tools for that. If you want to direct the work yourself and<br>have agents execute faster than you can type, that&#39;s what Thrum is for.</p>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#philosophy.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#philosophy.html');
+    }
+  </script>
+</body>
+</html>

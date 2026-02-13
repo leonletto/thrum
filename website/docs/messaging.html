@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>messaging — Thrum</title>
+  <meta name="description" content="">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="messaging — Thrum">
+  <meta property="og:description" content="">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/messaging.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="messaging — Thrum">
+  <meta name="twitter:description" content="">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#messaging.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Thrum Messaging System</h1>
+<h2>Overview</h2>
+<p>The Thrum messaging system provides structured communication between agents with<br>support for direct messaging, read tracking, scoping, references, and rich content<br>formats. Messages are persisted in a Git-backed event log and projected into SQLite<br>for fast queries.</p>
+<p>This document covers the CLI commands and behaviors for sending, receiving,<br>replying to, and managing messages.</p>
+<h2>Quick Reference</h2>
+<h3>Top-Level Commands</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thrum send MESSAGE</code></td>
+<td>Send a message (with optional <code>--to</code>, <code>--scope</code>, <code>--ref</code>, <code>--mention</code>)</td>
+</tr>
+<tr>
+<td><code>thrum reply MSG_ID TEXT</code></td>
+<td>Reply to a message, creating a reply-to reference</td>
+</tr>
+<tr>
+<td><code>thrum inbox</code></td>
+<td>List messages with read/unread indicators</td>
+</tr>
+</tbody></table>
+<h3>Message Subcommands</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thrum message get MSG_ID</code></td>
+<td>Retrieve a single message with full details</td>
+</tr>
+<tr>
+<td><code>thrum message edit MSG_ID TEXT</code></td>
+<td>Replace a message&#39;s content (author only)</td>
+</tr>
+<tr>
+<td><code>thrum message delete MSG_ID --force</code></td>
+<td>Soft-delete a message</td>
+</tr>
+<tr>
+<td><code>thrum message read MSG_ID [...]</code></td>
+<td>Manually mark messages as read</td>
+</tr>
+</tbody></table>
+<h2>Sending Messages</h2>
+<h3>Basic Send</h3>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Test suite is green, ready for review&quot;</span></code></pre>
+<p>The daemon resolves the current agent identity and session automatically. The<br>message is written as a <code>message.create</code> event to the agent&#39;s sharded JSONL log<br>(<code>.git/thrum-sync/a-sync/messages/{agent_name}.jsonl</code>) and projected into<br>SQLite.</p>
+<h3>Flags</h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Format</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--to</code></td>
+<td><code>@role</code></td>
+<td>Direct recipient (adds a mention ref)</td>
+</tr>
+<tr>
+<td><code>--scope</code></td>
+<td><code>type:value</code></td>
+<td>Attach scope context (repeatable)</td>
+</tr>
+<tr>
+<td><code>--ref</code></td>
+<td><code>type:value</code></td>
+<td>Attach reference (repeatable)</td>
+</tr>
+<tr>
+<td><code>--mention</code></td>
+<td><code>@role</code></td>
+<td>Mention an agent role (repeatable)</td>
+</tr>
+<tr>
+<td><code>--format</code></td>
+<td><code>markdown|plain|json</code></td>
+<td>Content format (default: <code>markdown</code>)</td>
+</tr>
+<tr>
+<td><code>--priority</code></td>
+<td><code>low|normal|high</code></td>
+<td>Message priority (default: <code>normal</code>)</td>
+</tr>
+<tr>
+<td><code>--structured</code></td>
+<td>JSON string</td>
+<td>Typed payload for machine-readable data</td>
+</tr>
+</tbody></table>
+<h3>Direct Messaging with --to</h3>
+<p>The <code>--to</code> flag provides a shorthand for directing a message to a specific agent,<br>role, or group. Under the hood, <code>--to @reviewer</code> appends <code>@reviewer</code> to the mentions<br>list, which is stored as a <code>mention</code> ref on the message.</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># These are equivalent:</span>
+thrum send <span class="hljs-string">&quot;Please review PR #42&quot;</span> --to @reviewer
+thrum send <span class="hljs-string">&quot;Please review PR #42&quot;</span> --mention @reviewer
+
+<span class="hljs-comment"># Send to a group</span>
+thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @everyone
+
+<span class="hljs-comment"># Send to a custom group</span>
+thrum send <span class="hljs-string">&quot;Backend review needed&quot;</span> --to @backend</code></pre>
+<p>The <code>@</code> prefix is optional -- <code>--to reviewer</code> and <code>--to @reviewer</code> both work.</p>
+<h3>Mention Routing</h3>
+<p>When a message includes mentions (via <code>--to</code>, <code>--mention</code>, or <code>@role</code> in the<br>mentions list), Thrum stores them as refs with type <code>mention</code> and the role name<br>as the value:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
+<p>Agents can then filter their inbox to only messages that mention them:</p>
+<pre><code class="language-bash hljs">thrum inbox --mentions</code></pre>
+<p>This queries for messages where a <code>mention</code> ref matches the current agent&#39;s<br>role.</p>
+<h3>Example: Agent-to-Agent Coordination</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Implementer finishes a task and notifies the reviewer</span>
+thrum send <span class="hljs-string">&quot;Auth module complete, all tests passing&quot;</span> \
+  --to @reviewer \
+  --scope module:auth \
+  --ref issue:beads-42
+
+<span class="hljs-comment"># Reviewer checks inbox for messages directed at them</span>
+thrum inbox --mentions
+
+<span class="hljs-comment"># Reviewer replies to the message</span>
+thrum reply msg_01HXE... <span class="hljs-string">&quot;Looks good, merging now&quot;</span></code></pre>
+<h2>Replying to Messages</h2>
+<p>The <code>reply</code> command creates a reply-to reference linking your message to the<br>original:</p>
+<pre><code class="language-bash hljs">thrum reply MSG_ID <span class="hljs-string">&quot;Your reply text&quot;</span></code></pre>
+<p><strong>What happens internally:</strong></p>
+<ol>
+<li>Creates a new message with a <code>reply_to</code> ref pointing to the original message.</li>
+<li>The inbox groups replies with the original message using a <code>↳</code> prefix.</li>
+<li>Marks the original message as read (auto mark-as-read).</li>
+</ol>
+<h3>Flags</h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Format</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--format</code></td>
+<td><code>markdown|plain|json</code></td>
+<td>Content format (default: <code>markdown</code>)</td>
+</tr>
+</tbody></table>
+<h3>Example</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Reply to a message</span>
+thrum reply msg_01HXE... <span class="hljs-string">&quot;Good idea, let&#x27;s do that&quot;</span>
+
+<span class="hljs-comment"># Reply with plain text format</span>
+thrum reply msg_01HXF... <span class="hljs-string">&quot;Acknowledged&quot;</span> --format plain</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>&gt; Reply sent: msg_01HXG...
+  In reply to: msg_01HXE...</code></pre>
+<h2>Inbox</h2>
+<p>The inbox displays messages with read/unread indicators, relative timestamps,<br>and pagination.</p>
+<pre><code class="language-bash hljs">thrum inbox</code></pre>
+<h3>Flags</h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--scope type:value</code></td>
+<td>Filter by scope</td>
+</tr>
+<tr>
+<td><code>--mentions</code></td>
+<td>Only messages mentioning the current agent</td>
+</tr>
+<tr>
+<td><code>--unread</code></td>
+<td>Only unread messages</td>
+</tr>
+<tr>
+<td><code>--page-size N</code></td>
+<td>Results per page (default: 10)</td>
+</tr>
+<tr>
+<td><code>--page N</code></td>
+<td>Page number (default: 1)</td>
+</tr>
+</tbody></table>
+<h3>Read/Unread Indicators</h3>
+<p>Each message in the inbox shows a read-state indicator:</p>
+<ul>
+<li><code>●</code> (filled circle) -- unread</li>
+<li><code>○</code> (open circle) -- read</li>
+</ul>
+<p>The header line for each message follows this format:</p>
+<pre><code>│ ● msg_01HXE...  @implementer  5m ago                     │
+│ ○ msg_01HXF...  @reviewer     1h ago  (edited)           │
+│ ↳ msg_01HXG...  @implementer  10m ago                    │</code></pre>
+<p>Messages that have been edited show an <code>(edited)</code> tag in the header. Replies are<br>displayed with a <code>↳</code> prefix and grouped with the original message.</p>
+<h3>Auto Mark-as-Read</h3>
+<p>Viewing the inbox automatically marks all displayed messages as read<br>(best-effort; failure does not block the command). This behavior is skipped when<br>using the <code>--unread</code> filter, so that repeatedly checking unread messages does<br>not clear them before you act on them.</p>
+<p>The footer shows pagination and unread count:</p>
+<pre><code>Showing 1-10 of 23 messages (3 unread)</code></pre>
+<h3>Empty States</h3>
+<p>When no messages match the current filters, the inbox shows contextual feedback:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># No messages at all</span>
+thrum inbox
+<span class="hljs-comment"># Output: No messages in inbox.</span>
+
+<span class="hljs-comment"># No messages matching a scope filter</span>
+thrum inbox --scope module:auth
+<span class="hljs-comment"># Output: No messages matching filter --scope module:auth</span>
+<span class="hljs-comment">#         Showing 0 of 15 total messages (filter: scope=module:auth)</span></code></pre>
+<h2>Message Operations</h2>
+<h3>Get</h3>
+<p>Retrieve a single message with its full details: author, timestamps, scopes,<br>refs, edit and delete status.</p>
+<pre><code class="language-bash hljs">thrum message get msg_01HXE...</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Message: msg_01HXE...
+  From:    @implementer
+  Time:    5m ago
+  Scopes:  module:auth
+  Refs:    issue:beads-42, mention:reviewer
+  Edited:  2m ago
+
+Auth module complete, all tests passing</code></pre>
+<p>The <code>get</code> command automatically marks the message as read.</p>
+<h3>Edit</h3>
+<p>Replace a message&#39;s content entirely. Only the original author (matching<br><code>agent_id</code>) can edit their own messages. Deleted messages cannot be edited.</p>
+<pre><code class="language-bash hljs">thrum message edit msg_01HXE... <span class="hljs-string">&quot;Updated: auth module complete with rate limiting&quot;</span></code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>&gt; Message edited: msg_01HXE... (version 2)</code></pre>
+<p>Each edit is recorded in the <code>message_edits</code> table with before/after content,<br>the editor&#39;s session, and a timestamp. The version number reflects the total<br>number of edits applied to the message. Edits trigger subscription notifications<br>just like new messages.</p>
+<h3>Delete</h3>
+<p>Soft-delete a message. Requires the <code>--force</code> flag as a safety confirmation.</p>
+<pre><code class="language-bash hljs">thrum message delete msg_01HXE... --force</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>&gt; Message deleted: msg_01HXE...</code></pre>
+<p>Deleted messages:</p>
+<ul>
+<li>Are flagged with <code>deleted=1</code> in SQLite and a <code>message.delete</code> event is<br>appended to the JSONL log.</li>
+<li>Still appear in <code>message get</code> (with a <code>DELETED</code> status label) but are excluded<br>from inbox listings by default.</li>
+<li>Cannot be un-deleted (the JSONL log is append-only).</li>
+<li>Can include an optional deletion reason in the RPC request.</li>
+</ul>
+<h3>Mark Read</h3>
+<p>Explicitly mark one or more messages as read. This is useful when auto<br>mark-as-read was skipped or when processing messages programmatically. Use<br><code>--all</code> to mark every unread message as read at once.</p>
+<pre><code class="language-bash hljs">thrum message <span class="hljs-built_in">read</span> msg_01HXE...
+thrum message <span class="hljs-built_in">read</span> msg_01 msg_02 msg_03
+thrum message <span class="hljs-built_in">read</span> --all</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>&gt; Marked 3 messages as read</code></pre>
+<p>Read state is tracked per session and per agent in the <code>message_reads</code> table. A<br>message is considered &quot;read&quot; if any session or agent matching the current<br>identity has a read record for it.</p>
+<h3>Auto Mark-as-Read Summary</h3>
+<p>Several commands mark messages as read automatically:</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thrum inbox</code></td>
+<td>Marks all displayed messages as read (skipped with <code>--unread</code>)</td>
+</tr>
+<tr>
+<td><code>thrum reply MSG_ID ...</code></td>
+<td>Marks the replied-to message as read</td>
+</tr>
+<tr>
+<td><code>thrum message get MSG_ID</code></td>
+<td>Marks the retrieved message as read</td>
+</tr>
+</tbody></table>
+<p>All auto mark-as-read operations are best-effort: if they fail, the parent<br>command still succeeds.</p>
+<h2>Message Structure</h2>
+<h3>Core Fields</h3>
+<p>Every message has these core fields:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;author&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:role:HASH&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Message content&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{...}&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;refs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;metadata&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T11:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;deleted&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h3>Body Formats</h3>
+<p>Messages support three content formats:</p>
+<p><strong>Markdown</strong> (default) -- best for human-readable documentation, notes, and<br>status updates:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;# Heading\n\nWith **formatting**&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Plain text</strong> -- best for log messages, simple status, and system<br>notifications:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;plain&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Simple unformatted text&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
+<p><strong>JSON</strong> -- best for machine-readable data, API responses, and structured<br>status:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;json&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;type\&quot;:\&quot;status\&quot;,\&quot;value\&quot;:\&quot;complete\&quot;}&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
+<h3>Structured Data</h3>
+<p>In addition to the main content, messages can include typed structured data via<br>the <code>--structured</code> flag:</p>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Test results for feature X&quot;</span> \
+  --structured <span class="hljs-string">&#x27;{&quot;type&quot;:&quot;test_result&quot;,&quot;passed&quot;:45,&quot;failed&quot;:2,&quot;coverage&quot;:85.9}&#x27;</span></code></pre>
+<p>The <code>structured</code> field allows agents to parse machine-readable payloads, build<br>dashboards, trigger automated workflows, and index by structured fields.</p>
+<h2>Scopes</h2>
+<p>Scopes define the context and visibility of a message. They answer &quot;What is this<br>message about?&quot;</p>
+<h3>Scope Structure</h3>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope_type&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope_value&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
+<h3>Common Scope Types</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Example</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>repo</code></td>
+<td><code>repo:github.com/user/repo</code></td>
+<td>Messages about a specific repository</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td><code>file:src/main.go</code></td>
+<td>Messages related to a specific file</td>
+</tr>
+<tr>
+<td><code>dir</code></td>
+<td><code>dir:src/components</code></td>
+<td>Messages about a directory and contents</td>
+</tr>
+<tr>
+<td><code>feature</code></td>
+<td><code>feature:user-authentication</code></td>
+<td>Messages about a feature or epic</td>
+</tr>
+<tr>
+<td><code>component</code></td>
+<td><code>component:api-server</code></td>
+<td>Messages about a system component</td>
+</tr>
+<tr>
+<td><code>module</code></td>
+<td><code>module:auth</code></td>
+<td>Messages about a code module</td>
+</tr>
+</tbody></table>
+<h3>Multiple Scopes</h3>
+<p>A message can have multiple scopes:</p>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Fixed authentication bug&quot;</span> \
+  --scope repo:github.com/user/repo \
+  --scope file:src/auth.go \
+  --scope feature:user-authentication</code></pre>
+<h3>Filtering by Scope</h3>
+<pre><code class="language-bash hljs">thrum inbox --scope file:src/main.go
+thrum inbox --scope module:auth</code></pre>
+<h2>References (Refs)</h2>
+<p>References link messages to external entities. They answer &quot;What does this<br>message reference?&quot;</p>
+<h3>Ref Structure</h3>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ref_type&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ref_value&quot;</span> <span class="hljs-punctuation">}</span></code></pre>
+<h3>Common Ref Types</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Example</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>issue</code></td>
+<td><code>issue:beads-123</code></td>
+<td>Links to a Beads issue</td>
+</tr>
+<tr>
+<td><code>commit</code></td>
+<td><code>commit:abc123def456</code></td>
+<td>Links to a Git commit</td>
+</tr>
+<tr>
+<td><code>pr</code></td>
+<td><code>pr:42</code></td>
+<td>Links to a pull request</td>
+</tr>
+<tr>
+<td><code>ticket</code></td>
+<td><code>ticket:JIRA-456</code></td>
+<td>Links to an external ticket</td>
+</tr>
+<tr>
+<td><code>url</code></td>
+<td><code>url:https://docs.example.com/page</code></td>
+<td>Links to a web page</td>
+</tr>
+<tr>
+<td><code>mention</code></td>
+<td><code>mention:reviewer</code></td>
+<td>Created automatically from <code>--to</code> and <code>--mention</code> flags</td>
+</tr>
+<tr>
+<td><code>reply_to</code></td>
+<td><code>reply_to:msg_01HXE...</code></td>
+<td>Created by <code>thrum reply</code> to link to parent message</td>
+</tr>
+</tbody></table>
+<h3>Multiple Refs</h3>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Implemented feature from design doc, closes issue&quot;</span> \
+  --ref issue:beads-123 \
+  --ref commit:abc123def \
+  --ref url:https://docs.example.com/design</code></pre>
+<h2>Groups</h2>
+<p>Groups allow you to send messages to collections of agents and roles using a<br>single <code>--to @groupname</code> address.</p>
+<h3>Built-in Groups</h3>
+<p><strong><code>@everyone</code></strong> — Automatically created on daemon startup. All registered agents are<br>implicit members. This group cannot be deleted.</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Send to all agents</span>
+thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @everyone</code></pre>
+<h3>Creating Custom Groups</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Create a group</span>
+thrum group create reviewers --description <span class="hljs-string">&quot;Code review team&quot;</span>
+
+<span class="hljs-comment"># Add members (agents or roles)</span>
+thrum group add reviewers @alice
+thrum group add reviewers --role reviewer
+
+<span class="hljs-comment"># Send to the group</span>
+thrum send <span class="hljs-string">&quot;PR ready for review&quot;</span> --to @reviewers</code></pre>
+<h3>Group Operations</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thrum group create NAME</code></td>
+<td>Create a new group</td>
+</tr>
+<tr>
+<td><code>thrum group delete NAME</code></td>
+<td>Delete a group (cannot delete <code>@everyone</code>)</td>
+</tr>
+<tr>
+<td><code>thrum group add GROUP MEMBER</code></td>
+<td>Add agent or role to group</td>
+</tr>
+<tr>
+<td><code>thrum group remove GROUP MEMBER</code></td>
+<td>Remove a member</td>
+</tr>
+<tr>
+<td><code>thrum group list</code></td>
+<td>List all groups</td>
+</tr>
+<tr>
+<td><code>thrum group info NAME</code></td>
+<td>Show group details</td>
+</tr>
+<tr>
+<td><code>thrum group members NAME</code></td>
+<td>List members (<code>--expand</code> resolves to agent IDs)</td>
+</tr>
+</tbody></table>
+<h3>Message Resolution</h3>
+<p>When a message is sent to a group, the daemon resolves group membership at <strong>read time</strong>.<br>This means:</p>
+<ul>
+<li>New agents added to a group automatically receive messages sent to that group</li>
+<li>The <code>@everyone</code> group dynamically includes all registered agents</li>
+<li>Role-based members are resolved to all agents with that role at query time</li>
+</ul>
+<h3>Broadcast Deprecation</h3>
+<p>The <code>--broadcast</code> flag is deprecated. Use <code>--to @everyone</code> instead:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Old (deprecated):</span>
+thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --broadcast
+
+<span class="hljs-comment"># New (recommended):</span>
+thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @everyone</code></pre>
+<h2>Global Flags</h2>
+<p>These flags are available on all commands:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--json</code></td>
+<td>Output as JSON (for scripting and automation)</td>
+</tr>
+<tr>
+<td><code>--quiet</code></td>
+<td>Suppress non-essential output (hints, tips)</td>
+</tr>
+<tr>
+<td><code>--verbose</code></td>
+<td>Debug output</td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>Agent role (or <code>THRUM_ROLE</code> env var)</td>
+</tr>
+<tr>
+<td><code>--module</code></td>
+<td>Agent module (or <code>THRUM_MODULE</code> env var)</td>
+</tr>
+<tr>
+<td><code>--repo</code></td>
+<td>Repository path (default: <code>.</code>)</td>
+</tr>
+</tbody></table>
+<h2>Implementation Details</h2>
+<h3>Storage</h3>
+<p>Messages are stored in two places:</p>
+<ol>
+<li><p><strong>Sharded JSONL Event Logs</strong> (in the <code>a-sync</code> Git worktree at<br><code>.git/thrum-sync/a-sync/</code>) -- the append-only source of truth. Events are<br>sharded per agent:</p>
+<ul>
+<li><code>.git/thrum-sync/a-sync/events.jsonl</code> -- agent lifecycle events<br>(<code>agent.register</code>, <code>agent.session.start</code>, <code>agent.session.end</code>,<br><code>agent.cleanup</code>)</li>
+<li><code>.git/thrum-sync/a-sync/messages/{agent_name}.jsonl</code> -- per-agent message<br>events (<code>message.create</code>, <code>message.edit</code>, <code>message.delete</code>, <code>agent.update</code>)</li>
+</ul>
+</li>
+<li><p><strong>SQLite Projection</strong> (<code>.thrum/var/messages.db</code>) -- derived from the JSONL<br>logs for query performance. Can be rebuilt from the logs. Contains the tables<br>described below.</p>
+</li>
+</ol>
+<h3>Tables</h3>
+<h4>messages</h4>
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> messages (
+  message_id TEXT <span class="hljs-keyword">PRIMARY KEY</span>,
+  agent_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  session_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  created_at TEXT <span class="hljs-keyword">NOT NULL</span>,
+  updated_at TEXT,
+  deleted <span class="hljs-type">INTEGER</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-number">0</span>,
+  deleted_at TEXT,
+  delete_reason TEXT,
+  body_format TEXT <span class="hljs-keyword">NOT NULL</span>,
+  body_content TEXT <span class="hljs-keyword">NOT NULL</span>,
+  body_structured TEXT
+)</code></pre>
+<h4>message_scopes</h4>
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> message_scopes (
+  message_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  scope_type TEXT <span class="hljs-keyword">NOT NULL</span>,
+  scope_value TEXT <span class="hljs-keyword">NOT NULL</span>,
+  <span class="hljs-keyword">PRIMARY KEY</span> (message_id, scope_type, scope_value)
+)</code></pre>
+<h4>message_refs</h4>
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> message_refs (
+  message_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  ref_type TEXT <span class="hljs-keyword">NOT NULL</span>,
+  ref_value TEXT <span class="hljs-keyword">NOT NULL</span>,
+  <span class="hljs-keyword">PRIMARY KEY</span> (message_id, ref_type, ref_value)
+)</code></pre>
+<h4>message_edits</h4>
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> message_edits (
+  id <span class="hljs-type">INTEGER</span> <span class="hljs-keyword">PRIMARY KEY</span> AUTOINCREMENT,
+  message_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  edited_at TEXT <span class="hljs-keyword">NOT NULL</span>,
+  edited_by TEXT <span class="hljs-keyword">NOT NULL</span>,
+  old_content TEXT,
+  new_content TEXT,
+  old_structured TEXT,
+  new_structured TEXT
+)</code></pre>
+<p>Each row represents one edit operation with before/after values for both content<br>and structured data.</p>
+<h4>message_reads</h4>
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> message_reads (
+  message_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  session_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  agent_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  read_at TEXT <span class="hljs-keyword">NOT NULL</span>,
+  <span class="hljs-keyword">PRIMARY KEY</span> (message_id, session_id),
+  <span class="hljs-keyword">FOREIGN KEY</span> (message_id) <span class="hljs-keyword">REFERENCES</span> messages(message_id) <span class="hljs-keyword">ON</span> <span class="hljs-keyword">DELETE</span> CASCADE
+)</code></pre>
+<p>Read state is tracked per message per session. A message is considered read for<br>an agent if any matching <code>session_id</code> or <code>agent_id</code> has a record. This means<br>read state persists across session restarts for the same agent.</p>
+<h3>Indexes</h3>
+<p>Optimized for common query patterns:</p>
+<ul>
+<li><code>idx_messages_time</code> -- time-based sorting</li>
+<li><code>idx_messages_agent</code> -- author filtering</li>
+<li><code>idx_messages_session</code> -- session filtering</li>
+<li><code>idx_scopes_lookup</code> -- scope filtering</li>
+<li><code>idx_refs_lookup</code> -- ref filtering (including reply_to references)</li>
+<li><code>idx_edits_message</code> -- edit history lookup by message and timestamp</li>
+<li><code>idx_message_reads_agent</code> -- read state by agent</li>
+<li><code>idx_message_reads_message</code> -- read state by message</li>
+</ul>
+<h2>MCP Server Integration</h2>
+<p>The MCP server (<code>thrum mcp serve</code>) provides native messaging tools for AI agents<br>running in Claude Code or similar environments:</p>
+<table>
+<thead>
+<tr>
+<th>MCP Tool</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>send_message</code></td>
+<td>Send a message to <code>@role</code> or agent name (supports <code>priority</code>: <code>critical</code>, <code>high</code>, <code>normal</code>, <code>low</code>)</td>
+</tr>
+<tr>
+<td><code>check_messages</code></td>
+<td>Poll for unread messages mentioning this agent, auto-marks read</td>
+</tr>
+<tr>
+<td><code>wait_for_message</code></td>
+<td>Block until a message arrives via WebSocket push or timeout (max 600s)</td>
+</tr>
+<tr>
+<td><code>list_agents</code></td>
+<td>List registered agents with active/offline status</td>
+</tr>
+<tr>
+<td><code>broadcast_message</code></td>
+<td>Send to all active agents (with optional exclude filter)</td>
+</tr>
+</tbody></table>
+<p>MCP tools use the same underlying RPC methods (<code>message.send</code>, <code>message.list</code>,<br><code>message.markRead</code>) but add convenience features like <code>@role</code> addressing and<br>real-time WebSocket push notifications.</p>
+<p><strong>Priority levels at the MCP layer</strong>: <code>critical</code>, <code>high</code>, <code>normal</code> (default),<br><code>low</code>. The <code>critical</code> level is available through MCP tools and is stored on the<br>message but does not have special handling at the RPC layer.</p>
+<h2>Agent Identity</h2>
+<p>Agents are identified by name using identity files stored at<br><code>.thrum/identities/{name}.json</code>. Identity is resolved in this priority order:</p>
+<ol>
+<li><code>THRUM_NAME</code> environment variable (selects which identity file to load)</li>
+<li><code>THRUM_ROLE</code> and <code>THRUM_MODULE</code> environment variables</li>
+<li>CLI flags (<code>--role</code>, <code>--module</code>, <code>--name</code>)</li>
+<li>Single identity file auto-selection (solo-agent worktrees)</li>
+</ol>
+<p>Agent names must match <code>[a-z0-9_]+</code>. Reserved names: <code>daemon</code>, <code>system</code>,<br><code>thrum</code>, <code>all</code>, <code>broadcast</code>.</p>
+<p>For multi-agent worktrees, each agent gets its own identity file and JSONL<br>shard.</p>
+<h2>See Also</h2>
+<ul>
+<li>RPC API Reference: <code>docs/rpc-api.md</code></li>
+<li>Daemon Architecture: <code>docs/daemon.md</code></li>
+<li>Development Guide: <code>docs/development.md</code></li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#messaging.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#messaging.html');
+    }
+  </script>
+</body>
+</html>

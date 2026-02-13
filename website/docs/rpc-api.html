@@ -1,0 +1,2662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>rpc-api — Thrum</title>
+  <meta name="description" content="">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="rpc-api — Thrum">
+  <meta property="og:description" content="">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/rpc-api.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="rpc-api — Thrum">
+  <meta name="twitter:description" content="">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#rpc-api.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Thrum Daemon RPC API</h1>
+<h2>Overview</h2>
+<p>The Thrum daemon exposes a JSON-RPC 2.0 API over Unix socket<br>(<code>.thrum/var/thrum.sock</code>) and WebSocket (<code>ws://localhost:9999</code>). This document<br>describes every available RPC method.</p>
+<h2>Protocol</h2>
+<h3>JSON-RPC 2.0</h3>
+<p>All requests and responses follow the JSON-RPC 2.0 specification.</p>
+<p><strong>Request format:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;method_name&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Success response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-comment">/* method-specific result */</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Error response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;error&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;code&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">-32000</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Error description&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;data&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Additional error info&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h3>Standard Error Codes</h3>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Meaning</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>-32700</td>
+<td>Parse error</td>
+<td>Invalid JSON</td>
+</tr>
+<tr>
+<td>-32600</td>
+<td>Invalid request</td>
+<td>Not a valid JSON-RPC 2.0 request</td>
+</tr>
+<tr>
+<td>-32601</td>
+<td>Method not found</td>
+<td>Method doesn&#39;t exist</td>
+</tr>
+<tr>
+<td>-32602</td>
+<td>Invalid params</td>
+<td>Invalid method parameters</td>
+</tr>
+<tr>
+<td>-32603</td>
+<td>Internal error</td>
+<td>Internal JSON-RPC error</td>
+</tr>
+<tr>
+<td>-32000</td>
+<td>Server error</td>
+<td>Generic server error</td>
+</tr>
+<tr>
+<td>-32001</td>
+<td>Transport error</td>
+<td>Wrong transport for this method</td>
+</tr>
+</tbody></table>
+<h3>Transports</h3>
+<p>Both Unix socket and WebSocket expose the same set of methods, with one<br>exception:</p>
+<ul>
+<li><code>user.register</code> is only available over WebSocket (returns <code>-32001</code> on Unix<br>socket)</li>
+</ul>
+<h2>Method Reference</h2>
+<h3>health</h3>
+<p>Health check and daemon status.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><em>(none)</em></td>
+<td></td>
+<td></td>
+<td>Empty object or omit params</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>&quot;ok&quot;</code> or <code>&quot;degraded&quot;</code></td>
+</tr>
+<tr>
+<td><code>uptime_ms</code></td>
+<td>integer</td>
+<td>Daemon uptime in milliseconds</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>string</td>
+<td>Daemon version (e.g., <code>&quot;0.1.0&quot;</code>)</td>
+</tr>
+<tr>
+<td><code>repo_id</code></td>
+<td>string</td>
+<td>Repository identifier</td>
+</tr>
+<tr>
+<td><code>sync_state</code></td>
+<td>string</td>
+<td><code>&quot;synced&quot;</code>, <code>&quot;pending&quot;</code>, or <code>&quot;error&quot;</code></td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li>No method-specific errors.</li>
+</ul>
+<h3>agent.register</h3>
+<p>Register or update an agent identity.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>no</td>
+<td>Human-readable agent name (e.g., <code>&quot;furiosa&quot;</code>). Must match <code>[a-z0-9_]+</code>. Reserved: <code>daemon</code>, <code>system</code>, <code>thrum</code>, <code>all</code>, <code>broadcast</code>.</td>
+</tr>
+<tr>
+<td><code>role</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Agent role (e.g., <code>&quot;implementer&quot;</code>, <code>&quot;reviewer&quot;</code>)</td>
+</tr>
+<tr>
+<td><code>module</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Module/component responsibility (e.g., <code>&quot;auth&quot;</code>)</td>
+</tr>
+<tr>
+<td><code>display</code></td>
+<td>string</td>
+<td>no</td>
+<td>Human-readable display name</td>
+</tr>
+<tr>
+<td><code>force</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Override existing registration by a different agent</td>
+</tr>
+<tr>
+<td><code>re_register</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Same agent returning (re-register after identity loss)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent_id</code></td>
+<td>string</td>
+<td>Generated agent ID (e.g., <code>&quot;agent:implementer:ABC123&quot;</code>)</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>&quot;registered&quot;</code>, <code>&quot;updated&quot;</code>, or <code>&quot;conflict&quot;</code></td>
+</tr>
+<tr>
+<td><code>conflict</code></td>
+<td>object</td>
+<td>Present only when <code>status</code> is <code>&quot;conflict&quot;</code></td>
+</tr>
+<tr>
+<td><code>conflict.existing_agent_id</code></td>
+<td>string</td>
+<td>ID of the conflicting agent</td>
+</tr>
+<tr>
+<td><code>conflict.registered_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp of conflicting registration</td>
+</tr>
+<tr>
+<td><code>conflict.last_seen_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp of last activity</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>invalid request</code>: Malformed JSON params</li>
+<li><code>role is required</code>: Missing <code>role</code> field</li>
+<li><code>module is required</code>: Missing <code>module</code> field</li>
+</ul>
+<h3>agent.list</h3>
+<p>List registered agents with optional filters.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>role</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filter by role</td>
+</tr>
+<tr>
+<td><code>module</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filter by module</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agents</code></td>
+<td>array</td>
+<td>List of agent objects</td>
+</tr>
+<tr>
+<td><code>agents[].agent_id</code></td>
+<td>string</td>
+<td>Agent ID</td>
+</tr>
+<tr>
+<td><code>agents[].kind</code></td>
+<td>string</td>
+<td><code>&quot;agent&quot;</code> or <code>&quot;user&quot;</code></td>
+</tr>
+<tr>
+<td><code>agents[].role</code></td>
+<td>string</td>
+<td>Agent role</td>
+</tr>
+<tr>
+<td><code>agents[].module</code></td>
+<td>string</td>
+<td>Agent module</td>
+</tr>
+<tr>
+<td><code>agents[].display</code></td>
+<td>string</td>
+<td>Display name</td>
+</tr>
+<tr>
+<td><code>agents[].registered_at</code></td>
+<td>string</td>
+<td>ISO 8601 registration timestamp</td>
+</tr>
+<tr>
+<td><code>agents[].last_seen_at</code></td>
+<td>string</td>
+<td>ISO 8601 last activity timestamp (may be empty)</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>invalid request</code>: Malformed JSON params</li>
+</ul>
+<h3>agent.whoami</h3>
+<p>Get current agent identity and active session.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><em>(none)</em></td>
+<td></td>
+<td></td>
+<td>Empty object or omit params</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent_id</code></td>
+<td>string</td>
+<td>Current agent ID</td>
+</tr>
+<tr>
+<td><code>role</code></td>
+<td>string</td>
+<td>Agent role</td>
+</tr>
+<tr>
+<td><code>module</code></td>
+<td>string</td>
+<td>Agent module</td>
+</tr>
+<tr>
+<td><code>display</code></td>
+<td>string</td>
+<td>Display name</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>string</td>
+<td>Identity source: <code>&quot;environment&quot;</code>, <code>&quot;flags&quot;</code>, or <code>&quot;identity_file&quot;</code></td>
+</tr>
+<tr>
+<td><code>session_id</code></td>
+<td>string</td>
+<td>Active session ID (empty if no active session)</td>
+</tr>
+<tr>
+<td><code>session_start</code></td>
+<td>string</td>
+<td>ISO 8601 session start time (empty if no active session)</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>resolve identity</code>: Could not determine agent identity from environment or<br>identity file</li>
+</ul>
+<h3>agent.listContext</h3>
+<p>List agent work contexts (branch, commits, files, intent, task).</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent_id</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filter by specific agent ID</td>
+</tr>
+<tr>
+<td><code>branch</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filter by branch name</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filter by file path (matches changed or uncommitted files)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>contexts</code></td>
+<td>array</td>
+<td>List of work context objects</td>
+</tr>
+<tr>
+<td><code>contexts[].session_id</code></td>
+<td>string</td>
+<td>Session ID</td>
+</tr>
+<tr>
+<td><code>contexts[].agent_id</code></td>
+<td>string</td>
+<td>Agent ID</td>
+</tr>
+<tr>
+<td><code>contexts[].branch</code></td>
+<td>string</td>
+<td>Current Git branch (may be empty)</td>
+</tr>
+<tr>
+<td><code>contexts[].worktree_path</code></td>
+<td>string</td>
+<td>Worktree filesystem path (may be empty)</td>
+</tr>
+<tr>
+<td><code>contexts[].unmerged_commits</code></td>
+<td>array</td>
+<td>List of commit summaries not on main</td>
+</tr>
+<tr>
+<td><code>contexts[].unmerged_commits[].hash</code></td>
+<td>string</td>
+<td>Commit hash</td>
+</tr>
+<tr>
+<td><code>contexts[].unmerged_commits[].subject</code></td>
+<td>string</td>
+<td>Commit subject line</td>
+</tr>
+<tr>
+<td><code>contexts[].uncommitted_files</code></td>
+<td>array</td>
+<td>List of uncommitted file paths</td>
+</tr>
+<tr>
+<td><code>contexts[].changed_files</code></td>
+<td>array</td>
+<td>List of all changed file paths</td>
+</tr>
+<tr>
+<td><code>contexts[].git_updated_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp of last git context extraction</td>
+</tr>
+<tr>
+<td><code>contexts[].current_task</code></td>
+<td>string</td>
+<td>Current task identifier (may be empty)</td>
+</tr>
+<tr>
+<td><code>contexts[].task_updated_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp of last task update</td>
+</tr>
+<tr>
+<td><code>contexts[].intent</code></td>
+<td>string</td>
+<td>Free-text intent description (may be empty)</td>
+</tr>
+<tr>
+<td><code>contexts[].intent_updated_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp of last intent update</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>invalid request</code>: Malformed JSON params</li>
+</ul>
+<h3>agent.delete</h3>
+<p>Delete an agent by name. Removes the identity file, per-agent JSONL message<br>file, and SQLite record. Emits an <code>agent.cleanup</code> event.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Agent name to delete (must match <code>[a-z0-9_]+</code>)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent_id</code></td>
+<td>string</td>
+<td>Deleted agent ID</td>
+</tr>
+<tr>
+<td><code>deleted</code></td>
+<td>boolean</td>
+<td><code>true</code> if the agent was deleted</td>
+</tr>
+<tr>
+<td><code>message</code></td>
+<td>string</td>
+<td>Human-readable confirmation message</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>agent name is required</code>: Missing <code>name</code> field</li>
+<li><code>invalid agent name</code>: Name does not match validation regex</li>
+<li><code>agent not found</code>: No agent with given name</li>
+</ul>
+<h3>agent.cleanup</h3>
+<p>Detect and optionally remove orphaned agents. An agent is considered orphaned if<br>its identity file is missing, its worktree no longer exists, or it has been<br>inactive beyond the threshold.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>dry_run</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Preview orphans without deleting</td>
+</tr>
+<tr>
+<td><code>force</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Delete all orphans without prompting</td>
+</tr>
+<tr>
+<td><code>threshold</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Days since last seen to consider stale</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>orphans</code></td>
+<td>array</td>
+<td>List of orphaned agent objects</td>
+</tr>
+<tr>
+<td><code>orphans[].agent_id</code></td>
+<td>string</td>
+<td>Agent ID</td>
+</tr>
+<tr>
+<td><code>orphans[].role</code></td>
+<td>string</td>
+<td>Agent role</td>
+</tr>
+<tr>
+<td><code>orphans[].module</code></td>
+<td>string</td>
+<td>Agent module</td>
+</tr>
+<tr>
+<td><code>orphans[].worktree</code></td>
+<td>string</td>
+<td>Worktree name (may be empty)</td>
+</tr>
+<tr>
+<td><code>orphans[].branch</code></td>
+<td>string</td>
+<td>Branch name (may be empty)</td>
+</tr>
+<tr>
+<td><code>orphans[].last_seen_at</code></td>
+<td>string</td>
+<td>ISO 8601 last activity timestamp</td>
+</tr>
+<tr>
+<td><code>orphans[].worktree_missing</code></td>
+<td>boolean</td>
+<td>Whether the agent&#39;s worktree no longer exists</td>
+</tr>
+<tr>
+<td><code>orphans[].branch_missing</code></td>
+<td>boolean</td>
+<td>Whether the agent&#39;s branch no longer exists</td>
+</tr>
+<tr>
+<td><code>orphans[].days_since_last_seen</code></td>
+<td>integer</td>
+<td>Days since last activity</td>
+</tr>
+<tr>
+<td><code>orphans[].message_count</code></td>
+<td>integer</td>
+<td>Number of messages from this agent</td>
+</tr>
+<tr>
+<td><code>deleted</code></td>
+<td>array</td>
+<td>List of deleted agent ID strings (empty in dry-run mode)</td>
+</tr>
+<tr>
+<td><code>dry_run</code></td>
+<td>boolean</td>
+<td>Whether this was a dry-run</td>
+</tr>
+<tr>
+<td><code>message</code></td>
+<td>string</td>
+<td>Summary message</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>invalid request</code>: Malformed JSON params</li>
+</ul>
+<h3>session.start</h3>
+<p>Start a new work session for an agent. Automatically recovers any orphaned<br>sessions for the same agent.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Which agent is starting the session</td>
+</tr>
+<tr>
+<td><code>scopes</code></td>
+<td>array</td>
+<td>no</td>
+<td>Initial session scopes (<code>[{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}]</code>)</td>
+</tr>
+<tr>
+<td><code>refs</code></td>
+<td>array</td>
+<td>no</td>
+<td>Initial session refs (<code>[{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}]</code>)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session_id</code></td>
+<td>string</td>
+<td>New session ID (e.g., <code>&quot;ses_01HXE...&quot;</code>)</td>
+</tr>
+<tr>
+<td><code>agent_id</code></td>
+<td>string</td>
+<td>Agent ID that owns this session</td>
+</tr>
+<tr>
+<td><code>started_at</code></td>
+<td>string</td>
+<td>ISO 8601 session start timestamp</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>agent_id is required</code>: Missing <code>agent_id</code> field</li>
+<li><code>agent not found</code>: Agent with given ID is not registered</li>
+</ul>
+<h3>session.end</h3>
+<p>End an active work session. Syncs work contexts to JSONL on end.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Session ID to end</td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td>string</td>
+<td>no</td>
+<td>End reason: <code>&quot;normal&quot;</code> (default), <code>&quot;crash&quot;</code>, <code>&quot;superseded&quot;</code></td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session_id</code></td>
+<td>string</td>
+<td>Ended session ID</td>
+</tr>
+<tr>
+<td><code>ended_at</code></td>
+<td>string</td>
+<td>ISO 8601 end timestamp</td>
+</tr>
+<tr>
+<td><code>duration_ms</code></td>
+<td>integer</td>
+<td>Session duration in milliseconds</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>session_id is required</code>: Missing <code>session_id</code> field</li>
+<li><code>get session</code>: Session ID not found</li>
+</ul>
+<h3>session.heartbeat</h3>
+<p>Update session activity timestamp. Optionally add/remove scopes and refs.<br>Extracts git work context if a <code>worktree</code> ref is set.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Session ID</td>
+</tr>
+<tr>
+<td><code>add_scopes</code></td>
+<td>array</td>
+<td>no</td>
+<td>Scopes to add (<code>[{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}]</code>)</td>
+</tr>
+<tr>
+<td><code>remove_scopes</code></td>
+<td>array</td>
+<td>no</td>
+<td>Scopes to remove</td>
+</tr>
+<tr>
+<td><code>add_refs</code></td>
+<td>array</td>
+<td>no</td>
+<td>Refs to add (<code>[{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}]</code>)</td>
+</tr>
+<tr>
+<td><code>remove_refs</code></td>
+<td>array</td>
+<td>no</td>
+<td>Refs to remove</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session_id</code></td>
+<td>string</td>
+<td>Session ID</td>
+</tr>
+<tr>
+<td><code>last_seen_at</code></td>
+<td>string</td>
+<td>ISO 8601 updated last-seen timestamp</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>session_id is required</code>: Missing <code>session_id</code> field</li>
+<li><code>session not found</code>: Session ID does not exist</li>
+<li><code>session has already ended</code>: Session was previously ended</li>
+</ul>
+<h3>session.setIntent</h3>
+<p>Set a free-text intent describing what the agent is working on.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Session ID</td>
+</tr>
+<tr>
+<td><code>intent</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Free-text intent (e.g., <code>&quot;Refactoring auth flow&quot;</code>). Empty string clears it.</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session_id</code></td>
+<td>string</td>
+<td>Session ID</td>
+</tr>
+<tr>
+<td><code>intent</code></td>
+<td>string</td>
+<td>The intent that was set</td>
+</tr>
+<tr>
+<td><code>intent_updated_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp of the update</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>session_id is required</code>: Missing <code>session_id</code> field</li>
+<li><code>session not found</code>: Session ID does not exist</li>
+<li><code>session has already ended</code>: Session was previously ended</li>
+</ul>
+<h3>session.setTask</h3>
+<p>Set the current task identifier for the session.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Session ID</td>
+</tr>
+<tr>
+<td><code>current_task</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Task identifier (e.g., <code>&quot;beads:thrum-xyz&quot;</code>). Empty string clears it.</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session_id</code></td>
+<td>string</td>
+<td>Session ID</td>
+</tr>
+<tr>
+<td><code>current_task</code></td>
+<td>string</td>
+<td>The task that was set</td>
+</tr>
+<tr>
+<td><code>task_updated_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp of the update</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>session_id is required</code>: Missing <code>session_id</code> field</li>
+<li><code>session not found</code>: Session ID does not exist</li>
+<li><code>session has already ended</code>: Session was previously ended</li>
+</ul>
+<h3>session.list</h3>
+<p>List sessions with optional filters.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent_id</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filter by agent ID</td>
+</tr>
+<tr>
+<td><code>active_only</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Only return active (non-ended) sessions</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>sessions</code></td>
+<td>array</td>
+<td>List of session objects</td>
+</tr>
+<tr>
+<td><code>sessions[].session_id</code></td>
+<td>string</td>
+<td>Session ID</td>
+</tr>
+<tr>
+<td><code>sessions[].agent_id</code></td>
+<td>string</td>
+<td>Agent ID</td>
+</tr>
+<tr>
+<td><code>sessions[].started_at</code></td>
+<td>string</td>
+<td>ISO 8601 start timestamp</td>
+</tr>
+<tr>
+<td><code>sessions[].ended_at</code></td>
+<td>string</td>
+<td>ISO 8601 end timestamp (empty if active)</td>
+</tr>
+<tr>
+<td><code>sessions[].end_reason</code></td>
+<td>string</td>
+<td>End reason (empty if active)</td>
+</tr>
+<tr>
+<td><code>sessions[].last_seen_at</code></td>
+<td>string</td>
+<td>ISO 8601 last heartbeat timestamp</td>
+</tr>
+<tr>
+<td><code>sessions[].intent</code></td>
+<td>string</td>
+<td>Free-text intent (empty if not set)</td>
+</tr>
+<tr>
+<td><code>sessions[].status</code></td>
+<td>string</td>
+<td><code>&quot;active&quot;</code> or <code>&quot;ended&quot;</code></td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>invalid request</code>: Malformed JSON params</li>
+</ul>
+<h3>message.send</h3>
+<p>Send a message to the messaging system. Triggers subscription notifications.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>content</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Message body text</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>&quot;markdown&quot;</code> (default), <code>&quot;plain&quot;</code>, or <code>&quot;json&quot;</code></td>
+</tr>
+<tr>
+<td><code>structured</code></td>
+<td>object</td>
+<td>no</td>
+<td>Typed JSON payload</td>
+</tr>
+<tr>
+<td><code>scopes</code></td>
+<td>array</td>
+<td>no</td>
+<td>Message scopes (<code>[{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}]</code>)</td>
+</tr>
+<tr>
+<td><code>refs</code></td>
+<td>array</td>
+<td>no</td>
+<td>Message references (<code>[{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}]</code>)</td>
+</tr>
+<tr>
+<td><code>mentions</code></td>
+<td>array</td>
+<td>no</td>
+<td>Mention roles (e.g., <code>[&quot;@reviewer&quot;]</code>)</td>
+</tr>
+<tr>
+<td><code>tags</code></td>
+<td>array</td>
+<td>no</td>
+<td>Message tags</td>
+</tr>
+<tr>
+<td><code>priority</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>&quot;low&quot;</code>, <code>&quot;normal&quot;</code> (default), <code>&quot;high&quot;</code></td>
+</tr>
+<tr>
+<td><code>acting_as</code></td>
+<td>string</td>
+<td>no</td>
+<td>Impersonate this agent ID (users only)</td>
+</tr>
+<tr>
+<td><code>disclose</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Show <code>[via user:X]</code> tag when impersonating</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>message_id</code></td>
+<td>string</td>
+<td>Generated message ID (e.g., <code>&quot;msg_01HXE...&quot;</code>)</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>string</td>
+<td>ISO 8601 creation timestamp</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>content is required</code>: Missing <code>content</code> field</li>
+<li><code>invalid format</code>: Format not one of <code>markdown</code>, <code>plain</code>, <code>json</code></li>
+<li><code>no active session found</code>: Agent does not have an active session</li>
+<li><code>only users can impersonate agents</code>: Non-user tried to use <code>acting_as</code></li>
+<li><code>target agent does not exist</code>: <code>acting_as</code> references nonexistent agent</li>
+</ul>
+<h3>message.get</h3>
+<p>Retrieve a single message by ID with full details.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>message_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Message ID to retrieve</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>message</code></td>
+<td>object</td>
+<td>Full message detail</td>
+</tr>
+<tr>
+<td><code>message.message_id</code></td>
+<td>string</td>
+<td>Message ID</td>
+</tr>
+<tr>
+<td><code>message.author</code></td>
+<td>object</td>
+<td>Author information</td>
+</tr>
+<tr>
+<td><code>message.author.agent_id</code></td>
+<td>string</td>
+<td>Author agent ID</td>
+</tr>
+<tr>
+<td><code>message.author.session_id</code></td>
+<td>string</td>
+<td>Session ID that created the message</td>
+</tr>
+<tr>
+<td><code>message.body</code></td>
+<td>object</td>
+<td>Message body</td>
+</tr>
+<tr>
+<td><code>message.body.format</code></td>
+<td>string</td>
+<td><code>&quot;markdown&quot;</code>, <code>&quot;plain&quot;</code>, or <code>&quot;json&quot;</code></td>
+</tr>
+<tr>
+<td><code>message.body.content</code></td>
+<td>string</td>
+<td>Message text</td>
+</tr>
+<tr>
+<td><code>message.body.structured</code></td>
+<td>string</td>
+<td>JSON string of structured data (empty if none)</td>
+</tr>
+<tr>
+<td><code>message.scopes</code></td>
+<td>array</td>
+<td>Message scopes</td>
+</tr>
+<tr>
+<td><code>message.refs</code></td>
+<td>array</td>
+<td>Message refs</td>
+</tr>
+<tr>
+<td><code>message.metadata</code></td>
+<td>object</td>
+<td>Deletion metadata</td>
+</tr>
+<tr>
+<td><code>message.metadata.deleted_at</code></td>
+<td>string</td>
+<td>ISO 8601 deletion timestamp (empty if not deleted)</td>
+</tr>
+<tr>
+<td><code>message.metadata.delete_reason</code></td>
+<td>string</td>
+<td>Deletion reason (empty if not deleted)</td>
+</tr>
+<tr>
+<td><code>message.created_at</code></td>
+<td>string</td>
+<td>ISO 8601 creation timestamp</td>
+</tr>
+<tr>
+<td><code>message.updated_at</code></td>
+<td>string</td>
+<td>ISO 8601 last edit timestamp (empty if never edited)</td>
+</tr>
+<tr>
+<td><code>message.deleted</code></td>
+<td>boolean</td>
+<td>Whether the message is deleted</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>message_id is required</code>: Missing <code>message_id</code> field</li>
+<li><code>message not found</code>: No message with given ID</li>
+</ul>
+<h3>message.list</h3>
+<p>List messages with filtering, pagination, and sorting.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>scope</code></td>
+<td>object</td>
+<td>no</td>
+<td>Filter by scope (<code>{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}</code>)</td>
+</tr>
+<tr>
+<td><code>ref</code></td>
+<td>object</td>
+<td>no</td>
+<td>Filter by ref (<code>{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}</code>)</td>
+</tr>
+<tr>
+<td><code>author_id</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filter by author agent ID</td>
+</tr>
+<tr>
+<td><code>mentions</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Only messages mentioning current agent (resolved from config)</td>
+</tr>
+<tr>
+<td><code>unread</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Only unread messages (resolved from config)</td>
+</tr>
+<tr>
+<td><code>mention_role</code></td>
+<td>string</td>
+<td>no</td>
+<td>Explicit filter: messages with mention ref matching this role (for remote callers like MCP server)</td>
+</tr>
+<tr>
+<td><code>unread_for_agent</code></td>
+<td>string</td>
+<td>no</td>
+<td>Explicit filter: messages unread by this agent ID (for remote callers like MCP server)</td>
+</tr>
+<tr>
+<td><code>page_size</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Items per page (default: 10, max: 100)</td>
+</tr>
+<tr>
+<td><code>page</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Page number (default: 1)</td>
+</tr>
+<tr>
+<td><code>sort_by</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>&quot;created_at&quot;</code> (default) or <code>&quot;updated_at&quot;</code></td>
+</tr>
+<tr>
+<td><code>sort_order</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>&quot;asc&quot;</code> or <code>&quot;desc&quot;</code> (default)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>messages</code></td>
+<td>array</td>
+<td>List of message summaries</td>
+</tr>
+<tr>
+<td><code>messages[].message_id</code></td>
+<td>string</td>
+<td>Message ID</td>
+</tr>
+<tr>
+<td><code>messages[].agent_id</code></td>
+<td>string</td>
+<td>Author agent ID</td>
+</tr>
+<tr>
+<td><code>messages[].body</code></td>
+<td>object</td>
+<td>Message body (format, content, structured)</td>
+</tr>
+<tr>
+<td><code>messages[].created_at</code></td>
+<td>string</td>
+<td>ISO 8601 creation timestamp</td>
+</tr>
+<tr>
+<td><code>messages[].deleted</code></td>
+<td>boolean</td>
+<td>Whether the message is deleted</td>
+</tr>
+<tr>
+<td><code>messages[].is_read</code></td>
+<td>boolean</td>
+<td>Whether the message has been read by current agent/session</td>
+</tr>
+<tr>
+<td><code>total</code></td>
+<td>integer</td>
+<td>Total matching messages</td>
+</tr>
+<tr>
+<td><code>unread</code></td>
+<td>integer</td>
+<td>Count of unread messages</td>
+</tr>
+<tr>
+<td><code>page</code></td>
+<td>integer</td>
+<td>Current page number</td>
+</tr>
+<tr>
+<td><code>page_size</code></td>
+<td>integer</td>
+<td>Items per page</td>
+</tr>
+<tr>
+<td><code>total_pages</code></td>
+<td>integer</td>
+<td>Total number of pages</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>invalid sort_by</code>: Must be <code>&quot;created_at&quot;</code> or <code>&quot;updated_at&quot;</code></li>
+<li><code>invalid sort_order</code>: Must be <code>&quot;asc&quot;</code> or <code>&quot;desc&quot;</code></li>
+</ul>
+<h3>message.edit</h3>
+<p>Edit a message&#39;s content or structured data. Only the original author can edit.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>message_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Message ID to edit</td>
+</tr>
+<tr>
+<td><code>content</code></td>
+<td>string</td>
+<td>no</td>
+<td>New content (at least one of <code>content</code> or <code>structured</code> required)</td>
+</tr>
+<tr>
+<td><code>structured</code></td>
+<td>object</td>
+<td>no</td>
+<td>New structured data (at least one of <code>content</code> or <code>structured</code> required)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>message_id</code></td>
+<td>string</td>
+<td>Edited message ID</td>
+</tr>
+<tr>
+<td><code>updated_at</code></td>
+<td>string</td>
+<td>ISO 8601 edit timestamp</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>integer</td>
+<td>Edit count (total number of edits for this message)</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>message_id is required</code>: Missing <code>message_id</code> field</li>
+<li><code>at least one of content or structured must be provided</code>: Neither field given</li>
+<li><code>message not found</code>: No message with given ID</li>
+<li><code>cannot edit deleted message</code>: Message was soft-deleted</li>
+<li><code>only message author can edit</code>: Current agent is not the message author</li>
+<li><code>no active session found</code>: Agent does not have an active session</li>
+</ul>
+<h3>message.delete</h3>
+<p>Soft-delete a message. The message remains in the database and JSONL log but is<br>marked as deleted.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>message_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Message ID to delete</td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td>string</td>
+<td>no</td>
+<td>Reason for deletion</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>message_id</code></td>
+<td>string</td>
+<td>Deleted message ID</td>
+</tr>
+<tr>
+<td><code>deleted_at</code></td>
+<td>string</td>
+<td>ISO 8601 deletion timestamp</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>message_id is required</code>: Missing <code>message_id</code> field</li>
+<li><code>message not found</code>: No message with given ID</li>
+<li><code>message already deleted</code>: Message was already soft-deleted</li>
+</ul>
+<h3>message.markRead</h3>
+<p>Batch mark messages as read for the current agent and session. Returns<br>collaboration info (other agents who also read the messages).</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>message_ids</code></td>
+<td>array</td>
+<td>yes</td>
+<td>List of message ID strings</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>marked_count</code></td>
+<td>integer</td>
+<td>Number of messages successfully marked as read</td>
+</tr>
+<tr>
+<td><code>also_read_by</code></td>
+<td>object</td>
+<td>Map of message ID to list of other agent IDs that also read it (omitted if empty)</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>message_ids is required and must not be empty</code>: Missing or empty<br><code>message_ids</code> array</li>
+<li><code>no active session found</code>: Agent does not have an active session</li>
+</ul>
+<h3>group.create</h3>
+<p>Create a named group for targeted messaging. Groups can contain agents and roles.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Group name (e.g., <code>&quot;reviewers&quot;</code>)</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>string</td>
+<td>no</td>
+<td>Human-readable description</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>string</td>
+<td>ISO 8601 creation timestamp</td>
+</tr>
+<tr>
+<td><code>created_by</code></td>
+<td>string</td>
+<td>Agent ID of creator</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>name is required</code>: Missing <code>name</code> field</li>
+<li><code>group already exists</code>: Group with this name already exists</li>
+</ul>
+<h3>group.delete</h3>
+<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be deleted.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Group name</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Name of deleted group</td>
+</tr>
+<tr>
+<td><code>deleted_at</code></td>
+<td>string</td>
+<td>ISO 8601 deletion timestamp</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>name is required</code>: Missing <code>name</code> field</li>
+<li><code>cannot delete protected group</code>: Attempted to delete <code>@everyone</code></li>
+<li><code>group not found</code>: No group with given name</li>
+</ul>
+<h3>group.member.add</h3>
+<p>Add a member to a group. Members can be agents (by name) or roles.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>group_name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Group to add member to</td>
+</tr>
+<tr>
+<td><code>member_type</code></td>
+<td>string</td>
+<td>yes</td>
+<td><code>&quot;agent&quot;</code> or <code>&quot;role&quot;</code></td>
+</tr>
+<tr>
+<td><code>member_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Agent name or role name</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>group_name</code></td>
+<td>string</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>member_type</code></td>
+<td>string</td>
+<td>Type of member added</td>
+</tr>
+<tr>
+<td><code>member_id</code></td>
+<td>string</td>
+<td>ID of member added</td>
+</tr>
+<tr>
+<td><code>added_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>group_name is required</code>: Missing <code>group_name</code> field</li>
+<li><code>member_type is required</code>: Missing <code>member_type</code> field</li>
+<li><code>member_id is required</code>: Missing <code>member_id</code> field</li>
+<li><code>group not found</code>: No group with given name</li>
+<li><code>invalid member_type</code>: Must be <code>&quot;agent&quot;</code> or <code>&quot;role&quot;</code></li>
+</ul>
+<h3>group.member.remove</h3>
+<p>Remove a member from a group.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>group_name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Group to remove member from</td>
+</tr>
+<tr>
+<td><code>member_type</code></td>
+<td>string</td>
+<td>yes</td>
+<td><code>&quot;agent&quot;</code> or <code>&quot;role&quot;</code></td>
+</tr>
+<tr>
+<td><code>member_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Agent name or role name</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>group_name</code></td>
+<td>string</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>member_type</code></td>
+<td>string</td>
+<td>Type of member removed</td>
+</tr>
+<tr>
+<td><code>member_id</code></td>
+<td>string</td>
+<td>ID of member removed</td>
+</tr>
+<tr>
+<td><code>removed_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>group_name is required</code>: Missing <code>group_name</code> field</li>
+<li><code>member_type is required</code>: Missing <code>member_type</code> field</li>
+<li><code>member_id is required</code>: Missing <code>member_id</code> field</li>
+<li><code>group not found</code>: No group with given name</li>
+<li><code>member not found</code>: Member is not in the group</li>
+</ul>
+<h3>group.list</h3>
+<p>List all groups in the system.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><em>(none)</em></td>
+<td></td>
+<td></td>
+<td>Empty object or omit params</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>groups</code></td>
+<td>array</td>
+<td>List of group objects</td>
+</tr>
+<tr>
+<td><code>groups[].name</code></td>
+<td>string</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>groups[].description</code></td>
+<td>string</td>
+<td>Group description (may be empty)</td>
+</tr>
+<tr>
+<td><code>groups[].created_at</code></td>
+<td>string</td>
+<td>ISO 8601 creation timestamp</td>
+</tr>
+<tr>
+<td><code>groups[].created_by</code></td>
+<td>string</td>
+<td>Agent ID of creator</td>
+</tr>
+<tr>
+<td><code>groups[].member_count</code></td>
+<td>integer</td>
+<td>Number of direct members</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li>No method-specific errors.</li>
+</ul>
+<h3>group.info</h3>
+<p>Get detailed information about a specific group.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Group name</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>string</td>
+<td>Group description (may be empty)</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>string</td>
+<td>ISO 8601 creation timestamp</td>
+</tr>
+<tr>
+<td><code>created_by</code></td>
+<td>string</td>
+<td>Agent ID of creator</td>
+</tr>
+<tr>
+<td><code>members</code></td>
+<td>array</td>
+<td>List of member objects</td>
+</tr>
+<tr>
+<td><code>members[].type</code></td>
+<td>string</td>
+<td><code>&quot;agent&quot;</code> or <code>&quot;role&quot;</code></td>
+</tr>
+<tr>
+<td><code>members[].id</code></td>
+<td>string</td>
+<td>Agent name or role name</td>
+</tr>
+<tr>
+<td><code>members[].added_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp when member was added</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>name is required</code>: Missing <code>name</code> field</li>
+<li><code>group not found</code>: No group with given name</li>
+</ul>
+<h3>group.members</h3>
+<p>Get members of a group with optional expansion. When <code>expand</code> is <code>true</code>, resolves roles to individual agent IDs.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>expand</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Resolve roles to agent IDs (default: <code>false</code>)</td>
+</tr>
+</tbody></table>
+<p><strong>Response (without expand):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>members</code></td>
+<td>array</td>
+<td>List of direct member objects</td>
+</tr>
+<tr>
+<td><code>members[].type</code></td>
+<td>string</td>
+<td><code>&quot;agent&quot;</code> or <code>&quot;role&quot;</code></td>
+</tr>
+<tr>
+<td><code>members[].id</code></td>
+<td>string</td>
+<td>Agent name or role name</td>
+</tr>
+</tbody></table>
+<p><strong>Response (with expand=true):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>agent_ids</code></td>
+<td>array</td>
+<td>List of resolved agent IDs (strings)</td>
+</tr>
+<tr>
+<td><code>count</code></td>
+<td>integer</td>
+<td>Number of resolved agents</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>name is required</code>: Missing <code>name</code> field</li>
+<li><code>group not found</code>: No group with given name</li>
+</ul>
+<h3>subscribe</h3>
+<p>Subscribe to push notifications for messages matching a scope, mention, or all<br>messages.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>scope</code></td>
+<td>object</td>
+<td>no</td>
+<td>Subscribe to scope (<code>{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}</code>)</td>
+</tr>
+<tr>
+<td><code>mention_role</code></td>
+<td>string</td>
+<td>no</td>
+<td>Subscribe to mentions of this role (without <code>@</code> prefix)</td>
+</tr>
+<tr>
+<td><code>all</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Subscribe to all messages (firehose)</td>
+</tr>
+</tbody></table>
+<p>Exactly one of <code>scope</code>, <code>mention_role</code>, or <code>all</code> must be provided.</p>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>subscription_id</code></td>
+<td>integer</td>
+<td>Subscription ID (used for unsubscribe)</td>
+</tr>
+<tr>
+<td><code>session_id</code></td>
+<td>string</td>
+<td>Session that owns this subscription</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>string</td>
+<td>ISO 8601 creation timestamp</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>at least one of scope, mention_role, or all must be specified</code>: No<br>subscription type given</li>
+<li><code>no active session found</code>: Agent does not have an active session</li>
+</ul>
+<h3>unsubscribe</h3>
+<p>Remove a subscription by ID.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>subscription_id</code></td>
+<td>integer</td>
+<td>yes</td>
+<td>Subscription ID to remove</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>removed</code></td>
+<td>boolean</td>
+<td><code>true</code> if the subscription was deleted</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>subscription_id is required</code>: Missing or zero <code>subscription_id</code></li>
+<li><code>no active session found</code>: Agent does not have an active session</li>
+</ul>
+<h3>subscriptions.list</h3>
+<p>List all subscriptions for the current session.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><em>(none)</em></td>
+<td></td>
+<td></td>
+<td>Empty object or omit params</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>subscriptions</code></td>
+<td>array</td>
+<td>List of subscription objects</td>
+</tr>
+<tr>
+<td><code>subscriptions[].id</code></td>
+<td>integer</td>
+<td>Subscription ID</td>
+</tr>
+<tr>
+<td><code>subscriptions[].scope_type</code></td>
+<td>string</td>
+<td>Scope type (empty if not a scope subscription)</td>
+</tr>
+<tr>
+<td><code>subscriptions[].scope_value</code></td>
+<td>string</td>
+<td>Scope value (empty if not a scope subscription)</td>
+</tr>
+<tr>
+<td><code>subscriptions[].mention_role</code></td>
+<td>string</td>
+<td>Mention role (empty if not a mention subscription)</td>
+</tr>
+<tr>
+<td><code>subscriptions[].all</code></td>
+<td>boolean</td>
+<td><code>true</code> if this is an all-messages subscription</td>
+</tr>
+<tr>
+<td><code>subscriptions[].created_at</code></td>
+<td>string</td>
+<td>ISO 8601 creation timestamp</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>no active session found</code>: Agent does not have an active session</li>
+</ul>
+<h3>user.register</h3>
+<p>Register a human user identity. Only available over WebSocket.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>username</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Username (alphanumeric, underscore, or hyphen; 1-32 chars)</td>
+</tr>
+<tr>
+<td><code>display</code></td>
+<td>string</td>
+<td>no</td>
+<td>Display name</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>user_id</code></td>
+<td>string</td>
+<td>Generated user ID (e.g., <code>&quot;user:leon&quot;</code>)</td>
+</tr>
+<tr>
+<td><code>username</code></td>
+<td>string</td>
+<td>The registered username</td>
+</tr>
+<tr>
+<td><code>display_name</code></td>
+<td>string</td>
+<td>Display name (if provided)</td>
+</tr>
+<tr>
+<td><code>token</code></td>
+<td>string</td>
+<td>Session token for reconnection</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>&quot;registered&quot;</code> or <code>&quot;existing&quot;</code> (idempotent re-registration)</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>-32001</code> (Transport error): Method called over Unix socket instead of<br>WebSocket</li>
+<li><code>username is required</code>: Missing <code>username</code> field</li>
+<li><code>username cannot start with &#39;agent:&#39; prefix</code>: Namespace conflict</li>
+<li><code>invalid username format</code>: Does not match <code>[a-zA-Z0-9_-]{1,32}</code></li>
+</ul>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>Registration is idempotent: if the user already exists, returns the existing<br>info with a fresh token and status <code>&quot;existing&quot;</code>.</li>
+</ul>
+<h3>user.identify</h3>
+<p>Get the current user&#39;s identity from git config. Used for browser<br>auto-registration.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><em>(none)</em></td>
+<td></td>
+<td></td>
+<td>Empty object or omit params</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>username</code></td>
+<td>string</td>
+<td>Sanitized git <code>user.name</code> (lowercased, spaces replaced with hyphens)</td>
+</tr>
+<tr>
+<td><code>email</code></td>
+<td>string</td>
+<td>Git <code>user.email</code></td>
+</tr>
+<tr>
+<td><code>display</code></td>
+<td>string</td>
+<td>Raw git <code>user.name</code></td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>git config user.name not set</code>: Git user.name is not configured in the<br>repository</li>
+</ul>
+<h2>Push Notifications</h2>
+<p>When a message matches a subscription, the daemon sends a JSON-RPC notification<br>(no <code>id</code> field) over the same socket connection:</p>
+<p><strong>Notification format:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;notification.message&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;author&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:implementer:auth:ABC&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span>
+    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;First 100 chars of message...&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;module&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;matched_subscription&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;match_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope&quot;</span>
+    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Match types:</strong></p>
+<ul>
+<li><code>scope</code> - Message has a scope matching your subscription</li>
+<li><code>mention</code> - Message mentions your subscribed role</li>
+<li><code>all</code> - Your &quot;all messages&quot; subscription matched</li>
+</ul>
+<p><strong>Client implementation notes:</strong></p>
+<ol>
+<li>Keep connection open to receive notifications</li>
+<li>Notifications have no <code>id</code> field (one-way, no response expected)</li>
+<li>Use <code>message.get</code> to fetch full message content after notification</li>
+<li>Clients disconnected at notification time will see messages via<br><code>message.list</code> when reconnecting</li>
+</ol>
+<h3>sync.status</h3>
+<p>Get current sync loop status and health. Available when the sync loop is active<br>(requires a remote origin).</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><em>(none)</em></td>
+<td></td>
+<td></td>
+<td>Empty object or omit params</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>running</code></td>
+<td>boolean</td>
+<td>Whether the sync loop is running</td>
+</tr>
+<tr>
+<td><code>last_sync_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp of last successful sync</td>
+</tr>
+<tr>
+<td><code>last_error</code></td>
+<td>string</td>
+<td>Last error message (empty if no error)</td>
+</tr>
+<tr>
+<td><code>sync_state</code></td>
+<td>string</td>
+<td><code>&quot;stopped&quot;</code>, <code>&quot;idle&quot;</code>, <code>&quot;synced&quot;</code>, or <code>&quot;error&quot;</code></td>
+</tr>
+</tbody></table>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>This method is only registered when the sync loop is initialized (i.e., the<br>repository has a remote origin). Returns method-not-found (<code>-32601</code>)<br>otherwise.</li>
+</ul>
+<h3>sync.force</h3>
+<p>Trigger an immediate sync (non-blocking). Available when the sync loop is active<br>(requires a remote origin).</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><em>(none)</em></td>
+<td></td>
+<td></td>
+<td>Empty object or omit params</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>triggered</code></td>
+<td>boolean</td>
+<td>Whether sync was triggered</td>
+</tr>
+<tr>
+<td><code>last_sync_at</code></td>
+<td>string</td>
+<td>ISO 8601 timestamp of last sync</td>
+</tr>
+<tr>
+<td><code>sync_state</code></td>
+<td>string</td>
+<td>Current sync state</td>
+</tr>
+</tbody></table>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>This method is only registered when the sync loop is initialized (i.e., the<br>repository has a remote origin). Returns method-not-found (<code>-32601</code>)<br>otherwise.</li>
+<li>The sync loop runs every 60 seconds by default (configurable via<br><code>--sync-interval</code>).</li>
+</ul>
+<h2>Using the API</h2>
+<h3>From Command Line</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Using netcat (nc)</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">&#x27;{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;health&quot;,&quot;id&quot;:1}&#x27;</span> | nc -U .thrum/var/thrum.sock
+
+<span class="hljs-comment"># Using curl (requires HTTP-to-Unix-socket proxy)</span>
+<span class="hljs-comment"># Not directly supported without proxy</span></code></pre>
+<h3>From Go Code</h3>
+<pre><code class="language-go hljs"><span class="hljs-keyword">import</span> <span class="hljs-string">&quot;github.com/leonletto/thrum/internal/daemon&quot;</span>
+
+<span class="hljs-comment">// Connect to daemon</span>
+client, err := daemon.NewClient(<span class="hljs-string">&quot;.thrum/var/thrum.sock&quot;</span>)
+<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+    log.Fatal(err)
+}
+<span class="hljs-keyword">defer</span> client.Close()
+
+<span class="hljs-comment">// Call health method</span>
+result, err := client.Call(<span class="hljs-string">&quot;health&quot;</span>, <span class="hljs-keyword">map</span>[<span class="hljs-type">string</span>]any{})
+<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+    log.Fatal(err)
+}
+
+<span class="hljs-keyword">var</span> healthResp daemon.HealthResponse
+<span class="hljs-keyword">if</span> err := json.Unmarshal(result, &amp;healthResp); err != <span class="hljs-literal">nil</span> {
+    log.Fatal(err)
+}
+
+fmt.Printf(<span class="hljs-string">&quot;Status: %s\n&quot;</span>, healthResp.Status)</code></pre>
+<h3>From Other Languages</h3>
+<h4>Python Example</h4>
+<pre><code class="language-python hljs"><span class="hljs-keyword">import</span> socket
+<span class="hljs-keyword">import</span> json
+
+<span class="hljs-keyword">def</span> <span class="hljs-title function_">call_rpc</span>(<span class="hljs-params">method, params={}</span>):
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.connect(<span class="hljs-string">&#x27;.thrum/var/thrum.sock&#x27;</span>)
+
+    request = {
+        <span class="hljs-string">&#x27;jsonrpc&#x27;</span>: <span class="hljs-string">&#x27;2.0&#x27;</span>,
+        <span class="hljs-string">&#x27;method&#x27;</span>: method,
+        <span class="hljs-string">&#x27;params&#x27;</span>: params,
+        <span class="hljs-string">&#x27;id&#x27;</span>: <span class="hljs-number">1</span>
+    }
+
+    sock.sendall(json.dumps(request).encode() + <span class="hljs-string">b&#x27;\n&#x27;</span>)
+    response = sock.recv(<span class="hljs-number">4096</span>)
+    sock.close()
+
+    <span class="hljs-keyword">return</span> json.loads(response)
+
+<span class="hljs-comment"># Call health method</span>
+result = call_rpc(<span class="hljs-string">&#x27;health&#x27;</span>)
+<span class="hljs-built_in">print</span>(result[<span class="hljs-string">&#x27;result&#x27;</span>][<span class="hljs-string">&#x27;status&#x27;</span>])</code></pre>
+<h4>Node.js Example</h4>
+<pre><code class="language-javascript hljs"><span class="hljs-keyword">const</span> net = <span class="hljs-built_in">require</span>(<span class="hljs-string">&quot;net&quot;</span>);
+
+<span class="hljs-keyword">function</span> <span class="hljs-title function_">callRPC</span>(<span class="hljs-params">method, params = {}</span>) {
+  <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Promise</span>(<span class="hljs-function">(<span class="hljs-params">resolve, reject</span>) =&gt;</span> {
+    <span class="hljs-keyword">const</span> client = net.<span class="hljs-title function_">createConnection</span>(<span class="hljs-string">&quot;.thrum/var/thrum.sock&quot;</span>);
+
+    <span class="hljs-keyword">const</span> request = {
+      <span class="hljs-attr">jsonrpc</span>: <span class="hljs-string">&quot;2.0&quot;</span>,
+      <span class="hljs-attr">method</span>: method,
+      <span class="hljs-attr">params</span>: params,
+      <span class="hljs-attr">id</span>: <span class="hljs-number">1</span>,
+    };
+
+    client.<span class="hljs-title function_">on</span>(<span class="hljs-string">&quot;connect&quot;</span>, <span class="hljs-function">() =&gt;</span> {
+      client.<span class="hljs-title function_">write</span>(<span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">stringify</span>(request) + <span class="hljs-string">&quot;\n&quot;</span>);
+    });
+
+    client.<span class="hljs-title function_">on</span>(<span class="hljs-string">&quot;data&quot;</span>, <span class="hljs-function">(<span class="hljs-params">data</span>) =&gt;</span> {
+      <span class="hljs-keyword">const</span> response = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(data.<span class="hljs-title function_">toString</span>());
+      client.<span class="hljs-title function_">end</span>();
+      <span class="hljs-title function_">resolve</span>(response.<span class="hljs-property">result</span>);
+    });
+
+    client.<span class="hljs-title function_">on</span>(<span class="hljs-string">&quot;error&quot;</span>, reject);
+  });
+}
+
+<span class="hljs-comment">// Call health method</span>
+<span class="hljs-title function_">callRPC</span>(<span class="hljs-string">&quot;health&quot;</span>).<span class="hljs-title function_">then</span>(<span class="hljs-function">(<span class="hljs-params">result</span>) =&gt;</span> {
+  <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">&quot;Status:&quot;</span>, result.<span class="hljs-property">status</span>);
+});</code></pre>
+<h2>Best Practices</h2>
+<h3>Connection Management</h3>
+<ol>
+<li><strong>Reuse connections</strong> - Keep the connection open for multiple requests</li>
+<li><strong>Handle disconnections</strong> - Implement retry logic for connection failures</li>
+<li><strong>Set timeouts</strong> - Don&#39;t wait forever for responses</li>
+</ol>
+<h3>Error Handling</h3>
+<ol>
+<li><strong>Check error field</strong> - Always check for <code>error</code> in response</li>
+<li><strong>Handle specific error codes</strong> - Different codes require different actions</li>
+<li><strong>Retry on transient errors</strong> - Socket errors, timeouts</li>
+</ol>
+<h3>Request IDs</h3>
+<ol>
+<li><strong>Use unique IDs</strong> - Helps correlate requests and responses</li>
+<li><strong>Can be strings or numbers</strong> - Both are valid per JSON-RPC 2.0</li>
+<li><strong>Optional for notifications</strong> - Omit ID if you don&#39;t need a response</li>
+</ol>
+<h2>Troubleshooting</h2>
+<h3>Connection Refused</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Check if daemon is running</span>
+ps aux | grep thrum
+
+<span class="hljs-comment"># Check socket exists</span>
+<span class="hljs-built_in">ls</span> -l .thrum/var/thrum.sock
+
+<span class="hljs-comment"># Check socket permissions</span>
+<span class="hljs-comment"># Should be: srw------- (0600)</span></code></pre>
+<h3>Parse Errors</h3>
+<p>Common causes:</p>
+<ul>
+<li>Missing newline (<code>\n</code>) at end of request</li>
+<li>Invalid JSON syntax</li>
+<li>Wrong encoding (must be UTF-8)</li>
+</ul>
+<h3>Method Not Found</h3>
+<ul>
+<li>Check method name spelling (case-sensitive)</li>
+<li>Verify daemon version supports the method</li>
+<li>See available methods section above</li>
+</ul>
+<h2>References</h2>
+<ul>
+<li><a href="https://www.jsonrpc.org/specification">JSON-RPC 2.0 Specification</a></li>
+<li>Daemon Architecture: <code>docs/daemon.md</code></li>
+<li>Development Guide: <code>docs/development.md</code></li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#rpc-api.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#rpc-api.html');
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tailscale-security — Thrum</title>
+  <meta name="description" content="">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="tailscale-security — Thrum">
+  <meta property="og:description" content="">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/tailscale-security.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="tailscale-security — Thrum">
+  <meta name="twitter:description" content="">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#tailscale-security.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Tailscale Sync Security</h1>
+<blockquote>
+<p>See also: <a href="tailscale-sync.html">Tailscale Sync</a> for setup, architecture, and<br>CLI commands.</p>
+</blockquote>
+<p>Security model for the Tailscale-based sync protocol.</p>
+<h2>Overview</h2>
+<p>The sync protocol uses three layers of defense:</p>
+<ol>
+<li><strong>Tailscale Encryption</strong> -- WireGuard tunnels encrypt all traffic</li>
+<li><strong>Pairing Code</strong> -- Human-mediated 4-digit code establishes trust</li>
+<li><strong>Token Authentication</strong> -- 32-byte token authenticates every request</li>
+</ol>
+<p>This replaces the previous overengineered security stack (Ed25519 signing,<br>validation pipeline, WhoIs authorization, rate limiting, quarantine system)<br>with a simpler model that provides equivalent practical security.</p>
+<h2>Layer 1: Tailscale Encryption</h2>
+<p>All sync traffic flows over Tailscale&#39;s WireGuard mesh network. This provides:</p>
+<ul>
+<li><strong>End-to-end encryption</strong> between peers</li>
+<li><strong>Identity verification</strong> via Tailscale&#39;s control plane</li>
+<li><strong>NAT traversal</strong> with no port forwarding or firewall configuration</li>
+<li><strong>Network-level access control</strong> via Tailscale ACLs</li>
+</ul>
+<p>Tailscale handles the hard parts of secure networking. Thrum doesn&#39;t need to<br>implement its own transport encryption.</p>
+<h3>Recommended ACL Configuration</h3>
+<h4>Tailscale ACLs</h4>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;tagOwners&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;tag:thrum-daemon&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;group:devops&quot;</span><span class="hljs-punctuation">]</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;acls&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;action&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;accept&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;src&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;tag:thrum-daemon&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;dst&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;tag:thrum-daemon:9100&quot;</span><span class="hljs-punctuation">]</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h4>Headscale ACLs</h4>
+<pre><code class="language-yaml hljs"><span class="hljs-attr">groups:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">thrum-daemons</span>
+    <span class="hljs-attr">members:</span> [<span class="hljs-string">&quot;user1&quot;</span>, <span class="hljs-string">&quot;user2&quot;</span>]
+
+<span class="hljs-attr">acls:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">action:</span> <span class="hljs-string">accept</span>
+    <span class="hljs-attr">src:</span> [<span class="hljs-string">&quot;group:thrum-daemons&quot;</span>]
+    <span class="hljs-attr">dst:</span> [<span class="hljs-string">&quot;group:thrum-daemons:9100&quot;</span>]</code></pre>
+<h2>Layer 2: Pairing Code</h2>
+<p>Trust between two machines is established through a human-mediated pairing flow.</p>
+<h3>How It Works</h3>
+<ol>
+<li>Machine A generates a random 4-digit code and displays it to the user</li>
+<li>The user communicates the code to Machine B&#39;s operator (verbally, chat, etc.)</li>
+<li>Machine B sends the code to Machine A over Tailscale</li>
+<li>Machine A verifies the code and establishes the peer relationship</li>
+</ol>
+<h3>Security Properties</h3>
+<ul>
+<li><strong>Human-in-the-loop</strong>: A person must deliberately share the code, preventing<br>automated or accidental pairing</li>
+<li><strong>Time-limited</strong>: Pairing sessions expire after 5 minutes</li>
+<li><strong>Attempt-limited</strong>: Only 3 attempts per session before lockout</li>
+<li><strong>One-time use</strong>: Each code can only be used once</li>
+</ul>
+<h3>Threat Model</h3>
+<p>The pairing code provides protection against:</p>
+<ul>
+<li><strong>Unauthorized peers</strong> -- Only someone with the code can pair</li>
+<li><strong>Replay attacks</strong> -- Codes expire and are single-use</li>
+<li><strong>Brute force</strong> -- 3-attempt limit makes guessing impractical within the<br>5-minute window</li>
+</ul>
+<p>The code does NOT protect against an attacker who can both observe the code<br>being shared AND intercept the Tailscale connection. In practice, Tailscale&#39;s<br>network security makes this extremely unlikely.</p>
+<h2>Layer 3: Token Authentication</h2>
+<p>After pairing, a 32-byte hex token (256 bits of entropy) is shared between<br>the two peers. Every sync request includes this token.</p>
+<h3>Token Lifecycle</h3>
+<ol>
+<li><strong>Generation</strong>: A random 32-byte token is generated during pairing</li>
+<li><strong>Distribution</strong>: The token is sent to the joining peer in the pairing<br>response</li>
+<li><strong>Storage</strong>: Both peers store the token in their <code>peers.json</code> file</li>
+<li><strong>Validation</strong>: Every sync request is validated against the token before<br>processing</li>
+</ol>
+<h3>Validation Flow</h3>
+<pre><code>Incoming sync request
+   │
+   ├─ Is method &quot;pair.request&quot;?  ──► Yes: Skip auth (pairing flow)
+   │
+   ├─ Extract token from params
+   │
+   ├─ Look up token in peer registry
+   │   ├─ Not found  ──► Reject (unauthorized)
+   │   └─ Found      ──► Allow + update last_sync
+   │
+   └─ Dispatch to handler</code></pre>
+<h3>Security Properties</h3>
+<ul>
+<li><strong>256 bits of entropy</strong> -- Computationally infeasible to guess</li>
+<li><strong>Per-peer tokens</strong> -- Each peer relationship has its own token</li>
+<li><strong>Central validation</strong> -- All RPCs are authenticated in the sync server<br>before handler dispatch</li>
+<li><strong>Exempt only pair.request</strong> -- The pairing RPC is the only unauthenticated<br>method (protected by the pairing code instead)</li>
+</ul>
+<h2>Configuration</h2>
+<p>No security-specific configuration is needed. The security model is built into<br>the pairing and sync flow.</p>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Configuration</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Encryption</td>
+<td>Automatic (Tailscale)</td>
+</tr>
+<tr>
+<td>Pairing timeout</td>
+<td>5 minutes (hardcoded)</td>
+</tr>
+<tr>
+<td>Pairing attempts</td>
+<td>3 per session (hardcoded)</td>
+</tr>
+<tr>
+<td>Token length</td>
+<td>32 bytes / 256 bits (hardcoded)</td>
+</tr>
+<tr>
+<td>Network ACLs</td>
+<td>Configure in Tailscale admin console</td>
+</tr>
+</tbody></table>
+<h2>Comparison with Previous Model</h2>
+<table>
+<thead>
+<tr>
+<th>Previous (Removed)</th>
+<th>Current (Simplified)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Ed25519 event signing</td>
+<td>Not needed -- Tailscale provides transport integrity</td>
+</tr>
+<tr>
+<td>3-stage validation pipeline</td>
+<td>Not needed -- token auth is sufficient</td>
+</tr>
+<tr>
+<td>WhoIs authorization</td>
+<td>Not needed -- pairing code + Tailscale ACLs</td>
+</tr>
+<tr>
+<td>Per-peer rate limiting</td>
+<td>Not needed -- Tailscale rate limits at network level</td>
+</tr>
+<tr>
+<td>Quarantine system</td>
+<td>Not needed -- invalid tokens are simply rejected</td>
+</tr>
+<tr>
+<td>TOFU key pinning</td>
+<td>Replaced by explicit human-mediated pairing</td>
+</tr>
+<tr>
+<td>~1,074 lines of security code</td>
+<td>~40 lines of token validation</td>
+</tr>
+</tbody></table>
+<h2>Troubleshooting</h2>
+<h3>Peer rejected with &quot;unauthorized&quot;</h3>
+<p>The peer&#39;s token doesn&#39;t match. This can happen if:</p>
+<ol>
+<li>The peer was removed and re-paired (old token is invalid)</li>
+<li>The <code>peers.json</code> file was manually edited or corrupted</li>
+<li>The peer registry was reset on one side</li>
+</ol>
+<p><strong>Fix</strong>: Remove the peer on both machines and re-pair:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># On both machines:</span>
+thrum peer remove &lt;name&gt;
+
+<span class="hljs-comment"># Then pair again:</span>
+<span class="hljs-comment"># Machine A: thrum peer add</span>
+<span class="hljs-comment"># Machine B: thrum peer join &lt;address&gt;</span></code></pre>
+<h3>Pairing fails with &quot;no active pairing session&quot;</h3>
+<p>The pairing session on Machine A expired or was never started.</p>
+<p><strong>Fix</strong>: Run <code>thrum peer add</code> on Machine A first, then <code>thrum peer join</code> on<br>Machine B within 5 minutes.</p>
+<h3>Pairing fails with &quot;too many failed attempts&quot;</h3>
+<p>Three incorrect codes were entered.</p>
+<p><strong>Fix</strong>: Run <code>thrum peer add</code> again on Machine A to start a fresh session with<br>a new code.</p>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#tailscale-security.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#tailscale-security.html');
+    }
+  </script>
+</body>
+</html>
