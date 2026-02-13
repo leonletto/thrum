@@ -18,8 +18,8 @@ type Event struct {
 
 // GetEventsSince returns events with sequence > afterSeq, up to limit.
 // Returns (events, nextSequence, moreAvailable, error).
-// nextSequence is the highest sequence in the returned batch (for checkpointing).
-// moreAvailable is true if more events exist after this batch.
+// NextSequence is the highest sequence in the returned batch (for checkpointing).
+// MoreAvailable is true if more events exist after this batch.
 func GetEventsSince(db *sql.DB, afterSeq int64, limit int) ([]Event, int64, bool, error) {
 	if limit <= 0 {
 		limit = 100
@@ -34,7 +34,7 @@ func GetEventsSince(db *sql.DB, afterSeq int64, limit int) ([]Event, int64, bool
 	if err != nil {
 		return nil, 0, false, fmt.Errorf("query events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var events []Event
 	for rows.Next() {

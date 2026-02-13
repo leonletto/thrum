@@ -27,7 +27,7 @@ func NewSyncRegistry() *SyncRegistry {
 
 // SetPeerRegistry enables token-based auth for sync.* RPCs.
 // When set, all sync.* methods require a valid peer token in params.
-// pair.request is exempt (it's how peers obtain tokens).
+// Pair.request is exempt (it's how peers obtain tokens).
 func (r *SyncRegistry) SetPeerRegistry(peers *PeerRegistry) {
 	r.peers = peers
 }
@@ -61,7 +61,7 @@ func (r *SyncRegistry) Register(method string, handler Handler) error {
 }
 
 // ServeSyncRPC reads JSON-RPC requests from a connection and dispatches only to sync handlers.
-// peerID identifies the remote peer for rate limiting (from WhoIs or connection info).
+// PeerID identifies the remote peer for rate limiting (from WhoIs or connection info).
 // Application RPCs return "method not found". Uses the same wire format as the Unix socket server.
 func (r *SyncRegistry) ServeSyncRPC(ctx context.Context, conn net.Conn, peerID string) {
 	ctx = transport.WithTransport(ctx, transport.TransportTailscale)

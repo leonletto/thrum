@@ -44,7 +44,7 @@ func (s *PeriodicSyncScheduler) SetRecentThreshold(d time.Duration) {
 	s.recentThreshold = d
 }
 
-// Start begins periodic sync. It blocks until the context is cancelled.
+// Start begins periodic sync. It blocks until the context is canceled.
 func (s *PeriodicSyncScheduler) Start(ctx context.Context) {
 	log.Printf("periodic_sync: starting with interval=%s, recent_threshold=%s", s.interval, s.recentThreshold)
 

@@ -81,8 +81,8 @@ func (r *PeerRegistry) GetPeer(daemonID string) *PeerInfo {
 	}
 
 	// Return a copy to avoid race conditions
-	copy := *p
-	return &copy
+	cloned := *p
+	return &cloned
 }
 
 // FindPeerByToken returns the peer with the given auth token, or nil if not found.
@@ -96,8 +96,8 @@ func (r *PeerRegistry) FindPeerByToken(token string) *PeerInfo {
 
 	for _, p := range r.peers {
 		if p.Token == token {
-			copy := *p
-			return &copy
+			cloned := *p
+			return &cloned
 		}
 	}
 	return nil
@@ -114,8 +114,8 @@ func (r *PeerRegistry) FindPeerByName(name string) *PeerInfo {
 
 	for _, p := range r.peers {
 		if p.Name == name {
-			copy := *p
-			return &copy
+			cloned := *p
+			return &cloned
 		}
 	}
 	return nil
@@ -128,8 +128,8 @@ func (r *PeerRegistry) ListPeers() []*PeerInfo {
 
 	result := make([]*PeerInfo, 0, len(r.peers))
 	for _, p := range r.peers {
-		copy := *p
-		result = append(result, &copy)
+		cloned := *p
+		result = append(result, &cloned)
 	}
 	return result
 }
