@@ -49,6 +49,12 @@ func TestPrimeContext_JSONStructure(t *testing.T) {
 			UncommittedFiles: []string{"src/main.go"},
 			UnmergedCommits:  3,
 		},
+		SyncState: &PrimeSyncInfo{
+			DaemonStatus: "ok",
+			UptimeMs:     360000,
+			SyncState:    "idle",
+			Version:      "0.4.0",
+		},
 	}
 
 	// Verify JSON marshaling
@@ -63,7 +69,7 @@ func TestPrimeContext_JSONStructure(t *testing.T) {
 	}
 
 	// Check all sections present
-	for _, section := range []string{"identity", "session", "agents", "messages", "work_context"} {
+	for _, section := range []string{"identity", "session", "agents", "messages", "work_context", "sync_state"} {
 		if _, ok := decoded[section]; !ok {
 			t.Errorf("missing section %q in JSON output", section)
 		}
@@ -97,6 +103,15 @@ func TestPrimeContext_JSONStructure(t *testing.T) {
 	wc := decoded["work_context"].(map[string]any)
 	if wc["branch"] != "feature/test" {
 		t.Errorf("work_context.branch = %v, want %q", wc["branch"], "feature/test")
+	}
+
+	// Verify sync_state
+	ss := decoded["sync_state"].(map[string]any)
+	if ss["daemon_status"] != "ok" {
+		t.Errorf("sync_state.daemon_status = %v, want %q", ss["daemon_status"], "ok")
+	}
+	if ss["version"] != "0.4.0" {
+		t.Errorf("sync_state.version = %v, want %q", ss["version"], "0.4.0")
 	}
 }
 
@@ -192,6 +207,60 @@ func TestFormatPrimeContext_GitError(t *testing.T) {
 
 	if !strings.Contains(output, "not a git repository") {
 		t.Errorf("expected 'not a git repository' in output:\n%s", output)
+	}
+}
+
+func TestFormatPrimeContext_SyncState(t *testing.T) {
+	ctx := &PrimeContext{
+		SyncState: &PrimeSyncInfo{
+			DaemonStatus: "ok",
+			UptimeMs:     7200000, // 2 hours
+			SyncState:    "idle",
+			Version:      "0.4.0",
+		},
+	}
+	output := FormatPrimeContext(ctx)
+
+	checks := []string{
+		"Daemon: ok",
+		"v0.4.0",
+		"Sync: idle",
+	}
+	for _, check := range checks {
+		if !strings.Contains(output, check) {
+			t.Errorf("output missing %q:\n%s", check, output)
+		}
+	}
+}
+
+func TestFormatPrimeContext_CommandReference(t *testing.T) {
+	ctx := &PrimeContext{}
+	output := FormatPrimeContext(ctx)
+
+	// Quick command reference should always appear
+	checks := []string{
+		"Commands:",
+		"thrum send",
+		"thrum inbox",
+		"thrum reply",
+		"thrum status",
+		"thrum wait",
+		"thrum <cmd> --help",
+	}
+	for _, check := range checks {
+		if !strings.Contains(output, check) {
+			t.Errorf("output missing %q:\n%s", check, output)
+		}
+	}
+}
+
+func TestFormatPrimeContext_NoSyncState(t *testing.T) {
+	ctx := &PrimeContext{}
+	output := FormatPrimeContext(ctx)
+
+	// Should not contain "Daemon:" when SyncState is nil
+	if strings.Contains(output, "Daemon:") {
+		t.Errorf("unexpected 'Daemon:' in output when SyncState is nil:\n%s", output)
 	}
 }
 

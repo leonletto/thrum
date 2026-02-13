@@ -85,7 +85,7 @@ thrum send "Completed bd-123, ready for review" --to @reviewer
 ## Requirements
 
 - [Beads](https://github.com/steveyegge/beads) - Install the Beads plugin for Claude Code, or install the CLI with `cargo install beads-cli`
-- [Thrum](https://github.com/thrumdev/thrum) - Install with `go install github.com/thrumdev/thrum/cmd/thrum@latest` or use binary releases
+- [Thrum](https://github.com/leonletto/thrum) - Install with `go install github.com/leonletto/thrum/cmd/thrum@latest` or use binary releases
 - Git repository with remote configured
 - Claude Code environment
 

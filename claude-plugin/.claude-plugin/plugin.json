@@ -1,0 +1,42 @@
+{
+  "name": "thrum",
+  "description": "Git-backed messaging for AI agent coordination across sessions, worktrees, and machines.",
+  "version": "0.4.0",
+  "author": {
+    "name": "Leon Letto",
+    "url": "https://github.com/leonletto"
+  },
+  "repository": "https://github.com/leonletto/thrum",
+  "license": "MIT",
+  "homepage": "https://leonletto.github.io/thrum",
+  "keywords": [
+    "messaging",
+    "multi-agent",
+    "coordination",
+    "git-sync"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "thrum prime 2>/dev/null || echo 'Thrum not initialized (run: thrum init && thrum daemon start)'"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "thrum prime 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}
