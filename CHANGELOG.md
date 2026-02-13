@@ -8,6 +8,17 @@ and this project adheres to
 
 ## [0.3.2] - Unreleased
 
+### Added
+
+#### Configuration Consolidation
+
+- **Expanded config schema** — `.thrum/config.json` now supports `runtime.primary`, `daemon.sync_interval`, and `daemon.ws_port` fields. Backwards compatible with existing config files.
+- **Interactive runtime selection** — `thrum init` detects installed AI runtimes and prompts you to select one. Non-interactive fallback for CI/piped environments.
+- **`thrum config show`** — New command that prints effective configuration resolved from all sources. Shows value and source (config.json, env, default) for each setting. Supports `--json` for machine-readable output.
+- **Configurable daemon settings** — Daemon reads `sync_interval` and `ws_port` from config.json instead of hardcoded values. `ws_port: "auto"` finds a free port dynamically.
+- **Runtime tier documentation** — Tier 1 (Claude, Augment), Tier 2 (Cursor, Codex), Tier 3 (Gemini, Amp) documented with support levels.
+- **Configuration guide** — New docs page covering config.json schema, priority chain, environment variable overrides, and runtime selection.
+
 ### Removed
 
 #### Thread System
