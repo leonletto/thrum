@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -360,11 +361,18 @@ func TestSessionHeartbeat(t *testing.T) {
 	sessionID := startRespTyped.SessionID
 
 	t.Run("update_last_seen_at", func(t *testing.T) {
-		// Get initial last_seen_at
+		// Get initial last_seen_at for session
 		var initialLastSeen string
 		err := s.DB().QueryRow("SELECT last_seen_at FROM sessions WHERE session_id = ?", sessionID).Scan(&initialLastSeen)
 		if err != nil {
 			t.Fatalf("query last_seen_at: %v", err)
+		}
+
+		// Get initial last_seen_at for agent (may be NULL)
+		var initialAgentLastSeen sql.NullString
+		err = s.DB().QueryRow("SELECT last_seen_at FROM agents WHERE agent_id = ?", agentID).Scan(&initialAgentLastSeen)
+		if err != nil {
+			t.Fatalf("query agent last_seen_at: %v", err)
 		}
 
 		// Wait a bit to ensure timestamp changes (intentional timing test)
@@ -393,7 +401,7 @@ func TestSessionHeartbeat(t *testing.T) {
 			t.Error("LastSeenAt should not be empty")
 		}
 
-		// Verify last_seen_at was updated
+		// Verify session last_seen_at was updated
 		var updatedLastSeen string
 		err = s.DB().QueryRow("SELECT last_seen_at FROM sessions WHERE session_id = ?", sessionID).Scan(&updatedLastSeen)
 		if err != nil {
@@ -401,7 +409,22 @@ func TestSessionHeartbeat(t *testing.T) {
 		}
 
 		if updatedLastSeen == initialLastSeen {
-			t.Error("last_seen_at should have been updated")
+			t.Error("session last_seen_at should have been updated")
+		}
+
+		// Verify agent last_seen_at was updated (should now be non-NULL)
+		var updatedAgentLastSeen sql.NullString
+		err = s.DB().QueryRow("SELECT last_seen_at FROM agents WHERE agent_id = ?", agentID).Scan(&updatedAgentLastSeen)
+		if err != nil {
+			t.Fatalf("query updated agent last_seen_at: %v", err)
+		}
+
+		if !updatedAgentLastSeen.Valid {
+			t.Error("agent last_seen_at should not be NULL after heartbeat")
+		}
+
+		if initialAgentLastSeen.Valid && updatedAgentLastSeen.String == initialAgentLastSeen.String {
+			t.Error("agent last_seen_at should have been updated")
 		}
 	})
 

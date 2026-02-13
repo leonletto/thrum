@@ -356,11 +356,17 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	// Update last_seen_at
+	// Update last_seen_at for session
 	_, err = h.state.DB().Exec(`UPDATE sessions SET last_seen_at = ? WHERE session_id = ?`, now, req.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("update last_seen_at: %w", err)
 	}
+
+	// Update last_seen_at for agent (best-effort)
+	_, _ = h.state.DB().Exec(
+		"UPDATE agents SET last_seen_at = ? WHERE agent_id = (SELECT agent_id FROM sessions WHERE session_id = ?)",
+		now, req.SessionID,
+	)
 
 	// Remove scopes
 	for _, scope := range req.RemoveScopes {

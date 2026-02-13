@@ -775,7 +775,7 @@ Example:
 
 ### thrum group create
 
-Create a named group for targeted messaging. Groups can contain agents, roles, or other groups (nested).
+Create a named group for targeted messaging. Groups can contain agents and roles.
 
     thrum group create NAME [flags]
 
@@ -811,7 +811,7 @@ Example:
 
 ### thrum group add
 
-Add a member to a group. Members can be agents, roles, or other groups. The command auto-detects the member type based on format.
+Add a member to a group. Members can be agents or roles. The command auto-detects the member type based on format.
 
     thrum group add GROUP MEMBER
 
@@ -819,7 +819,6 @@ Add a member to a group. Members can be agents, roles, or other groups. The comm
 
 - `@alice` or `alice` — Specific agent by name
 - `--role planner` — All agents with role "planner"
-- `--group team` — Nested group reference
 
 Example:
 
@@ -830,10 +829,6 @@ Example:
     # Add all agents with a role
     $ thrum group add reviewers --role reviewer
     ✓ Added role reviewer to group reviewers
-
-    # Add another group (nested)
-    $ thrum group add backend --group reviewers
-    ✓ Added group reviewers to group backend
 
 
 ### thrum group remove
@@ -873,7 +868,7 @@ Example:
 
     backend
       Description: Backend developers
-      Members:     1 group, 3 agents
+      Members:     3 agents
       Created:     2026-02-09 10:20:00
 
 

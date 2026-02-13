@@ -403,9 +403,6 @@ thrum inbox --unread
 # Check what others are working on
 thrum agent list --context
 
-# Review thread history
-thrum thread list
-
 # Check Beads for task state
 bd ready
 bd list --status=in_progress

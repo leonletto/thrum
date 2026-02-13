@@ -6,173 +6,138 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.2] - Unreleased
-
-### Added
-
-#### Configuration Consolidation
-
-- **Expanded config schema** — `.thrum/config.json` now supports `runtime.primary`, `daemon.sync_interval`, and `daemon.ws_port` fields. Backwards compatible with existing config files.
-- **Interactive runtime selection** — `thrum init` detects installed AI runtimes and prompts you to select one. Non-interactive fallback for CI/piped environments.
-- **`thrum config show`** — New command that prints effective configuration resolved from all sources. Shows value and source (config.json, env, default) for each setting. Supports `--json` for machine-readable output.
-- **Configurable daemon settings** — Daemon reads `sync_interval` and `ws_port` from config.json instead of hardcoded values. `ws_port: "auto"` finds a free port dynamically.
-- **Runtime tier documentation** — Tier 1 (Claude, Augment), Tier 2 (Cursor, Codex), Tier 3 (Gemini, Amp) documented with support levels.
-- **Configuration guide** — New docs page covering config.json schema, priority chain, environment variable overrides, and runtime selection.
-
-### Removed
-
-#### Thread System
-
-- **Thread commands** — `thrum thread create`, `thrum thread list`, `thrum thread show` removed. Threads are replaced by the reply-to convention.
-- **Thread RPC handlers** — `thread.create`, `thread.list`, `thread.get` removed from daemon RPC API.
-- **Thread database table** — Schema migration v12 drops `threads` table and associated indexes.
-
-#### Nested Groups
-
-- **Group nesting** — Groups no longer support other groups as members. Only agents (`@name`) and roles (`--role name`) are accepted.
-- **Cycle detection** — Removed from group resolver (no longer needed with flat groups).
-- **`--group` flag** — Removed from `thrum group add` command (was used to add nested groups).
-
-### Changed
-
-#### Reply-to Convention
-
-- **`thrum reply MSG_ID`** — Now creates a `reply_to` ref on the new message instead of creating a thread. Copies audience (mentions) from parent message.
-- **Inbox display** — Replies are clustered with their parent messages and shown with `↳` prefix.
-- **Message refs** — Messages can reference a parent via `reply_to` type in `message_refs`.
-
-#### Group Resolver
-
-- **Flattened resolution** — Group resolver simplified from recursive to iterative (flat expansion only).
-- **SQL queries** — Removed recursive CTE from group expansion queries.
-
-#### MCP Tools
-
-- **`send_message`** — Accepts optional `reply_to` parameter (message ID to reply to).
-- **`add_group_member`** — Now only accepts `agent` or `role` member types (rejects `group`).
+## [0.4.0] - Unreleased
 
 ### Added
 
 #### Agent Groups
 
-Named groups for organizing agents and targeting messages. Groups are flat collections (agents and roles only).
+Named groups for organizing agents and targeting messages. Groups are flat
+collections of agents and roles.
 
 - `thrum group create|delete|add|remove|list|info|members` CLI commands
 - Auto-detection of member type (`@alice` = agent, `--role` = role)
 - `@everyone` built-in group auto-created on daemon startup
-- Iterative group resolution via SQL for inbox queries
-- JSON output via `--json` flag on all group commands
-- Schema migration v7 to v8 with `groups` and `group_members` tables
-
-#### MCP Group Tools
-
-Six new MCP tools for group management in native agent workflows.
-
-- `create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
-  `list_groups`, `get_group`
+- Group-scoped messaging via `thrum send --to @groupname`
+- 6 new MCP tools: `create_group`, `delete_group`, `add_group_member`,
+  `remove_group_member`, `list_groups`, `get_group`
 - `get_group` supports `expand=true` to resolve roles to agent IDs
+
+#### Reply-to Messages
+
+Simple message threading via parent references, replacing the thread system.
+
+- `thrum reply MSG_ID` creates a `reply_to` reference on the new message
+- Replies copy audience (mentions) from parent message
+- Inbox clusters replies under parent messages with `↳` prefix
+- `send_message` MCP tool accepts optional `reply_to` parameter
+
+#### Tailscale Peer Sync
+
+Cross-machine event synchronization over Tailscale's encrypted mesh network.
+
+- Human-mediated pairing: `thrum peer add` generates 4-digit code,
+  `thrum peer join <address>` connects
+- 3-layer security: Tailscale WireGuard encryption + pairing code + per-peer
+  token auth
+- Event-sourced sync with sequence-based checkpoints and deduplication
+- Periodic sync scheduler with configurable intervals
+- 5 CLI commands: `thrum peer add|join|list|remove|status`
+- Peer registry with persistence to `.thrum/var/peers.json`
+- Supports both Tailscale SaaS and self-hosted Headscale control planes
 
 #### Runtime Preset Registry
 
-Multi-runtime support for any AI coding agent. Thrum auto-detects or accepts
-explicit runtime selection, generating the correct configuration files for each
-platform.
+Multi-runtime support for AI coding agents with auto-detection and config
+generation.
 
-- `thrum runtime list|show|set-default` CLI commands for managing runtime presets
-- 6 built-in presets: Claude Code, Codex, Cursor, Gemini, Auggie, Amp
-- User config override via `~/.config/thrum/runtimes.json` (XDG-aware)
+- Auto-detection for 6 platforms: Claude Code, Codex, Cursor, Gemini, Auggie,
+  CLI-only
+- `thrum runtime list|show|set-default` CLI commands
 - `thrum init --runtime <name>` generates runtime-specific config files
-  (settings.json, AGENTS.md, .cursorrules, etc.)
-- Template engine with embedded templates for each runtime
-- Runtime auto-detection from file markers and environment variables
+  (MCP settings, hooks, instructions)
+- Embedded templates for each runtime with shared startup script
+- File marker detection (`.claude/settings.json`, `.codex`, `.cursorrules`,
+  `.augment`) with env var fallback
 
-#### Enhanced Quickstart
+#### Configuration Consolidation
 
-- `thrum quickstart` gains `--runtime`, `--dry-run`, `--no-init`, `--force` flags
-- Auto-detects runtime and generates config files during quickstart
-- Dry-run mode previews generated files without daemon connection
+`.thrum/config.json` as single source of truth for all settings.
 
-#### Worktree Bootstrap
+- `thrum config show` displays effective configuration resolved from all sources
+  with provenance (config.json, env, default, auto-detected). Supports `--json`.
+- `thrum init` interactively prompts for runtime selection (non-interactive
+  fallback for CI)
+- Daemon reads `sync_interval` and `ws_port` from config.json
+- `ws_port: "auto"` finds a free port dynamically
+- Priority chain: CLI flags > env vars > config.json > defaults
 
-One-command worktree setup with full agent context bootstrapping.
+#### Team Command
 
-- `thrum quickstart --preamble-file` flag composes default preamble with custom
-  project-specific content
-- `thrum quickstart` auto-creates empty context file and default preamble on
-  first registration (idempotent — preserves existing preambles)
-- `scripts/setup-worktree-thrum.sh` enhanced with `--identity`, `--role`,
-  `--module`, `--preamble`, `--base` flags for full single-command bootstrap
-- Flag value validation with helpful error messages on missing values
-- Error handling on `git worktree add` with contextual failure messages
-- 7 new Go tests for context bootstrapping, 13-case shell test harness
-- Three-layer context model: prompt (session) → preamble (persistent) → context
-  (volatile)
-- `toolkit/templates/` restructured into `agent-dev-workflow/` template set
+Rich per-agent status for all active agents.
+
+- `thrum team` shows session, git branch, intent, inbox counts, and per-file
+  change details with diff stats for every active agent
+- Per-agent inbox shows directed messages; shared messages in footer section
+- `--all` flag includes offline agents, `--json` for machine-readable output
+- `THRUM_HOSTNAME` env var for friendly machine names
+- Hostname tracking on agent registration (schema v11)
 
 #### Context Prime
 
 - `thrum context prime` gathers identity, session, agents, inbox, and git work
-  context in a single command
+  context in a single command for agent initialization
 - Graceful degradation when daemon, session, or git are unavailable
 - Both human-readable and `--json` output
 
-#### Team Command
+#### Enhanced Quickstart & Worktree Bootstrap
 
-Rich per-agent status for all active agents, powered by server-side SQL JOINs.
+- `thrum quickstart` gains `--runtime`, `--dry-run`, `--no-init`, `--force`,
+  `--preamble-file` flags
+- Auto-detects runtime and generates config files during quickstart
+- Auto-creates context file and default preamble on first registration
+- `scripts/setup-worktree-thrum.sh` enhanced with `--identity`, `--role`,
+  `--module`, `--preamble`, `--base` flags for single-command worktree bootstrap
 
-- `thrum team` shows `thrum status`-like detail for every active agent
-- Per-agent display: location, session duration, intent, inbox counts, branch,
-  and per-file change details with diff stats
-- Per-agent inbox shows only directed messages (mentions); shared messages
-  (broadcasts + group counts) appear in a footer section
-- `--all` flag includes offline agents
-- `--json` flag for machine-readable output
-- Schema migration v11: hostname tracking on agent registration
-- `THRUM_HOSTNAME` env var override for friendly machine names
-- `team.list` RPC handler with two-query architecture (agents+contexts, inbox
-  counts)
+#### Additional Commands
 
-#### Inbox Scoping Fixes
-
-- `thrum status` and `thrum overview` now show the agent's actual scoped inbox
-  count (was showing total system message count)
-- `thrum status` and `thrum overview` now resolve local worktree identity
-  instead of falling back to the main worktree's agent (worktree identity fix)
-
-#### Tailscale Sync
-
-Cross-machine event synchronization over Tailscale's encrypted mesh network.
-Pair machines with a simple 4-digit code and sync events in real-time.
-
-- Human-mediated pairing flow: `thrum peer add` + `thrum peer join <address>`
-- 4-digit pairing code with 3-attempt limit and 5-minute timeout
-- Token-based authentication (32-byte hex token per peer pair)
-- tsnet listener for encrypted peer-to-peer sync on port 9100
-- `sync.pull` batched event pulling with sequence-based checkpoints and dedup
-- `sync.notify` push notifications (fire-and-forget)
-- Periodic sync scheduler (5-minute fallback for missed notifications)
-- Peer registry with persistence to `.thrum/var/peers.json`
-- `thrum peer add|join|list|remove|status` CLI commands
-- Tailscale sync status in `thrum status` health endpoint
-- Supports both Tailscale SaaS and self-hosted Headscale control planes
-
-#### Tailscale Sync Security
-
-Three-layer security model: Tailscale encryption, pairing code, token auth.
-
-- Tailscale WireGuard tunnels provide end-to-end encryption
-- Pairing code establishes human-mediated trust between machines
-- Per-peer 32-byte token authenticates all sync requests
-- Central token validation in sync server (pair.request exempt)
-- Replaces previous overengineered security stack (~1,074 lines removed):
-  Ed25519 signing, validation pipeline, WhoIs auth, rate limiting, quarantine
+- `thrum whoami` — display current agent identity without daemon connection
+- `thrum version` — version info with hyperlinks to repo and docs
 
 ### Changed
 
-- `--broadcast` flag on `thrum send` now maps to `--to @everyone` with a
-  deprecation notice
-- `broadcast_message` MCP tool simplified to send via `@everyone` group
-- Website: added light/dark theme toggle and full light-mode support
+- **`thrum send --broadcast`** deprecated, maps to `--to @everyone` with notice
+- **`broadcast_message` MCP tool** simplified to send via `@everyone` group
+- **`thrum status`/`overview`** scope inbox counts to agent's actual messages
+  and resolve local worktree identity correctly
+- **`thrum who-has`** shows detailed file change info (+additions/-deletions,
+  status, time ago)
+- **Website** — added light/dark theme toggle with full light-mode CSS
+
+### Removed
+
+- **Thread system** — `thrum thread create|list|show` commands, `thread.create`,
+  `thread.list`, `thread.get` RPC handlers, and `threads` table all removed.
+  Replaced by reply-to references and groups.
+
+### Infrastructure
+
+- **Schema**: 5 migrations (v7→v12) — added `groups`, `group_members`, `events`,
+  `sync_checkpoints` tables; added `file_changes` and `hostname` columns;
+  dropped `threads` table
+- **Dependencies**: Tailscale SDK v1.94.1, `golang.org/x/term` v0.38.0
+- **Tests**: +39 test files (~6,000 lines added, ~1,200 removed)
+- **New packages**: `internal/groups`, `internal/runtime`,
+  `internal/daemon/checkpoint`, `internal/daemon/eventlog`
+
+### Documentation
+
+- 5 new guides: multi-agent coordination, Tailscale sync, Tailscale security,
+  configuration, and design philosophy
+- CLI progressive disclosure: 4-tier command organization (daily drivers,
+  agent-oriented, setup/admin, aliases)
+- All thread and nested-group references removed across 18+ docs
+- Toolkit templates restructured into `agent-dev-workflow/` directory
 
 ## [0.3.1] - 2026-02-11
 
