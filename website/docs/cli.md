@@ -84,13 +84,18 @@ Available on all commands:
 
 Initialize Thrum in the current repository. Creates the `.thrum/` directory
 structure, sets up the `a-sync` branch for message synchronization, and updates
-`.gitignore`.
+`.gitignore`. Detects installed AI runtimes and prompts you to select one.
 
     thrum init [flags]
 
-| Flag      | Description                                   | Default |
-| --------- | --------------------------------------------- | ------- |
-| `--force` | Force reinitialization if already initialized | `false` |
+| Flag             | Description                                              | Default |
+| ---------------- | -------------------------------------------------------- | ------- |
+| `--force`        | Force reinitialization if already initialized            | `false` |
+| `--runtime`      | Specify runtime directly (skip detection prompt)         | (auto)  |
+| `--dry-run`      | Preview changes without writing files                    | `false` |
+| `--agent-name`   | Agent name for templates                                 |         |
+| `--agent-role`   | Agent role for templates                                 |         |
+| `--agent-module` | Agent module for templates                               |         |
 
 Example:
 
@@ -100,6 +105,40 @@ Example:
       Created: .thrum/ directory structure
       Created: a-sync branch for message sync
       Updated: .gitignore
+
+    Detected AI runtimes:
+      1. Claude Code    (found .claude/settings.json)
+
+    Which is your primary runtime? [1]:
+    ✓ Runtime saved to .thrum/config.json (primary: claude)
+
+
+### thrum config show
+
+Show effective configuration resolved from all sources. Displays each value
+and where it came from (config.json, environment variable, default).
+
+    thrum config show [flags]
+
+| Flag     | Description              | Default |
+| -------- | ------------------------ | ------- |
+| `--json` | Machine-readable output  | `false` |
+
+Example:
+
+    $ thrum config show
+    Thrum Configuration
+      Config file: .thrum/config.json
+
+    Runtime
+      Primary:     claude (config.json)
+      Detected:    claude, augment
+
+    Daemon
+      Local-only:    true (config.json)
+      Sync interval: 60s (default)
+      WS port:       auto (default)
+      Status:        running (PID 7718)
 
 
 ### thrum setup
