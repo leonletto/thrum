@@ -178,10 +178,14 @@ async function generateSEOPages(docs, docsDir) {
   <meta property="og:description" content="${escapeAttr(doc.description)}">
   <meta property="og:url" content="${CONFIG.siteUrl}/docs/${doc.path}">
   <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="${CONFIG.siteUrl}/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary">
+  <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${escapeAttr(doc.title)} \u2014 Thrum">
   <meta name="twitter:description" content="${escapeAttr(doc.description)}">
+  <meta name="twitter:image" content="${CONFIG.siteUrl}/img/social-card.png">
   <!-- Canonical: SPA is the primary URL -->
   <link rel="canonical" href="${CONFIG.siteUrl}/docs.html#${doc.path}">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">

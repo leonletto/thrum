@@ -1,0 +1,389 @@
+[
+  {
+    "path": "event-streaming.html",
+    "title": "Event Streaming",
+    "description": "Real-time push notifications via Broadcaster and Dispatcher - subscription matching, delivery, and client registries",
+    "category": "api",
+    "order": 2,
+    "tags": [
+      "events",
+      "streaming",
+      "notifications",
+      "websocket",
+      "broadcaster",
+      "dispatcher"
+    ],
+    "lastUpdated": "2026-02-08"
+  },
+  {
+    "path": "inbox-query-methods.html",
+    "title": "Inbox Query Methods",
+    "description": "RPC methods for querying messages, agents, and managing read state with filtering and pagination",
+    "category": "api",
+    "order": 3,
+    "tags": [
+      "inbox",
+      "query",
+      "filtering",
+      "pagination",
+      "read-state",
+      "rpc"
+    ],
+    "lastUpdated": "2026-02-08"
+  },
+  {
+    "path": "api/authentication.html",
+    "title": "Authentication Guide",
+    "description": "Agent and user authentication, registration, sessions, impersonation, and security considerations",
+    "category": "api",
+    "order": 4,
+    "tags": [
+      "authentication",
+      "authorization",
+      "sessions",
+      "users",
+      "agents",
+      "security"
+    ],
+    "lastUpdated": "2026-02-08"
+  },
+  {
+    "path": "api/events.html",
+    "title": "Event Reference",
+    "description": "Complete event catalog - message, thread, agent, and session events with payloads, JSONL storage, and delivery",
+    "category": "api",
+    "order": 5,
+    "tags": [
+      "events",
+      "websocket",
+      "notifications",
+      "jsonl",
+      "reference",
+      "payloads"
+    ],
+    "lastUpdated": "2026-02-08"
+  },
+  {
+    "path": "api/websocket.html",
+    "title": "WebSocket API",
+    "description": "Real-time bidirectional communication via JSON-RPC 2.0 over WebSocket - connections, RPC methods, push notifications",
+    "category": "api",
+    "order": 6,
+    "tags": [
+      "websocket",
+      "json-rpc",
+      "real-time",
+      "api",
+      "bidirectional",
+      "push"
+    ],
+    "lastUpdated": "2026-02-08"
+  },
+  {
+    "path": "context.html",
+    "title": "Agent Context Management",
+    "description": "Per-agent context storage for persisting volatile project state across sessions and machines",
+    "category": "context",
+    "order": 1,
+    "tags": [
+      "context",
+      "agents",
+      "persistence",
+      "markdown",
+      "state"
+    ],
+    "lastUpdated": "2026-02-12"
+  },
+  {
+    "path": "daemon.html",
+    "title": "Daemon Architecture",
+    "description": "Background service managing state, RPC handlers, sync loop, WebSocket server, and embedded UI on single port",
+    "category": "daemon",
+    "order": 1,
+    "tags": [
+      "daemon",
+      "background-service",
+      "rpc",
+      "websocket",
+      "lifecycle",
+      "sync"
+    ],
+    "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "development.html",
+    "title": "Development Guide",
+    "description": "Setup, testing, building, contributing - complete guide for developing and extending Thrum",
+    "category": "development",
+    "order": 2,
+    "tags": [
+      "development",
+      "contributing",
+      "testing",
+      "building",
+      "makefile",
+      "go"
+    ],
+    "lastUpdated": "2026-02-08"
+  },
+  {
+    "path": "security-cicd.html",
+    "title": "Security & CI/CD",
+    "description": "Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum",
+    "category": "development",
+    "order": 3,
+    "tags": [
+      "security",
+      "ci",
+      "cd",
+      "github-actions",
+      "workflows",
+      "deployment"
+    ],
+    "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "agent-coordination.html",
+    "title": "Agent Coordination",
+    "description": "Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams",
+    "category": "guides",
+    "order": 1,
+    "tags": [
+      "coordination",
+      "multi-agent",
+      "beads",
+      "workflows",
+      "patterns",
+      "sessions"
+    ],
+    "lastUpdated": "2026-02-09"
+  },
+  {
+    "path": "agent-configs.html",
+    "title": "Agent Configurations",
+    "description": "Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking",
+    "category": "guides",
+    "order": 2,
+    "tags": [
+      "agents",
+      "claude-code",
+      "configuration",
+      "setup",
+      "toolkit"
+    ],
+    "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "multi-agent.html",
+    "title": "Multi-Agent Support",
+    "description": "Agent groups, runtime presets, context prime, and coordination patterns for running multiple AI agents across worktrees and platforms",
+    "category": "guides",
+    "order": 2,
+    "tags": [
+      "multi-agent",
+      "groups",
+      "runtime",
+      "coordination",
+      "teams",
+      "context-prime"
+    ],
+    "lastUpdated": "2026-02-11"
+  },
+  {
+    "path": "configuration.html",
+    "title": "Configuration",
+    "description": "Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command",
+    "category": "guides",
+    "order": 3,
+    "tags": [
+      "configuration",
+      "config",
+      "runtime",
+      "daemon",
+      "settings",
+      "config-show"
+    ],
+    "lastUpdated": "2026-02-12"
+  },
+  {
+    "path": "workflow-templates.html",
+    "title": "Workflow Templates",
+    "description": "Three-phase development templates for planning, preparing, and implementing features with AI agents",
+    "category": "guides",
+    "order": 3,
+    "tags": [
+      "templates",
+      "workflow",
+      "planning",
+      "implementation",
+      "agents",
+      "toolkit"
+    ],
+    "lastUpdated": "2026-02-12"
+  },
+  {
+    "path": "beads-and-thrum.html",
+    "title": "Beads and Thrum",
+    "description": "How persistent task tracking and agent messaging work together for multi-agent development",
+    "category": "guides",
+    "order": 4,
+    "tags": [
+      "beads",
+      "thrum",
+      "agents",
+      "coordination",
+      "memory",
+      "messaging"
+    ],
+    "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "identity.html",
+    "title": "Agent Identity & Registration",
+    "description": "Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees",
+    "category": "identity",
+    "order": 1,
+    "tags": [
+      "identity",
+      "registration",
+      "agents",
+      "naming",
+      "conflicts",
+      "resolution"
+    ],
+    "lastUpdated": "2026-02-08"
+  },
+  {
+    "path": "subscriptions.html",
+    "title": "Subscriptions & Notifications",
+    "description": "Real-time push notification system with scope, mention, and all-message filters - subscription lifecycle and dispatch",
+    "category": "messaging",
+    "order": 2,
+    "tags": [
+      "subscriptions",
+      "notifications",
+      "push",
+      "filtering",
+      "dispatcher",
+      "broadcaster"
+    ],
+    "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "philosophy.html",
+    "title": "Philosophy",
+    "description": "Why Thrum exists — a Git-backed messaging system designed for human-centric AI agent coordination, not another orchestration engine",
+    "category": "overview",
+    "order": 999,
+    "tags": [
+      "philosophy",
+      "vision",
+      "human-centric",
+      "workflow"
+    ],
+    "lastUpdated": "2026-02-12"
+  },
+  {
+    "path": "quickstart.html",
+    "title": "Quickstart Guide",
+    "description": "Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message",
+    "category": "quickstart",
+    "order": 1,
+    "tags": [
+      "quickstart",
+      "getting-started",
+      "installation",
+      "setup",
+      "tutorial"
+    ],
+    "lastUpdated": "2026-02-12"
+  },
+  {
+    "path": "sync.html",
+    "title": "Sync Protocol",
+    "description": "Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design",
+    "category": "sync",
+    "order": 1,
+    "tags": [
+      "sync",
+      "git",
+      "worktree",
+      "merge",
+      "offline",
+      "jsonl"
+    ],
+    "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "architecture.html",
+    "title": "architecture",
+    "description": "",
+    "category": "uncategorized",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "cli.html",
+    "title": "cli",
+    "description": "",
+    "category": "uncategorized",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "mcp-server.html",
+    "title": "mcp-server",
+    "description": "",
+    "category": "uncategorized",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "messaging.html",
+    "title": "messaging",
+    "description": "",
+    "category": "uncategorized",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "overview.html",
+    "title": "overview",
+    "description": "",
+    "category": "uncategorized",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "rpc-api.html",
+    "title": "rpc-api",
+    "description": "",
+    "category": "uncategorized",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "tailscale-security.html",
+    "title": "tailscale-security",
+    "description": "",
+    "category": "uncategorized",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "tailscale-sync.html",
+    "title": "tailscale-sync",
+    "description": "",
+    "category": "uncategorized",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  }
+]
