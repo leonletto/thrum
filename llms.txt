@@ -416,7 +416,7 @@ All commands accept these flags:
 
   toolkit/agents/           Claude Code agent definitions
     thrum-agent.md          Thrum messaging coordination guide
-    beads-agent.md          Beads issue tracking integration guide
+    (Beads plugin)          Install via /install-plugin beads (recommended over agent file)
     message-listener.md     Background message polling agent (Haiku model)
 
   toolkit/templates/        Multi-agent workflow templates
