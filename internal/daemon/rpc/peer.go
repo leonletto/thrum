@@ -190,8 +190,8 @@ func (h *PeerJoinHandler) Handle(_ context.Context, params json.RawMessage) (any
 
 // PeerRemoveHandler handles the peer.remove RPC.
 type PeerRemoveHandler struct {
-	removePeer     RemovePeerFunc
-	findByName     FindPeerByNameFunc
+	removePeer RemovePeerFunc
+	findByName FindPeerByNameFunc
 }
 
 // NewPeerRemoveHandler creates a new handler.

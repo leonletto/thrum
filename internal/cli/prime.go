@@ -9,11 +9,11 @@ import (
 
 // PrimeContext contains all context sections gathered by `thrum context prime`.
 type PrimeContext struct {
-	Identity    *WhoamiResult        `json:"identity,omitempty"`
-	Session     *SessionInfo         `json:"session,omitempty"`
-	Agents      *AgentsInfo          `json:"agents,omitempty"`
-	Messages    *MessagesInfo        `json:"messages,omitempty"`
-	WorkContext *WorkContextInfo     `json:"work_context,omitempty"`
+	Identity    *WhoamiResult    `json:"identity,omitempty"`
+	Session     *SessionInfo     `json:"session,omitempty"`
+	Agents      *AgentsInfo      `json:"agents,omitempty"`
+	Messages    *MessagesInfo    `json:"messages,omitempty"`
+	WorkContext *WorkContextInfo `json:"work_context,omitempty"`
 }
 
 // SessionInfo is a simplified session summary for context prime output.
@@ -39,10 +39,10 @@ type MessagesInfo struct {
 
 // WorkContextInfo contains git work context for context prime output.
 type WorkContextInfo struct {
-	Branch          string   `json:"branch,omitempty"`
+	Branch           string   `json:"branch,omitempty"`
 	UncommittedFiles []string `json:"uncommitted_files,omitempty"`
 	UnmergedCommits  int      `json:"unmerged_commits"`
-	Error           string   `json:"error,omitempty"`
+	Error            string   `json:"error,omitempty"`
 }
 
 // ContextPrime gathers comprehensive session context from the daemon and git.

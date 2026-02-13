@@ -18,10 +18,10 @@ const DefaultRecentSyncThreshold = 2 * time.Minute
 // PeriodicSyncScheduler runs background sync from all known peers as a safety net
 // for missed push notifications.
 type PeriodicSyncScheduler struct {
-	syncManager      *DaemonSyncManager
-	state            *state.State
-	interval         time.Duration
-	recentThreshold  time.Duration
+	syncManager     *DaemonSyncManager
+	state           *state.State
+	interval        time.Duration
+	recentThreshold time.Duration
 }
 
 // NewPeriodicSyncScheduler creates a new periodic sync scheduler.

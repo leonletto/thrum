@@ -17,14 +17,14 @@ type MessageCreateEvent struct {
 	Version      int         `json:"v"`
 	OriginDaemon string      `json:"origin_daemon,omitempty"`
 	MessageID    string      `json:"message_id"`
-	ThreadID   string      `json:"thread_id,omitempty"`
-	AgentID    string      `json:"agent_id"`
-	SessionID  string      `json:"session_id"`
-	Body       MessageBody `json:"body"`
-	Scopes     []Scope     `json:"scopes,omitempty"`
-	Refs       []Ref       `json:"refs,omitempty"`
-	AuthoredBy string      `json:"authored_by,omitempty"` // Actual author if impersonating
-	Disclosed  bool        `json:"disclosed,omitempty"`   // Show [via user:X] in UI
+	ThreadID     string      `json:"thread_id,omitempty"`
+	AgentID      string      `json:"agent_id"`
+	SessionID    string      `json:"session_id"`
+	Body         MessageBody `json:"body"`
+	Scopes       []Scope     `json:"scopes,omitempty"`
+	Refs         []Ref       `json:"refs,omitempty"`
+	AuthoredBy   string      `json:"authored_by,omitempty"` // Actual author if impersonating
+	Disclosed    bool        `json:"disclosed,omitempty"`   // Show [via user:X] in UI
 }
 
 // MessageBody represents the body of a message.
@@ -103,13 +103,13 @@ type AgentRegisterEvent struct {
 	Version      int    `json:"v"`
 	OriginDaemon string `json:"origin_daemon,omitempty"`
 	AgentID      string `json:"agent_id"`
-	Kind      string `json:"kind"`
-	Name      string `json:"name,omitempty"` // Agent name (empty for legacy unnamed agents)
-	Role      string `json:"role"`
-	Module    string `json:"module"`
-	Worktree  string `json:"worktree,omitempty"` // Worktree name (Decision 24)
-	Display   string `json:"display,omitempty"`
-	Hostname  string `json:"hostname,omitempty"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name,omitempty"` // Agent name (empty for legacy unnamed agents)
+	Role         string `json:"role"`
+	Module       string `json:"module"`
+	Worktree     string `json:"worktree,omitempty"` // Worktree name (Decision 24)
+	Display      string `json:"display,omitempty"`
+	Hostname     string `json:"hostname,omitempty"`
 }
 
 // AgentSessionStartEvent represents an agent.session.start event.
@@ -169,21 +169,21 @@ type AgentCleanupEvent struct {
 	Version      int    `json:"v"`
 	OriginDaemon string `json:"origin_daemon,omitempty"`
 	AgentID      string `json:"agent_id"` // Deleted agent name
-	Reason    string `json:"reason,omitempty"`
-	Method    string `json:"method,omitempty"` // "manual", "automated", "ui"
+	Reason       string `json:"reason,omitempty"`
+	Method       string `json:"method,omitempty"` // "manual", "automated", "ui"
 }
 
 // GroupCreateEvent represents a group.create event.
 type GroupCreateEvent struct {
-	Type         string `json:"type"`        // "group.create"
+	Type         string `json:"type"` // "group.create"
 	Timestamp    string `json:"timestamp"`
 	EventID      string `json:"event_id"`
 	Version      int    `json:"v"`
 	OriginDaemon string `json:"origin_daemon,omitempty"`
 	GroupID      string `json:"group_id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	CreatedBy   string `json:"created_by"`
+	Name         string `json:"name"`
+	Description  string `json:"description,omitempty"`
+	CreatedBy    string `json:"created_by"`
 }
 
 // GroupMemberAddEvent represents a group.member.add event.
@@ -194,9 +194,9 @@ type GroupMemberAddEvent struct {
 	Version      int    `json:"v"`
 	OriginDaemon string `json:"origin_daemon,omitempty"`
 	GroupID      string `json:"group_id"`
-	MemberType  string `json:"member_type"`  // "agent", "role", "group"
-	MemberValue string `json:"member_value"`
-	AddedBy     string `json:"added_by"`
+	MemberType   string `json:"member_type"` // "agent", "role", "group"
+	MemberValue  string `json:"member_value"`
+	AddedBy      string `json:"added_by"`
 }
 
 // GroupMemberRemoveEvent represents a group.member.remove event.
@@ -207,9 +207,9 @@ type GroupMemberRemoveEvent struct {
 	Version      int    `json:"v"`
 	OriginDaemon string `json:"origin_daemon,omitempty"`
 	GroupID      string `json:"group_id"`
-	MemberType  string `json:"member_type"`
-	MemberValue string `json:"member_value"`
-	RemovedBy   string `json:"removed_by"`
+	MemberType   string `json:"member_type"`
+	MemberValue  string `json:"member_value"`
+	RemovedBy    string `json:"removed_by"`
 }
 
 // GroupUpdateEvent represents a group.update event.
@@ -220,8 +220,8 @@ type GroupUpdateEvent struct {
 	Version      int               `json:"v"`
 	OriginDaemon string            `json:"origin_daemon,omitempty"`
 	GroupID      string            `json:"group_id"`
-	UpdatedBy string            `json:"updated_by"`
-	Fields    map[string]string `json:"fields"` // Changed fields
+	UpdatedBy    string            `json:"updated_by"`
+	Fields       map[string]string `json:"fields"` // Changed fields
 }
 
 // GroupDeleteEvent represents a group.delete event.
@@ -232,7 +232,7 @@ type GroupDeleteEvent struct {
 	Version      int    `json:"v"`
 	OriginDaemon string `json:"origin_daemon,omitempty"`
 	GroupID      string `json:"group_id"`
-	DeletedBy string `json:"deleted_by"`
+	DeletedBy    string `json:"deleted_by"`
 }
 
 // CommitSummary represents a single commit.

@@ -89,8 +89,8 @@ var BuiltinPresets = map[string]RuntimePreset{
 
 // userPresetsConfig is the JSON schema for ~/.config/thrum/runtimes.json.
 type userPresetsConfig struct {
-	DefaultRuntime string                    `json:"default_runtime,omitempty"`
-	CustomRuntimes map[string]RuntimePreset  `json:"custom_runtimes,omitempty"`
+	DefaultRuntime string                   `json:"default_runtime,omitempty"`
+	CustomRuntimes map[string]RuntimePreset `json:"custom_runtimes,omitempty"`
 }
 
 // GetPreset returns the preset for the given runtime name.

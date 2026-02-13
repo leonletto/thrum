@@ -474,19 +474,19 @@ type ListContextResponse struct {
 
 // AgentWorkContext represents an agent's work context.
 type AgentWorkContext struct {
-	SessionID        string        `json:"session_id"`
-	AgentID          string        `json:"agent_id"`
-	Branch           string        `json:"branch,omitempty"`
-	WorktreePath     string        `json:"worktree_path,omitempty"`
-	UnmergedCommits  []CommitSummary `json:"unmerged_commits,omitempty"`
-	UncommittedFiles []string      `json:"uncommitted_files,omitempty"`
-	ChangedFiles     []string      `json:"changed_files,omitempty"`   // Kept for backward compatibility
+	SessionID        string              `json:"session_id"`
+	AgentID          string              `json:"agent_id"`
+	Branch           string              `json:"branch,omitempty"`
+	WorktreePath     string              `json:"worktree_path,omitempty"`
+	UnmergedCommits  []CommitSummary     `json:"unmerged_commits,omitempty"`
+	UncommittedFiles []string            `json:"uncommitted_files,omitempty"`
+	ChangedFiles     []string            `json:"changed_files,omitempty"` // Kept for backward compatibility
 	FileChanges      []gitctx.FileChange `json:"file_changes,omitempty"`
-	GitUpdatedAt     string        `json:"git_updated_at,omitempty"`
-	CurrentTask      string        `json:"current_task,omitempty"`
-	TaskUpdatedAt    string        `json:"task_updated_at,omitempty"`
-	Intent           string        `json:"intent,omitempty"`
-	IntentUpdatedAt  string        `json:"intent_updated_at,omitempty"`
+	GitUpdatedAt     string              `json:"git_updated_at,omitempty"`
+	CurrentTask      string              `json:"current_task,omitempty"`
+	TaskUpdatedAt    string              `json:"task_updated_at,omitempty"`
+	Intent           string              `json:"intent,omitempty"`
+	IntentUpdatedAt  string              `json:"intent_updated_at,omitempty"`
 }
 
 // CommitSummary represents a single commit.

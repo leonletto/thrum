@@ -34,7 +34,7 @@ func TestPrimeContext_JSONStructure(t *testing.T) {
 				{
 					MessageID: "msg_1",
 					AgentID:   "test:coordinator:main",
-					Body:      struct {
+					Body: struct {
 						Format     string `json:"format"`
 						Content    string `json:"content"`
 						Structured string `json:"structured,omitempty"`

@@ -176,4 +176,3 @@ func FormatTeam(resp *TeamListResponse) string {
 
 	return out.String()
 }
-

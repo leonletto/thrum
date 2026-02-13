@@ -192,7 +192,7 @@ func TestExpandMembers_Deduplication(t *testing.T) {
 	insertAgent(t, db, "alice", "reviewer")
 
 	insertGroup(t, db, "grp_1", "team-a", "")
-	insertMember(t, db, "grp_1", "agent", "alice") // direct member
+	insertMember(t, db, "grp_1", "agent", "alice")   // direct member
 	insertMember(t, db, "grp_1", "role", "reviewer") // also included via role
 
 	members, err := r.ExpandMembers("team-a")
