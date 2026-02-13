@@ -90,10 +90,10 @@ Events are persisted as sharded JSONL files in the sync worktree at
 
 **Storage assignment**:
 
-| File                     | Event Types                                                                         |
-| ------------------------ | ----------------------------------------------------------------------------------- |
-| `events.jsonl`           | `agent.register`, `agent.session.start`, `agent.session.end`, `agent.cleanup`       |
-| `messages/{agent}.jsonl` | `message.create`, `message.edit`, `message.delete`, `thread.create`, `agent.update` |
+| File                     | Event Types                                                                 |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `events.jsonl`           | `agent.register`, `agent.session.start`, `agent.session.end`, `agent.cleanup` |
+| `messages/{agent}.jsonl` | `message.create`, `message.edit`, `message.delete`, `agent.update`          |
 
 Events are append-only and immutable. The JSONL files are the source of truth;
 the SQLite database (`.thrum/var/messages.db`) is a derived read projection that
@@ -124,7 +124,6 @@ Emitted when a new message is created in the system.
   "event_id": "01HQXYZ...",
   "v": 1,
   "message_id": "msg_xyz789",
-  "thread_id": "thread_abc123",
   "agent_id": "furiosa",
   "session_id": "s_abc123",
   "body": {
@@ -154,7 +153,6 @@ Emitted when a new message is created in the system.
 - `event_id`: Globally unique ULID for deduplication
 - `v`: Event schema version
 - `message_id`: Unique message identifier
-- `thread_id`: Parent thread (empty if standalone message)
 - `agent_id`: Message author's agent name or legacy ID
 - `session_id`: Session that created the message
 - `timestamp`: Message creation time (ISO 8601)
@@ -293,83 +291,6 @@ ws.onmessage = (event) => {
   }
 };
 ```
-
----
-
-### Thread Events
-
-#### thread.created
-
-Emitted when a new thread is created.
-
-**When emitted**:
-
-- After `thread.create` RPC call succeeds
-- When thread is synced from remote
-
-**Stored in**: `messages/{agent_name}.jsonl`
-
-**Payload** (ThreadCreateEvent):
-
-```json
-{
-  "type": "thread.create",
-  "timestamp": "2024-01-01T12:00:00Z",
-  "event_id": "01HQXYZ...",
-  "v": 1,
-  "thread_id": "thread_abc123",
-  "title": "Discussion about feature X",
-  "created_by": "furiosa"
-}
-```
-
-**Fields**:
-
-- `event_id`: Globally unique ULID for deduplication
-- `thread_id`: Unique thread identifier
-- `title`: Thread title
-- `timestamp`: Creation time (ISO 8601)
-- `created_by`: Agent/user that created the thread
-
-**Related methods**: `thread.create`, `thread.list`, `thread.get`
-
----
-
-#### thread.updated
-
-Real-time notification emitted when a thread is updated with new messages. This
-event is a WebSocket notification only and is **not persisted** to JSONL.
-
-**When emitted**:
-
-- After a new message is added to a thread
-- Sent to clients with matching subscriptions
-
-**Payload** (ThreadUpdatedEvent):
-
-```json
-{
-  "type": "thread.updated",
-  "timestamp": "2024-01-01T13:00:00Z",
-  "event_id": "01HQXYZ...",
-  "v": 1,
-  "thread_id": "thread_abc123",
-  "message_count": 5,
-  "unread_count": 2,
-  "last_activity": "2024-01-01T13:00:00Z",
-  "last_sender": "furiosa",
-  "preview": "Latest message text..."
-}
-```
-
-**Fields**:
-
-- `thread_id`: Thread that was updated
-- `message_count`: Total messages in thread
-- `unread_count`: Unread messages for the subscribing agent
-- `last_activity`: Timestamp of latest activity
-- `last_sender`: Agent who sent the latest message
-- `preview`: Optional preview of latest message content
 
 ---
 

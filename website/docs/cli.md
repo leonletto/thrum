@@ -15,15 +15,12 @@ messaging system for AI agent coordination.
 | `thrum overview`           | Show combined status, team, and inbox view           |
 | `thrum status`             | Show current agent status, session, and work context |
 | `thrum send`               | Send a message (direct or broadcast)                 |
-| `thrum reply`              | Reply to a message (creates thread if needed)        |
+| `thrum reply`              | Reply to a message                                   |
 | `thrum inbox`              | List messages in your inbox                          |
 | `thrum message get`        | Get a single message with full details               |
 | `thrum message edit`       | Edit a message (full replacement)                    |
 | `thrum message delete`     | Delete a message                                     |
 | `thrum message read`       | Mark messages as read                                |
-| `thrum thread create`      | Create a new thread                                  |
-| `thrum thread list`        | List threads with filtering and pagination           |
-| `thrum thread show`        | Show a thread with its messages                      |
 | `thrum agent register`     | Register this agent with the daemon                  |
 | `thrum agent list`         | List registered agents                               |
 | `thrum agent whoami`       | Show current agent identity                          |
@@ -230,7 +227,6 @@ have an active session.
 | `--scope`           | Add scope (repeatable, format: `type:value`)            |            |
 | `--ref`             | Add reference (repeatable, format: `type:value`)        |            |
 | `--mention`         | Mention a role (repeatable, format: `@role`)            |            |
-| `--thread`          | Reply to thread ID                                      |            |
 | `--structured`      | Structured payload (JSON string)                        |            |
 | `--priority`        | Message priority (`low`, `normal`, `high`)              | `normal`   |
 | `--format`          | Message format (`markdown`, `plain`, `json`)            | `markdown` |
@@ -245,7 +241,6 @@ Example:
 
     $ thrum send "PR ready for review" --to @reviewer --scope module:auth --ref pr:42
     ✓ Message sent: msg_01HXE8Z7...
-      Thread: thr_01HXE8A2...
       Created: 2026-02-03T10:00:00Z
 
     # Send to all agents via @everyone group
@@ -259,8 +254,9 @@ Example:
 
 ### thrum reply
 
-Reply to a message by ID. If the message is not in a thread, one is created
-automatically. The replied-to message is marked as read.
+Reply to a message by ID. Creates a reply-to reference so replies are grouped
+with the original message in your inbox. The replied-to message is marked as
+read.
 
     thrum reply MSG_ID TEXT [flags]
 
@@ -272,7 +268,7 @@ Example:
 
     $ thrum reply msg_01HXE8Z7 "Good idea, let's do that"
     ✓ Reply sent: msg_01HXE9A3...
-      Thread: thr_01HXE8A2...
+      In reply to: msg_01HXE8Z7
 
 
 ### thrum inbox
@@ -296,7 +292,7 @@ Example:
 
     $ thrum inbox --unread
     ┌──────────────────────────────────────────────────────────┐
-    │ ● msg_01HXE8Z7  @planner  2m ago  thread:thr_01H...    │
+    │ ● msg_01HXE8Z7  @planner  2m ago                       │
     │ We should refactor the sync daemon before adding embeds. │
     ├──────────────────────────────────────────────────────────┤
     │ ● msg_01HXE8A2  @reviewer  15m ago                      │
@@ -318,7 +314,6 @@ Example:
     Message: msg_01HXE8Z7
       From:    @planner
       Time:    2m ago
-      Thread:  thr_01HXE8A2
       Scopes:  module:auth
       Refs:    issue:thrum-42
 
@@ -372,80 +367,6 @@ Example:
 
     $ thrum message read --all
     ✓ Marked 7 messages as read
-
-
-## Threads
-
-### thrum thread create
-
-Create a new discussion thread, optionally with an initial message directed to a
-specific agent.
-
-    thrum thread create TITLE [flags]
-
-| Flag        | Description                                     | Default |
-| ----------- | ----------------------------------------------- | ------- |
-| `--message` | Initial message content                         |         |
-| `--to`      | Recipient for initial message (format: `@role`) |         |
-
-Example:
-
-    $ thrum thread create "Auth refactor discussion" --message "Let's plan the token refresh changes" --to @reviewer
-    ✓ Thread created: thr_01HXE8Y2...
-      Title:      Auth refactor discussion
-      Created by: implementer_35HV62T9B9
-      Message:    msg_01HXE8Y3...
-
-
-### thrum thread list
-
-List threads with optional filtering and pagination.
-
-    thrum thread list [flags]
-
-| Flag          | Description                            | Default |
-| ------------- | -------------------------------------- | ------- |
-| `--scope`     | Filter by scope (format: `type:value`) |         |
-| `--page-size` | Results per page                       | `10`    |
-| `--page`      | Page number                            | `1`     |
-
-Example:
-
-    $ thrum thread list
-    THREAD               TITLE                          MSGS UNREAD LAST ACTIVITY
-    ─────────────────────────────────────────────────────────────────────────────────
-    thr_01HXE8Y2         Auth refactor discussion          4      2 15m ago (@reviewer)
-    thr_01HXE7A1         Sprint planning                   8      · 2h ago (@planner)
-
-    Showing 1-2 of 2 threads
-
-
-### thrum thread show
-
-Show a thread's details and paginated messages.
-
-    thrum thread show THREAD_ID [flags]
-
-| Flag          | Description       | Default |
-| ------------- | ----------------- | ------- |
-| `--page-size` | Messages per page | `10`    |
-| `--page`      | Page number       | `1`     |
-
-Example:
-
-    $ thrum thread show thr_01HXE8Y2
-    Thread: thr_01HXE8Y2
-      Title:   Auth refactor discussion
-      Created: 2h ago by @implementer
-
-    ┌─────────────────────────────────────────────────────────────────┐
-    │ msg_01HXE8Y3  @implementer  2h ago                             │
-    │ Let's plan the token refresh changes                           │
-    ├─────────────────────────────────────────────────────────────────┤
-    │ msg_01HXE9A4  @reviewer  1h ago                                │
-    │ I think we should use rotating keys instead of refresh tokens  │
-    └─────────────────────────────────────────────────────────────────┘
-    Showing 1-2 of 2 messages
 
 
 ## Identity & Sessions
@@ -813,7 +734,7 @@ Example:
 
 ### thrum group create
 
-Create a named group for targeted messaging. Groups can contain agents, roles, or other groups (nested).
+Create a named group for targeted messaging. Groups contain agents and roles.
 
     thrum group create NAME [flags]
 
@@ -849,7 +770,7 @@ Example:
 
 ### thrum group add
 
-Add a member to a group. Members can be agents, roles, or other groups. The command auto-detects the member type based on format.
+Add a member to a group. Members can be agents or roles.
 
     thrum group add GROUP MEMBER
 
@@ -857,7 +778,6 @@ Add a member to a group. Members can be agents, roles, or other groups. The comm
 
 - `@alice` or `alice` — Specific agent by name
 - `--role planner` — All agents with role "planner"
-- `--group team` — Nested group reference
 
 Example:
 
@@ -868,10 +788,6 @@ Example:
     # Add all agents with a role
     $ thrum group add reviewers --role reviewer
     ✓ Added role reviewer to group reviewers
-
-    # Add another group (nested)
-    $ thrum group add backend --group reviewers
-    ✓ Added group reviewers to group backend
 
 
 ### thrum group remove
@@ -911,7 +827,7 @@ Example:
 
     backend
       Description: Backend developers
-      Members:     1 group, 3 agents
+      Members:     3
       Created:     2026-02-09 10:20:00
 
 
@@ -937,30 +853,16 @@ Example:
 
 ### thrum group members
 
-List members of a group. Use `--expand` to recursively resolve nested groups and roles to individual agent IDs.
+List members of a group.
 
-    thrum group members NAME [flags]
-
-| Flag       | Description                                                 | Default |
-| ---------- | ----------------------------------------------------------- | ------- |
-| `--expand` | Resolve nested groups/roles to agent IDs (recursive)       | `false` |
-
-Without `--expand`, shows direct members (agents, roles, groups). With `--expand`, recursively resolves to a flat list of agent IDs.
+    thrum group members NAME
 
 Example:
 
-    # Show direct members
     $ thrum group members reviewers
     Members of reviewers (2):
       - @alice (agent)
       - reviewer (role)
-
-    # Expand to agent IDs
-    $ thrum group members reviewers --expand
-    Resolved members of reviewers (3 agents):
-      - alice
-      - bob
-      - charlie
 
 
 ## Coordination

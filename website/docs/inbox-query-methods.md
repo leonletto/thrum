@@ -1,7 +1,7 @@
 ---
 title: "Inbox Query Methods"
 description:
-  "RPC methods for querying messages, threads, agents, and managing read state
+  "RPC methods for querying messages, agents, and managing read state
   with filtering and pagination"
 category: "api"
 order: 3
@@ -14,8 +14,8 @@ last_updated: "2026-02-08"
 ## Overview
 
 The Thrum daemon provides a complete set of RPC methods for querying the inbox,
-listing agents, browsing threads, and managing read state. These methods power
-both the CLI (`thrum inbox`, `thrum thread list`) and the Web UI.
+listing agents, and managing read state. These methods power
+both the CLI (`thrum inbox`) and the Web UI.
 
 All methods use JSON-RPC 2.0 over Unix socket (`.thrum/var/thrum.sock`) or
 WebSocket (`ws://localhost:9999`). See `docs/rpc-api.md` for the full API
@@ -77,7 +77,6 @@ the primary inbox query method.
   "jsonrpc": "2.0",
   "method": "message.list",
   "params": {
-    "thread_id": "thr_01HXE...",
     "author_id": "furiosa",
     "scope": { "type": "module", "value": "auth" },
     "ref": { "type": "mention", "value": "reviewer" },
@@ -98,7 +97,6 @@ the primary inbox query method.
 
 | Parameter          | Type    | Description                                                                 |
 | ------------------ | ------- | --------------------------------------------------------------------------- |
-| `thread_id`        | string  | Filter by thread                                                            |
 | `author_id`        | string  | Filter by author agent ID                                                   |
 | `scope`            | object  | Filter by scope (`{"type": "...", "value": "..."}`)                         |
 | `ref`              | object  | Filter by ref (`{"type": "...", "value": "..."}`)                           |
@@ -125,7 +123,6 @@ the primary inbox query method.
     "messages": [
       {
         "message_id": "msg_01HXE...",
-        "thread_id": "thr_01HXE...",
         "agent_id": "furiosa",
         "body": {
           "format": "markdown",
@@ -178,7 +175,6 @@ author info, edit/delete metadata.
   "result": {
     "message": {
       "message_id": "msg_01HXE...",
-      "thread_id": "thr_01HXE...",
       "author": {
         "agent_id": "furiosa",
         "session_id": "ses_01HXE..."
@@ -238,104 +234,6 @@ Batch mark messages as read for the current agent and session.
 The `also_read_by` field returns collaboration info: other agents who have also
 read the same messages. This is omitted if empty.
 
-### 5. thread.list
-
-Lists threads with message counts, unread counts, last activity, and preview.
-
-**Request:**
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "thread.list",
-  "params": {
-    "scope": { "type": "module", "value": "auth" },
-    "page_size": 20,
-    "page": 1
-  },
-  "id": 1
-}
-```
-
-**Response:**
-
-```json
-{
-  "jsonrpc": "2.0",
-  "result": {
-    "threads": [
-      {
-        "thread_id": "thr_01HXE...",
-        "title": "Auth module discussion",
-        "message_count": 8,
-        "unread_count": 2,
-        "last_activity": "2026-02-03T15:41:12Z",
-        "last_sender": "furiosa",
-        "preview": "Auth module complete, all tests passing",
-        "created_by": "furiosa",
-        "created_at": "2026-02-03T10:00:00Z"
-      }
-    ],
-    "total": 5,
-    "page": 1,
-    "page_size": 20,
-    "total_pages": 1
-  },
-  "id": 1
-}
-```
-
-### 6. thread.get
-
-Gets thread details with paginated messages.
-
-**Request:**
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "thread.get",
-  "params": {
-    "thread_id": "thr_01HXE...",
-    "page_size": 50,
-    "page": 1
-  },
-  "id": 1
-}
-```
-
-**Response:**
-
-```json
-{
-  "jsonrpc": "2.0",
-  "result": {
-    "thread": {
-      "thread_id": "thr_01HXE...",
-      "title": "Auth module discussion",
-      "created_by": "furiosa",
-      "created_at": "2026-02-03T10:00:00Z"
-    },
-    "messages": [
-      {
-        "message_id": "msg_01HXE...",
-        "thread_id": "thr_01HXE...",
-        "agent_id": "furiosa",
-        "body": { "format": "markdown", "content": "Starting work on auth" },
-        "created_at": "2026-02-03T10:00:00Z",
-        "deleted": false,
-        "is_read": true
-      }
-    ],
-    "total": 8,
-    "page": 1,
-    "page_size": 50,
-    "total_pages": 1
-  },
-  "id": 1
-}
-```
-
 ## Read/Unread Tracking
 
 Read state is fully implemented with the following infrastructure:
@@ -363,7 +261,6 @@ record.
   in the response envelope
 - `message.list` supports `unread` (boolean, config-resolved) and
   `unread_for_agent` (string, explicit) filters
-- `thread.list` responses include `unread_count` per thread
 
 ### Auto Mark-as-Read
 
@@ -378,12 +275,10 @@ Several CLI commands mark messages as read automatically:
 ## Features Summary
 
 - **Agent listing** -- List all agents with role/module filters and metadata
-- **Message listing** -- Filter by thread, author, scope, ref, mentions, unread
+- **Message listing** -- Filter by author, scope, ref, mentions, unread
   status
 - **Pagination** -- Configurable page size (max 100), page numbers, total counts
 - **Sorting** -- By `created_at` or `updated_at`, ascending or descending
-- **Thread support** -- List threads with unread counts and preview, get thread
-  with messages
 - **Read tracking** -- Per-session and per-agent read state, auto mark-as-read
 - **Mention filtering** -- Filter by mention role (config-resolved or explicit)
 - **Transport context** -- Both Unix socket and WebSocket supported
@@ -395,9 +290,6 @@ Several CLI commands mark messages as read automatically:
 ```bash
 # List unread messages mentioning the current agent's role
 thrum inbox --mentions --unread
-
-# List all messages in a specific thread
-thrum thread show thr_01HXE...
 ```
 
 ### Loading inbox from the UI (WebSocket)
@@ -413,12 +305,6 @@ const inbox = await rpc("message.list", {
   page_size: 50,
   sort_by: "created_at",
   sort_order: "desc",
-});
-
-// Get thread details with messages
-const thread = await rpc("thread.get", {
-  thread_id: inbox.messages[0].thread_id,
-  page_size: 50,
 });
 
 // Mark messages as read
@@ -449,7 +335,6 @@ All methods have comprehensive test coverage in:
 - `internal/daemon/rpc/agent_test.go` -- Agent listing, filtering
 - `internal/daemon/rpc/message_test.go` -- Message CRUD, pagination, sorting
 - `internal/daemon/rpc/message_filter_test.go` -- Mention and unread filtering
-- `internal/daemon/rpc/thread_test.go` -- Thread CRUD, pagination
 - `internal/daemon/rpc/session_test.go` -- Session management
 - `tests/e2e/messaging.spec.ts` -- End-to-end messaging scenarios
 

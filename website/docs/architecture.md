@@ -25,7 +25,7 @@ on:
 ```
 internal/
 ├── config/      # Configuration loading, identity files, agent naming
-├── identity/    # ID generation (repo, agent, session, message, thread, event)
+├── identity/    # ID generation (repo, agent, session, message, event)
 ├── jsonl/       # JSONL reader/writer with file locking
 ├── projection/  # SQLite projection engine (multi-file rebuild)
 ├── schema/      # SQLite schema, migrations, JSONL sharding migration
@@ -121,7 +121,6 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)
 | **Session ID**         | `ses_` + ulid()                 | `ses_01HXF2A9Y1Q0P8...`  |
 | **Session Token**      | `tok_` + ulid()                 | `tok_01HXF2A9Y1Q0P8...`  |
 | **Message ID**         | `msg_` + ulid()                 | `msg_01HXF2A9Y1Q0P8...`  |
-| **Thread ID**          | `thr_` + ulid()                 | `thr_01HXF2A9Y1Q0P8...`  |
 | **Event ID**           | `evt_` + ulid()                 | `evt_01HXF2A9Y1Q0P8...`  |
 
 ### Deterministic IDs
@@ -134,7 +133,7 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)
 
 ### Unique IDs
 
-- **Session, Message, Thread, Event IDs**: Use ULID (time-ordered, unique)
+- **Session, Message, Event IDs**: Use ULID (time-ordered, unique)
 - ULID format: 26 characters, sortable by time, 128-bit random
 - Thread-safe generation with mutex-protected monotonic entropy
 
@@ -279,7 +278,6 @@ message_scopes      # Routing scopes (many-to-many)
 message_refs        # References (many-to-many)
 message_reads       # Per-session read tracking (local-only, no git sync)
 message_edits       # Edit history tracking
-threads             # Optional message grouping
 agents              # Registered agents (kind: "agent" or "user")
 sessions            # Agent work periods
 session_scopes      # Session context scopes
@@ -287,7 +285,7 @@ session_refs        # Session context references
 subscriptions       # Push notification subscriptions
 agent_work_contexts # Live git state per session
 groups              # Named collections for targeted messaging
-group_members       # Group membership (agents, roles, nested groups)
+group_members       # Group membership (agents and roles)
 schema_version      # Migration tracking
 ```
 
@@ -355,7 +353,7 @@ projector.Apply(eventJSON)
 
 `Rebuild(syncDir)` handles the sharded JSONL structure:
 
-1. Read `events.jsonl` (agent lifecycle, threads, sessions)
+1. Read `events.jsonl` (agent lifecycle, sessions)
 2. Glob `messages/*.jsonl` (per-agent message files)
 3. Sort ALL events globally by `(timestamp, event_id)` for deterministic
    ordering
@@ -371,7 +369,6 @@ ordering.
 | `message.create`      | Insert into messages, scopes, refs                   |
 | `message.edit`        | Update body_content, updated_at, record edit history |
 | `message.delete`      | Set deleted=1, deleted_at, delete_reason             |
-| `thread.create`       | Insert into threads                                  |
 | `group.create`        | Insert into groups                                   |
 | `group.delete`        | Delete group and members                             |
 | `agent.register`      | Insert/replace agent                                 |
@@ -392,7 +389,6 @@ Shared Go structs for all event types:
 - `MessageCreateEvent` - Message creation with body, scopes, refs
 - `MessageEditEvent` - Message body edit
 - `MessageDeleteEvent` - Soft delete with reason
-- `ThreadCreateEvent` - Thread creation
 - `GroupCreateEvent` - Group creation with name and description
 - `GroupDeleteEvent` - Group deletion
 - `AgentRegisterEvent` - Agent registration (kind: "agent" or "user")

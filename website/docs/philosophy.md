@@ -121,6 +121,10 @@ Thrum doesn't orchestrate your agents. It gives agents a way to message each
 other across worktrees and machines, so you can run several in parallel without
 being the message relay yourself.
 
+Thrum doesn't stop agents or interrupt their work. If you need to stop an agent,
+you stop the process. Thrum provides the communication layer — you provide
+the control.
+
 It's not a framework either. Any agent that can run shell commands or use MCP
 tools can use Thrum. There's no SDK to integrate, no protocol to implement
 beyond basic messaging.

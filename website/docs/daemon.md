@@ -220,7 +220,6 @@ on both the Unix socket and WebSocket servers unless noted.
 | **Agent**        | `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`, `agent.delete`, `agent.cleanup`        | `delete` and `cleanup` are Unix socket only       |
 | **Session**      | `session.start`, `session.end`, `session.list`, `session.heartbeat`, `session.setIntent`, `session.setTask` |                                                   |
 | **Message**      | `message.send`, `message.get`, `message.list`, `message.edit`, `message.delete`, `message.markRead`         |                                                   |
-| **Thread**       | `thread.create`, `thread.list`, `thread.get`                                                                |                                                   |
 | **Subscription** | `subscribe`, `unsubscribe`, `subscriptions.list`                                                            |                                                   |
 | **Sync**         | `sync.force`, `sync.status`                                                                                 | Both Unix socket and WebSocket                    |
 | **User**         | `user.register`, `user.identify`                                                                            | `user.register` restricted to WebSocket transport |
