@@ -70,6 +70,9 @@ playwright-report/
 # Screenshots (Playwright testing artifacts)
 *.png
 
+# Playwright cli artifacts
+.playwright-cli
+
 # Thrum runtime files
 .thrum/
 .thrum.*.json
