@@ -7,13 +7,22 @@ import (
 	"time"
 )
 
-// PrimeContext contains all context sections gathered by `thrum context prime`.
+// PrimeContext contains all context sections gathered by `thrum prime`.
 type PrimeContext struct {
-	Identity    *WhoamiResult    `json:"identity,omitempty"`
-	Session     *SessionInfo     `json:"session,omitempty"`
-	Agents      *AgentsInfo      `json:"agents,omitempty"`
-	Messages    *MessagesInfo    `json:"messages,omitempty"`
-	WorkContext *WorkContextInfo `json:"work_context,omitempty"`
+	Identity    *WhoamiResult      `json:"identity,omitempty"`
+	Session     *SessionInfo       `json:"session,omitempty"`
+	Agents      *AgentsInfo        `json:"agents,omitempty"`
+	Messages    *MessagesInfo      `json:"messages,omitempty"`
+	WorkContext *WorkContextInfo   `json:"work_context,omitempty"`
+	SyncState   *PrimeSyncInfo     `json:"sync_state,omitempty"`
+}
+
+// PrimeSyncInfo contains sync health for prime output.
+type PrimeSyncInfo struct {
+	DaemonStatus string `json:"daemon_status"`
+	UptimeMs     int64  `json:"uptime_ms,omitempty"`
+	SyncState    string `json:"sync_state,omitempty"`
+	Version      string `json:"version,omitempty"`
 }
 
 // SessionInfo is a simplified session summary for context prime output.
@@ -104,6 +113,17 @@ func ContextPrime(client *Client) *PrimeContext {
 	// 5. Git work context
 	ctx.WorkContext = getGitWorkContext()
 
+	// 6. Sync/daemon health
+	var health HealthResult
+	if err := client.Call("health", map[string]any{}, &health); err == nil {
+		ctx.SyncState = &PrimeSyncInfo{
+			DaemonStatus: health.Status,
+			UptimeMs:     health.UptimeMs,
+			SyncState:    health.SyncState,
+			Version:      health.Version,
+		}
+	}
+
 	return ctx
 }
 
@@ -167,9 +187,9 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 
 	// Identity
 	if ctx.Identity != nil {
-		out.WriteString(fmt.Sprintf("Agent: @%s (%s)\n", ctx.Identity.Role, ctx.Identity.AgentID))
+		fmt.Fprintf(&out, "Agent: @%s (%s)\n", ctx.Identity.Role, ctx.Identity.AgentID)
 		if ctx.Identity.Module != "" {
-			out.WriteString(fmt.Sprintf("  Module: %s\n", ctx.Identity.Module))
+			fmt.Fprintf(&out, "  Module: %s\n", ctx.Identity.Module)
 		}
 	} else {
 		out.WriteString("Agent: not registered\n")
@@ -183,9 +203,9 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 				sessionAge = fmt.Sprintf(" (%s)", formatDuration(time.Since(t)))
 			}
 		}
-		out.WriteString(fmt.Sprintf("Session: %s%s\n", ctx.Session.SessionID, sessionAge))
+		fmt.Fprintf(&out, "Session: %s%s\n", ctx.Session.SessionID, sessionAge)
 		if ctx.Session.Intent != "" {
-			out.WriteString(fmt.Sprintf("  Intent: %s\n", ctx.Session.Intent))
+			fmt.Fprintf(&out, "  Intent: %s\n", ctx.Session.Intent)
 		}
 	} else {
 		out.WriteString("Session: none\n")
@@ -193,18 +213,18 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 
 	// Agents
 	if ctx.Agents != nil {
-		out.WriteString(fmt.Sprintf("\nTeam: %d agents (%d active)\n", ctx.Agents.Total, ctx.Agents.Active))
+		fmt.Fprintf(&out, "\nTeam: %d agents (%d active)\n", ctx.Agents.Total, ctx.Agents.Active)
 		for _, agent := range ctx.Agents.List {
-			out.WriteString(fmt.Sprintf("  @%s (%s)\n", agent.Role, agent.Module))
+			fmt.Fprintf(&out, "  @%s (%s)\n", agent.Role, agent.Module)
 		}
 	}
 
 	// Messages
 	if ctx.Messages != nil {
 		if ctx.Messages.Unread > 0 {
-			out.WriteString(fmt.Sprintf("\nInbox: %d unread (%d total)\n", ctx.Messages.Unread, ctx.Messages.Total))
+			fmt.Fprintf(&out, "\nInbox: %d unread (%d total)\n", ctx.Messages.Unread, ctx.Messages.Total)
 		} else {
-			out.WriteString(fmt.Sprintf("\nInbox: %d messages (all read)\n", ctx.Messages.Total))
+			fmt.Fprintf(&out, "\nInbox: %d messages (all read)\n", ctx.Messages.Total)
 		}
 		for _, msg := range ctx.Messages.Recent {
 			from := extractRole(msg.AgentID)
@@ -212,27 +232,53 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 			if len(content) > 60 {
 				content = content[:57] + "..."
 			}
-			out.WriteString(fmt.Sprintf("  @%s: %s\n", from, content))
+			fmt.Fprintf(&out, "  @%s: %s\n", from, content)
 		}
 	}
 
 	// Work context
 	if ctx.WorkContext != nil {
 		if ctx.WorkContext.Error != "" {
-			out.WriteString(fmt.Sprintf("\nGit: %s\n", ctx.WorkContext.Error))
+			fmt.Fprintf(&out, "\nGit: %s\n", ctx.WorkContext.Error)
 		} else {
-			out.WriteString(fmt.Sprintf("\nBranch: %s\n", ctx.WorkContext.Branch))
+			fmt.Fprintf(&out, "\nBranch: %s\n", ctx.WorkContext.Branch)
 			if ctx.WorkContext.UnmergedCommits > 0 {
-				out.WriteString(fmt.Sprintf("  Unmerged commits: %d\n", ctx.WorkContext.UnmergedCommits))
+				fmt.Fprintf(&out, "  Unmerged commits: %d\n", ctx.WorkContext.UnmergedCommits)
 			}
 			if len(ctx.WorkContext.UncommittedFiles) > 0 {
-				out.WriteString(fmt.Sprintf("  Uncommitted files: %d\n", len(ctx.WorkContext.UncommittedFiles)))
+				fmt.Fprintf(&out, "  Uncommitted files: %d\n", len(ctx.WorkContext.UncommittedFiles))
 				for _, f := range ctx.WorkContext.UncommittedFiles {
-					out.WriteString(fmt.Sprintf("    %s\n", f))
+					fmt.Fprintf(&out, "    %s\n", f)
 				}
 			}
 		}
 	}
+
+	// Sync state
+	if ctx.SyncState != nil {
+		fmt.Fprintf(&out, "\nDaemon: %s", ctx.SyncState.DaemonStatus)
+		if ctx.SyncState.Version != "" {
+			fmt.Fprintf(&out, " (v%s)", ctx.SyncState.Version)
+		}
+		if ctx.SyncState.UptimeMs > 0 {
+			fmt.Fprintf(&out, ", up %s", formatDuration(time.Duration(ctx.SyncState.UptimeMs)*time.Millisecond))
+		}
+		out.WriteString("\n")
+		if ctx.SyncState.SyncState != "" {
+			fmt.Fprintf(&out, "  Sync: %s\n", ctx.SyncState.SyncState)
+		}
+	}
+
+	// Quick command reference
+	out.WriteString("\nCommands:\n")
+	out.WriteString("  thrum send \"msg\" --to @name    Send direct message\n")
+	out.WriteString("  thrum inbox                    Check messages\n")
+	out.WriteString("  thrum reply <id> \"msg\"         Reply to message\n")
+	out.WriteString("  thrum send \"msg\" --broadcast   Broadcast to all\n")
+	out.WriteString("  thrum status                   Agent/daemon status\n")
+	out.WriteString("  thrum team                     List team members\n")
+	out.WriteString("  thrum wait                     Block until message arrives\n")
+	out.WriteString("  thrum <cmd> --help             Detailed command usage\n")
 
 	return out.String()
 }
