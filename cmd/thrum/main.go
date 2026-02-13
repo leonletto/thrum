@@ -108,6 +108,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(waitCmd())
 
 	// Composite commands
+	rootCmd.AddCommand(primeCmd())
 	rootCmd.AddCommand(quickstartCmd())
 	rootCmd.AddCommand(overviewCmd())
 	rootCmd.AddCommand(teamCmd())
@@ -2691,11 +2692,22 @@ func contextUpdateCmd() *cobra.Command {
 				}
 			}
 
+			// Check if the thrum plugin is installed (provides /thrum:update-context)
+			if homeDir, err := os.UserHomeDir(); err == nil {
+				pluginPath := filepath.Join(homeDir, ".claude", "plugins", "cache", "thrum-marketplace", "thrum")
+				if matches, _ := filepath.Glob(pluginPath + "/*/commands/update-context.md"); len(matches) > 0 {
+					fmt.Println("The thrum plugin provides /thrum:update-context.")
+					fmt.Println("Run /thrum:update-context in Claude Code to update your agent context.")
+					return nil
+				}
+			}
+
 			// Not found — print installation instructions
 			fmt.Println("The /update-context skill is not installed.")
 			fmt.Println()
-			fmt.Println("This skill guides agents to compose structured context and save it")
-			fmt.Println("via 'thrum context save'. Install it from the thrum toolkit:")
+			fmt.Println("If the thrum Claude Code plugin is installed, use /thrum:update-context instead.")
+			fmt.Println()
+			fmt.Println("Otherwise, install the standalone skill from the thrum toolkit:")
 			fmt.Println()
 			fmt.Println("  # Project-level (this repo only)")
 			fmt.Println("  mkdir -p .claude/commands")
@@ -2704,8 +2716,6 @@ func contextUpdateCmd() *cobra.Command {
 			fmt.Println("  # Global (all projects)")
 			fmt.Println("  mkdir -p ~/.claude/commands")
 			fmt.Println("  cp toolkit/commands/update-context.md ~/.claude/commands/")
-			fmt.Println()
-			fmt.Println("See toolkit/commands/README.md for details.")
 			return nil
 		},
 	}
@@ -2997,22 +3007,32 @@ Examples:
 	return cmd
 }
 
-func contextPrimeCmd() *cobra.Command {
+func primeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "prime",
-		Short: "Gather comprehensive session context for agent initialization",
+		Short: "Gather session context for agent initialization",
 		Long: `Collect all context needed for agent session initialization or recovery.
 
-Gathers identity, session info, agent list, unread messages, and git
-work context into a single output. Gracefully handles missing sections.
+Gathers identity, session info, team, inbox, git context, and daemon
+health into a single AI-optimized output. Used by plugin hooks on
+SessionStart and PreCompact to re-prime agent context.
+
+Gracefully degrades if daemon is not running.
 
 Examples:
-  thrum context prime          # Human-readable summary
-  thrum context prime --json   # Structured JSON output`,
+  thrum prime          # Human-readable summary
+  thrum prime --json   # Structured JSON output`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
 			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
+				// Graceful degradation: output helpful message instead of error
+				fmt.Println("Thrum not initialized (run: thrum init && thrum daemon start)")
+				fmt.Println()
+				fmt.Println("Commands:")
+				fmt.Println("  thrum init                     Initialize thrum in this repo")
+				fmt.Println("  thrum daemon start             Start the daemon")
+				fmt.Println("  thrum quickstart               Register + start session")
+				return nil
 			}
 			defer func() { _ = client.Close() }()
 
@@ -3028,6 +3048,22 @@ Examples:
 			return nil
 		},
 	}
+}
+
+func contextPrimeCmd() *cobra.Command {
+	// Reuse primeCmd — `thrum context prime` is an alias for `thrum prime`
+	cmd := primeCmd()
+	cmd.Long = `Collect all context needed for agent session initialization or recovery.
+
+Gathers identity, session info, agent list, unread messages, git context,
+and daemon health into a single output. Gracefully handles missing sections.
+
+This is an alias for 'thrum prime'.
+
+Examples:
+  thrum context prime          # Human-readable summary
+  thrum context prime --json   # Structured JSON output`
+	return cmd
 }
 
 func runtimeGroupCmd() *cobra.Command {
