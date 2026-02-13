@@ -133,6 +133,76 @@ func TestIsValidRuntime(t *testing.T) {
 	}
 }
 
+func TestDetectAllRuntimes_MultipleDetected(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create Claude and Augment markers
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".claude"), 0750)
+	_ = os.WriteFile(filepath.Join(tmpDir, ".claude/settings.json"), []byte("{}"), 0600)
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".augment"), 0750)
+
+	results := DetectAllRuntimes(tmpDir)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 detected runtimes, got %d: %+v", len(results), results)
+	}
+	if results[0].Name != "claude" {
+		t.Errorf("expected first result to be claude, got %q", results[0].Name)
+	}
+	if results[1].Name != "auggie" {
+		t.Errorf("expected second result to be auggie, got %q", results[1].Name)
+	}
+	// Sources should reference file markers
+	if results[0].Source != "found .claude/settings.json" {
+		t.Errorf("expected source 'found .claude/settings.json', got %q", results[0].Source)
+	}
+}
+
+func TestDetectAllRuntimes_NoneDetected(t *testing.T) {
+	tmpDir := t.TempDir()
+	results := DetectAllRuntimes(tmpDir)
+	if len(results) != 0 {
+		t.Errorf("expected 0 detected runtimes, got %d", len(results))
+	}
+}
+
+func TestDetectAllRuntimes_DeduplicatesFileAndEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Claude via file marker AND env var — should only appear once
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".claude"), 0750)
+	_ = os.WriteFile(filepath.Join(tmpDir, ".claude/settings.json"), []byte("{}"), 0600)
+	t.Setenv("CLAUDE_SESSION_ID", "test_session")
+
+	results := DetectAllRuntimes(tmpDir)
+	claudeCount := 0
+	for _, r := range results {
+		if r.Name == "claude" {
+			claudeCount++
+		}
+	}
+	if claudeCount != 1 {
+		t.Errorf("expected claude to appear once, got %d times", claudeCount)
+	}
+	// File marker should win (first in results)
+	if results[0].Source != "found .claude/settings.json" {
+		t.Errorf("expected file marker source, got %q", results[0].Source)
+	}
+}
+
+func TestDetectAllRuntimes_EnvOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("GEMINI_CLI", "true")
+
+	results := DetectAllRuntimes(tmpDir)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 detected runtime, got %d", len(results))
+	}
+	if results[0].Name != "gemini" {
+		t.Errorf("expected gemini, got %q", results[0].Name)
+	}
+	if results[0].Source != "env GEMINI_CLI" {
+		t.Errorf("expected source 'env GEMINI_CLI', got %q", results[0].Source)
+	}
+}
+
 func TestSupportedRuntimes(t *testing.T) {
 	runtimes := SupportedRuntimes()
 	if len(runtimes) < 6 {
