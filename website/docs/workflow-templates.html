@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow Templates — Thrum</title>
+  <meta name="description" content="Three-phase development templates for planning, preparing, and implementing features with AI agents">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Workflow Templates — Thrum">
+  <meta property="og:description" content="Three-phase development templates for planning, preparing, and implementing features with AI agents">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/workflow-templates.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Workflow Templates — Thrum">
+  <meta name="twitter:description" content="Three-phase development templates for planning, preparing, and implementing features with AI agents">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#workflow-templates.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Workflow Templates</h1>
+<p>Thrum ships ready-to-use templates that guide AI agents through planning, preparing, and implementing features. You copy them into your project and customize the placeholders for your environment.</p>
+<p>Templates live in <code>toolkit/templates/</code> in the Thrum repository.</p>
+<h2>The three-phase workflow</h2>
+<pre><code>1. PLAN              2. PREPARE            3. IMPLEMENT
+─────────────        ──────────────        ─────────────────────
+Brainstorm           Select/create         Orient from beads
+Write spec           worktree              Implement tasks
+Create epics         Setup thrum +         Test → commit → close
+Create tasks         beads redirect        Quality gates
+Set deps             Run quickstart        Merge to main</code></pre>
+<p><strong>Plan</strong> — Explore codebase, propose approaches, write design spec, decompose into beads epics with detailed task descriptions.</p>
+<p><strong>Prepare</strong> — Select or create git worktree, configure thrum and beads redirects so all worktrees share the same daemon and issue database. Bootstrap agent identity.</p>
+<p><strong>Implement</strong> — Work through tasks in dependency order: claim → read → implement → test → commit → close. Orient phase reads beads status and git history for resume after context loss.</p>
+<h2>Install the templates</h2>
+<p>Copy the templates into your project documentation:</p>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cp</span> toolkit/templates/*.md your-project/docs/templates/</code></pre>
+<p>Or reference them directly from the Thrum repo when starting a new agent session.</p>
+<h2>Customize the placeholders</h2>
+<p>Templates use <code>{{PLACEHOLDER}}</code> syntax for project-specific values. Replace these before giving a template to an agent.</p>
+<h3>Planning agent placeholders</h3>
+<pre><code class="language-bash hljs">{{FEATURE_DESCRIPTION}} → <span class="hljs-string">&quot;Add WebSocket sync between agents&quot;</span>
+{{PROJECT_ROOT}}        → /home/user/projects/myproject
+{{DESIGN_DOC_DIR}}      → docs/plans/
+{{REFERENCE_DOCS}}      → .ref/example_project/, dev-docs/architecture.md
+{{TECH_STACK}}          → Go backend, React/TypeScript UI, SQLite, JSONL</code></pre>
+<h3>Worktree setup placeholders</h3>
+<pre><code class="language-bash hljs">{{PROJECT_ROOT}}  → /home/user/projects/myproject
+{{WORKTREE_BASE}} → ~/.workspaces/myproject
+{{FEATURE_NAME}}  → auth</code></pre>
+<h3>Implementation agent placeholders</h3>
+<pre><code class="language-bash hljs">{{EPIC_ID}}          → bd-a3f8
+{{WORKTREE_PATH}}    → ~/.workspaces/myproject/auth
+{{BRANCH_NAME}}      → feature/auth
+{{DESIGN_DOC}}       → docs/plans/2026-02-auth-design.md
+{{REFERENCE_CODE}}   → .ref/example_auth_impl/
+{{QUALITY_COMMANDS}} → make <span class="hljs-built_in">test</span> &amp;&amp; make lint
+{{COVERAGE_TARGET}}  → &gt;80%
+{{AGENT_NAME}}       → impl-auth</code></pre>
+<h3>Example: Fill in for a real project</h3>
+<p>You&#39;re building authentication for a Go service. Here&#39;s how you customize the implementation template:</p>
+<pre><code class="language-bash hljs">{{EPIC_ID}}          → bd-k7m2
+{{WORKTREE_PATH}}    → ~/.workspaces/myservice/auth
+{{BRANCH_NAME}}      → feature/auth-jwt
+{{DESIGN_DOC}}       → docs/plans/2026-02-jwt-auth.md
+{{REFERENCE_CODE}}   → .ref/gorilla-sessions-example/
+{{QUALITY_COMMANDS}} → go <span class="hljs-built_in">test</span> ./... &amp;&amp; golangci-lint run
+{{COVERAGE_TARGET}}  → &gt;85%
+{{AGENT_NAME}}       → impl-auth-jwt</code></pre>
+<p>Save the filled-in template as a file or paste it directly into your agent&#39;s prompt.</p>
+<h2>Use the planning template</h2>
+<p>Give <code>planning-agent.md</code> to a planning agent when you have a feature idea and need actionable tasks.</p>
+<p><strong>Produces:</strong> Design spec, beads epics, detailed task descriptions, dependency relationships.</p>
+<p>Planning agents front-load detail into task descriptions so implementation agents work autonomously without conversation history.</p>
+<h2>Use the worktree setup guide</h2>
+<p>Follow <code>worktree-setup.md</code> when an epic needs an isolated workspace.</p>
+<p><strong>Does:</strong> Check existing worktrees for reuse, create new worktree + branch if needed, configure thrum and beads redirects, bootstrap agent identity, verify with <code>bd where</code>, <code>bd ready</code>, and <code>thrum context show</code>.</p>
+<p>Without redirect configuration, agents in different worktrees see different tasks and different daemon instances.</p>
+<h3>Setup script</h3>
+<p>The <code>setup-worktree-thrum.sh</code> script handles full worktree bootstrapping in a single command:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Full worktree setup with identity</span>
+./scripts/setup-worktree-thrum.sh ~/.workspaces/myproject/auth feature/auth \
+  --identity impl-auth \
+  --role implementer</code></pre>
+<p>This creates the worktree, sets up thrum and beads redirects, and registers the agent identity. The <code>thrum quickstart</code> command (used internally) auto-creates a default preamble with thrum quick-reference commands.</p>
+<h2>Use the implementation template</h2>
+<p>Give <code>implementation-agent.md</code> to an implementation agent when an epic has tasks and a worktree is ready.</p>
+<p><strong>Orient</strong> — Check beads status and git state to find starting point (works for fresh starts and resumes).</p>
+<p><strong>Implement</strong> — Work through tasks: claim → read → implement → test → commit → close.</p>
+<p><strong>Verify</strong> — Run full quality gates after all tasks complete.</p>
+<p><strong>Land</strong> — Close epic, merge to main, push.</p>
+<p>After context loss, restart with the same filled-in template. Orient re-runs and picks up from the first incomplete task. Completed work is never redone.</p>
+<h2>See also</h2>
+<ul>
+<li><a href="agent-configs.html">Agent Configuration</a> — How to configure agents for autonomous operation</li>
+<li><a href="beads-and-thrum.html">Beads and Thrum Integration</a> — How the workflow uses beads for task tracking and Thrum for coordination</li>
+<li><a href="quickstart.html">Quick Start</a> — Set up Thrum and run your first multi-agent workflow</li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#workflow-templates.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#workflow-templates.html');
+    }
+  </script>
+</body>
+</html>

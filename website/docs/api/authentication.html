@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authentication Guide — Thrum</title>
+  <meta name="description" content="Agent and user authentication, registration, sessions, impersonation, and security considerations">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Authentication Guide — Thrum">
+  <meta property="og:description" content="Agent and user authentication, registration, sessions, impersonation, and security considerations">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/api/authentication.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Authentication Guide — Thrum">
+  <meta name="twitter:description" content="Agent and user authentication, registration, sessions, impersonation, and security considerations">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#api/authentication.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Authentication Guide</h1>
+<p>This document explains authentication and authorization in the Thrum API.</p>
+<h2>Overview</h2>
+<p>Thrum supports two types of identity:</p>
+<ol>
+<li><strong>Agents</strong>: Autonomous processes (bots, AI agents, services) that send and<br>receive messages</li>
+<li><strong>Users</strong>: Human users accessing the system via WebSocket (typically through<br>the embedded web UI)</li>
+</ol>
+<p>Both agents and users are registered with the daemon and stored in the same<br><code>agents</code> table in SQLite (distinguished by the <code>kind</code> field: <code>&quot;agent&quot;</code> or<br><code>&quot;user&quot;</code>).</p>
+<h2>Agent Authentication</h2>
+<h3>Registration</h3>
+<p>Agents register using the <code>agent.register</code> RPC method, available over both Unix<br>socket and WebSocket.</p>
+<p><strong>Identity Components</strong>:</p>
+<ul>
+<li><code>name</code>: Human-readable agent name (optional; e.g., <code>&quot;furiosa&quot;</code>, <code>&quot;nux&quot;</code>)</li>
+<li><code>role</code>: The agent&#39;s function (e.g., <code>&quot;implementer&quot;</code>, <code>&quot;reviewer&quot;</code>,<br><code>&quot;coordinator&quot;</code>)</li>
+<li><code>module</code>: The area of responsibility (e.g., <code>&quot;auth&quot;</code>, <code>&quot;sync&quot;</code>, <code>&quot;ui&quot;</code>)</li>
+<li><code>repo_id</code>: Automatically determined from the repository&#39;s git origin URL</li>
+</ul>
+<p><strong>Agent ID Format</strong>:</p>
+<ul>
+<li><strong>Named</strong>: <code>{name}</code> (e.g., <code>furiosa</code>)</li>
+<li><strong>Unnamed</strong>: <code>{role}_{hash10}</code> (e.g., <code>implementer_35HV62T9B9</code>)</li>
+<li><strong>Legacy</strong> (backward compatible): <code>agent:{role}:{hash}</code> -- no longer generated<br>but still recognized</li>
+</ul>
+<p>The hash is computed as<br><code>crockford_base32(sha256(repo_id + &quot;|&quot; + role + &quot;|&quot; + module))[:10]</code>.</p>
+<p><strong>Example</strong> (named agent):</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.register&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Auth Implementer&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Response</strong>:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;registered&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Example</strong> (unnamed agent):</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.register&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Response</strong>:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer_35HV62T9B9&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;registered&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h3>Re-Registration</h3>
+<p>Agents can re-register with the same role/module/name. The same agent ID is<br>returned without writing a new event (idempotent). To force an update event, use<br>the <code>re_register</code> flag.</p>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Agent restart</li>
+<li>Daemon restart</li>
+<li>Network reconnection</li>
+<li>Updating display name</li>
+</ul>
+<h3>Quickstart (CLI Shortcut)</h3>
+<p>The <code>quickstart</code> command combines registration, session start, and optional<br>intent setting:</p>
+<pre><code class="language-bash hljs">thrum quickstart --name furiosa --role implementer --module auth --intent <span class="hljs-string">&quot;Working on auth&quot;</span></code></pre>
+<h3>Session Management</h3>
+<p>After registration, agents must start a session to send messages:</p>
+<ol>
+<li><strong>Register</strong>: <code>agent.register</code> -&gt; get <code>agent_id</code></li>
+<li><strong>Start session</strong>: <code>session.start</code> with <code>agent_id</code> -&gt; get <code>session_id</code></li>
+<li><strong>Heartbeat</strong>: <code>session.heartbeat</code> to update last-seen time and extract git<br>work context</li>
+<li><strong>Send messages</strong>: Use <code>agent_id</code> in requests</li>
+<li><strong>End session</strong>: <code>session.end</code> with <code>session_id</code></li>
+</ol>
+<p><strong>Why sessions?</strong></p>
+<ul>
+<li>Track agent activity periods</li>
+<li>Detect crashes (orphaned sessions)</li>
+<li>Attribute messages to specific runs</li>
+<li>Track git work context (branch, changed files, uncommitted work)</li>
+</ul>
+<p><strong>Session IDs</strong> use ULID format: <code>ses_</code> + ULID (e.g.,<br><code>ses_01HXE8Z7R9K3Q6M2W8F4VY</code>).</p>
+<h3>Identity Resolution for CLI</h3>
+<p>The CLI resolves agent identity using a priority chain (see <code>docs/identity.md</code><br>for full details):</p>
+<ol>
+<li><code>THRUM_NAME</code> env var (selects identity file; highest priority)</li>
+<li>CLI flags (<code>--name</code>, <code>--role</code>, <code>--module</code>)</li>
+<li>Environment variables (<code>THRUM_ROLE</code>, <code>THRUM_MODULE</code>, <code>THRUM_DISPLAY</code>)</li>
+<li>Identity file in <code>.thrum/identities/</code> directory</li>
+<li>Error if required fields missing</li>
+</ol>
+<h3>MCP Server Identity</h3>
+<p>The MCP server (<code>thrum mcp serve</code>) loads agent identity at startup from<br><code>.thrum/identities/{name}.json</code>. It requires a named agent. Use <code>--agent-id</code><br>flag or <code>THRUM_NAME</code> env var for multi-agent worktrees:</p>
+<pre><code class="language-bash hljs">THRUM_NAME=furiosa thrum mcp serve
+thrum mcp serve --agent-id furiosa</code></pre>
+<h2>User Authentication</h2>
+<h3>WebSocket-Only</h3>
+<p>Users can <strong>only</strong> register via WebSocket (not Unix socket). This is enforced by<br>the daemon:</p>
+<ul>
+<li>Unix socket is for local agents (same machine, no UI)</li>
+<li>WebSocket is for browser connections (UI at <code>http://localhost:9999</code>)</li>
+</ul>
+<p>Attempting <code>user.register</code> over Unix socket returns error code <code>-32001</code>.</p>
+<h3>Browser Auto-Registration</h3>
+<p>When a user opens the web UI at <code>http://localhost:9999</code>, the browser<br>automatically registers:</p>
+<ol>
+<li><strong>Connect</strong>: WebSocket connects to <code>ws://localhost:9999/ws</code></li>
+<li><strong>Identify</strong>: Call <code>user.identify</code> RPC to get git user info from the<br>repository&#39;s <code>git config</code></li>
+<li><strong>Register</strong>: Call <code>user.register</code> with the sanitized username</li>
+<li><strong>Persist</strong>: Store user info and token in <code>localStorage</code> for reconnection</li>
+</ol>
+<p>This flow is handled by the <code>AuthProvider</code> React component. No manual login is<br>required.</p>
+<p><strong>Fallback</strong>: If <code>git config user.name</code> is not set, the UI checks <code>localStorage</code><br>for a previously stored username. If neither source is available, an error is<br>displayed.</p>
+<h3>user.identify RPC</h3>
+<p>Returns git user info from the repository&#39;s git config. No authentication needed<br>-- this is a read-only query. Available over both Unix socket and WebSocket.</p>
+<p><strong>Response</strong>:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;username&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;leon-letto&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;email&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;leon@example.com&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Leon Letto&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p>The <code>username</code> field is sanitized from <code>git config user.name</code>: lowercased,<br>spaces/hyphens/underscores normalized to hyphens, non-alphanumeric characters<br>stripped, truncated to 32 characters.</p>
+<h3>user.register RPC</h3>
+<p>Registers a user with the daemon. <strong>Idempotent</strong>: if the user already exists,<br>returns existing info with a fresh session token.</p>
+<p><strong>Username Rules</strong>:</p>
+<ul>
+<li>Alphanumeric characters, underscores, and hyphens</li>
+<li>Length 1-32 characters</li>
+<li>Must not start with <code>agent:</code> prefix</li>
+<li>Regex: <code>^[a-zA-Z0-9_-]{1,32}$</code></li>
+</ul>
+<p><strong>User ID Format</strong>: <code>user:{username}</code> (e.g., <code>user:leon</code>)</p>
+<p><strong>Example</strong>:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;user.register&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;username&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;leon&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Leon Letto&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Response</strong>:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;user_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;user:leon&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;username&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;leon&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;display_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Leon Letto&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;token&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;tok_01HXE8Z7R9K3Q6M2W8F4VY&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;registered&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p>When re-registering an existing user, the response has <code>&quot;status&quot;: &quot;existing&quot;</code><br>and a fresh token.</p>
+<p><strong>Storage</strong>: Users are stored internally as <code>agent.register</code> events with<br><code>kind: &quot;user&quot;</code>, <code>role: {username}</code>, and <code>module: &quot;ui&quot;</code>.</p>
+<h3>localStorage Persistence</h3>
+<p>The browser stores user identity in <code>localStorage</code> under the <code>thrum_user</code> key:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;user_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;user:leon&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;token&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;tok_...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;username&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;leon&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;display_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Leon Letto&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p>On subsequent page loads, the stored username is used as a fallback if<br><code>user.identify</code> fails.</p>
+<h2>Authorization</h2>
+<h3>Impersonation</h3>
+<p>Users can impersonate agents to send messages &quot;as&quot; an agent.</p>
+<p><strong>Use case</strong>: UI allowing users to send messages from an agent&#39;s perspective.</p>
+<p><strong>Restrictions</strong>:</p>
+<ol>
+<li><strong>Only users can impersonate</strong>: Agents cannot impersonate other agents or<br>users</li>
+<li><strong>Only agents can be impersonated</strong>: Users cannot impersonate other users</li>
+<li><strong>Target must exist</strong>: The impersonated agent must be registered</li>
+</ol>
+<p><strong>Example</strong>:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;message.send&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Hello from Claude!&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;acting_as&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Audit Trail</strong>:</p>
+<ul>
+<li><code>authored_by</code>: Original user ID (e.g., <code>&quot;user:leon&quot;</code>)</li>
+<li><code>disclosed</code>: Whether impersonation is revealed in UI (default: false)</li>
+<li><code>agent_id</code>: Impersonated agent ID (appears as message author)</li>
+</ul>
+<p><strong>Validation</strong>:</p>
+<ul>
+<li>Caller must be <code>user:*</code></li>
+<li><code>acting_as</code> must reference an existing agent</li>
+<li><code>acting_as</code> cannot be a <code>user:*</code> ID</li>
+</ul>
+<p><strong>Error codes</strong>:</p>
+<ul>
+<li><code>-32001</code>: Only users can impersonate</li>
+<li><code>-32002</code>: Target agent does not exist</li>
+<li><code>-32003</code>: Users can only impersonate agents, not other users</li>
+</ul>
+<h3>Message Ownership</h3>
+<p><strong>Editing</strong>: Only the message author can edit their own messages.</p>
+<p><strong>Deletion</strong>: Only the message author can delete their own messages.</p>
+<p><strong>Author determination</strong>:</p>
+<ul>
+<li>If <code>authored_by</code> is set (impersonation): <code>authored_by</code> is the owner</li>
+<li>Otherwise: <code>agent_id</code> is the owner</li>
+</ul>
+<p><strong>Example</strong>: User &quot;leon&quot; impersonates agent &quot;furiosa&quot; to send a message:</p>
+<ul>
+<li><code>agent_id</code>: <code>&quot;furiosa&quot;</code> (appears as author)</li>
+<li><code>authored_by</code>: <code>&quot;user:leon&quot;</code> (actual owner)</li>
+<li>Only <code>&quot;user:leon&quot;</code> can edit/delete this message</li>
+</ul>
+<h3>Session-Based Authorization</h3>
+<p>All RPC requests include transport context with the caller&#39;s identity.</p>
+<p><strong>Transport context</strong>:</p>
+<ul>
+<li>Unix socket: Agent identity (from environment or registration)</li>
+<li>WebSocket: User/agent identity (from registration)</li>
+</ul>
+<p><strong>Implicit authorization</strong>: The daemon knows which connection is making the<br>request.</p>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Prevent cross-session operations</li>
+<li>Attribute actions to sessions</li>
+<li>Audit trail</li>
+</ul>
+<h2>Security Considerations</h2>
+<h3>Current (MVP)</h3>
+<ol>
+<li><strong>No encryption</strong>: WebSocket traffic is unencrypted (<code>ws://</code>, not <code>wss://</code>)</li>
+<li><strong>No authentication tokens</strong>: No password or token verification for initial<br>connection</li>
+<li><strong>Local-only</strong>: Daemon binds to <code>127.0.0.1</code> (localhost only)</li>
+<li><strong>Trust-based</strong>: Clients on the same machine are trusted</li>
+<li><strong>Single port</strong>: WebSocket and embedded SPA share port 9999</li>
+</ol>
+<p><strong>Acceptable for</strong>:</p>
+<ul>
+<li>Local development</li>
+<li>Single-user machines</li>
+<li>Trusted environments</li>
+</ul>
+<p><strong>Not acceptable for</strong>:</p>
+<ul>
+<li>Multi-user machines</li>
+<li>Production deployments</li>
+<li>Untrusted networks</li>
+</ul>
+<h3>Future Enhancements</h3>
+<ol>
+<li><strong>TLS/SSL</strong>: Support <code>wss://</code> for encrypted WebSocket connections</li>
+<li><strong>Token-based auth</strong>: JWT or similar for user authentication</li>
+<li><strong>Role-based access control (RBAC)</strong>: Permission system for operations</li>
+<li><strong>API keys</strong>: For programmatic agent access</li>
+<li><strong>Audit logging</strong>: Comprehensive audit trail for all operations</li>
+</ol>
+<h2>Session Lifecycle</h2>
+<h3>Agent Sessions</h3>
+<pre><code>1. Agent starts
+   |
+2. Connect to daemon (Unix socket or WebSocket)
+   |
+3. Register: agent.register (with optional name)
+   |
+4. Start session: session.start
+   |
+5. Send/receive messages, heartbeat periodically
+   |
+6. End session: session.end (or crash)
+   |
+7. Disconnect</code></pre>
+<p>Or use <code>quickstart</code> to combine steps 3-4 (and optionally set intent):</p>
+<pre><code>1. Agent starts
+   |
+2. Connect to daemon
+   |
+3. Quickstart: agent.register + session.start + set-intent
+   |
+4. Send/receive messages, heartbeat periodically
+   |
+5. End session: session.end (or crash)
+   |
+6. Disconnect</code></pre>
+<h3>User Sessions</h3>
+<pre><code>1. User opens UI at http://localhost:9999
+   |
+2. WebSocket connects to ws://localhost:9999/ws
+   |
+3. Auto-identify: user.identify (reads git config)
+   |
+4. Auto-register: user.register (idempotent, returns token)
+   |
+5. Send/receive messages, subscribe to events
+   |
+6. Disconnect (session persists for reconnection)</code></pre>
+<h3>Orphaned Sessions</h3>
+<p><strong>Problem</strong>: Agent crashes without calling <code>session.end</code>.</p>
+<p><strong>Detection</strong>: When agent re-registers and starts a new session, the daemon<br>detects existing open sessions for that agent.</p>
+<p><strong>Recovery</strong>: Orphaned sessions are automatically ended with <code>reason: &quot;crash&quot;</code><br>during the next <code>session.start</code> call.</p>
+<h3>Daemon Lifecycle Hardening</h3>
+<p>The daemon has several safety mechanisms for robust session management:</p>
+<ul>
+<li><strong>Defer cleanup</strong>: Safety net catches panics/early returns, cleans up PID<br>file, socket, and port files on any exit</li>
+<li><strong>JSON PID file</strong>: Contains <code>{PID, RepoPath, StartedAt, SocketPath}</code> for<br>repo-affinity validation</li>
+<li><strong>Socket flock</strong>: OS-level file lock (<code>flock</code>) on the socket file,<br>auto-released on process death (even SIGKILL)</li>
+<li><strong>Pre-startup validation</strong>: Detects duplicate daemons serving the same<br>repository before starting</li>
+</ul>
+<h2>Connection Security</h2>
+<h3>Unix Socket</h3>
+<p><strong>Path</strong>: <code>$REPO/.thrum/daemon.sock</code> (follows <code>.thrum/redirect</code> in worktrees)</p>
+<p><strong>Access control</strong>: File system permissions (0600)</p>
+<p><strong>Security</strong>: Only processes with read/write access to the socket file can<br>connect.</p>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Local agents (same machine as daemon)</li>
+<li>CLI tools</li>
+<li>MCP server (<code>thrum mcp serve</code>)</li>
+<li>Trusted local services</li>
+</ul>
+<h3>WebSocket</h3>
+<p><strong>Endpoint</strong>: <code>ws://localhost:9999/ws</code> (when UI is embedded)</p>
+<p><strong>Fallback</strong>: <code>ws://localhost:9999/</code> (when no UI is embedded, backward<br>compatible)</p>
+<p><strong>Bind address</strong>: <code>127.0.0.1</code> (localhost only)</p>
+<p><strong>Security</strong>: Only processes on the same machine can connect.</p>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Web UI (browser on same machine, served as embedded SPA)</li>
+<li>Desktop applications</li>
+<li>Remote tunneling (SSH port forwarding)</li>
+</ul>
+<p><strong>Warning</strong>: Do not expose WebSocket port to untrusted networks without TLS and<br>authentication.</p>
+<h2>Best Practices</h2>
+<h3>Agent Development</h3>
+<ol>
+<li><strong>Use quickstart</strong>: Prefer <code>thrum quickstart</code> over manual register + session<br>start</li>
+<li><strong>Use named agents</strong>: Provide <code>--name</code> for human-readable identification</li>
+<li><strong>Graceful shutdown</strong>: Always call <code>session.end</code> before exiting</li>
+<li><strong>Error handling</strong>: Catch crashes, end session in cleanup</li>
+<li><strong>Heartbeat regularly</strong>: Call <code>session.heartbeat</code> to update work context and<br>stay visible</li>
+<li><strong>Idempotent registration</strong>: Safe to call <code>agent.register</code> multiple times</li>
+</ol>
+<h3>User Clients</h3>
+<ol>
+<li><strong>Auto-registration</strong>: Let the <code>AuthProvider</code> handle identity automatically</li>
+<li><strong>Reconnection</strong>: Re-register with same username after disconnect<br>(idempotent)</li>
+<li><strong>Session management</strong>: Let daemon manage session lifecycle</li>
+<li><strong>Impersonation disclosure</strong>: Set <code>disclosed: true</code> for transparency</li>
+<li><strong>Error handling</strong>: Handle authorization errors gracefully</li>
+</ol>
+<h3>Security</h3>
+<ol>
+<li><strong>Local only</strong>: Do not expose daemon to network without authentication</li>
+<li><strong>Principle of least privilege</strong>: Subscribe only to necessary events</li>
+<li><strong>Audit logging</strong>: Log all user actions for accountability</li>
+<li><strong>Input validation</strong>: Validate all user input before sending to daemon</li>
+</ol>
+<h2>Examples</h2>
+<h3>Agent Registration and Session (CLI)</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># One-step quickstart (recommended)</span>
+thrum quickstart --name furiosa --role implementer --module auth \
+  --intent <span class="hljs-string">&quot;Implementing JWT authentication&quot;</span>
+
+<span class="hljs-comment"># Or step-by-step</span>
+thrum agent register --name=furiosa --role=implementer --module=auth
+thrum session start
+thrum send <span class="hljs-string">&quot;Starting work on auth module&quot;</span> --to @coordinator</code></pre>
+<h3>Agent Registration and Session (WebSocket)</h3>
+<pre><code class="language-typescript hljs"><span class="hljs-keyword">import</span> <span class="hljs-title class_">WebSocket</span> <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;ws&quot;</span>;
+
+<span class="hljs-keyword">const</span> ws = <span class="hljs-keyword">new</span> <span class="hljs-title class_">WebSocket</span>(<span class="hljs-string">&quot;ws://localhost:9999/ws&quot;</span>);
+
+<span class="hljs-keyword">let</span> <span class="hljs-attr">agentId</span>: <span class="hljs-built_in">string</span>;
+<span class="hljs-keyword">let</span> <span class="hljs-attr">sessionId</span>: <span class="hljs-built_in">string</span>;
+
+ws.<span class="hljs-title function_">on</span>(<span class="hljs-string">&quot;open&quot;</span>, <span class="hljs-title function_">async</span> () =&gt; {
+  <span class="hljs-comment">// Step 1: Register agent</span>
+  ws.<span class="hljs-title function_">send</span>(
+    <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">stringify</span>({
+      <span class="hljs-attr">jsonrpc</span>: <span class="hljs-string">&quot;2.0&quot;</span>,
+      <span class="hljs-attr">method</span>: <span class="hljs-string">&quot;agent.register&quot;</span>,
+      <span class="hljs-attr">params</span>: {
+        <span class="hljs-attr">name</span>: <span class="hljs-string">&quot;furiosa&quot;</span>,
+        <span class="hljs-attr">role</span>: <span class="hljs-string">&quot;implementer&quot;</span>,
+        <span class="hljs-attr">module</span>: <span class="hljs-string">&quot;auth&quot;</span>,
+      },
+      <span class="hljs-attr">id</span>: <span class="hljs-number">1</span>,
+    }),
+  );
+});
+
+ws.<span class="hljs-title function_">on</span>(<span class="hljs-string">&quot;message&quot;</span>, <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">data</span>: <span class="hljs-built_in">string</span></span>) =&gt;</span> {
+  <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(data);
+
+  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">id</span> === <span class="hljs-number">1</span>) {
+    <span class="hljs-comment">// Registration response</span>
+    agentId = msg.<span class="hljs-property">result</span>.<span class="hljs-property">agent_id</span>;
+
+    <span class="hljs-comment">// Step 2: Start session</span>
+    ws.<span class="hljs-title function_">send</span>(
+      <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">stringify</span>({
+        <span class="hljs-attr">jsonrpc</span>: <span class="hljs-string">&quot;2.0&quot;</span>,
+        <span class="hljs-attr">method</span>: <span class="hljs-string">&quot;session.start&quot;</span>,
+        <span class="hljs-attr">params</span>: { <span class="hljs-attr">agent_id</span>: agentId },
+        <span class="hljs-attr">id</span>: <span class="hljs-number">2</span>,
+      }),
+    );
+  }
+
+  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">id</span> === <span class="hljs-number">2</span>) {
+    <span class="hljs-comment">// Session start response</span>
+    sessionId = msg.<span class="hljs-property">result</span>.<span class="hljs-property">session_id</span>;
+    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`Agent registered: <span class="hljs-subst">${agentId}</span>, Session: <span class="hljs-subst">${sessionId}</span>`</span>);
+
+    <span class="hljs-comment">// Now ready to send messages</span>
+  }
+});</code></pre>
+<h3>MCP Server (Native Agent Messaging)</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Start MCP server for Claude Code integration</span>
+THRUM_NAME=furiosa thrum mcp serve
+
+<span class="hljs-comment"># Or with explicit agent-id override</span>
+thrum mcp serve --agent-id furiosa</code></pre>
+<p>The MCP server provides 5 tools: <code>send_message</code>, <code>check_messages</code>,<br><code>wait_for_message</code>, <code>list_agents</code>, <code>broadcast_message</code>. Identity is resolved<br>once at startup.</p>
+<h3>User Registration (Browser Auto-Registration)</h3>
+<p>The browser handles registration automatically via <code>AuthProvider</code>. No manual<br>code is needed. The flow is:</p>
+<pre><code>Page loads -&gt; AuthProvider mounts -&gt; user.identify -&gt; user.register -&gt; UI shows identity</code></pre>
+<p>For programmatic WebSocket user registration:</p>
+<pre><code class="language-typescript hljs"><span class="hljs-keyword">const</span> ws = <span class="hljs-keyword">new</span> <span class="hljs-title class_">WebSocket</span>(<span class="hljs-string">&quot;ws://localhost:9999/ws&quot;</span>);
+
+ws.<span class="hljs-title function_">on</span>(<span class="hljs-string">&quot;open&quot;</span>, <span class="hljs-function">() =&gt;</span> {
+  <span class="hljs-comment">// User registration (idempotent)</span>
+  ws.<span class="hljs-title function_">send</span>(
+    <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">stringify</span>({
+      <span class="hljs-attr">jsonrpc</span>: <span class="hljs-string">&quot;2.0&quot;</span>,
+      <span class="hljs-attr">method</span>: <span class="hljs-string">&quot;user.register&quot;</span>,
+      <span class="hljs-attr">params</span>: {
+        <span class="hljs-attr">username</span>: <span class="hljs-string">&quot;leon&quot;</span>,
+        <span class="hljs-attr">display</span>: <span class="hljs-string">&quot;Leon Letto&quot;</span>,
+      },
+      <span class="hljs-attr">id</span>: <span class="hljs-number">1</span>,
+    }),
+  );
+});
+
+ws.<span class="hljs-title function_">on</span>(<span class="hljs-string">&quot;message&quot;</span>, <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">data</span>: <span class="hljs-built_in">string</span></span>) =&gt;</span> {
+  <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(data);
+
+  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">id</span> === <span class="hljs-number">1</span>) {
+    <span class="hljs-comment">// User registered</span>
+    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`User: <span class="hljs-subst">${msg.result.user_id}</span>, Token: <span class="hljs-subst">${msg.result.token}</span>`</span>);
+  }
+});</code></pre>
+<h2>See Also</h2>
+<ul>
+<li><a href="../identity.html">Identity &amp; Registration</a> - Full agent identity system<br>documentation</li>
+<li><a href="./websocket.html">WebSocket API</a> - Full API reference</li>
+<li><a href="./events.html">Event Reference</a> - Event types and payloads</li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#api/authentication.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#api/authentication.html');
+    }
+  </script>
+</body>
+</html>

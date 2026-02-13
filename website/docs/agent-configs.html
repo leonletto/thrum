@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Configurations — Thrum</title>
+  <meta name="description" content="Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Agent Configurations — Thrum">
+  <meta property="og:description" content="Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/agent-configs.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Agent Configurations — Thrum">
+  <meta name="twitter:description" content="Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#agent-configs.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Agent Configurations</h1>
+<p>Claude Code agent definitions teach Claude how to use Thrum and Beads effectively. These <code>.md</code> files with YAML frontmatter ship in <code>toolkit/agents/</code> and load into your project&#39;s <code>.claude/agents/</code> directory.</p>
+<h2>Install the agent configs</h2>
+<p>Copy the agent definitions to your project:</p>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">mkdir</span> -p .claude/agents
+<span class="hljs-built_in">cp</span> toolkit/agents/*.md .claude/agents/</code></pre>
+<p>Claude Code automatically detects and loads these files when you start a session.</p>
+<h2>Available agents</h2>
+<h3>thrum-agent</h3>
+<p>Comprehensive guide for Thrum messaging. Teaches Claude how to register agents, send/receive messages, coordinate with teammates, and choose between MCP tools and CLI.</p>
+<p><strong>Use when:</strong></p>
+<ul>
+<li>Coordinating multi-agent workflows</li>
+<li>Working across worktrees or machines</li>
+<li>Requesting code reviews or assigning tasks</li>
+<li>Broadcasting status updates</li>
+</ul>
+<p><strong>Key capabilities:</strong></p>
+<ul>
+<li>Agent registration with roles and intents</li>
+<li>Direct messaging and broadcasts</li>
+<li>MCP server integration with async notifications</li>
+<li>Message priority handling (critical/high/normal/low)</li>
+<li>Session management and heartbeats</li>
+</ul>
+<h3>beads-agent</h3>
+<p>Guide for Beads issue tracking. Teaches Claude the task lifecycle (create, claim, close), dependency management with <code>blocks</code> relationships, and context recovery after conversation compaction.</p>
+<p><strong>Use when:</strong></p>
+<ul>
+<li>Managing feature epics with multiple subtasks</li>
+<li>Tracking work across agent sessions</li>
+<li>Coordinating parallel work with dependency graphs</li>
+<li>Discovering side quests during implementation</li>
+</ul>
+<p><strong>Key capabilities:</strong></p>
+<ul>
+<li>Finding ready work (unblocked tasks)</li>
+<li>Creating tasks with dependencies</li>
+<li>Epic-driven work breakdown</li>
+<li>Git-backed sync for multi-agent coordination</li>
+<li>Adding notes with documentation links</li>
+</ul>
+<h3>message-listener</h3>
+<p>Lightweight background listener that watches for incoming Thrum messages so you<br>don&#39;t have to manually check your inbox. Runs on Haiku for cost efficiency<br>(~$0.00003/cycle). Uses <code>thrum wait</code> for efficient blocking instead of polling<br>loops — returns immediately when messages arrive, covers ~30 minutes across 6<br>cycles.</p>
+<p><strong>Use when:</strong></p>
+<ul>
+<li>You&#39;re running multiple agents and want to know when they message you</li>
+<li>Working long sessions where agents on other worktrees may send updates</li>
+<li>You want incoming messages surfaced without manually running <code>thrum inbox</code></li>
+</ul>
+<p><strong>Key capabilities:</strong></p>
+<ul>
+<li>Blocking wait via <code>thrum wait --all --timeout 5m</code> (6 cycles max)</li>
+<li>Immediate return on message arrival</li>
+<li>Time-based filtering with <code>--after</code> flag (skips old messages)</li>
+<li>CLI-only (no MCP tools — sub-agents can&#39;t access MCP)</li>
+</ul>
+<h2>Configure the message listener</h2>
+<p>The message-listener runs as a background task so your main agent session stays<br>focused on work while messages are watched for you.</p>
+<p>Launch it at session start:</p>
+<pre><code class="language-typescript hljs"><span class="hljs-comment">// In Claude Code with Thrum MCP configured</span>
+<span class="hljs-title class_">Task</span>({
+  <span class="hljs-attr">subagent_type</span>: <span class="hljs-string">&quot;message-listener&quot;</span>,
+  <span class="hljs-attr">model</span>: <span class="hljs-string">&quot;haiku&quot;</span>,
+  <span class="hljs-attr">run_in_background</span>: <span class="hljs-literal">true</span>,
+  <span class="hljs-attr">prompt</span>: <span class="hljs-string">&quot;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --all --timeout 5m --after -30s --json&quot;</span>
+});</code></pre>
+<p><strong>Wait command flags:</strong></p>
+<ul>
+<li><code>--all</code> — Subscribe to all messages (broadcasts + directed)</li>
+<li><code>--timeout 5m</code> — Block up to 5 minutes per cycle</li>
+<li><code>--after -30s</code> — Only return messages from the last 30 seconds (skips old)</li>
+<li><code>--json</code> — Machine-readable output</li>
+</ul>
+<p>The listener uses <code>thrum wait</code> which blocks until a message arrives or the timeout expires — no polling loops needed. Each cycle is a single Bash call. Re-arm the listener after processing messages to continue listening.</p>
+<h2>Customize for your project</h2>
+<p>You can edit these agent definitions to match your team&#39;s workflows. Add project-specific commands, adjust priorities, or include custom context.</p>
+<p>For the agent file format, see <a href="https://docs.anthropic.com/claude-code">Claude Code agent documentation</a>.</p>
+<h2>See also</h2>
+<ul>
+<li><a href="quickstart.html">Quickstart</a> — Get started with Thrum in 5 minutes</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> — Multi-agent messaging patterns</li>
+<li><a href="../toolkit/templates/">Workflow Templates</a> — Complete planning and implementation workflows</li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#agent-configs.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#agent-configs.html');
+    }
+  </script>
+</body>
+</html>

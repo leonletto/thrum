@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inbox Query Methods — Thrum</title>
+  <meta name="description" content="RPC methods for querying messages, agents, and managing read state with filtering and pagination">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Inbox Query Methods — Thrum">
+  <meta property="og:description" content="RPC methods for querying messages, agents, and managing read state with filtering and pagination">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/inbox-query-methods.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Inbox Query Methods — Thrum">
+  <meta name="twitter:description" content="RPC methods for querying messages, agents, and managing read state with filtering and pagination">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#inbox-query-methods.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Inbox Query RPC Methods</h1>
+<h2>Overview</h2>
+<p>The Thrum daemon provides a complete set of RPC methods for querying the inbox,<br>listing agents, and managing read state. These methods power<br>both the CLI (<code>thrum inbox</code>) and the Web UI.</p>
+<p>All methods use JSON-RPC 2.0 over Unix socket (<code>.thrum/var/thrum.sock</code>) or<br>WebSocket (<code>ws://localhost:9999</code>). See <code>docs/rpc-api.md</code> for the full API<br>reference.</p>
+<h2>Query Methods</h2>
+<h3>1. agent.list</h3>
+<p>Lists all registered agents with optional filtering by role or module.</p>
+<p><strong>Request:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.list&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agents&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+      <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Furiosa&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;registered_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;last_seen_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T15:30:00Z&quot;</span>
+      <span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">]</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p>Both <code>role</code> and <code>module</code> filters are optional. Omit both to list all agents.</p>
+<h3>2. message.list</h3>
+<p>Lists messages with comprehensive filtering, pagination, and sorting. This is<br>the primary inbox query method.</p>
+<p><strong>Request:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;message.list&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;author_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;scope&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;module&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;ref&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;mentions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;unread&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;mention_role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;unread_for_agent&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;sort_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;created_at&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;sort_order&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;desc&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Filters (all optional):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>author_id</code></td>
+<td>string</td>
+<td>Filter by author agent ID</td>
+</tr>
+<tr>
+<td><code>scope</code></td>
+<td>object</td>
+<td>Filter by scope (<code>{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}</code>)</td>
+</tr>
+<tr>
+<td><code>ref</code></td>
+<td>object</td>
+<td>Filter by ref (<code>{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}</code>)</td>
+</tr>
+<tr>
+<td><code>mentions</code></td>
+<td>boolean</td>
+<td>Only messages mentioning current agent (resolved from local config)</td>
+</tr>
+<tr>
+<td><code>unread</code></td>
+<td>boolean</td>
+<td>Only unread messages (resolved from local config)</td>
+</tr>
+<tr>
+<td><code>mention_role</code></td>
+<td>string</td>
+<td>Explicit mention filter by role (for remote callers like the MCP server)</td>
+</tr>
+<tr>
+<td><code>unread_for_agent</code></td>
+<td>string</td>
+<td>Explicit unread filter by agent ID (for remote callers like the MCP server)</td>
+</tr>
+</tbody></table>
+<p><strong>Pagination and sorting (all optional):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>page_size</code></td>
+<td>integer</td>
+<td>10</td>
+<td>Items per page (max: 100)</td>
+</tr>
+<tr>
+<td><code>page</code></td>
+<td>integer</td>
+<td>1</td>
+<td>Page number</td>
+</tr>
+<tr>
+<td><code>sort_by</code></td>
+<td>string</td>
+<td><code>&quot;created_at&quot;</code></td>
+<td>Sort field: <code>&quot;created_at&quot;</code> or <code>&quot;updated_at&quot;</code></td>
+</tr>
+<tr>
+<td><code>sort_order</code></td>
+<td>string</td>
+<td><code>&quot;desc&quot;</code></td>
+<td>Sort direction: <code>&quot;asc&quot;</code> or <code>&quot;desc&quot;</code></td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;messages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+      <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+          <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Auth module complete, all tests passing&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span>
+        <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T15:41:12Z&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;deleted&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;is_read&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span>
+      <span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;total&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">150</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;unread&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;total_pages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Filter resolution:</strong> The <code>mentions</code> and <code>unread</code> boolean filters are resolved<br>using the local agent config (via <code>THRUM_ROLE</code> / identity file). The<br><code>mention_role</code> and <code>unread_for_agent</code> string filters are explicit overrides for<br>remote callers (like the MCP server) that cannot access local config.</p>
+<h3>3. message.get</h3>
+<p>Retrieves a single message by ID with full details including scopes, refs,<br>author info, edit/delete metadata.</p>
+<p><strong>Request:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;message.get&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;author&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span>
+      <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Auth module complete, all tests passing&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span>
+      <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;module&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;refs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;metadata&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;deleted_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;delete_reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span>
+      <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T15:41:12Z&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;deleted&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h3>4. message.markRead</h3>
+<p>Batch mark messages as read for the current agent and session.</p>
+<p><strong>Request:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;message.markRead&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;message_ids&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;msg_01HXF...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;msg_01HXG...&quot;</span><span class="hljs-punctuation">]</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;marked_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;also_read_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;other_agent&quot;</span><span class="hljs-punctuation">]</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p>The <code>also_read_by</code> field returns collaboration info: other agents who have also<br>read the same messages. This is omitted if empty.</p>
+<h2>Read/Unread Tracking</h2>
+<p>Read state is fully implemented with the following infrastructure:</p>
+<h3>Storage</h3>
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> message_reads (
+  message_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  session_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  agent_id TEXT <span class="hljs-keyword">NOT NULL</span>,
+  read_at TEXT <span class="hljs-keyword">NOT NULL</span>,
+  <span class="hljs-keyword">PRIMARY KEY</span> (message_id, session_id),
+  <span class="hljs-keyword">FOREIGN KEY</span> (message_id) <span class="hljs-keyword">REFERENCES</span> messages(message_id) <span class="hljs-keyword">ON</span> <span class="hljs-keyword">DELETE</span> CASCADE
+);</code></pre>
+<p>Read state is tracked per message per session and per agent. A message is<br>considered read if any session or agent matching the current identity has a read<br>record.</p>
+<h3>Query Integration</h3>
+<ul>
+<li><code>message.list</code> responses include <code>is_read</code> on each message and <code>unread</code> count<br>in the response envelope</li>
+<li><code>message.list</code> supports <code>unread</code> (boolean, config-resolved) and<br><code>unread_for_agent</code> (string, explicit) filters</li>
+</ul>
+<h3>Auto Mark-as-Read</h3>
+<p>Several CLI commands mark messages as read automatically:</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thrum inbox</code></td>
+<td>Marks all displayed messages as read (skipped with <code>--unread</code>)</td>
+</tr>
+<tr>
+<td><code>thrum reply MSG_ID ...</code></td>
+<td>Marks the replied-to message as read</td>
+</tr>
+<tr>
+<td><code>thrum message get MSG_ID</code></td>
+<td>Marks the retrieved message as read</td>
+</tr>
+</tbody></table>
+<h2>Features Summary</h2>
+<ul>
+<li><strong>Agent listing</strong> -- List all agents with role/module filters and metadata</li>
+<li><strong>Message listing</strong> -- Filter by author, scope, ref, mentions, unread<br>status</li>
+<li><strong>Pagination</strong> -- Configurable page size (max 100), page numbers, total counts</li>
+<li><strong>Sorting</strong> -- By <code>created_at</code> or <code>updated_at</code>, ascending or descending</li>
+<li><strong>Read tracking</strong> -- Per-session and per-agent read state, auto mark-as-read</li>
+<li><strong>Mention filtering</strong> -- Filter by mention role (config-resolved or explicit)</li>
+<li><strong>Transport context</strong> -- Both Unix socket and WebSocket supported</li>
+</ul>
+<h2>Usage Examples</h2>
+<h3>Loading inbox for a CLI agent</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># List unread messages mentioning the current agent&#x27;s role</span>
+thrum inbox --mentions --unread</code></pre>
+<h3>Loading inbox from the UI (WebSocket)</h3>
+<pre><code class="language-javascript hljs"><span class="hljs-comment">// Get list of agents</span>
+<span class="hljs-keyword">const</span> agents = <span class="hljs-keyword">await</span> <span class="hljs-title function_">rpc</span>(<span class="hljs-string">&quot;agent.list&quot;</span>, {});
+
+<span class="hljs-comment">// Get unread messages mentioning a specific role</span>
+<span class="hljs-keyword">const</span> inbox = <span class="hljs-keyword">await</span> <span class="hljs-title function_">rpc</span>(<span class="hljs-string">&quot;message.list&quot;</span>, {
+  <span class="hljs-attr">mention_role</span>: <span class="hljs-string">&quot;reviewer&quot;</span>,
+  <span class="hljs-attr">unread_for_agent</span>: <span class="hljs-string">&quot;furiosa&quot;</span>,
+  <span class="hljs-attr">page_size</span>: <span class="hljs-number">50</span>,
+  <span class="hljs-attr">sort_by</span>: <span class="hljs-string">&quot;created_at&quot;</span>,
+  <span class="hljs-attr">sort_order</span>: <span class="hljs-string">&quot;desc&quot;</span>,
+});
+
+<span class="hljs-comment">// Mark messages as read</span>
+<span class="hljs-keyword">await</span> <span class="hljs-title function_">rpc</span>(<span class="hljs-string">&quot;message.markRead&quot;</span>, {
+  <span class="hljs-attr">message_ids</span>: inbox.<span class="hljs-property">messages</span>.<span class="hljs-title function_">map</span>(<span class="hljs-function">(<span class="hljs-params">m</span>) =&gt;</span> m.<span class="hljs-property">message_id</span>),
+});</code></pre>
+<h3>Loading inbox from the MCP server</h3>
+<p>The MCP server uses the explicit <code>mention_role</code> and <code>unread_for_agent</code> filters<br>because it cannot access the local agent config directly:</p>
+<pre><code class="language-javascript hljs"><span class="hljs-comment">// MCP check_messages tool uses:</span>
+<span class="hljs-keyword">const</span> messages = <span class="hljs-keyword">await</span> <span class="hljs-title function_">rpc</span>(<span class="hljs-string">&quot;message.list&quot;</span>, {
+  <span class="hljs-attr">mention_role</span>: agentRole,
+  <span class="hljs-attr">unread_for_agent</span>: agentID,
+  <span class="hljs-attr">sort_by</span>: <span class="hljs-string">&quot;created_at&quot;</span>,
+  <span class="hljs-attr">sort_order</span>: <span class="hljs-string">&quot;desc&quot;</span>,
+});</code></pre>
+<h2>Testing</h2>
+<p>All methods have comprehensive test coverage in:</p>
+<ul>
+<li><code>internal/daemon/rpc/agent_test.go</code> -- Agent listing, filtering</li>
+<li><code>internal/daemon/rpc/message_test.go</code> -- Message CRUD, pagination, sorting</li>
+<li><code>internal/daemon/rpc/message_filter_test.go</code> -- Mention and unread filtering</li>
+<li><code>internal/daemon/rpc/session_test.go</code> -- Session management</li>
+<li><code>tests/e2e/messaging.spec.ts</code> -- End-to-end messaging scenarios</li>
+</ul>
+<h2>See Also</h2>
+<ul>
+<li>Full RPC API Reference: <code>docs/rpc-api.md</code></li>
+<li>Messaging System (CLI): <code>docs/messaging.md</code></li>
+<li>Daemon Architecture: <code>docs/daemon.md</code></li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#inbox-query-methods.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#inbox-query-methods.html');
+    }
+  </script>
+</body>
+</html>

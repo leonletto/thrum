@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Agent Support — Thrum</title>
+  <meta name="description" content="Agent groups, runtime presets, context prime, and coordination patterns for running multiple AI agents across worktrees and platforms">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Multi-Agent Support — Thrum">
+  <meta property="og:description" content="Agent groups, runtime presets, context prime, and coordination patterns for running multiple AI agents across worktrees and platforms">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/multi-agent.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Multi-Agent Support — Thrum">
+  <meta name="twitter:description" content="Agent groups, runtime presets, context prime, and coordination patterns for running multiple AI agents across worktrees and platforms">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#multi-agent.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Multi-Agent Support</h1>
+<blockquote>
+<p>See also: <a href="philosophy.html">Why Thrum Exists</a> for the philosophy behind<br>human-directed coordination, <a href="agent-coordination.html">Agent Coordination</a> for<br>workflow patterns and Beads integration, <a href="identity.html">Identity System</a> for<br>agent naming and registration.</p>
+</blockquote>
+<h2>Overview</h2>
+<p>Thrum helps you coordinate multiple AI agents from the ground up. You can run<br>agents in different terminals, worktrees, or on different machines — they share<br>a single daemon and message store. Each agent gets a unique identity, and you<br>get tools to organize agents into teams, detect and configure any AI coding<br>platform, and recover full session context after compaction.</p>
+<p><strong>Key multi-agent capabilities:</strong></p>
+<ul>
+<li><strong>Agent Groups</strong> -- Named collections of agents and roles for targeted<br>messaging</li>
+<li><strong>Runtime Presets</strong> -- Auto-detect and configure Claude Code, Codex, Cursor,<br>Gemini, and other AI platforms</li>
+<li><strong>Context Prime</strong> -- Single command to gather full agent state for session<br>initialization or recovery</li>
+<li><strong>Coordination Tools</strong> -- File ownership tracking, agent presence, and<br>efficient message waiting</li>
+</ul>
+<h2>Agent Groups</h2>
+<p>Groups let you send messages to collections of agents without addressing each<br>one individually. Groups can contain specific agents or all agents with a role.</p>
+<h3>Quick Reference</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thrum group create NAME</code></td>
+<td>Create a new group</td>
+</tr>
+<tr>
+<td><code>thrum group delete NAME</code></td>
+<td>Delete a group (cannot delete <code>@everyone</code>)</td>
+</tr>
+<tr>
+<td><code>thrum group add GROUP MEMBER</code></td>
+<td>Add agent or role</td>
+</tr>
+<tr>
+<td><code>thrum group remove GROUP MEMBER</code></td>
+<td>Remove a member</td>
+</tr>
+<tr>
+<td><code>thrum group list</code></td>
+<td>List all groups</td>
+</tr>
+<tr>
+<td><code>thrum group info NAME</code></td>
+<td>Show group details</td>
+</tr>
+<tr>
+<td><code>thrum group members NAME</code></td>
+<td>List members (<code>--expand</code> resolves to agent IDs)</td>
+</tr>
+</tbody></table>
+<h3>Built-in @everyone Group</h3>
+<p>Every Thrum daemon automatically creates the <code>@everyone</code> group on startup. It<br>includes all registered agents via a <code>role:*</code> wildcard, so new agents are<br>automatically reachable through it. The <code>@everyone</code> group cannot be deleted or<br>modified.</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Send to all agents</span>
+thrum send <span class="hljs-string">&quot;Deploy complete, all clear&quot;</span> --to @everyone</code></pre>
+<p>This replaces the deprecated <code>--broadcast</code> flag:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Old (deprecated):</span>
+thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --broadcast
+
+<span class="hljs-comment"># New (recommended):</span>
+thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @everyone</code></pre>
+<h3>Creating and Managing Groups</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Create a group with a description</span>
+thrum group create reviewers --description <span class="hljs-string">&quot;Code review team&quot;</span>
+
+<span class="hljs-comment"># Add individual agents</span>
+thrum group add reviewers @alice
+thrum group add reviewers @bob
+
+<span class="hljs-comment"># Add all agents with a specific role</span>
+thrum group add reviewers --role reviewer
+
+<span class="hljs-comment"># Remove a member</span>
+thrum group remove reviewers @bob
+
+<span class="hljs-comment"># List all groups</span>
+thrum group list
+
+<span class="hljs-comment"># Show group details</span>
+thrum group info reviewers</code></pre>
+<h3>Member Types</h3>
+<p>Groups support two member types:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Syntax</th>
+<th>Resolves To</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Agent</td>
+<td><code>@alice</code></td>
+<td>A specific agent by name</td>
+</tr>
+<tr>
+<td>Role</td>
+<td><code>--role reviewer</code></td>
+<td>All agents registered with that role</td>
+</tr>
+</tbody></table>
+<h3>Sending to Groups</h3>
+<p>Use <code>--to @groupname</code> just like sending to an individual agent:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Send to the review team</span>
+thrum send <span class="hljs-string">&quot;PR #42 ready for review&quot;</span> --to @reviewers
+
+<span class="hljs-comment"># Send to all developers</span>
+thrum send <span class="hljs-string">&quot;Code freeze starts now&quot;</span> --to @all-devs</code></pre>
+<p>The daemon resolves group membership at <strong>read time</strong> using a SQL query. This<br>means agents added to a group after a message was sent still receive it.</p>
+<h3>Expanding Group Membership</h3>
+<p>Use <code>--expand</code> to see which individual agents a group resolves to:</p>
+<pre><code class="language-bash hljs">thrum group members reviewers --<span class="hljs-built_in">expand</span> --json</code></pre>
+<p>Output:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;members&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;alice&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;role&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span><span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;expanded&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;alice&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;bob&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;carol&quot;</span><span class="hljs-punctuation">]</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h3>MCP Group Tools</h3>
+<p>When using the MCP server (<code>thrum mcp serve</code>), groups are managed via native MCP<br>tools:</p>
+<table>
+<thead>
+<tr>
+<th>MCP Tool</th>
+<th>Parameters</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>create_group</code></td>
+<td><code>name</code>, <code>description?</code></td>
+<td>Create a named group</td>
+</tr>
+<tr>
+<td><code>delete_group</code></td>
+<td><code>name</code></td>
+<td>Delete a group</td>
+</tr>
+<tr>
+<td><code>add_group_member</code></td>
+<td><code>group</code>, <code>member_type</code>, <code>member_value</code></td>
+<td>Add member to group</td>
+</tr>
+<tr>
+<td><code>remove_group_member</code></td>
+<td><code>group</code>, <code>member_type</code>, <code>member_value</code></td>
+<td>Remove member from group</td>
+</tr>
+<tr>
+<td><code>list_groups</code></td>
+<td>--</td>
+<td>List all groups</td>
+</tr>
+<tr>
+<td><code>get_group</code></td>
+<td><code>name</code>, <code>expand?</code></td>
+<td>Get details with optional expansion</td>
+</tr>
+</tbody></table>
+<p>Example MCP usage:</p>
+<pre><code>mcp__thrum__create_group(name=&quot;backend&quot;, description=&quot;Backend team&quot;)
+mcp__thrum__add_group_member(group=&quot;backend&quot;, member_type=&quot;role&quot;, member_value=&quot;implementer&quot;)
+mcp__thrum__send_message(to=&quot;@backend&quot;, content=&quot;API changes merged&quot;)</code></pre>
+<hr>
+<h2>Runtime Presets</h2>
+<p>Thrum supports multiple AI coding platforms through a runtime preset system.<br>Each preset knows how to configure MCP servers, instruction files, and hooks for<br>a specific platform.</p>
+<h3>Built-in Presets</h3>
+<table>
+<thead>
+<tr>
+<th>Preset</th>
+<th>Display Name</th>
+<th>MCP</th>
+<th>Hooks</th>
+<th>Instructions File</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>claude</code></td>
+<td>Claude Code</td>
+<td>Yes</td>
+<td>Yes</td>
+<td><code>CLAUDE.md</code></td>
+</tr>
+<tr>
+<td><code>codex</code></td>
+<td>OpenAI Codex</td>
+<td>Yes</td>
+<td>No</td>
+<td><code>AGENTS.md</code></td>
+</tr>
+<tr>
+<td><code>cursor</code></td>
+<td>Cursor</td>
+<td>Yes</td>
+<td>No</td>
+<td><code>.cursorrules</code></td>
+</tr>
+<tr>
+<td><code>gemini</code></td>
+<td>Google Gemini</td>
+<td>Yes</td>
+<td>No</td>
+<td><code>~/.gemini/instructions.md</code></td>
+</tr>
+<tr>
+<td><code>auggie</code></td>
+<td>Augment</td>
+<td>No</td>
+<td>No</td>
+<td><code>CLAUDE.md</code></td>
+</tr>
+<tr>
+<td><code>amp</code></td>
+<td>Sourcegraph Amp</td>
+<td>No</td>
+<td>No</td>
+<td><code>CLAUDE.md</code></td>
+</tr>
+</tbody></table>
+<h3>CLI Commands</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># List all available presets (built-in + user-defined)</span>
+thrum runtime list
+
+<span class="hljs-comment"># Show details for a specific preset</span>
+thrum runtime show claude
+
+<span class="hljs-comment"># Set a default runtime for this machine</span>
+thrum runtime set-default claude</code></pre>
+<h3>Auto-Detection</h3>
+<p>Thrum can auto-detect which AI platform is running by checking for file markers<br>and environment variables:</p>
+<p><strong>File markers:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Marker File</th>
+<th>Detected Runtime</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>.claude/settings.json</code></td>
+<td><code>claude</code></td>
+</tr>
+<tr>
+<td><code>.codex</code></td>
+<td><code>codex</code></td>
+</tr>
+<tr>
+<td><code>.cursorrules</code></td>
+<td><code>cursor</code></td>
+</tr>
+<tr>
+<td><code>.augment</code></td>
+<td><code>auggie</code></td>
+</tr>
+</tbody></table>
+<p><strong>Environment variables:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Detected Runtime</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>CLAUDE_SESSION_ID</code></td>
+<td><code>claude</code></td>
+</tr>
+<tr>
+<td><code>CURSOR_SESSION</code></td>
+<td><code>cursor</code></td>
+</tr>
+<tr>
+<td><code>GEMINI_CLI</code></td>
+<td><code>gemini</code></td>
+</tr>
+<tr>
+<td><code>AUGMENT_AGENT</code></td>
+<td><code>auggie</code></td>
+</tr>
+</tbody></table>
+<p>If no runtime is detected, Thrum falls back to CLI-only mode (no MCP<br>configuration generated).</p>
+<h3>Integration with init and quickstart</h3>
+<p>Use <code>--runtime</code> to specify or auto-detect the platform:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Auto-detect and generate config</span>
+thrum init --runtime auto
+
+<span class="hljs-comment"># Explicit runtime selection</span>
+thrum init --runtime claude
+<span class="hljs-comment"># Generates .claude/settings.json with thrum MCP server config</span>
+
+thrum init --runtime cursor
+<span class="hljs-comment"># Generates .cursorrules with thrum instructions</span>
+
+<span class="hljs-comment"># Quickstart with runtime detection</span>
+thrum quickstart --name furiosa --role implementer --module auth \
+  --runtime claude --intent <span class="hljs-string">&quot;JWT auth&quot;</span></code></pre>
+<h3>Dry-Run Mode</h3>
+<p>Preview what configuration files would be generated without connecting to the<br>daemon or writing files:</p>
+<pre><code class="language-bash hljs">thrum quickstart --runtime cursor --dry-run
+<span class="hljs-comment"># Shows .cursorrules content and MCP config that would be created</span></code></pre>
+<h3>Custom Runtimes</h3>
+<p>Add custom runtime presets via <code>~/.config/thrum/runtimes.json</code> (XDG-aware):</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;default_runtime&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;claude&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;custom_runtimes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;my-agent&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;my-agent&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;display_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;My Custom Agent&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;command&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;my-agent&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;mcp_supported&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;hooks_supported&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;instructions_file&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;AGENTS.md&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;mcp_config_path&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;~/.my-agent/settings.json&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;setup_notes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Custom setup instructions&quot;</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p>Custom runtimes appear alongside built-in presets in <code>thrum runtime list</code>.</p>
+<hr>
+<h2>Context Prime</h2>
+<p>After compaction or starting a new session, you want to quickly answer: what was<br>I working on? Context prime gathers all agent state into a single output so an<br>agent can pick up where it left off.</p>
+<h3>Usage</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Human-readable summary</span>
+thrum context prime
+
+<span class="hljs-comment"># Structured JSON for LLM consumption</span>
+thrum context prime --json</code></pre>
+<h3>What It Gathers</h3>
+<p>Context prime collects information from multiple sources in one call:</p>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Source</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Identity</td>
+<td>Identity file</td>
+<td>Agent ID, role, module, display name</td>
+</tr>
+<tr>
+<td>Session</td>
+<td>Daemon RPC</td>
+<td>Session ID, intent, task, uptime</td>
+</tr>
+<tr>
+<td>Agents</td>
+<td>Daemon RPC</td>
+<td>List of registered agents with status and roles</td>
+</tr>
+<tr>
+<td>Inbox</td>
+<td>Daemon RPC</td>
+<td>Unread message count, total messages</td>
+</tr>
+<tr>
+<td>Git</td>
+<td>Local git state</td>
+<td>Current branch, recent commits, changed files</td>
+</tr>
+<tr>
+<td>Context</td>
+<td>Context file</td>
+<td>Saved context from previous session (if exists)</td>
+</tr>
+</tbody></table>
+<h3>Example Output</h3>
+<pre><code>=== Context Prime for furiosa ===
+
+Identity: furiosa (implementer @ auth)
+Session:  ses_01HXF2A9... (active 2h15m)
+Intent:   JWT authentication implementation
+
+Agents Online:
+  planner    coordinator @ main    (active 5m ago)
+  reviewer   reviewer @ all        (active 12m ago)
+
+Inbox: 3 unread / 12 total
+
+Git:
+  Branch: feature/auth
+  Ahead:  3 commits
+  Files:  src/auth.go, src/auth_test.go (modified)
+
+Saved Context:
+  # Next Steps
+  - Finish JWT implementation
+  - Add rate limiting tests</code></pre>
+<h3>Graceful Degradation</h3>
+<p>Context prime handles missing components gracefully:</p>
+<ul>
+<li><strong>No daemon running</strong> -- skips session, agents, and inbox sections</li>
+<li><strong>No active session</strong> -- shows identity only</li>
+<li><strong>No git repo</strong> -- skips git section</li>
+<li><strong>No saved context</strong> -- skips context section</li>
+<li><strong>No remote</strong> -- skips upstream comparison</li>
+</ul>
+<p>This makes it safe to run at any point, even before the daemon is started.</p>
+<h3>Use Cases</h3>
+<ul>
+<li><strong>Session startup</strong> -- run at the beginning of every session to understand<br>current state</li>
+<li><strong>After compaction</strong> -- recover full context when the LLM&#39;s context window<br>resets</li>
+<li><strong>Handoff between agents</strong> -- incoming agent runs context prime to understand<br>the project state</li>
+<li><strong>Debugging</strong> -- quickly see what the agent knows and what it&#39;s working on</li>
+</ul>
+<hr>
+<h2>Multi-Worktree Coordination</h2>
+<p>Multiple agents can operate across git worktrees while sharing a single daemon<br>and message store.</p>
+<h3>How It Works</h3>
+<pre><code>┌──────────────────────────────────────────────────────────────┐
+│                     Main Worktree                             │
+│  /path/to/repo                                                │
+│  ├── .thrum/                    ← Daemon socket, SQLite, IDs  │
+│  ├── .git/thrum-sync/a-sync/   ← JSONL event log             │
+│  └── Daemon process (shared)                                  │
+├──────────────────────────────────────────────────────────────┤
+│                     Feature Worktrees                         │
+│  ~/.workspaces/repo/auth/                                     │
+│  ├── .thrum/redirect → /path/to/repo/.thrum/                 │
+│  └── Uses same daemon, same messages                          │
+│                                                               │
+│  ~/.workspaces/repo/sync/                                     │
+│  ├── .thrum/redirect → /path/to/repo/.thrum/                 │
+│  └── Uses same daemon, same messages                          │
+└──────────────────────────────────────────────────────────────┘</code></pre>
+<ul>
+<li><strong>One daemon per repository</strong> -- not per worktree</li>
+<li>Feature worktrees use <code>.thrum/redirect</code> to point to the main <code>.thrum/</code><br>directory</li>
+<li>All agents connect via the same Unix socket</li>
+<li>Each agent has its own identity file and message shard</li>
+</ul>
+<h3>Setting Up Feature Worktrees</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Create the worktree</span>
+git worktree add ~/.workspaces/repo/auth -b feature/auth
+
+<span class="hljs-comment"># Set up thrum redirect (shares daemon with main repo)</span>
+thrum setup --main-repo /path/to/repo
+
+<span class="hljs-comment"># Or use the setup script</span>
+scripts/setup-worktree-thrum.sh ~/.workspaces/repo/auth</code></pre>
+<h3>Running Multiple Agents</h3>
+<p>Each agent in a worktree gets its own identity:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Main worktree: coordinator</span>
+<span class="hljs-built_in">cd</span> /path/to/repo
+thrum quickstart --name coordinator --role coordinator --module main
+
+<span class="hljs-comment"># Auth worktree: implementer</span>
+<span class="hljs-built_in">cd</span> ~/.workspaces/repo/auth
+<span class="hljs-built_in">export</span> THRUM_NAME=furiosa
+thrum quickstart --name furiosa --role implementer --module auth
+
+<span class="hljs-comment"># Sync worktree: another implementer</span>
+<span class="hljs-built_in">cd</span> ~/.workspaces/repo/sync
+<span class="hljs-built_in">export</span> THRUM_NAME=nux
+thrum quickstart --name nux --role implementer --module <span class="hljs-built_in">sync</span></code></pre>
+<p>All three agents share the same daemon and can message each other:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># furiosa sends to coordinator</span>
+thrum send <span class="hljs-string">&quot;Auth module complete, tests passing&quot;</span> --to @coordinator
+
+<span class="hljs-comment"># coordinator sends to the whole team</span>
+thrum send <span class="hljs-string">&quot;Both features ready, starting integration&quot;</span> --to @everyone</code></pre>
+<h3>Multiple Agents in the Same Worktree</h3>
+<p>Multiple agents can coexist in a single worktree. Each gets a separate identity<br>file in <code>.thrum/identities/</code>:</p>
+<pre><code>.thrum/identities/
+├── furiosa.json     # implementation agent
+├── reviewer.json    # review agent</code></pre>
+<p>Use <code>THRUM_NAME</code> to select which identity to use:</p>
+<pre><code class="language-bash hljs">THRUM_NAME=furiosa thrum send <span class="hljs-string">&quot;Implementation complete&quot;</span>
+THRUM_NAME=reviewer thrum send <span class="hljs-string">&quot;LGTM, approved&quot;</span></code></pre>
+<hr>
+<h2>Coordination Tools</h2>
+<h3>who-has: File Ownership</h3>
+<p>Check which agents are currently working on a file:</p>
+<pre><code class="language-bash hljs">thrum who-has auth.go
+<span class="hljs-comment"># Output: @furiosa is editing auth.go (feature/auth, 3 unmerged commits)</span>
+
+thrum who-has internal/cli/agent.go
+<span class="hljs-comment"># Output: No agent is currently editing internal/cli/agent.go</span></code></pre>
+<p>This queries agent work contexts (tracked via <code>thrum agent list --context</code>) to<br>prevent two agents from editing the same file simultaneously.</p>
+<h3>ping: Agent Presence</h3>
+<p>Check if an agent is online and what they are working on:</p>
+<pre><code class="language-bash hljs">thrum ping @reviewer
+<span class="hljs-comment"># Output:</span>
+<span class="hljs-comment">#   reviewer: active (last seen 2m ago)</span>
+<span class="hljs-comment">#   Intent: Reviewing PR #42</span>
+
+thrum ping @furiosa
+<span class="hljs-comment"># Output:</span>
+<span class="hljs-comment">#   furiosa: offline (last seen 3h ago)</span></code></pre>
+<p>Agents are considered <code>active</code> if seen within the last 2 minutes, <code>offline</code><br>otherwise.</p>
+<h3>wait: Efficient Message Blocking</h3>
+<p>Block until a matching message arrives or a timeout expires. This is the<br>foundation of the message-listener pattern for async agent coordination.</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Wait for any message (broadcasts + directed)</span>
+thrum <span class="hljs-built_in">wait</span> --all --<span class="hljs-built_in">timeout</span> 5m
+
+<span class="hljs-comment"># Wait for messages since a time offset (skip old messages)</span>
+thrum <span class="hljs-built_in">wait</span> --all --after -30s --<span class="hljs-built_in">timeout</span> 5m --json
+
+<span class="hljs-comment"># Wait for mentions of your role</span>
+thrum <span class="hljs-built_in">wait</span> --mention @reviewer --<span class="hljs-built_in">timeout</span> 5m</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Format</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--timeout</code></td>
+<td>Duration (e.g., <code>5m</code>)</td>
+<td>Max wait time (default: <code>30s</code>)</td>
+</tr>
+<tr>
+<td><code>--all</code></td>
+<td>Boolean</td>
+<td>Subscribe to all messages</td>
+</tr>
+<tr>
+<td><code>--mention</code></td>
+<td><code>@role</code></td>
+<td>Wait for mentions of a role</td>
+</tr>
+<tr>
+<td><code>--after</code></td>
+<td>Relative time (e.g., <code>-30s</code>)</td>
+<td>Only messages after this offset</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>Boolean</td>
+<td>Output messages as JSON</td>
+</tr>
+</tbody></table>
+<p><strong>Exit codes:</strong></p>
+<ul>
+<li><code>0</code> -- message received</li>
+<li><code>1</code> -- timeout (no messages)</li>
+<li><code>2</code> -- error</li>
+</ul>
+<hr>
+<h2>Complete Workflows</h2>
+<h3>Workflow 1: Setting Up a Review Team</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># 1. Create a review team group</span>
+thrum group create reviewers --description <span class="hljs-string">&quot;Code review team&quot;</span>
+thrum group add reviewers --role reviewer
+thrum group add reviewers @alice
+
+<span class="hljs-comment"># 2. Implementer finishes work and notifies the team</span>
+thrum send <span class="hljs-string">&quot;PR #42 ready for review: JWT auth implementation&quot;</span> \
+  --to @reviewers --priority high --ref <span class="hljs-built_in">pr</span>:42
+
+<span class="hljs-comment"># 3. Reviewers check their inbox</span>
+thrum inbox --mentions
+
+<span class="hljs-comment"># 4. Reviewer responds</span>
+thrum reply msg_01HXE... <span class="hljs-string">&quot;Reviewed. LGTM with minor comments on error handling.&quot;</span></code></pre>
+<h3>Workflow 2: Cross-Platform Agent Setup</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Claude Code agent</span>
+thrum init --runtime claude
+thrum quickstart --name claude_agent --role implementer --module auth \
+  --runtime claude --intent <span class="hljs-string">&quot;Implementing auth&quot;</span>
+<span class="hljs-comment"># Generates .claude/settings.json with MCP config</span>
+
+<span class="hljs-comment"># Cursor agent (same repo, different terminal)</span>
+thrum init --runtime cursor
+thrum quickstart --name cursor_agent --role reviewer --module auth \
+  --runtime cursor --intent <span class="hljs-string">&quot;Reviewing auth&quot;</span>
+<span class="hljs-comment"># Generates .cursorrules with thrum instructions</span>
+
+<span class="hljs-comment"># Both agents share the same daemon and can message each other</span></code></pre>
+<h3>Workflow 3: Session Recovery After Compaction</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Agent&#x27;s context window was compacted -- recover state</span>
+thrum context prime
+<span class="hljs-comment"># Shows: identity, session, team, inbox, git state, saved context</span>
+
+<span class="hljs-comment"># Check for urgent messages</span>
+thrum inbox --unread
+
+<span class="hljs-comment"># Resume work based on recovered context</span>
+thrum agent set-intent <span class="hljs-string">&quot;Resuming JWT implementation after compaction&quot;</span></code></pre>
+<h3>Workflow 4: Multi-Worktree Team Coordination</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># === Coordinator (main worktree) ===</span>
+thrum quickstart --name coordinator --role coordinator --module main
+thrum group create backend --description <span class="hljs-string">&quot;Backend team&quot;</span>
+thrum group add backend @furiosa
+thrum group add backend @nux
+
+<span class="hljs-comment"># Assign work</span>
+thrum send <span class="hljs-string">&quot;furiosa: implement auth (feature/auth worktree)&quot;</span> --to @furiosa
+thrum send <span class="hljs-string">&quot;nux: implement sync (feature/sync worktree)&quot;</span> --to @nux
+
+<span class="hljs-comment"># Check team status</span>
+thrum agent list --context
+<span class="hljs-comment"># AGENT        ROLE          MODULE  BRANCH         FILES</span>
+<span class="hljs-comment"># coordinator  coordinator   main    main           -</span>
+<span class="hljs-comment"># furiosa      implementer   auth    feature/auth   src/auth.go</span>
+<span class="hljs-comment"># nux          implementer   sync    feature/sync   internal/sync/loop.go</span>
+
+<span class="hljs-comment"># Send update to the whole backend team</span>
+thrum send <span class="hljs-string">&quot;Both features shipping in v0.4&quot;</span> --to @backend
+
+<span class="hljs-comment"># === Implementer (auth worktree) ===</span>
+<span class="hljs-built_in">cd</span> ~/.workspaces/repo/auth
+<span class="hljs-built_in">export</span> THRUM_NAME=furiosa
+thrum inbox --unread
+thrum send <span class="hljs-string">&quot;Auth complete, 15 tests passing&quot;</span> --to @coordinator</code></pre>
+<hr>
+<h2>Best Practices</h2>
+<h3>Group Organization</h3>
+<ul>
+<li><strong>Start simple</strong> -- create groups as coordination needs emerge, not upfront</li>
+<li><strong>Use role-based membership</strong> when possible (<code>--role reviewer</code>) so new agents<br>with that role are automatically included</li>
+<li><strong>Use <code>@everyone</code> sparingly</strong> -- prefer targeted groups to reduce noise</li>
+</ul>
+<h3>Runtime Configuration</h3>
+<ul>
+<li><strong>Let Thrum auto-detect</strong> when possible (<code>--runtime auto</code> or omit the flag)</li>
+<li><strong>Set a default runtime</strong> on your machine if you always use the same platform:<br><code>thrum runtime set-default claude</code></li>
+<li><strong>Use <code>--dry-run</code></strong> to preview generated configs before committing to them</li>
+</ul>
+<h3>Context Recovery</h3>
+<ul>
+<li><strong>Run <code>thrum context prime</code></strong> at the start of every session</li>
+<li><strong>Save context</strong> at the end of every session:<br><code>echo &quot;# Next steps\n- ...&quot; | thrum context save</code></li>
+<li><strong>After compaction</strong>, context prime provides everything needed to resume work</li>
+</ul>
+<h3>Coordination</h3>
+<ul>
+<li><strong>Check <code>who-has</code></strong> before editing files another agent might be working on</li>
+<li><strong>Use <code>thrum wait</code></strong> instead of polling loops for efficient message delivery</li>
+<li><strong>Set clear intents</strong> so other agents can see what you are working on via<br><code>thrum agent list --context</code></li>
+</ul>
+<h2>See Also</h2>
+<ul>
+<li><a href="tailscale-sync.html">Tailscale Sync</a> -- Cross-machine sync via Tailscale with<br>Ed25519 signing and peer discovery</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> -- Workflow patterns and Beads<br>integration</li>
+<li><a href="identity.html">Identity System</a> -- Agent naming, registration, and conflict<br>resolution</li>
+<li><a href="messaging.html">Messaging System</a> -- Message structure, threads, scopes, and<br>refs</li>
+<li><a href="mcp-server.html">MCP Server</a> -- MCP tools for AI agent integration</li>
+<li><a href="context.html">Context Management</a> -- Per-agent context storage and preambles</li>
+<li><a href="cli.html">CLI Reference</a> -- Complete command documentation</li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#multi-agent.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#multi-agent.html');
+    }
+  </script>
+</body>
+</html>

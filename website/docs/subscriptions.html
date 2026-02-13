@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subscriptions & Notifications — Thrum</title>
+  <meta name="description" content="Real-time push notification system with scope, mention, and all-message filters - subscription lifecycle and dispatch">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Subscriptions &amp; Notifications — Thrum">
+  <meta property="og:description" content="Real-time push notification system with scope, mention, and all-message filters - subscription lifecycle and dispatch">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/subscriptions.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Subscriptions &amp; Notifications — Thrum">
+  <meta name="twitter:description" content="Real-time push notification system with scope, mention, and all-message filters - subscription lifecycle and dispatch">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#subscriptions.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Subscriptions &amp; Notifications</h1>
+<h2>Overview</h2>
+<p>The subscription system allows agents to receive real-time push notifications<br>when messages match their interests. Agents can subscribe to:</p>
+<ul>
+<li><strong>Scopes</strong> - Messages with specific scope (e.g., <code>module:auth</code>,<br><code>file:main.go</code>)</li>
+<li><strong>Mentions</strong> - Messages that @mention a specific role (e.g., <code>@reviewer</code>) or<br>agent name (e.g., <code>@furiosa</code>)</li>
+<li><strong>All messages</strong> - Wildcard subscription to receive all messages</li>
+</ul>
+<p>When a new message matches a subscription, the daemon:</p>
+<ol>
+<li>Identifies matching subscriptions via the <strong>dispatcher</strong></li>
+<li>Sends <strong>push notifications</strong> to connected clients via the <strong>broadcaster</strong></li>
+<li>Stores the message for later retrieval via <code>message.list</code> API</li>
+</ol>
+<h2>Architecture</h2>
+<h3>Components</h3>
+<pre><code>+-------------------------------------------------------------+
+|                      Message Flow                            |
++-------------------------------------------------------------+
+
+  message.send RPC
+       |
+       v
+  +--------------+
+  | Message      |  1. Write to JSONL (sharded per-agent)
+  | Handler      |  2. Insert into SQLite
+  +---------+----+  3. Extract scopes/refs
+            |
+            v
+  +--------------+
+  | Dispatcher   |  1. Query all subscriptions
+  |              |  2. Match against message (scope/mention/all)
+  +---------+----+  3. Build notifications
+            |
+            v
+  +--------------+
+  | Broadcaster  |  1. Try Unix socket clients first
+  |              |  2. Fall back to WebSocket clients
+  +---------+----+  3. Best-effort delivery
+            |
+       +----+----+
+       |         |
+       v         v
+  Unix Socket   WebSocket
+  Clients       Clients (port 9999)
+       |         |
+       v         v
+    Connected clients receive notification.message</code></pre>
+<h3>Database Schema</h3>
+<p><strong>subscriptions table:</strong></p>
+<pre><code class="language-sql hljs"><span class="hljs-keyword">CREATE TABLE</span> subscriptions (
+  id           <span class="hljs-type">INTEGER</span> <span class="hljs-keyword">PRIMARY KEY</span> AUTOINCREMENT,
+  session_id   TEXT <span class="hljs-keyword">NOT NULL</span>,
+  scope_type   TEXT,                    <span class="hljs-comment">-- NULL for non-scope subscriptions</span>
+  scope_value  TEXT,                   <span class="hljs-comment">-- NULL for non-scope subscriptions</span>
+  mention_role TEXT,                  <span class="hljs-comment">-- NULL for non-mention subscriptions</span>
+  created_at   TEXT <span class="hljs-keyword">NOT NULL</span>,
+  <span class="hljs-keyword">UNIQUE</span>(session_id, scope_type, scope_value, mention_role)
+);
+
+<span class="hljs-comment">-- Indexes for efficient matching</span>
+<span class="hljs-keyword">CREATE</span> INDEX idx_subscriptions_scope <span class="hljs-keyword">ON</span> subscriptions(scope_type, scope_value);
+<span class="hljs-keyword">CREATE</span> INDEX idx_subscriptions_mention <span class="hljs-keyword">ON</span> subscriptions(mention_role);
+<span class="hljs-keyword">CREATE</span> INDEX idx_subscriptions_session <span class="hljs-keyword">ON</span> subscriptions(session_id);</code></pre>
+<p><strong>Note:</strong> The subscriptions table does not have a foreign key constraint on<br><code>session_id</code>. Subscription cleanup on session end is handled at the application<br>level.</p>
+<p><strong>Subscription types (mutually exclusive):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>scope_type</th>
+<th>scope_value</th>
+<th>mention_role</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Scope</td>
+<td><code>&quot;module&quot;</code></td>
+<td><code>&quot;auth&quot;</code></td>
+<td><code>NULL</code></td>
+<td>Matches messages with scope <code>module:auth</code></td>
+</tr>
+<tr>
+<td>Mention</td>
+<td><code>NULL</code></td>
+<td><code>NULL</code></td>
+<td><code>&quot;reviewer&quot;</code></td>
+<td>Matches messages with <code>@reviewer</code> mention</td>
+</tr>
+<tr>
+<td>All</td>
+<td><code>NULL</code></td>
+<td><code>NULL</code></td>
+<td><code>NULL</code></td>
+<td>Matches all messages (wildcard)</td>
+</tr>
+</tbody></table>
+<h3>Duplicate Prevention</h3>
+<p>SQLite&#39;s <code>UNIQUE</code> constraint doesn&#39;t work correctly with NULL values (treats<br>each NULL as unique). We implement <strong>application-level duplicate checking</strong> in<br><code>service.go</code>:</p>
+<pre><code class="language-go hljs"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(s *Service)</span></span> subscriptionExists(...) (<span class="hljs-type">bool</span>, <span class="hljs-type">error</span>) {
+    <span class="hljs-comment">// Build query with explicit NULL checks for each combination</span>
+    <span class="hljs-keyword">if</span> scopeType != <span class="hljs-literal">nil</span> &amp;&amp; scopeValue != <span class="hljs-literal">nil</span> {
+        query = <span class="hljs-string">&quot;WHERE session_id = ? AND scope_type = ? AND scope_value = ?&quot;</span>
+    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> mentionRole != <span class="hljs-literal">nil</span> {
+        query = <span class="hljs-string">&quot;WHERE session_id = ? AND mention_role = ?&quot;</span>
+    } <span class="hljs-keyword">else</span> {
+        query = <span class="hljs-string">&quot;WHERE session_id = ? AND scope_type IS NULL AND ...&quot;</span>
+    }
+}</code></pre>
+<h2>Subscription Lifecycle</h2>
+<h3>Creating Subscriptions</h3>
+<ol>
+<li>Client calls <code>subscribe</code> RPC with subscription criteria</li>
+<li>Handler validates:<ul>
+<li>Session is active (resolved from agent identity config)</li>
+<li>At least one of scope, mention_role, or all specified</li>
+<li>No duplicate subscription exists (application-level check)</li>
+</ul>
+</li>
+<li>Insert into <code>subscriptions</code> table</li>
+<li>Return subscription ID</li>
+</ol>
+<p><strong>Example:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-comment">// Request</span>
+<span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;subscribe&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;scope&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;module&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span>
+
+<span class="hljs-comment">// Response</span>
+<span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h3>Removing Subscriptions</h3>
+<ol>
+<li>Client calls <code>unsubscribe</code> RPC with subscription ID</li>
+<li>Handler verifies subscription belongs to current session</li>
+<li>Delete from <code>subscriptions</code> table</li>
+<li>Return <code>{&quot;removed&quot;: true}</code> or <code>{&quot;removed&quot;: false}</code> (idempotent)</li>
+</ol>
+<p><strong>Example:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-comment">// Request</span>
+<span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;unsubscribe&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span>
+<span class="hljs-punctuation">}</span>
+
+<span class="hljs-comment">// Response</span>
+<span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;removed&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h3>Listing Subscriptions</h3>
+<pre><code class="language-json hljs"><span class="hljs-comment">// Request</span>
+<span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;subscriptions.list&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span>
+
+<span class="hljs-comment">// Response</span>
+<span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;subscriptions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+      <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;scope_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;module&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;scope_value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span>
+      <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">43</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;mention_role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:05:00Z&quot;</span>
+      <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">44</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;all&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:10:00Z&quot;</span>
+      <span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">]</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h2>Message Dispatch</h2>
+<h3>Matching Algorithm</h3>
+<p>When <code>message.send</code> is called, the dispatcher:</p>
+<ol>
+<li><strong>Query all subscriptions</strong> from database (joins with sessions and agents<br>tables for mention resolution)</li>
+<li><strong>For each subscription</strong>, check if message matches:<ul>
+<li><strong>Scope match</strong>: Any message scope matches subscription scope</li>
+<li><strong>Mention match</strong>: Any message ref has <code>type=&quot;mention&quot;</code> and matches the<br>subscription&#39;s <code>mention_role</code>, the agent&#39;s role, or the agent&#39;s ID/name</li>
+<li><strong>All match</strong>: Always matches (wildcard)</li>
+</ul>
+</li>
+<li><strong>Build notification</strong> for each match</li>
+<li><strong>Push to connected clients</strong> via the Broadcaster</li>
+</ol>
+<p><strong>Implementation (<code>dispatcher.go</code>):</strong></p>
+<pre><code class="language-go hljs"><span class="hljs-comment">// matchSubscription checks if a message matches a subscription.</span>
+<span class="hljs-comment">// Supports both role-based mentions (@reviewer) and name-based mentions (@furiosa).</span>
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">matchSubscription</span><span class="hljs-params">(msg *MessageInfo, scopeType, scopeValue, mentionRole, agentID, agentRole sql.NullString)</span></span> <span class="hljs-type">string</span> {
+    <span class="hljs-comment">// All subscription - always matches</span>
+    <span class="hljs-keyword">if</span> !scopeType.Valid &amp;&amp; !scopeValue.Valid &amp;&amp; !mentionRole.Valid {
+        <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;all&quot;</span>
+    }
+
+    <span class="hljs-comment">// Scope subscription</span>
+    <span class="hljs-keyword">if</span> scopeType.Valid &amp;&amp; scopeValue.Valid {
+        <span class="hljs-keyword">for</span> _, scope := <span class="hljs-keyword">range</span> msg.Scopes {
+            <span class="hljs-keyword">if</span> scope.Type == scopeType.String &amp;&amp; scope.Value == scopeValue.String {
+                <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;scope&quot;</span>
+            }
+        }
+    }
+
+    <span class="hljs-comment">// Mention subscription - matches on:</span>
+    <span class="hljs-comment">// 1. subscription&#x27;s mention_role</span>
+    <span class="hljs-comment">// 2. agent&#x27;s role (for role-based mentions)</span>
+    <span class="hljs-comment">// 3. agent&#x27;s ID/name (for name-based mentions like @furiosa)</span>
+    <span class="hljs-keyword">if</span> mentionRole.Valid {
+        <span class="hljs-keyword">for</span> _, ref := <span class="hljs-keyword">range</span> msg.Refs {
+            <span class="hljs-keyword">if</span> ref.Type == <span class="hljs-string">&quot;mention&quot;</span> {
+                <span class="hljs-keyword">if</span> ref.Value == mentionRole.String {
+                    <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;mention&quot;</span>
+                }
+                <span class="hljs-keyword">if</span> agentRole.Valid &amp;&amp; ref.Value == agentRole.String {
+                    <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;mention&quot;</span>
+                }
+                <span class="hljs-keyword">if</span> agentID.Valid &amp;&amp; ref.Value == agentID.String {
+                    <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;mention&quot;</span>
+                }
+            }
+        }
+    }
+
+    <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;&quot;</span> <span class="hljs-comment">// No match</span>
+}</code></pre>
+<h3>Notification Building</h3>
+<p>For each match, the dispatcher builds a notification payload:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;notification.message&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;author&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span>
+    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;First 100 characters of content...&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;module&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;matched_subscription&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;match_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope&quot;</span>
+    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Author parsing:</strong></p>
+<ul>
+<li>Uses <code>identity.ParseAgentID()</code> to extract the role from the agent ID</li>
+<li>The <code>name</code> field is set to the raw agent ID (which is the agent&#39;s name for<br>named agents)</li>
+<li>The <code>module</code> field is empty -- module is not encoded in the agent ID and would<br>require a database lookup</li>
+</ul>
+<p><strong>Preview truncation:</strong></p>
+<ul>
+<li>If content is 100 chars or less: Use as-is</li>
+<li>If content exceeds 100 chars: Truncate to 100 chars and append <code>&quot;...&quot;</code></li>
+</ul>
+<h2>Push Notifications</h2>
+<h3>Broadcaster</h3>
+<p>The daemon uses a <code>Broadcaster</code> (<code>internal/daemon/broadcaster.go</code>) that<br>implements the <code>ClientNotifier</code> interface. It tries both transport registries in<br>order:</p>
+<ol>
+<li><strong>Unix socket clients</strong> first (via <code>ClientRegistry</code> from<br><code>internal/daemon/notify.go</code>)</li>
+<li><strong>WebSocket clients</strong> as fallback (via <code>ClientRegistry</code> from<br><code>internal/websocket/registry.go</code>)</li>
+</ol>
+<p>If the notification is delivered successfully via either transport, the<br>Broadcaster returns immediately. This means each session only receives one<br>notification per match, regardless of how many transports are available.</p>
+<h3>Unix Socket Client Registry</h3>
+<p><strong>Location:</strong> <code>internal/daemon/notify.go</code></p>
+<pre><code class="language-go hljs"><span class="hljs-keyword">type</span> ClientRegistry <span class="hljs-keyword">struct</span> {
+    mu      sync.RWMutex
+    clients <span class="hljs-keyword">map</span>[<span class="hljs-type">string</span>]*ConnectedClient
+}
+
+<span class="hljs-keyword">type</span> ConnectedClient <span class="hljs-keyword">struct</span> {
+    sessionID <span class="hljs-type">string</span>
+    conn      net.Conn
+}</code></pre>
+<p><strong>Operations:</strong></p>
+<ul>
+<li><code>Register(sessionID, conn)</code> - Add client when they connect</li>
+<li><code>Unregister(sessionID)</code> - Remove client on disconnect</li>
+<li><code>Notify(sessionID, *Notification)</code> - Send notification with newline framing</li>
+</ul>
+<h3>WebSocket Client Registry</h3>
+<p><strong>Location:</strong> <code>internal/websocket/registry.go</code></p>
+<pre><code class="language-go hljs"><span class="hljs-keyword">type</span> ClientRegistry <span class="hljs-keyword">struct</span> {
+    mu      sync.RWMutex
+    clients <span class="hljs-keyword">map</span>[<span class="hljs-type">string</span>]*Connection
+}</code></pre>
+<p><strong>Operations:</strong></p>
+<ul>
+<li><code>Register(sessionID, conn)</code> - Add client when they connect</li>
+<li><code>Unregister(sessionID)</code> - Remove client on disconnect</li>
+<li><code>Get(sessionID)</code> - Look up client by session ID</li>
+<li><code>Count()</code> - Number of connected clients</li>
+<li><code>CloseAll()</code> - Close all connections (used during shutdown)</li>
+<li><code>Notify(sessionID, notification)</code> - Send JSON-RPC notification via WebSocket<br>frame</li>
+</ul>
+<h3>Sending Notifications</h3>
+<p>When the dispatcher finds matches, it calls <code>Broadcaster.Notify()</code> for each:</p>
+<ol>
+<li><strong>Lookup session</strong> in Unix socket registry, then WebSocket registry<ul>
+<li>If not found in either: Silently succeed (client will see message via<br><code>message.list</code>)</li>
+</ul>
+</li>
+<li><strong>Marshal notification</strong> to JSON-RPC format</li>
+<li><strong>Write to transport</strong>:<ul>
+<li>Unix socket: Newline-delimited JSON</li>
+<li>WebSocket: Text frame via buffered send channel (256-message buffer)</li>
+</ul>
+</li>
+<li><strong>Handle errors</strong>:<ul>
+<li>Write error: Client disconnected - auto-unregister</li>
+<li>Buffer full (WebSocket): Client disconnected - auto-unregister</li>
+<li>Success: Continue</li>
+</ul>
+</li>
+</ol>
+<p><strong>JSON-RPC notification format:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;notification.message&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-comment">/* NotifyParams */</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Note:</strong> No <code>id</code> field - notifications are one-way, no response expected.</p>
+<h3>Connection Management</h3>
+<p><strong>Client responsibilities:</strong></p>
+<ol>
+<li>Keep connection open during session</li>
+<li>Listen for incoming notifications</li>
+<li>Parse JSON-RPC notifications (no <code>id</code> field)</li>
+<li>Fetch full message content with <code>message.get</code></li>
+</ol>
+<p><strong>Daemon responsibilities:</strong></p>
+<ol>
+<li>Track connected clients by session</li>
+<li>Auto-unregister on write errors</li>
+<li>Don&#39;t block message.send on notification failures</li>
+<li>Silently ignore notifications to disconnected clients</li>
+</ol>
+<h2>Testing</h2>
+<h3>Coverage</h3>
+<p><strong>Key test scenarios:</strong></p>
+<ol>
+<li>Subscription CRUD (create, list, unsubscribe)</li>
+<li>Duplicate prevention (all subscription types)</li>
+<li>Scope matching (exact match, multiple scopes, no match)</li>
+<li>Mention matching (role-based @reviewer, name-based @furiosa)</li>
+<li>All subscription matching (wildcard)</li>
+<li>Multiple subscriptions per session</li>
+<li>Client registry (register, unregister, notify) for both Unix socket and<br>WebSocket</li>
+<li>Notification format (JSON-RPC, field validation)</li>
+<li>Preview truncation (short, long, exact 100 chars)</li>
+<li>Disconnected client handling (auto-unregister)</li>
+<li>Broadcaster routing (Unix socket first, WebSocket fallback)</li>
+</ol>
+<h3>Test Patterns</h3>
+<p><strong>Database tests</strong> use temp directories:</p>
+<pre><code class="language-go hljs">tmpDir := t.TempDir()
+db, err := schema.OpenDB(filepath.Join(tmpDir, <span class="hljs-string">&quot;test.db&quot;</span>))
+<span class="hljs-keyword">defer</span> db.Close()</code></pre>
+<p><strong>Unix socket connection tests</strong> use <code>net.Pipe()</code>:</p>
+<pre><code class="language-go hljs">server, client := net.Pipe()
+<span class="hljs-keyword">defer</span> server.Close()
+<span class="hljs-keyword">defer</span> client.Close()
+
+<span class="hljs-comment">// IMPORTANT: net.Pipe() is synchronous - use goroutines</span>
+<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+    buf := <span class="hljs-built_in">make</span>([]<span class="hljs-type">byte</span>, <span class="hljs-number">1024</span>)
+    n, _ := client.Read(buf)
+    <span class="hljs-comment">// Process buffer</span>
+}()
+registry.Notify(<span class="hljs-string">&quot;ses_001&quot;</span>, notification)</code></pre>
+<h2>Performance Considerations</h2>
+<h3>Matching Efficiency</h3>
+<p><strong>Current implementation:</strong></p>
+<ul>
+<li>Load ALL subscriptions from DB on every message</li>
+<li>O(N) matching where N = number of subscriptions</li>
+<li>Joins with sessions and agents tables for mention resolution</li>
+</ul>
+<p><strong>Rationale for simple approach:</strong></p>
+<ul>
+<li>Expected subscription count: &lt; 100 per daemon instance</li>
+<li>Message send frequency: &lt; 10/second</li>
+<li>Premature optimization avoided - measure first</li>
+</ul>
+<h3>Notification Delivery</h3>
+<p><strong>Current:</strong></p>
+<ul>
+<li>Synchronous notification sending via Broadcaster</li>
+<li>Blocks message.send briefly</li>
+</ul>
+<p><strong>Trade-off:</strong></p>
+<ul>
+<li>Simplicity vs. throughput</li>
+<li>Current approach is correct and maintainable</li>
+<li>Optimize when proven necessary</li>
+</ul>
+<h2>Error Handling</h2>
+<h3>Subscription Errors</h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Duplicate subscription</td>
+<td>Return error <code>&quot;subscription already exists&quot;</code></td>
+</tr>
+<tr>
+<td>Invalid session</td>
+<td>Return error <code>&quot;no active session found&quot;</code></td>
+</tr>
+<tr>
+<td>Missing parameters</td>
+<td>Return error <code>&quot;at least one of scope, mention_role, or all must be specified&quot;</code></td>
+</tr>
+<tr>
+<td>Database error</td>
+<td>Return error with details</td>
+</tr>
+</tbody></table>
+<h3>Notification Errors</h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Client not connected</td>
+<td>Silently succeed (client will poll)</td>
+</tr>
+<tr>
+<td>Write error (disconnect)</td>
+<td>Auto-unregister, return error</td>
+</tr>
+<tr>
+<td>Buffer full (WebSocket)</td>
+<td>Auto-unregister, return error</td>
+</tr>
+<tr>
+<td>Marshal error</td>
+<td>Return error (should never happen)</td>
+</tr>
+</tbody></table>
+<h3>Recovery</h3>
+<p><strong>Client reconnection:</strong></p>
+<ul>
+<li>Registry tracks by session ID</li>
+<li>Re-register on reconnect</li>
+<li>Previous subscriptions still active (tied to session, not connection)</li>
+</ul>
+<h2>Design Notes</h2>
+<h3>Why Application-Level Duplicate Checking?</h3>
+<p>SQLite&#39;s <code>UNIQUE</code> constraint fails with NULL values:</p>
+<ul>
+<li><code>(ses_001, NULL, NULL, NULL)</code> can be inserted multiple times</li>
+<li>SQLite treats NULL != NULL in uniqueness checks</li>
+</ul>
+<p><strong>Alternatives considered:</strong></p>
+<ol>
+<li>Use empty string <code>&quot;&quot;</code> instead of NULL - Semantically incorrect</li>
+<li>Separate tables per subscription type - Over-engineered</li>
+<li><strong>Application-level checking</strong> - Simple, correct, maintainable (chosen)</li>
+</ol>
+<h3>Why Silently Ignore Disconnected Clients?</h3>
+<p>When a notification can&#39;t be sent (client disconnected):</p>
+<ol>
+<li>Message is already in database (via <code>message.send</code>)</li>
+<li>Client will see it when they call <code>message.list</code></li>
+<li>Failing the entire <code>message.send</code> would be wrong</li>
+</ol>
+<p><strong>Design:</strong></p>
+<ul>
+<li>Notifications are <strong>best-effort delivery</strong></li>
+<li>Database is <strong>source of truth</strong></li>
+<li>Clients must poll <code>message.list</code> on reconnect</li>
+</ul>
+<h3>Why Preview Truncation?</h3>
+<ul>
+<li>Full message content can be large (megabytes)</li>
+<li>Notifications should be lightweight</li>
+<li>Clients can fetch full content with <code>message.get</code></li>
+<li>100 chars is enough for preview/triage</li>
+</ul>
+<h2>References</h2>
+<ul>
+<li>RPC API: <code>docs/rpc-api.md</code></li>
+<li>Messaging: <code>docs/messaging.md</code></li>
+<li>Daemon Architecture: <code>docs/daemon.md</code></li>
+<li>Event Streaming: <code>docs/event-streaming.md</code></li>
+<li>WebSocket API: <code>docs/api/websocket.md</code></li>
+<li>SQLite Schema: <code>internal/schema/schema.go</code></li>
+<li>Subscription Service: <code>internal/subscriptions/service.go</code></li>
+<li>Dispatcher: <code>internal/subscriptions/dispatcher.go</code></li>
+<li>Broadcaster: <code>internal/daemon/broadcaster.go</code></li>
+<li>Unix Socket Client Registry: <code>internal/daemon/notify.go</code></li>
+<li>WebSocket Client Registry: <code>internal/websocket/registry.go</code></li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#subscriptions.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#subscriptions.html');
+    }
+  </script>
+</body>
+</html>

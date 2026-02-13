@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beads and Thrum — Thrum</title>
+  <meta name="description" content="How persistent task tracking and agent messaging work together for multi-agent development">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Beads and Thrum — Thrum">
+  <meta property="og:description" content="How persistent task tracking and agent messaging work together for multi-agent development">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/beads-and-thrum.html">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Beads and Thrum — Thrum">
+  <meta name="twitter:description" content="How persistent task tracking and agent messaging work together for multi-agent development">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#beads-and-thrum.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h1>Beads and Thrum</h1>
+<h2>The Context Loss Problem</h2>
+<p>AI agents lose context. When a conversation becomes too long, the context window compacts and early messages disappear. When a session ends, the agent forgets what it was working on. When an agent teammate sends a message, that message vanishes if the receiving agent isn&#39;t actively listening.</p>
+<p>In single-agent workflows, this is annoying. In multi-agent workflows, it&#39;s catastrophic. Agents duplicate work, miss dependencies, and lose coordination. The traditional solution — stuffing everything into the prompt — doesn&#39;t scale beyond trivial tasks.</p>
+<h2>Two Complementary Tools</h2>
+<p>Beads and Thrum solve different halves of the same problem: how to give agents persistent memory and communication that survives session boundaries.</p>
+<p><strong>Beads</strong> is a git-backed issue tracker. It handles task state, dependencies, and work discovery. When an agent needs to know &quot;what should I work on?&quot; or &quot;what was I doing?&quot;, Beads provides the answer.</p>
+<p><strong>Thrum</strong> is a git-backed messaging system. It handles coordination, notifications, and presence. When an agent needs to know &quot;what did my teammates tell me?&quot; or &quot;who&#39;s working on what?&quot;, Thrum provides the answer.</p>
+<p>Both use Git as the persistence layer. No external services, no databases, no state that lives outside the repository. Everything survives session boundaries because everything is committed to version control.</p>
+<h2>What Each Tool Covers</h2>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Beads</th>
+<th>Thrum</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Purpose</strong></td>
+<td>Task tracking and dependency management</td>
+<td>Agent messaging and coordination</td>
+</tr>
+<tr>
+<td><strong>Primary Use</strong></td>
+<td>Persistent work state across sessions</td>
+<td>Communication across agents and sessions</td>
+</tr>
+<tr>
+<td><strong>Key Commands</strong></td>
+<td><code>bd create</code>, <code>bd ready</code>, <code>bd close</code>, <code>bd show</code></td>
+<td><code>thrum send</code>, <code>thrum inbox</code>, <code>thrum agent list</code></td>
+</tr>
+<tr>
+<td><strong>Recovery Scenario</strong></td>
+<td>&quot;What tasks am I responsible for?&quot;</td>
+<td>&quot;What messages did I miss while offline?&quot;</td>
+</tr>
+<tr>
+<td><strong>State Storage</strong></td>
+<td><code>.beads/</code> directory in Git</td>
+<td><code>.thrum/</code> directory in Git</td>
+</tr>
+<tr>
+<td><strong>Daemon</strong></td>
+<td>None (purely CLI)</td>
+<td>Optional daemon for real-time notifications</td>
+</tr>
+</tbody></table>
+<p>Beads answers: <strong>What should I work on?</strong><br>Thrum answers: <strong>What did others tell me?</strong></p>
+<h2>A Combined Workflow</h2>
+<p>Here&#39;s how an agent uses both tools together across multiple sessions.</p>
+<p><strong>Session 1: Starting work</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Check for assigned work</span>
+$ bd ready --assigned-to @implementer_ui
+- thrum-a1b2: Implement search UI component
+
+<span class="hljs-comment"># Check for messages from coordinator</span>
+$ thrum inbox --unread
+From: @planner
+Message: <span class="hljs-string">&quot;Search UI should use the MiniSearch interface we built in thrum-c3d4&quot;</span>
+
+<span class="hljs-comment"># Claim the task</span>
+$ bd update thrum-a1b2 --status in_progress
+
+<span class="hljs-comment"># Acknowledge and ask question</span>
+$ thrum send <span class="hljs-string">&quot;Starting on search UI. Should it support dark mode?&quot;</span> --to @planner</code></pre>
+<p><strong>Session 2: After context window compaction</strong></p>
+<p>The agent&#39;s context has been compacted. Early messages are gone. But the state persists in Git.</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Recover task context</span>
+$ bd show thrum-a1b2
+Title: Implement search UI component
+Status: in_progress
+Assigned: @implementer_ui
+Depends on: thrum-c3d4 (closed)
+
+<span class="hljs-comment"># Check for planner&#x27;s response</span>
+$ thrum inbox --unread
+From: @planner
+Message: <span class="hljs-string">&quot;Yes, dark mode required. See design tokens in styles/theme.css&quot;</span>
+
+<span class="hljs-comment"># Continue work with full context recovered</span></code></pre>
+<p><strong>Session 3: Finishing up</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Mark task complete</span>
+$ bd close thrum-a1b2 --comment <span class="hljs-string">&quot;Implemented with dark mode support&quot;</span>
+
+<span class="hljs-comment"># Notify coordinator</span>
+$ thrum send <span class="hljs-string">&quot;Search UI complete (thrum-a1b2). Ready for integration.&quot;</span> --to @planner</code></pre>
+<p><strong>Session 4: New agent picks up follow-up work</strong></p>
+<p>A different agent needs to build on this work.</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Discover what&#x27;s ready to work on</span>
+$ bd ready
+- thrum-e5f6: Integrate search UI into main app (depends on thrum-a1b2)
+
+<span class="hljs-comment"># Check message history for context</span>
+$ thrum inbox --from @implementer_ui
+From: @implementer_ui
+Message: <span class="hljs-string">&quot;Search UI complete (thrum-a1b2). Ready for integration.&quot;</span>
+
+<span class="hljs-comment"># Full context recovered without any conversation history</span></code></pre>
+<h2>Why Git-Backed Persistence Matters</h2>
+<p>Both Beads and Thrum store state in Git, not in memory, databases, or external services. This design choice provides several guarantees:</p>
+<p><strong>Offline operation.</strong> No network dependency. Agents work in air-gapped environments, on planes, or when external services are down.</p>
+<p><strong>State travels with the repository.</strong> Clone the repo, get all task history and message history. No separate database to back up or migrate.</p>
+<p><strong>Survives any session boundary.</strong> Context window compaction, agent restart, machine crash, or branch switch — the state persists because it&#39;s committed to version control.</p>
+<p><strong>Auditable history.</strong> Every task state change and every message is a Git commit. You can see who changed what, when, and why using standard Git tools.</p>
+<p>This architecture trades real-time performance for persistence and simplicity. For agent workflows — where context loss is the primary failure mode — that&#39;s the right tradeoff.</p>
+<h2>See Also</h2>
+<ul>
+<li><a href="./quickstart.html">Quickstart</a> — Get started with Beads and Thrum in 5 minutes</li>
+<li><a href="./agent-coordination.html">Agent Coordination</a> — Patterns for multi-agent workflows</li>
+<li><a href="./cli-reference.html">CLI Reference</a> — Complete command documentation</li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#beads-and-thrum.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#beads-and-thrum.html');
+    }
+  </script>
+</body>
+</html>

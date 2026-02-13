@@ -29,7 +29,8 @@ const MiniSearch = require('minisearch');
 const CONFIG = {
   docsDir: path.join(__dirname, '../docs'),
   outputDir: path.join(__dirname, '../assets/docs'),
-  websiteDir: path.join(__dirname, '..')
+  websiteDir: path.join(__dirname, '..'),
+  siteUrl: 'https://leonletto.github.io/thrum'
 };
 
 /**
@@ -156,6 +157,97 @@ async function processMarkdownFile(filePath, docsDir, outputDir) {
 }
 
 /**
+ * Generate per-doc SEO pages with Open Graph meta tags.
+ *
+ * Each doc gets a lightweight HTML page at docs/{name}.html that:
+ * - Has proper <title>, og:title, og:description for social sharing
+ * - Includes the rendered content for crawler indexing
+ * - Redirects browsers to the SPA (docs.html#{path})
+ */
+async function generateSEOPages(docs, docsDir) {
+  const seoTemplate = (doc, html) => `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${doc.title} \u2014 Thrum</title>
+  <meta name="description" content="${escapeAttr(doc.description)}">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="${escapeAttr(doc.title)} \u2014 Thrum">
+  <meta property="og:description" content="${escapeAttr(doc.description)}">
+  <meta property="og:url" content="${CONFIG.siteUrl}/docs/${doc.path}">
+  <meta property="og:site_name" content="Thrum">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="${escapeAttr(doc.title)} \u2014 Thrum">
+  <meta name="twitter:description" content="${escapeAttr(doc.description)}">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="${CONFIG.siteUrl}/docs.html#${doc.path}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+${html}
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#${doc.path}">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#${doc.path}');
+    }
+  </script>
+</body>
+</html>`;
+
+  let count = 0;
+  for (const doc of docs) {
+    const htmlPath = path.join(CONFIG.outputDir, doc.path);
+    const html = await fs.readFile(htmlPath, 'utf-8');
+    const seoPath = path.join(docsDir, doc.path);
+    await fs.ensureDir(path.dirname(seoPath));
+    await fs.writeFile(seoPath, seoTemplate(doc, html));
+    count++;
+  }
+  return count;
+}
+
+function escapeAttr(str) {
+  return (str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
  * Main build function
  */
 async function buildDocs() {
@@ -245,6 +337,11 @@ async function buildDocs() {
       searchIndex
     );
     console.log(`   ✓ Generated search-index.json (${searchDocs.length} documents)`);
+
+    // Step 6: Generate per-doc SEO pages with Open Graph meta tags
+    console.log('🔗 Generating SEO pages with Open Graph meta tags...');
+    const seoCount = await generateSEOPages(docs, CONFIG.docsDir);
+    console.log(`   ✓ Generated ${seoCount} SEO pages in docs/`);
 
     console.log('');
     console.log('✅ Build complete!');
