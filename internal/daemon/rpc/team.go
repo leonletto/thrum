@@ -18,13 +18,13 @@ type TeamListRequest struct {
 
 // TeamListResponse represents the response from team.list RPC.
 type TeamListResponse struct {
-	Members        []TeamMember      `json:"members"`
-	SharedMessages *SharedMessages   `json:"shared_messages,omitempty"`
+	Members        []TeamMember    `json:"members"`
+	SharedMessages *SharedMessages `json:"shared_messages,omitempty"`
 }
 
 // SharedMessages contains team-wide message counts (broadcasts + groups).
 type SharedMessages struct {
-	BroadcastTotal int                `json:"broadcast_total"`
+	BroadcastTotal int                 `json:"broadcast_total"`
 	Groups         []GroupMessageCount `json:"groups,omitempty"`
 }
 

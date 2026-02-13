@@ -11,21 +11,21 @@ import (
 
 // HealthResult contains daemon health information.
 type HealthResult struct {
-	Status    string              `json:"status"`
-	UptimeMs  int64               `json:"uptime_ms"`
-	Version   string              `json:"version"`
-	RepoID    string              `json:"repo_id"`
-	SyncState string              `json:"sync_state"`
-	Tailscale *TailscaleSyncInfo  `json:"tailscale,omitempty"`
+	Status    string             `json:"status"`
+	UptimeMs  int64              `json:"uptime_ms"`
+	Version   string             `json:"version"`
+	RepoID    string             `json:"repo_id"`
+	SyncState string             `json:"sync_state"`
+	Tailscale *TailscaleSyncInfo `json:"tailscale,omitempty"`
 }
 
 // TailscaleSyncInfo mirrors the RPC type for CLI deserialization.
 type TailscaleSyncInfo struct {
-	Enabled        bool             `json:"enabled"`
-	Hostname       string           `json:"hostname"`
-	ConnectedPeers int              `json:"connected_peers"`
-	Peers          []TailscalePeer  `json:"peers,omitempty"`
-	SyncStatus     string           `json:"sync_status"`
+	Enabled        bool            `json:"enabled"`
+	Hostname       string          `json:"hostname"`
+	ConnectedPeers int             `json:"connected_peers"`
+	Peers          []TailscalePeer `json:"peers,omitempty"`
+	SyncStatus     string          `json:"sync_status"`
 }
 
 // TailscalePeer represents a peer in the Tailscale sync status.

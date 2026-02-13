@@ -38,11 +38,11 @@ type RuntimeInitOptions struct {
 
 // FileAction describes a file that would be created or overwritten.
 type FileAction struct {
-	Path      string `json:"path"`
-	Action    string `json:"action"` // "create" or "overwrite"
-	Runtime   string `json:"runtime"`
-	Template  string `json:"template"`
-	Skipped   bool   `json:"skipped,omitempty"`
+	Path       string `json:"path"`
+	Action     string `json:"action"` // "create" or "overwrite"
+	Runtime    string `json:"runtime"`
+	Template   string `json:"template"`
+	Skipped    bool   `json:"skipped,omitempty"`
 	SkipReason string `json:"skip_reason,omitempty"`
 }
 

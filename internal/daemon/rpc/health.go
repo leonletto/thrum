@@ -8,22 +8,22 @@ import (
 
 // HealthResponse represents the response from the health check RPC.
 type HealthResponse struct {
-	Status    string              `json:"status"`              // "ok" or "degraded"
-	Uptime    int64               `json:"uptime_ms"`           // Uptime in milliseconds
-	Version   string              `json:"version"`             // Daemon version
-	RepoID    string              `json:"repo_id"`             // Repository ID
-	SyncState string              `json:"sync_state"`          // "synced", "pending", "error"
-	Tailscale *TailscaleSyncInfo  `json:"tailscale,omitempty"` // Tailscale sync info (nil if disabled)
+	Status    string             `json:"status"`              // "ok" or "degraded"
+	Uptime    int64              `json:"uptime_ms"`           // Uptime in milliseconds
+	Version   string             `json:"version"`             // Daemon version
+	RepoID    string             `json:"repo_id"`             // Repository ID
+	SyncState string             `json:"sync_state"`          // "synced", "pending", "error"
+	Tailscale *TailscaleSyncInfo `json:"tailscale,omitempty"` // Tailscale sync info (nil if disabled)
 }
 
 // TailscaleSyncInfo contains Tailscale sync status for the health response.
 type TailscaleSyncInfo struct {
-	Enabled        bool              `json:"enabled"`
-	Hostname       string            `json:"hostname"`
-	ConnectedPeers int               `json:"connected_peers"`
-	Peers          []TailscalePeer   `json:"peers,omitempty"`
-	LastSync       string            `json:"last_sync,omitempty"`
-	SyncStatus     string            `json:"sync_status"` // "idle", "syncing", "error"
+	Enabled        bool            `json:"enabled"`
+	Hostname       string          `json:"hostname"`
+	ConnectedPeers int             `json:"connected_peers"`
+	Peers          []TailscalePeer `json:"peers,omitempty"`
+	LastSync       string          `json:"last_sync,omitempty"`
+	SyncStatus     string          `json:"sync_status"` // "idle", "syncing", "error"
 }
 
 // TailscalePeer represents a peer in the Tailscale sync status.
@@ -38,9 +38,9 @@ type TailscaleSyncInfoProvider func() *TailscaleSyncInfo
 
 // HealthHandler creates a health check handler.
 type HealthHandler struct {
-	startTime    time.Time
-	version      string
-	repoID       string
+	startTime      time.Time
+	version        string
+	repoID         string
 	tsInfoProvider TailscaleSyncInfoProvider
 }
 

@@ -14,8 +14,8 @@ type SendOptions struct {
 	Refs          []string // Format: "type:value"
 	Mentions      []string // Format: "@role"
 	Thread        string
-	ReplyTo       string   // Message ID to reply to
-	Structured    string   // JSON string
+	ReplyTo       string // Message ID to reply to
+	Structured    string // JSON string
 	Priority      string
 	Format        string
 	To            string // Direct recipient (e.g., "@reviewer")

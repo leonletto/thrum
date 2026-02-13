@@ -32,14 +32,14 @@ type State struct {
 	db             *sql.DB
 	projector      *projection.Projector
 	repoID         string
-	daemonID       string       // Unique identifier for this daemon instance (for sync origin tracking)
-	sequence       atomic.Int64 // Monotonically increasing event sequence counter
-	repoPath       string       // Path to the repository root
-	thrumDir       string       // Path to .thrum directory (runtime: var/, identities/)
-	syncDir        string       // Path to sync worktree (JSONL data on a-sync branch)
-	mu             sync.RWMutex // Protects agent/session operations
-	onEventWrite   EventWriteHook // Optional hook called after successful event write
-	signingKey     ed25519.PrivateKey // Optional Ed25519 key for signing events
+	daemonID       string                                             // Unique identifier for this daemon instance (for sync origin tracking)
+	sequence       atomic.Int64                                       // Monotonically increasing event sequence counter
+	repoPath       string                                             // Path to the repository root
+	thrumDir       string                                             // Path to .thrum directory (runtime: var/, identities/)
+	syncDir        string                                             // Path to sync worktree (JSONL data on a-sync branch)
+	mu             sync.RWMutex                                       // Protects agent/session operations
+	onEventWrite   EventWriteHook                                     // Optional hook called after successful event write
+	signingKey     ed25519.PrivateKey                                 // Optional Ed25519 key for signing events
 	signEvent      func(event map[string]any, key ed25519.PrivateKey) // Injected signing function
 }
 

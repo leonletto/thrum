@@ -139,8 +139,8 @@ type AgentWorkContext struct {
 	WorktreePath     string                 `json:"worktree_path,omitempty"`
 	UnmergedCommits  []gitctx.CommitSummary `json:"unmerged_commits,omitempty"`
 	UncommittedFiles []string               `json:"uncommitted_files,omitempty"`
-	ChangedFiles     []string               `json:"changed_files,omitempty"`   // Kept for backward compatibility
-	FileChanges      []gitctx.FileChange    `json:"file_changes,omitempty"`    // NEW: rich per-file data
+	ChangedFiles     []string               `json:"changed_files,omitempty"` // Kept for backward compatibility
+	FileChanges      []gitctx.FileChange    `json:"file_changes,omitempty"`  // NEW: rich per-file data
 	GitUpdatedAt     string                 `json:"git_updated_at,omitempty"`
 	CurrentTask      string                 `json:"current_task,omitempty"`
 	TaskUpdatedAt    string                 `json:"task_updated_at,omitempty"`

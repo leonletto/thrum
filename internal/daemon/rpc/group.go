@@ -58,7 +58,7 @@ type GroupDeleteResponse struct {
 // GroupMemberAddRequest is the request for group.member.add RPC.
 type GroupMemberAddRequest struct {
 	Group         string `json:"group"`
-	MemberType    string `json:"member_type"`  // "agent", "role"
+	MemberType    string `json:"member_type"` // "agent", "role"
 	MemberValue   string `json:"member_value"`
 	CallerAgentID string `json:"caller_agent_id,omitempty"`
 }

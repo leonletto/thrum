@@ -43,10 +43,10 @@ type ConfigDaemonInfo struct {
 
 // ConfigIdentityInfo contains current agent identity.
 type ConfigIdentityInfo struct {
-	Agent   string `json:"agent,omitempty"`
-	Role    string `json:"role,omitempty"`
-	Module  string `json:"module,omitempty"`
-	File    string `json:"file,omitempty"`
+	Agent  string `json:"agent,omitempty"`
+	Role   string `json:"role,omitempty"`
+	Module string `json:"module,omitempty"`
+	File   string `json:"file,omitempty"`
 }
 
 // ConfigValue pairs a value with its source.

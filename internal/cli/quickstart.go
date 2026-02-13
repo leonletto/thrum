@@ -9,10 +9,10 @@ import (
 
 // QuickstartOptions contains options for the quickstart command.
 type QuickstartOptions struct {
-	Name       string
-	Role       string
-	Module     string
-	Display    string
+	Name         string
+	Role         string
+	Module       string
+	Display      string
 	Intent       string
 	PreambleFile string // Path to custom preamble file to compose with default
 	ReRegister   bool

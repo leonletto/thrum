@@ -7,10 +7,10 @@ import (
 
 // Checkpoint represents sync progress for a peer daemon.
 type Checkpoint struct {
-	PeerDaemonID    string `json:"peer_daemon_id"`
-	LastSyncedSeq   int64  `json:"last_synced_sequence"`
-	LastSyncTimestamp int64 `json:"last_sync_timestamp"`
-	SyncStatus      string `json:"sync_status"`
+	PeerDaemonID      string `json:"peer_daemon_id"`
+	LastSyncedSeq     int64  `json:"last_synced_sequence"`
+	LastSyncTimestamp int64  `json:"last_sync_timestamp"`
+	SyncStatus        string `json:"sync_status"`
 }
 
 // GetCheckpoint returns the checkpoint for a peer daemon.
