@@ -115,6 +115,9 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(whoHasCmd())
 	rootCmd.AddCommand(pingCmd())
 
+	// Configuration
+	rootCmd.AddCommand(configGroupCmd())
+
 	// Subcommand groups
 	rootCmd.AddCommand(daemonCmd())
 	rootCmd.AddCommand(agentCmd())
@@ -305,6 +308,49 @@ Examples:
 // isInteractive returns true if stdin is a terminal (not piped/redirected).
 func isInteractive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+func configGroupCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "config",
+		Short: "View and manage configuration",
+		Long:  `View and manage Thrum configuration stored in .thrum/config.json.`,
+	}
+
+	cmd.AddCommand(configShowCmd())
+	return cmd
+}
+
+func configShowCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show",
+		Short: "Show effective configuration from all sources",
+		Long: `Show the effective Thrum configuration resolved from all sources.
+
+Displays the current configuration values and their sources
+(config.json, environment variable, default, auto-detected).
+
+Works whether the daemon is running or not.
+
+Examples:
+  thrum config show
+  thrum config show --json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			result, err := cli.ConfigShow(flagRepo)
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatConfigShow(result))
+			}
+
+			return nil
+		},
+	}
 }
 
 func migrateCmd() *cobra.Command {
