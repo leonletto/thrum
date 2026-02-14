@@ -23,6 +23,10 @@ builds:
     goarch:
       - amd64
       - arm64
+    hooks:
+      post:
+        # Codesign macOS binaries with Developer ID certificate (hardened runtime required for notarization)
+        - cmd: 'bash -c ''[ "{{ .Os }}" = "darwin" ] && codesign --force --sign "Developer ID Application: Leon Letto (XW56K59R9K)" --options runtime --timestamp "{{ .Path }}" || true'''
 
 archives:
   - id: thrum

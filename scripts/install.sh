@@ -107,17 +107,14 @@ verify_checksum() {
   log "  Checksum verified (SHA-256)"
 }
 
-# --- macOS re-signing ---
+# --- macOS quarantine cleanup ---
 
 macos_resign() {
   binary="$1"
   if [ "$(uname -s)" = "Darwin" ]; then
     # Remove quarantine attribute (macOS adds this to downloaded files)
     xattr -d com.apple.quarantine "$binary" 2>/dev/null || true
-    # Ad-hoc codesign for Gatekeeper
-    if command -v codesign > /dev/null 2>&1; then
-      codesign --force --sign - "$binary" 2>/dev/null || true
-    fi
+    # Binary is already signed with Developer ID and notarized via CI/CD
   fi
 }
 
