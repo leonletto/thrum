@@ -6,7 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - Unreleased
+## [0.4.2] - 2026-02-14
+
+### Added
+
+- Apple Developer ID codesigning and notarization for macOS release binaries
+- CI/CD signs darwin binaries during GoReleaser build and submits to Apple for
+  Gatekeeper approval
+
+## [0.4.1] - 2026-02-14
+
+### Fixed
+
+- Context prime identity resolution in worktrees and unread hint
+- 6 bugs closed (thrum-pwaa, thrum-16lv, thrum-pgoc, thrum-5611, thrum-en2c,
+  thrum-8ws1): daemon accept loop race condition, gofmt formatting, golangci-lint
+  errors, macOS quarantine attribute in install script
+
+### Changed
+
+- Documentation audit: updated 9 files across website docs, llms.txt, and plugin
+  files to reflect v0.4.1 changes
+
+## [0.4.0] - 2026-02-13
 
 ### Added
 
