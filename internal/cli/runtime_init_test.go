@@ -205,8 +205,11 @@ func TestRuntimeInit_CreateFiles(t *testing.T) {
 	if !strings.Contains(string(content), "test_agent") {
 		t.Error("settings.json should contain agent name")
 	}
-	if !strings.Contains(string(content), "thrum") {
-		t.Error("settings.json should contain MCP command")
+	if strings.Contains(string(content), "mcpServers") {
+		t.Error("settings.json should NOT contain mcpServers (removed to prevent Claude Code hang)")
+	}
+	if !strings.Contains(string(content), "SessionStart") {
+		t.Error("settings.json should contain SessionStart hook")
 	}
 }
 
