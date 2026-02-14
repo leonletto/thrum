@@ -32,7 +32,7 @@ func IsGitWorktree(repoPath string) (bool, string, error) {
 	commonDirCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-common-dir")
 	commonDirOut, err := commonDirCmd.Output()
 	if err != nil {
-		return false, "", nil // can't determine, assume not a worktree
+		return false, "", nil //nolint:nilerr // can't determine, assume not a worktree
 	}
 	commonDir := strings.TrimSpace(string(commonDirOut))
 
@@ -46,7 +46,7 @@ func IsGitWorktree(repoPath string) (bool, string, error) {
 	gitDirCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-dir")
 	gitDirOut, err := gitDirCmd.Output()
 	if err != nil {
-		return false, "", nil
+		return false, "", nil //nolint:nilerr // can't determine, assume not a worktree
 	}
 	gitDir := strings.TrimSpace(string(gitDirOut))
 	if !filepath.IsAbs(gitDir) {

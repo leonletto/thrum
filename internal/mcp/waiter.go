@@ -48,7 +48,7 @@ type Waiter struct {
 }
 
 // NewWaiter creates a Waiter that connects to the daemon WebSocket.
-// agentID is the composite agent ID (e.g., "agent:implementer:abc123") used
+// AgentID is the composite agent ID (e.g., "agent:implementer:abc123") used
 // for subscription lookup. If empty, falls back to role-based identity.
 func NewWaiter(ctx context.Context, socketPath, agentID, agentRole, wsURL string) (*Waiter, error) {
 	wCtx, cancel := context.WithCancel(ctx)
@@ -129,7 +129,7 @@ func isAlreadyExistsError(err error) bool {
 }
 
 // wsRPC sends a JSON-RPC request over WebSocket and reads the response.
-func (w *Waiter) wsRPC(method string, params any) (json.RawMessage, error) {
+func (w *Waiter) wsRPC(method string, params any) (json.RawMessage, error) { //nolint:unparam // result kept for future use
 	id := w.nextID.Add(1)
 	req := map[string]any{
 		"jsonrpc": "2.0",
