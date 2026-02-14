@@ -2,9 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/leonletto/thrum/internal/runtime"
 )
 
 // PrimeContext contains all context sections gathered by `thrum prime`.
@@ -15,6 +19,8 @@ type PrimeContext struct {
 	Messages    *MessagesInfo      `json:"messages,omitempty"`
 	WorkContext *WorkContextInfo   `json:"work_context,omitempty"`
 	SyncState   *PrimeSyncInfo     `json:"sync_state,omitempty"`
+	RepoPath    string             `json:"repo_path,omitempty"`
+	Runtime     string             `json:"runtime,omitempty"`
 }
 
 // PrimeSyncInfo contains sync health for prime output.
@@ -58,6 +64,12 @@ type WorkContextInfo struct {
 // It gracefully handles missing sections (e.g., no session, no daemon, not a git repo).
 func ContextPrime(client *Client) *PrimeContext {
 	ctx := &PrimeContext{}
+
+	// Resolve repo path and detect runtime
+	if cwd, err := os.Getwd(); err == nil {
+		ctx.RepoPath = cwd
+		ctx.Runtime = runtime.DetectRuntime(cwd)
+	}
 
 	// 1. Agent identity
 	whoami, err := AgentWhoami(client)
@@ -279,6 +291,21 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 	out.WriteString("  thrum team                     List team members\n")
 	out.WriteString("  thrum wait                     Block until message arrives\n")
 	out.WriteString("  thrum <cmd> --help             Detailed command usage\n")
+
+	// Listener auto-spawn instruction for Claude Code sessions with active identity
+	if ctx.Identity != nil && ctx.Runtime == "claude" {
+		repoPath := ctx.RepoPath
+		if repoPath == "" {
+			repoPath = "."
+		}
+		// Check for identity file on disk as extra confirmation
+		identDir := filepath.Join(repoPath, ".thrum", "identities")
+		if entries, err := os.ReadDir(identDir); err == nil && len(entries) > 0 {
+			fmt.Fprintf(&out, "\nListener: Active identity detected. Spawn a background message listener:\n")
+			fmt.Fprintf(&out, "  Task(subagent_type=\"message-listener\", model=\"haiku\", run_in_background=true,\n")
+			fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages. WAIT_CMD=cd %s && thrum wait --all --timeout 15m --after -30s --json\")\n", repoPath)
+		}
+	}
 
 	return out.String()
 }

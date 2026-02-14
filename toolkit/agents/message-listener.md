@@ -32,7 +32,7 @@ blocks until a message arrives or times out.
 
 After exhausting all cycles with no messages, return `NO_MESSAGES_TIMEOUT`.
 
-**Budget**: You have up to 12 Bash tool calls (6 wait cycles × ~5 min each = ~30
+**Budget**: You have up to 12 Bash tool calls (6 wait cycles × ~15 min each = ~90
 minutes). Return EARLY as soon as you receive a message. Do not continue looping.
 
 ## Spawning
@@ -44,12 +44,12 @@ Task(
   subagent_type="message-listener",
   model="haiku",
   run_in_background=true,
-  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --all --timeout 5m --after -30s --json"
+  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --all --timeout 15m --after -30s --json"
 )
 ```
 
 - `--all`: Subscribe to all messages (broadcasts + directed)
-- `--timeout 5m`: Block up to 5 minutes per cycle
+- `--timeout 15m`: Block up to 15 minutes per cycle
 - `--after -30s`: Only return messages from the last 30 seconds (skips old)
 - `--json`: Machine-readable output
 

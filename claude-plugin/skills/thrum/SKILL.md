@@ -104,10 +104,12 @@ thrum <cmd> --help                       Detailed command usage
 
 ### Listener Pattern (Background Message Monitoring)
 
-Launch a background sub-agent to monitor for messages:
+When `thrum prime` detects a Claude Code session with an active identity, it
+outputs a ready-to-use listener spawn instruction. Launch it to monitor for
+messages in the background (~90 min coverage, 6 cycles × 15 min):
 
 ```
-Task(subagent_type: "message-listener", run_in_background: true)
+Task(subagent_type: "message-listener", model: "haiku", run_in_background: true)
 ```
 
 The listener calls `thrum wait` (blocking), then returns when messages arrive.

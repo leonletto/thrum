@@ -9,11 +9,12 @@ Task(
   subagent_type="message-listener",
   model="haiku",
   run_in_background=true,
-  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --all --timeout 5m --after -30s --json"
+  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --all --timeout 15m --after -30s --json"
 )
 ```
 
-Replace `/path/to/repo` with the actual repo path.
+Replace `/path/to/repo` with the actual repo path. When using the Thrum plugin,
+`thrum prime` outputs a ready-to-use spawn instruction with the correct path.
 
 ## How It Works
 
@@ -22,7 +23,7 @@ Replace `/path/to/repo` with the actual repo path.
 3. **Return** — Returns `MESSAGES_RECEIVED` (with message data) or `NO_MESSAGES_TIMEOUT`
 4. **Re-arm** — After processing, spawn a new listener to continue monitoring
 
-The listener loops internally (up to 6 cycles of 5 min each = ~30 min max).
+The listener loops internally (up to 6 cycles of 15 min each = ~90 min max).
 
 ## Processing Messages
 
@@ -51,7 +52,7 @@ else:
 | Flag | Purpose |
 |------|---------|
 | `--all` | Subscribe to all messages (broadcasts + directed) |
-| `--timeout 5m` | Block up to 5 minutes per cycle |
+| `--timeout 15m` | Block up to 15 minutes per cycle |
 | `--after -30s` | Only return messages from last 30 seconds (skip old) |
 | `--json` | Machine-readable output |
 | `--mention-only` | Only messages that @mention you |

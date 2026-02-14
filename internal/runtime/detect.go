@@ -15,6 +15,7 @@ func DetectRuntime(repoPath string) string {
 		name   string
 	}{
 		{".claude/settings.json", "claude"},
+		{".claude", "claude"},
 		{".codex", "codex"},
 		{".cursorrules", "cursor"},
 		{".augment", "auggie"},

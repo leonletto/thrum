@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
@@ -261,6 +262,73 @@ func TestFormatPrimeContext_NoSyncState(t *testing.T) {
 	// Should not contain "Daemon:" when SyncState is nil
 	if strings.Contains(output, "Daemon:") {
 		t.Errorf("unexpected 'Daemon:' in output when SyncState is nil:\n%s", output)
+	}
+}
+
+func TestFormatPrimeContext_ListenerInstruction_ClaudeRuntime(t *testing.T) {
+	// Create temp dir with identity file to simulate registered agent
+	tmpDir := t.TempDir()
+	identDir := tmpDir + "/.thrum/identities"
+	if err := os.MkdirAll(identDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(identDir+"/test_agent.json", []byte(`{"version":1}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := &PrimeContext{
+		Identity: &WhoamiResult{
+			AgentID: "test_agent",
+			Role:    "impl",
+			Module:  "auth",
+		},
+		RepoPath: tmpDir,
+		Runtime:  "claude",
+	}
+
+	output := FormatPrimeContext(ctx)
+
+	checks := []string{
+		"Listener:",
+		"Active identity detected",
+		"message-listener",
+		"--timeout 15m",
+		tmpDir,
+	}
+	for _, check := range checks {
+		if !strings.Contains(output, check) {
+			t.Errorf("output missing %q:\n%s", check, output)
+		}
+	}
+}
+
+func TestFormatPrimeContext_NoListenerInstruction_NonClaudeRuntime(t *testing.T) {
+	ctx := &PrimeContext{
+		Identity: &WhoamiResult{
+			AgentID: "test_agent",
+			Role:    "impl",
+			Module:  "auth",
+		},
+		RepoPath: "/tmp/test",
+		Runtime:  "cursor",
+	}
+
+	output := FormatPrimeContext(ctx)
+
+	if strings.Contains(output, "Listener:") {
+		t.Errorf("should not contain listener instruction for non-claude runtime:\n%s", output)
+	}
+}
+
+func TestFormatPrimeContext_NoListenerInstruction_NoIdentity(t *testing.T) {
+	ctx := &PrimeContext{
+		Runtime: "claude",
+	}
+
+	output := FormatPrimeContext(ctx)
+
+	if strings.Contains(output, "Listener:") {
+		t.Errorf("should not contain listener instruction without identity:\n%s", output)
 	}
 }
 
