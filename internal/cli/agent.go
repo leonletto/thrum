@@ -711,11 +711,12 @@ func FormatWhoHas(file string, result *ListContextResponse) string {
 
 // FormatPing formats the ping response showing agent presence.
 func FormatPing(name string, agents *ListAgentsResponse, contexts *ListContextResponse) string {
-	// Find the agent by name (Display) first, then fall back to role
+	// Find the agent by name: check AgentID, Display, then fall back to Role
 	var agent *AgentInfo
 	for i := range agents.Agents {
-		if agents.Agents[i].Display == name {
-			agent = &agents.Agents[i]
+		a := &agents.Agents[i]
+		if a.AgentID == name || a.Display == name {
+			agent = a
 			break
 		}
 	}
