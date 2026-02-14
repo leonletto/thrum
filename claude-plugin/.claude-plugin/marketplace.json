@@ -4,6 +4,9 @@
   "owner": {
     "name": "Leon Letto"
   },
+  "metadata": {
+    "description": "Git-backed messaging for AI agent coordination across sessions, worktrees, and machines."
+  },
   "plugins": [
     {
       "name": "thrum",
