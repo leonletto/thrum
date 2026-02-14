@@ -710,18 +710,26 @@ func FormatWhoHas(file string, result *ListContextResponse) string {
 }
 
 // FormatPing formats the ping response showing agent presence.
-func FormatPing(role string, agents *ListAgentsResponse, contexts *ListContextResponse) string {
-	// Find the agent by role
+func FormatPing(name string, agents *ListAgentsResponse, contexts *ListContextResponse) string {
+	// Find the agent by name (Display) first, then fall back to role
 	var agent *AgentInfo
 	for i := range agents.Agents {
-		if agents.Agents[i].Role == role {
+		if agents.Agents[i].Display == name {
 			agent = &agents.Agents[i]
 			break
 		}
 	}
+	if agent == nil {
+		for i := range agents.Agents {
+			if agents.Agents[i].Role == name {
+				agent = &agents.Agents[i]
+				break
+			}
+		}
+	}
 
 	if agent == nil {
-		return fmt.Sprintf("@%s: not found (no agent registered with this role)\n", role)
+		return fmt.Sprintf("@%s: not found (no agent registered with this name or role)\n", name)
 	}
 
 	// Find context for this agent
@@ -745,7 +753,7 @@ func FormatPing(role string, agents *ListAgentsResponse, contexts *ListContextRe
 				sessionDuration = fmt.Sprintf(", last heartbeat %s", formatTimeAgo(t))
 			}
 		}
-		output.WriteString(fmt.Sprintf("@%s: active%s\n", role, sessionDuration))
+		output.WriteString(fmt.Sprintf("@%s: active%s\n", name, sessionDuration))
 
 		if ctx.Intent != "" {
 			output.WriteString(fmt.Sprintf("  Intent: %s\n", ctx.Intent))
@@ -764,7 +772,7 @@ func FormatPing(role string, agents *ListAgentsResponse, contexts *ListContextRe
 				lastSeen = fmt.Sprintf(" (last seen %s)", formatTimeAgo(t))
 			}
 		}
-		output.WriteString(fmt.Sprintf("@%s: offline%s\n", role, lastSeen))
+		output.WriteString(fmt.Sprintf("@%s: offline%s\n", name, lastSeen))
 	}
 
 	return output.String()
