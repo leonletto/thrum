@@ -519,12 +519,12 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	// Resolve current agent ID once — used for exclude_self, is_read, and unread count
+	// Resolve current agent ID once — used for exclude_self, is_read, and unread count.
+	// Use resolveAgentOnly (not resolveAgentAndSession) so the unread count works
+	// even when the caller has no active session (e.g., thrum prime on startup).
 	var currentAgentID string
 	if req.ExcludeSelf || req.Unread || req.UnreadForAgent != "" {
-		if selfID, _, resolveErr := h.resolveAgentAndSession(req.CallerAgentID); resolveErr == nil {
-			currentAgentID = selfID
-		}
+		currentAgentID = h.resolveAgentOnly(req.CallerAgentID)
 	}
 
 	// Build query — include is_read status via correlated subquery when agent is known
@@ -1097,6 +1097,21 @@ func (h *MessageHandler) resolveAgentAndSession(callerAgentID string) (agentID s
 	}
 
 	return agentID, sessionID, nil
+}
+
+// resolveAgentOnly resolves the caller's agent ID without requiring an active session.
+// Used by HandleList for unread count and is_read computation where only the agent
+// identity matters, not the session.
+func (h *MessageHandler) resolveAgentOnly(callerAgentID string) string {
+	if callerAgentID != "" {
+		return callerAgentID
+	}
+	// Fallback: load identity from daemon's config
+	cfg, err := config.LoadWithPath(h.state.RepoPath(), "", "")
+	if err != nil {
+		return ""
+	}
+	return identity.GenerateAgentID(h.state.RepoID(), cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name)
 }
 
 // validateImpersonation validates that the caller is authorized to impersonate the target identity.
