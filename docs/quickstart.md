@@ -21,6 +21,9 @@ across sessions, worktrees, and machines using Git as the sync layer.
 > **New here?** Read [Why Thrum Exists](philosophy.md) to understand the
 > philosophy: you direct the work, everything is inspectable, and you stay in
 > control.
+>
+> **Using Claude Code?** Install the [Thrum plugin](claude-code-plugin.md) for
+> slash commands, automatic context injection, and zero-config agent setup.
 
 ## Fast Path
 

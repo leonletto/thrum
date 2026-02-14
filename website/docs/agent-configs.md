@@ -9,6 +9,10 @@ last_updated: "2026-02-10"
 
 # Agent Configurations
 
+> **Recommended:** Install the [Thrum plugin](claude-code-plugin.md) instead of
+> manual agent definitions. The plugin provides 10 slash commands, automatic
+> context hooks, and 8 resource docs — all in a single install.
+
 Claude Code agent definitions teach Claude how to use Thrum effectively. These `.md` files with YAML frontmatter ship in `toolkit/agents/` and load into your project's `.claude/agents/` directory. For Beads task tracking, we recommend installing the [Beads plugin](#beads-plugin-recommended) instead.
 
 ## Install the agent configs
@@ -64,7 +68,7 @@ Or visit the [Beads project](https://github.com/steveyegge/beads) for details.
 Lightweight background listener that watches for incoming Thrum messages so you
 don't have to manually check your inbox. Runs on Haiku for cost efficiency
 (~$0.00003/cycle). Uses `thrum wait` for efficient blocking instead of polling
-loops — returns immediately when messages arrive, covers ~30 minutes across 6
+loops — returns immediately when messages arrive, covers ~90 minutes across 6
 cycles.
 
 **Use when:**
@@ -73,7 +77,7 @@ cycles.
 - You want incoming messages surfaced without manually running `thrum inbox`
 
 **Key capabilities:**
-- Blocking wait via `thrum wait --all --timeout 5m` (6 cycles max)
+- Blocking wait via `thrum wait --all --timeout 15m` (6 cycles max)
 - Immediate return on message arrival
 - Time-based filtering with `--after` flag (skips old messages)
 - CLI-only (no MCP tools — sub-agents can't access MCP)
@@ -91,13 +95,13 @@ Task({
   subagent_type: "message-listener",
   model: "haiku",
   run_in_background: true,
-  prompt: "Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --all --timeout 5m --after -30s --json"
+  prompt: "Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --all --timeout 15m --after -30s --json"
 });
 ```
 
 **Wait command flags:**
 - `--all` — Subscribe to all messages (broadcasts + directed)
-- `--timeout 5m` — Block up to 5 minutes per cycle
+- `--timeout 15m` — Block up to 15 minutes per cycle
 - `--after -30s` — Only return messages from the last 30 seconds (skips old)
 - `--json` — Machine-readable output
 
@@ -111,6 +115,7 @@ For the agent file format, see [Claude Code agent documentation](https://docs.an
 
 ## See also
 
+- [Claude Code Plugin](claude-code-plugin.md) — Recommended: plugin with slash commands and hooks
 - [Quickstart](quickstart.md) — Get started with Thrum in 5 minutes
 - [Agent Coordination](agent-coordination.md) — Multi-agent messaging patterns
 - [Workflow Templates](../toolkit/templates/) — Complete planning and implementation workflows

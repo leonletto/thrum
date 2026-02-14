@@ -190,6 +190,22 @@
     "lastUpdated": "2026-02-11"
   },
   {
+    "path": "claude-code-plugin.html",
+    "title": "Claude Code Plugin",
+    "description": "Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration",
+    "category": "guides",
+    "order": 3,
+    "tags": [
+      "claude-code",
+      "plugin",
+      "installation",
+      "slash-commands",
+      "mcp",
+      "hooks"
+    ],
+    "lastUpdated": "2026-02-13"
+  },
+  {
     "path": "configuration.html",
     "title": "Configuration",
     "description": "Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command",
@@ -317,6 +333,15 @@
   {
     "path": "architecture.html",
     "title": "architecture",
+    "description": "",
+    "category": "uncategorized",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "claude-agent-integration.html",
+    "title": "claude-agent-integration",
     "description": "",
     "category": "uncategorized",
     "order": 999,

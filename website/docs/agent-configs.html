@@ -51,6 +51,9 @@
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
 <h1>Agent Configurations</h1>
+<blockquote>
+<p><strong>Recommended:</strong> Install the <a href="claude-code-plugin.html">Thrum plugin</a> instead of<br>manual agent definitions. The plugin provides 10 slash commands, automatic<br>context hooks, and 8 resource docs — all in a single install.</p>
+</blockquote>
 <p>Claude Code agent definitions teach Claude how to use Thrum effectively. These <code>.md</code> files with YAML frontmatter ship in <code>toolkit/agents/</code> and load into your project&#39;s <code>.claude/agents/</code> directory. For Beads task tracking, we recommend installing the <a href="#beads-plugin-recommended">Beads plugin</a> instead.</p>
 <h2>Install the agent configs</h2>
 <p>Copy the agent definitions to your project:</p>
@@ -88,7 +91,7 @@
 <pre><code>/install-plugin beads</code></pre>
 <p>Or visit the <a href="https://github.com/steveyegge/beads">Beads project</a> for details.</p>
 <h3>message-listener</h3>
-<p>Lightweight background listener that watches for incoming Thrum messages so you<br>don&#39;t have to manually check your inbox. Runs on Haiku for cost efficiency<br>(~$0.00003/cycle). Uses <code>thrum wait</code> for efficient blocking instead of polling<br>loops — returns immediately when messages arrive, covers ~30 minutes across 6<br>cycles.</p>
+<p>Lightweight background listener that watches for incoming Thrum messages so you<br>don&#39;t have to manually check your inbox. Runs on Haiku for cost efficiency<br>(~$0.00003/cycle). Uses <code>thrum wait</code> for efficient blocking instead of polling<br>loops — returns immediately when messages arrive, covers ~90 minutes across 6<br>cycles.</p>
 <p><strong>Use when:</strong></p>
 <ul>
 <li>You&#39;re running multiple agents and want to know when they message you</li>
@@ -97,7 +100,7 @@
 </ul>
 <p><strong>Key capabilities:</strong></p>
 <ul>
-<li>Blocking wait via <code>thrum wait --all --timeout 5m</code> (6 cycles max)</li>
+<li>Blocking wait via <code>thrum wait --all --timeout 15m</code> (6 cycles max)</li>
 <li>Immediate return on message arrival</li>
 <li>Time-based filtering with <code>--after</code> flag (skips old messages)</li>
 <li>CLI-only (no MCP tools — sub-agents can&#39;t access MCP)</li>
@@ -110,12 +113,12 @@
   <span class="hljs-attr">subagent_type</span>: <span class="hljs-string">&quot;message-listener&quot;</span>,
   <span class="hljs-attr">model</span>: <span class="hljs-string">&quot;haiku&quot;</span>,
   <span class="hljs-attr">run_in_background</span>: <span class="hljs-literal">true</span>,
-  <span class="hljs-attr">prompt</span>: <span class="hljs-string">&quot;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --all --timeout 5m --after -30s --json&quot;</span>
+  <span class="hljs-attr">prompt</span>: <span class="hljs-string">&quot;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --all --timeout 15m --after -30s --json&quot;</span>
 });</code></pre>
 <p><strong>Wait command flags:</strong></p>
 <ul>
 <li><code>--all</code> — Subscribe to all messages (broadcasts + directed)</li>
-<li><code>--timeout 5m</code> — Block up to 5 minutes per cycle</li>
+<li><code>--timeout 15m</code> — Block up to 15 minutes per cycle</li>
 <li><code>--after -30s</code> — Only return messages from the last 30 seconds (skips old)</li>
 <li><code>--json</code> — Machine-readable output</li>
 </ul>
@@ -125,6 +128,7 @@
 <p>For the agent file format, see <a href="https://docs.anthropic.com/claude-code">Claude Code agent documentation</a>.</p>
 <h2>See also</h2>
 <ul>
+<li><a href="claude-code-plugin.html">Claude Code Plugin</a> — Recommended: plugin with slash commands and hooks</li>
 <li><a href="quickstart.html">Quickstart</a> — Get started with Thrum in 5 minutes</li>
 <li><a href="agent-coordination.html">Agent Coordination</a> — Multi-agent messaging patterns</li>
 <li><a href="../toolkit/templates/">Workflow Templates</a> — Complete planning and implementation workflows</li>
