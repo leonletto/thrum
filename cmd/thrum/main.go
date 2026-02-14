@@ -178,6 +178,38 @@ Examples:
 			// Step 1: Repo initialization (unless dry-run or runtime-only)
 			alreadyInitialized := false
 			if !dryRun {
+				// Detect if we're in a git worktree
+				isWorktree, mainRepoRoot, _ := cli.IsGitWorktree(flagRepo)
+				if isWorktree {
+					// Check if main repo has .thrum/ initialized
+					mainThrumDir := filepath.Join(mainRepoRoot, ".thrum")
+					if _, err := os.Stat(mainThrumDir); os.IsNotExist(err) {
+						return fmt.Errorf("this is a git worktree, but the main repo (%s) is not initialized.\n  Run 'thrum init' in the main repo first, then run 'thrum init' here again", mainRepoRoot)
+					}
+
+					// Set up redirect to main repo's .thrum/
+					setupOpts := cli.SetupOptions{
+						RepoPath: flagRepo,
+						MainRepo: mainRepoRoot,
+					}
+					if err := cli.Setup(setupOpts); err != nil {
+						if strings.Contains(err.Error(), "redirect to self") {
+							// Not actually a worktree from thrum's perspective, fall through
+						} else {
+							return fmt.Errorf("worktree setup: %w", err)
+						}
+					} else {
+						if !flagQuiet {
+							fmt.Println("✓ Worktree detected — set up redirect to main repo")
+							fmt.Printf("  Main repo: %s\n", mainRepoRoot)
+							fmt.Printf("  Redirect: .thrum/redirect → %s\n", mainThrumDir)
+							fmt.Println("  Created: .thrum/identities/ (local to this worktree)")
+						}
+						// Skip runtime config for worktrees — they share the main repo's config
+						return nil
+					}
+				}
+
 				opts := cli.InitOptions{
 					RepoPath: flagRepo,
 					Force:    force,

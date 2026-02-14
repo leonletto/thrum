@@ -24,9 +24,8 @@ func TestRenderTemplate(t *testing.T) {
 			runtime:  "claude",
 			template: "settings.json.tmpl",
 			contains: []string{
-				`"thrum"`,
 				"test_agent",
-				"mcp",
+				"SessionStart",
 			},
 		},
 		{
