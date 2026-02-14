@@ -62,7 +62,7 @@ type WorkContextInfo struct {
 
 // ContextPrime gathers comprehensive session context from the daemon and git.
 // It gracefully handles missing sections (e.g., no session, no daemon, not a git repo).
-// callerAgentID is optional — when provided, it ensures identity resolution uses the
+// CallerAgentID is optional — when provided, it ensures identity resolution uses the
 // local worktree's agent instead of the daemon's default (important for multi-worktree setups).
 func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 	ctx := &PrimeContext{}
