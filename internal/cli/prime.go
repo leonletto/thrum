@@ -13,14 +13,14 @@ import (
 
 // PrimeContext contains all context sections gathered by `thrum prime`.
 type PrimeContext struct {
-	Identity    *WhoamiResult      `json:"identity,omitempty"`
-	Session     *SessionInfo       `json:"session,omitempty"`
-	Agents      *AgentsInfo        `json:"agents,omitempty"`
-	Messages    *MessagesInfo      `json:"messages,omitempty"`
-	WorkContext *WorkContextInfo   `json:"work_context,omitempty"`
-	SyncState   *PrimeSyncInfo     `json:"sync_state,omitempty"`
-	RepoPath    string             `json:"repo_path,omitempty"`
-	Runtime     string             `json:"runtime,omitempty"`
+	Identity    *WhoamiResult    `json:"identity,omitempty"`
+	Session     *SessionInfo     `json:"session,omitempty"`
+	Agents      *AgentsInfo      `json:"agents,omitempty"`
+	Messages    *MessagesInfo    `json:"messages,omitempty"`
+	WorkContext *WorkContextInfo `json:"work_context,omitempty"`
+	SyncState   *PrimeSyncInfo   `json:"sync_state,omitempty"`
+	RepoPath    string           `json:"repo_path,omitempty"`
+	Runtime     string           `json:"runtime,omitempty"`
 }
 
 // PrimeSyncInfo contains sync health for prime output.
