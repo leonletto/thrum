@@ -62,7 +62,9 @@ type WorkContextInfo struct {
 
 // ContextPrime gathers comprehensive session context from the daemon and git.
 // It gracefully handles missing sections (e.g., no session, no daemon, not a git repo).
-func ContextPrime(client *Client) *PrimeContext {
+// callerAgentID is optional — when provided, it ensures identity resolution uses the
+// local worktree's agent instead of the daemon's default (important for multi-worktree setups).
+func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 	ctx := &PrimeContext{}
 
 	// Resolve repo path and detect runtime
@@ -71,8 +73,8 @@ func ContextPrime(client *Client) *PrimeContext {
 		ctx.Runtime = runtime.DetectRuntime(cwd)
 	}
 
-	// 1. Agent identity
-	whoami, err := AgentWhoami(client)
+	// 1. Agent identity (pass caller ID for correct worktree resolution)
+	whoami, err := AgentWhoami(client, callerAgentID...)
 	if err == nil {
 		ctx.Identity = whoami
 	}
@@ -106,8 +108,12 @@ func ContextPrime(client *Client) *PrimeContext {
 		ctx.Agents = info
 	}
 
-	// 4. Unread messages
-	inbox, err := Inbox(client, InboxOptions{PageSize: 10})
+	// 4. Unread messages (pass caller ID for correct inbox filtering)
+	inboxOpts := InboxOptions{PageSize: 10}
+	if len(callerAgentID) > 0 && callerAgentID[0] != "" {
+		inboxOpts.CallerAgentID = callerAgentID[0]
+	}
+	inbox, err := Inbox(client, inboxOpts)
 	if err == nil {
 		info := &MessagesInfo{
 			Total:  inbox.Total,
@@ -234,7 +240,7 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 	// Messages
 	if ctx.Messages != nil {
 		if ctx.Messages.Unread > 0 {
-			fmt.Fprintf(&out, "\nInbox: %d unread (%d total)\n", ctx.Messages.Unread, ctx.Messages.Total)
+			fmt.Fprintf(&out, "\nInbox: %d unread (%d total) — process these before starting new work\n", ctx.Messages.Unread, ctx.Messages.Total)
 		} else {
 			fmt.Fprintf(&out, "\nInbox: %d messages (all read)\n", ctx.Messages.Total)
 		}

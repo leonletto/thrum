@@ -3036,7 +3036,8 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
-			result := cli.ContextPrime(client)
+				agentID, _ := resolveLocalAgentID()
+			result := cli.ContextPrime(client, agentID)
 
 			if flagJSON {
 				output, _ := json.MarshalIndent(result, "", "  ")
