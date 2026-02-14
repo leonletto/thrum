@@ -71,6 +71,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	// Accept connections in a goroutine
+	s.wg.Add(1)
 	go s.acceptLoop(ctx)
 
 	return nil
@@ -131,6 +132,7 @@ func (s *Server) removeOldSocket() error {
 
 // acceptLoop accepts connections in a loop.
 func (s *Server) acceptLoop(ctx context.Context) {
+	defer s.wg.Done()
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
