@@ -1,4 +1,4 @@
-# Thrum
+# Thrum v0.4.1
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
 
@@ -59,12 +59,16 @@ All commands accept these flags:
   thrum version
     Show version, build hash, repository URL, and documentation URL.
 
+  thrum prime [--json]
+    Gather comprehensive session context for agent initialization or context recovery.
+    Shows: identity, session, team, inbox summary, branch, daemon status, commands, listener instruction.
+
   thrum completion [bash|fish|powershell|zsh]
     Generate shell autocompletion scripts.
 
 ### Messaging
 
-  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @role] [--broadcast|-b] [--priority low|normal|high] [--format markdown|plain|json] [--structured JSON]
+  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @role] [--broadcast|-b] [-p|--priority low|normal|high|critical] [--format markdown|plain|json] [--structured JSON]
     Send a message. Use --broadcast to send to all agents. Use --to @group to send to a group.
 
   thrum reply MSG_ID TEXT [--format markdown|plain|json]
@@ -278,7 +282,7 @@ All commands accept these flags:
 
 ### Send a message to a teammate
 
-  thrum send "Auth module ready for review" --mention @reviewer --scope module:auth
+  thrum send "Auth module ready for review" --to @reviewer --scope module:auth
 
 ### Broadcast to all agents
 
@@ -353,17 +357,58 @@ All commands accept these flags:
     Use --agent-id to select identity file. Configure in .claude/settings.json.
 
   MCP Tools:
-    send_message        Send a message to another agent via @role or @group addressing
-    check_messages      Poll for unread messages mentioning this agent, auto-marks read
-    wait_for_message    Block until a message arrives (WebSocket push) or timeout
-    list_agents         List registered agents with active/offline status
-    broadcast_message   Deprecated -- use send_message with to="@everyone" instead
-    create_group        Create a named group
-    delete_group        Delete a group
-    add_group_member    Add member to group (agent, role, or nested group)
-    remove_group_member Remove member from group
-    list_groups         List all groups
-    get_group           Get group details (supports expand=true for nested resolution)
+    send_message(to, content, priority?, reply_to?, metadata?)
+      Send a message to another agent via @role or @group addressing.
+      - to: recipient @role or @group (required)
+      - content: message text (required)
+      - priority: critical|high|normal|low (optional, default: normal)
+      - reply_to: message ID to reply to (optional)
+      - metadata: optional key-value pairs (optional)
+
+    check_messages(limit?)
+      Poll for unread messages mentioning this agent, auto-marks read.
+      - limit: max messages to return (optional, default: 50)
+
+    wait_for_message(timeout?, priority_filter?)
+      Block until a message arrives (WebSocket push) or timeout.
+      - timeout: max seconds to wait (optional, default: 300, max: 600)
+      - priority_filter: all|critical|high_and_above|normal_and_above (optional, default: all)
+
+    list_agents(include_offline?)
+      List registered agents with active/offline status.
+      - include_offline: include inactive agents (optional, default: true)
+
+    broadcast_message(content, priority?)
+      Deprecated -- use send_message with to="@everyone" instead.
+
+    create_group(name, description?)
+      Create a named group.
+      - name: group name (required)
+      - description: optional description (optional)
+
+    delete_group(name)
+      Delete a group.
+      - name: group name to delete (required)
+
+    add_group_member(group, member_type, member_value)
+      Add member to group (agent, role, or nested group).
+      - group: group name (required)
+      - member_type: agent|role|group (required)
+      - member_value: agent name, role name, or group name (required)
+
+    remove_group_member(group, member_type, member_value)
+      Remove member from group.
+      - group: group name (required)
+      - member_type: agent|role|group (required)
+      - member_value: agent name, role name, or group name (required)
+
+    list_groups()
+      List all groups (no parameters).
+
+    get_group(name, expand?)
+      Get group details (supports expand=true for nested resolution).
+      - name: group name (required)
+      - expand: resolve nested groups/roles to agent IDs (optional, default: false)
 
 ## Daemon
 
@@ -416,14 +461,12 @@ All commands accept these flags:
 
   toolkit/agents/           Claude Code agent definitions
     thrum-agent.md          Thrum messaging coordination guide
-    (Beads plugin)          Install via /install-plugin beads (recommended over agent file)
+    (Beads plugin)          Install via /install-plugin beads
     message-listener.md     Background message polling agent (Haiku model)
 
-  toolkit/templates/        Multi-agent workflow templates
-    planning-agent.md       Phase 1: brainstorm, design spec, task decomposition
-    implementation-agent.md Phase 3: task-by-task execution with quality gates
-    worktree-setup.md       Phase 2: git worktree and beads configuration
-    CLAUDE.md               Overview of the 3-phase workflow
+  toolkit/templates/        Agent development workflow patterns
+    agent-dev-workflow/     Templates and guides for agent development
+    README.md               Documentation for using templates
 
   Install: cp toolkit/agents/*.md your-project/.claude/agents/
 

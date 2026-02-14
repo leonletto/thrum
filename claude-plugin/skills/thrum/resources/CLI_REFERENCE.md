@@ -25,7 +25,7 @@ thrum message edit <msg-id> <new-text>
 thrum message delete <msg-id>
 thrum message read <msg-id> [<msg-id>...]     # Mark as read
 thrum message read --all                       # Mark all as read
-thrum wait [--all] [--timeout <duration>] [--after <duration>] [--mention-only] [--json]
+thrum wait [--all] [--timeout <duration>] [--after <duration>] [--mention <role>] [--scope <scope>] [--json]
 ```
 
 ## Agent Management

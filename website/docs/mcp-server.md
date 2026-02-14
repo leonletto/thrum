@@ -142,6 +142,8 @@ Add to `.claude/settings.json` (project or user level):
 }
 ```
 
+**Note:** `thrum init` no longer auto-generates MCP server configuration in `.claude/settings.json`. The plugin hook-based approach is recommended. Add MCP server configuration manually only if needed for direct MCP tool access.
+
 Once configured, Claude Code starts `thrum mcp serve` as a child process and
 exposes its tools as `mcp__thrum__<tool_name>`.
 
