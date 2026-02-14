@@ -3665,7 +3665,7 @@ Examples:
   thrum ping planner`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			role := strings.TrimPrefix(args[0], "@")
+			name := strings.TrimPrefix(args[0], "@")
 
 			client, err := getClient()
 			if err != nil {
@@ -3693,7 +3693,7 @@ Examples:
 				output, _ := json.MarshalIndent(combined, "", "  ")
 				fmt.Println(string(output))
 			} else {
-				fmt.Print(cli.FormatPing(role, agents, contexts))
+				fmt.Print(cli.FormatPing(name, agents, contexts))
 				if !flagQuiet {
 					fmt.Print(cli.Hint("ping", flagQuiet, flagJSON))
 				}

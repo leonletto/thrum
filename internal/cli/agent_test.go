@@ -358,11 +358,11 @@ func TestFormatPing(t *testing.T) {
 			contains: []string{"@unknown", "not found"},
 		},
 		{
-			name: "active agent with context",
-			role: "reviewer",
+			name: "active agent matched by name",
+			role: "agent_b",
 			agents: ListAgentsResponse{
 				Agents: []AgentInfo{
-					{AgentID: "agent:reviewer:auth", Role: "reviewer"},
+					{AgentID: "agent:reviewer:auth", Role: "reviewer", Display: "agent_b"},
 				},
 			},
 			contexts: &ListContextResponse{
@@ -375,14 +375,33 @@ func TestFormatPing(t *testing.T) {
 					},
 				},
 			},
-			contains: []string{"@reviewer", "active", "Reviewing PR #42", "feature/auth"},
+			contains: []string{"@agent_b", "active", "Reviewing PR #42", "feature/auth"},
+		},
+		{
+			name: "fallback to role match",
+			role: "reviewer",
+			agents: ListAgentsResponse{
+				Agents: []AgentInfo{
+					{AgentID: "agent:reviewer:auth", Role: "reviewer", Display: "agent_b"},
+				},
+			},
+			contexts: &ListContextResponse{
+				Contexts: []AgentWorkContext{
+					{
+						AgentID:   "agent:reviewer:auth",
+						SessionID: "ses_abc",
+						Intent:    "Reviewing PR #42",
+					},
+				},
+			},
+			contains: []string{"@reviewer", "active"},
 		},
 		{
 			name: "offline agent",
 			role: "builder",
 			agents: ListAgentsResponse{
 				Agents: []AgentInfo{
-					{AgentID: "agent:builder:core", Role: "builder", LastSeenAt: "2026-02-03T10:00:00Z"},
+					{AgentID: "agent:builder:core", Role: "builder", Display: "builder", LastSeenAt: "2026-02-03T10:00:00Z"},
 				},
 			},
 			contexts: &ListContextResponse{Contexts: []AgentWorkContext{}},
