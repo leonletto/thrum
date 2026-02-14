@@ -122,9 +122,12 @@ func (c *Connection) Close() error {
 	c.closed = true
 	close(c.sendCh)
 
-	// Unregister from client registry if we have a session
+	// Unregister from client registry and clean up subscriptions
 	if c.sessionID != "" {
 		c.server.clients.Unregister(c.sessionID)
+		if c.server.onDisconnect != nil {
+			c.server.onDisconnect(c.sessionID)
+		}
 	}
 
 	return c.conn.Close()

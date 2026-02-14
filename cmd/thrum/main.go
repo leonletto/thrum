@@ -4232,6 +4232,12 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 	wsServer := websocket.NewServer(wsAddr, wsRegistry, uiFS)
 
+	// Clean up subscriptions when a WebSocket client disconnects (thrum-pgoc fix)
+	subSvc := subscriptions.NewService(st.DB())
+	wsServer.SetDisconnectHook(func(sessionID string) {
+		_, _ = subSvc.ClearBySession(sessionID)
+	})
+
 	// Tailscale tsnet listener (optional — daemon works fine without it)
 	tsCfg := config.LoadTailscaleConfig(thrumDir)
 	if tsCfg.Enabled {

@@ -294,6 +294,74 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestClearBySession(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() failed: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB() failed: %v", err)
+	}
+
+	svc := subscriptions.NewService(db)
+
+	// Create subscriptions for two sessions
+	scope1 := &types.Scope{Type: "module", Value: "auth"}
+	_, err = svc.Subscribe("ses_001", scope1, nil, false)
+	if err != nil {
+		t.Fatalf("Subscribe() #1 failed: %v", err)
+	}
+
+	_, err = svc.Subscribe("ses_001", nil, nil, true)
+	if err != nil {
+		t.Fatalf("Subscribe() #2 failed: %v", err)
+	}
+
+	scope2 := &types.Scope{Type: "module", Value: "sync"}
+	_, err = svc.Subscribe("ses_002", scope2, nil, false)
+	if err != nil {
+		t.Fatalf("Subscribe() #3 failed: %v", err)
+	}
+
+	// Clear ses_001 subscriptions
+	cleared, err := svc.ClearBySession("ses_001")
+	if err != nil {
+		t.Fatalf("ClearBySession() failed: %v", err)
+	}
+	if cleared != 2 {
+		t.Errorf("Expected 2 cleared, got %d", cleared)
+	}
+
+	// ses_001 should have no subscriptions
+	subs, err := svc.List("ses_001")
+	if err != nil {
+		t.Fatalf("List() failed: %v", err)
+	}
+	if len(subs) != 0 {
+		t.Errorf("Expected 0 subscriptions for ses_001 after clear, got %d", len(subs))
+	}
+
+	// ses_002 should still have its subscription
+	subs, err = svc.List("ses_002")
+	if err != nil {
+		t.Fatalf("List() failed: %v", err)
+	}
+	if len(subs) != 1 {
+		t.Errorf("Expected 1 subscription for ses_002, got %d", len(subs))
+	}
+
+	// After clearing, ses_001 should be able to re-subscribe (no "already exists" error)
+	_, err = svc.Subscribe("ses_001", scope1, nil, false)
+	if err != nil {
+		t.Errorf("Re-subscribe after clear should succeed, got: %v", err)
+	}
+}
+
 func TestList_Empty(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")

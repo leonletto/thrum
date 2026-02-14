@@ -101,6 +101,23 @@ func (s *Service) Unsubscribe(subscriptionID int, sessionID string) (bool, error
 	return rowsAffected > 0, nil
 }
 
+// ClearBySession removes all subscriptions for the given session.
+// Called when a WebSocket client disconnects to prevent "already exists" errors on reconnect.
+func (s *Service) ClearBySession(sessionID string) (int, error) {
+	query := `DELETE FROM subscriptions WHERE session_id = ?`
+	result, err := s.db.Exec(query, sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("delete subscriptions for session: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("get rows affected: %w", err)
+	}
+
+	return int(rowsAffected), nil
+}
+
 // List returns all subscriptions for the given session.
 func (s *Service) List(sessionID string) ([]Subscription, error) {
 	query := `SELECT id, session_id, scope_type, scope_value, mention_role, created_at
