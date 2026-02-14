@@ -17,6 +17,53 @@ type InitOptions struct {
 	Force    bool
 }
 
+// IsGitWorktree checks if repoPath is a git worktree (not the main working tree).
+// Returns (isWorktree, mainRepoRoot, error).
+func IsGitWorktree(repoPath string) (bool, string, error) {
+	// Get the repo toplevel (current working tree root)
+	topLevelCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--show-toplevel")
+	topLevelOut, err := topLevelCmd.Output()
+	if err != nil {
+		return false, "", fmt.Errorf("not a git repository")
+	}
+	topLevel := strings.TrimSpace(string(topLevelOut))
+
+	// Get the common git dir (shared across all worktrees)
+	commonDirCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-common-dir")
+	commonDirOut, err := commonDirCmd.Output()
+	if err != nil {
+		return false, "", nil // can't determine, assume not a worktree
+	}
+	commonDir := strings.TrimSpace(string(commonDirOut))
+
+	// Make commonDir absolute if relative
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(topLevel, commonDir)
+	}
+	commonDir = filepath.Clean(commonDir)
+
+	// Get the git dir for this working tree
+	gitDirCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-dir")
+	gitDirOut, err := gitDirCmd.Output()
+	if err != nil {
+		return false, "", nil
+	}
+	gitDir := strings.TrimSpace(string(gitDirOut))
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(topLevel, gitDir)
+	}
+	gitDir = filepath.Clean(gitDir)
+
+	// If git-dir != git-common-dir, this is a worktree
+	if gitDir != commonDir {
+		// Main repo root is the parent of the common git dir (e.g., /repo/.git -> /repo)
+		mainRoot := filepath.Dir(commonDir)
+		return true, mainRoot, nil
+	}
+
+	return false, "", nil
+}
+
 // Init initializes a Thrum repository.
 func Init(opts InitOptions) error {
 	thrumDir := filepath.Join(opts.RepoPath, ".thrum")

@@ -249,6 +249,56 @@ func TestUpdateGitignore_Idempotent(t *testing.T) {
 	}
 }
 
+func TestIsGitWorktree(t *testing.T) {
+	// Create main repo
+	mainDir := t.TempDir()
+	initGitRepo(t, mainDir)
+
+	t.Run("main repo is not a worktree", func(t *testing.T) {
+		isWT, _, err := IsGitWorktree(mainDir)
+		if err != nil {
+			t.Fatalf("IsGitWorktree error: %v", err)
+		}
+		if isWT {
+			t.Error("main repo should not be detected as a worktree")
+		}
+	})
+
+	t.Run("git worktree is detected", func(t *testing.T) {
+		// Create a worktree
+		wtDir := filepath.Join(t.TempDir(), "worktree")
+		cmd := exec.Command("git", "worktree", "add", wtDir, "-b", "test-branch")
+		cmd.Dir = mainDir
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("git worktree add: %v", err)
+		}
+
+		isWT, mainRoot, err := IsGitWorktree(wtDir)
+		if err != nil {
+			t.Fatalf("IsGitWorktree error: %v", err)
+		}
+		if !isWT {
+			t.Error("worktree should be detected as a worktree")
+		}
+
+		// mainRoot should point to the main repo (resolve symlinks for macOS /var → /private/var)
+		absMainDir, _ := filepath.Abs(mainDir)
+		realMainDir, _ := filepath.EvalSymlinks(absMainDir)
+		realMainRoot, _ := filepath.EvalSymlinks(mainRoot)
+		if realMainRoot != realMainDir {
+			t.Errorf("expected main root %s, got %s", realMainDir, realMainRoot)
+		}
+	})
+
+	t.Run("non-git directory returns error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		_, _, err := IsGitWorktree(tmpDir)
+		if err == nil {
+			t.Error("expected error for non-git directory")
+		}
+	})
+}
+
 // Helper function to initialize a git repository.
 func initGitRepo(t *testing.T, dir string) {
 	t.Helper()
