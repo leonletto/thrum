@@ -234,7 +234,7 @@ The listener runs 6 cycles of 15 minutes each (~90 min coverage), blocks on
 | Slash commands | 10 commands included | None |
 | Hooks | SessionStart + PreCompact | Manual hook configuration |
 | Resource docs | 8 progressive disclosure docs | Single monolithic agent file |
-| Maintenance | Versioned (v0.4.0) | Ad-hoc |
+| Maintenance | Versioned (v0.4.1) | Ad-hoc |
 
 The manual agent definitions (`thrum-agent.md`, `message-listener.md`) still
 work and are available in `toolkit/agents/` for environments that don't support

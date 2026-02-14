@@ -85,6 +85,8 @@ This creates:
 - `.thrum/var/` for daemon runtime files
 - `a-sync` orphan branch for message synchronization
 
+**Git worktree auto-detection:** Since v0.4.1, `thrum init` automatically detects if you're in a git worktree and sets up a `.thrum/redirect` file pointing to the main repo's `.thrum/` directory. All worktrees share the same daemon and message history — no manual worktree configuration needed.
+
 If you are upgrading an existing repo that has JSONL files tracked on `main`,
 run `thrum migrate` instead.
 

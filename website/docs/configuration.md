@@ -34,6 +34,8 @@ Located at `.thrum/config.json` in your repository:
 
 This file is created during `thrum init` and can be edited at any time.
 
+**Git worktree auto-detection:** Since v0.4.1, `thrum init` automatically detects if you're in a git worktree and sets up a `.thrum/redirect` file pointing to the main repo's `.thrum/` directory instead of creating a new config. All worktrees share the same configuration and daemon.
+
 ## Schema Reference
 
 ### `runtime.primary`

@@ -4,7 +4,7 @@ description: >
   Multi-agent coordination via messaging, groups, and shared context. Use when
   agents need to communicate, delegate work, or coordinate across worktrees.
 allowed-tools: "Bash(thrum:*)"
-version: "0.4.0"
+version: "0.4.1"
 author: "Leon Letto <https://github.com/leonletto>"
 license: "MIT"
 ---
@@ -24,7 +24,7 @@ thrum send "msg" --broadcast             Broadcast to all agents
 thrum reply <msg-id> "response"          Reply (same audience)
 thrum inbox                              List messages (unread first)
 thrum inbox --unread                     Unread only
-thrum wait                               Block until message arrives (5min timeout)
+thrum wait                               Block until message arrives (30s timeout)
 thrum wait --timeout 120                 Custom timeout (seconds)
 ```
 
