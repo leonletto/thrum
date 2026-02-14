@@ -12,17 +12,22 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// DisconnectFunc is called when a WebSocket client disconnects.
+// It receives the sessionID of the disconnected client.
+type DisconnectFunc func(sessionID string)
+
 // Server represents the WebSocket RPC server.
 type Server struct {
-	addr       string
-	httpServer *http.Server
-	upgrader   websocket.Upgrader
-	registry   HandlerRegistry
-	clients    *ClientRegistry
-	mu         sync.RWMutex
-	shutdown   bool
-	wg         sync.WaitGroup
-	startTime  time.Time
+	addr         string
+	httpServer   *http.Server
+	upgrader     websocket.Upgrader
+	registry     HandlerRegistry
+	clients      *ClientRegistry
+	onDisconnect DisconnectFunc
+	mu           sync.RWMutex
+	shutdown     bool
+	wg           sync.WaitGroup
+	startTime    time.Time
 }
 
 // NewServer creates a new WebSocket RPC server.
@@ -117,6 +122,12 @@ func (s *Server) GetRegistry() HandlerRegistry {
 // GetClients returns the client registry for accessing connected WebSocket clients.
 func (s *Server) GetClients() *ClientRegistry {
 	return s.clients
+}
+
+// SetDisconnectHook registers a callback that fires when a WebSocket client disconnects.
+// Used to clean up subscriptions and other session-scoped resources.
+func (s *Server) SetDisconnectHook(fn DisconnectFunc) {
+	s.onDisconnect = fn
 }
 
 // Start starts the WebSocket server and begins accepting connections.
