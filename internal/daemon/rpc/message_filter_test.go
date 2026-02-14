@@ -255,3 +255,85 @@ func TestMessageListCombinedFilters(t *testing.T) {
 		}
 	})
 }
+
+// TestMessageListUnreadCountWithoutSession verifies that the unread count is
+// computed correctly even when the caller has no active session. This is the
+// fix for thrum-pwaa: ContextPrime calls Inbox during startup before a session
+// exists, and the unread count must still be non-zero.
+func TestMessageListUnreadCountWithoutSession(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("create .thrum dir: %v", err)
+	}
+
+	repoID := "r_NOSESS_TEST"
+	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	ctx := context.Background()
+
+	// Register sender agent and start a session for it (needed to send messages)
+	t.Setenv("THRUM_ROLE", "sender")
+	t.Setenv("THRUM_MODULE", "test")
+	senderID := identity.GenerateAgentID(repoID, "sender", "test", "")
+	agentHandler := NewAgentHandler(st)
+	registerParams, _ := json.Marshal(RegisterRequest{Role: "sender", Module: "test"})
+	if _, err := agentHandler.HandleRegister(ctx, registerParams); err != nil {
+		t.Fatalf("register sender: %v", err)
+	}
+	sessionHandler := NewSessionHandler(st)
+	sessionParams, _ := json.Marshal(SessionStartRequest{AgentID: senderID})
+	if _, err := sessionHandler.HandleStart(ctx, sessionParams); err != nil {
+		t.Fatalf("start sender session: %v", err)
+	}
+
+	// Register receiver agent but do NOT start a session for it
+	receiverID := identity.GenerateAgentID(repoID, "receiver", "test", "")
+	registerParams2, _ := json.Marshal(RegisterRequest{Role: "receiver", Module: "test"})
+	if _, err := agentHandler.HandleRegister(ctx, registerParams2); err != nil {
+		t.Fatalf("register receiver: %v", err)
+	}
+
+	// Send 3 messages from sender
+	handler := NewMessageHandler(st)
+	for i := 0; i < 3; i++ {
+		req := SendRequest{
+			Content:       "Test message for receiver",
+			CallerAgentID: senderID,
+		}
+		params, _ := json.Marshal(req)
+		if _, err := handler.HandleSend(ctx, params); err != nil {
+			t.Fatalf("send: %v", err)
+		}
+	}
+
+	// Query inbox with exclude_self and caller_agent_id for the receiver (who has NO session)
+	listReq := ListMessagesRequest{
+		ExcludeSelf:   true,
+		CallerAgentID: receiverID,
+		PageSize:      10,
+	}
+	listParams, _ := json.Marshal(listReq)
+	resp, err := handler.HandleList(ctx, listParams)
+	if err != nil {
+		t.Fatalf("HandleList: %v", err)
+	}
+
+	listResp, ok := resp.(*ListMessagesResponse)
+	if !ok {
+		t.Fatalf("expected *ListMessagesResponse, got %T", resp)
+	}
+
+	// The unread count should be 3 (all messages unread by receiver),
+	// NOT 0 which was the bug when resolveAgentAndSession required a session.
+	if listResp.Unread != 3 {
+		t.Errorf("expected 3 unread messages, got %d (bug thrum-pwaa: unread count should work without active session)", listResp.Unread)
+	}
+	if listResp.Total != 3 {
+		t.Errorf("expected 3 total messages, got %d", listResp.Total)
+	}
+}
