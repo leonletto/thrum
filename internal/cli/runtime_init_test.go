@@ -24,7 +24,7 @@ func TestRenderTemplate(t *testing.T) {
 			runtime:  "claude",
 			template: "settings.json.tmpl",
 			contains: []string{
-				"test_agent",
+				"thrum-startup.sh",
 				"SessionStart",
 			},
 		},
@@ -32,7 +32,6 @@ func TestRenderTemplate(t *testing.T) {
 			runtime:  "codex",
 			template: "session-start.sh.tmpl",
 			contains: []string{
-				"THRUM_NAME=test_agent",
 				"THRUM_ROLE=implementer",
 				"THRUM_MODULE=auth",
 			},
@@ -201,8 +200,8 @@ func TestRuntimeInit_CreateFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read settings.json: %v", err)
 	}
-	if !strings.Contains(string(content), "test_agent") {
-		t.Error("settings.json should contain agent name")
+	if strings.Contains(string(content), "THRUM_NAME") {
+		t.Error("settings.json should not hardcode THRUM_NAME (quickstart reuses existing identity)")
 	}
 	if strings.Contains(string(content), "mcpServers") {
 		t.Error("settings.json should NOT contain mcpServers (removed to prevent Claude Code hang)")
@@ -358,8 +357,8 @@ func TestRuntimeInit_Auggie(t *testing.T) {
 	if !strings.Contains(settingsStr, "SessionStart") {
 		t.Error(".augment/settings.json should contain SessionStart hook")
 	}
-	if !strings.Contains(settingsStr, "test_agent") {
-		t.Error(".augment/settings.json should contain agent name")
+	if strings.Contains(settingsStr, "THRUM_NAME") {
+		t.Error(".augment/settings.json should not hardcode THRUM_NAME (quickstart reuses existing identity)")
 	}
 
 	// Verify .augment/rules/thrum.md
@@ -372,8 +371,8 @@ func TestRuntimeInit_Auggie(t *testing.T) {
 	if !strings.Contains(rulesStr, "type: always") {
 		t.Error("rules file should have 'type: always' frontmatter")
 	}
-	if !strings.Contains(rulesStr, "test_agent") {
-		t.Error("rules file should contain agent name")
+	if !strings.Contains(rulesStr, "quickstart") {
+		t.Error("rules file should contain quickstart command")
 	}
 	if !strings.Contains(rulesStr, "backend") {
 		t.Error("rules file should contain agent module")
@@ -424,8 +423,8 @@ func TestRuntimeInit_DefaultValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read startup script: %v", err)
 	}
-	if !strings.Contains(string(content), "default_agent") {
-		t.Error("startup script should use default agent name")
+	if strings.Contains(string(content), "default_agent") {
+		t.Error("startup script should not hardcode default_agent (quickstart reuses existing identity)")
 	}
 }
 

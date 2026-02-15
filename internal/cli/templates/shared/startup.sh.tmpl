@@ -4,7 +4,8 @@
 set -e
 
 # Configuration (override via env vars or args)
-AGENT_NAME="${THRUM_NAME:-${1:-{{.AgentName}}}}"
+# When AGENT_NAME is empty, quickstart reuses the existing identity file
+AGENT_NAME="${THRUM_NAME:-${1:-}}"
 AGENT_ROLE="${THRUM_ROLE:-${2:-{{.AgentRole}}}}"
 AGENT_MODULE="${THRUM_MODULE:-${3:-{{.AgentModule}}}}"
 AGENT_INTENT="${THRUM_INTENT:-General agent work}"
@@ -14,13 +15,21 @@ if ! thrum daemon status &>/dev/null; then
   thrum daemon start
 fi
 
-# 2. Register agent (idempotent)
-thrum quickstart \
-  --name "$AGENT_NAME" \
-  --role "$AGENT_ROLE" \
-  --module "$AGENT_MODULE" \
-  --intent "$AGENT_INTENT" \
-  --json
+# 2. Register agent (reuses existing identity if one exists)
+if [ -n "$AGENT_NAME" ]; then
+  thrum quickstart \
+    --name "$AGENT_NAME" \
+    --role "$AGENT_ROLE" \
+    --module "$AGENT_MODULE" \
+    --intent "$AGENT_INTENT" \
+    --json
+else
+  thrum quickstart \
+    --role "$AGENT_ROLE" \
+    --module "$AGENT_MODULE" \
+    --intent "$AGENT_INTENT" \
+    --json
+fi
 
 # 3. Check inbox and output context
 thrum inbox --unread --json
