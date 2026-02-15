@@ -99,8 +99,8 @@ func NewState(thrumDir string, syncDir string, repoID string) (*State, error) {
 	// Wrap raw DB in safedb to enforce context-aware queries at compile time
 	safeDB := safedb.New(db)
 
-	// Create projector (still uses raw *sql.DB — migrated in step 8c)
-	projector := projection.NewProjector(db)
+	// Create projector (now uses *safedb.DB — migrated in step 8c)
+	projector := projection.NewProjector(safeDB)
 
 	// Compute repo path from thrumDir (parent of .thrum)
 	repoPath := filepath.Dir(thrumDir)
@@ -255,7 +255,7 @@ func (s *State) WriteEvent(ctx context.Context, event any) error {
 	}
 
 	// Apply to projector (update SQLite)
-	if err := s.projector.Apply(eventJSON); err != nil {
+	if err := s.projector.Apply(ctx, eventJSON); err != nil {
 		return fmt.Errorf("apply to projector: %w", err)
 	}
 

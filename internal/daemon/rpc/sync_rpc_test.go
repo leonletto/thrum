@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/sync"
 	_ "modernc.org/sqlite"
@@ -399,7 +400,7 @@ func setupTestProjector(t *testing.T, repoPath string) *projection.Projector {
 		t.Fatalf("Failed to initialize schema: %v", err)
 	}
 
-	return projection.NewProjector(db)
+	return projection.NewProjector(safedb.New(db))
 }
 
 // initTestSchema initializes the database schema for testing.

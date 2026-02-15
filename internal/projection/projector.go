@@ -1,6 +1,7 @@
 package projection
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -8,22 +9,23 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/types"
 )
 
 // Projector replays JSONL events into SQLite.
 type Projector struct {
-	db *sql.DB
+	db *safedb.DB
 }
 
 // NewProjector creates a new projector for the given database.
-func NewProjector(db *sql.DB) *Projector {
+func NewProjector(db *safedb.DB) *Projector {
 	return &Projector{db: db}
 }
 
 // Apply applies a single event to the database.
-func (p *Projector) Apply(event json.RawMessage) error {
+func (p *Projector) Apply(ctx context.Context, event json.RawMessage) error {
 	// Parse base event to get type
 	var base types.BaseEvent
 	if err := json.Unmarshal(event, &base); err != nil {
@@ -32,33 +34,33 @@ func (p *Projector) Apply(event json.RawMessage) error {
 
 	switch base.Type {
 	case "message.create":
-		return p.applyMessageCreate(event)
+		return p.applyMessageCreate(ctx, event)
 	case "message.edit":
-		return p.applyMessageEdit(event)
+		return p.applyMessageEdit(ctx, event)
 	case "message.delete":
-		return p.applyMessageDelete(event)
+		return p.applyMessageDelete(ctx, event)
 	case "thread.create":
-		return p.applyThreadCreate(event)
+		return p.applyThreadCreate(ctx, event)
 	case "agent.register":
-		return p.applyAgentRegister(event)
+		return p.applyAgentRegister(ctx, event)
 	case "agent.session.start":
-		return p.applySessionStart(event)
+		return p.applySessionStart(ctx, event)
 	case "agent.session.end":
-		return p.applySessionEnd(event)
+		return p.applySessionEnd(ctx, event)
 	case "agent.update":
-		return p.applyAgentUpdate(event)
+		return p.applyAgentUpdate(ctx, event)
 	case "agent.cleanup":
-		return p.applyAgentCleanup(event)
+		return p.applyAgentCleanup(ctx, event)
 	case "group.create":
-		return p.applyGroupCreate(event)
+		return p.applyGroupCreate(ctx, event)
 	case "group.member.add":
-		return p.applyGroupMemberAdd(event)
+		return p.applyGroupMemberAdd(ctx, event)
 	case "group.member.remove":
-		return p.applyGroupMemberRemove(event)
+		return p.applyGroupMemberRemove(ctx, event)
 	case "group.update":
-		return p.applyGroupUpdate(event)
+		return p.applyGroupUpdate(ctx, event)
 	case "group.delete":
-		return p.applyGroupDelete(event)
+		return p.applyGroupDelete(ctx, event)
 	default:
 		// Unknown event types are ignored (forward compatibility)
 		return nil
@@ -75,7 +77,7 @@ type eventWithOrder struct {
 // Rebuild rebuilds the database by replaying all events from multiple JSONL files.
 // It reads from events.jsonl and messages/*.jsonl in the sync worktree directory,
 // sorts all events globally by (timestamp, event_id), and applies them in order.
-func (p *Projector) Rebuild(syncDir string) error {
+func (p *Projector) Rebuild(ctx context.Context, syncDir string) error {
 	var allEvents []eventWithOrder
 
 	// Read events.jsonl (core events: agent lifecycle, threads)
@@ -114,7 +116,7 @@ func (p *Projector) Rebuild(syncDir string) error {
 
 	// Apply events in sorted order
 	for _, e := range allEvents {
-		if err := p.Apply(e.event); err != nil {
+		if err := p.Apply(ctx, e.event); err != nil {
 			return fmt.Errorf("apply event: %w", err)
 		}
 	}
@@ -153,13 +155,13 @@ func readEventsFromFile(path string) ([]eventWithOrder, error) {
 	return events, nil
 }
 
-func (p *Projector) applyMessageCreate(data json.RawMessage) error {
+func (p *Projector) applyMessageCreate(ctx context.Context, data json.RawMessage) error {
 	var event types.MessageCreateEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal message.create: %w", err)
 	}
 
-	tx, err := p.db.Begin()
+	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
@@ -212,13 +214,13 @@ func (p *Projector) applyMessageCreate(data json.RawMessage) error {
 	return tx.Commit()
 }
 
-func (p *Projector) applyMessageEdit(data json.RawMessage) error {
+func (p *Projector) applyMessageEdit(ctx context.Context, data json.RawMessage) error {
 	var event types.MessageEditEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal message.edit: %w", err)
 	}
 
-	tx, err := p.db.Begin()
+	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
@@ -272,13 +274,13 @@ func (p *Projector) applyMessageEdit(data json.RawMessage) error {
 	return tx.Commit()
 }
 
-func (p *Projector) applyMessageDelete(data json.RawMessage) error {
+func (p *Projector) applyMessageDelete(ctx context.Context, data json.RawMessage) error {
 	var event types.MessageDeleteEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal message.delete: %w", err)
 	}
 
-	_, err := p.db.Exec(`
+	_, err := p.db.ExecContext(ctx, `
 		UPDATE messages
 		SET deleted = 1, deleted_at = ?, delete_reason = ?
 		WHERE message_id = ?
@@ -294,13 +296,13 @@ func (p *Projector) applyMessageDelete(data json.RawMessage) error {
 	return nil
 }
 
-func (p *Projector) applyThreadCreate(data json.RawMessage) error {
+func (p *Projector) applyThreadCreate(ctx context.Context, data json.RawMessage) error {
 	var event types.ThreadCreateEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal thread.create: %w", err)
 	}
 
-	_, err := p.db.Exec(`
+	_, err := p.db.ExecContext(ctx, `
 		INSERT INTO threads (thread_id, title, created_at, created_by)
 		VALUES (?, ?, ?, ?)
 	`,
@@ -316,13 +318,13 @@ func (p *Projector) applyThreadCreate(data json.RawMessage) error {
 	return nil
 }
 
-func (p *Projector) applyAgentRegister(data json.RawMessage) error {
+func (p *Projector) applyAgentRegister(ctx context.Context, data json.RawMessage) error {
 	var event types.AgentRegisterEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal agent.register: %w", err)
 	}
 
-	_, err := p.db.Exec(`
+	_, err := p.db.ExecContext(ctx, `
 		INSERT OR REPLACE INTO agents (agent_id, kind, role, module, display, hostname, registered_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`,
@@ -341,13 +343,13 @@ func (p *Projector) applyAgentRegister(data json.RawMessage) error {
 	return nil
 }
 
-func (p *Projector) applySessionStart(data json.RawMessage) error {
+func (p *Projector) applySessionStart(ctx context.Context, data json.RawMessage) error {
 	var event types.AgentSessionStartEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal agent.session.start: %w", err)
 	}
 
-	_, err := p.db.Exec(`
+	_, err := p.db.ExecContext(ctx, `
 		INSERT INTO sessions (session_id, agent_id, started_at, last_seen_at)
 		VALUES (?, ?, ?, ?)
 	`,
@@ -363,13 +365,13 @@ func (p *Projector) applySessionStart(data json.RawMessage) error {
 	return nil
 }
 
-func (p *Projector) applySessionEnd(data json.RawMessage) error {
+func (p *Projector) applySessionEnd(ctx context.Context, data json.RawMessage) error {
 	var event types.AgentSessionEndEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal agent.session.end: %w", err)
 	}
 
-	_, err := p.db.Exec(`
+	_, err := p.db.ExecContext(ctx, `
 		UPDATE sessions
 		SET ended_at = ?, end_reason = ?
 		WHERE session_id = ?
@@ -385,14 +387,14 @@ func (p *Projector) applySessionEnd(data json.RawMessage) error {
 	return nil
 }
 
-func (p *Projector) applyAgentUpdate(data json.RawMessage) error {
+func (p *Projector) applyAgentUpdate(ctx context.Context, data json.RawMessage) error {
 	var event types.AgentUpdateEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal agent.update: %w", err)
 	}
 
 	// Get existing work contexts for this agent
-	existing, err := p.getWorkContexts(event.AgentID)
+	existing, err := p.getWorkContexts(ctx, event.AgentID)
 	if err != nil {
 		return fmt.Errorf("get existing contexts: %w", err)
 	}
@@ -401,7 +403,7 @@ func (p *Projector) applyAgentUpdate(data json.RawMessage) error {
 	merged := mergeWorkContexts(existing, event.WorkContexts)
 
 	// Update database with merged result
-	if err := p.setWorkContexts(event.AgentID, merged); err != nil {
+	if err := p.setWorkContexts(ctx, event.AgentID, merged); err != nil {
 		return fmt.Errorf("set work contexts: %w", err)
 	}
 
@@ -409,14 +411,14 @@ func (p *Projector) applyAgentUpdate(data json.RawMessage) error {
 }
 
 // getWorkContexts retrieves all work contexts for an agent from the database.
-func (p *Projector) getWorkContexts(agentID string) ([]types.SessionWorkContext, error) {
+func (p *Projector) getWorkContexts(ctx context.Context, agentID string) ([]types.SessionWorkContext, error) {
 	query := `SELECT session_id, branch, worktree_path,
 	                 unmerged_commits, uncommitted_files, changed_files, git_updated_at,
 	                 current_task, task_updated_at, intent, intent_updated_at
 	          FROM agent_work_contexts
 	          WHERE agent_id = ?`
 
-	rows, err := p.db.Query(query, agentID)
+	rows, err := p.db.QueryContext(ctx, query, agentID)
 	if err != nil {
 		return nil, err
 	}
@@ -502,8 +504,8 @@ func (p *Projector) getWorkContexts(agentID string) ([]types.SessionWorkContext,
 }
 
 // setWorkContexts replaces all work contexts for an agent in the database.
-func (p *Projector) setWorkContexts(agentID string, contexts []types.SessionWorkContext) error {
-	tx, err := p.db.Begin()
+func (p *Projector) setWorkContexts(ctx context.Context, agentID string, contexts []types.SessionWorkContext) error {
+	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
@@ -587,13 +589,13 @@ func mergeWorkContexts(a, b []types.SessionWorkContext) []types.SessionWorkConte
 	return result
 }
 
-func (p *Projector) applyAgentCleanup(data json.RawMessage) error {
+func (p *Projector) applyAgentCleanup(ctx context.Context, data json.RawMessage) error {
 	var event types.AgentCleanupEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal agent.cleanup: %w", err)
 	}
 
-	_, err := p.db.Exec(`DELETE FROM agents WHERE agent_id = ?`, event.AgentID)
+	_, err := p.db.ExecContext(ctx, `DELETE FROM agents WHERE agent_id = ?`, event.AgentID)
 	if err != nil {
 		return fmt.Errorf("delete agent: %w", err)
 	}
@@ -601,13 +603,13 @@ func (p *Projector) applyAgentCleanup(data json.RawMessage) error {
 	return nil
 }
 
-func (p *Projector) applyGroupCreate(data json.RawMessage) error {
+func (p *Projector) applyGroupCreate(ctx context.Context, data json.RawMessage) error {
 	var event types.GroupCreateEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal group.create: %w", err)
 	}
 
-	_, err := p.db.Exec(`
+	_, err := p.db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO groups (group_id, name, description, created_at, created_by)
 		VALUES (?, ?, ?, ?, ?)
 	`, event.GroupID, event.Name, sqlNullString(event.Description), event.Timestamp, event.CreatedBy)
@@ -618,13 +620,13 @@ func (p *Projector) applyGroupCreate(data json.RawMessage) error {
 	return nil
 }
 
-func (p *Projector) applyGroupMemberAdd(data json.RawMessage) error {
+func (p *Projector) applyGroupMemberAdd(ctx context.Context, data json.RawMessage) error {
 	var event types.GroupMemberAddEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal group.member.add: %w", err)
 	}
 
-	_, err := p.db.Exec(`
+	_, err := p.db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO group_members (group_id, member_type, member_value, added_at, added_by)
 		VALUES (?, ?, ?, ?, ?)
 	`, event.GroupID, event.MemberType, event.MemberValue, event.Timestamp, sqlNullString(event.AddedBy))
@@ -635,13 +637,13 @@ func (p *Projector) applyGroupMemberAdd(data json.RawMessage) error {
 	return nil
 }
 
-func (p *Projector) applyGroupMemberRemove(data json.RawMessage) error {
+func (p *Projector) applyGroupMemberRemove(ctx context.Context, data json.RawMessage) error {
 	var event types.GroupMemberRemoveEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal group.member.remove: %w", err)
 	}
 
-	_, err := p.db.Exec(`
+	_, err := p.db.ExecContext(ctx, `
 		DELETE FROM group_members
 		WHERE group_id = ? AND member_type = ? AND member_value = ?
 	`, event.GroupID, event.MemberType, event.MemberValue)
@@ -652,14 +654,14 @@ func (p *Projector) applyGroupMemberRemove(data json.RawMessage) error {
 	return nil
 }
 
-func (p *Projector) applyGroupUpdate(data json.RawMessage) error {
+func (p *Projector) applyGroupUpdate(ctx context.Context, data json.RawMessage) error {
 	var event types.GroupUpdateEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal group.update: %w", err)
 	}
 
 	if desc, ok := event.Fields["description"]; ok {
-		_, err := p.db.Exec(`
+		_, err := p.db.ExecContext(ctx, `
 			UPDATE groups SET description = ?, updated_at = ? WHERE group_id = ?
 		`, sqlNullString(desc), event.Timestamp, event.GroupID)
 		if err != nil {
@@ -668,7 +670,7 @@ func (p *Projector) applyGroupUpdate(data json.RawMessage) error {
 	}
 
 	if name, ok := event.Fields["name"]; ok {
-		_, err := p.db.Exec(`
+		_, err := p.db.ExecContext(ctx, `
 			UPDATE groups SET name = ?, updated_at = ? WHERE group_id = ?
 		`, name, event.Timestamp, event.GroupID)
 		if err != nil {
@@ -679,14 +681,14 @@ func (p *Projector) applyGroupUpdate(data json.RawMessage) error {
 	return nil
 }
 
-func (p *Projector) applyGroupDelete(data json.RawMessage) error {
+func (p *Projector) applyGroupDelete(ctx context.Context, data json.RawMessage) error {
 	var event types.GroupDeleteEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("unmarshal group.delete: %w", err)
 	}
 
 	// CASCADE will delete group_members too
-	_, err := p.db.Exec(`DELETE FROM groups WHERE group_id = ?`, event.GroupID)
+	_, err := p.db.ExecContext(ctx, `DELETE FROM groups WHERE group_id = ?`, event.GroupID)
 	if err != nil {
 		return fmt.Errorf("delete group: %w", err)
 	}
