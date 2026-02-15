@@ -4101,8 +4101,8 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			rpc.NewPeerStartPairingHandler(pairingMgr.StartPairing).Handle)
 
 		// peer.wait_pairing — block until pairing completes or times out
-		waitFn := func() (peerName, peerAddr, peerDaemonID string, err error) {
-			result, err := pairingMgr.WaitForPairing()
+		waitFn := func(ctx context.Context) (peerName, peerAddr, peerDaemonID string, err error) {
+			result, err := pairingMgr.WaitForPairing(ctx)
 			if err != nil {
 				return "", "", "", err
 			}
