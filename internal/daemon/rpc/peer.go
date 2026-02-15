@@ -14,7 +14,7 @@ type StartPairingFunc func(timeout time.Duration) (code string, err error)
 
 // WaitForPairingFunc blocks until the active pairing session completes or times out.
 // Returns the paired peer's name, address, and daemon ID.
-type WaitForPairingFunc func() (peerName, peerAddress, peerDaemonID string, err error)
+type WaitForPairingFunc func(ctx context.Context) (peerName, peerAddress, peerDaemonID string, err error)
 
 // JoinPeerFunc connects to a remote peer, sends a pairing code, and stores the result.
 type JoinPeerFunc func(peerAddr, code string) (peerName, peerDaemonID string, err error)
@@ -129,8 +129,8 @@ func NewPeerWaitPairingHandler(fn WaitForPairingFunc) *PeerWaitPairingHandler {
 }
 
 // Handle blocks until pairing completes or times out.
-func (h *PeerWaitPairingHandler) Handle(_ context.Context, _ json.RawMessage) (any, error) {
-	peerName, peerAddr, peerDaemonID, err := h.waitForPairing()
+func (h *PeerWaitPairingHandler) Handle(ctx context.Context, _ json.RawMessage) (any, error) {
+	peerName, peerAddr, peerDaemonID, err := h.waitForPairing(ctx)
 	if err != nil {
 		return PeerWaitPairingResponse{
 			Status:  "timeout",
