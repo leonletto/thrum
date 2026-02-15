@@ -140,7 +140,7 @@ type GroupMembersResponse struct {
 // -- Handlers --
 
 // HandleCreate handles the group.create RPC method.
-func (h *GroupHandler) HandleCreate(_ context.Context, params json.RawMessage) (any, error) {
+func (h *GroupHandler) HandleCreate(ctx context.Context, params json.RawMessage) (any, error) {
 	var req GroupCreateRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -180,7 +180,7 @@ func (h *GroupHandler) HandleCreate(_ context.Context, params json.RawMessage) (
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write group.create event: %w", err)
 	}
 
@@ -192,7 +192,7 @@ func (h *GroupHandler) HandleCreate(_ context.Context, params json.RawMessage) (
 }
 
 // HandleDelete handles the group.delete RPC method.
-func (h *GroupHandler) HandleDelete(_ context.Context, params json.RawMessage) (any, error) {
+func (h *GroupHandler) HandleDelete(ctx context.Context, params json.RawMessage) (any, error) {
 	var req GroupDeleteRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -236,7 +236,7 @@ func (h *GroupHandler) HandleDelete(_ context.Context, params json.RawMessage) (
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write group.delete event: %w", err)
 	}
 
@@ -247,7 +247,7 @@ func (h *GroupHandler) HandleDelete(_ context.Context, params json.RawMessage) (
 }
 
 // HandleMemberAdd handles the group.member.add RPC method.
-func (h *GroupHandler) HandleMemberAdd(_ context.Context, params json.RawMessage) (any, error) {
+func (h *GroupHandler) HandleMemberAdd(ctx context.Context, params json.RawMessage) (any, error) {
 	var req GroupMemberAddRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -301,7 +301,7 @@ func (h *GroupHandler) HandleMemberAdd(_ context.Context, params json.RawMessage
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write group.member.add event: %w", err)
 	}
 
@@ -313,7 +313,7 @@ func (h *GroupHandler) HandleMemberAdd(_ context.Context, params json.RawMessage
 }
 
 // HandleMemberRemove handles the group.member.remove RPC method.
-func (h *GroupHandler) HandleMemberRemove(_ context.Context, params json.RawMessage) (any, error) {
+func (h *GroupHandler) HandleMemberRemove(ctx context.Context, params json.RawMessage) (any, error) {
 	var req GroupMemberRemoveRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -362,7 +362,7 @@ func (h *GroupHandler) HandleMemberRemove(_ context.Context, params json.RawMess
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write group.member.remove event: %w", err)
 	}
 
@@ -532,7 +532,7 @@ func (h *GroupHandler) HandleMembers(_ context.Context, params json.RawMessage) 
 
 // EnsureEveryoneGroup creates the built-in @everyone group if it doesn't exist.
 // Called during daemon startup.
-func EnsureEveryoneGroup(st *state.State) error {
+func EnsureEveryoneGroup(ctx context.Context, st *state.State) error {
 	st.RLock()
 	var exists bool
 	err := st.DB().QueryRow("SELECT EXISTS(SELECT 1 FROM groups WHERE name = 'everyone')").Scan(&exists)
@@ -558,7 +558,7 @@ func EnsureEveryoneGroup(st *state.State) error {
 	st.Lock()
 	defer st.Unlock()
 
-	if err := st.WriteEvent(createEvent); err != nil {
+	if err := st.WriteEvent(ctx, createEvent); err != nil {
 		return fmt.Errorf("write everyone group.create: %w", err)
 	}
 
@@ -571,7 +571,7 @@ func EnsureEveryoneGroup(st *state.State) error {
 		AddedBy:     "system",
 	}
 
-	if err := st.WriteEvent(memberEvent); err != nil {
+	if err := st.WriteEvent(ctx, memberEvent); err != nil {
 		return fmt.Errorf("write everyone group.member.add: %w", err)
 	}
 

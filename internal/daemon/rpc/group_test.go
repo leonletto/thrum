@@ -118,7 +118,7 @@ func TestGroupDelete_ProtectedEveryone(t *testing.T) {
 	defer cleanup()
 
 	// Create @everyone
-	if err := EnsureEveryoneGroup(st); err != nil {
+	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
 		t.Fatalf("ensure everyone: %v", err)
 	}
 
@@ -182,7 +182,7 @@ func TestGroupMemberAdd_ProtectedEveryone(t *testing.T) {
 	handler, st, cleanup := setupGroupTest(t)
 	defer cleanup()
 
-	if err := EnsureEveryoneGroup(st); err != nil {
+	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
 		t.Fatalf("ensure everyone: %v", err)
 	}
 
@@ -317,7 +317,7 @@ func TestEnsureEveryoneGroup(t *testing.T) {
 	defer cleanup()
 
 	// First call creates the group
-	if err := EnsureEveryoneGroup(st); err != nil {
+	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
 		t.Fatalf("first EnsureEveryoneGroup: %v", err)
 	}
 
@@ -341,7 +341,7 @@ func TestEnsureEveryoneGroup(t *testing.T) {
 	}
 
 	// Second call is idempotent
-	if err := EnsureEveryoneGroup(st); err != nil {
+	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
 		t.Fatalf("second EnsureEveryoneGroup: %v", err)
 	}
 

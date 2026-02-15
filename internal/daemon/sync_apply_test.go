@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -50,7 +51,7 @@ func TestSyncApplier_ApplyRemoteEvents(t *testing.T) {
 		},
 	}
 
-	applied, skipped, err := applier.ApplyRemoteEvents(events)
+	applied, skipped, err := applier.ApplyRemoteEvents(context.Background(), events)
 	if err != nil {
 		t.Fatalf("ApplyRemoteEvents: %v", err)
 	}
@@ -86,7 +87,7 @@ func TestSyncApplier_Deduplication(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := st.WriteEvent(localEvent); err != nil {
+	if err := st.WriteEvent(context.Background(), localEvent); err != nil {
 		t.Fatalf("write local event: %v", err)
 	}
 
@@ -110,7 +111,7 @@ func TestSyncApplier_Deduplication(t *testing.T) {
 		},
 	}
 
-	applied, skipped, err := applier.ApplyRemoteEvents(events)
+	applied, skipped, err := applier.ApplyRemoteEvents(context.Background(), events)
 	if err != nil {
 		t.Fatalf("ApplyRemoteEvents: %v", err)
 	}
@@ -147,7 +148,7 @@ func TestSyncApplier_ApplyAndCheckpoint(t *testing.T) {
 		},
 	}
 
-	applied, _, err := applier.ApplyAndCheckpoint("d_peer", events, 200)
+	applied, _, err := applier.ApplyAndCheckpoint(context.Background(), "d_peer", events, 200)
 	if err != nil {
 		t.Fatalf("ApplyAndCheckpoint: %v", err)
 	}
