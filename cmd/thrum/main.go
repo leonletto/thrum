@@ -3400,6 +3400,34 @@ Examples:
 				}
 			}
 
+			// Reuse existing identity if one exists for this worktree.
+			// This prevents duplicate agent registration when quickstart is called
+			// both from the shell and from an AI agent's session startup.
+			if !forceInit {
+				existingCfg, err := config.LoadWithPath(flagRepo, "", "")
+				if err == nil && existingCfg.Agent.Name != "" {
+					switch {
+					case name == "":
+						// No --name given (automated/template call): fully adopt existing identity.
+						name = existingCfg.Agent.Name
+						flagRole = existingCfg.Agent.Role
+						flagModule = existingCfg.Agent.Module
+						if display == "" && existingCfg.Agent.Display != "" {
+							display = existingCfg.Agent.Display
+						}
+					case name == existingCfg.Agent.Name:
+						// Same --name as existing: re-register (update role/module if changed).
+					default:
+						// Different --name than existing: warn about replacing the identity.
+						fmt.Fprintf(os.Stderr, "Note: Existing agent @%s found (role=%s, module=%s).\n",
+							existingCfg.Agent.Name, existingCfg.Agent.Role, existingCfg.Agent.Module)
+						fmt.Fprintf(os.Stderr, "  Registering new agent @%s will replace the existing identity.\n", name)
+						fmt.Fprintf(os.Stderr, "  Use --force to skip this warning, or omit --name to reuse @%s.\n\n",
+							existingCfg.Agent.Name)
+					}
+				}
+			}
+
 			opts := cli.QuickstartOptions{
 				Name:         name,
 				Role:         flagRole,
