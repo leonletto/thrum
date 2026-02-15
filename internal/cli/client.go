@@ -20,7 +20,7 @@ type Client struct {
 
 // NewClient creates a new RPC client connected to the daemon at the given socket path.
 func NewClient(socketPath string) (*Client, error) {
-	conn, err := net.Dial("unix", socketPath)
+	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to daemon at %s: %w", socketPath, err)
 	}
@@ -36,7 +36,7 @@ func NewClient(socketPath string) (*Client, error) {
 
 // defaultCallTimeout is the maximum time a CLI→daemon RPC call can take.
 // Prevents CLI commands from hanging forever when the daemon is unresponsive.
-const defaultCallTimeout = 30 * time.Second
+const defaultCallTimeout = 10 * time.Second
 
 // Call makes a JSON-RPC call to the daemon
 // method: the RPC method name (e.g., "health", "message.send")
@@ -49,6 +49,11 @@ func (c *Client) Call(method string, params any, result any) error {
 	}
 	defer func() { _ = c.conn.SetDeadline(time.Time{}) }()
 
+	return c.callRaw(method, params, result)
+}
+
+// callRaw sends the RPC without setting a deadline (caller must set it).
+func (c *Client) callRaw(method string, params any, result any) error {
 	// Create JSON-RPC request
 	id := c.nextID.Add(1)
 	request := map[string]any{
@@ -104,7 +109,7 @@ func (c *Client) CallWithTimeout(method string, params any, result any, timeout 
 	}
 	defer func() { _ = c.conn.SetDeadline(time.Time{}) }() // clear deadline
 
-	return c.Call(method, params, result)
+	return c.callRaw(method, params, result)
 }
 
 // Close closes the connection to the daemon.
