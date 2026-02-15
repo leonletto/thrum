@@ -127,7 +127,7 @@ func TestMessageSend(t *testing.T) {
 			Title:     "Test Thread",
 			CreatedBy: agentID,
 		}
-		if err := st.WriteEvent(threadEvent); err != nil {
+		if err := st.WriteEvent(context.Background(), threadEvent); err != nil {
 			t.Fatalf("failed to create thread: %v", err)
 		}
 
@@ -522,7 +522,7 @@ func TestMessageGet(t *testing.T) {
 			Title:     "Test Thread",
 			CreatedBy: agentID,
 		}
-		if err := st.WriteEvent(threadEvent); err != nil {
+		if err := st.WriteEvent(context.Background(), threadEvent); err != nil {
 			t.Fatalf("failed to create thread: %v", err)
 		}
 
@@ -580,7 +580,7 @@ func TestMessageGet(t *testing.T) {
 			MessageID: msgID,
 			Reason:    "test delete",
 		}
-		if err := st.WriteEvent(deleteEvent); err != nil {
+		if err := st.WriteEvent(context.Background(), deleteEvent); err != nil {
 			t.Fatalf("failed to delete message: %v", err)
 		}
 
@@ -684,7 +684,7 @@ func TestMessageList(t *testing.T) {
 		Title:     "Test Thread",
 		CreatedBy: agentID,
 	}
-	if err := st.WriteEvent(threadEvent); err != nil {
+	if err := st.WriteEvent(context.Background(), threadEvent); err != nil {
 		t.Fatalf("failed to create thread: %v", err)
 	}
 
@@ -1966,7 +1966,7 @@ func TestHandleSend_GroupScope(t *testing.T) {
 
 	t.Run("send_to_everyone_stores_group_scope", func(t *testing.T) {
 		// Create @everyone
-		if err := EnsureEveryoneGroup(st); err != nil {
+		if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
 			t.Fatalf("ensure everyone: %v", err)
 		}
 
@@ -2042,7 +2042,7 @@ func TestInboxGroupMembership(t *testing.T) {
 	}
 
 	// Create @everyone and @reviewers groups
-	if err := EnsureEveryoneGroup(st); err != nil {
+	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
 		t.Fatalf("ensure everyone: %v", err)
 	}
 

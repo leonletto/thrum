@@ -134,7 +134,7 @@ func TestUserRegister_IdempotentReRegistration(t *testing.T) {
 	}
 
 	st.Lock()
-	if err := st.WriteEvent(event); err != nil {
+	if err := st.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("failed to write initial event: %v", err)
 	}
 	st.Unlock()

@@ -3906,7 +3906,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	}
 
 	// Ensure @everyone group exists (auto-created on first startup)
-	if err := rpc.EnsureEveryoneGroup(st); err != nil {
+	if err := rpc.EnsureEveryoneGroup(context.Background(), st); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to ensure @everyone group: %v\n", err)
 	}
 

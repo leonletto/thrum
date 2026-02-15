@@ -137,7 +137,7 @@ func (h *SessionHandler) HandleStart(ctx context.Context, params json.RawMessage
 	}
 
 	// Check for orphaned sessions and recover them
-	if err := h.recoverOrphanedSessions(req.AgentID); err != nil {
+	if err := h.recoverOrphanedSessions(ctx, req.AgentID); err != nil {
 		return nil, fmt.Errorf("recover orphaned sessions: %w", err)
 	}
 
@@ -154,7 +154,7 @@ func (h *SessionHandler) HandleStart(ctx context.Context, params json.RawMessage
 	}
 
 	// Write event to JSONL and SQLite
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write session.start event: %w", err)
 	}
 
@@ -233,7 +233,7 @@ func (h *SessionHandler) HandleEnd(ctx context.Context, params json.RawMessage) 
 	}
 
 	// Write event to JSONL and SQLite
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write session.end event: %w", err)
 	}
 
@@ -427,7 +427,7 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 }
 
 // recoverOrphanedSessions finds sessions for the agent with no end event and marks them as recovered.
-func (h *SessionHandler) recoverOrphanedSessions(agentID string) error {
+func (h *SessionHandler) recoverOrphanedSessions(ctx context.Context, agentID string) error {
 	// Find sessions with no end time for this agent
 	query := `SELECT session_id, started_at
 	          FROM sessions
@@ -466,7 +466,7 @@ func (h *SessionHandler) recoverOrphanedSessions(agentID string) error {
 		}
 
 		// Write event to JSONL and SQLite
-		if err := h.state.WriteEvent(event); err != nil {
+		if err := h.state.WriteEvent(ctx, event); err != nil {
 			return fmt.Errorf("write crash recovery event for session %s: %w", sessionID, err)
 		}
 	}
@@ -816,7 +816,7 @@ func (h *SessionHandler) syncWorkContexts(agentID string) error {
 		WorkContexts: filtered,
 	}
 
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(context.Background(), event); err != nil {
 		return fmt.Errorf("write agent.update event: %w", err)
 	}
 

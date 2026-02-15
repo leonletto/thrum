@@ -1,6 +1,7 @@
 package state_test
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -40,7 +41,7 @@ func TestSequenceNumbers_Monotonic(t *testing.T) {
 			Role:      "tester",
 			Module:    "test",
 		}
-		if err := st.WriteEvent(event); err != nil {
+		if err := st.WriteEvent(context.Background(), event); err != nil {
 			t.Fatalf("write event %d: %v", i, err)
 		}
 	}
@@ -80,7 +81,7 @@ func TestOriginDaemon_PresentInAllEvents(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := st.WriteEvent(event); err != nil {
+	if err := st.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -113,7 +114,7 @@ func TestOriginDaemon_PreservedIfSet(t *testing.T) {
 		Role:         "tester",
 		Module:       "test",
 	}
-	if err := st.WriteEvent(event); err != nil {
+	if err := st.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -141,7 +142,7 @@ func TestGetEventsSince_ViaState(t *testing.T) {
 			Role:      "tester",
 			Module:    "test",
 		}
-		if err := st.WriteEvent(event); err != nil {
+		if err := st.WriteEvent(context.Background(), event); err != nil {
 			t.Fatalf("write event %d: %v", i, err)
 		}
 	}
@@ -198,7 +199,7 @@ func TestSequence_PersistsAcrossRestart(t *testing.T) {
 			Role:      "tester",
 			Module:    "test",
 		}
-		if err := st1.WriteEvent(event); err != nil {
+		if err := st1.WriteEvent(context.Background(), event); err != nil {
 			t.Fatalf("write: %v", err)
 		}
 	}
@@ -220,7 +221,7 @@ func TestSequence_PersistsAcrossRestart(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := st2.WriteEvent(event); err != nil {
+	if err := st2.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -246,7 +247,7 @@ func TestEventJSON_ContainsAllFields(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := st.WriteEvent(event); err != nil {
+	if err := st.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -283,7 +284,7 @@ func TestSequence_MessageEventsAlsoTracked(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := st.WriteEvent(agentEvent); err != nil {
+	if err := st.WriteEvent(context.Background(), agentEvent); err != nil {
 		t.Fatalf("write agent event: %v", err)
 	}
 
@@ -299,7 +300,7 @@ func TestSequence_MessageEventsAlsoTracked(t *testing.T) {
 			Content: "Test",
 		},
 	}
-	if err := st.WriteEvent(msgEvent); err != nil {
+	if err := st.WriteEvent(context.Background(), msgEvent); err != nil {
 		t.Fatalf("write message event: %v", err)
 	}
 
