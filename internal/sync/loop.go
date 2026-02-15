@@ -197,7 +197,7 @@ func (l *SyncLoop) doSync(ctx context.Context) {
 
 	// 3. Update SQLite projection with new events
 	if mergeResult != nil && mergeResult.NewEvents > 0 {
-		if err := l.updateProjection(mergeResult.NewParsedEvents); err != nil {
+		if err := l.updateProjection(ctx, mergeResult.NewParsedEvents); err != nil {
 			l.setError(fmt.Errorf("update projection: %w", err))
 			return
 		}
@@ -228,13 +228,13 @@ func (l *SyncLoop) doSync(ctx context.Context) {
 
 // updateProjection applies the parsed events directly to SQLite.
 // Phase 5 optimization: events are passed from merge step, eliminating redundant file I/O.
-func (l *SyncLoop) updateProjection(parsedEvents []json.RawMessage) error {
+func (l *SyncLoop) updateProjection(ctx context.Context, parsedEvents []json.RawMessage) error {
 	// Apply each parsed event to the projector
 	for _, event := range parsedEvents {
 		// Extract event ID for error reporting
 		id, _ := extractEventIDFromRaw(event)
 
-		if err := l.projector.Apply(event); err != nil {
+		if err := l.projector.Apply(ctx, event); err != nil {
 			return fmt.Errorf("apply event %s: %w", id, err)
 		}
 	}
