@@ -34,11 +34,21 @@ func NewClient(socketPath string) (*Client, error) {
 	return client, nil
 }
 
+// defaultCallTimeout is the maximum time a CLI→daemon RPC call can take.
+// Prevents CLI commands from hanging forever when the daemon is unresponsive.
+const defaultCallTimeout = 30 * time.Second
+
 // Call makes a JSON-RPC call to the daemon
 // method: the RPC method name (e.g., "health", "message.send")
 // params: the parameters to send (will be JSON-encoded)
 // result: pointer to store the result (will be JSON-decoded)
 func (c *Client) Call(method string, params any, result any) error {
+	// Set default deadline so CLI commands don't hang forever if daemon is deadlocked.
+	if err := c.conn.SetDeadline(time.Now().Add(defaultCallTimeout)); err != nil {
+		return fmt.Errorf("set deadline: %w", err)
+	}
+	defer func() { _ = c.conn.SetDeadline(time.Time{}) }()
+
 	// Create JSON-RPC request
 	id := c.nextID.Add(1)
 	request := map[string]any{
@@ -68,7 +78,7 @@ func (c *Client) Call(method string, params any, result any) error {
 	}
 
 	if err := decoder.Decode(&response); err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
+		return fmt.Errorf("failed to read response (daemon may be unresponsive — try: thrum daemon restart): %w", err)
 	}
 
 	// Check for RPC error
