@@ -47,14 +47,14 @@ func TestOpenDB(t *testing.T) {
 		t.Errorf("Expected busy_timeout=5000, got %d", busyTimeout)
 	}
 
-	// Verify WAL auto-checkpoint is set (prevents unbounded WAL growth)
-	var walCheckpoint int
-	err = db.QueryRow("PRAGMA wal_autocheckpoint").Scan(&walCheckpoint)
+	// Verify synchronous=NORMAL (safe for WAL, faster than FULL)
+	var syncMode int
+	err = db.QueryRow("PRAGMA synchronous").Scan(&syncMode)
 	if err != nil {
-		t.Fatalf("Query wal_autocheckpoint failed: %v", err)
+		t.Fatalf("Query synchronous failed: %v", err)
 	}
-	if walCheckpoint != 1000 {
-		t.Errorf("Expected wal_autocheckpoint=1000, got %d", walCheckpoint)
+	if syncMode != 1 { // 1 = NORMAL
+		t.Errorf("Expected synchronous=1 (NORMAL), got %d", syncMode)
 	}
 }
 

@@ -355,12 +355,17 @@ func OpenDB(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("set busy timeout: %w", err)
 	}
 
-	// Auto-checkpoint WAL every 1000 pages (~4MB) to prevent unbounded growth.
-	// Large WAL files slow writes, increasing lock hold time and contention.
-	if _, err := db.Exec("PRAGMA wal_autocheckpoint = 1000"); err != nil {
+	// NORMAL synchronous is safe in WAL mode and significantly faster than
+	// the default FULL. Reduces write latency under heavy message traffic.
+	if _, err := db.Exec("PRAGMA synchronous = NORMAL"); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("set wal autocheckpoint: %w", err)
+		return nil, fmt.Errorf("set synchronous mode: %w", err)
 	}
+
+	// Limit to 1 open connection. SQLite doesn't handle concurrent writers;
+	// multiple connections cause checkpoint-blocking readers that let the WAL
+	// grow unbounded (1.18MB observed in production).
+	db.SetMaxOpenConns(1)
 
 	return db, nil
 }
