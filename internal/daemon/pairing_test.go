@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -192,7 +193,7 @@ func TestPairing_WaitForCompletion(t *testing.T) {
 		_, _, _, _ = pm.HandlePairRequest(code, "d_remote", "remote-machine", "100.64.1.2:9100")
 	}()
 
-	result, err := pm.WaitForPairing()
+	result, err := pm.WaitForPairing(context.Background())
 	if err != nil {
 		t.Fatalf("WaitForPairing: %v", err)
 	}
@@ -209,9 +210,30 @@ func TestPairing_WaitTimeout(t *testing.T) {
 		t.Fatalf("StartPairing: %v", err)
 	}
 
-	_, err = pm.WaitForPairing()
+	_, err = pm.WaitForPairing(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Errorf("expected timeout error, got: %v", err)
+	}
+}
+
+func TestPairing_WaitContextCanceled(t *testing.T) {
+	pm := newTestPairingManager(t)
+
+	_, err := pm.StartPairing(5 * time.Minute)
+	if err != nil {
+		t.Fatalf("StartPairing: %v", err)
+	}
+
+	// Create a context with a short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err = pm.WaitForPairing(ctx)
+	if err == nil {
+		t.Fatal("expected error from context cancellation")
+	}
+	if err != context.DeadlineExceeded {
+		t.Errorf("expected context.DeadlineExceeded, got: %v", err)
 	}
 }
 

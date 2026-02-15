@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -96,7 +97,7 @@ func (pm *PairingManager) StartPairing(timeout time.Duration) (string, error) {
 
 // WaitForPairing blocks until a pairing completes or times out.
 // Returns the pairing result on success, or an error on timeout/cancellation.
-func (pm *PairingManager) WaitForPairing() (*PairingResult, error) {
+func (pm *PairingManager) WaitForPairing(ctx context.Context) (*PairingResult, error) {
 	pm.mu.Lock()
 	if pm.session == nil {
 		pm.mu.Unlock()
@@ -117,6 +118,9 @@ func (pm *PairingManager) WaitForPairing() (*PairingResult, error) {
 			return nil, fmt.Errorf("pairing canceled")
 		}
 		return result, nil
+	case <-ctx.Done():
+		pm.CancelPairing()
+		return nil, ctx.Err()
 	case <-time.After(timeout):
 		pm.CancelPairing()
 		return nil, fmt.Errorf("pairing timed out")
