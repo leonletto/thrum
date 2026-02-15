@@ -23,6 +23,7 @@ type SyncTriggerFunc func(daemonID string)
 // When a peer notifies us of new events, we trigger an async pull sync.
 type SyncNotifyHandler struct {
 	triggerSync SyncTriggerFunc
+	sem         chan struct{}
 }
 
 // NewSyncNotifyHandler creates a new sync.notify handler.
@@ -30,6 +31,7 @@ type SyncNotifyHandler struct {
 func NewSyncNotifyHandler(triggerSync SyncTriggerFunc) *SyncNotifyHandler {
 	return &SyncNotifyHandler{
 		triggerSync: triggerSync,
+		sem:         make(chan struct{}, 10),
 	}
 }
 
@@ -48,7 +50,15 @@ func (h *SyncNotifyHandler) Handle(_ context.Context, params json.RawMessage) (a
 
 	log.Printf("sync.notify received from %s (latest_seq=%d, event_count=%d)", req.DaemonID, req.LatestSeq, req.EventCount)
 
-	go h.triggerSync(req.DaemonID)
+	select {
+	case h.sem <- struct{}{}:
+		go func() {
+			defer func() { <-h.sem }()
+			h.triggerSync(req.DaemonID)
+		}()
+	default:
+		log.Printf("sync.notify: goroutine pool full, dropping notification from %s", req.DaemonID)
+	}
 
 	return map[string]string{"status": "ok"}, nil
 }
