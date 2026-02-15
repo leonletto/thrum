@@ -1,9 +1,11 @@
 package eventlog
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 )
 
 // Event represents a stored event with its sequence number.
@@ -20,13 +22,13 @@ type Event struct {
 // Returns (events, nextSequence, moreAvailable, error).
 // NextSequence is the highest sequence in the returned batch (for checkpointing).
 // MoreAvailable is true if more events exist after this batch.
-func GetEventsSince(db *sql.DB, afterSeq int64, limit int) ([]Event, int64, bool, error) {
+func GetEventsSince(ctx context.Context, db *safedb.DB, afterSeq int64, limit int) ([]Event, int64, bool, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 
 	// Fetch limit+1 rows to detect if more are available
-	rows, err := db.Query(
+	rows, err := db.QueryContext(ctx,
 		`SELECT event_id, sequence, type, timestamp, origin_daemon, event_json
 		 FROM events WHERE sequence > ? ORDER BY sequence LIMIT ?`,
 		afterSeq, limit+1,

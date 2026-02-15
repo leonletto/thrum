@@ -1,12 +1,14 @@
 package eventlog_test
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/eventlog"
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/schema"
 )
 
@@ -44,7 +46,7 @@ func insertTestEvent(t *testing.T, db *sql.DB, seq int64, eventID, eventType str
 func TestGetEventsSince_EmptyDatabase(t *testing.T) {
 	db := setupTestDB(t)
 
-	events, nextSeq, more, err := eventlog.GetEventsSince(db, 0, 100)
+	events, nextSeq, more, err := eventlog.GetEventsSince(context.Background(), safedb.New(db), 0, 100)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,7 +70,7 @@ func TestGetEventsSince_PartialBatch(t *testing.T) {
 	}
 
 	// Query with limit 50 — should get partial batch
-	events, nextSeq, more, err := eventlog.GetEventsSince(db, 0, 50)
+	events, nextSeq, more, err := eventlog.GetEventsSince(context.Background(), safedb.New(db), 0, 50)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -100,7 +102,7 @@ func TestGetEventsSince_FullBatch(t *testing.T) {
 	}
 
 	// Query with limit 100 — should get all events, no more available
-	events, nextSeq, more, err := eventlog.GetEventsSince(db, 0, 100)
+	events, nextSeq, more, err := eventlog.GetEventsSince(context.Background(), safedb.New(db), 0, 100)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -124,7 +126,7 @@ func TestGetEventsSince_BeyondLastEvent(t *testing.T) {
 	}
 
 	// Query beyond last event
-	events, nextSeq, more, err := eventlog.GetEventsSince(db, 10, 100)
+	events, nextSeq, more, err := eventlog.GetEventsSince(context.Background(), safedb.New(db), 10, 100)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -147,7 +149,7 @@ func TestGetEventsSince_NextSequenceIsMaxInBatch(t *testing.T) {
 	}
 
 	// Get events 6-15 (afterSeq=5, limit=10)
-	events, nextSeq, more, err := eventlog.GetEventsSince(db, 5, 10)
+	events, nextSeq, more, err := eventlog.GetEventsSince(context.Background(), safedb.New(db), 5, 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -174,7 +176,7 @@ func TestGetEventsSince_IteratesAllEvents(t *testing.T) {
 	var allEvents []eventlog.Event
 	afterSeq := int64(0)
 	for {
-		events, nextSeq, more, err := eventlog.GetEventsSince(db, afterSeq, 20)
+		events, nextSeq, more, err := eventlog.GetEventsSince(context.Background(), safedb.New(db), afterSeq, 20)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -207,7 +209,7 @@ func TestGetEventsSince_DefaultLimit(t *testing.T) {
 	}
 
 	// Pass limit=0 should default to 100
-	events, _, more, err := eventlog.GetEventsSince(db, 0, 0)
+	events, _, more, err := eventlog.GetEventsSince(context.Background(), safedb.New(db), 0, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

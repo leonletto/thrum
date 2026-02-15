@@ -13,7 +13,7 @@ type mockEventQuerier struct {
 	events []eventlog.Event
 }
 
-func (m *mockEventQuerier) GetEventsSince(afterSeq int64, limit int) ([]eventlog.Event, int64, bool, error) {
+func (m *mockEventQuerier) GetEventsSince(ctx context.Context, afterSeq int64, limit int) ([]eventlog.Event, int64, bool, error) {
 	var result []eventlog.Event
 	for _, e := range m.events {
 		if e.Sequence > afterSeq {

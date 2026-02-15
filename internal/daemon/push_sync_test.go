@@ -131,7 +131,7 @@ func TestPushSync_EndToEndEventSync(t *testing.T) {
 	}
 
 	// Verify event exists in daemon B's database
-	events, _, _, err := daemonB.state.GetEventsSince(0, 100)
+	events, _, _, err := daemonB.state.GetEventsSince(context.Background(), 0, 100)
 	if err != nil {
 		t.Fatalf("get events: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestPushSync_NotifyFailureDoesNotBlockWrite(t *testing.T) {
 	writeTestEvent(t, daemonA.state, "message.create")
 
 	// Verify event was written
-	events, _, _, err := daemonA.state.GetEventsSince(0, 100)
+	events, _, _, err := daemonA.state.GetEventsSince(context.Background(), 0, 100)
 	if err != nil {
 		t.Fatalf("get events: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestPushSync_PeriodicSyncCatchesMissedNotifications(t *testing.T) {
 	scheduler.syncFromPeers()
 
 	// Verify events were synced
-	events, _, _, err := daemonB.state.GetEventsSince(0, 100)
+	events, _, _, err := daemonB.state.GetEventsSince(context.Background(), 0, 100)
 	if err != nil {
 		t.Fatalf("get events: %v", err)
 	}
@@ -325,7 +325,7 @@ func TestPushSync_PeriodicSyncSkipsRecentlySynced(t *testing.T) {
 
 	// writeTestEvent("message.create") writes 2 events (agent.register + message.create)
 	// So after first sync, daemon B should have 2 events
-	events, _, _, err := daemonB.state.GetEventsSince(0, 100)
+	events, _, _, err := daemonB.state.GetEventsSince(context.Background(), 0, 100)
 	if err != nil {
 		t.Fatalf("get events: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestPushSync_PeriodicSyncSkipsRecentlySynced(t *testing.T) {
 	scheduler.SetRecentThreshold(0)
 	scheduler.syncFromPeers()
 
-	events, _, _, err = daemonB.state.GetEventsSince(0, 100)
+	events, _, _, err = daemonB.state.GetEventsSince(context.Background(), 0, 100)
 	if err != nil {
 		t.Fatalf("get events: %v", err)
 	}

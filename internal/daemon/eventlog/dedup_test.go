@@ -1,19 +1,21 @@
 package eventlog_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/eventlog"
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 )
 
 func TestHasEvent_Exists(t *testing.T) {
 	db := setupTestDB(t)
 	insertTestEvent(t, db, 1, "evt_existing", "agent.register")
 
-	exists, err := eventlog.HasEvent(db, "evt_existing")
+	exists, err := eventlog.HasEvent(context.Background(), safedb.New(db), "evt_existing")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -25,7 +27,7 @@ func TestHasEvent_Exists(t *testing.T) {
 func TestHasEvent_NotExists(t *testing.T) {
 	db := setupTestDB(t)
 
-	exists, err := eventlog.HasEvent(db, "evt_nonexistent")
+	exists, err := eventlog.HasEvent(context.Background(), safedb.New(db), "evt_nonexistent")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -55,7 +57,7 @@ func TestHasEvent_Performance(t *testing.T) {
 	// Dedup lookup should be fast (<10ms for 1000 events)
 	start := time.Now()
 	for i := 1; i <= 1000; i++ {
-		_, err := eventlog.HasEvent(db, fmt.Sprintf("evt_%04d", i))
+		_, err := eventlog.HasEvent(context.Background(), safedb.New(db), fmt.Sprintf("evt_%04d", i))
 		if err != nil {
 			t.Fatalf("HasEvent: %v", err)
 		}
