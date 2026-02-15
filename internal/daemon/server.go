@@ -230,7 +230,7 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		// Call handler with transport context and per-request timeout.
 		// This prevents a single blocked handler from permanently hanging
 		// the connection goroutine (which cascades into daemon deadlock).
-		reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
+		reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Second)
 		ctxWithTransport := transport.WithTransport(reqCtx, transport.TransportUnixSocket)
 		result, err := handler(ctxWithTransport, req.Params)
 		reqCancel()
