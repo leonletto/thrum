@@ -148,7 +148,7 @@ func TestGetEventsSince_ViaState(t *testing.T) {
 	}
 
 	// Query first 10
-	events, nextSeq, more, err := st.GetEventsSince(0, 10)
+	events, nextSeq, more, err := st.GetEventsSince(context.Background(), 0, 10)
 	if err != nil {
 		t.Fatalf("GetEventsSince: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestGetEventsSince_ViaState(t *testing.T) {
 	}
 
 	// Query remaining
-	events, nextSeq, more, err = st.GetEventsSince(10, 100)
+	events, nextSeq, more, err = st.GetEventsSince(context.Background(), 10, 100)
 	if err != nil {
 		t.Fatalf("GetEventsSince: %v", err)
 	}

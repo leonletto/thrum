@@ -25,11 +25,11 @@ func NewSyncApplier(st *state.State) *SyncApplier {
 // ApplyRemoteEvents applies a batch of remote events to the local store.
 // Returns the number of events applied and skipped (duplicates).
 func (a *SyncApplier) ApplyRemoteEvents(ctx context.Context, events []eventlog.Event) (applied, skipped int, err error) {
-	db := a.state.DB()
+	db := a.state.SafeDB()
 
 	for _, evt := range events {
 		// Deduplication: check if event already exists
-		exists, err := eventlog.HasEvent(db, evt.EventID)
+		exists, err := eventlog.HasEvent(ctx, db, evt.EventID)
 		if err != nil {
 			return applied, skipped, fmt.Errorf("check event %s: %w", evt.EventID, err)
 		}
