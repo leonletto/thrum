@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/jsonl"
 )
 
@@ -47,15 +49,13 @@ type Event struct {
 }
 
 // Fetch fetches the remote a-sync branch.
-func (m *Merger) Fetch() error {
+func (m *Merger) Fetch(ctx context.Context) error {
 	if m.localOnly {
 		return nil
 	}
 
 	// Check if remote exists
-	cmd := exec.Command("git", "remote")
-	cmd.Dir = m.syncDir
-	output, err := cmd.Output()
+	output, err := safecmd.Git(ctx, m.syncDir, "remote")
 	if err != nil {
 		return fmt.Errorf("checking for remotes: %w", err)
 	}
@@ -66,10 +66,8 @@ func (m *Merger) Fetch() error {
 		return nil
 	}
 
-	// Fetch the a-sync branch from origin
-	cmd = exec.Command("git", "fetch", "origin", SyncBranchName)
-	cmd.Dir = m.syncDir
-	if err := cmd.Run(); err != nil {
+	// Fetch the a-sync branch from origin (network operation — use GitLong for 10s timeout)
+	if _, err := safecmd.GitLong(ctx, m.syncDir, "fetch", "origin", SyncBranchName); err != nil {
 		// Fetch failed - might be offline or branch doesn't exist on remote yet
 		return nil //nolint:nilerr // intentionally ignore error for offline support
 	}
@@ -82,12 +80,12 @@ func (m *Merger) Fetch() error {
 //
 // Uses git archive to batch-extract remote files when possible,
 // falling back to per-file git show if git archive fails.
-func (m *Merger) MergeAll() (*MergeResult, error) {
+func (m *Merger) MergeAll(ctx context.Context) (*MergeResult, error) {
 	totalStats := &MergeResult{}
 	messagesDir := filepath.Join(m.syncDir, "messages")
 
 	// Try batch extraction via git archive
-	remoteTmpDir, archiveErr := m.extractRemoteFiles()
+	remoteTmpDir, archiveErr := m.extractRemoteFiles(ctx)
 	if archiveErr == nil {
 		defer func() {
 			_ = os.RemoveAll(remoteTmpDir)
@@ -101,7 +99,7 @@ func (m *Merger) MergeAll() (*MergeResult, error) {
 	if archiveErr == nil {
 		eventsStats, err = m.mergeFileFromDir(eventsPath, filepath.Join(remoteTmpDir, "events.jsonl"))
 	} else {
-		eventsStats, err = m.mergeFile(eventsPath, "events.jsonl")
+		eventsStats, err = m.mergeFile(ctx, eventsPath, "events.jsonl")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("merge events.jsonl: %w", err)
@@ -124,7 +122,7 @@ func (m *Merger) MergeAll() (*MergeResult, error) {
 			remoteFiles = make(map[string]bool)
 		}
 	} else {
-		remoteFiles, err = m.listRemoteMessageFiles()
+		remoteFiles, err = m.listRemoteMessageFiles(ctx)
 		if err != nil {
 			remoteFiles = make(map[string]bool)
 		}
@@ -140,7 +138,7 @@ func (m *Merger) MergeAll() (*MergeResult, error) {
 				stats, err = m.mergeFileFromDir(localPath, remotePath)
 			} else {
 				remotePath := "messages/" + localFile
-				stats, err = m.mergeFile(localPath, remotePath)
+				stats, err = m.mergeFile(ctx, localPath, remotePath)
 			}
 			if err != nil {
 				return nil, fmt.Errorf("merge %s: %w", localFile, err)
@@ -168,7 +166,7 @@ func (m *Merger) MergeAll() (*MergeResult, error) {
 				}
 			} else {
 				remotePath := "messages/" + remoteFile
-				if cpErr := m.copyRemoteFile(localPath, remotePath); cpErr != nil {
+				if cpErr := m.copyRemoteFile(ctx, localPath, remotePath); cpErr != nil {
 					return nil, fmt.Errorf("copy remote file %s: %w", remoteFile, cpErr)
 				}
 			}
@@ -192,7 +190,7 @@ func (m *Merger) MergeAll() (*MergeResult, error) {
 // extractRemoteFiles batch-extracts remote files from the sync branch
 // using git archive + tar. Returns the temp directory path containing the
 // extracted files. The caller must clean up the temp directory.
-func (m *Merger) extractRemoteFiles() (string, error) {
+func (m *Merger) extractRemoteFiles(ctx context.Context) (string, error) {
 	tmpDir, err := os.MkdirTemp("", "thrum-merge-*")
 	if err != nil {
 		return "", fmt.Errorf("create temp dir: %w", err)
@@ -202,10 +200,10 @@ func (m *Merger) extractRemoteFiles() (string, error) {
 	// This is significantly faster than multiple git show calls.
 	// NOTE: Files are at root level on a-sync branch (no .thrum/ prefix)
 	//nolint:gosec // arguments are not user-controlled
-	gitCmd := exec.Command("git", "archive", "origin/"+SyncBranchName, "--", "messages/", "events.jsonl")
+	gitCmd := exec.CommandContext(ctx, "git", "archive", "origin/"+SyncBranchName, "--", "messages/", "events.jsonl")
 	gitCmd.Dir = m.syncDir
 
-	tarCmd := exec.Command("tar", "-xf", "-", "-C", tmpDir) //nolint:gosec // tmpDir from os.MkdirTemp
+	tarCmd := exec.CommandContext(ctx, "tar", "-xf", "-", "-C", tmpDir) //nolint:gosec // tmpDir from os.MkdirTemp
 	tarCmd.Stdin, err = gitCmd.StdoutPipe()
 	if err != nil {
 		_ = os.RemoveAll(tmpDir)
@@ -275,7 +273,7 @@ func (m *Merger) accumulateStats(total, stats *MergeResult) {
 }
 
 // mergeFile merges a single JSONL file (local vs remote).
-func (m *Merger) mergeFile(localPath, remotePath string) (*MergeResult, error) {
+func (m *Merger) mergeFile(ctx context.Context, localPath, remotePath string) (*MergeResult, error) {
 	// Read local events
 	localEvents, err := m.readEventsFromFile(localPath)
 	if err != nil {
@@ -284,7 +282,7 @@ func (m *Merger) mergeFile(localPath, remotePath string) (*MergeResult, error) {
 	}
 
 	// Read remote events
-	remoteEvents, err := m.readRemoteFile(remotePath)
+	remoteEvents, err := m.readRemoteFile(ctx, remotePath)
 	if err != nil {
 		// File might not exist on remote yet
 		remoteEvents = []*Event{}
@@ -336,13 +334,11 @@ func (m *Merger) listLocalMessageFiles(messagesDir string) (map[string]bool, err
 }
 
 // listRemoteMessageFiles lists all .jsonl files in the remote messages directory.
-func (m *Merger) listRemoteMessageFiles() (map[string]bool, error) {
+func (m *Merger) listRemoteMessageFiles(ctx context.Context) (map[string]bool, error) {
 	files := make(map[string]bool)
 
 	// Use git ls-tree to list remote files
-	cmd := exec.Command("git", "ls-tree", "--name-only", "origin/"+SyncBranchName, "messages/")
-	cmd.Dir = m.syncDir
-	output, err := cmd.Output()
+	output, err := safecmd.Git(ctx, m.syncDir, "ls-tree", "--name-only", "origin/"+SyncBranchName, "messages/")
 	if err != nil {
 		// Remote branch or directory doesn't exist yet
 		return files, fmt.Errorf("list remote files: %w", err)
@@ -365,11 +361,9 @@ func (m *Merger) listRemoteMessageFiles() (map[string]bool, error) {
 }
 
 // copyRemoteFile copies a file from the remote a-sync branch to local.
-func (m *Merger) copyRemoteFile(localPath, remotePath string) error {
+func (m *Merger) copyRemoteFile(ctx context.Context, localPath, remotePath string) error {
 	// Read remote file content
-	cmd := exec.Command("git", "show", "origin/"+SyncBranchName+":"+remotePath) //nolint:gosec // remotePath from internal file listing
-	cmd.Dir = m.syncDir
-	output, err := cmd.Output()
+	output, err := safecmd.Git(ctx, m.syncDir, "show", "origin/"+SyncBranchName+":"+remotePath)
 	if err != nil {
 		return fmt.Errorf("read remote file: %w", err)
 	}
@@ -403,10 +397,8 @@ func (m *Merger) readEventsFromFile(path string) ([]*Event, error) {
 }
 
 // readRemoteFile reads events from a remote JSONL file.
-func (m *Merger) readRemoteFile(remotePath string) ([]*Event, error) {
-	cmd := exec.Command("git", "show", "origin/"+SyncBranchName+":"+remotePath) //nolint:gosec // remotePath from internal file listing
-	cmd.Dir = m.syncDir
-	output, err := cmd.Output()
+func (m *Merger) readRemoteFile(ctx context.Context, remotePath string) ([]*Event, error) {
+	output, err := safecmd.Git(ctx, m.syncDir, "show", "origin/"+SyncBranchName+":"+remotePath)
 	if err != nil {
 		return nil, fmt.Errorf("read remote file: %w", err)
 	}

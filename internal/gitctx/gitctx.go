@@ -1,12 +1,13 @@
 package gitctx
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 )
 
 // WorkContext represents git-derived work state.
@@ -38,7 +39,7 @@ type FileChange struct {
 
 // ExtractWorkContext extracts git state for a worktree.
 // If the path is not a git repository, returns an empty context (not an error).
-func ExtractWorkContext(worktreePath string) (*WorkContext, error) {
+func ExtractWorkContext(goCtx context.Context, worktreePath string) (*WorkContext, error) {
 	ctx := &WorkContext{
 		ExtractedAt:      time.Now().UTC(),
 		UnmergedCommits:  []CommitSummary{},
@@ -47,13 +48,8 @@ func ExtractWorkContext(worktreePath string) (*WorkContext, error) {
 		FileChanges:      []FileChange{},
 	}
 
-	// Check if git is available
-	if _, err := exec.LookPath("git"); err != nil {
-		return nil, fmt.Errorf("git not installed: %w", err)
-	}
-
 	// Verify worktree path
-	topLevel, err := runGitCommand(worktreePath, "rev-parse", "--show-toplevel")
+	topLevel, err := runGitCommand(goCtx, worktreePath, "rev-parse", "--show-toplevel")
 	if err != nil {
 		// Not a git repo - return empty context
 		return ctx, nil //nolint:nilerr // intentional: not being a git repo is not an error
@@ -61,36 +57,36 @@ func ExtractWorkContext(worktreePath string) (*WorkContext, error) {
 	ctx.WorktreePath = strings.TrimSpace(topLevel)
 
 	// Get current branch
-	branch, err := runGitCommand(worktreePath, "branch", "--show-current")
+	branch, err := runGitCommand(goCtx, worktreePath, "branch", "--show-current")
 	if err == nil {
 		ctx.Branch = strings.TrimSpace(branch)
 	}
 
 	// Determine base branch (origin/main, origin/master, or HEAD~10)
-	baseBranch := determineBaseBranch(worktreePath)
+	baseBranch := determineBaseBranch(goCtx, worktreePath)
 
 	// Get unmerged commits
 	if baseBranch != "" {
-		commits, err := extractUnmergedCommits(worktreePath, baseBranch)
+		commits, err := extractUnmergedCommits(goCtx, worktreePath, baseBranch)
 		if err == nil {
 			ctx.UnmergedCommits = commits
 		}
 
 		// Get changed files vs base branch
-		changedFiles, err := runGitCommand(worktreePath, "diff", "--name-only", baseBranch+"...HEAD")
+		changedFiles, err := runGitCommand(goCtx, worktreePath, "diff", "--name-only", baseBranch+"...HEAD")
 		if err == nil {
 			ctx.ChangedFiles = parseLines(changedFiles)
 		}
 
 		// Extract per-file changes with diffstat and timestamps
-		fileChanges, err := extractFileChanges(worktreePath, baseBranch)
+		fileChanges, err := extractFileChanges(goCtx, worktreePath, baseBranch)
 		if err == nil {
 			ctx.FileChanges = fileChanges
 		}
 	}
 
 	// Get uncommitted files (staged + modified)
-	status, err := runGitCommand(worktreePath, "status", "--porcelain")
+	status, err := runGitCommand(goCtx, worktreePath, "status", "--porcelain")
 	if err == nil {
 		ctx.UncommittedFiles = parseStatusOutput(status)
 	}
@@ -98,31 +94,24 @@ func ExtractWorkContext(worktreePath string) (*WorkContext, error) {
 	return ctx, nil
 }
 
-// runGitCommand executes a git command in the specified directory.
-func runGitCommand(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("git %s: %w (stderr: %s)", strings.Join(args, " "), err, stderr.String())
+// runGitCommand executes a git command in the specified directory using safecmd (5s timeout).
+func runGitCommand(ctx context.Context, dir string, args ...string) (string, error) {
+	output, err := safecmd.Git(ctx, dir, args...)
+	if err != nil {
+		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
-
-	return stdout.String(), nil
+	return string(output), nil
 }
 
 // determineBaseBranch finds the best base branch to compare against.
-func determineBaseBranch(worktreePath string) string {
+func determineBaseBranch(ctx context.Context, worktreePath string) string {
 	// Try origin/main
-	if branchExists(worktreePath, "origin/main") {
+	if branchExists(ctx, worktreePath, "origin/main") {
 		return "origin/main"
 	}
 
 	// Try origin/master
-	if branchExists(worktreePath, "origin/master") {
+	if branchExists(ctx, worktreePath, "origin/master") {
 		return "origin/master"
 	}
 
@@ -131,15 +120,15 @@ func determineBaseBranch(worktreePath string) string {
 }
 
 // branchExists checks if a branch exists.
-func branchExists(worktreePath, branch string) bool {
-	_, err := runGitCommand(worktreePath, "rev-parse", "--verify", branch)
+func branchExists(ctx context.Context, worktreePath, branch string) bool {
+	_, err := runGitCommand(ctx, worktreePath, "rev-parse", "--verify", branch)
 	return err == nil
 }
 
 // extractUnmergedCommits gets commits that exist on HEAD but not on baseBranch.
-func extractUnmergedCommits(worktreePath, baseBranch string) ([]CommitSummary, error) {
+func extractUnmergedCommits(ctx context.Context, worktreePath, baseBranch string) ([]CommitSummary, error) {
 	// Get commit SHAs and messages
-	output, err := runGitCommand(worktreePath, "log", baseBranch+"..HEAD", "--format=%H %s")
+	output, err := runGitCommand(ctx, worktreePath, "log", baseBranch+"..HEAD", "--format=%H %s")
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +147,7 @@ func extractUnmergedCommits(worktreePath, baseBranch string) ([]CommitSummary, e
 		message := parts[1]
 
 		// Get files changed in this commit
-		filesOutput, err := runGitCommand(worktreePath, "diff-tree", "--no-commit-id", "--name-only", "-r", sha)
+		filesOutput, err := runGitCommand(ctx, worktreePath, "diff-tree", "--no-commit-id", "--name-only", "-r", sha)
 		var files []string
 		if err == nil {
 			files = parseLines(filesOutput)
@@ -211,9 +200,9 @@ func parseStatusOutput(output string) []string {
 
 // extractFileChanges extracts per-file metadata (diffstat, timestamps) for files changed
 // between baseBranch and HEAD. Returns files sorted by most-recent-first.
-func extractFileChanges(worktreePath, baseBranch string) ([]FileChange, error) {
+func extractFileChanges(ctx context.Context, worktreePath, baseBranch string) ([]FileChange, error) {
 	// Step 1: Get diffstat for all changed files (additions/deletions)
-	diffstatOutput, err := runGitCommand(worktreePath, "diff", "--numstat", baseBranch+"...HEAD")
+	diffstatOutput, err := runGitCommand(ctx, worktreePath, "diff", "--numstat", baseBranch+"...HEAD")
 	if err != nil {
 		return nil, fmt.Errorf("git diff --numstat: %w", err)
 	}
@@ -244,7 +233,7 @@ func extractFileChanges(worktreePath, baseBranch string) ([]FileChange, error) {
 
 	// Step 2: Get timestamps for each file (batch extraction)
 	// Use git log to walk commits and find the most recent modification time per file
-	logOutput, err := runGitCommand(worktreePath, "log", baseBranch+"...HEAD", "--format=%aI", "--name-only")
+	logOutput, err := runGitCommand(ctx, worktreePath, "log", baseBranch+"...HEAD", "--format=%aI", "--name-only")
 	if err != nil {
 		return nil, fmt.Errorf("git log --name-only: %w", err)
 	}

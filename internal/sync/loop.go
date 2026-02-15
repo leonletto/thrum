@@ -172,7 +172,7 @@ func (l *SyncLoop) run(ctx context.Context) {
 }
 
 // doSync performs a single sync cycle.
-func (l *SyncLoop) doSync(_ context.Context) {
+func (l *SyncLoop) doSync(ctx context.Context) {
 	// Acquire lock
 	lockPath := filepath.Join(paths.VarDir(l.thrumDir), "sync.lock")
 	lock, err := acquireLock(lockPath)
@@ -183,13 +183,13 @@ func (l *SyncLoop) doSync(_ context.Context) {
 	defer func() { _ = releaseLock(lock) }()
 
 	// 1. Fetch remote
-	if err := l.syncer.merger.Fetch(); err != nil {
+	if err := l.syncer.merger.Fetch(ctx); err != nil {
 		l.setError(fmt.Errorf("fetch: %w", err))
 		return
 	}
 
 	// 2. Merge all files (events.jsonl + messages/*.jsonl)
-	mergeResult, err := l.syncer.merger.MergeAll()
+	mergeResult, err := l.syncer.merger.MergeAll(ctx)
 	if err != nil {
 		l.setError(fmt.Errorf("merge: %w", err))
 		return
@@ -214,7 +214,7 @@ func (l *SyncLoop) doSync(_ context.Context) {
 	}
 
 	// 5. Commit and push if local changes
-	if err := l.syncer.CommitAndPush(); err != nil {
+	if err := l.syncer.CommitAndPush(ctx); err != nil {
 		l.setError(fmt.Errorf("commit and push: %w", err))
 		return
 	}
