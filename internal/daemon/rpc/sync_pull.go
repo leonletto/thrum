@@ -27,7 +27,7 @@ type SyncPullResponse struct {
 
 // EventQuerier is the interface for querying events by sequence.
 type EventQuerier interface {
-	GetEventsSince(afterSeq int64, limit int) ([]eventlog.Event, int64, bool, error)
+	GetEventsSince(ctx context.Context, afterSeq int64, limit int) ([]eventlog.Event, int64, bool, error)
 }
 
 // SyncPullHandler handles the sync.pull RPC method.
@@ -59,7 +59,7 @@ func (h *SyncPullHandler) Handle(ctx context.Context, params json.RawMessage) (a
 		limit = MaxSyncBatchSize
 	}
 
-	events, nextSeq, more, err := h.querier.GetEventsSince(req.AfterSequence, limit)
+	events, nextSeq, more, err := h.querier.GetEventsSince(ctx, req.AfterSequence, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query events: %w", err)
 	}

@@ -339,6 +339,11 @@ func (s *State) DB() *sql.DB {
 	return s.db.Raw()
 }
 
+// SafeDB returns the safedb wrapper that enforces context-aware queries.
+func (s *State) SafeDB() *safedb.DB {
+	return s.db
+}
+
 // RepoID returns the repository ID.
 func (s *State) RepoID() string {
 	return s.repoID
@@ -351,9 +356,8 @@ func (s *State) DaemonID() string {
 
 // GetEventsSince returns events with sequence > afterSeq, up to limit.
 // Delegates to the eventlog package.
-func (s *State) GetEventsSince(afterSeq int64, limit int) ([]eventlog.Event, int64, bool, error) {
-	// TODO(thrum-qvo6): Migrate eventlog to accept *safedb.DB + ctx
-	return eventlog.GetEventsSince(s.db.Raw(), afterSeq, limit)
+func (s *State) GetEventsSince(ctx context.Context, afterSeq int64, limit int) ([]eventlog.Event, int64, bool, error) {
+	return eventlog.GetEventsSince(ctx, s.db, afterSeq, limit)
 }
 
 // RepoPath returns the path to the repository root.
