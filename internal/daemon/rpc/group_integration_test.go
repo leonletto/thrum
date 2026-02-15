@@ -62,7 +62,7 @@ func setupGroupIntegrationTest(t *testing.T) (
 	}
 
 	// Ensure @everyone group
-	if err := EnsureEveryoneGroup(st); err != nil {
+	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
 		t.Fatalf("ensure everyone: %v", err)
 	}
 

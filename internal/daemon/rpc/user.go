@@ -135,7 +135,7 @@ func (h *UserHandler) HandleRegister(ctx context.Context, params json.RawMessage
 	}
 
 	// Register new user
-	return h.registerUser(userID, req.Username, req.Display)
+	return h.registerUser(ctx, userID, req.Username, req.Display)
 }
 
 // getUserByID retrieves a user by ID from the database.
@@ -174,7 +174,7 @@ func (h *UserHandler) getUserByID(userID string) (*AgentInfo, error) {
 }
 
 // registerUser writes a user.register event (stored as agent.register with kind="user").
-func (h *UserHandler) registerUser(userID, username, display string) (*RegisterUserResponse, error) {
+func (h *UserHandler) registerUser(ctx context.Context, userID, username, display string) (*RegisterUserResponse, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Create agent.register event with kind="user"
@@ -189,7 +189,7 @@ func (h *UserHandler) registerUser(userID, username, display string) (*RegisterU
 	}
 
 	// Write event to JSONL and SQLite
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write user.register event: %w", err)
 	}
 

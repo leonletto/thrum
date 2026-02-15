@@ -16,7 +16,7 @@ type PeerStatus struct {
 }
 
 // SyncFromPeerFunc pulls events from a specific peer and applies them.
-type SyncFromPeerFunc func(peerAddr, peerDaemonID string) (applied, skipped int, err error)
+type SyncFromPeerFunc func(ctx context.Context, peerAddr, peerDaemonID string) (applied, skipped int, err error)
 
 // ListPeersFunc returns known peer statuses.
 type ListPeersFunc func() []PeerStatus
@@ -36,7 +36,7 @@ func NewTsyncForceHandler(syncFn SyncFromPeerFunc, listFn ListPeersFunc) *TsyncF
 }
 
 // Handle triggers sync from all known peers (or a specific one if --from is set).
-func (h *TsyncForceHandler) Handle(_ context.Context, params json.RawMessage) (any, error) {
+func (h *TsyncForceHandler) Handle(ctx context.Context, params json.RawMessage) (any, error) {
 	var req struct {
 		From string `json:"from"`
 	}
@@ -55,7 +55,7 @@ func (h *TsyncForceHandler) Handle(_ context.Context, params json.RawMessage) (a
 			continue
 		}
 
-		applied, skipped, err := h.syncFromPeer(peer.Address, peer.DaemonID)
+		applied, skipped, err := h.syncFromPeer(ctx, peer.Address, peer.DaemonID)
 		result := map[string]any{
 			"peer":    peer.DaemonID,
 			"applied": applied,
