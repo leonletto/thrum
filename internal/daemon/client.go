@@ -18,7 +18,7 @@ type Client struct {
 
 // NewClient creates a new client connected to the daemon socket.
 func NewClient(socketPath string) (*Client, error) {
-	conn, err := net.Dial("unix", socketPath)
+	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}
