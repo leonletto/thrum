@@ -216,7 +216,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		if existingAgent.AgentID == agentID {
 			if req.ReRegister {
 				// Update registration
-				return h.registerAgent(agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated")
+				return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated")
 			}
 			// Return existing agent info without conflict
 			return &RegisterResponse{
@@ -243,11 +243,11 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		_, _ = h.state.DB().Exec("DELETE FROM agents WHERE agent_id = ?", existingAgent.AgentID)
 
 		// Force override - register new agent
-		return h.registerAgent(agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered")
+		return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered")
 	}
 
 	// No conflict - register new agent
-	return h.registerAgent(agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered")
+	return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered")
 }
 
 // HandleList handles the agent.list RPC method.
@@ -406,7 +406,7 @@ func resolveHostname() string {
 }
 
 // registerAgent writes an agent.register event and returns the response.
-func (h *AgentHandler) registerAgent(agentID, name, role, module, display, worktree, status string) (*RegisterResponse, error) {
+func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, module, display, worktree, status string) (*RegisterResponse, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Create agent.register event
@@ -424,7 +424,7 @@ func (h *AgentHandler) registerAgent(agentID, name, role, module, display, workt
 	}
 
 	// Write event to JSONL and SQLite
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write agent.register event: %w", err)
 	}
 
@@ -716,7 +716,7 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 	}
 
 	// Write event to events.jsonl
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write agent.cleanup event: %w", err)
 	}
 

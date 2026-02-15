@@ -468,13 +468,13 @@ func writeTestEvent(t *testing.T, st *state.State, eventType string) {
 	switch eventType {
 	case "message.create":
 		// Register an agent first
-		_ = st.WriteEvent(types.AgentRegisterEvent{
+		_ = st.WriteEvent(context.Background(), types.AgentRegisterEvent{
 			Type:      "agent.register",
 			AgentID:   "test-agent",
 			Role:      "tester",
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		})
-		err := st.WriteEvent(types.MessageCreateEvent{
+		err := st.WriteEvent(context.Background(), types.MessageCreateEvent{
 			Type:      "message.create",
 			AgentID:   "test-agent",
 			ThreadID:  "t_test",
@@ -485,7 +485,7 @@ func writeTestEvent(t *testing.T, st *state.State, eventType string) {
 			t.Fatalf("write message event: %v", err)
 		}
 	case "thread.create":
-		err := st.WriteEvent(types.ThreadCreateEvent{
+		err := st.WriteEvent(context.Background(), types.ThreadCreateEvent{
 			Type:      "thread.create",
 			ThreadID:  "t_test_" + time.Now().Format("150405.000"),
 			Title:     "Test Thread",

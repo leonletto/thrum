@@ -318,7 +318,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write message.create event: %w", err)
 	}
 
@@ -804,7 +804,7 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write message.delete event: %w", err)
 	}
 
@@ -900,7 +900,7 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write message.edit event: %w", err)
 	}
 

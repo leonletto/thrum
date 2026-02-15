@@ -93,7 +93,7 @@ func (d *testDaemon) writeEvent(t *testing.T, agentID string, idx int) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := d.state.WriteEvent(evt); err != nil {
+	if err := d.state.WriteEvent(context.Background(), evt); err != nil {
 		t.Fatalf("write event %d: %v", idx, err)
 	}
 }
@@ -135,7 +135,7 @@ func TestPullSyncBasic(t *testing.T) {
 		t.Errorf("got %d events, want 10", len(resp.Events))
 	}
 
-	applied, skipped, err := applier.ApplyRemoteEvents(resp.Events)
+	applied, skipped, err := applier.ApplyRemoteEvents(context.Background(), resp.Events)
 	if err != nil {
 		t.Fatalf("ApplyRemoteEvents: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestPullSyncDeduplication(t *testing.T) {
 		t.Fatalf("PullEvents (first): %v", err)
 	}
 
-	applied1, skipped1, err := applier.ApplyRemoteEvents(resp.Events)
+	applied1, skipped1, err := applier.ApplyRemoteEvents(context.Background(), resp.Events)
 	if err != nil {
 		t.Fatalf("ApplyRemoteEvents (first): %v", err)
 	}
@@ -212,7 +212,7 @@ func TestPullSyncDeduplication(t *testing.T) {
 		t.Fatalf("PullEvents (second): %v", err)
 	}
 
-	applied2, skipped2, err := applier.ApplyRemoteEvents(resp2.Events)
+	applied2, skipped2, err := applier.ApplyRemoteEvents(context.Background(), resp2.Events)
 	if err != nil {
 		t.Fatalf("ApplyRemoteEvents (second): %v", err)
 	}
@@ -246,7 +246,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 	// First sync with checkpoint
 	var totalApplied int
 	err := client.PullAllEvents(daemonA.addr(), 0, "", func(events []eventlog.Event, nextSeq int64) error {
-		a, _, applyErr := applier.ApplyAndCheckpoint(peerID, events, nextSeq)
+		a, _, applyErr := applier.ApplyAndCheckpoint(context.Background(), peerID, events, nextSeq)
 		totalApplied += a
 		return applyErr
 	})
@@ -275,7 +275,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 	// Second sync using checkpoint
 	totalApplied = 0
 	err = client.PullAllEvents(daemonA.addr(), firstCheckpointSeq, "", func(events []eventlog.Event, nextSeq int64) error {
-		a, _, applyErr := applier.ApplyAndCheckpoint(peerID, events, nextSeq)
+		a, _, applyErr := applier.ApplyAndCheckpoint(context.Background(), peerID, events, nextSeq)
 		totalApplied += a
 		return applyErr
 	})
@@ -322,7 +322,7 @@ func TestPullSyncBatching(t *testing.T) {
 	totalApplied := 0
 	err := client.PullAllEvents(daemonA.addr(), 0, "", func(events []eventlog.Event, nextSeq int64) error {
 		batchCount++
-		a, _, applyErr := applier.ApplyRemoteEvents(events)
+		a, _, applyErr := applier.ApplyRemoteEvents(context.Background(), events)
 		totalApplied += a
 		return applyErr
 	})
@@ -373,7 +373,7 @@ func TestPullSyncEndToEnd_SyncManager(t *testing.T) {
 
 	// Sync from A
 	peerID := daemonA.state.DaemonID()
-	applied, skipped, err := syncMgr.SyncFromPeer(daemonA.addr(), peerID)
+	applied, skipped, err := syncMgr.SyncFromPeer(context.Background(), daemonA.addr(), peerID)
 	if err != nil {
 		t.Fatalf("SyncFromPeer: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestPullSyncEndToEnd_SyncManager(t *testing.T) {
 	}
 
 	// Sync again — should skip all
-	applied2, skipped2, err := syncMgr.SyncFromPeer(daemonA.addr(), peerID)
+	applied2, skipped2, err := syncMgr.SyncFromPeer(context.Background(), daemonA.addr(), peerID)
 	if err != nil {
 		t.Fatalf("SyncFromPeer (second): %v", err)
 	}

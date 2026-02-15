@@ -80,7 +80,7 @@ func (s *PeriodicSyncScheduler) syncFromPeers() {
 		}
 
 		addr := peer.Addr()
-		applied, _, err := s.syncManager.SyncFromPeer(addr, peer.DaemonID)
+		applied, _, err := s.syncManager.SyncFromPeer(context.Background(), addr, peer.DaemonID)
 		if err != nil {
 			log.Printf("periodic_sync: sync from %s failed: %v", peer.DaemonID, err)
 			continue
