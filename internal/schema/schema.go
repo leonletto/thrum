@@ -347,6 +347,21 @@ func OpenDB(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("set journal mode: %w", err)
 	}
 
+	// Set busy timeout so concurrent access retries instead of returning SQLITE_BUSY.
+	// Without this, a write during heavy read activity causes immediate failures
+	// that cascade into daemon deadlocks.
+	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("set busy timeout: %w", err)
+	}
+
+	// Auto-checkpoint WAL every 1000 pages (~4MB) to prevent unbounded growth.
+	// Large WAL files slow writes, increasing lock hold time and contention.
+	if _, err := db.Exec("PRAGMA wal_autocheckpoint = 1000"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("set wal autocheckpoint: %w", err)
+	}
+
 	return db, nil
 }
 

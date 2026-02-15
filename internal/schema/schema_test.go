@@ -36,6 +36,26 @@ func TestOpenDB(t *testing.T) {
 	if journalMode != "wal" {
 		t.Errorf("Expected journal_mode='wal', got '%s'", journalMode)
 	}
+
+	// Verify busy_timeout is set (prevents SQLITE_BUSY cascading into deadlocks)
+	var busyTimeout int
+	err = db.QueryRow("PRAGMA busy_timeout").Scan(&busyTimeout)
+	if err != nil {
+		t.Fatalf("Query busy_timeout failed: %v", err)
+	}
+	if busyTimeout != 5000 {
+		t.Errorf("Expected busy_timeout=5000, got %d", busyTimeout)
+	}
+
+	// Verify WAL auto-checkpoint is set (prevents unbounded WAL growth)
+	var walCheckpoint int
+	err = db.QueryRow("PRAGMA wal_autocheckpoint").Scan(&walCheckpoint)
+	if err != nil {
+		t.Fatalf("Query wal_autocheckpoint failed: %v", err)
+	}
+	if walCheckpoint != 1000 {
+		t.Errorf("Expected wal_autocheckpoint=1000, got %d", walCheckpoint)
+	}
 }
 
 func TestInitDB(t *testing.T) {
