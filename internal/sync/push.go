@@ -1,10 +1,12 @@
 package sync
 
 import (
+	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 )
 
 // Syncer coordinates sync operations (branch, merge, push).
@@ -38,12 +40,12 @@ func NewSyncer(repoPath string, syncDir string, localOnly bool) *Syncer {
 // Push rejection handling:
 // - If push rejected, fetch + merge + retry
 // - Max 3 retries before failing.
-func (s *Syncer) CommitAndPush() error {
+func (s *Syncer) CommitAndPush(ctx context.Context) error {
 	const maxRetries = 3
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// Check if there are changes to commit
-		hasChanges, err := s.hasChanges()
+		hasChanges, err := s.hasChanges(ctx)
 		if err != nil {
 			return fmt.Errorf("checking for changes: %w", err)
 		}
@@ -54,19 +56,19 @@ func (s *Syncer) CommitAndPush() error {
 		}
 
 		// Stage all JSONL files (events.jsonl + messages/*.jsonl)
-		if err := s.stageChanges(); err != nil {
+		if err := s.stageChanges(ctx); err != nil {
 			return fmt.Errorf("staging changes: %w", err)
 		}
 
 		// Commit with timestamp
 		timestamp := time.Now().UTC().Format(time.RFC3339)
 		commitMsg := fmt.Sprintf("sync: %s", timestamp)
-		if err := s.commitChanges(commitMsg); err != nil {
+		if err := s.commitChanges(ctx, commitMsg); err != nil {
 			return fmt.Errorf("committing changes: %w", err)
 		}
 
 		// Push to origin a-sync
-		err = s.push()
+		err = s.push(ctx)
 		if err == nil {
 			// Push succeeded
 			return nil
@@ -84,11 +86,11 @@ func (s *Syncer) CommitAndPush() error {
 		}
 
 		// Fetch and merge, then retry
-		if err := s.merger.Fetch(); err != nil {
+		if err := s.merger.Fetch(ctx); err != nil {
 			return fmt.Errorf("fetch after rejection (attempt %d): %w", attempt, err)
 		}
 
-		if _, err := s.merger.MergeAll(); err != nil {
+		if _, err := s.merger.MergeAll(ctx); err != nil {
 			return fmt.Errorf("merge after rejection (attempt %d): %w", attempt, err)
 		}
 
@@ -100,10 +102,8 @@ func (s *Syncer) CommitAndPush() error {
 
 // hasChanges checks if there are uncommitted changes in the sync worktree.
 // Uses git status --porcelain to detect any modifications.
-func (s *Syncer) hasChanges() (bool, error) {
-	cmd := exec.Command("git", "status", "--porcelain")
-	cmd.Dir = s.syncDir
-	output, err := cmd.Output()
+func (s *Syncer) hasChanges(ctx context.Context) (bool, error) {
+	output, err := safecmd.Git(ctx, s.syncDir, "status", "--porcelain")
 	if err != nil {
 		return false, fmt.Errorf("checking status: %w", err)
 	}
@@ -112,20 +112,16 @@ func (s *Syncer) hasChanges() (bool, error) {
 
 // stageChanges stages all changes in the sync worktree.
 // The worktree only contains JSONL data, so we stage everything.
-func (s *Syncer) stageChanges() error {
-	cmd := exec.Command("git", "add", ".")
-	cmd.Dir = s.syncDir
-	if err := cmd.Run(); err != nil {
+func (s *Syncer) stageChanges(ctx context.Context) error {
+	if _, err := safecmd.Git(ctx, s.syncDir, "add", "."); err != nil {
 		return fmt.Errorf("git add: %w", err)
 	}
 	return nil
 }
 
 // commitChanges creates a commit with the given message.
-func (s *Syncer) commitChanges(message string) error {
-	cmd := exec.Command("git", "commit", "-m", message)
-	cmd.Dir = s.syncDir
-	output, err := cmd.CombinedOutput()
+func (s *Syncer) commitChanges(ctx context.Context, message string) error {
+	output, err := safecmd.Git(ctx, s.syncDir, "commit", "-m", message)
 	if err != nil {
 		// Check if the error is "nothing to commit" or "nothing added to commit"
 		outputStr := strings.ToLower(string(output))
@@ -140,15 +136,13 @@ func (s *Syncer) commitChanges(message string) error {
 }
 
 // push pushes the a-sync branch to origin.
-func (s *Syncer) push() error {
+func (s *Syncer) push(ctx context.Context) error {
 	if s.localOnly {
 		return nil
 	}
 
 	// Check if remote exists
-	cmd := exec.Command("git", "remote")
-	cmd.Dir = s.syncDir
-	output, err := cmd.Output()
+	output, err := safecmd.Git(ctx, s.syncDir, "remote")
 	if err != nil {
 		return fmt.Errorf("checking for remotes: %w", err)
 	}
@@ -159,10 +153,8 @@ func (s *Syncer) push() error {
 		return nil //nolint:nilerr // local-only mode is valid
 	}
 
-	// Push to origin a-sync
-	cmd = exec.Command("git", "push", "origin", SyncBranchName)
-	cmd.Dir = s.syncDir
-	output, err = cmd.CombinedOutput()
+	// Push to origin a-sync (network operation — use GitLong for 10s timeout)
+	output, err = safecmd.GitLong(ctx, s.syncDir, "push", "origin", SyncBranchName)
 	if err != nil {
 		return &PushError{
 			Err:    err,

@@ -1,6 +1,7 @@
 package gitctx_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -58,7 +59,7 @@ func writeFile(t *testing.T, dir, filename, content string) {
 func TestExtractWorkContext_ValidRepo(t *testing.T) {
 	repoPath := setupGitRepo(t)
 
-	ctx, err := gitctx.ExtractWorkContext(repoPath)
+	ctx, err := gitctx.ExtractWorkContext(context.Background(),repoPath)
 	if err != nil {
 		t.Fatalf("ExtractWorkContext failed: %v", err)
 	}
@@ -88,7 +89,7 @@ func TestExtractWorkContext_ValidRepo(t *testing.T) {
 func TestExtractWorkContext_NotGitRepo(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	ctx, err := gitctx.ExtractWorkContext(tmpDir)
+	ctx, err := gitctx.ExtractWorkContext(context.Background(),tmpDir)
 	if err != nil {
 		t.Fatalf("ExtractWorkContext should not error on non-git repo: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestExtractWorkContext_UncommittedFiles(t *testing.T) {
 
 	writeFile(t, repoPath, "modified.txt", "modified content")
 
-	ctx, err := gitctx.ExtractWorkContext(repoPath)
+	ctx, err := gitctx.ExtractWorkContext(context.Background(),repoPath)
 	if err != nil {
 		t.Fatalf("ExtractWorkContext failed: %v", err)
 	}
@@ -158,7 +159,7 @@ func TestExtractWorkContext_UnmergedCommits(t *testing.T) {
 	runGit(t, repoPath, "add", "feature2.txt")
 	runGit(t, repoPath, "commit", "-m", "Add feature 2")
 
-	ctx, err := gitctx.ExtractWorkContext(repoPath)
+	ctx, err := gitctx.ExtractWorkContext(context.Background(),repoPath)
 	if err != nil {
 		t.Fatalf("ExtractWorkContext failed: %v", err)
 	}
@@ -205,7 +206,7 @@ func TestExtractWorkContext_ChangedFiles(t *testing.T) {
 	runGit(t, repoPath, "add", "file2.txt")
 	runGit(t, repoPath, "commit", "-m", "Change 2")
 
-	ctx, err := gitctx.ExtractWorkContext(repoPath)
+	ctx, err := gitctx.ExtractWorkContext(context.Background(),repoPath)
 	if err != nil {
 		t.Fatalf("ExtractWorkContext failed: %v", err)
 	}
@@ -245,7 +246,7 @@ func TestExtractWorkContext_NoRemote(t *testing.T) {
 		runGit(t, repoPath, "commit", "-m", "Commit "+string(rune('1'+i)))
 	}
 
-	ctx, err := gitctx.ExtractWorkContext(repoPath)
+	ctx, err := gitctx.ExtractWorkContext(context.Background(),repoPath)
 	if err != nil {
 		t.Fatalf("ExtractWorkContext failed: %v", err)
 	}
@@ -263,7 +264,7 @@ func TestExtractWorkContext_EmptyRepo(t *testing.T) {
 	// Initialize empty repo (no commits)
 	runGit(t, tmpDir, "init")
 
-	ctx, err := gitctx.ExtractWorkContext(tmpDir)
+	ctx, err := gitctx.ExtractWorkContext(context.Background(),tmpDir)
 	if err != nil {
 		t.Fatalf("ExtractWorkContext should not error on empty repo: %v", err)
 	}
@@ -290,7 +291,7 @@ func TestExtractWorkContext_Performance(t *testing.T) {
 
 	// Benchmark extraction time
 	start := time.Now()
-	_, err := gitctx.ExtractWorkContext(repoPath)
+	_, err := gitctx.ExtractWorkContext(context.Background(),repoPath)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -345,7 +346,7 @@ func BenchmarkExtractWorkContext(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = gitctx.ExtractWorkContext(tmpDir)
+		_, _ = gitctx.ExtractWorkContext(context.Background(),tmpDir)
 	}
 }
 
@@ -378,7 +379,7 @@ func TestExtractWorkContext_FileChanges(t *testing.T) {
 	runGit(t, repoPath, "add", "database.go")
 	runGit(t, repoPath, "commit", "-m", "Add database module")
 
-	ctx, err := gitctx.ExtractWorkContext(repoPath)
+	ctx, err := gitctx.ExtractWorkContext(context.Background(),repoPath)
 	if err != nil {
 		t.Fatalf("ExtractWorkContext failed: %v", err)
 	}
@@ -448,7 +449,7 @@ func TestExtractWorkContext_FileChanges_BinaryFile(t *testing.T) {
 	runGit(t, repoPath, "add", "image.bin")
 	runGit(t, repoPath, "commit", "-m", "Add binary file")
 
-	ctx, err := gitctx.ExtractWorkContext(repoPath)
+	ctx, err := gitctx.ExtractWorkContext(context.Background(),repoPath)
 	if err != nil {
 		t.Fatalf("ExtractWorkContext failed: %v", err)
 	}
@@ -485,7 +486,7 @@ func TestExtractWorkContext_FileChanges_DeletedFile(t *testing.T) {
 	runGit(t, repoPath, "rm", "old.txt")
 	runGit(t, repoPath, "commit", "-m", "Delete old file")
 
-	ctx, err := gitctx.ExtractWorkContext(repoPath)
+	ctx, err := gitctx.ExtractWorkContext(context.Background(),repoPath)
 	if err != nil {
 		t.Fatalf("ExtractWorkContext failed: %v", err)
 	}
@@ -528,7 +529,7 @@ func TestExtractWorkContext_FileChanges_PerformanceTarget(t *testing.T) {
 
 	// Benchmark extraction time
 	start := time.Now()
-	ctx, err := gitctx.ExtractWorkContext(repoPath)
+	ctx, err := gitctx.ExtractWorkContext(context.Background(),repoPath)
 	elapsed := time.Since(start)
 
 	if err != nil {

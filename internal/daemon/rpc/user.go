@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os/exec"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"regexp"
 	"strings"
 	"time"
@@ -60,12 +60,12 @@ var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,32}$`)
 func (h *UserHandler) HandleIdentify(ctx context.Context, params json.RawMessage) (any, error) {
 	repoPath := h.state.RepoPath()
 
-	name, err := gitConfigValue(repoPath, "user.name")
+	name, err := gitConfigValue(ctx, repoPath, "user.name")
 	if err != nil || name == "" {
 		return nil, fmt.Errorf("git config user.name not set: configure with 'git config user.name \"Your Name\"'")
 	}
 
-	email, _ := gitConfigValue(repoPath, "user.email")
+	email, _ := gitConfigValue(ctx, repoPath, "user.email")
 
 	return &IdentifyResponse{
 		Username: sanitizeUsername(name),
@@ -228,10 +228,8 @@ func sanitizeUsername(name string) string {
 }
 
 // gitConfigValue runs git config to get a value from the repo's git config.
-func gitConfigValue(repoPath, key string) (string, error) {
-	cmd := exec.Command("git", "config", "--get", key)
-	cmd.Dir = repoPath
-	out, err := cmd.Output()
+func gitConfigValue(ctx context.Context, repoPath, key string) (string, error) {
+	out, err := safecmd.Git(ctx, repoPath, "config", "--get", key)
 	if err != nil {
 		return "", err
 	}
