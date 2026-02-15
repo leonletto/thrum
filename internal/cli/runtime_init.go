@@ -137,9 +137,7 @@ func RuntimeInit(opts RuntimeInitOptions) (*RuntimeInitResult, error) {
 		MCPCommand:  "thrum",
 	}
 
-	if data.AgentName == "" {
-		data.AgentName = "default_agent"
-	}
+	// AgentName left empty intentionally — quickstart will reuse existing identity.
 	if data.AgentRole == "" {
 		data.AgentRole = "implementer"
 	}
@@ -153,6 +151,10 @@ func RuntimeInit(opts RuntimeInitOptions) (*RuntimeInitResult, error) {
 		{"agent role", data.AgentRole},
 		{"agent module", data.AgentModule},
 	} {
+		// AgentName may be empty (quickstart reuses existing identity).
+		if check.value == "" {
+			continue
+		}
 		if !safeIdentifierRE.MatchString(check.value) {
 			return nil, fmt.Errorf("invalid %s %q: must contain only lowercase alphanumeric, underscore, or hyphen", check.name, check.value)
 		}
