@@ -161,6 +161,10 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 	writer := bufio.NewWriter(conn)
 
 	for {
+		// Set read deadline so idle connections don't accumulate forever.
+		// Clients reconnect as needed; 5 minutes is generous for keep-alive.
+		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
+
 		// Read request line
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
@@ -223,9 +227,13 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 			continue
 		}
 
-		// Call handler with transport context
-		ctxWithTransport := transport.WithTransport(ctx, transport.TransportUnixSocket)
+		// Call handler with transport context and per-request timeout.
+		// This prevents a single blocked handler from permanently hanging
+		// the connection goroutine (which cascades into daemon deadlock).
+		reqCtx, reqCancel := context.WithTimeout(ctx, 30*time.Second)
+		ctxWithTransport := transport.WithTransport(reqCtx, transport.TransportUnixSocket)
 		result, err := handler(ctxWithTransport, req.Params)
+		reqCancel()
 		if err != nil {
 			resp := jsonRPCResponse{
 				JSONRPC: "2.0",
