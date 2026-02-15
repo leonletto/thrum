@@ -59,7 +59,10 @@ func NewWaiter(ctx context.Context, socketPath, agentID, agentRole, wsURL string
 		return nil, fmt.Errorf("parse WebSocket URL: %w", err)
 	}
 
-	conn, _, err := websocket.DefaultDialer.DialContext(wCtx, u.String(), nil)
+	dialer := &websocket.Dialer{
+		HandshakeTimeout: 10 * time.Second,
+	}
+	conn, _, err := dialer.DialContext(wCtx, u.String(), nil)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("connect to daemon WebSocket at %s: %w", wsURL, err)
