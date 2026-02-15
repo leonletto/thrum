@@ -414,7 +414,7 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 
 	// Extract and store git work context
 	if worktreePath := h.getWorktreePath(req.SessionID); worktreePath != "" {
-		if gitCtx, err := gitctx.ExtractWorkContext(worktreePath); err == nil {
+		if gitCtx, err := gitctx.ExtractWorkContext(ctx, worktreePath); err == nil {
 			// Ignore error - work context is optional/best-effort
 			_ = h.updateWorkContext(req.SessionID, session.AgentID, gitCtx)
 		}

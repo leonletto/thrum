@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -63,7 +64,7 @@ func TestMerger_Fetch_NoRemote(t *testing.T) {
 	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), false)
 
 	// Should succeed with no remote
-	if err := m.Fetch(); err != nil {
+	if err := m.Fetch(context.Background()); err != nil {
 		t.Errorf("Fetch failed with no remote: %v", err)
 	}
 }
@@ -95,7 +96,7 @@ func TestMerger_Fetch_WithRemote(t *testing.T) {
 	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), false)
 
 	// Should succeed with remote
-	if err := m.Fetch(); err != nil {
+	if err := m.Fetch(context.Background()); err != nil {
 		t.Errorf("Fetch failed with remote: %v", err)
 	}
 }
@@ -127,7 +128,7 @@ func TestMerger_Fetch_LocalOnly(t *testing.T) {
 	m := NewMerger(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), true)
 
 	// Fetch should return nil immediately (skip) even though remote exists
-	if err := m.Fetch(); err != nil {
+	if err := m.Fetch(context.Background()); err != nil {
 		t.Errorf("Fetch should succeed (no-op) in local-only mode: %v", err)
 	}
 }
@@ -587,7 +588,7 @@ func TestMerger_MergeAll(t *testing.T) {
 	}
 
 	// Test MergeAll without remote (should succeed with no remote files)
-	result, err := m.MergeAll()
+	result, err := m.MergeAll(context.Background())
 	if err != nil {
 		t.Fatalf("MergeAll failed: %v", err)
 	}
@@ -660,7 +661,7 @@ func TestMerger_MergeFile(t *testing.T) {
 	}
 
 	// Merge with non-existent remote (should succeed)
-	result, err := m.mergeFile(localPath, "nonexistent.jsonl")
+	result, err := m.mergeFile(context.Background(),localPath, "nonexistent.jsonl")
 	if err != nil {
 		t.Fatalf("mergeFile failed: %v", err)
 	}

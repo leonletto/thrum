@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,7 +44,7 @@ func TestSyncer_HasChanges_NoChanges(t *testing.T) {
 	cmd.Dir = syncDir
 	_ = cmd.Run()
 
-	hasChanges, err := s.hasChanges()
+	hasChanges, err := s.hasChanges(context.Background())
 	if err != nil {
 		t.Fatalf("hasChanges failed: %v", err)
 	}
@@ -76,7 +77,7 @@ func TestSyncer_HasChanges_WithChanges(t *testing.T) {
 	_, _ = f.WriteString(`{"type":"message.create","timestamp":"2026-02-03T10:00:00Z","message_id":"msg_001"}` + "\n")
 	_ = f.Close()
 
-	hasChanges, err := s.hasChanges()
+	hasChanges, err := s.hasChanges(context.Background())
 	if err != nil {
 		t.Fatalf("hasChanges failed: %v", err)
 	}
@@ -130,7 +131,7 @@ func TestSyncer_StageChanges(t *testing.T) {
 	_ = bobFile.Close()
 
 	// Stage changes
-	if err := s.stageChanges(); err != nil {
+	if err := s.stageChanges(context.Background()); err != nil {
 		t.Fatalf("stageChanges failed: %v", err)
 	}
 
@@ -165,11 +166,11 @@ func TestSyncer_CommitChanges(t *testing.T) {
 	_, _ = f.WriteString(`{"type":"message.create","timestamp":"2026-02-03T10:00:00Z","message_id":"msg_001"}` + "\n")
 	_ = f.Close()
 
-	_ = s.stageChanges()
+	_ = s.stageChanges(context.Background())
 
 	// Commit
 	commitMsg := "test: commit message"
-	if err := s.commitChanges(commitMsg); err != nil {
+	if err := s.commitChanges(context.Background(),commitMsg); err != nil {
 		t.Fatalf("commitChanges failed: %v", err)
 	}
 
@@ -201,7 +202,7 @@ func TestSyncer_CommitChanges_NothingToCommit(t *testing.T) {
 	_ = cmd.Run()
 
 	// Commit without staging anything — should not error
-	err := s.commitChanges("test: empty commit")
+	err := s.commitChanges(context.Background(),"test: empty commit")
 	if err != nil {
 		t.Errorf("commitChanges should not fail when nothing to commit: %v", err)
 	}
@@ -212,7 +213,7 @@ func TestSyncer_Push_NoRemote(t *testing.T) {
 	s := NewSyncer(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), false)
 
 	// Should succeed (no-op) when no remote
-	if err := s.push(); err != nil {
+	if err := s.push(context.Background()); err != nil {
 		t.Errorf("push failed with no remote: %v", err)
 	}
 }
@@ -247,7 +248,7 @@ func TestSyncer_Push_WithRemote(t *testing.T) {
 	s := NewSyncer(repoPath, syncDir, false)
 
 	// Push should succeed
-	if err := s.push(); err != nil {
+	if err := s.push(context.Background()); err != nil {
 		t.Errorf("push failed: %v", err)
 	}
 }
@@ -320,7 +321,7 @@ func TestSyncer_CommitAndPush_NoChanges(t *testing.T) {
 	_ = cmd.Run()
 
 	// CommitAndPush should succeed with no changes
-	if err := s.CommitAndPush(); err != nil {
+	if err := s.CommitAndPush(context.Background()); err != nil {
 		t.Errorf("CommitAndPush failed with no changes: %v", err)
 	}
 }
@@ -349,7 +350,7 @@ func TestSyncer_CommitAndPush_WithChanges(t *testing.T) {
 	_ = f.Close()
 
 	// CommitAndPush should succeed
-	if err := s.CommitAndPush(); err != nil {
+	if err := s.CommitAndPush(context.Background()); err != nil {
 		t.Errorf("CommitAndPush failed: %v", err)
 	}
 
@@ -448,7 +449,7 @@ func TestSyncer_Push_LocalOnly(t *testing.T) {
 	s := NewSyncer(repoPath, syncDir, true)
 
 	// push should return nil immediately (skip) even though remote exists
-	if err := s.push(); err != nil {
+	if err := s.push(context.Background()); err != nil {
 		t.Errorf("push should succeed (no-op) in local-only mode: %v", err)
 	}
 
@@ -505,7 +506,7 @@ func TestSyncer_CommitAndPush_LocalOnly_CommitsButDoesNotPush(t *testing.T) {
 	s := NewSyncer(repoPath, syncDir, true)
 
 	// CommitAndPush should succeed — commits locally, skips push
-	if err := s.CommitAndPush(); err != nil {
+	if err := s.CommitAndPush(context.Background()); err != nil {
 		t.Fatalf("CommitAndPush failed in local-only mode: %v", err)
 	}
 

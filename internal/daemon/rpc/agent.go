@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"path/filepath"
 	"strings"
 	"time"
@@ -797,7 +797,7 @@ func (h *AgentHandler) HandleCleanup(ctx context.Context, params json.RawMessage
 		worktreeMissing := false
 		if identity.Worktree != "" {
 			// Check via git worktree list
-			worktreeMissing = !h.worktreeExists(identity.Worktree)
+			worktreeMissing = !h.worktreeExists(ctx, identity.Worktree)
 		}
 
 		// Check if agent is stale (based on last_seen_at)
@@ -880,11 +880,9 @@ func (h *AgentHandler) HandleCleanup(ctx context.Context, params json.RawMessage
 }
 
 // worktreeExists checks if a worktree exists via git worktree list.
-func (h *AgentHandler) worktreeExists(worktreeName string) bool {
+func (h *AgentHandler) worktreeExists(ctx context.Context, worktreeName string) bool {
 	// Run git worktree list and check if worktree name appears
-	cmd := exec.Command("git", "worktree", "list", "--porcelain")
-	cmd.Dir = h.state.RepoPath()
-	output, err := cmd.Output()
+	output, err := safecmd.Git(ctx, h.state.RepoPath(), "worktree", "list", "--porcelain")
 	if err != nil {
 		return false
 	}
