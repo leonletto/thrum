@@ -109,8 +109,8 @@ func TestMultiDaemon_SharedFixture(t *testing.T) {
 
 	// Both start with same data
 	var count1, count2 int
-	st1.DB().QueryRow("SELECT COUNT(*) FROM messages").Scan(&count1)
-	st2.DB().QueryRow("SELECT COUNT(*) FROM messages").Scan(&count2)
+	st1.RawDB().QueryRow("SELECT COUNT(*) FROM messages").Scan(&count1)
+	st2.RawDB().QueryRow("SELECT COUNT(*) FROM messages").Scan(&count2)
 
 	if count1 != count2 {
 		t.Errorf("fixtures should start with same message count: %d vs %d", count1, count2)
@@ -126,8 +126,8 @@ func TestMultiDaemon_SharedFixture(t *testing.T) {
 	}
 
 	// Daemon 1 should have more messages now
-	st1.DB().QueryRow("SELECT COUNT(*) FROM messages").Scan(&count1)
-	st2.DB().QueryRow("SELECT COUNT(*) FROM messages").Scan(&count2)
+	st1.RawDB().QueryRow("SELECT COUNT(*) FROM messages").Scan(&count1)
+	st2.RawDB().QueryRow("SELECT COUNT(*) FROM messages").Scan(&count2)
 
 	if count1 != count2+10 {
 		t.Errorf("expected daemon 1 to have 10 more messages: d1=%d d2=%d", count1, count2)
