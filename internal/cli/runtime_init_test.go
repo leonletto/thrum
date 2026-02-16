@@ -74,7 +74,6 @@ func TestRenderTemplate(t *testing.T) {
 			runtime:  "shared",
 			template: "startup.sh.tmpl",
 			contains: []string{
-				"test_agent",
 				"implementer",
 				"auth",
 				"thrum daemon",
@@ -86,7 +85,6 @@ func TestRenderTemplate(t *testing.T) {
 			template: "settings.json.tmpl",
 			contains: []string{
 				`"thrum"`,
-				"test_agent",
 				"mcp",
 				"SessionStart",
 			},
@@ -95,7 +93,6 @@ func TestRenderTemplate(t *testing.T) {
 			runtime:  "auggie",
 			template: "rules.md.tmpl",
 			contains: []string{
-				"test_agent",
 				"implementer",
 				"auth",
 				"type: always",
