@@ -197,7 +197,7 @@ func TestListSubscriptions(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	// Call ListSubscriptions
-	result, err := ListSubscriptions(client)
+	result, err := ListSubscriptions(client, "test-agent")
 	if err != nil {
 		t.Fatalf("ListSubscriptions() error = %v", err)
 	}
