@@ -4,12 +4,44 @@ package resilience
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
+// checkGoroutineLeaks snapshots goroutine count before the test body runs
+// and verifies no goroutines leaked after completion (with a small tolerance
+// for runtime-internal goroutines that may start/stop asynchronously).
+func checkGoroutineLeaks(t *testing.T, tolerance int) func() {
+	t.Helper()
+	// Let any previous test goroutines settle
+	runtime.GC()
+	time.Sleep(50 * time.Millisecond)
+	before := runtime.NumGoroutine()
+	return func() {
+		// Give goroutines time to wind down
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			runtime.GC()
+			after := runtime.NumGoroutine()
+			if after <= before+tolerance {
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		after := runtime.NumGoroutine()
+		if after > before+tolerance {
+			t.Errorf("goroutine leak detected: before=%d after=%d (tolerance=%d)", before, after, tolerance)
+		}
+	}
+}
+
 func TestConcurrent_10Senders(t *testing.T) {
+	done := checkGoroutineLeaks(t, 5)
+	defer done()
+
 	thrumDir := setupFixture(t)
 	_, _, socketPath := startTestDaemon(t, thrumDir)
 
@@ -57,6 +89,9 @@ func TestConcurrent_10Senders(t *testing.T) {
 }
 
 func TestConcurrent_ReadWriteMix(t *testing.T) {
+	done := checkGoroutineLeaks(t, 5)
+	defer done()
+
 	thrumDir := setupFixture(t)
 	_, _, socketPath := startTestDaemon(t, thrumDir)
 
@@ -113,6 +148,9 @@ func TestConcurrent_ReadWriteMix(t *testing.T) {
 }
 
 func TestConcurrent_InboxUnderLoad(t *testing.T) {
+	done := checkGoroutineLeaks(t, 5)
+	defer done()
+
 	thrumDir := setupFixture(t)
 	_, _, socketPath := startTestDaemon(t, thrumDir)
 
@@ -160,6 +198,9 @@ func TestConcurrent_InboxUnderLoad(t *testing.T) {
 }
 
 func TestConcurrent_SessionLifecycle(t *testing.T) {
+	done := checkGoroutineLeaks(t, 5)
+	defer done()
+
 	thrumDir := setupFixture(t)
 	_, _, socketPath := startTestDaemon(t, thrumDir)
 

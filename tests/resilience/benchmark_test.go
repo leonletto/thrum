@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 )
 
 // setupFixtureForBench extracts the fixture for benchmark use.
@@ -123,18 +124,28 @@ func BenchmarkConcurrentSend10(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		var wg sync.WaitGroup
-		for j := range 10 {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				rpcCallRaw(socketPath, "message.send", map[string]any{
-					"caller_agent_id": fixtureAgentName(idx + 1),
-					"content":         "Benchmark concurrent",
-					"format":          "markdown",
-				})
-			}(j)
+		done := make(chan struct{})
+		go func() {
+			var wg sync.WaitGroup
+			for j := range 10 {
+				wg.Add(1)
+				go func(idx int) {
+					defer wg.Done()
+					rpcCallRaw(socketPath, "message.send", map[string]any{
+						"caller_agent_id": fixtureAgentName(idx + 1),
+						"content":         "Benchmark concurrent",
+						"format":          "markdown",
+					})
+				}(j)
+			}
+			wg.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+			b.Fatal("BenchmarkConcurrentSend10: deadlock detected (30s timeout)")
 		}
-		wg.Wait()
 	}
 }
