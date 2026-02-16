@@ -33,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "thrum prime 2>/dev/null || true"
+            "command": "REPO=$(git rev-parse --show-toplevel 2>/dev/null) && \"$REPO/scripts/pre-compact-save-context.sh\" 2>/dev/null || true"
           }
         ]
       }

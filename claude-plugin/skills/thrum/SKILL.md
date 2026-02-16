@@ -56,9 +56,11 @@ thrum session start                      Start session
 thrum session end                        End session
 thrum session set-intent "..."           Update work description
 thrum context prime                      Same as thrum prime
+thrum context show                       Show saved work context
 thrum context save --file <path>         Save context from file
 thrum overview                           Combined status + team + inbox
 /thrum:update-context                    Guided context save (narrative + state)
+/thrum:load-context                      Restore work context after compaction
 ```
 
 ### Daemon & Sync
@@ -118,8 +120,9 @@ Re-arm after processing. See [LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md
 ### Context Management
 
 - `thrum prime` gathers identity, team, inbox, git context, sync health
-- Hooks auto-run `thrum prime` on SessionStart and PreCompact
-- After compaction: context auto-recovers via PreCompact hook
+- SessionStart hook auto-runs `thrum prime` on session start
+- PreCompact hook saves state to thrum context + `/tmp` backup before compaction
+- **After compaction:** run `/thrum:load-context` to restore your work context
 - Agent identity persists in `.thrum/identities/`
 
 ## Resources
