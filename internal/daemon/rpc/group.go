@@ -23,7 +23,7 @@ type GroupHandler struct {
 func NewGroupHandler(st *state.State) *GroupHandler {
 	return &GroupHandler{
 		state:    st,
-		resolver: groups.NewResolver(st.DB()),
+		resolver: groups.NewResolver(st.RawDB()),
 	}
 }
 
@@ -210,7 +210,7 @@ func (h *GroupHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 	// Look up group_id
 	h.state.RLock()
 	var groupID string
-	err := h.state.DB().QueryRow("SELECT group_id FROM groups WHERE name = ?", req.Name).Scan(&groupID)
+	err := h.state.DB().QueryRowContext(ctx, "SELECT group_id FROM groups WHERE name = ?", req.Name).Scan(&groupID)
 	h.state.RUnlock()
 
 	if err == sql.ErrNoRows {
@@ -273,7 +273,7 @@ func (h *GroupHandler) HandleMemberAdd(ctx context.Context, params json.RawMessa
 	// Look up group_id
 	h.state.RLock()
 	var groupID string
-	err := h.state.DB().QueryRow("SELECT group_id FROM groups WHERE name = ?", req.Group).Scan(&groupID)
+	err := h.state.DB().QueryRowContext(ctx, "SELECT group_id FROM groups WHERE name = ?", req.Group).Scan(&groupID)
 	h.state.RUnlock()
 
 	if err == sql.ErrNoRows {
@@ -334,7 +334,7 @@ func (h *GroupHandler) HandleMemberRemove(ctx context.Context, params json.RawMe
 	// Look up group_id
 	h.state.RLock()
 	var groupID string
-	err := h.state.DB().QueryRow("SELECT group_id FROM groups WHERE name = ?", req.Group).Scan(&groupID)
+	err := h.state.DB().QueryRowContext(ctx, "SELECT group_id FROM groups WHERE name = ?", req.Group).Scan(&groupID)
 	h.state.RUnlock()
 
 	if err == sql.ErrNoRows {
@@ -374,11 +374,11 @@ func (h *GroupHandler) HandleMemberRemove(ctx context.Context, params json.RawMe
 }
 
 // HandleList handles the group.list RPC method.
-func (h *GroupHandler) HandleList(_ context.Context, _ json.RawMessage) (any, error) {
+func (h *GroupHandler) HandleList(ctx context.Context, _ json.RawMessage) (any, error) {
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	rows, err := h.state.DB().Query(`
+	rows, err := h.state.DB().QueryContext(ctx, `
 		SELECT g.group_id, g.name, g.description, g.created_at,
 		       (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.group_id) as member_count
 		FROM groups g
@@ -409,7 +409,7 @@ func (h *GroupHandler) HandleList(_ context.Context, _ json.RawMessage) (any, er
 }
 
 // HandleInfo handles the group.info RPC method.
-func (h *GroupHandler) HandleInfo(_ context.Context, params json.RawMessage) (any, error) {
+func (h *GroupHandler) HandleInfo(ctx context.Context, params json.RawMessage) (any, error) {
 	var req GroupInfoRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -424,7 +424,7 @@ func (h *GroupHandler) HandleInfo(_ context.Context, params json.RawMessage) (an
 
 	var resp GroupInfoResponse
 	var desc sql.NullString
-	err := h.state.DB().QueryRow(
+	err := h.state.DB().QueryRowContext(ctx,
 		"SELECT group_id, name, description, created_at, created_by FROM groups WHERE name = ?",
 		req.Name,
 	).Scan(&resp.GroupID, &resp.Name, &desc, &resp.CreatedAt, &resp.CreatedBy)
@@ -440,7 +440,7 @@ func (h *GroupHandler) HandleInfo(_ context.Context, params json.RawMessage) (an
 	}
 
 	// Query members
-	rows, err := h.state.DB().Query(
+	rows, err := h.state.DB().QueryContext(ctx,
 		"SELECT member_type, member_value, added_at, added_by FROM group_members WHERE group_id = ? ORDER BY member_type, member_value",
 		resp.GroupID,
 	)
@@ -469,7 +469,7 @@ func (h *GroupHandler) HandleInfo(_ context.Context, params json.RawMessage) (an
 }
 
 // HandleMembers handles the group.members RPC method.
-func (h *GroupHandler) HandleMembers(_ context.Context, params json.RawMessage) (any, error) {
+func (h *GroupHandler) HandleMembers(ctx context.Context, params json.RawMessage) (any, error) {
 	var req GroupMembersRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -484,7 +484,7 @@ func (h *GroupHandler) HandleMembers(_ context.Context, params json.RawMessage) 
 
 	// Check group exists
 	var groupID string
-	err := h.state.DB().QueryRow("SELECT group_id FROM groups WHERE name = ?", req.Name).Scan(&groupID)
+	err := h.state.DB().QueryRowContext(ctx, "SELECT group_id FROM groups WHERE name = ?", req.Name).Scan(&groupID)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("group %q not found", req.Name)
 	}
@@ -493,7 +493,7 @@ func (h *GroupHandler) HandleMembers(_ context.Context, params json.RawMessage) 
 	}
 
 	// Query raw members
-	rows, err := h.state.DB().Query(
+	rows, err := h.state.DB().QueryContext(ctx,
 		"SELECT member_type, member_value, added_at, added_by FROM group_members WHERE group_id = ? ORDER BY member_type, member_value",
 		groupID,
 	)
@@ -535,7 +535,7 @@ func (h *GroupHandler) HandleMembers(_ context.Context, params json.RawMessage) 
 func EnsureEveryoneGroup(ctx context.Context, st *state.State) error {
 	st.RLock()
 	var exists bool
-	err := st.DB().QueryRow("SELECT EXISTS(SELECT 1 FROM groups WHERE name = 'everyone')").Scan(&exists)
+	err := st.DB().QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM groups WHERE name = 'everyone')").Scan(&exists)
 	st.RUnlock()
 	if err != nil {
 		return fmt.Errorf("check everyone group: %w", err)

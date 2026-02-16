@@ -102,7 +102,7 @@ func (d *testDaemon) writeEvent(t *testing.T, agentID string, idx int) {
 func (d *testDaemon) eventCount(t *testing.T) int {
 	t.Helper()
 	var count int
-	err := d.state.DB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
+	err := d.state.RawDB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
 	if err != nil {
 		t.Fatalf("count events: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestPullSyncBasic(t *testing.T) {
 	}
 
 	// Verify event IDs match
-	rows, err := daemonB.state.DB().Query("SELECT event_id FROM events ORDER BY sequence")
+	rows, err := daemonB.state.RawDB().Query("SELECT event_id FROM events ORDER BY sequence")
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 	}
 
 	// Verify checkpoint
-	cp, err := checkpoint.GetCheckpoint(daemonB.state.DB(), peerID)
+	cp, err := checkpoint.GetCheckpoint(daemonB.state.RawDB(), peerID)
 	if err != nil {
 		t.Fatalf("GetCheckpoint: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 	}
 
 	// Verify checkpoint updated
-	cp2, err := checkpoint.GetCheckpoint(daemonB.state.DB(), peerID)
+	cp2, err := checkpoint.GetCheckpoint(daemonB.state.RawDB(), peerID)
 	if err != nil {
 		t.Fatalf("GetCheckpoint (second): %v", err)
 	}
@@ -386,7 +386,7 @@ func TestPullSyncEndToEnd_SyncManager(t *testing.T) {
 
 	// Verify events in B
 	var count int
-	err = stB.DB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
+	err = stB.RawDB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestPullSyncEndToEnd_SyncManager(t *testing.T) {
 	}
 
 	// Verify checkpoint was set
-	cp, err := checkpoint.GetCheckpoint(stB.DB(), peerID)
+	cp, err := checkpoint.GetCheckpoint(stB.RawDB(), peerID)
 	if err != nil {
 		t.Fatalf("GetCheckpoint: %v", err)
 	}

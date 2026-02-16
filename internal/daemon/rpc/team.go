@@ -92,7 +92,7 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 
 	query += " ORDER BY s.started_at DESC NULLS LAST"
 
-	rows, err := h.state.DB().Query(query)
+	rows, err := h.state.DB().QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("query team members: %w", err)
 	}
@@ -191,25 +191,25 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 		for _, v := range values {
 			args = append(args, v)
 		}
-		_ = h.state.DB().QueryRow(mentionQuery, args...).Scan(&members[i].InboxTotal)
+		_ = h.state.DB().QueryRowContext(ctx, mentionQuery, args...).Scan(&members[i].InboxTotal)
 
 		// Unread: same filter, minus messages already read
 		unreadQuery := mentionQuery + " AND m.message_id NOT IN (SELECT message_id FROM message_reads WHERE agent_id = ?)"
 		unreadArgs := append(args, m.AgentID)
-		_ = h.state.DB().QueryRow(unreadQuery, unreadArgs...).Scan(&members[i].InboxUnread)
+		_ = h.state.DB().QueryRowContext(ctx, unreadQuery, unreadArgs...).Scan(&members[i].InboxUnread)
 	}
 
 	// Query 3: Shared message counts (broadcasts + per-group)
 	shared := &SharedMessages{}
 
 	// Broadcasts: messages with no mention refs and no group scopes
-	_ = h.state.DB().QueryRow(`SELECT COUNT(*) FROM messages m
+	_ = h.state.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM messages m
 		WHERE m.deleted = 0
 		AND m.message_id NOT IN (SELECT mr.message_id FROM message_refs mr WHERE mr.ref_type = 'mention')
 		AND m.message_id NOT IN (SELECT ms.message_id FROM message_scopes ms WHERE ms.scope_type = 'group')`).Scan(&shared.BroadcastTotal)
 
 	// Per-group message counts
-	groupRows, err := h.state.DB().Query(`SELECT ms.scope_value, COUNT(DISTINCT m.message_id)
+	groupRows, err := h.state.DB().QueryContext(ctx, `SELECT ms.scope_value, COUNT(DISTINCT m.message_id)
 		FROM messages m
 		JOIN message_scopes ms ON m.message_id = ms.message_id AND ms.scope_type = 'group'
 		WHERE m.deleted = 0

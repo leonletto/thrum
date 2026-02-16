@@ -48,7 +48,7 @@ func (m *DaemonSyncManager) SyncFromPeer(ctx context.Context, peerAddr string, p
 	}
 
 	// Set sync status
-	if statusErr := checkpoint.UpdateSyncStatus(m.state.DB(), peerDaemonID, "syncing"); statusErr != nil {
+	if statusErr := checkpoint.UpdateSyncStatus(m.state.RawDB(), peerDaemonID, "syncing"); statusErr != nil {
 		log.Printf("sync: failed to update status to 'syncing' for %s: %v", peerDaemonID, statusErr)
 	}
 	defer func() {
@@ -56,7 +56,7 @@ func (m *DaemonSyncManager) SyncFromPeer(ctx context.Context, peerAddr string, p
 		if err != nil {
 			status = "error"
 		}
-		if statusErr := checkpoint.UpdateSyncStatus(m.state.DB(), peerDaemonID, status); statusErr != nil {
+		if statusErr := checkpoint.UpdateSyncStatus(m.state.RawDB(), peerDaemonID, status); statusErr != nil {
 			log.Printf("sync: failed to update status to '%s' for %s: %v", status, peerDaemonID, statusErr)
 		}
 	}()
@@ -112,7 +112,7 @@ func (m *DaemonSyncManager) ListPeers() []PeerStatusInfo {
 		}
 
 		var lastSeq int64
-		cp, err := checkpoint.GetCheckpoint(m.state.DB(), p.DaemonID)
+		cp, err := checkpoint.GetCheckpoint(m.state.RawDB(), p.DaemonID)
 		if err == nil && cp != nil {
 			lastSeq = cp.LastSyncedSeq
 		}
@@ -223,7 +223,7 @@ func (m *DaemonSyncManager) TailscaleSyncStatus(hostname string) (int, []PeerSta
 		}
 
 		var lastSeq int64
-		cp, err := checkpoint.GetCheckpoint(m.state.DB(), p.DaemonID)
+		cp, err := checkpoint.GetCheckpoint(m.state.RawDB(), p.DaemonID)
 		if err == nil && cp != nil {
 			lastSeq = cp.LastSyncedSeq
 		}
@@ -264,7 +264,7 @@ func (m *DaemonSyncManager) DetailedPeerStatus() []DetailedPeerInfo {
 		}
 
 		var lastSeq int64
-		cp, err := checkpoint.GetCheckpoint(m.state.DB(), p.DaemonID)
+		cp, err := checkpoint.GetCheckpoint(m.state.RawDB(), p.DaemonID)
 		if err == nil && cp != nil {
 			lastSeq = cp.LastSyncedSeq
 		}
