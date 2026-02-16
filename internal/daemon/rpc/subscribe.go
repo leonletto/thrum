@@ -69,7 +69,7 @@ type SubscriptionHandler struct {
 func NewSubscriptionHandler(state *state.State) *SubscriptionHandler {
 	return &SubscriptionHandler{
 		state: state,
-		svc:   subscriptions.NewService(state.DB()),
+		svc:   subscriptions.NewService(state.RawDB()),
 	}
 }
 
@@ -215,7 +215,7 @@ func (h *SubscriptionHandler) getCurrentSession(callerAgentID string) (string, e
 	          LIMIT 1`
 
 	var sessionID string
-	sessionErr := h.state.DB().QueryRow(query, agentID).Scan(&sessionID)
+	sessionErr := h.state.DB().QueryRowContext(context.Background(), query, agentID).Scan(&sessionID)
 	if sessionErr == sql.ErrNoRows {
 		return "", fmt.Errorf("no active session found for agent %s", agentID)
 	}

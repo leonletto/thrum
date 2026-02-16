@@ -105,7 +105,7 @@ func TestSessionStart(t *testing.T) {
 
 			// Verify session was written to database
 			var count int
-			err = s.DB().QueryRow("SELECT COUNT(*) FROM sessions WHERE session_id = ?", startResp.SessionID).Scan(&count)
+			err = s.RawDB().QueryRow("SELECT COUNT(*) FROM sessions WHERE session_id = ?", startResp.SessionID).Scan(&count)
 			if err != nil {
 				t.Errorf("query session: %v", err)
 			}
@@ -221,7 +221,7 @@ func TestSessionEnd(t *testing.T) {
 
 			// Verify session was updated in database
 			var endedAt *string
-			err = s.DB().QueryRow("SELECT ended_at FROM sessions WHERE session_id = ?", tt.request.SessionID).Scan(&endedAt)
+			err = s.RawDB().QueryRow("SELECT ended_at FROM sessions WHERE session_id = ?", tt.request.SessionID).Scan(&endedAt)
 			if err != nil {
 				t.Errorf("query session: %v", err)
 			}
@@ -263,7 +263,7 @@ func TestSessionCrashRecovery(t *testing.T) {
 	orphanedSessions := []string{"ses_ORPHAN1", "ses_ORPHAN2"}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, sessionID := range orphanedSessions {
-		_, err = s.DB().Exec(`
+		_, err = s.RawDB().Exec(`
 			INSERT INTO sessions (session_id, agent_id, started_at, last_seen_at)
 			VALUES (?, ?, ?, ?)
 		`, sessionID, agentID, now, now)
@@ -274,7 +274,7 @@ func TestSessionCrashRecovery(t *testing.T) {
 
 	// Verify orphaned sessions exist with no end time
 	var orphanedCount int
-	err = s.DB().QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND ended_at IS NULL", agentID).Scan(&orphanedCount)
+	err = s.RawDB().QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND ended_at IS NULL", agentID).Scan(&orphanedCount)
 	if err != nil {
 		t.Fatalf("query orphaned sessions: %v", err)
 	}
@@ -295,7 +295,7 @@ func TestSessionCrashRecovery(t *testing.T) {
 
 	// Verify orphaned sessions were recovered (ended_at should now be set)
 	var recoveredCount int
-	err = s.DB().QueryRow(`
+	err = s.RawDB().QueryRow(`
 		SELECT COUNT(*) FROM sessions
 		WHERE agent_id = ? AND ended_at IS NOT NULL AND end_reason = 'crash_recovered'
 	`, agentID).Scan(&recoveredCount)
@@ -308,7 +308,7 @@ func TestSessionCrashRecovery(t *testing.T) {
 
 	// Verify new session was created
 	var activeCount int
-	err = s.DB().QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND ended_at IS NULL", agentID).Scan(&activeCount)
+	err = s.RawDB().QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND ended_at IS NULL", agentID).Scan(&activeCount)
 	if err != nil {
 		t.Fatalf("query active sessions: %v", err)
 	}
@@ -363,14 +363,14 @@ func TestSessionHeartbeat(t *testing.T) {
 	t.Run("update_last_seen_at", func(t *testing.T) {
 		// Get initial last_seen_at for session
 		var initialLastSeen string
-		err := s.DB().QueryRow("SELECT last_seen_at FROM sessions WHERE session_id = ?", sessionID).Scan(&initialLastSeen)
+		err := s.RawDB().QueryRow("SELECT last_seen_at FROM sessions WHERE session_id = ?", sessionID).Scan(&initialLastSeen)
 		if err != nil {
 			t.Fatalf("query last_seen_at: %v", err)
 		}
 
 		// Get initial last_seen_at for agent (may be NULL)
 		var initialAgentLastSeen sql.NullString
-		err = s.DB().QueryRow("SELECT last_seen_at FROM agents WHERE agent_id = ?", agentID).Scan(&initialAgentLastSeen)
+		err = s.RawDB().QueryRow("SELECT last_seen_at FROM agents WHERE agent_id = ?", agentID).Scan(&initialAgentLastSeen)
 		if err != nil {
 			t.Fatalf("query agent last_seen_at: %v", err)
 		}
@@ -403,7 +403,7 @@ func TestSessionHeartbeat(t *testing.T) {
 
 		// Verify session last_seen_at was updated
 		var updatedLastSeen string
-		err = s.DB().QueryRow("SELECT last_seen_at FROM sessions WHERE session_id = ?", sessionID).Scan(&updatedLastSeen)
+		err = s.RawDB().QueryRow("SELECT last_seen_at FROM sessions WHERE session_id = ?", sessionID).Scan(&updatedLastSeen)
 		if err != nil {
 			t.Fatalf("query updated last_seen_at: %v", err)
 		}
@@ -414,7 +414,7 @@ func TestSessionHeartbeat(t *testing.T) {
 
 		// Verify agent last_seen_at was updated (should now be non-NULL)
 		var updatedAgentLastSeen sql.NullString
-		err = s.DB().QueryRow("SELECT last_seen_at FROM agents WHERE agent_id = ?", agentID).Scan(&updatedAgentLastSeen)
+		err = s.RawDB().QueryRow("SELECT last_seen_at FROM agents WHERE agent_id = ?", agentID).Scan(&updatedAgentLastSeen)
 		if err != nil {
 			t.Fatalf("query updated agent last_seen_at: %v", err)
 		}
@@ -444,7 +444,7 @@ func TestSessionHeartbeat(t *testing.T) {
 
 		// Verify scopes were added
 		var scopeCount int
-		err = s.DB().QueryRow("SELECT COUNT(*) FROM session_scopes WHERE session_id = ?", sessionID).Scan(&scopeCount)
+		err = s.RawDB().QueryRow("SELECT COUNT(*) FROM session_scopes WHERE session_id = ?", sessionID).Scan(&scopeCount)
 		if err != nil {
 			t.Fatalf("query scopes: %v", err)
 		}
@@ -454,7 +454,7 @@ func TestSessionHeartbeat(t *testing.T) {
 
 		// Verify specific scope
 		var scopeValue string
-		err = s.DB().QueryRow("SELECT scope_value FROM session_scopes WHERE session_id = ? AND scope_type = ?",
+		err = s.RawDB().QueryRow("SELECT scope_value FROM session_scopes WHERE session_id = ? AND scope_type = ?",
 			sessionID, "module").Scan(&scopeValue)
 		if err != nil {
 			t.Fatalf("query scope value: %v", err)
@@ -480,7 +480,7 @@ func TestSessionHeartbeat(t *testing.T) {
 
 		// Verify refs were added
 		var refCount int
-		err = s.DB().QueryRow("SELECT COUNT(*) FROM session_refs WHERE session_id = ?", sessionID).Scan(&refCount)
+		err = s.RawDB().QueryRow("SELECT COUNT(*) FROM session_refs WHERE session_id = ?", sessionID).Scan(&refCount)
 		if err != nil {
 			t.Fatalf("query refs: %v", err)
 		}
@@ -504,7 +504,7 @@ func TestSessionHeartbeat(t *testing.T) {
 
 		// Verify scope was removed
 		var scopeCount int
-		err = s.DB().QueryRow("SELECT COUNT(*) FROM session_scopes WHERE session_id = ?", sessionID).Scan(&scopeCount)
+		err = s.RawDB().QueryRow("SELECT COUNT(*) FROM session_scopes WHERE session_id = ?", sessionID).Scan(&scopeCount)
 		if err != nil {
 			t.Fatalf("query scopes: %v", err)
 		}
@@ -528,7 +528,7 @@ func TestSessionHeartbeat(t *testing.T) {
 
 		// Verify ref was removed
 		var refCount int
-		err = s.DB().QueryRow("SELECT COUNT(*) FROM session_refs WHERE session_id = ?", sessionID).Scan(&refCount)
+		err = s.RawDB().QueryRow("SELECT COUNT(*) FROM session_refs WHERE session_id = ?", sessionID).Scan(&refCount)
 		if err != nil {
 			t.Fatalf("query refs: %v", err)
 		}
@@ -634,7 +634,7 @@ func TestHeartbeat_WorkContext(t *testing.T) {
 
 	// Verify worktree ref was stored
 	var storedWorktree string
-	err = s.DB().QueryRow(`
+	err = s.RawDB().QueryRow(`
 		SELECT ref_value FROM session_refs WHERE session_id = ? AND ref_type = 'worktree'
 	`, sessionID).Scan(&storedWorktree)
 	if err != nil {
@@ -659,7 +659,7 @@ func TestHeartbeat_WorkContext(t *testing.T) {
 
 	// Verify work context was stored
 	var branch string
-	err = s.DB().QueryRow(`
+	err = s.RawDB().QueryRow(`
 		SELECT branch FROM agent_work_contexts WHERE session_id = ?
 	`, sessionID).Scan(&branch)
 	if err != nil {
@@ -672,7 +672,7 @@ func TestHeartbeat_WorkContext(t *testing.T) {
 
 	// Verify other fields were populated
 	var worktreePath, gitUpdatedAt string
-	err = s.DB().QueryRow(`
+	err = s.RawDB().QueryRow(`
 		SELECT worktree_path, git_updated_at FROM agent_work_contexts WHERE session_id = ?
 	`, sessionID).Scan(&worktreePath, &gitUpdatedAt)
 	if err != nil {
@@ -742,7 +742,7 @@ func TestHeartbeat_NoWorktreeRef(t *testing.T) {
 
 	// Verify no work context was created
 	var count int
-	err = s.DB().QueryRow(`
+	err = s.RawDB().QueryRow(`
 		SELECT COUNT(*) FROM agent_work_contexts WHERE session_id = ?
 	`, sessionID).Scan(&count)
 	if err != nil {
@@ -869,7 +869,7 @@ func TestSetIntent(t *testing.T) {
 
 		// Verify in database
 		var dbIntent string
-		err = s.DB().QueryRow(`SELECT intent FROM agent_work_contexts WHERE session_id = ?`, sessionID).Scan(&dbIntent)
+		err = s.RawDB().QueryRow(`SELECT intent FROM agent_work_contexts WHERE session_id = ?`, sessionID).Scan(&dbIntent)
 		if err != nil {
 			t.Fatalf("query intent from db: %v", err)
 		}
@@ -983,7 +983,7 @@ func TestSetTask(t *testing.T) {
 
 		// Verify in database
 		var dbTask string
-		err = s.DB().QueryRow(`SELECT current_task FROM agent_work_contexts WHERE session_id = ?`, sessionID).Scan(&dbTask)
+		err = s.RawDB().QueryRow(`SELECT current_task FROM agent_work_contexts WHERE session_id = ?`, sessionID).Scan(&dbTask)
 		if err != nil {
 			t.Fatalf("query task from db: %v", err)
 		}
@@ -1442,7 +1442,7 @@ func TestSessionSetIntent(t *testing.T) {
 
 		// Verify in database
 		var dbIntent string
-		err = s.DB().QueryRow(`SELECT intent FROM agent_work_contexts WHERE session_id = ?`, sessionID).Scan(&dbIntent)
+		err = s.RawDB().QueryRow(`SELECT intent FROM agent_work_contexts WHERE session_id = ?`, sessionID).Scan(&dbIntent)
 		if err != nil {
 			t.Fatalf("query intent from db: %v", err)
 		}

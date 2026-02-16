@@ -245,7 +245,7 @@ func TestImpersonation_MessageCreateEventFields(t *testing.T) {
 	var authoredBy sql.NullString
 	var disclosed int
 	query := `SELECT authored_by, disclosed FROM messages WHERE message_id = ?`
-	err = st.DB().QueryRow(query, sendResp.MessageID).Scan(&authoredBy, &disclosed)
+	err = st.RawDB().QueryRow(query, sendResp.MessageID).Scan(&authoredBy, &disclosed)
 	if err != nil {
 		t.Fatalf("failed to query message: %v", err)
 	}

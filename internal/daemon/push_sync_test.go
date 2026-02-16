@@ -122,7 +122,7 @@ func TestPushSync_EndToEndEventSync(t *testing.T) {
 	syncManager.SyncFromPeerByID(daemonA.state.DaemonID())
 
 	// Verify event was synced
-	cp, err := checkpoint.GetCheckpoint(daemonB.state.DB(), daemonA.state.DaemonID())
+	cp, err := checkpoint.GetCheckpoint(daemonB.state.RawDB(), daemonA.state.DaemonID())
 	if err != nil {
 		t.Fatalf("get checkpoint: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestPushSync_EndToEndEventSync(t *testing.T) {
 	}
 
 	// Verify event exists in daemon B's database
-	events, _, _, err := daemonB.state.GetEventsSince(0, 100)
+	events, _, _, err := daemonB.state.GetEventsSince(context.Background(), 0, 100)
 	if err != nil {
 		t.Fatalf("get events: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestPushSync_NotifyFailureDoesNotBlockWrite(t *testing.T) {
 	writeTestEvent(t, daemonA.state, "message.create")
 
 	// Verify event was written
-	events, _, _, err := daemonA.state.GetEventsSince(0, 100)
+	events, _, _, err := daemonA.state.GetEventsSince(context.Background(), 0, 100)
 	if err != nil {
 		t.Fatalf("get events: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestPushSync_PeriodicSyncCatchesMissedNotifications(t *testing.T) {
 	scheduler.syncFromPeers()
 
 	// Verify events were synced
-	events, _, _, err := daemonB.state.GetEventsSince(0, 100)
+	events, _, _, err := daemonB.state.GetEventsSince(context.Background(), 0, 100)
 	if err != nil {
 		t.Fatalf("get events: %v", err)
 	}
@@ -325,7 +325,7 @@ func TestPushSync_PeriodicSyncSkipsRecentlySynced(t *testing.T) {
 
 	// writeTestEvent("message.create") writes 2 events (agent.register + message.create)
 	// So after first sync, daemon B should have 2 events
-	events, _, _, err := daemonB.state.GetEventsSince(0, 100)
+	events, _, _, err := daemonB.state.GetEventsSince(context.Background(), 0, 100)
 	if err != nil {
 		t.Fatalf("get events: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestPushSync_PeriodicSyncSkipsRecentlySynced(t *testing.T) {
 	scheduler.SetRecentThreshold(0)
 	scheduler.syncFromPeers()
 
-	events, _, _, err = daemonB.state.GetEventsSince(0, 100)
+	events, _, _, err = daemonB.state.GetEventsSince(context.Background(), 0, 100)
 	if err != nil {
 		t.Fatalf("get events: %v", err)
 	}
@@ -468,13 +468,13 @@ func writeTestEvent(t *testing.T, st *state.State, eventType string) {
 	switch eventType {
 	case "message.create":
 		// Register an agent first
-		_ = st.WriteEvent(types.AgentRegisterEvent{
+		_ = st.WriteEvent(context.Background(), types.AgentRegisterEvent{
 			Type:      "agent.register",
 			AgentID:   "test-agent",
 			Role:      "tester",
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		})
-		err := st.WriteEvent(types.MessageCreateEvent{
+		err := st.WriteEvent(context.Background(), types.MessageCreateEvent{
 			Type:      "message.create",
 			AgentID:   "test-agent",
 			ThreadID:  "t_test",
@@ -485,7 +485,7 @@ func writeTestEvent(t *testing.T, st *state.State, eventType string) {
 			t.Fatalf("write message event: %v", err)
 		}
 	case "thread.create":
-		err := st.WriteEvent(types.ThreadCreateEvent{
+		err := st.WriteEvent(context.Background(), types.ThreadCreateEvent{
 			Type:      "thread.create",
 			ThreadID:  "t_test_" + time.Now().Format("150405.000"),
 			Title:     "Test Thread",

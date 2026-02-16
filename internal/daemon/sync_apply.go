@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -23,12 +24,12 @@ func NewSyncApplier(st *state.State) *SyncApplier {
 
 // ApplyRemoteEvents applies a batch of remote events to the local store.
 // Returns the number of events applied and skipped (duplicates).
-func (a *SyncApplier) ApplyRemoteEvents(events []eventlog.Event) (applied, skipped int, err error) {
+func (a *SyncApplier) ApplyRemoteEvents(ctx context.Context, events []eventlog.Event) (applied, skipped int, err error) {
 	db := a.state.DB()
 
 	for _, evt := range events {
 		// Deduplication: check if event already exists
-		exists, err := eventlog.HasEvent(db, evt.EventID)
+		exists, err := eventlog.HasEvent(ctx, db, evt.EventID)
 		if err != nil {
 			return applied, skipped, fmt.Errorf("check event %s: %w", evt.EventID, err)
 		}
@@ -41,7 +42,7 @@ func (a *SyncApplier) ApplyRemoteEvents(events []eventlog.Event) (applied, skipp
 		// - JSONL routing (messages/{agent}.jsonl vs events.jsonl)
 		// - SQLite events table insert (with new local sequence)
 		// - Projection update
-		if err := a.applyEvent(evt); err != nil {
+		if err := a.applyEvent(ctx, evt); err != nil {
 			return applied, skipped, fmt.Errorf("apply event %s: %w", evt.EventID, err)
 		}
 		applied++
@@ -54,7 +55,7 @@ func (a *SyncApplier) ApplyRemoteEvents(events []eventlog.Event) (applied, skipp
 // The checkpoint is derived from the actual events received, not the peer's claimed
 // next_sequence, to prevent checkpoint manipulation attacks where a malicious peer
 // skips events by sending an inflated next_sequence value.
-func (a *SyncApplier) ApplyAndCheckpoint(peerID string, events []eventlog.Event, peerNextSeq int64) (applied, skipped int, err error) {
+func (a *SyncApplier) ApplyAndCheckpoint(ctx context.Context, peerID string, events []eventlog.Event, peerNextSeq int64) (applied, skipped int, err error) {
 	// Get current checkpoint to validate monotonic progress
 	currentSeq, err := a.GetCheckpoint(peerID)
 	if err != nil {
@@ -81,14 +82,14 @@ func (a *SyncApplier) ApplyAndCheckpoint(peerID string, events []eventlog.Event,
 		}
 	}
 
-	applied, skipped, err = a.ApplyRemoteEvents(events)
+	applied, skipped, err = a.ApplyRemoteEvents(ctx, events)
 	if err != nil {
 		return applied, skipped, err
 	}
 
 	// Update checkpoint with safe sequence
 	if applied > 0 || skipped > 0 {
-		if err := checkpoint.UpdateCheckpoint(a.state.DB(), peerID, safeNextSeq, time.Now().Unix()); err != nil {
+		if err := checkpoint.UpdateCheckpoint(a.state.RawDB(), peerID, safeNextSeq, time.Now().Unix()); err != nil {
 			return applied, skipped, fmt.Errorf("update checkpoint: %w", err)
 		}
 	}
@@ -98,7 +99,7 @@ func (a *SyncApplier) ApplyAndCheckpoint(peerID string, events []eventlog.Event,
 
 // GetCheckpoint returns the checkpoint for a peer daemon.
 func (a *SyncApplier) GetCheckpoint(peerID string) (int64, error) {
-	cp, err := checkpoint.GetCheckpoint(a.state.DB(), peerID)
+	cp, err := checkpoint.GetCheckpoint(a.state.RawDB(), peerID)
 	if err != nil {
 		return 0, err
 	}
@@ -110,7 +111,7 @@ func (a *SyncApplier) GetCheckpoint(peerID string) (int64, error) {
 
 // applyEvent applies a single remote event to the local store.
 // The event's JSON payload is parsed into a map and written via State.WriteEvent.
-func (a *SyncApplier) applyEvent(evt eventlog.Event) error {
+func (a *SyncApplier) applyEvent(ctx context.Context, evt eventlog.Event) error {
 	// Parse the event JSON to a map so WriteEvent can process it
 	var eventMap map[string]any
 	if err := json.Unmarshal(evt.EventJSON, &eventMap); err != nil {
@@ -124,10 +125,10 @@ func (a *SyncApplier) applyEvent(evt eventlog.Event) error {
 	eventMap["origin_daemon"] = evt.OriginDaemon
 
 	// Write via State.WriteEvent which handles JSONL routing, sequence, and projection
-	return a.state.WriteEvent(eventMap)
+	return a.state.WriteEvent(ctx, eventMap)
 }
 
 // DB returns the database for direct queries (used by tests).
 func (a *SyncApplier) DB() *sql.DB {
-	return a.state.DB()
+	return a.state.RawDB()
 }

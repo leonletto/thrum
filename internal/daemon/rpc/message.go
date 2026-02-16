@@ -181,8 +181,8 @@ type MessageHandler struct {
 func NewMessageHandler(state *state.State) *MessageHandler {
 	return &MessageHandler{
 		state:         state,
-		dispatcher:    subscriptions.NewDispatcher(state.DB()),
-		groupResolver: groups.NewResolver(state.DB()),
+		dispatcher:    subscriptions.NewDispatcher(state.RawDB()),
+		groupResolver: groups.NewResolver(state.RawDB()),
 	}
 }
 
@@ -192,7 +192,7 @@ func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptio
 	return &MessageHandler{
 		state:         state,
 		dispatcher:    dispatcher,
-		groupResolver: groups.NewResolver(state.DB()),
+		groupResolver: groups.NewResolver(state.RawDB()),
 	}
 }
 
@@ -288,7 +288,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	// Handle reply_to: validate parent message exists and add reply_to ref
 	if req.ReplyTo != "" {
 		var exists int
-		err := h.state.DB().QueryRow(`SELECT COUNT(1) FROM messages WHERE message_id = ?`, req.ReplyTo).Scan(&exists)
+		err := h.state.DB().QueryRowContext(ctx, `SELECT COUNT(1) FROM messages WHERE message_id = ?`, req.ReplyTo).Scan(&exists)
 		if err != nil || exists == 0 {
 			return nil, fmt.Errorf("reply_to message not found: %s", req.ReplyTo)
 		}
@@ -315,15 +315,15 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	}
 
 	// Write event to JSONL and SQLite
+	// Lock only for WriteEvent
 	h.state.Lock()
-	defer h.state.Unlock()
-
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
+		h.state.Unlock()
 		return nil, fmt.Errorf("write message.create event: %w", err)
 	}
+	h.state.Unlock()
 
-	// Trigger subscription notifications
-	// Use the pre-configured dispatcher (has client notifier set for push notifications)
+	// No lock for dispatch and emit (WebSocket I/O)
 	preview := req.Content
 	if len(preview) > 100 {
 		preview = preview[:100]
@@ -341,25 +341,12 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	}
 
 	// Find matching subscriptions and push notifications to connected clients
-	_, err = h.dispatcher.DispatchForMessage(msgInfo)
-	if err != nil {
-		// Log error but don't fail the message send
-		_ = err
-	}
-
-	// Store threadID for emit (need to unlock state before emitting)
-	threadID := req.ThreadID
-
-	// Unlock state before emitting (to avoid deadlock)
-	h.state.Unlock()
+	_, _ = h.dispatcher.DispatchForMessage(msgInfo)
 
 	// Emit thread.updated event for real-time updates
-	if threadID != "" {
-		_ = h.emitThreadUpdated(ctx, threadID)
+	if req.ThreadID != "" {
+		_ = h.emitThreadUpdated(ctx, req.ThreadID)
 	}
-
-	// Re-lock state before returning (to satisfy defer unlock)
-	h.state.Lock()
 
 	return &SendResponse{
 		MessageID: messageID,
@@ -393,7 +380,7 @@ func (h *MessageHandler) HandleGet(ctx context.Context, params json.RawMessage) 
 	var threadID, updatedAt, bodyStructured, deletedAt, deleteReason sql.NullString
 	var deleted int
 
-	err := h.state.DB().QueryRow(query, req.MessageID).Scan(
+	err := h.state.DB().QueryRowContext(ctx, query, req.MessageID).Scan(
 		&msg.MessageID,
 		&threadID,
 		&msg.Author.AgentID,
@@ -435,7 +422,7 @@ func (h *MessageHandler) HandleGet(ctx context.Context, params json.RawMessage) 
 
 	// Query scopes
 	scopeQuery := `SELECT scope_type, scope_value FROM message_scopes WHERE message_id = ?`
-	rows, err := h.state.DB().Query(scopeQuery, req.MessageID)
+	rows, err := h.state.DB().QueryContext(ctx, scopeQuery, req.MessageID)
 	if err != nil {
 		return nil, fmt.Errorf("query scopes: %w", err)
 	}
@@ -455,7 +442,7 @@ func (h *MessageHandler) HandleGet(ctx context.Context, params json.RawMessage) 
 
 	// Query refs
 	refQuery := `SELECT ref_type, ref_value FROM message_refs WHERE message_id = ?`
-	rows, err = h.state.DB().Query(refQuery, req.MessageID)
+	rows, err = h.state.DB().QueryContext(ctx, refQuery, req.MessageID)
 	if err != nil {
 		return nil, fmt.Errorf("query refs: %w", err)
 	}
@@ -671,7 +658,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	}
 
 	var total int
-	if err := h.state.DB().QueryRow(countQuery, countArgs...).Scan(&total); err != nil {
+	if err := h.state.DB().QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count messages: %w", err)
 	}
 
@@ -684,7 +671,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	args = append(args, pageSize, offset)
 
 	// Execute query
-	rows, err := h.state.DB().Query(query, args...)
+	rows, err := h.state.DB().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query messages: %w", err)
 	}
@@ -746,7 +733,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		}
 		unreadQuery += " AND m.message_id NOT IN (SELECT mrd2.message_id FROM message_reads mrd2 WHERE mrd2.agent_id = ?)"
 		unreadArgs = append(unreadArgs, currentAgentID)
-		_ = h.state.DB().QueryRow(unreadQuery, unreadArgs...).Scan(&unread)
+		_ = h.state.DB().QueryRowContext(ctx, unreadQuery, unreadArgs...).Scan(&unread)
 	}
 
 	return &ListMessagesResponse{
@@ -775,7 +762,7 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 	h.state.RLock()
 	var deleted int
 	query := `SELECT deleted FROM messages WHERE message_id = ?`
-	err := h.state.DB().QueryRow(query, req.MessageID).Scan(&deleted)
+	err := h.state.DB().QueryRowContext(ctx, query, req.MessageID).Scan(&deleted)
 	h.state.RUnlock()
 
 	if err == sql.ErrNoRows {
@@ -804,7 +791,7 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write message.delete event: %w", err)
 	}
 
@@ -843,7 +830,7 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	var deleted int
 	var currentContent, currentStructured sql.NullString
 	query := `SELECT agent_id, deleted, body_content, body_structured FROM messages WHERE message_id = ?`
-	err = h.state.DB().QueryRow(query, req.MessageID).Scan(&authorAgentID, &deleted, &currentContent, &currentStructured)
+	err = h.state.DB().QueryRowContext(ctx, query, req.MessageID).Scan(&authorAgentID, &deleted, &currentContent, &currentStructured)
 	h.state.RUnlock()
 
 	if err == sql.ErrNoRows {
@@ -897,15 +884,15 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	}
 
 	// Write event to JSONL and SQLite
+	// Lock only for WriteEvent
 	h.state.Lock()
-	defer h.state.Unlock()
-
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
+		h.state.Unlock()
 		return nil, fmt.Errorf("write message.edit event: %w", err)
 	}
+	h.state.Unlock()
 
-	// Trigger subscription notifications
-	// Use the pre-configured dispatcher (has client notifier set for push notifications)
+	// Query metadata and dispatch without lock (DB queries + WebSocket I/O)
 	preview := newContent
 	if len(preview) > 100 {
 		preview = preview[:100]
@@ -917,14 +904,14 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	var refs []types.Ref
 
 	query = `SELECT thread_id FROM messages WHERE message_id = ?`
-	err = h.state.DB().QueryRow(query, req.MessageID).Scan(&threadID)
+	err = h.state.DB().QueryRowContext(ctx, query, req.MessageID).Scan(&threadID)
 	if err != nil {
 		return nil, fmt.Errorf("query message metadata: %w", err)
 	}
 
 	// Query scopes
 	scopeQuery := `SELECT scope_type, scope_value FROM message_scopes WHERE message_id = ?`
-	rows, err := h.state.DB().Query(scopeQuery, req.MessageID)
+	rows, err := h.state.DB().QueryContext(ctx, scopeQuery, req.MessageID)
 	if err != nil {
 		return nil, fmt.Errorf("query scopes: %w", err)
 	}
@@ -943,7 +930,7 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 
 	// Query refs
 	refQuery := `SELECT ref_type, ref_value FROM message_refs WHERE message_id = ?`
-	rows, err = h.state.DB().Query(refQuery, req.MessageID)
+	rows, err = h.state.DB().QueryContext(ctx, refQuery, req.MessageID)
 	if err != nil {
 		return nil, fmt.Errorf("query refs: %w", err)
 	}
@@ -972,16 +959,12 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	}
 
 	// Dispatch notifications (same as message.create)
-	_, err = h.dispatcher.DispatchForMessage(msgInfo)
-	if err != nil {
-		// Log error but don't fail the edit
-		_ = err
-	}
+	_, _ = h.dispatcher.DispatchForMessage(msgInfo)
 
 	// Count edits for version number (count includes the edit we just applied)
 	var editCount int
 	countQuery := `SELECT COUNT(*) FROM message_edits WHERE message_id = ?`
-	if err := h.state.DB().QueryRow(countQuery, req.MessageID).Scan(&editCount); err != nil {
+	if err := h.state.DB().QueryRowContext(ctx, countQuery, req.MessageID).Scan(&editCount); err != nil {
 		// If query fails, default to 1 (we just made an edit)
 		editCount = 1
 	}
@@ -1088,7 +1071,9 @@ func (h *MessageHandler) resolveAgentAndSession(callerAgentID string) (agentID s
 	          ORDER BY started_at DESC
 	          LIMIT 1`
 
-	err = h.state.DB().QueryRow(query, agentID).Scan(&sessionID)
+	// Use context.Background() since this is called from methods that already have ctx
+	// but this function doesn't have ctx parameter. We'll need to add ctx parameter.
+	err = h.state.DB().QueryRowContext(context.Background(), query, agentID).Scan(&sessionID)
 	if err == sql.ErrNoRows {
 		return "", "", fmt.Errorf("no active session found for agent %s (you must start a session first)", agentID)
 	}
@@ -1134,7 +1119,7 @@ func (h *MessageHandler) validateImpersonation(callerID, targetID string) error 
 
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = ?)`
-	err := h.state.DB().QueryRow(query, targetID).Scan(&exists)
+	err := h.state.DB().QueryRowContext(context.Background(), query, targetID).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("check agent exists: %w", err)
 	}
@@ -1176,7 +1161,7 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	tx, err := h.state.DB().Begin()
+	tx, err := h.state.DB().BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
@@ -1297,7 +1282,7 @@ func (h *MessageHandler) emitThreadUpdated(_ context.Context, threadID string) e
 	var lastActivity string
 	var lastSender, preview sql.NullString
 
-	err = h.state.DB().QueryRow(query, threadID, threadID, sessionID, agentID, threadID).Scan(
+	err = h.state.DB().QueryRowContext(context.Background(), query, threadID, threadID, sessionID, agentID, threadID).Scan(
 		&messageCount,
 		&unreadCount,
 		&lastActivity,
