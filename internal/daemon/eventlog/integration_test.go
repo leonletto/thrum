@@ -1,12 +1,14 @@
 package eventlog_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/checkpoint"
 	"github.com/leonletto/thrum/internal/daemon/eventlog"
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 )
 
 func TestIntegration_FullSyncWorkflow(t *testing.T) {
@@ -38,7 +40,7 @@ func TestIntegration_FullSyncWorkflow(t *testing.T) {
 	batchNum := 0
 
 	for {
-		events, nextSeq, more, err := eventlog.GetEventsSince(db, afterSeq, 20)
+		events, nextSeq, more, err := eventlog.GetEventsSince(context.Background(), safedb.New(db), afterSeq, 20)
 		if err != nil {
 			t.Fatalf("batch %d: %v", batchNum, err)
 		}
@@ -87,7 +89,7 @@ func TestIntegration_FullSyncWorkflow(t *testing.T) {
 
 	// Verify dedup: all events should exist
 	for i := int64(1); i <= 100; i++ {
-		exists, err := eventlog.HasEvent(db, fmt.Sprintf("evt_%03d", i))
+		exists, err := eventlog.HasEvent(context.Background(), safedb.New(db), fmt.Sprintf("evt_%03d", i))
 		if err != nil {
 			t.Fatalf("HasEvent: %v", err)
 		}
@@ -97,7 +99,7 @@ func TestIntegration_FullSyncWorkflow(t *testing.T) {
 	}
 
 	// Verify dedup: non-existent event
-	exists, err := eventlog.HasEvent(db, "evt_999")
+	exists, err := eventlog.HasEvent(context.Background(), safedb.New(db), "evt_999")
 	if err != nil {
 		t.Fatalf("HasEvent: %v", err)
 	}
@@ -130,7 +132,7 @@ func TestIntegration_EventFieldsParsing(t *testing.T) {
 	}
 
 	// Query it back
-	events, _, _, err := eventlog.GetEventsSince(db, 0, 10)
+	events, _, _, err := eventlog.GetEventsSince(context.Background(), safedb.New(db), 0, 10)
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}

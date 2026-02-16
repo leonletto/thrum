@@ -80,7 +80,7 @@ func (s *PeriodicSyncScheduler) syncFromPeers() {
 		}
 
 		addr := peer.Addr()
-		applied, _, err := s.syncManager.SyncFromPeer(addr, peer.DaemonID)
+		applied, _, err := s.syncManager.SyncFromPeer(context.Background(), addr, peer.DaemonID)
 		if err != nil {
 			log.Printf("periodic_sync: sync from %s failed: %v", peer.DaemonID, err)
 			continue
@@ -99,7 +99,7 @@ func (s *PeriodicSyncScheduler) syncFromPeers() {
 
 // wasRecentlySynced checks if a peer was synced within the recent threshold.
 func (s *PeriodicSyncScheduler) wasRecentlySynced(peerDaemonID string) bool {
-	cp, err := checkpoint.GetCheckpoint(s.state.DB(), peerDaemonID)
+	cp, err := checkpoint.GetCheckpoint(s.state.RawDB(), peerDaemonID)
 	if err != nil || cp == nil {
 		return false
 	}

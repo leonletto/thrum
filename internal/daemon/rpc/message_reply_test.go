@@ -77,7 +77,7 @@ func TestReplyTo_RefCreated(t *testing.T) {
 
 	// Verify reply_to ref exists in message_refs
 	var refType, refValue string
-	err = st.DB().QueryRow(
+	err = st.RawDB().QueryRow(
 		`SELECT ref_type, ref_value FROM message_refs WHERE message_id = ? AND ref_type = 'reply_to'`,
 		replyID,
 	).Scan(&refType, &refValue)
@@ -112,7 +112,7 @@ func TestReplyTo_NoReplyTo_BackwardCompat(t *testing.T) {
 
 	// Verify no reply_to ref exists
 	var count int
-	err := st.DB().QueryRow(
+	err := st.RawDB().QueryRow(
 		`SELECT COUNT(1) FROM message_refs WHERE message_id = ? AND ref_type = 'reply_to'`,
 		msgID,
 	).Scan(&count)
