@@ -1,12 +1,11 @@
 #!/bin/bash
 # Pre-compact hook: save mechanical state to thrum context before auto-compaction.
+# This captures git state, beads state, and recent activity so the agent can
+# recover context after compaction. The agent's narrative summary (from
+# /update-context) provides richer context, but this ensures at minimum the
+# mechanical state is preserved.
 #
-# NOTE: The canonical version of this script is bundled with the thrum Claude
-# plugin at claude-plugin/scripts/pre-compact-save-context.sh. This copy exists
-# for repos that don't use the plugin but want the pre-compact hook.
-#
-# If using the plugin, the hook runs via ${CLAUDE_PLUGIN_ROOT}/scripts/ — this
-# file is only used if referenced directly from .claude/settings.json hooks.
+# Bundled with the thrum Claude plugin — runs from ${CLAUDE_PLUGIN_ROOT}/scripts/.
 
 set -euo pipefail
 
@@ -84,5 +83,7 @@ echo "$CONTEXT" > "$BACKUP_FILE" 2>/dev/null || true
 # Clean up old backups for THIS agent (keep only the latest)
 ls -t /tmp/thrum-pre-compact-${AGENT_NAME}-${AGENT_ROLE}-${AGENT_MODULE}-*.md 2>/dev/null | tail -n +2 | xargs rm -f 2>/dev/null || true
 
-# Output brief summary for hook feedback
+# Output brief summary for hook feedback (PreCompact output does NOT survive
+# compaction — this is informational only. The agent recovers context via
+# /thrum:load-context which reads from thrum context saved above.)
 echo "Pre-compact: saved state to thrum context + ${BACKUP_FILE}. After compaction, run /thrum:load-context to recover."
