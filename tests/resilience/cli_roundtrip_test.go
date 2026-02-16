@@ -80,12 +80,16 @@ func runThrum(t *testing.T, bin, repoDir, agentName string, args ...string) (str
 
 	fullArgs := append([]string{"--repo", repoDir, "--quiet"}, args...)
 	cmd := exec.CommandContext(ctx, bin, fullArgs...)
-	cmd.Env = append(os.Environ(),
-		"THRUM_NAME="+agentName,
+	env := []string{
+		"THRUM_NAME=" + agentName,
 		"THRUM_ROLE=coordinator",
 		"THRUM_MODULE=all",
-		"HOME="+os.Getenv("HOME"),
-	)
+		"HOME=" + os.Getenv("HOME"),
+	}
+	if cliSocketPath != "" {
+		env = append(env, "THRUM_SOCKET="+cliSocketPath)
+	}
+	cmd.Env = append(os.Environ(), env...)
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
