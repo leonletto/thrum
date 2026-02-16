@@ -4,19 +4,31 @@ package resilience
 
 import (
 	"fmt"
+	"os/exec"
 	"sync"
 	"testing"
 	"time"
 )
 
-// setupFixtureForBench extracts the fixture for benchmark use.
+// setupFixtureForBench copies the shared fixture for benchmark use.
+// Each benchmark gets a mutable copy since daemons modify the DB.
 func setupFixtureForBench(b *testing.B) string {
 	b.Helper()
-	tmpDir := b.TempDir()
-	if err := extractTarGz(fixturePath, tmpDir); err != nil {
-		b.Fatalf("Failed to extract fixture: %v", err)
+
+	if sharedFixtureDir == "" {
+		b.Fatal("shared fixture not initialized (TestMain not run?)")
 	}
-	return tmpDir + "/.thrum"
+
+	tmpDir := b.TempDir()
+	thrumDir := tmpDir + "/.thrum"
+
+	// Copy shared fixture using cp -a (preserves permissions, much faster than tar.gz extraction)
+	cpCmd := exec.Command("cp", "-a", sharedFixtureDir, thrumDir)
+	if out, err := cpCmd.CombinedOutput(); err != nil {
+		b.Fatalf("cp shared fixture: %v\n%s", err, out)
+	}
+
+	return thrumDir
 }
 
 // startTestDaemonForBench starts a daemon for benchmark use.

@@ -6,16 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/safedb"
-	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/schema"
 )
@@ -24,16 +21,7 @@ import (
 // The client should get an error within the timeout, not hang forever.
 func TestCrash_KillDuringWrite(t *testing.T) {
 	thrumDir := setupFixture(t)
-
-	st, err := state.NewState(thrumDir, thrumDir, "test-crash-write")
-	if err != nil {
-		t.Fatalf("NewState: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-
-	socketPath := shortSocketPath(t)
-	server := daemon.NewServer(socketPath)
-	registerAllHandlers(server, st)
+	st, server, socketPath := startDaemonManual(t, thrumDir, "test-crash-write")
 
 	// Register a handler that blocks to simulate an in-flight write,
 	// then we'll kill the server while this handler is running
@@ -44,20 +32,6 @@ func TestCrash_KillDuringWrite(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
-
-	if err := server.Start(context.Background()); err != nil {
-		t.Fatalf("server start: %v", err)
-	}
-
-	// Wait for socket ready
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", socketPath); err == nil {
-			conn.Close()
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
 
 	// Start a blocking write in background
 	var clientErr error
@@ -97,28 +71,7 @@ func TestCrash_DBIntegrityAfterAbruptShutdown(t *testing.T) {
 	thrumDir := setupFixture(t)
 
 	// Phase 1: Start daemon and send messages, then kill abruptly
-	st, err := state.NewState(thrumDir, thrumDir, "test-crash-integrity")
-	if err != nil {
-		t.Fatalf("NewState: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-
-	socketPath := shortSocketPath(t)
-	server := daemon.NewServer(socketPath)
-	registerAllHandlers(server, st)
-
-	if err := server.Start(context.Background()); err != nil {
-		t.Fatalf("server start: %v", err)
-	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", socketPath); err == nil {
-			conn.Close()
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	st, server, socketPath := startDaemonManual(t, thrumDir, "test-crash-integrity")
 
 	// Ensure session and send some messages
 	ensureSession(t, socketPath, "coordinator_0000")
@@ -170,27 +123,7 @@ func TestCrash_RestartAfterCrash(t *testing.T) {
 	thrumDir := setupFixture(t)
 
 	// Phase 1: Start daemon, send data, crash
-	st1, err := state.NewState(thrumDir, thrumDir, "test-crash-restart-1")
-	if err != nil {
-		t.Fatalf("NewState 1: %v", err)
-	}
-
-	socketPath := shortSocketPath(t)
-	server1 := daemon.NewServer(socketPath)
-	registerAllHandlers(server1, st1)
-
-	if err := server1.Start(context.Background()); err != nil {
-		t.Fatalf("server 1 start: %v", err)
-	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", socketPath); err == nil {
-			conn.Close()
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	st1, server1, socketPath := startDaemonManual(t, thrumDir, "test-crash-restart-1")
 
 	// Send a unique message before crash
 	ensureSession(t, socketPath, "coordinator_0000")
@@ -208,30 +141,10 @@ func TestCrash_RestartAfterCrash(t *testing.T) {
 	st1.Close()
 
 	// Phase 2: Restart daemon on same data
-	os.Remove(socketPath)
+	_, server2, socketPath2 := startDaemonManual(t, thrumDir, "test-crash-restart-2")
+	defer server2.Stop()
 
-	st2, err := state.NewState(thrumDir, thrumDir, "test-crash-restart-2")
-	if err != nil {
-		t.Fatalf("NewState 2: %v", err)
-	}
-	t.Cleanup(func() { st2.Close() })
-
-	server2 := daemon.NewServer(socketPath)
-	registerAllHandlers(server2, st2)
-
-	if err := server2.Start(context.Background()); err != nil {
-		t.Fatalf("server 2 start: %v", err)
-	}
-	t.Cleanup(func() { server2.Stop() })
-
-	deadline = time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", socketPath); err == nil {
-			conn.Close()
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	socketPath = socketPath2 // Use new socket path for restart
 
 	// Verify health
 	var health map[string]any
@@ -289,28 +202,7 @@ func TestCrash_ProjectionRebuildAfterCrash(t *testing.T) {
 	origDB.Close()
 
 	// Phase 2: Start daemon, send more messages, crash
-	st, err := state.NewState(thrumDir, thrumDir, "test-crash-rebuild")
-	if err != nil {
-		t.Fatalf("NewState: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-
-	socketPath := shortSocketPath(t)
-	server := daemon.NewServer(socketPath)
-	registerAllHandlers(server, st)
-
-	if err := server.Start(context.Background()); err != nil {
-		t.Fatalf("server start: %v", err)
-	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", socketPath); err == nil {
-			conn.Close()
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	st, server, socketPath := startDaemonManual(t, thrumDir, "test-crash-rebuild")
 
 	ensureSession(t, socketPath, "coordinator_0000")
 	for i := range 5 {
