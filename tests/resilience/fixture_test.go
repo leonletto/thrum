@@ -123,7 +123,7 @@ func registerAllHandlers(server *daemon.Server, st *state.State) {
 	server.RegisterHandler("session.setIntent", sessionHandler.HandleSetIntent)
 	server.RegisterHandler("session.setTask", sessionHandler.HandleSetTask)
 
-	dispatcher := subscriptions.NewDispatcher(st.DB())
+	dispatcher := subscriptions.NewDispatcher(st.RawDB())
 	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher)
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)

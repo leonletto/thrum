@@ -12,7 +12,7 @@ func TestRPC_FixtureIntegrity(t *testing.T) {
 
 	// Verify agent count
 	var agentCount int
-	if err := st.DB().QueryRow("SELECT COUNT(*) FROM agents").Scan(&agentCount); err != nil {
+	if err := st.RawDB().QueryRow("SELECT COUNT(*) FROM agents").Scan(&agentCount); err != nil {
 		t.Fatalf("count agents: %v", err)
 	}
 	if agentCount != 50 {
@@ -21,7 +21,7 @@ func TestRPC_FixtureIntegrity(t *testing.T) {
 
 	// Verify message count
 	var msgCount int
-	if err := st.DB().QueryRow("SELECT COUNT(*) FROM messages").Scan(&msgCount); err != nil {
+	if err := st.RawDB().QueryRow("SELECT COUNT(*) FROM messages").Scan(&msgCount); err != nil {
 		t.Fatalf("count messages: %v", err)
 	}
 	if msgCount != 10000 {
@@ -30,7 +30,7 @@ func TestRPC_FixtureIntegrity(t *testing.T) {
 
 	// Verify session count
 	var sesCount int
-	if err := st.DB().QueryRow("SELECT COUNT(*) FROM sessions").Scan(&sesCount); err != nil {
+	if err := st.RawDB().QueryRow("SELECT COUNT(*) FROM sessions").Scan(&sesCount); err != nil {
 		t.Fatalf("count sessions: %v", err)
 	}
 	if sesCount != 100 {
@@ -39,7 +39,7 @@ func TestRPC_FixtureIntegrity(t *testing.T) {
 
 	// Verify group count
 	var grpCount int
-	if err := st.DB().QueryRow("SELECT COUNT(*) FROM groups").Scan(&grpCount); err != nil {
+	if err := st.RawDB().QueryRow("SELECT COUNT(*) FROM groups").Scan(&grpCount); err != nil {
 		t.Fatalf("count groups: %v", err)
 	}
 	if grpCount != 20 {
@@ -48,7 +48,7 @@ func TestRPC_FixtureIntegrity(t *testing.T) {
 
 	// Verify message reads exist
 	var readCount int
-	if err := st.DB().QueryRow("SELECT COUNT(*) FROM message_reads").Scan(&readCount); err != nil {
+	if err := st.RawDB().QueryRow("SELECT COUNT(*) FROM message_reads").Scan(&readCount); err != nil {
 		t.Fatalf("count reads: %v", err)
 	}
 	if readCount == 0 {
