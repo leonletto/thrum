@@ -94,7 +94,7 @@ func TestMessageSend(t *testing.T) {
 		// Verify message was written to database
 		var content string
 		query := `SELECT body_content FROM messages WHERE message_id = ?`
-		err = st.DB().QueryRow(query, sendResp.MessageID).Scan(&content)
+		err = st.RawDB().QueryRow(query, sendResp.MessageID).Scan(&content)
 		if err != nil {
 			t.Fatalf("failed to query message: %v", err)
 		}
@@ -105,7 +105,7 @@ func TestMessageSend(t *testing.T) {
 		// Verify agent and session
 		var msgAgentID, msgSessionID string
 		query = `SELECT agent_id, session_id FROM messages WHERE message_id = ?`
-		err = st.DB().QueryRow(query, sendResp.MessageID).Scan(&msgAgentID, &msgSessionID)
+		err = st.RawDB().QueryRow(query, sendResp.MessageID).Scan(&msgAgentID, &msgSessionID)
 		if err != nil {
 			t.Fatalf("failed to query message: %v", err)
 		}
@@ -153,7 +153,7 @@ func TestMessageSend(t *testing.T) {
 		// Verify thread_id in database
 		var msgThreadID string
 		query := `SELECT thread_id FROM messages WHERE message_id = ?`
-		err = st.DB().QueryRow(query, sendResp.MessageID).Scan(&msgThreadID)
+		err = st.RawDB().QueryRow(query, sendResp.MessageID).Scan(&msgThreadID)
 		if err != nil {
 			t.Fatalf("failed to query message: %v", err)
 		}
@@ -185,7 +185,7 @@ func TestMessageSend(t *testing.T) {
 
 		// Verify scopes in database
 		query := `SELECT scope_type, scope_value FROM message_scopes WHERE message_id = ? ORDER BY scope_type`
-		rows, err := st.DB().Query(query, messageID)
+		rows, err := st.RawDB().Query(query, messageID)
 		if err != nil {
 			t.Fatalf("failed to query scopes: %v", err)
 		}
@@ -234,7 +234,7 @@ func TestMessageSend(t *testing.T) {
 
 		// Verify refs in database
 		query := `SELECT ref_type, ref_value FROM message_refs WHERE message_id = ? ORDER BY ref_type`
-		rows, err := st.DB().Query(query, messageID)
+		rows, err := st.RawDB().Query(query, messageID)
 		if err != nil {
 			t.Fatalf("failed to query refs: %v", err)
 		}
@@ -287,7 +287,7 @@ func TestMessageSend(t *testing.T) {
 		// Verify structured data in database
 		var structuredJSON string
 		query := `SELECT body_structured FROM messages WHERE message_id = ?`
-		err = st.DB().QueryRow(query, messageID).Scan(&structuredJSON)
+		err = st.RawDB().QueryRow(query, messageID).Scan(&structuredJSON)
 		if err != nil {
 			t.Fatalf("failed to query message: %v", err)
 		}
@@ -329,7 +329,7 @@ func TestMessageSend(t *testing.T) {
 		// Verify format defaults to markdown
 		var format string
 		query := `SELECT body_format FROM messages WHERE message_id = ?`
-		err = st.DB().QueryRow(query, messageID).Scan(&format)
+		err = st.RawDB().QueryRow(query, messageID).Scan(&format)
 		if err != nil {
 			t.Fatalf("failed to query message: %v", err)
 		}
@@ -1042,7 +1042,7 @@ func TestMessageDelete(t *testing.T) {
 		var deleted int
 		var deletedAt, deleteReason sql.NullString
 		query := `SELECT deleted, deleted_at, delete_reason FROM messages WHERE message_id = ?`
-		err = st.DB().QueryRow(query, messageID).Scan(&deleted, &deletedAt, &deleteReason)
+		err = st.RawDB().QueryRow(query, messageID).Scan(&deleted, &deletedAt, &deleteReason)
 		if err != nil {
 			t.Fatalf("failed to query message: %v", err)
 		}
@@ -1117,7 +1117,7 @@ func TestMessageDelete(t *testing.T) {
 		// Verify delete_reason is NULL in database
 		var deleteReason sql.NullString
 		query := `SELECT delete_reason FROM messages WHERE message_id = ?`
-		err = st.DB().QueryRow(query, msgID).Scan(&deleteReason)
+		err = st.RawDB().QueryRow(query, msgID).Scan(&deleteReason)
 		if err != nil {
 			t.Fatalf("failed to query message: %v", err)
 		}
@@ -1224,7 +1224,7 @@ func TestMessageEdit(t *testing.T) {
 		var content string
 		var updatedAt sql.NullString
 		query := `SELECT body_content, updated_at FROM messages WHERE message_id = ?`
-		err = st.DB().QueryRow(query, messageID).Scan(&content, &updatedAt)
+		err = st.RawDB().QueryRow(query, messageID).Scan(&content, &updatedAt)
 		if err != nil {
 			t.Fatalf("failed to query message: %v", err)
 		}
@@ -1265,7 +1265,7 @@ func TestMessageEdit(t *testing.T) {
 		// Verify structured data was updated
 		var structuredJSON sql.NullString
 		query := `SELECT body_structured FROM messages WHERE message_id = ?`
-		err = st.DB().QueryRow(query, messageID).Scan(&structuredJSON)
+		err = st.RawDB().QueryRow(query, messageID).Scan(&structuredJSON)
 		if err != nil {
 			t.Fatalf("failed to query message: %v", err)
 		}
@@ -1314,7 +1314,7 @@ func TestMessageEdit(t *testing.T) {
 		var content string
 		var structuredJSON sql.NullString
 		query := `SELECT body_content, body_structured FROM messages WHERE message_id = ?`
-		err = st.DB().QueryRow(query, messageID).Scan(&content, &structuredJSON)
+		err = st.RawDB().QueryRow(query, messageID).Scan(&content, &structuredJSON)
 		if err != nil {
 			t.Fatalf("failed to query message: %v", err)
 		}
@@ -1464,7 +1464,7 @@ func TestMessageEdit(t *testing.T) {
 		// Verify content was updated
 		var content string
 		query := `SELECT body_content FROM messages WHERE message_id = ?`
-		err = st.DB().QueryRow(query, msgID).Scan(&content)
+		err = st.RawDB().QueryRow(query, msgID).Scan(&content)
 		if err != nil {
 			t.Fatalf("failed to query message: %v", err)
 		}
@@ -1598,7 +1598,7 @@ func TestMessageMarkRead(t *testing.T) {
 		// Verify read record was created in database
 		var count int
 		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ? AND session_id = ? AND agent_id = ?`
-		err = st.DB().QueryRow(query, messageIDs[0], sessionID, agentID).Scan(&count)
+		err = st.RawDB().QueryRow(query, messageIDs[0], sessionID, agentID).Scan(&count)
 		if err != nil {
 			t.Fatalf("failed to query message_reads: %v", err)
 		}
@@ -1630,7 +1630,7 @@ func TestMessageMarkRead(t *testing.T) {
 		for _, msgID := range []string{messageIDs[1], messageIDs[2]} {
 			var exists bool
 			query := `SELECT EXISTS(SELECT 1 FROM message_reads WHERE message_id = ?)`
-			err = st.DB().QueryRow(query, msgID).Scan(&exists)
+			err = st.RawDB().QueryRow(query, msgID).Scan(&exists)
 			if err != nil {
 				t.Fatalf("failed to check read record for %s: %v", msgID, err)
 			}
@@ -1663,7 +1663,7 @@ func TestMessageMarkRead(t *testing.T) {
 		// Verify still only 1 record (not duplicated)
 		var count int
 		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ? AND session_id = ?`
-		err = st.DB().QueryRow(query, messageIDs[0], sessionID).Scan(&count)
+		err = st.RawDB().QueryRow(query, messageIDs[0], sessionID).Scan(&count)
 		if err != nil {
 			t.Fatalf("failed to query message_reads: %v", err)
 		}
@@ -1734,7 +1734,7 @@ func TestMessageMarkRead(t *testing.T) {
 		// Verify 2 read records exist (one per session)
 		var count int
 		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ?`
-		err = st.DB().QueryRow(query, messageIDs[0]).Scan(&count)
+		err = st.RawDB().QueryRow(query, messageIDs[0]).Scan(&count)
 		if err != nil {
 			t.Fatalf("failed to count read records: %v", err)
 		}
@@ -1835,7 +1835,7 @@ func TestMessageMarkRead(t *testing.T) {
 		// Verify read record exists for session3
 		var count int
 		query := `SELECT COUNT(*) FROM message_reads WHERE message_id = ? AND session_id = ?`
-		err = st.DB().QueryRow(query, newMsgID, session3ID).Scan(&count)
+		err = st.RawDB().QueryRow(query, newMsgID, session3ID).Scan(&count)
 		if err != nil {
 			t.Fatalf("failed to query message_reads: %v", err)
 		}
@@ -1899,7 +1899,7 @@ func TestHandleSend_GroupScope(t *testing.T) {
 
 		// Check scopes — should have group scope
 		var scopeType, scopeValue string
-		err = st.DB().QueryRow(
+		err = st.RawDB().QueryRow(
 			"SELECT scope_type, scope_value FROM message_scopes WHERE message_id = ?",
 			sendResp.MessageID,
 		).Scan(&scopeType, &scopeValue)
@@ -1912,7 +1912,7 @@ func TestHandleSend_GroupScope(t *testing.T) {
 
 		// Check refs — should have group ref (not mention ref)
 		var refType, refValue string
-		err = st.DB().QueryRow(
+		err = st.RawDB().QueryRow(
 			"SELECT ref_type, ref_value FROM message_refs WHERE message_id = ?",
 			sendResp.MessageID,
 		).Scan(&refType, &refValue)
@@ -1939,7 +1939,7 @@ func TestHandleSend_GroupScope(t *testing.T) {
 
 		// Should have mention ref, not group scope
 		var refType, refValue string
-		err = st.DB().QueryRow(
+		err = st.RawDB().QueryRow(
 			"SELECT ref_type, ref_value FROM message_refs WHERE message_id = ?",
 			sendResp.MessageID,
 		).Scan(&refType, &refValue)
@@ -1952,7 +1952,7 @@ func TestHandleSend_GroupScope(t *testing.T) {
 
 		// No group scopes
 		var scopeCount int
-		err = st.DB().QueryRow(
+		err = st.RawDB().QueryRow(
 			"SELECT COUNT(*) FROM message_scopes WHERE message_id = ? AND scope_type = 'group'",
 			sendResp.MessageID,
 		).Scan(&scopeCount)
@@ -1983,7 +1983,7 @@ func TestHandleSend_GroupScope(t *testing.T) {
 		sendResp := resp.(*SendResponse)
 
 		var scopeType, scopeValue string
-		err = st.DB().QueryRow(
+		err = st.RawDB().QueryRow(
 			"SELECT scope_type, scope_value FROM message_scopes WHERE message_id = ?",
 			sendResp.MessageID,
 		).Scan(&scopeType, &scopeValue)

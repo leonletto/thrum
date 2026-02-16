@@ -64,7 +64,7 @@ func TestSyncApplier_ApplyRemoteEvents(t *testing.T) {
 
 	// Verify events are in the events table
 	var count int
-	err = st.DB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
+	err = st.RawDB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestSyncApplier_Deduplication(t *testing.T) {
 
 	// Total events should be 2 (1 local + 1 new remote)
 	var count int
-	err = st.DB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
+	err = st.RawDB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestSyncApplier_ApplyAndCheckpoint(t *testing.T) {
 	}
 
 	// Verify checkpoint
-	cp, err := checkpoint.GetCheckpoint(st.DB(), "d_peer")
+	cp, err := checkpoint.GetCheckpoint(st.RawDB(), "d_peer")
 	if err != nil {
 		t.Fatalf("GetCheckpoint: %v", err)
 	}

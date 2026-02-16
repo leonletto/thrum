@@ -47,7 +47,7 @@ func TestSequenceNumbers_Monotonic(t *testing.T) {
 	}
 
 	// Verify sequences are 1-10 with no gaps
-	rows, err := st.DB().Query("SELECT sequence FROM events ORDER BY sequence")
+	rows, err := st.RawDB().Query("SELECT sequence FROM events ORDER BY sequence")
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestOriginDaemon_PresentInAllEvents(t *testing.T) {
 
 	// Check origin_daemon is set in events table
 	var originDaemon string
-	err := st.DB().QueryRow("SELECT origin_daemon FROM events LIMIT 1").Scan(&originDaemon)
+	err := st.RawDB().QueryRow("SELECT origin_daemon FROM events LIMIT 1").Scan(&originDaemon)
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestOriginDaemon_PreservedIfSet(t *testing.T) {
 
 	// Check origin_daemon preserves the pre-set value
 	var originDaemon string
-	err := st.DB().QueryRow("SELECT origin_daemon FROM events LIMIT 1").Scan(&originDaemon)
+	err := st.RawDB().QueryRow("SELECT origin_daemon FROM events LIMIT 1").Scan(&originDaemon)
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestSequence_PersistsAcrossRestart(t *testing.T) {
 
 	// Verify the new event has sequence 6
 	var maxSeq int64
-	err = st2.DB().QueryRow("SELECT MAX(sequence) FROM events").Scan(&maxSeq)
+	err = st2.RawDB().QueryRow("SELECT MAX(sequence) FROM events").Scan(&maxSeq)
 	if err != nil {
 		t.Fatalf("query max seq: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestEventJSON_ContainsAllFields(t *testing.T) {
 
 	// Read event_json from events table
 	var eventJSONStr string
-	err := st.DB().QueryRow("SELECT event_json FROM events LIMIT 1").Scan(&eventJSONStr)
+	err := st.RawDB().QueryRow("SELECT event_json FROM events LIMIT 1").Scan(&eventJSONStr)
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -306,7 +306,7 @@ func TestSequence_MessageEventsAlsoTracked(t *testing.T) {
 
 	// Both should be in the events table with contiguous sequences
 	var count int
-	err := st.DB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
+	err := st.RawDB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
@@ -315,7 +315,7 @@ func TestSequence_MessageEventsAlsoTracked(t *testing.T) {
 	}
 
 	// Verify sequences
-	rows, err := st.DB().Query("SELECT sequence, type FROM events ORDER BY sequence")
+	rows, err := st.RawDB().Query("SELECT sequence, type FROM events ORDER BY sequence")
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}

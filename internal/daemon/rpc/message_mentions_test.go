@@ -77,7 +77,7 @@ func TestMessageSend_WithMentions(t *testing.T) {
 
 	// Verify mentions were stored as refs
 	query := `SELECT ref_type, ref_value FROM message_refs WHERE message_id = ? ORDER BY ref_value`
-	rows, err := st.DB().Query(query, sendResp.MessageID)
+	rows, err := st.RawDB().Query(query, sendResp.MessageID)
 	if err != nil {
 		t.Fatalf("failed to query refs: %v", err)
 	}
