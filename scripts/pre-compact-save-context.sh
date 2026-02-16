@@ -69,5 +69,18 @@ CTXEOF
 # Save to thrum context
 echo "$CONTEXT" | thrum context save 2>/dev/null || true
 
-# Output brief summary for hook feedback
-echo "Pre-compact: saved git/beads/thrum state to agent context - you should run /update-context to save a richer narrative summary."
+# Also write to /tmp as backup (in case thrum context save fails)
+# Include agent identity + epoch in filename for multi-agent disambiguation
+AGENT_NAME=$(thrum whoami --json 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+AGENT_ROLE=$(thrum whoami --json 2>/dev/null | grep -o '"role":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+AGENT_MODULE=$(thrum whoami --json 2>/dev/null | grep -o '"module":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+EPOCH=$(date +%s)
+BACKUP_FILE="/tmp/thrum-pre-compact-${AGENT_NAME}-${AGENT_ROLE}-${AGENT_MODULE}-${EPOCH}.md"
+echo "$CONTEXT" > "$BACKUP_FILE" 2>/dev/null || true
+# Clean up old backups for THIS agent (keep only the latest)
+ls -t /tmp/thrum-pre-compact-${AGENT_NAME}-${AGENT_ROLE}-${AGENT_MODULE}-*.md 2>/dev/null | tail -n +2 | xargs rm -f 2>/dev/null || true
+
+# Output brief summary for hook feedback (PreCompact output does NOT survive
+# compaction — this is informational only. The agent recovers context via
+# /thrum:load-context which reads from thrum context saved above.)
+echo "Pre-compact: saved state to thrum context + ${BACKUP_FILE}. After compaction, run /thrum:load-context to recover."
