@@ -315,15 +315,15 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	}
 
 	// Write event to JSONL and SQLite
+	// Lock only for WriteEvent
 	h.state.Lock()
-	defer h.state.Unlock()
-
 	if err := h.state.WriteEvent(ctx, event); err != nil {
+		h.state.Unlock()
 		return nil, fmt.Errorf("write message.create event: %w", err)
 	}
+	h.state.Unlock()
 
-	// Trigger subscription notifications
-	// Use the pre-configured dispatcher (has client notifier set for push notifications)
+	// No lock for dispatch and emit (WebSocket I/O)
 	preview := req.Content
 	if len(preview) > 100 {
 		preview = preview[:100]
@@ -341,25 +341,12 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	}
 
 	// Find matching subscriptions and push notifications to connected clients
-	_, err = h.dispatcher.DispatchForMessage(msgInfo)
-	if err != nil {
-		// Log error but don't fail the message send
-		_ = err
-	}
-
-	// Store threadID for emit (need to unlock state before emitting)
-	threadID := req.ThreadID
-
-	// Unlock state before emitting (to avoid deadlock)
-	h.state.Unlock()
+	_, _ = h.dispatcher.DispatchForMessage(msgInfo)
 
 	// Emit thread.updated event for real-time updates
-	if threadID != "" {
-		_ = h.emitThreadUpdated(ctx, threadID)
+	if req.ThreadID != "" {
+		_ = h.emitThreadUpdated(ctx, req.ThreadID)
 	}
-
-	// Re-lock state before returning (to satisfy defer unlock)
-	h.state.Lock()
 
 	return &SendResponse{
 		MessageID: messageID,
@@ -897,15 +884,15 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	}
 
 	// Write event to JSONL and SQLite
+	// Lock only for WriteEvent
 	h.state.Lock()
-	defer h.state.Unlock()
-
 	if err := h.state.WriteEvent(ctx, event); err != nil {
+		h.state.Unlock()
 		return nil, fmt.Errorf("write message.edit event: %w", err)
 	}
+	h.state.Unlock()
 
-	// Trigger subscription notifications
-	// Use the pre-configured dispatcher (has client notifier set for push notifications)
+	// Query metadata and dispatch without lock (DB queries + WebSocket I/O)
 	preview := newContent
 	if len(preview) > 100 {
 		preview = preview[:100]
@@ -972,11 +959,7 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	}
 
 	// Dispatch notifications (same as message.create)
-	_, err = h.dispatcher.DispatchForMessage(msgInfo)
-	if err != nil {
-		// Log error but don't fail the edit
-		_ = err
-	}
+	_, _ = h.dispatcher.DispatchForMessage(msgInfo)
 
 	// Count edits for version number (count includes the edit we just applied)
 	var editCount int

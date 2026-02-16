@@ -342,15 +342,17 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 		return nil, fmt.Errorf("session_id is required")
 	}
 
+	// Lock for session verification and DB updates
 	h.state.Lock()
-	defer h.state.Unlock()
 
 	// Verify session exists and is active
 	session, err := h.getSession(ctx, req.SessionID)
 	if err != nil {
+		h.state.Unlock()
 		return nil, fmt.Errorf("session not found: %w", err)
 	}
 	if session.EndedAt != "" {
+		h.state.Unlock()
 		return nil, fmt.Errorf("session %s has already ended", req.SessionID)
 	}
 
@@ -359,6 +361,7 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 	// Update last_seen_at for session
 	_, err = h.state.DB().ExecContext(ctx, `UPDATE sessions SET last_seen_at = ? WHERE session_id = ?`, now, req.SessionID)
 	if err != nil {
+		h.state.Unlock()
 		return nil, fmt.Errorf("update last_seen_at: %w", err)
 	}
 
@@ -375,6 +378,7 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 			WHERE session_id = ? AND scope_type = ? AND scope_value = ?
 		`, req.SessionID, scope.Type, scope.Value)
 		if err != nil {
+			h.state.Unlock()
 			return nil, fmt.Errorf("remove scope: %w", err)
 		}
 	}
@@ -386,6 +390,7 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 			VALUES (?, ?, ?, ?)
 		`, req.SessionID, scope.Type, scope.Value, now)
 		if err != nil {
+			h.state.Unlock()
 			return nil, fmt.Errorf("add scope: %w", err)
 		}
 	}
@@ -397,6 +402,7 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 			WHERE session_id = ? AND ref_type = ? AND ref_value = ?
 		`, req.SessionID, ref.Type, ref.Value)
 		if err != nil {
+			h.state.Unlock()
 			return nil, fmt.Errorf("remove ref: %w", err)
 		}
 	}
@@ -408,20 +414,28 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 			VALUES (?, ?, ?, ?)
 		`, req.SessionID, ref.Type, ref.Value, now)
 		if err != nil {
+			h.state.Unlock()
 			return nil, fmt.Errorf("add ref: %w", err)
 		}
 	}
 
-	// Extract and store git work context
-	if worktreePath := h.getWorktreePath(ctx, req.SessionID); worktreePath != "" {
+	// Copy data needed for git extraction
+	sessionID := req.SessionID
+	agentID := session.AgentID
+
+	h.state.Unlock()
+
+	// Git extraction without lock (this runs git commands!)
+	worktreePath := h.getWorktreePath(ctx, sessionID)
+	if worktreePath != "" {
 		if gitCtx, err := gitctx.ExtractWorkContext(ctx, worktreePath); err == nil {
-			// Ignore error - work context is optional/best-effort
-			_ = h.updateWorkContext(ctx, req.SessionID, session.AgentID, gitCtx)
+			// updateWorkContext does its own DB writes, no lock needed
+			_ = h.updateWorkContext(ctx, sessionID, agentID, gitCtx)
 		}
 	}
 
 	return &HeartbeatResponse{
-		SessionID:  req.SessionID,
+		SessionID:  sessionID,
 		LastSeenAt: now,
 	}, nil
 }
