@@ -3,10 +3,12 @@
 package resilience
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/schema"
 )
@@ -60,8 +62,8 @@ func TestRecovery_ProjectionConsistency(t *testing.T) {
 	}
 
 	// Rebuild from JSONL (syncDir = thrumDir since events.jsonl and messages/ are there)
-	projector := projection.NewProjector(newDB)
-	if err := projector.Rebuild(thrumDir); err != nil {
+	projector := projection.NewProjector(safedb.New(newDB))
+	if err := projector.Rebuild(context.Background(), thrumDir); err != nil {
 		t.Fatalf("rebuild projection: %v", err)
 	}
 
@@ -190,8 +192,8 @@ func TestRecovery_CorruptedMessageJSONL(t *testing.T) {
 		t.Fatalf("init db: %v", err)
 	}
 
-	projector := projection.NewProjector(newDB)
-	err = projector.Rebuild(thrumDir)
+	projector := projection.NewProjector(safedb.New(newDB))
+	err = projector.Rebuild(context.Background(), thrumDir)
 	// The projector may return an error or skip the line — either is acceptable
 	// as long as it doesn't panic
 	if err != nil {
