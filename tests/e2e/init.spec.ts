@@ -37,9 +37,13 @@ test.describe('Initialization Tests', () => {
 
       // Assert: .thrum directory and files are created
       expect(fs.existsSync(path.join(tmpDir, '.thrum'))).toBe(true);
-      expect(fs.existsSync(path.join(tmpDir, '.thrum', 'sync'))).toBe(true);
       expect(fs.existsSync(path.join(tmpDir, '.thrum', 'identities'))).toBe(true);
       expect(fs.existsSync(path.join(tmpDir, '.thrum', 'var'))).toBe(true);
+
+      // Assert: sync worktree created with events.jsonl and messages/ directory
+      const syncDir = path.join(tmpDir, '.git', 'thrum-sync', 'a-sync');
+      expect(fs.existsSync(path.join(syncDir, 'events.jsonl'))).toBe(true);
+      expect(fs.existsSync(path.join(syncDir, 'messages'))).toBe(true);
 
       // Assert: success message is printed
       expect(output.toLowerCase()).toContain('initialized');
@@ -84,7 +88,13 @@ test.describe('Initialization Tests', () => {
 
       // Assert: files still exist, no data loss
       expect(fs.existsSync(path.join(tmpDir, '.thrum'))).toBe(true);
-      expect(fs.existsSync(path.join(tmpDir, '.thrum', 'sync'))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, '.thrum', 'identities'))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, '.thrum', 'var'))).toBe(true);
+
+      // Assert: sync worktree still intact after re-init
+      const syncDir = path.join(tmpDir, '.git', 'thrum-sync', 'a-sync');
+      expect(fs.existsSync(path.join(syncDir, 'events.jsonl'))).toBe(true);
+      expect(fs.existsSync(path.join(syncDir, 'messages'))).toBe(true);
 
       // Assert: message indicates re-initialized
       expect(output.toLowerCase()).toContain('initialized');
