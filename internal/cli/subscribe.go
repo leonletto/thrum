@@ -10,9 +10,10 @@ import (
 
 // SubscribeRequest represents the request for subscriptions.subscribe RPC.
 type SubscribeRequest struct {
-	Scope       *types.Scope `json:"scope,omitempty"`
-	MentionRole *string      `json:"mention_role,omitempty"`
-	All         bool         `json:"all,omitempty"`
+	Scope         *types.Scope `json:"scope,omitempty"`
+	MentionRole   *string      `json:"mention_role,omitempty"`
+	All           bool         `json:"all,omitempty"`
+	CallerAgentID string       `json:"caller_agent_id,omitempty"`
 }
 
 // SubscribeResponse represents the response from subscriptions.subscribe RPC.
@@ -24,7 +25,8 @@ type SubscribeResponse struct {
 
 // UnsubscribeRequest represents the request for subscriptions.unsubscribe RPC.
 type UnsubscribeRequest struct {
-	SubscriptionID int `json:"subscription_id"`
+	SubscriptionID int    `json:"subscription_id"`
+	CallerAgentID  string `json:"caller_agent_id,omitempty"`
 }
 
 // UnsubscribeResponse represents the response from subscriptions.unsubscribe RPC.
@@ -33,7 +35,9 @@ type UnsubscribeResponse struct {
 }
 
 // ListSubscriptionsRequest represents the request for subscriptions.list RPC.
-type ListSubscriptionsRequest struct{}
+type ListSubscriptionsRequest struct {
+	CallerAgentID string `json:"caller_agent_id,omitempty"`
+}
 
 // ListSubscriptionsResponse represents the response from subscriptions.list RPC.
 type ListSubscriptionsResponse struct {
@@ -52,14 +56,20 @@ type SubscriptionInfo struct {
 
 // SubscribeOptions contains options for subscribing.
 type SubscribeOptions struct {
-	Scope       *types.Scope
-	MentionRole *string
-	All         bool
+	Scope         *types.Scope
+	MentionRole   *string
+	All           bool
+	CallerAgentID string
 }
 
 // Subscribe creates a new subscription.
 func Subscribe(client *Client, opts SubscribeOptions) (*SubscribeResponse, error) {
-	req := SubscribeRequest(opts)
+	req := SubscribeRequest{
+		Scope:         opts.Scope,
+		MentionRole:   opts.MentionRole,
+		All:           opts.All,
+		CallerAgentID: opts.CallerAgentID,
+	}
 
 	var result SubscribeResponse
 	if err := client.Call("subscribe", req, &result); err != nil {
@@ -84,8 +94,10 @@ func Unsubscribe(client *Client, subscriptionID int) (*UnsubscribeResponse, erro
 }
 
 // ListSubscriptions retrieves all subscriptions for the current session.
-func ListSubscriptions(client *Client) (*ListSubscriptionsResponse, error) {
-	req := ListSubscriptionsRequest{}
+func ListSubscriptions(client *Client, callerAgentID string) (*ListSubscriptionsResponse, error) {
+	req := ListSubscriptionsRequest{
+		CallerAgentID: callerAgentID,
+	}
 
 	var result ListSubscriptionsResponse
 	if err := client.Call("subscriptions.list", req, &result); err != nil {

@@ -1747,18 +1747,22 @@ This removes:
 
 Examples:
   thrum agent delete furiosa
-  thrum agent delete coordinator_1B9K`,
+  thrum agent delete coordinator_1B9K
+  thrum agent delete coordinator_1B9K --force`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			agentName := args[0]
+			force, _ := cmd.Flags().GetBool("force")
 
-			// Confirm deletion
-			fmt.Printf("Delete agent '%s' and all associated data? [y/N] ", agentName)
-			var response string
-			_, _ = fmt.Scanln(&response)
-			if response != "y" && response != "Y" {
-				fmt.Println("Deletion canceled.")
-				return nil
+			// Confirm deletion (unless --force)
+			if !force {
+				fmt.Printf("Delete agent '%s' and all associated data? [y/N] ", agentName)
+				var response string
+				_, _ = fmt.Scanln(&response)
+				if response != "y" && response != "Y" {
+					fmt.Println("Deletion canceled.")
+					return nil
+				}
 			}
 
 			client, err := getClient()
@@ -1782,6 +1786,7 @@ Examples:
 			return nil
 		},
 	}
+	deleteCmd.Flags().Bool("force", false, "Skip confirmation prompt")
 	cmd.AddCommand(deleteCmd)
 
 	cleanupCmd := &cobra.Command{
@@ -2653,13 +2658,18 @@ func subscriptionsCmd() *cobra.Command {
 		Short: "List active subscriptions",
 		Long:  `List all active subscriptions for the current session.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("failed to connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.ListSubscriptions(client)
+			result, err := cli.ListSubscriptions(client, agentID)
 			if err != nil {
 				return err
 			}

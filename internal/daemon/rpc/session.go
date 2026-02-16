@@ -224,6 +224,13 @@ func (h *SessionHandler) HandleEnd(ctx context.Context, params json.RawMessage) 
 		reason = "normal"
 	}
 
+	// Cleanup orphaned subscriptions for this session before emitting the end event.
+	// This prevents subscription records from accumulating from crashed clients.
+	if _, err := h.state.DB().ExecContext(ctx,
+		"DELETE FROM subscriptions WHERE session_id = ?", req.SessionID); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup subscriptions for session %s: %v\n", req.SessionID, err)
+	}
+
 	// Create session.end event
 	event := types.AgentSessionEndEvent{
 		Type:      "agent.session.end",
