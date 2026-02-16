@@ -86,7 +86,7 @@ func (h *SubscriptionHandler) HandleSubscribe(ctx context.Context, params json.R
 	}
 
 	// Get current session
-	sessionID, err := h.getCurrentSession(req.CallerAgentID)
+	sessionID, err := h.getCurrentSession(ctx, req.CallerAgentID)
 	if err != nil {
 		return nil, fmt.Errorf("get current session: %w", err)
 	}
@@ -120,7 +120,7 @@ func (h *SubscriptionHandler) HandleUnsubscribe(ctx context.Context, params json
 	}
 
 	// Get current session
-	sessionID, err := h.getCurrentSession(req.CallerAgentID)
+	sessionID, err := h.getCurrentSession(ctx, req.CallerAgentID)
 	if err != nil {
 		return nil, fmt.Errorf("get current session: %w", err)
 	}
@@ -147,7 +147,7 @@ func (h *SubscriptionHandler) HandleList(ctx context.Context, params json.RawMes
 	}
 
 	// Get current session
-	sessionID, err := h.getCurrentSession(req.CallerAgentID)
+	sessionID, err := h.getCurrentSession(ctx, req.CallerAgentID)
 	if err != nil {
 		return nil, fmt.Errorf("get current session: %w", err)
 	}
@@ -195,7 +195,7 @@ func (h *SubscriptionHandler) HandleList(ctx context.Context, params json.RawMes
 }
 
 // getCurrentSession retrieves the current active session for the calling agent.
-func (h *SubscriptionHandler) getCurrentSession(callerAgentID string) (string, error) {
+func (h *SubscriptionHandler) getCurrentSession(ctx context.Context, callerAgentID string) (string, error) {
 	var agentID string
 	if callerAgentID != "" {
 		agentID = callerAgentID
@@ -215,7 +215,7 @@ func (h *SubscriptionHandler) getCurrentSession(callerAgentID string) (string, e
 	          LIMIT 1`
 
 	var sessionID string
-	sessionErr := h.state.DB().QueryRowContext(context.Background(), query, agentID).Scan(&sessionID)
+	sessionErr := h.state.DB().QueryRowContext(ctx, query, agentID).Scan(&sessionID)
 	if sessionErr == sql.ErrNoRows {
 		return "", fmt.Errorf("no active session found for agent %s", agentID)
 	}

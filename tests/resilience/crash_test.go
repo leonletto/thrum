@@ -29,6 +29,7 @@ func TestCrash_KillDuringWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewState: %v", err)
 	}
+	t.Cleanup(func() { st.Close() })
 
 	socketPath := shortSocketPath(t)
 	server := daemon.NewServer(socketPath)
@@ -100,6 +101,7 @@ func TestCrash_DBIntegrityAfterAbruptShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewState: %v", err)
 	}
+	t.Cleanup(func() { st.Close() })
 
 	socketPath := shortSocketPath(t)
 	server := daemon.NewServer(socketPath)
@@ -291,6 +293,7 @@ func TestCrash_ProjectionRebuildAfterCrash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewState: %v", err)
 	}
+	t.Cleanup(func() { st.Close() })
 
 	socketPath := shortSocketPath(t)
 	server := daemon.NewServer(socketPath)
