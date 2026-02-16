@@ -28,8 +28,7 @@ func TestTimeout_HandlerDeadlineEnforced(t *testing.T) {
 	}
 	t.Cleanup(func() { st.Close() })
 
-	sockDir := t.TempDir()
-	socketPath := sockDir + "/t.sock"
+	socketPath := shortSocketPath(t)
 	server := daemon.NewServer(socketPath)
 
 	// Register all normal handlers
@@ -87,8 +86,7 @@ func TestTimeout_ConcurrentRequestsIndependent(t *testing.T) {
 	}
 	t.Cleanup(func() { st.Close() })
 
-	sockDir := t.TempDir()
-	socketPath := sockDir + "/t.sock"
+	socketPath := shortSocketPath(t)
 	server := daemon.NewServer(socketPath)
 
 	registerAllHandlers(server, st)
@@ -166,8 +164,7 @@ func TestTimeout_ContextCancellationPropagates(t *testing.T) {
 	}
 	t.Cleanup(func() { st.Close() })
 
-	sockDir := t.TempDir()
-	socketPath := sockDir + "/t.sock"
+	socketPath := shortSocketPath(t)
 	server := daemon.NewServer(socketPath)
 
 	registerAllHandlers(server, st)
@@ -222,8 +219,7 @@ func TestTimeout_MultipleSlowRequests(t *testing.T) {
 	}
 	t.Cleanup(func() { st.Close() })
 
-	sockDir := t.TempDir()
-	socketPath := sockDir + "/t.sock"
+	socketPath := shortSocketPath(t)
 	server := daemon.NewServer(socketPath)
 
 	registerAllHandlers(server, st)
