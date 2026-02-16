@@ -294,8 +294,12 @@ func startTestDaemon(t TB, thrumDir string) (*state.State, *daemon.Server, strin
 	return st, server, socketPath
 }
 
-// setupCLIFixture extracts the fixture, starts a daemon with the socket at a
-// CLI-discoverable path, handling macOS 108-char socket path limits via redirect.
+// cliSocketPath stores the socket path for CLI tests, set by setupCLIFixture.
+// runThrum passes this via THRUM_SOCKET env var.
+var cliSocketPath string
+
+// setupCLIFixture extracts the fixture, starts a daemon with a short socket path,
+// and stores it for runThrum to pass via THRUM_SOCKET env var.
 // Returns the repoDir (--repo value for CLI commands).
 func setupCLIFixture(t *testing.T) string {
 	t.Helper()
@@ -303,64 +307,9 @@ func setupCLIFixture(t *testing.T) string {
 	thrumDir := setupFixture(t)
 	repoDir := filepath.Dir(thrumDir)
 
-	// Check if the standard socket path is short enough for macOS.
-	standardSocket := filepath.Join(thrumDir, "var", "thrum.sock")
-	if len(standardSocket) <= 100 {
-		// Short enough — use directly
-		if err := os.MkdirAll(filepath.Dir(standardSocket), 0750); err != nil {
-			t.Fatalf("mkdir var: %v", err)
-		}
-		startDaemonAt(t, thrumDir, standardSocket)
-		return repoDir
-	}
-
-	// Path too long — create a short /tmp dir as the "real" .thrum dir
-	// and use .thrum/redirect to point there.
-	shortDir, err := os.MkdirTemp("", "ts-*")
-	if err != nil {
-		t.Fatalf("create short thrum dir: %v", err)
-	}
-	t.Cleanup(func() { os.RemoveAll(shortDir) })
-
-	// Copy the fixture's .thrum contents into the short dir
-	entries, err := os.ReadDir(thrumDir)
-	if err != nil {
-		t.Fatalf("read thrumDir: %v", err)
-	}
-	for _, e := range entries {
-		src := filepath.Join(thrumDir, e.Name())
-		dst := filepath.Join(shortDir, e.Name())
-		if e.IsDir() {
-			// Copy directory recursively using cp
-			cpCmd := exec.Command("cp", "-a", src, dst)
-			if out, err := cpCmd.CombinedOutput(); err != nil {
-				t.Fatalf("cp %s → %s: %v\n%s", src, dst, err, out)
-			}
-		} else {
-			data, err := os.ReadFile(src)
-			if err != nil {
-				t.Fatalf("read %s: %v", src, err)
-			}
-			if err := os.WriteFile(dst, data, 0640); err != nil {
-				t.Fatalf("write %s: %v", dst, err)
-			}
-		}
-	}
-
-	// Create var/ and socket in the short dir
-	shortVarDir := filepath.Join(shortDir, "var")
-	if err := os.MkdirAll(shortVarDir, 0750); err != nil {
-		t.Fatalf("mkdir short var: %v", err)
-	}
-	socketPath := filepath.Join(shortVarDir, "thrum.sock")
-
-	// Write redirect file so CLI resolves to the short dir
-	if err := os.WriteFile(filepath.Join(thrumDir, "redirect"), []byte(shortDir), 0640); err != nil {
-		t.Fatalf("write redirect: %v", err)
-	}
-
-	// Start daemon using the short path
-	startDaemonAt(t, shortDir, socketPath)
+	socketPath := shortSocketPath(t)
+	startDaemonAt(t, thrumDir, socketPath)
+	cliSocketPath = socketPath
 
 	return repoDir
 }

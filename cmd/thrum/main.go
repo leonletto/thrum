@@ -3831,8 +3831,12 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 }
 
 // getClient returns a configured RPC client.
+// Respects THRUM_SOCKET env var if set, otherwise uses DefaultSocketPath.
 func getClient() (*cli.Client, error) {
-	socketPath := cli.DefaultSocketPath(flagRepo)
+	socketPath := os.Getenv("THRUM_SOCKET")
+	if socketPath == "" {
+		socketPath = cli.DefaultSocketPath(flagRepo)
+	}
 	return cli.NewClient(socketPath)
 }
 
