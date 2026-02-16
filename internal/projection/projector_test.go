@@ -1,12 +1,14 @@
 package projection_test
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/projection"
 	"github.com/leonletto/thrum/internal/schema"
@@ -33,7 +35,7 @@ func TestProjector_ApplyMessageCreate(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 
-	p := projection.NewProjector(db)
+	p := projection.NewProjector(safedb.New(db))
 
 	event := types.MessageCreateEvent{
 		Type:      "message.create",
@@ -55,7 +57,7 @@ func TestProjector_ApplyMessageCreate(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(event)
-	if err := p.Apply(data); err != nil {
+	if err := p.Apply(context.Background(), data); err != nil {
 		t.Fatalf("Apply() failed: %v", err)
 	}
 
@@ -94,7 +96,7 @@ func TestProjector_ApplyMessageEdit(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 
-	p := projection.NewProjector(db)
+	p := projection.NewProjector(safedb.New(db))
 
 	// Create a message first
 	createEvent := types.MessageCreateEvent{
@@ -109,7 +111,7 @@ func TestProjector_ApplyMessageEdit(t *testing.T) {
 		},
 	}
 	createData, _ := json.Marshal(createEvent)
-	if err := p.Apply(createData); err != nil {
+	if err := p.Apply(context.Background(), createData); err != nil {
 		t.Fatalf("apply create: %v", err)
 	}
 
@@ -124,7 +126,7 @@ func TestProjector_ApplyMessageEdit(t *testing.T) {
 		},
 	}
 	editData, _ := json.Marshal(editEvent)
-	if err := p.Apply(editData); err != nil {
+	if err := p.Apply(context.Background(), editData); err != nil {
 		t.Fatalf("Apply() edit failed: %v", err)
 	}
 
@@ -170,7 +172,7 @@ func TestProjector_ApplyMessageDelete(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 
-	p := projection.NewProjector(db)
+	p := projection.NewProjector(safedb.New(db))
 
 	// Create a message first
 	createEvent := types.MessageCreateEvent{
@@ -185,7 +187,7 @@ func TestProjector_ApplyMessageDelete(t *testing.T) {
 		},
 	}
 	createData, _ := json.Marshal(createEvent)
-	if err := p.Apply(createData); err != nil {
+	if err := p.Apply(context.Background(), createData); err != nil {
 		t.Fatalf("apply create: %v", err)
 	}
 
@@ -197,7 +199,7 @@ func TestProjector_ApplyMessageDelete(t *testing.T) {
 		Reason:    "spam",
 	}
 	deleteData, _ := json.Marshal(deleteEvent)
-	if err := p.Apply(deleteData); err != nil {
+	if err := p.Apply(context.Background(), deleteData); err != nil {
 		t.Fatalf("Apply() delete failed: %v", err)
 	}
 
@@ -223,7 +225,7 @@ func TestProjector_ApplyThreadCreate(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 
-	p := projection.NewProjector(db)
+	p := projection.NewProjector(safedb.New(db))
 
 	event := types.ThreadCreateEvent{
 		Type:      "thread.create",
@@ -234,7 +236,7 @@ func TestProjector_ApplyThreadCreate(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(event)
-	if err := p.Apply(data); err != nil {
+	if err := p.Apply(context.Background(), data); err != nil {
 		t.Fatalf("Apply() failed: %v", err)
 	}
 
@@ -253,7 +255,7 @@ func TestProjector_ApplyAgentRegister(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 
-	p := projection.NewProjector(db)
+	p := projection.NewProjector(safedb.New(db))
 
 	event := types.AgentRegisterEvent{
 		Type:      "agent.register",
@@ -266,7 +268,7 @@ func TestProjector_ApplyAgentRegister(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(event)
-	if err := p.Apply(data); err != nil {
+	if err := p.Apply(context.Background(), data); err != nil {
 		t.Fatalf("Apply() failed: %v", err)
 	}
 
@@ -288,7 +290,7 @@ func TestProjector_ApplySessionStart(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 
-	p := projection.NewProjector(db)
+	p := projection.NewProjector(safedb.New(db))
 
 	event := types.AgentSessionStartEvent{
 		Type:      "agent.session.start",
@@ -298,7 +300,7 @@ func TestProjector_ApplySessionStart(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(event)
-	if err := p.Apply(data); err != nil {
+	if err := p.Apply(context.Background(), data); err != nil {
 		t.Fatalf("Apply() failed: %v", err)
 	}
 
@@ -320,7 +322,7 @@ func TestProjector_ApplySessionEnd(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 
-	p := projection.NewProjector(db)
+	p := projection.NewProjector(safedb.New(db))
 
 	// Start a session first
 	startEvent := types.AgentSessionStartEvent{
@@ -330,7 +332,7 @@ func TestProjector_ApplySessionEnd(t *testing.T) {
 		AgentID:   "agent:test:ABC",
 	}
 	startData, _ := json.Marshal(startEvent)
-	if err := p.Apply(startData); err != nil {
+	if err := p.Apply(context.Background(), startData); err != nil {
 		t.Fatalf("apply session start: %v", err)
 	}
 
@@ -342,7 +344,7 @@ func TestProjector_ApplySessionEnd(t *testing.T) {
 		Reason:    "completed",
 	}
 	endData, _ := json.Marshal(endEvent)
-	if err := p.Apply(endData); err != nil {
+	if err := p.Apply(context.Background(), endData); err != nil {
 		t.Fatalf("Apply() session end failed: %v", err)
 	}
 
@@ -424,8 +426,8 @@ func TestProjector_Rebuild(t *testing.T) {
 	}
 
 	// Rebuild database from multi-file JSONL
-	p := projection.NewProjector(db)
-	if err := p.Rebuild(syncDir); err != nil {
+	p := projection.NewProjector(safedb.New(db))
+	if err := p.Rebuild(context.Background(), syncDir); err != nil {
 		t.Fatalf("Rebuild() failed: %v", err)
 	}
 
@@ -456,7 +458,7 @@ func TestProjector_MessageEditHistory(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 
-	p := projection.NewProjector(db)
+	p := projection.NewProjector(safedb.New(db))
 
 	// Create a message with structured data
 	createEvent := types.MessageCreateEvent{
@@ -472,7 +474,7 @@ func TestProjector_MessageEditHistory(t *testing.T) {
 		},
 	}
 	createData, _ := json.Marshal(createEvent)
-	if err := p.Apply(createData); err != nil {
+	if err := p.Apply(context.Background(), createData); err != nil {
 		t.Fatalf("apply create: %v", err)
 	}
 
@@ -488,7 +490,7 @@ func TestProjector_MessageEditHistory(t *testing.T) {
 		},
 	}
 	edit1Data, _ := json.Marshal(edit1Event)
-	if err := p.Apply(edit1Data); err != nil {
+	if err := p.Apply(context.Background(), edit1Data); err != nil {
 		t.Fatalf("Apply() first edit failed: %v", err)
 	}
 
@@ -504,7 +506,7 @@ func TestProjector_MessageEditHistory(t *testing.T) {
 		},
 	}
 	edit2Data, _ := json.Marshal(edit2Event)
-	if err := p.Apply(edit2Data); err != nil {
+	if err := p.Apply(context.Background(), edit2Data); err != nil {
 		t.Fatalf("Apply() second edit failed: %v", err)
 	}
 
@@ -578,7 +580,7 @@ func TestProjector_MessageEditNonExistent(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 
-	p := projection.NewProjector(db)
+	p := projection.NewProjector(safedb.New(db))
 
 	// Try to edit a message that doesn't exist
 	editEvent := types.MessageEditEvent{
@@ -592,7 +594,7 @@ func TestProjector_MessageEditNonExistent(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(editEvent)
-	err := p.Apply(data)
+	err := p.Apply(context.Background(), data)
 	if err == nil {
 		t.Error("Expected error when editing non-existent message")
 	}
@@ -602,7 +604,7 @@ func TestProjector_UnknownEventType(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
 
-	p := projection.NewProjector(db)
+	p := projection.NewProjector(safedb.New(db))
 
 	// Unknown event type should be ignored (forward compatibility)
 	unknownEvent := map[string]string{
@@ -612,7 +614,7 @@ func TestProjector_UnknownEventType(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(unknownEvent)
-	if err := p.Apply(data); err != nil {
+	if err := p.Apply(context.Background(), data); err != nil {
 		t.Errorf("Apply() should not error on unknown event type: %v", err)
 	}
 }

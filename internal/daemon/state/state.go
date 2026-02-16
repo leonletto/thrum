@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/leonletto/thrum/internal/daemon/eventlog"
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/projection"
@@ -29,7 +31,7 @@ type State struct {
 	eventsWriter   *jsonl.Writer            // Writer for events.jsonl (non-message events)
 	messageWriters map[string]*jsonl.Writer // Writers for messages/{agent}.jsonl (keyed by agent name)
 	writersMu      sync.Mutex               // Protects messageWriters map
-	db             *sql.DB
+	db             *safedb.DB
 	projector      *projection.Projector
 	repoID         string
 	daemonID       string                                             // Unique identifier for this daemon instance (for sync origin tracking)
@@ -94,8 +96,11 @@ func NewState(thrumDir string, syncDir string, repoID string) (*State, error) {
 		return nil, fmt.Errorf("create messages directory: %w", err)
 	}
 
-	// Create projector
-	projector := projection.NewProjector(db)
+	// Wrap raw DB in safedb to enforce context-aware queries at compile time
+	safeDB := safedb.New(db)
+
+	// Create projector (now uses *safedb.DB — migrated in step 8c)
+	projector := projection.NewProjector(safeDB)
 
 	// Compute repo path from thrumDir (parent of .thrum)
 	repoPath := filepath.Dir(thrumDir)
@@ -112,7 +117,7 @@ func NewState(thrumDir string, syncDir string, repoID string) (*State, error) {
 	s := &State{
 		eventsWriter:   eventsWriter,
 		messageWriters: make(map[string]*jsonl.Writer),
-		db:             db,
+		db:             safeDB,
 		projector:      projector,
 		repoID:         repoID,
 		daemonID:       identity.GenerateDaemonID(),
@@ -164,7 +169,9 @@ func (s *State) Close() error {
 
 // WriteEvent writes an event to both JSONL and SQLite.
 // Automatically generates and adds event_id (ULID) and version fields.
-func (s *State) WriteEvent(event any) error {
+// The context is used for SQLite operations, ensuring the server's per-request
+// timeout propagates to database queries.
+func (s *State) WriteEvent(ctx context.Context, event any) error {
 	// Marshal event to map so we can add fields
 	eventBytes, err := json.Marshal(event)
 	if err != nil {
@@ -206,7 +213,7 @@ func (s *State) WriteEvent(event any) error {
 	switch {
 	case strings.HasPrefix(eventType, "message."):
 		// Message events go to per-agent message files
-		agentName, err := s.resolveAgentForMessage(eventMap)
+		agentName, err := s.resolveAgentForMessage(ctx, eventMap)
 		if err != nil {
 			return fmt.Errorf("resolve agent for message event: %w", err)
 		}
@@ -239,7 +246,7 @@ func (s *State) WriteEvent(event any) error {
 	evtType, _ := eventMap["type"].(string)
 	evtTimestamp, _ := eventMap["timestamp"].(string)
 	evtOrigin, _ := eventMap["origin_daemon"].(string)
-	_, err = s.db.Exec(
+	_, err = s.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO events (event_id, sequence, type, timestamp, origin_daemon, event_json) VALUES (?, ?, ?, ?, ?, ?)`,
 		evtID, seq, evtType, evtTimestamp, evtOrigin, string(eventJSON),
 	)
@@ -248,7 +255,7 @@ func (s *State) WriteEvent(event any) error {
 	}
 
 	// Apply to projector (update SQLite)
-	if err := s.projector.Apply(eventJSON); err != nil {
+	if err := s.projector.Apply(ctx, eventJSON); err != nil {
 		return fmt.Errorf("apply to projector: %w", err)
 	}
 
@@ -263,7 +270,7 @@ func (s *State) WriteEvent(event any) error {
 // resolveAgentForMessage determines which agent file a message event should be routed to.
 // For message.create: extracts agent name from the event's agent_id field.
 // For message.edit/delete: looks up the original message's author from SQLite.
-func (s *State) resolveAgentForMessage(event map[string]any) (string, error) {
+func (s *State) resolveAgentForMessage(ctx context.Context, event map[string]any) (string, error) {
 	eventType, _ := event["type"].(string)
 
 	switch eventType {
@@ -285,7 +292,7 @@ func (s *State) resolveAgentForMessage(event map[string]any) (string, error) {
 		// Query the messages table for the original author
 		var agentID string
 		query := `SELECT agent_id FROM messages WHERE message_id = ?`
-		err := s.db.QueryRow(query, messageID).Scan(&agentID)
+		err := s.db.QueryRowContext(ctx, query, messageID).Scan(&agentID)
 		if err != nil {
 			return "", fmt.Errorf("lookup original author for %s: %w", messageID, err)
 		}
@@ -326,9 +333,14 @@ func (s *State) getOrCreateMessageWriter(agentName string) (*jsonl.Writer, error
 	return writer, nil
 }
 
-// DB returns the SQLite database connection for queries.
-func (s *State) DB() *sql.DB {
+// DB returns the safedb wrapper that enforces context-aware queries at compile time.
+func (s *State) DB() *safedb.DB {
 	return s.db
+}
+
+// RawDB returns the underlying *sql.DB for schema setup and migrations ONLY.
+func (s *State) RawDB() *sql.DB {
+	return s.db.Raw()
 }
 
 // RepoID returns the repository ID.
@@ -343,8 +355,8 @@ func (s *State) DaemonID() string {
 
 // GetEventsSince returns events with sequence > afterSeq, up to limit.
 // Delegates to the eventlog package.
-func (s *State) GetEventsSince(afterSeq int64, limit int) ([]eventlog.Event, int64, bool, error) {
-	return eventlog.GetEventsSince(s.db, afterSeq, limit)
+func (s *State) GetEventsSince(ctx context.Context, afterSeq int64, limit int) ([]eventlog.Event, int64, bool, error) {
+	return eventlog.GetEventsSince(ctx, s.db, afterSeq, limit)
 }
 
 // RepoPath returns the path to the repository root.
