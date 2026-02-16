@@ -1,0 +1,100 @@
+# Thrum Agent Coordination
+
+**All agents working in this repository MUST use Thrum for coordination.**
+
+## On Session Start
+
+Register with thrum immediately. Choose a role that describes your function and
+a module for your area of work:
+
+```bash
+thrum quickstart --role {{.AgentRole}} --module {{.AgentModule}} --intent "What you're working on"
+```
+
+Common roles: `coordinator`, `implementer`, `reviewer`, `planner`, `tester`
+
+## During Work
+
+- **Check inbox** before starting and periodically: `thrum inbox --unread`
+- **Send status updates** when starting/finishing significant work:
+  `thrum send "Starting task X" --to @coordinator`
+- **Reply to messages**: `thrum reply <MSG_ID> "your response"`
+- **Update intent** when switching tasks:
+  `thrum agent set-intent "New task description"`
+- **Heartbeat** to stay visible: `thrum agent heartbeat`
+- **Check who's online**: `thrum agent list --context`
+- **Coordinate on files**: `thrum who-has <file>`
+
+## Message Protocol
+
+When working with other agents:
+
+1. **Announce start of work**:
+   `thrum send "Starting work on <task>" --to @coordinator`
+2. **Report task completion**:
+   `thrum send "Completed <task>, tests passing" --to @coordinator`
+3. **Ask for review/input**:
+   `thrum send "Need input on <topic>" --mention @reviewer`
+4. **Wait for response** (blocking):
+   `thrum wait --timeout 5m --mention @<your-role>`
+5. **Check for messages** (non-blocking): `thrum inbox --unread`
+
+## Priority Handling
+
+| Priority   | Action                                  |
+| ---------- | --------------------------------------- |
+| `critical` | Stop current work immediately           |
+| `high`     | Process at next breakpoint              |
+| `normal`   | Process when current sub-task completes |
+| `low`      | Queue, process when convenient          |
+
+## MCP Messaging Protocol
+
+When running with the Thrum MCP server (`{{.MCPCommand}} mcp serve`), agents use
+native MCP tools instead of CLI shell-outs. Configure in `.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "thrum": {
+      "type": "stdio",
+      "command": "{{.MCPCommand}}",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+### MCP Tools
+
+- `mcp__thrum__send_message(to="@agent", content="...", priority="normal")` — Send to agent
+- `mcp__thrum__send_message(to="@everyone", content="...")` — Broadcast to all
+- `mcp__thrum__check_messages()` — Poll for unread messages
+- `mcp__thrum__list_agents()` — See who's online
+
+### Background Listener
+
+Sub-agents cannot access MCP tools — they fall back to Bash. Spawn a
+background listener on startup:
+
+```
+Task(
+  subagent_type="message-listener",
+  model="haiku",
+  run_in_background=true,
+  prompt="Listen for Thrum messages. WAIT_CMD=thrum wait --all --timeout 5m --after -30s --json"
+)
+```
+
+The listener uses `thrum wait --all` which blocks until a message arrives or
+times out — no polling loops needed.
+
+### Context Management
+
+Compact after 10+ message cycles to prevent context overflow. Run
+`/update-context` before compaction to save session state. After compaction,
+run `/thrum:load-context` to restore your work context.
+
+## Reference
+
+Full CLI: `thrum --help` | Combined view: `thrum overview` | Daemon: `thrum daemon status`
