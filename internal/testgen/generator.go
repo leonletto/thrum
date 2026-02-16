@@ -133,8 +133,8 @@ func generateSessions(rng *rand.Rand, agents []agentInfo, n int, baseTime time.T
 			AgentID:   agent.AgentID,
 			StartedAt: start,
 		}
-		// 80% of sessions are ended
-		if rng.Float64() < 0.8 {
+		// First 10 sessions stay active (for test agents); 80% of the rest are ended
+		if i >= 10 && rng.Float64() < 0.8 {
 			end := start.Add(duration)
 			s.EndedAt = &end
 		}
@@ -622,17 +622,30 @@ func populateSQLite(outputDir string, agents []agentInfo, sessions []sessionInfo
 	}
 
 	// Insert message reads (~70% of messages read by random agents)
-	readStmt, err := tx.Prepare("INSERT OR IGNORE INTO message_reads (message_id, agent_id, read_at) VALUES (?, ?, ?)")
+	readStmt, err := tx.Prepare("INSERT OR IGNORE INTO message_reads (message_id, session_id, agent_id, read_at) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		return fmt.Errorf("prepare read insert: %w", err)
 	}
 	defer readStmt.Close()
 
+	// Build agent->sessions map for assigning reads to sessions
+	agentSessions := make(map[string][]sessionInfo)
+	for _, s := range sessions {
+		agentSessions[s.AgentID] = append(agentSessions[s.AgentID], s)
+	}
+
 	for _, m := range messages {
 		if rng.Float64() < 0.7 {
 			reader := agents[rng.Intn(len(agents))]
+			// Pick a session for this reader
+			var sessionID string
+			if ss, ok := agentSessions[reader.AgentID]; ok && len(ss) > 0 {
+				sessionID = ss[rng.Intn(len(ss))].SessionID
+			} else {
+				sessionID = sessions[rng.Intn(len(sessions))].SessionID
+			}
 			readTS := m.Timestamp.Add(time.Duration(1+rng.Intn(60)) * time.Minute).Format(time.RFC3339)
-			if _, err := readStmt.Exec(m.MessageID, reader.AgentID, readTS); err != nil {
+			if _, err := readStmt.Exec(m.MessageID, sessionID, reader.AgentID, readTS); err != nil {
 				return fmt.Errorf("insert read for %s: %w", m.MessageID, err)
 			}
 		}
