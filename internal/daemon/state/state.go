@@ -333,15 +333,14 @@ func (s *State) getOrCreateMessageWriter(agentName string) (*jsonl.Writer, error
 	return writer, nil
 }
 
-// DB returns the raw SQLite database connection for queries.
-// TODO(thrum-qvo6): Migrate callers to use SafeDB() with context, then remove this.
-func (s *State) DB() *sql.DB {
-	return s.db.Raw()
+// DB returns the safedb wrapper that enforces context-aware queries at compile time.
+func (s *State) DB() *safedb.DB {
+	return s.db
 }
 
-// SafeDB returns the safedb wrapper that enforces context-aware queries.
-func (s *State) SafeDB() *safedb.DB {
-	return s.db
+// RawDB returns the underlying *sql.DB for schema setup and migrations ONLY.
+func (s *State) RawDB() *sql.DB {
+	return s.db.Raw()
 }
 
 // RepoID returns the repository ID.

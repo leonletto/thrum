@@ -132,7 +132,7 @@ func (h *SessionHandler) HandleStart(ctx context.Context, params json.RawMessage
 	defer h.state.Unlock()
 
 	// Check if agent exists
-	if err := h.verifyAgentExists(req.AgentID); err != nil {
+	if err := h.verifyAgentExists(ctx, req.AgentID); err != nil {
 		return nil, fmt.Errorf("agent not found: %w", err)
 	}
 
@@ -160,7 +160,7 @@ func (h *SessionHandler) HandleStart(ctx context.Context, params json.RawMessage
 
 	// Store initial scopes
 	for _, scope := range req.Scopes {
-		_, err := h.state.DB().Exec(`
+		_, err := h.state.DB().ExecContext(ctx, `
 			INSERT OR IGNORE INTO session_scopes (session_id, scope_type, scope_value, added_at)
 			VALUES (?, ?, ?, ?)
 		`, sessionID, scope.Type, scope.Value, now)
@@ -171,7 +171,7 @@ func (h *SessionHandler) HandleStart(ctx context.Context, params json.RawMessage
 
 	// Store initial refs
 	for _, ref := range req.Refs {
-		_, err := h.state.DB().Exec(`
+		_, err := h.state.DB().ExecContext(ctx, `
 			INSERT OR IGNORE INTO session_refs (session_id, ref_type, ref_value, added_at)
 			VALUES (?, ?, ?, ?)
 		`, sessionID, ref.Type, ref.Value, now)
@@ -203,7 +203,7 @@ func (h *SessionHandler) HandleEnd(ctx context.Context, params json.RawMessage) 
 	defer h.state.Unlock()
 
 	// Get session info to calculate duration
-	session, err := h.getSession(req.SessionID)
+	session, err := h.getSession(ctx, req.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("get session: %w", err)
 	}
@@ -238,7 +238,7 @@ func (h *SessionHandler) HandleEnd(ctx context.Context, params json.RawMessage) 
 	}
 
 	// Sync work contexts for this agent
-	if err := h.syncWorkContexts(session.AgentID); err != nil {
+	if err := h.syncWorkContexts(ctx, session.AgentID); err != nil {
 		// Log error but don't fail the session end
 		fmt.Fprintf(os.Stderr, "Warning: failed to sync work contexts: %v\n", err)
 	}
@@ -279,7 +279,7 @@ func (h *SessionHandler) HandleList(ctx context.Context, params json.RawMessage)
 
 	query += " ORDER BY s.started_at DESC"
 
-	rows, err := h.state.DB().Query(query, args...)
+	rows, err := h.state.DB().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query sessions: %w", err)
 	}
@@ -346,7 +346,7 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 	defer h.state.Unlock()
 
 	// Verify session exists and is active
-	session, err := h.getSession(req.SessionID)
+	session, err := h.getSession(ctx, req.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("session not found: %w", err)
 	}
@@ -357,20 +357,20 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Update last_seen_at for session
-	_, err = h.state.DB().Exec(`UPDATE sessions SET last_seen_at = ? WHERE session_id = ?`, now, req.SessionID)
+	_, err = h.state.DB().ExecContext(ctx, `UPDATE sessions SET last_seen_at = ? WHERE session_id = ?`, now, req.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("update last_seen_at: %w", err)
 	}
 
 	// Update last_seen_at for agent (best-effort)
-	_, _ = h.state.DB().Exec(
+	_, _ = h.state.DB().ExecContext(ctx,
 		"UPDATE agents SET last_seen_at = ? WHERE agent_id = (SELECT agent_id FROM sessions WHERE session_id = ?)",
 		now, req.SessionID,
 	)
 
 	// Remove scopes
 	for _, scope := range req.RemoveScopes {
-		_, err := h.state.DB().Exec(`
+		_, err := h.state.DB().ExecContext(ctx, `
 			DELETE FROM session_scopes
 			WHERE session_id = ? AND scope_type = ? AND scope_value = ?
 		`, req.SessionID, scope.Type, scope.Value)
@@ -381,7 +381,7 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 
 	// Add scopes
 	for _, scope := range req.AddScopes {
-		_, err := h.state.DB().Exec(`
+		_, err := h.state.DB().ExecContext(ctx, `
 			INSERT OR IGNORE INTO session_scopes (session_id, scope_type, scope_value, added_at)
 			VALUES (?, ?, ?, ?)
 		`, req.SessionID, scope.Type, scope.Value, now)
@@ -392,7 +392,7 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 
 	// Remove refs
 	for _, ref := range req.RemoveRefs {
-		_, err := h.state.DB().Exec(`
+		_, err := h.state.DB().ExecContext(ctx, `
 			DELETE FROM session_refs
 			WHERE session_id = ? AND ref_type = ? AND ref_value = ?
 		`, req.SessionID, ref.Type, ref.Value)
@@ -403,7 +403,7 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 
 	// Add refs
 	for _, ref := range req.AddRefs {
-		_, err := h.state.DB().Exec(`
+		_, err := h.state.DB().ExecContext(ctx, `
 			INSERT OR IGNORE INTO session_refs (session_id, ref_type, ref_value, added_at)
 			VALUES (?, ?, ?, ?)
 		`, req.SessionID, ref.Type, ref.Value, now)
@@ -413,10 +413,10 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 	}
 
 	// Extract and store git work context
-	if worktreePath := h.getWorktreePath(req.SessionID); worktreePath != "" {
+	if worktreePath := h.getWorktreePath(ctx, req.SessionID); worktreePath != "" {
 		if gitCtx, err := gitctx.ExtractWorkContext(ctx, worktreePath); err == nil {
 			// Ignore error - work context is optional/best-effort
-			_ = h.updateWorkContext(req.SessionID, session.AgentID, gitCtx)
+			_ = h.updateWorkContext(ctx, req.SessionID, session.AgentID, gitCtx)
 		}
 	}
 
@@ -433,7 +433,7 @@ func (h *SessionHandler) recoverOrphanedSessions(ctx context.Context, agentID st
 	          FROM sessions
 	          WHERE agent_id = ? AND ended_at IS NULL`
 
-	rows, err := h.state.DB().Query(query, agentID)
+	rows, err := h.state.DB().QueryContext(ctx, query, agentID)
 	if err != nil {
 		return fmt.Errorf("query orphaned sessions: %w", err)
 	}
@@ -475,10 +475,10 @@ func (h *SessionHandler) recoverOrphanedSessions(ctx context.Context, agentID st
 }
 
 // verifyAgentExists checks if an agent with the given ID exists.
-func (h *SessionHandler) verifyAgentExists(agentID string) error {
+func (h *SessionHandler) verifyAgentExists(ctx context.Context, agentID string) error {
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = ?)`
-	err := h.state.DB().QueryRow(query, agentID).Scan(&exists)
+	err := h.state.DB().QueryRowContext(ctx, query, agentID).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("check agent existence: %w", err)
 	}
@@ -489,7 +489,7 @@ func (h *SessionHandler) verifyAgentExists(agentID string) error {
 }
 
 // getSession retrieves session information.
-func (h *SessionHandler) getSession(sessionID string) (*sessionInfo, error) {
+func (h *SessionHandler) getSession(ctx context.Context, sessionID string) (*sessionInfo, error) {
 	query := `SELECT session_id, agent_id, started_at, ended_at
 	          FROM sessions
 	          WHERE session_id = ?`
@@ -497,7 +497,7 @@ func (h *SessionHandler) getSession(sessionID string) (*sessionInfo, error) {
 	var session sessionInfo
 	var endedAt sql.NullString
 
-	err := h.state.DB().QueryRow(query, sessionID).Scan(
+	err := h.state.DB().QueryRowContext(ctx, query, sessionID).Scan(
 		&session.SessionID,
 		&session.AgentID,
 		&session.StartedAt,
@@ -525,13 +525,13 @@ type sessionInfo struct {
 
 // getWorktreePath returns the worktree path for a session from session_refs.
 // Returns empty string if no worktree ref is found.
-func (h *SessionHandler) getWorktreePath(sessionID string) string {
+func (h *SessionHandler) getWorktreePath(ctx context.Context, sessionID string) string {
 	var worktreePath string
 	query := `SELECT ref_value FROM session_refs
 	          WHERE session_id = ? AND ref_type = 'worktree'
 	          LIMIT 1`
 
-	err := h.state.DB().QueryRow(query, sessionID).Scan(&worktreePath)
+	err := h.state.DB().QueryRowContext(ctx, query, sessionID).Scan(&worktreePath)
 	if err != nil {
 		return ""
 	}
@@ -540,7 +540,7 @@ func (h *SessionHandler) getWorktreePath(sessionID string) string {
 }
 
 // updateWorkContext upserts the agent_work_contexts table with git-derived context.
-func (h *SessionHandler) updateWorkContext(sessionID, agentID string, ctx *gitctx.WorkContext) error {
+func (h *SessionHandler) updateWorkContext(workCtx context.Context, sessionID, agentID string, ctx *gitctx.WorkContext) error {
 	// Marshal JSON fields
 	unmergedCommitsJSON, err := json.Marshal(ctx.UnmergedCommits)
 	if err != nil {
@@ -565,7 +565,7 @@ func (h *SessionHandler) updateWorkContext(sessionID, agentID string, ctx *gitct
 	gitUpdatedAt := ctx.ExtractedAt.Format(time.RFC3339Nano)
 
 	// Upsert work context
-	_, err = h.state.DB().Exec(`
+	_, err = h.state.DB().ExecContext(workCtx, `
 		INSERT INTO agent_work_contexts (
 			session_id, agent_id, branch, worktree_path,
 			unmerged_commits, uncommitted_files, changed_files, file_changes, git_updated_at
@@ -600,7 +600,7 @@ func (h *SessionHandler) HandleSetIntent(ctx context.Context, params json.RawMes
 	defer h.state.Unlock()
 
 	// Verify session exists and is active
-	session, err := h.getSession(req.SessionID)
+	session, err := h.getSession(ctx, req.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("session not found: %w", err)
 	}
@@ -611,7 +611,7 @@ func (h *SessionHandler) HandleSetIntent(ctx context.Context, params json.RawMes
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Upsert work context with intent
-	_, err = h.state.DB().Exec(`
+	_, err = h.state.DB().ExecContext(ctx, `
 		INSERT INTO agent_work_contexts (session_id, agent_id, intent, intent_updated_at)
 		VALUES (?, ?, ?, ?)
 		ON CONFLICT(session_id) DO UPDATE SET
@@ -645,7 +645,7 @@ func (h *SessionHandler) HandleSetTask(ctx context.Context, params json.RawMessa
 	defer h.state.Unlock()
 
 	// Verify session exists and is active
-	session, err := h.getSession(req.SessionID)
+	session, err := h.getSession(ctx, req.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("session not found: %w", err)
 	}
@@ -656,7 +656,7 @@ func (h *SessionHandler) HandleSetTask(ctx context.Context, params json.RawMessa
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Upsert work context with task
-	_, err = h.state.DB().Exec(`
+	_, err = h.state.DB().ExecContext(ctx, `
 		INSERT INTO agent_work_contexts (session_id, agent_id, current_task, task_updated_at)
 		VALUES (?, ?, ?, ?)
 		ON CONFLICT(session_id) DO UPDATE SET
@@ -675,7 +675,7 @@ func (h *SessionHandler) HandleSetTask(ctx context.Context, params json.RawMessa
 }
 
 // syncWorkContexts syncs work contexts for an agent to JSONL.
-func (h *SessionHandler) syncWorkContexts(agentID string) error {
+func (h *SessionHandler) syncWorkContexts(ctx context.Context, agentID string) error {
 	// Collect all work contexts for this agent
 	query := `SELECT session_id, branch, worktree_path,
 	                 unmerged_commits, uncommitted_files, changed_files, file_changes, git_updated_at,
@@ -684,7 +684,7 @@ func (h *SessionHandler) syncWorkContexts(agentID string) error {
 	          WHERE agent_id = ?
 	          ORDER BY git_updated_at DESC`
 
-	rows, err := h.state.DB().Query(query, agentID)
+	rows, err := h.state.DB().QueryContext(ctx, query, agentID)
 	if err != nil {
 		return fmt.Errorf("query work contexts: %w", err)
 	}

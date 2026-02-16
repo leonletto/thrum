@@ -100,7 +100,7 @@ func TestAgentRegister(t *testing.T) {
 
 				// Now manually insert a conflicting agent (different agent_id, same role+module)
 				// This simulates the conflict scenario
-				_, err = s.DB().Exec(`
+				_, err = s.RawDB().Exec(`
 					INSERT INTO agents (agent_id, kind, role, module, display, registered_at)
 					VALUES (?, ?, ?, ?, ?, ?)
 				`, "agent:implementer:CONFLICT00", "agent", "implementer", "auth", "", "2026-01-01T00:00:00Z")
@@ -120,7 +120,7 @@ func TestAgentRegister(t *testing.T) {
 			wantErr:      false,
 			setupFunc: func(s *state.State) error {
 				// Insert conflicting agent
-				_, err := s.DB().Exec(`
+				_, err := s.RawDB().Exec(`
 					INSERT INTO agents (agent_id, kind, role, module, display, registered_at)
 					VALUES (?, ?, ?, ?, ?, ?)
 				`, "agent:implementer:CONFLICT00", "agent", "implementer", "auth", "", "2026-01-01T00:00:00Z")
@@ -206,7 +206,7 @@ func TestAgentRegister(t *testing.T) {
 			// Verify agent was written to database (except for conflicts)
 			if !tt.wantConflict && regResp.Status != "conflict" {
 				var count int
-				err = s.DB().QueryRow("SELECT COUNT(*) FROM agents WHERE agent_id = ?", regResp.AgentID).Scan(&count)
+				err = s.RawDB().QueryRow("SELECT COUNT(*) FROM agents WHERE agent_id = ?", regResp.AgentID).Scan(&count)
 				if err != nil {
 					t.Errorf("query agent: %v", err)
 				}
@@ -458,7 +458,7 @@ func TestListContext(t *testing.T) {
 	session2ID := sessResp2.SessionID
 
 	// Create work contexts manually
-	_, err = s.DB().Exec(`
+	_, err = s.RawDB().Exec(`
 		INSERT INTO agent_work_contexts (
 			session_id, agent_id, branch, worktree_path,
 			unmerged_commits, uncommitted_files, changed_files, git_updated_at,
@@ -475,7 +475,7 @@ func TestListContext(t *testing.T) {
 		t.Fatalf("insert work context 1: %v", err)
 	}
 
-	_, err = s.DB().Exec(`
+	_, err = s.RawDB().Exec(`
 		INSERT INTO agent_work_contexts (
 			session_id, agent_id, branch, worktree_path,
 			unmerged_commits, uncommitted_files, changed_files, git_updated_at
@@ -738,7 +738,7 @@ func TestAgentDelete(t *testing.T) {
 
 		// Verify agent was removed from database
 		var count int
-		err = st.DB().QueryRow("SELECT COUNT(*) FROM agents WHERE agent_id = ?", "test_agent").Scan(&count)
+		err = st.RawDB().QueryRow("SELECT COUNT(*) FROM agents WHERE agent_id = ?", "test_agent").Scan(&count)
 		if err != nil {
 			t.Fatalf("Failed to query database: %v", err)
 		}
@@ -917,26 +917,26 @@ func TestGetMessageCount(t *testing.T) {
 	agentID := "agent:tester:ABC123"
 
 	// No messages → count should be 0
-	count := agentHandler.getMessageCount(agentID)
+	count := agentHandler.getMessageCount(context.Background(), agentID)
 	if count != 0 {
 		t.Errorf("Expected 0 messages, got %d", count)
 	}
 
 	// Insert a message directly into SQLite
-	_, err = s.DB().Exec(`INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content)
+	_, err = s.RawDB().Exec(`INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content)
 		VALUES (?, ?, ?, datetime('now'), 'markdown', 'test')`,
 		"msg_test001", agentID, "ses_test001")
 	if err != nil {
 		t.Fatalf("insert message: %v", err)
 	}
 
-	count = agentHandler.getMessageCount(agentID)
+	count = agentHandler.getMessageCount(context.Background(), agentID)
 	if count != 1 {
 		t.Errorf("Expected 1 message, got %d", count)
 	}
 
 	// Non-existent agent → 0
-	count = agentHandler.getMessageCount("agent:ghost:XYZ999")
+	count = agentHandler.getMessageCount(context.Background(), "agent:ghost:XYZ999")
 	if count != 0 {
 		t.Errorf("Expected 0 for non-existent agent, got %d", count)
 	}

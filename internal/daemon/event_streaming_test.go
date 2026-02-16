@@ -84,7 +84,7 @@ func TestEventStreamingIntegration(t *testing.T) {
 	sessionID := startResp.SessionID
 
 	// Create subscription for all messages
-	subService := subscriptions.NewService(st.DB())
+	subService := subscriptions.NewService(st.RawDB())
 	_, err = subService.Subscribe(sessionID, nil, nil, true)
 	if err != nil {
 		t.Fatalf("Failed to create subscription: %v", err)
@@ -94,7 +94,7 @@ func TestEventStreamingIntegration(t *testing.T) {
 	receiver := &mockNotificationReceiver{}
 
 	// Create dispatcher with the mock receiver
-	dispatcher := subscriptions.NewDispatcher(st.DB())
+	dispatcher := subscriptions.NewDispatcher(st.RawDB())
 	dispatcher.SetClientNotifier(receiver)
 
 	// Create message handler with the dispatcher
@@ -312,7 +312,7 @@ func TestEventStreamingWithSubscriptionFiltering(t *testing.T) {
 	session2ID := session2StartResp.SessionID
 
 	// Create filtered subscription - session1 subscribes to task:thrum-ukr scope only
-	subService := subscriptions.NewService(st.DB())
+	subService := subscriptions.NewService(st.RawDB())
 	scope := &types.Scope{Type: "task", Value: "thrum-ukr"}
 	_, err = subService.Subscribe(session1ID, scope, nil, false)
 	if err != nil {
@@ -338,7 +338,7 @@ func TestEventStreamingWithSubscriptionFiltering(t *testing.T) {
 	}
 
 	// Create dispatcher with the multi-notifier
-	dispatcher := subscriptions.NewDispatcher(st.DB())
+	dispatcher := subscriptions.NewDispatcher(st.RawDB())
 	dispatcher.SetClientNotifier(multiNotifier)
 
 	// Create message handler

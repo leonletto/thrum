@@ -146,7 +146,7 @@ func (h *UserHandler) getUserByID(userID string) (*AgentInfo, error) {
 	var agent AgentInfo
 	var display, lastSeenAt sql.NullString
 
-	err := h.state.DB().QueryRow(query, userID).Scan(
+	err := h.state.DB().QueryRowContext(context.Background(), query, userID).Scan(
 		&agent.AgentID,
 		&agent.Kind,
 		&agent.Role,
