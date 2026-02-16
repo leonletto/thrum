@@ -1,19 +1,21 @@
 package cleanup
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 )
 
 // CleanupStaleContexts removes stale work contexts from the database.
 // Returns the number of contexts deleted.
-func CleanupStaleContexts(db *sql.DB, now time.Time) (int, error) {
+func CleanupStaleContexts(ctx context.Context, db *safedb.DB, now time.Time) (int, error) {
 	nowStr := now.Format(time.RFC3339)
 	cutoff24h := now.Add(-24 * time.Hour).Format(time.RFC3339)
 	cutoff7d := now.Add(-7 * 24 * time.Hour).Format(time.RFC3339)
 
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		DELETE FROM agent_work_contexts
 		WHERE
 			-- Rule 1: Old (>24h) + no unmerged commits

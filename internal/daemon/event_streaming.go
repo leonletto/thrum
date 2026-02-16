@@ -1,8 +1,7 @@
 package daemon
 
 import (
-	"database/sql"
-
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	"github.com/leonletto/thrum/internal/websocket"
@@ -21,13 +20,13 @@ type EventStreamingSetup struct {
 // Parameters:
 //   - unixClients: Registry of Unix socket clients
 //   - wsServer: WebSocket server (for accessing its client registry)
-//   - db: SQLite database for subscription queries
+//   - db: SafeDB for subscription queries
 //
 // Returns a setup that can be used to configure handlers with push notification support.
 func NewEventStreamingSetup(
 	unixClients *ClientRegistry,
 	wsServer *websocket.Server,
-	db *sql.DB,
+	db *safedb.DB,
 ) *EventStreamingSetup {
 	// Create broadcaster that pushes to both Unix and WebSocket clients
 	broadcaster := NewBroadcaster(unixClients, wsServer.GetClients())
@@ -49,5 +48,5 @@ func NewEventStreamingSetupFromState(
 	unixClients *ClientRegistry,
 	wsServer *websocket.Server,
 ) *EventStreamingSetup {
-	return NewEventStreamingSetup(unixClients, wsServer, st.RawDB())
+	return NewEventStreamingSetup(unixClients, wsServer, st.DB())
 }

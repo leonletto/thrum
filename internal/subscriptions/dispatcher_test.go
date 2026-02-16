@@ -1,10 +1,12 @@
 package subscriptions_test
 
 import (
+	"context"
 	"path/filepath"
 	"sync"
 	"testing"
 
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/schema"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	"github.com/leonletto/thrum/internal/types"
@@ -49,12 +51,13 @@ func TestDispatchForMessage_ScopeMatch(t *testing.T) {
 		t.Fatalf("InitDB() failed: %v", err)
 	}
 
-	svc := subscriptions.NewService(db)
-	dispatcher := subscriptions.NewDispatcher(db)
+	sdb := safedb.New(db)
+	svc := subscriptions.NewService(sdb)
+	dispatcher := subscriptions.NewDispatcher(sdb)
 
 	// Create subscription for scope module:auth
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe("ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -67,7 +70,7 @@ func TestDispatchForMessage_ScopeMatch(t *testing.T) {
 		},
 	}
 
-	matches, err := dispatcher.DispatchForMessage(msg)
+	matches, err := dispatcher.DispatchForMessage(context.Background(), msg)
 	if err != nil {
 		t.Fatalf("DispatchForMessage() failed: %v", err)
 	}
@@ -100,12 +103,13 @@ func TestDispatchForMessage_NoMatch(t *testing.T) {
 		t.Fatalf("InitDB() failed: %v", err)
 	}
 
-	svc := subscriptions.NewService(db)
-	dispatcher := subscriptions.NewDispatcher(db)
+	sdb := safedb.New(db)
+	svc := subscriptions.NewService(sdb)
+	dispatcher := subscriptions.NewDispatcher(sdb)
 
 	// Create subscription for scope module:auth
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe("ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -118,7 +122,7 @@ func TestDispatchForMessage_NoMatch(t *testing.T) {
 		},
 	}
 
-	matches, err := dispatcher.DispatchForMessage(msg)
+	matches, err := dispatcher.DispatchForMessage(context.Background(), msg)
 	if err != nil {
 		t.Fatalf("DispatchForMessage() failed: %v", err)
 	}
@@ -142,12 +146,13 @@ func TestDispatchForMessage_MentionMatch(t *testing.T) {
 		t.Fatalf("InitDB() failed: %v", err)
 	}
 
-	svc := subscriptions.NewService(db)
-	dispatcher := subscriptions.NewDispatcher(db)
+	sdb := safedb.New(db)
+	svc := subscriptions.NewService(sdb)
+	dispatcher := subscriptions.NewDispatcher(sdb)
 
 	// Create subscription for mentions of @reviewer
 	role := "reviewer"
-	_, err = svc.Subscribe("ses_001", nil, &role, false)
+	_, err = svc.Subscribe(context.Background(),"ses_001", nil, &role, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -160,7 +165,7 @@ func TestDispatchForMessage_MentionMatch(t *testing.T) {
 		},
 	}
 
-	matches, err := dispatcher.DispatchForMessage(msg)
+	matches, err := dispatcher.DispatchForMessage(context.Background(), msg)
 	if err != nil {
 		t.Fatalf("DispatchForMessage() failed: %v", err)
 	}
@@ -190,11 +195,12 @@ func TestDispatchForMessage_AllMatch(t *testing.T) {
 		t.Fatalf("InitDB() failed: %v", err)
 	}
 
-	svc := subscriptions.NewService(db)
-	dispatcher := subscriptions.NewDispatcher(db)
+	sdb := safedb.New(db)
+	svc := subscriptions.NewService(sdb)
+	dispatcher := subscriptions.NewDispatcher(sdb)
 
 	// Create "all" subscription
-	_, err = svc.Subscribe("ses_001", nil, nil, true)
+	_, err = svc.Subscribe(context.Background(),"ses_001", nil, nil, true)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -207,7 +213,7 @@ func TestDispatchForMessage_AllMatch(t *testing.T) {
 		},
 	}
 
-	matches, err := dispatcher.DispatchForMessage(msg)
+	matches, err := dispatcher.DispatchForMessage(context.Background(), msg)
 	if err != nil {
 		t.Fatalf("DispatchForMessage() failed: %v", err)
 	}
@@ -237,17 +243,18 @@ func TestDispatchForMessage_MultipleMatches(t *testing.T) {
 		t.Fatalf("InitDB() failed: %v", err)
 	}
 
-	svc := subscriptions.NewService(db)
-	dispatcher := subscriptions.NewDispatcher(db)
+	sdb := safedb.New(db)
+	svc := subscriptions.NewService(sdb)
+	dispatcher := subscriptions.NewDispatcher(sdb)
 
 	// Create multiple subscriptions
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe("ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() #1 failed: %v", err)
 	}
 
-	_, err = svc.Subscribe("ses_002", nil, nil, true) // all subscription
+	_, err = svc.Subscribe(context.Background(),"ses_002", nil, nil, true) // all subscription
 	if err != nil {
 		t.Fatalf("Subscribe() #2 failed: %v", err)
 	}
@@ -260,7 +267,7 @@ func TestDispatchForMessage_MultipleMatches(t *testing.T) {
 		},
 	}
 
-	matches, err := dispatcher.DispatchForMessage(msg)
+	matches, err := dispatcher.DispatchForMessage(context.Background(), msg)
 	if err != nil {
 		t.Fatalf("DispatchForMessage() failed: %v", err)
 	}
@@ -298,12 +305,13 @@ func TestDispatchForMessage_MultipleScopes(t *testing.T) {
 		t.Fatalf("InitDB() failed: %v", err)
 	}
 
-	svc := subscriptions.NewService(db)
-	dispatcher := subscriptions.NewDispatcher(db)
+	sdb := safedb.New(db)
+	svc := subscriptions.NewService(sdb)
+	dispatcher := subscriptions.NewDispatcher(sdb)
 
 	// Create subscription for module:auth
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe("ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -318,7 +326,7 @@ func TestDispatchForMessage_MultipleScopes(t *testing.T) {
 		},
 	}
 
-	matches, err := dispatcher.DispatchForMessage(msg)
+	matches, err := dispatcher.DispatchForMessage(context.Background(), msg)
 	if err != nil {
 		t.Fatalf("DispatchForMessage() failed: %v", err)
 	}
@@ -342,7 +350,8 @@ func TestDispatchForMessage_NoSubscriptions(t *testing.T) {
 		t.Fatalf("InitDB() failed: %v", err)
 	}
 
-	dispatcher := subscriptions.NewDispatcher(db)
+	sdb := safedb.New(db)
+	dispatcher := subscriptions.NewDispatcher(sdb)
 
 	// Message with no subscriptions in DB
 	msg := &subscriptions.MessageInfo{
@@ -352,7 +361,7 @@ func TestDispatchForMessage_NoSubscriptions(t *testing.T) {
 		},
 	}
 
-	matches, err := dispatcher.DispatchForMessage(msg)
+	matches, err := dispatcher.DispatchForMessage(context.Background(), msg)
 	if err != nil {
 		t.Fatalf("DispatchForMessage() failed: %v", err)
 	}
@@ -376,8 +385,9 @@ func TestDispatcher_WithClientNotifier(t *testing.T) {
 		t.Fatalf("InitDB() failed: %v", err)
 	}
 
-	svc := subscriptions.NewService(db)
-	dispatcher := subscriptions.NewDispatcher(db)
+	sdb := safedb.New(db)
+	svc := subscriptions.NewService(sdb)
+	dispatcher := subscriptions.NewDispatcher(sdb)
 	notifier := newMockNotifier()
 
 	// Set the client notifier
@@ -385,7 +395,7 @@ func TestDispatcher_WithClientNotifier(t *testing.T) {
 
 	// Create subscription
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	sub, err := svc.Subscribe("ses_001", scope, nil, false)
+	sub, err := svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -403,7 +413,7 @@ func TestDispatcher_WithClientNotifier(t *testing.T) {
 		Preview:   "This is a test message",
 	}
 
-	matches, err := dispatcher.DispatchForMessage(msg)
+	matches, err := dispatcher.DispatchForMessage(context.Background(), msg)
 	if err != nil {
 		t.Fatalf("DispatchForMessage() failed: %v", err)
 	}
@@ -489,13 +499,14 @@ func TestDispatcher_PreviewTruncation(t *testing.T) {
 		t.Fatalf("InitDB() failed: %v", err)
 	}
 
-	svc := subscriptions.NewService(db)
-	dispatcher := subscriptions.NewDispatcher(db)
+	sdb := safedb.New(db)
+	svc := subscriptions.NewService(sdb)
+	dispatcher := subscriptions.NewDispatcher(sdb)
 	notifier := newMockNotifier()
 	dispatcher.SetClientNotifier(notifier)
 
 	// Create subscription
-	_, err = svc.Subscribe("ses_001", nil, nil, true)
+	_, err = svc.Subscribe(context.Background(),"ses_001", nil, nil, true)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -508,7 +519,7 @@ func TestDispatcher_PreviewTruncation(t *testing.T) {
 		Timestamp: "2026-01-01T12:00:00Z",
 	}
 
-	_, err = dispatcher.DispatchForMessage(msg)
+	_, err = dispatcher.DispatchForMessage(context.Background(), msg)
 	if err != nil {
 		t.Fatalf("DispatchForMessage() failed: %v", err)
 	}
@@ -554,13 +565,14 @@ func TestDispatcher_NotificationWithoutClientNotifier(t *testing.T) {
 		t.Fatalf("InitDB() failed: %v", err)
 	}
 
-	svc := subscriptions.NewService(db)
-	dispatcher := subscriptions.NewDispatcher(db)
+	sdb := safedb.New(db)
+	svc := subscriptions.NewService(sdb)
+	dispatcher := subscriptions.NewDispatcher(sdb)
 	// Don't set client notifier
 
 	// Create subscription
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe("ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -573,7 +585,7 @@ func TestDispatcher_NotificationWithoutClientNotifier(t *testing.T) {
 		},
 	}
 
-	matches, err := dispatcher.DispatchForMessage(msg)
+	matches, err := dispatcher.DispatchForMessage(context.Background(), msg)
 	if err != nil {
 		t.Fatalf("DispatchForMessage() failed: %v", err)
 	}

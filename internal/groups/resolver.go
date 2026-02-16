@@ -1,31 +1,33 @@
 package groups
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
+
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 )
 
 // Resolver provides group existence checks and membership resolution.
 type Resolver struct {
-	db *sql.DB
+	db *safedb.DB
 }
 
 // NewResolver creates a new group resolver.
-func NewResolver(db *sql.DB) *Resolver {
+func NewResolver(db *safedb.DB) *Resolver {
 	return &Resolver{db: db}
 }
 
 // IsGroup checks if a name corresponds to an existing group.
 // Used at send-time to decide: group scope vs regular mention ref.
-func (r *Resolver) IsGroup(name string) (bool, error) {
+func (r *Resolver) IsGroup(ctx context.Context, name string) (bool, error) {
 	var exists bool
-	err := r.db.QueryRow("SELECT EXISTS(SELECT 1 FROM groups WHERE name = ?)", name).Scan(&exists)
+	err := r.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM groups WHERE name = ?)", name).Scan(&exists)
 	return exists, err
 }
 
 // IsMember checks if an agent belongs to a group (resolving roles).
-func (r *Resolver) IsMember(groupName, agentID, agentRole string) (bool, error) {
-	members, err := r.ExpandMembers(groupName)
+func (r *Resolver) IsMember(ctx context.Context, groupName, agentID, agentRole string) (bool, error) {
+	members, err := r.ExpandMembers(ctx, groupName)
 	if err != nil {
 		return false, err
 	}
@@ -39,8 +41,13 @@ func (r *Resolver) IsMember(groupName, agentID, agentRole string) (bool, error) 
 
 // ExpandMembers resolves a group to a deduplicated list of agent IDs.
 // Handles agent and role members (flat groups only, no nesting).
-func (r *Resolver) ExpandMembers(groupName string) ([]string, error) {
-	rows, err := r.db.Query(`
+func (r *Resolver) ExpandMembers(ctx context.Context, groupName string) ([]string, error) {
+	// Collect all members first, then close the cursor before sub-queries.
+	// SQLite with SetMaxOpenConns(1) deadlocks if we query inside an open rows cursor.
+	type member struct {
+		typ, value string
+	}
+	rows, err := r.db.QueryContext(ctx, `
 		SELECT gm.member_type, gm.member_value
 		FROM group_members gm
 		JOIN groups g ON gm.group_id = g.group_id
@@ -49,29 +56,39 @@ func (r *Resolver) ExpandMembers(groupName string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("query group members: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
 
+	var members []member
+	for rows.Next() {
+		var m member
+		if err := rows.Scan(&m.typ, &m.value); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("scan member: %w", err)
+		}
+		members = append(members, m)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, fmt.Errorf("iterate members: %w", err)
+	}
+	_ = rows.Close()
+
+	// Now resolve roles with the cursor closed.
 	var agents []string
 	seen := make(map[string]bool)
 
-	for rows.Next() {
-		var memberType, memberValue string
-		if err := rows.Scan(&memberType, &memberValue); err != nil {
-			return nil, fmt.Errorf("scan member: %w", err)
-		}
-
-		switch memberType {
+	for _, m := range members {
+		switch m.typ {
 		case "agent":
-			if !seen[memberValue] {
-				agents = append(agents, memberValue)
-				seen[memberValue] = true
+			if !seen[m.value] {
+				agents = append(agents, m.value)
+				seen[m.value] = true
 			}
 		case "role":
 			var roleAgents []string
-			if memberValue == "*" {
-				roleAgents, err = r.queryAllAgents()
+			if m.value == "*" {
+				roleAgents, err = r.queryAllAgents(ctx)
 			} else {
-				roleAgents, err = r.queryAgentsByRole(memberValue)
+				roleAgents, err = r.queryAgentsByRole(ctx, m.value)
 			}
 			if err != nil {
 				return nil, err
@@ -84,15 +101,12 @@ func (r *Resolver) ExpandMembers(groupName string) ([]string, error) {
 			}
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate members: %w", err)
-	}
 
 	return agents, nil
 }
 
-func (r *Resolver) queryAgentsByRole(role string) ([]string, error) {
-	rows, err := r.db.Query("SELECT DISTINCT agent_id FROM agents WHERE role = ?", role)
+func (r *Resolver) queryAgentsByRole(ctx context.Context, role string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT DISTINCT agent_id FROM agents WHERE role = ?", role)
 	if err != nil {
 		return nil, fmt.Errorf("query agents by role: %w", err)
 	}
@@ -109,8 +123,8 @@ func (r *Resolver) queryAgentsByRole(role string) ([]string, error) {
 	return agents, rows.Err()
 }
 
-func (r *Resolver) queryAllAgents() ([]string, error) {
-	rows, err := r.db.Query("SELECT DISTINCT agent_id FROM agents")
+func (r *Resolver) queryAllAgents(ctx context.Context) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT DISTINCT agent_id FROM agents")
 	if err != nil {
 		return nil, fmt.Errorf("query all agents: %w", err)
 	}

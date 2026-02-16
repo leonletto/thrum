@@ -1,8 +1,11 @@
 package checkpoint
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 )
 
 // Checkpoint represents sync progress for a peer daemon.
@@ -15,9 +18,9 @@ type Checkpoint struct {
 
 // GetCheckpoint returns the checkpoint for a peer daemon.
 // Returns nil with no error if the peer has no checkpoint.
-func GetCheckpoint(db *sql.DB, peerID string) (*Checkpoint, error) {
+func GetCheckpoint(ctx context.Context, db *safedb.DB, peerID string) (*Checkpoint, error) {
 	var c Checkpoint
-	err := db.QueryRow(
+	err := db.QueryRowContext(ctx,
 		`SELECT peer_daemon_id, last_synced_sequence, last_sync_timestamp, sync_status
 		 FROM sync_checkpoints WHERE peer_daemon_id = ?`,
 		peerID,
@@ -33,8 +36,8 @@ func GetCheckpoint(db *sql.DB, peerID string) (*Checkpoint, error) {
 
 // UpdateCheckpoint creates or updates the checkpoint for a peer daemon.
 // This is idempotent — calling with the same values has no effect.
-func UpdateCheckpoint(db *sql.DB, peerID string, seq int64, timestamp int64) error {
-	_, err := db.Exec(
+func UpdateCheckpoint(ctx context.Context, db *safedb.DB, peerID string, seq int64, timestamp int64) error {
+	_, err := db.ExecContext(ctx,
 		`INSERT INTO sync_checkpoints (peer_daemon_id, last_synced_sequence, last_sync_timestamp, sync_status)
 		 VALUES (?, ?, ?, 'idle')
 		 ON CONFLICT(peer_daemon_id) DO UPDATE SET
@@ -50,8 +53,8 @@ func UpdateCheckpoint(db *sql.DB, peerID string, seq int64, timestamp int64) err
 
 // UpdateSyncStatus updates the sync_status for a peer daemon.
 // Valid statuses: 'idle', 'syncing', 'error'.
-func UpdateSyncStatus(db *sql.DB, peerID string, status string) error {
-	_, err := db.Exec(
+func UpdateSyncStatus(ctx context.Context, db *safedb.DB, peerID string, status string) error {
+	_, err := db.ExecContext(ctx,
 		`UPDATE sync_checkpoints SET sync_status = ? WHERE peer_daemon_id = ?`,
 		status, peerID,
 	)
@@ -62,8 +65,8 @@ func UpdateSyncStatus(db *sql.DB, peerID string, status string) error {
 }
 
 // ListCheckpoints returns all checkpoints.
-func ListCheckpoints(db *sql.DB) ([]Checkpoint, error) {
-	rows, err := db.Query(
+func ListCheckpoints(ctx context.Context, db *safedb.DB) ([]Checkpoint, error) {
+	rows, err := db.QueryContext(ctx,
 		`SELECT peer_daemon_id, last_synced_sequence, last_sync_timestamp, sync_status
 		 FROM sync_checkpoints ORDER BY peer_daemon_id`,
 	)
