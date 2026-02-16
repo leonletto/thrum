@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-02-15
+
+### Fixed
+
+- Daemon, CLI client, and MCP server can no longer hang indefinitely. All I/O
+  paths now enforce timeouts: 5s CLI dial, 10s RPC calls, 10s server
+  per-request, 10s WebSocket handshake, 5s/10s git commands, and context-scoped
+  SQLite queries. Lock scopes reduced in high-risk handlers so no mutex is held
+  during file I/O, git operations, or WebSocket dispatch.
+
 ## [0.4.2] - 2026-02-14
 
 ### Added

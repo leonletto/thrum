@@ -9,3 +9,6 @@ thrum prime
 ```
 
 Use `thrum prime --json` for structured output.
+
+**Tip:** After context compaction or session restart, run `/thrum:load-context` to
+restore your previous work context (what you were working on, decisions, next steps).
