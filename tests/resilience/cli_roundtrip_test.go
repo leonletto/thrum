@@ -3,6 +3,7 @@
 package resilience
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -70,12 +71,15 @@ func findRepoRoot(t *testing.T) string {
 }
 
 // runThrum executes the thrum binary with the given args and environment.
-// Returns stdout, stderr, and any error.
+// Returns stdout, stderr, and any error. Commands are killed after 30s to prevent hangs.
 func runThrum(t *testing.T, bin, repoDir, agentName string, args ...string) (string, string, error) {
 	t.Helper()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	fullArgs := append([]string{"--repo", repoDir, "--quiet"}, args...)
-	cmd := exec.Command(bin, fullArgs...)
+	cmd := exec.CommandContext(ctx, bin, fullArgs...)
 	cmd.Env = append(os.Environ(),
 		"THRUM_NAME="+agentName,
 		"THRUM_ROLE=coordinator",
@@ -88,6 +92,9 @@ func runThrum(t *testing.T, bin, repoDir, agentName string, args ...string) (str
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return stdout.String(), stderr.String(), fmt.Errorf("command timed out after 30s: %s %v", bin, args)
+	}
 	return stdout.String(), stderr.String(), err
 }
 
