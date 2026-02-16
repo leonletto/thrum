@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/projection"
@@ -193,7 +194,9 @@ func TestRecovery_CorruptedMessageJSONL(t *testing.T) {
 	}
 
 	projector := projection.NewProjector(safedb.New(newDB))
-	err = projector.Rebuild(context.Background(), thrumDir)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	err = projector.Rebuild(ctx, thrumDir)
 	// The projector may return an error or skip the line — either is acceptable
 	// as long as it doesn't panic
 	if err != nil {
