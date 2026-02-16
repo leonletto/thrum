@@ -123,7 +123,7 @@ func registerAllHandlers(server *daemon.Server, st *state.State) {
 	server.RegisterHandler("session.setIntent", sessionHandler.HandleSetIntent)
 	server.RegisterHandler("session.setTask", sessionHandler.HandleSetTask)
 
-	dispatcher := subscriptions.NewDispatcher(st.RawDB())
+	dispatcher := subscriptions.NewDispatcher(st.DB())
 	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher)
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)
@@ -151,6 +151,18 @@ func registerAllHandlers(server *daemon.Server, st *state.State) {
 	server.RegisterHandler("context.save", contextHandler.HandleSave)
 	server.RegisterHandler("context.show", contextHandler.HandleShow)
 	server.RegisterHandler("context.clear", contextHandler.HandleClear)
+}
+
+// shortSocketPath returns a short socket path under /tmp, avoiding the
+// 104-char Unix socket path limit on macOS. Registers cleanup to remove the dir.
+func shortSocketPath(t testing.TB) string {
+	t.Helper()
+	sockDir, err := os.MkdirTemp("", "ts-*")
+	if err != nil {
+		t.Fatalf("create sock dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(sockDir) })
+	return filepath.Join(sockDir, "t.sock")
 }
 
 // startDaemonAt starts a daemon on the given socket path. Returns state, server.

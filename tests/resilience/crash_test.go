@@ -30,8 +30,7 @@ func TestCrash_KillDuringWrite(t *testing.T) {
 		t.Fatalf("NewState: %v", err)
 	}
 
-	sockDir := t.TempDir()
-	socketPath := sockDir + "/t.sock"
+	socketPath := shortSocketPath(t)
 	server := daemon.NewServer(socketPath)
 	registerAllHandlers(server, st)
 
@@ -102,8 +101,7 @@ func TestCrash_DBIntegrityAfterAbruptShutdown(t *testing.T) {
 		t.Fatalf("NewState: %v", err)
 	}
 
-	sockDir := t.TempDir()
-	socketPath := sockDir + "/t.sock"
+	socketPath := shortSocketPath(t)
 	server := daemon.NewServer(socketPath)
 	registerAllHandlers(server, st)
 
@@ -175,8 +173,7 @@ func TestCrash_RestartAfterCrash(t *testing.T) {
 		t.Fatalf("NewState 1: %v", err)
 	}
 
-	sockDir := t.TempDir()
-	socketPath := sockDir + "/t.sock"
+	socketPath := shortSocketPath(t)
 	server1 := daemon.NewServer(socketPath)
 	registerAllHandlers(server1, st1)
 
@@ -295,8 +292,7 @@ func TestCrash_ProjectionRebuildAfterCrash(t *testing.T) {
 		t.Fatalf("NewState: %v", err)
 	}
 
-	sockDir := t.TempDir()
-	socketPath := sockDir + "/t.sock"
+	socketPath := shortSocketPath(t)
 	server := daemon.NewServer(socketPath)
 	registerAllHandlers(server, st)
 
