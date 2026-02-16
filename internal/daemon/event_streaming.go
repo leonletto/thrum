@@ -49,5 +49,5 @@ func NewEventStreamingSetupFromState(
 	unixClients *ClientRegistry,
 	wsServer *websocket.Server,
 ) *EventStreamingSetup {
-	return NewEventStreamingSetup(unixClients, wsServer, st.DB())
+	return NewEventStreamingSetup(unixClients, wsServer, st.RawDB())
 }

@@ -272,7 +272,7 @@ func setupAgentAndSession(t *testing.T, st *state.State, repoID string) string {
 	}
 
 	st.Lock()
-	if err := st.WriteEvent(agentEvent); err != nil {
+	if err := st.WriteEvent(context.Background(), agentEvent); err != nil {
 		t.Fatalf("WriteEvent(agent.register) failed: %v", err)
 	}
 	st.Unlock()
@@ -287,7 +287,7 @@ func setupAgentAndSession(t *testing.T, st *state.State, repoID string) string {
 	}
 
 	st.Lock()
-	if err := st.WriteEvent(sessionEvent); err != nil {
+	if err := st.WriteEvent(context.Background(), sessionEvent); err != nil {
 		t.Fatalf("WriteEvent(session.start) failed: %v", err)
 	}
 	st.Unlock()

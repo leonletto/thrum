@@ -61,7 +61,7 @@ func TestPeriodicSyncScheduler_SkipsRecentlySynced(t *testing.T) {
 	}
 
 	// Set a recent checkpoint
-	_, err = st.DB().Exec(`INSERT OR REPLACE INTO sync_checkpoints (peer_daemon_id, last_synced_sequence, last_sync_timestamp, sync_status) VALUES (?, ?, ?, ?)`,
+	_, err = st.RawDB().Exec(`INSERT OR REPLACE INTO sync_checkpoints (peer_daemon_id, last_synced_sequence, last_sync_timestamp, sync_status) VALUES (?, ?, ?, ?)`,
 		"test-peer", 100, time.Now().Unix(), "idle")
 	if err != nil {
 		t.Fatalf("insert checkpoint: %v", err)

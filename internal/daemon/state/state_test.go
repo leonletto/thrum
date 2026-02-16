@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -67,7 +68,7 @@ func TestWriteEvent_GeneratesEventID(t *testing.T) {
 	}
 
 	// Write event
-	if err := state.WriteEvent(event); err != nil {
+	if err := state.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 
@@ -148,7 +149,7 @@ func TestWriteEvent_UniqueEventIDs(t *testing.T) {
 			},
 		}
 
-		if err := state.WriteEvent(event); err != nil {
+		if err := state.WriteEvent(context.Background(), event); err != nil {
 			t.Fatalf("write event %d: %v", i, err)
 		}
 	}
@@ -219,7 +220,7 @@ func TestWriteEvent_PreservesExistingEventID(t *testing.T) {
 	}
 
 	// Write event
-	if err := state.WriteEvent(event); err != nil {
+	if err := state.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 
@@ -272,7 +273,7 @@ func TestWriteEvent_Routing(t *testing.T) {
 		Module:    "test",
 	}
 
-	if err := state.WriteEvent(agentEvent); err != nil {
+	if err := state.WriteEvent(context.Background(), agentEvent); err != nil {
 		t.Fatalf("write agent event: %v", err)
 	}
 
@@ -305,7 +306,7 @@ func TestWriteEvent_Routing(t *testing.T) {
 		},
 	}
 
-	if err := state.WriteEvent(messageEvent); err != nil {
+	if err := state.WriteEvent(context.Background(), messageEvent); err != nil {
 		t.Fatalf("write message event: %v", err)
 	}
 
@@ -339,7 +340,7 @@ func TestWriteEvent_Routing(t *testing.T) {
 		},
 	}
 
-	if err := state.WriteEvent(editEvent); err != nil {
+	if err := state.WriteEvent(context.Background(), editEvent); err != nil {
 		t.Fatalf("write edit event: %v", err)
 	}
 
@@ -368,7 +369,7 @@ func TestWriteEvent_Routing(t *testing.T) {
 		Reason:    "test delete",
 	}
 
-	if err := state.WriteEvent(deleteEvent); err != nil {
+	if err := state.WriteEvent(context.Background(), deleteEvent); err != nil {
 		t.Fatalf("write delete event: %v", err)
 	}
 
@@ -449,7 +450,7 @@ func TestStateAccessors(t *testing.T) {
 	defer func() { _ = state.Close() }()
 
 	// Test DB() returns non-nil
-	if state.DB() == nil {
+	if state.RawDB() == nil {
 		t.Error("DB() returned nil, expected non-nil database")
 	}
 
@@ -562,7 +563,7 @@ func TestNewState_SeparateSyncDir(t *testing.T) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := s.WriteEvent(event); err != nil {
+	if err := s.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 
@@ -581,7 +582,7 @@ func TestNewState_SeparateSyncDir(t *testing.T) {
 		SessionID: "ses_sep001",
 		Body:      types.MessageBody{Format: "markdown", Content: "separate sync dir"},
 	}
-	if err := s.WriteEvent(msgEvent); err != nil {
+	if err := s.WriteEvent(context.Background(), msgEvent); err != nil {
 		t.Fatalf("write message event: %v", err)
 	}
 
@@ -633,7 +634,7 @@ func TestWriteEvent_MarshalError(t *testing.T) {
 	type BadEvent struct {
 		Ch chan int
 	}
-	err = s.WriteEvent(BadEvent{Ch: make(chan int)})
+	err = s.WriteEvent(context.Background(), BadEvent{Ch: make(chan int)})
 	if err == nil {
 		t.Error("Expected marshal error for channel type")
 	}
@@ -656,7 +657,7 @@ func TestResolveAgentForMessage_EdgeCases(t *testing.T) {
 		event := map[string]any{
 			"type": "message.create",
 		}
-		_, err := s.resolveAgentForMessage(event)
+		_, err := s.resolveAgentForMessage(context.Background(), event)
 		if err == nil {
 			t.Error("Expected error for missing agent_id")
 		}
@@ -666,7 +667,7 @@ func TestResolveAgentForMessage_EdgeCases(t *testing.T) {
 		event := map[string]any{
 			"type": "message.edit",
 		}
-		_, err := s.resolveAgentForMessage(event)
+		_, err := s.resolveAgentForMessage(context.Background(), event)
 		if err == nil {
 			t.Error("Expected error for missing message_id")
 		}
@@ -677,7 +678,7 @@ func TestResolveAgentForMessage_EdgeCases(t *testing.T) {
 			"type":       "message.delete",
 			"message_id": "msg_nonexistent",
 		}
-		_, err := s.resolveAgentForMessage(event)
+		_, err := s.resolveAgentForMessage(context.Background(), event)
 		if err == nil {
 			t.Error("Expected error for nonexistent message")
 		}
@@ -687,7 +688,7 @@ func TestResolveAgentForMessage_EdgeCases(t *testing.T) {
 		event := map[string]any{
 			"type": "message.unknown",
 		}
-		_, err := s.resolveAgentForMessage(event)
+		_, err := s.resolveAgentForMessage(context.Background(), event)
 		if err == nil {
 			t.Error("Expected error for unexpected event type")
 		}
@@ -698,7 +699,7 @@ func TestResolveAgentForMessage_EdgeCases(t *testing.T) {
 			"type":     "message.create",
 			"agent_id": "agent:coordinator:XYZ789",
 		}
-		name, err := s.resolveAgentForMessage(event)
+		name, err := s.resolveAgentForMessage(context.Background(), event)
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -729,7 +730,7 @@ func TestWriteEvent_NonMessageEvent(t *testing.T) {
 		AgentID:   "agent:test:ABC123",
 	}
 
-	if err := s.WriteEvent(event); err != nil {
+	if err := s.WriteEvent(context.Background(), event); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 

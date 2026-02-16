@@ -186,7 +186,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 
 	// Check for duplicate agent name (name must be unique across all agents)
 	if req.Name != "" {
-		existingByName, err := h.getAgentByID(req.Name)
+		existingByName, err := h.getAgentByID(ctx, req.Name)
 		if err != nil && err != sql.ErrNoRows {
 			return nil, fmt.Errorf("check for existing agent by name: %w", err)
 		}
@@ -205,7 +205,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 	}
 
 	// Check for existing agent with same role+module
-	existingAgent, err := h.getAgentByRoleModule(req.Role, req.Module)
+	existingAgent, err := h.getAgentByRoleModule(ctx, req.Role, req.Module)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("check for existing agent: %w", err)
 	}
@@ -216,7 +216,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		if existingAgent.AgentID == agentID {
 			if req.ReRegister {
 				// Update registration
-				return h.registerAgent(agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated")
+				return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated")
 			}
 			// Return existing agent info without conflict
 			return &RegisterResponse{
@@ -240,14 +240,14 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		}
 
 		// Force override - remove old agent entry to prevent duplicates
-		_, _ = h.state.DB().Exec("DELETE FROM agents WHERE agent_id = ?", existingAgent.AgentID)
+		_, _ = h.state.DB().ExecContext(ctx, "DELETE FROM agents WHERE agent_id = ?", existingAgent.AgentID)
 
 		// Force override - register new agent
-		return h.registerAgent(agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered")
+		return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered")
 	}
 
 	// No conflict - register new agent
-	return h.registerAgent(agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered")
+	return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered")
 }
 
 // HandleList handles the agent.list RPC method.
@@ -276,7 +276,7 @@ func (h *AgentHandler) HandleList(ctx context.Context, params json.RawMessage) (
 
 	query += " ORDER BY registered_at DESC"
 
-	rows, err := h.state.DB().Query(query, args...)
+	rows, err := h.state.DB().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query agents: %w", err)
 	}
@@ -336,7 +336,7 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 		// Look up role/module from the agents table
 		h.state.RLock()
 		var dbRole, dbModule sql.NullString
-		_ = h.state.DB().QueryRow("SELECT role, module FROM agents WHERE agent_id = ?", agentID).Scan(&dbRole, &dbModule)
+		_ = h.state.DB().QueryRowContext(ctx, "SELECT role, module FROM agents WHERE agent_id = ?", agentID).Scan(&dbRole, &dbModule)
 		h.state.RUnlock()
 		if dbRole.Valid {
 			role = dbRole.String
@@ -371,7 +371,7 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 	          WHERE agent_id = ? AND ended_at IS NULL
 	          ORDER BY started_at DESC
 	          LIMIT 1`
-	sessionErr := h.state.DB().QueryRow(query, agentID).Scan(&sessionID, &sessionStart)
+	sessionErr := h.state.DB().QueryRowContext(ctx, query, agentID).Scan(&sessionID, &sessionStart)
 	if sessionErr != nil && sessionErr != sql.ErrNoRows {
 		return nil, fmt.Errorf("query active session: %w", sessionErr)
 	}
@@ -406,7 +406,7 @@ func resolveHostname() string {
 }
 
 // registerAgent writes an agent.register event and returns the response.
-func (h *AgentHandler) registerAgent(agentID, name, role, module, display, worktree, status string) (*RegisterResponse, error) {
+func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, module, display, worktree, status string) (*RegisterResponse, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Create agent.register event
@@ -424,7 +424,7 @@ func (h *AgentHandler) registerAgent(agentID, name, role, module, display, workt
 	}
 
 	// Write event to JSONL and SQLite
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write agent.register event: %w", err)
 	}
 
@@ -435,7 +435,7 @@ func (h *AgentHandler) registerAgent(agentID, name, role, module, display, workt
 }
 
 // getAgentByRoleModule queries for an existing agent with the given role and module.
-func (h *AgentHandler) getAgentByRoleModule(role, module string) (*AgentInfo, error) {
+func (h *AgentHandler) getAgentByRoleModule(ctx context.Context, role, module string) (*AgentInfo, error) {
 	query := `SELECT agent_id, kind, role, module, display, registered_at, last_seen_at
 	          FROM agents
 	          WHERE role = ? AND module = ?
@@ -444,7 +444,7 @@ func (h *AgentHandler) getAgentByRoleModule(role, module string) (*AgentInfo, er
 	var agent AgentInfo
 	var display, lastSeenAt sql.NullString
 
-	err := h.state.DB().QueryRow(query, role, module).Scan(
+	err := h.state.DB().QueryRowContext(ctx, query, role, module).Scan(
 		&agent.AgentID,
 		&agent.Kind,
 		&agent.Role,
@@ -469,7 +469,7 @@ func (h *AgentHandler) getAgentByRoleModule(role, module string) (*AgentInfo, er
 }
 
 // getAgentByID queries for an existing agent with the given agent ID.
-func (h *AgentHandler) getAgentByID(agentID string) (*AgentInfo, error) {
+func (h *AgentHandler) getAgentByID(ctx context.Context, agentID string) (*AgentInfo, error) {
 	query := `SELECT agent_id, kind, role, module, display, registered_at, last_seen_at
 	          FROM agents
 	          WHERE agent_id = ?
@@ -478,7 +478,7 @@ func (h *AgentHandler) getAgentByID(agentID string) (*AgentInfo, error) {
 	var agent AgentInfo
 	var display, lastSeenAt sql.NullString
 
-	err := h.state.DB().QueryRow(query, agentID).Scan(
+	err := h.state.DB().QueryRowContext(ctx, query, agentID).Scan(
 		&agent.AgentID,
 		&agent.Kind,
 		&agent.Role,
@@ -542,7 +542,7 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 
 	query += " ORDER BY git_updated_at DESC"
 
-	rows, err := h.state.DB().Query(query, args...)
+	rows, err := h.state.DB().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query work contexts: %w", err)
 	}
@@ -660,22 +660,24 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("invalid agent name: %w", err)
 	}
 
+	// Lock for DB query to get agent
 	h.state.Lock()
-	defer h.state.Unlock()
-
-	// Check if agent exists
-	agent, err := h.getAgentByID(req.Name)
+	agent, err := h.getAgentByID(ctx, req.Name)
 	if err != nil {
+		h.state.Unlock()
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("agent not found: %s", req.Name)
 		}
 		return nil, fmt.Errorf("check agent existence: %w", err)
 	}
+	h.state.Unlock()
 
-	// Get paths for deletion
+	// File I/O without lock
 	thrumDir := filepath.Join(h.state.RepoPath(), ".thrum")
 	identityPath := filepath.Join(thrumDir, "identities", req.Name+".json")
 	messagePath := filepath.Join(h.state.SyncDir(), "messages", req.Name+".jsonl")
+	contextPath := filepath.Join(thrumDir, "context", req.Name+".md")
+	preamblePath := agentcontext.PreamblePath(thrumDir, req.Name)
 
 	// Delete identity file
 	if err := os.Remove(identityPath); err != nil && !os.IsNotExist(err) {
@@ -688,20 +690,20 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 	}
 
 	// Delete context file (if exists)
-	contextPath := filepath.Join(thrumDir, "context", req.Name+".md")
 	if err := os.Remove(contextPath); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("delete context file: %w", err)
 	}
 
 	// Delete preamble file (if exists)
-	preamblePath := agentcontext.PreamblePath(thrumDir, req.Name)
 	if err := os.Remove(preamblePath); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("delete preamble file: %w", err)
 	}
 
-	// Delete agent from SQLite
-	_, err = h.state.DB().Exec("DELETE FROM agents WHERE agent_id = ?", req.Name)
+	// Re-lock for DB delete + event write
+	h.state.Lock()
+	_, err = h.state.DB().ExecContext(ctx, "DELETE FROM agents WHERE agent_id = ?", req.Name)
 	if err != nil {
+		h.state.Unlock()
 		return nil, fmt.Errorf("delete agent from database: %w", err)
 	}
 
@@ -716,9 +718,11 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 	}
 
 	// Write event to events.jsonl
-	if err := h.state.WriteEvent(event); err != nil {
+	if err := h.state.WriteEvent(ctx, event); err != nil {
+		h.state.Unlock()
 		return nil, fmt.Errorf("write agent.cleanup event: %w", err)
 	}
+	h.state.Unlock()
 
 	return &DeleteAgentResponse{
 		AgentID: agent.AgentID,
@@ -734,43 +738,62 @@ func (h *AgentHandler) HandleCleanup(ctx context.Context, params json.RawMessage
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
+	// Lock for DB query to get agent list
 	h.state.RLock()
-	defer h.state.RUnlock()
-
-	// Get list of all agents from SQLite
 	query := `SELECT agent_id, kind, role, module, last_seen_at FROM agents ORDER BY agent_id`
-	rows, err := h.state.DB().Query(query)
+	rows, err := h.state.DB().QueryContext(ctx, query)
 	if err != nil {
+		h.state.RUnlock()
 		return nil, fmt.Errorf("query agents: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
 
+	// Scan all agents into a slice
+	type agentRecord struct {
+		agentID    string
+		kind       string
+		role       string
+		module     string
+		lastSeenAt sql.NullString
+	}
+	var agents []agentRecord
+
+	for rows.Next() {
+		var rec agentRecord
+		if err := rows.Scan(&rec.agentID, &rec.kind, &rec.role, &rec.module, &rec.lastSeenAt); err != nil {
+			_ = rows.Close()
+			h.state.RUnlock()
+			return nil, fmt.Errorf("scan agent: %w", err)
+		}
+		agents = append(agents, rec)
+	}
+	_ = rows.Close()
+
+	if err := rows.Err(); err != nil {
+		h.state.RUnlock()
+		return nil, fmt.Errorf("iterate agents: %w", err)
+	}
+	h.state.RUnlock()
+
+	// Check identity files and worktrees without lock (file I/O + git commands)
 	var orphans []OrphanedAgent
 	thrumDir := filepath.Join(h.state.RepoPath(), ".thrum")
 	identitiesDir := filepath.Join(thrumDir, "identities")
 
-	for rows.Next() {
-		var agentID, kind, role, module string
-		var lastSeenAt sql.NullString
-
-		if err := rows.Scan(&agentID, &kind, &role, &module, &lastSeenAt); err != nil {
-			return nil, fmt.Errorf("scan agent: %w", err)
-		}
-
+	for _, agent := range agents {
 		// Skip users (kind == "user")
-		if kind == "user" {
+		if agent.kind == "user" {
 			continue
 		}
 
 		// Check if identity file exists
-		identityPath := filepath.Join(identitiesDir, agentID+".json")
+		identityPath := filepath.Join(identitiesDir, agent.agentID+".json")
 		if _, err := os.Stat(identityPath); os.IsNotExist(err) {
 			// Identity file missing - orphan
 			orphans = append(orphans, OrphanedAgent{
-				AgentID:         agentID,
-				Role:            role,
-				Module:          module,
-				LastSeenAt:      lastSeenAt.String,
+				AgentID:         agent.agentID,
+				Role:            agent.role,
+				Module:          agent.module,
+				LastSeenAt:      agent.lastSeenAt.String,
 				WorktreeMissing: true,
 				BranchMissing:   true,
 			})
@@ -793,18 +816,17 @@ func (h *AgentHandler) HandleCleanup(ctx context.Context, params json.RawMessage
 			continue // Skip if can't parse
 		}
 
-		// Check worktree exists
+		// Check worktree exists (calls git - no lock held)
 		worktreeMissing := false
 		if identity.Worktree != "" {
-			// Check via git worktree list
 			worktreeMissing = !h.worktreeExists(ctx, identity.Worktree)
 		}
 
 		// Check if agent is stale (based on last_seen_at)
 		daysSinceLastSeen := 9999
 		isStale := false
-		if lastSeenAt.Valid {
-			lastSeen, err := time.Parse(time.RFC3339, lastSeenAt.String)
+		if agent.lastSeenAt.Valid {
+			lastSeen, err := time.Parse(time.RFC3339, agent.lastSeenAt.String)
 			if err == nil {
 				daysSinceLastSeen = int(time.Since(lastSeen).Hours() / 24)
 				isStale = daysSinceLastSeen > req.Threshold
@@ -813,24 +835,20 @@ func (h *AgentHandler) HandleCleanup(ctx context.Context, params json.RawMessage
 
 		// If worktree is missing or agent is stale, mark as orphan
 		if worktreeMissing || isStale {
-			// Count messages
-			messageCount := h.getMessageCount(agentID)
+			// Count messages (DB query without lock - SQLite handles its own concurrency)
+			messageCount := h.getMessageCount(ctx, agent.agentID)
 
 			orphans = append(orphans, OrphanedAgent{
-				AgentID:           agentID,
-				Role:              role,
-				Module:            module,
+				AgentID:           agent.agentID,
+				Role:              agent.role,
+				Module:            agent.module,
 				Worktree:          identity.Worktree,
-				LastSeenAt:        lastSeenAt.String,
+				LastSeenAt:        agent.lastSeenAt.String,
 				WorktreeMissing:   worktreeMissing,
 				DaysSinceLastSeen: daysSinceLastSeen,
 				MessageCount:      messageCount,
 			})
 		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate agents: %w", err)
 	}
 
 	// If dry-run, just return the orphans
@@ -861,11 +879,8 @@ func (h *AgentHandler) HandleCleanup(ctx context.Context, params json.RawMessage
 		deleteReq := DeleteAgentRequest{Name: orphan.AgentID}
 		deleteJSON, _ := json.Marshal(deleteReq)
 
-		// Unlock before calling HandleDelete (it needs a lock)
-		h.state.RUnlock()
+		// HandleDelete manages its own locks
 		_, err := h.HandleDelete(ctx, deleteJSON)
-		h.state.RLock()
-
 		if err == nil {
 			deleted = append(deleted, orphan.AgentID)
 		}
@@ -901,9 +916,9 @@ func (h *AgentHandler) worktreeExists(ctx context.Context, worktreeName string) 
 }
 
 // getMessageCount returns the number of messages for an agent.
-func (h *AgentHandler) getMessageCount(agentID string) int {
+func (h *AgentHandler) getMessageCount(ctx context.Context, agentID string) int {
 	var count int
-	err := h.state.DB().QueryRow("SELECT COUNT(*) FROM messages WHERE agent_id = ?", agentID).Scan(&count)
+	err := h.state.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM messages WHERE agent_id = ?", agentID).Scan(&count)
 	if err != nil {
 		return 0
 	}

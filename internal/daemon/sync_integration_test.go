@@ -93,7 +93,7 @@ func (d *testDaemon) writeEvent(t *testing.T, agentID string, idx int) {
 		Role:      "tester",
 		Module:    "test",
 	}
-	if err := d.state.WriteEvent(evt); err != nil {
+	if err := d.state.WriteEvent(context.Background(), evt); err != nil {
 		t.Fatalf("write event %d: %v", idx, err)
 	}
 }
@@ -102,7 +102,7 @@ func (d *testDaemon) writeEvent(t *testing.T, agentID string, idx int) {
 func (d *testDaemon) eventCount(t *testing.T) int {
 	t.Helper()
 	var count int
-	err := d.state.DB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
+	err := d.state.RawDB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
 	if err != nil {
 		t.Fatalf("count events: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestPullSyncBasic(t *testing.T) {
 		t.Errorf("got %d events, want 10", len(resp.Events))
 	}
 
-	applied, skipped, err := applier.ApplyRemoteEvents(resp.Events)
+	applied, skipped, err := applier.ApplyRemoteEvents(context.Background(), resp.Events)
 	if err != nil {
 		t.Fatalf("ApplyRemoteEvents: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestPullSyncBasic(t *testing.T) {
 	}
 
 	// Verify event IDs match
-	rows, err := daemonB.state.DB().Query("SELECT event_id FROM events ORDER BY sequence")
+	rows, err := daemonB.state.RawDB().Query("SELECT event_id FROM events ORDER BY sequence")
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestPullSyncDeduplication(t *testing.T) {
 		t.Fatalf("PullEvents (first): %v", err)
 	}
 
-	applied1, skipped1, err := applier.ApplyRemoteEvents(resp.Events)
+	applied1, skipped1, err := applier.ApplyRemoteEvents(context.Background(), resp.Events)
 	if err != nil {
 		t.Fatalf("ApplyRemoteEvents (first): %v", err)
 	}
@@ -212,7 +212,7 @@ func TestPullSyncDeduplication(t *testing.T) {
 		t.Fatalf("PullEvents (second): %v", err)
 	}
 
-	applied2, skipped2, err := applier.ApplyRemoteEvents(resp2.Events)
+	applied2, skipped2, err := applier.ApplyRemoteEvents(context.Background(), resp2.Events)
 	if err != nil {
 		t.Fatalf("ApplyRemoteEvents (second): %v", err)
 	}
@@ -246,7 +246,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 	// First sync with checkpoint
 	var totalApplied int
 	err := client.PullAllEvents(daemonA.addr(), 0, "", func(events []eventlog.Event, nextSeq int64) error {
-		a, _, applyErr := applier.ApplyAndCheckpoint(peerID, events, nextSeq)
+		a, _, applyErr := applier.ApplyAndCheckpoint(context.Background(), peerID, events, nextSeq)
 		totalApplied += a
 		return applyErr
 	})
@@ -258,7 +258,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 	}
 
 	// Verify checkpoint
-	cp, err := checkpoint.GetCheckpoint(daemonB.state.DB(), peerID)
+	cp, err := checkpoint.GetCheckpoint(daemonB.state.RawDB(), peerID)
 	if err != nil {
 		t.Fatalf("GetCheckpoint: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 	// Second sync using checkpoint
 	totalApplied = 0
 	err = client.PullAllEvents(daemonA.addr(), firstCheckpointSeq, "", func(events []eventlog.Event, nextSeq int64) error {
-		a, _, applyErr := applier.ApplyAndCheckpoint(peerID, events, nextSeq)
+		a, _, applyErr := applier.ApplyAndCheckpoint(context.Background(), peerID, events, nextSeq)
 		totalApplied += a
 		return applyErr
 	})
@@ -293,7 +293,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 	}
 
 	// Verify checkpoint updated
-	cp2, err := checkpoint.GetCheckpoint(daemonB.state.DB(), peerID)
+	cp2, err := checkpoint.GetCheckpoint(daemonB.state.RawDB(), peerID)
 	if err != nil {
 		t.Fatalf("GetCheckpoint (second): %v", err)
 	}
@@ -322,7 +322,7 @@ func TestPullSyncBatching(t *testing.T) {
 	totalApplied := 0
 	err := client.PullAllEvents(daemonA.addr(), 0, "", func(events []eventlog.Event, nextSeq int64) error {
 		batchCount++
-		a, _, applyErr := applier.ApplyRemoteEvents(events)
+		a, _, applyErr := applier.ApplyRemoteEvents(context.Background(), events)
 		totalApplied += a
 		return applyErr
 	})
@@ -373,7 +373,7 @@ func TestPullSyncEndToEnd_SyncManager(t *testing.T) {
 
 	// Sync from A
 	peerID := daemonA.state.DaemonID()
-	applied, skipped, err := syncMgr.SyncFromPeer(daemonA.addr(), peerID)
+	applied, skipped, err := syncMgr.SyncFromPeer(context.Background(), daemonA.addr(), peerID)
 	if err != nil {
 		t.Fatalf("SyncFromPeer: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestPullSyncEndToEnd_SyncManager(t *testing.T) {
 
 	// Verify events in B
 	var count int
-	err = stB.DB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
+	err = stB.RawDB().QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestPullSyncEndToEnd_SyncManager(t *testing.T) {
 	}
 
 	// Verify checkpoint was set
-	cp, err := checkpoint.GetCheckpoint(stB.DB(), peerID)
+	cp, err := checkpoint.GetCheckpoint(stB.RawDB(), peerID)
 	if err != nil {
 		t.Fatalf("GetCheckpoint: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestPullSyncEndToEnd_SyncManager(t *testing.T) {
 	}
 
 	// Sync again — should skip all
-	applied2, skipped2, err := syncMgr.SyncFromPeer(daemonA.addr(), peerID)
+	applied2, skipped2, err := syncMgr.SyncFromPeer(context.Background(), daemonA.addr(), peerID)
 	if err != nil {
 		t.Fatalf("SyncFromPeer (second): %v", err)
 	}
