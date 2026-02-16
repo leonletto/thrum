@@ -14,14 +14,19 @@ import (
 // TestTimeout_HandlerDeadlineEnforced verifies that the server's 10s per-request
 // timeout fires when a handler blocks. We register a deliberately slow handler
 // and verify the client gets an error within a reasonable window.
+// Also verifies that context cancellation propagates through to the handler.
 func TestTimeout_HandlerDeadlineEnforced(t *testing.T) {
 	thrumDir := setupFixture(t)
 	_, server, socketPath := startDaemonManual(t, thrumDir, "test-timeout")
 	defer server.Stop()
 
+	// Track whether the handler's context was cancelled
+	var ctxCancelled atomic.Bool
+
 	// Register a deliberately slow handler that blocks until context expires
 	server.RegisterHandler("test.slow", func(ctx context.Context, params json.RawMessage) (any, error) {
 		<-ctx.Done()
+		ctxCancelled.Store(true)
 		return nil, ctx.Err()
 	})
 
@@ -42,6 +47,11 @@ func TestTimeout_HandlerDeadlineEnforced(t *testing.T) {
 	}
 	if elapsed < 5*time.Second {
 		t.Errorf("handler returned too quickly (%v) — timeout may not be enforced", elapsed)
+	}
+
+	// Verify context cancellation propagated to the handler
+	if !ctxCancelled.Load() {
+		t.Error("context cancellation did not propagate to handler")
 	}
 }
 
@@ -98,79 +108,4 @@ func TestTimeout_ConcurrentRequestsIndependent(t *testing.T) {
 	}
 
 	slowDone.Wait()
-}
-
-// TestTimeout_ContextCancellationPropagates verifies that context cancellation
-// from the server's per-request timeout propagates through to safedb queries.
-func TestTimeout_ContextCancellationPropagates(t *testing.T) {
-	thrumDir := setupFixture(t)
-	_, server, socketPath := startDaemonManual(t, thrumDir, "test-timeout-safedb")
-	defer server.Stop()
-
-	// Register a handler that starts a long-running DB query and
-	// verifies the context gets cancelled
-	var ctxCancelled atomic.Bool
-	server.RegisterHandler("test.dbTimeout", func(ctx context.Context, params json.RawMessage) (any, error) {
-		// Simulate a long operation by waiting on context
-		select {
-		case <-ctx.Done():
-			ctxCancelled.Store(true)
-			return nil, ctx.Err()
-		case <-time.After(30 * time.Second):
-			return map[string]string{"status": "should not reach here"}, nil
-		}
-	})
-
-	_, err := rpcCallRaw(socketPath, "test.dbTimeout", nil)
-	if err == nil {
-		t.Fatal("expected error from timed-out handler")
-	}
-
-	if !ctxCancelled.Load() {
-		t.Error("context cancellation did not propagate to handler")
-	}
-	t.Logf("Context cancellation propagated successfully: %v", err)
-}
-
-// TestTimeout_MultipleSlowRequests verifies that multiple slow requests on
-// different connections each get their own independent timeout.
-func TestTimeout_MultipleSlowRequests(t *testing.T) {
-	thrumDir := setupFixture(t)
-	_, server, socketPath := startDaemonManual(t, thrumDir, "test-timeout-multi")
-	defer server.Stop()
-
-	var handlerCalls atomic.Int64
-	server.RegisterHandler("test.slow", func(ctx context.Context, params json.RawMessage) (any, error) {
-		handlerCalls.Add(1)
-		<-ctx.Done()
-		return nil, ctx.Err()
-	})
-
-	// Fire 3 slow requests concurrently
-	var wg sync.WaitGroup
-	durations := make([]time.Duration, 3)
-	for i := range 3 {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			start := time.Now()
-			rpcCallRaw(socketPath, "test.slow", nil)
-			durations[idx] = time.Since(start)
-		}(i)
-	}
-
-	wg.Wait()
-
-	// All 3 should complete around the same time (~10s), not serially (~30s)
-	for i, d := range durations {
-		t.Logf("Slow request %d took %v", i, d)
-		if d > 15*time.Second {
-			t.Errorf("request %d took %v (expected ~10s; requests may be serialized)", i, d)
-		}
-	}
-
-	if handlerCalls.Load() != 3 {
-		t.Errorf("expected 3 handler calls, got %d", handlerCalls.Load())
-	}
-	t.Logf("All %d slow requests handled independently", handlerCalls.Load())
 }
