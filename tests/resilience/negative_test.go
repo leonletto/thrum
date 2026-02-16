@@ -30,8 +30,8 @@ func TestRPC_SendToNonexistentAgent(t *testing.T) {
 		},
 	})
 
-	// The daemon should either succeed (broadcast-like) or return a clear error.
-	// Either way, it must not crash.
+	// The messaging protocol accepts messages to unknown agents (deferred delivery /
+	// future agent). The key invariant is no crash or panic — either outcome is valid.
 	if err != nil {
 		t.Logf("Send to non-existent agent returned error (expected): %v", err)
 	} else {
@@ -51,6 +51,7 @@ func TestRPC_MalformedRequest(t *testing.T) {
 	thrumDir := setupFixture(t)
 	_, _, socketPath := startTestDaemon(t, thrumDir)
 
+	// Table-driven: add new malformation cases here.
 	tests := []struct {
 		name    string
 		payload string
@@ -215,10 +216,16 @@ func TestConcurrent_ErrorsUnderLoad(t *testing.T) {
 		}(i)
 	}
 
+	start := time.Now()
 	wg.Wait()
+	elapsed := time.Since(start)
 
-	t.Logf("Valid: %d success, %d fail | Invalid: %d errors",
-		validSuccess.Load(), validFail.Load(), invalidCount.Load())
+	t.Logf("Valid: %d success, %d fail | Invalid: %d errors (elapsed %v)",
+		validSuccess.Load(), validFail.Load(), invalidCount.Load(), elapsed)
+
+	if elapsed > 30*time.Second {
+		t.Errorf("mixed load took %v (expected <30s; may indicate serialization)", elapsed)
+	}
 
 	// All valid requests should succeed
 	if validFail.Load() > 0 {
