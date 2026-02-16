@@ -99,7 +99,7 @@ func (s *PeriodicSyncScheduler) syncFromPeers() {
 
 // wasRecentlySynced checks if a peer was synced within the recent threshold.
 func (s *PeriodicSyncScheduler) wasRecentlySynced(peerDaemonID string) bool {
-	cp, err := checkpoint.GetCheckpoint(s.state.RawDB(), peerDaemonID)
+	cp, err := checkpoint.GetCheckpoint(context.Background(), s.state.DB(), peerDaemonID)
 	if err != nil || cp == nil {
 		return false
 	}

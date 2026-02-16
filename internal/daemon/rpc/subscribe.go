@@ -69,7 +69,7 @@ type SubscriptionHandler struct {
 func NewSubscriptionHandler(state *state.State) *SubscriptionHandler {
 	return &SubscriptionHandler{
 		state: state,
-		svc:   subscriptions.NewService(state.RawDB()),
+		svc:   subscriptions.NewService(state.DB()),
 	}
 }
 
@@ -95,7 +95,7 @@ func (h *SubscriptionHandler) HandleSubscribe(ctx context.Context, params json.R
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	sub, err := h.svc.Subscribe(sessionID, req.Scope, req.MentionRole, req.All)
+	sub, err := h.svc.Subscribe(ctx, sessionID, req.Scope, req.MentionRole, req.All)
 	if err != nil {
 		return nil, fmt.Errorf("subscribe: %w", err)
 	}
@@ -129,7 +129,7 @@ func (h *SubscriptionHandler) HandleUnsubscribe(ctx context.Context, params json
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	removed, err := h.svc.Unsubscribe(req.SubscriptionID, sessionID)
+	removed, err := h.svc.Unsubscribe(ctx, req.SubscriptionID, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("unsubscribe: %w", err)
 	}
@@ -156,7 +156,7 @@ func (h *SubscriptionHandler) HandleList(ctx context.Context, params json.RawMes
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	subs, err := h.svc.List(sessionID)
+	subs, err := h.svc.List(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("list subscriptions: %w", err)
 	}

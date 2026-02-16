@@ -89,7 +89,7 @@ func (a *SyncApplier) ApplyAndCheckpoint(ctx context.Context, peerID string, eve
 
 	// Update checkpoint with safe sequence
 	if applied > 0 || skipped > 0 {
-		if err := checkpoint.UpdateCheckpoint(a.state.RawDB(), peerID, safeNextSeq, time.Now().Unix()); err != nil {
+		if err := checkpoint.UpdateCheckpoint(ctx, a.state.DB(), peerID, safeNextSeq, time.Now().Unix()); err != nil {
 			return applied, skipped, fmt.Errorf("update checkpoint: %w", err)
 		}
 	}
@@ -99,7 +99,7 @@ func (a *SyncApplier) ApplyAndCheckpoint(ctx context.Context, peerID string, eve
 
 // GetCheckpoint returns the checkpoint for a peer daemon.
 func (a *SyncApplier) GetCheckpoint(peerID string) (int64, error) {
-	cp, err := checkpoint.GetCheckpoint(a.state.RawDB(), peerID)
+	cp, err := checkpoint.GetCheckpoint(context.Background(), a.state.DB(), peerID)
 	if err != nil {
 		return 0, err
 	}

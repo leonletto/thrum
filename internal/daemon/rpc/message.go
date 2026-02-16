@@ -181,8 +181,8 @@ type MessageHandler struct {
 func NewMessageHandler(state *state.State) *MessageHandler {
 	return &MessageHandler{
 		state:         state,
-		dispatcher:    subscriptions.NewDispatcher(state.RawDB()),
-		groupResolver: groups.NewResolver(state.RawDB()),
+		dispatcher:    subscriptions.NewDispatcher(state.DB()),
+		groupResolver: groups.NewResolver(state.DB()),
 	}
 }
 
@@ -192,7 +192,7 @@ func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptio
 	return &MessageHandler{
 		state:         state,
 		dispatcher:    dispatcher,
-		groupResolver: groups.NewResolver(state.RawDB()),
+		groupResolver: groups.NewResolver(state.DB()),
 	}
 }
 
@@ -269,7 +269,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		}
 
 		// Check if this mention is a group
-		isGroup, err := h.groupResolver.IsGroup(role)
+		isGroup, err := h.groupResolver.IsGroup(ctx, role)
 		if err != nil {
 			return nil, fmt.Errorf("check group %q: %w", role, err)
 		}
@@ -341,7 +341,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	}
 
 	// Find matching subscriptions and push notifications to connected clients
-	_, _ = h.dispatcher.DispatchForMessage(msgInfo)
+	_, _ = h.dispatcher.DispatchForMessage(ctx, msgInfo)
 
 	// Emit thread.updated event for real-time updates
 	if req.ThreadID != "" {
@@ -959,7 +959,7 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	}
 
 	// Dispatch notifications (same as message.create)
-	_, _ = h.dispatcher.DispatchForMessage(msgInfo)
+	_, _ = h.dispatcher.DispatchForMessage(ctx, msgInfo)
 
 	// Count edits for version number (count includes the edit we just applied)
 	var editCount int
@@ -1312,5 +1312,5 @@ func (h *MessageHandler) emitThreadUpdated(_ context.Context, threadID string) e
 	}
 
 	// Dispatch to subscribed sessions
-	return h.dispatcher.DispatchThreadUpdated(info)
+	return h.dispatcher.DispatchThreadUpdated(context.Background(), info)
 }

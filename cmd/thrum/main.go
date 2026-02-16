@@ -3899,7 +3899,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	defer func() { _ = st.Close() }()
 
 	// Run initial cleanup of stale work contexts
-	if deleted, err := cleanup.CleanupStaleContexts(st.RawDB(), time.Now().UTC()); err != nil {
+	if deleted, err := cleanup.CleanupStaleContexts(context.Background(), st.DB(), time.Now().UTC()); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: cleanup failed: %v\n", err)
 	} else if deleted > 0 {
 		fmt.Fprintf(os.Stderr, "Cleaned up %d stale work context(s)\n", deleted)
@@ -3976,7 +3976,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server := daemon.NewServer(socketPath)
 
 	// Create subscription dispatcher
-	dispatcher := subscriptions.NewDispatcher(st.RawDB())
+	dispatcher := subscriptions.NewDispatcher(st.DB())
 
 	// Register RPC handlers
 	startTime := time.Now()
@@ -4261,9 +4261,9 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsServer := websocket.NewServer(wsAddr, wsRegistry, uiFS)
 
 	// Clean up subscriptions when a WebSocket client disconnects (thrum-pgoc fix)
-	subSvc := subscriptions.NewService(st.RawDB())
+	subSvc := subscriptions.NewService(st.DB())
 	wsServer.SetDisconnectHook(func(sessionID string) {
-		_, _ = subSvc.ClearBySession(sessionID)
+		_, _ = subSvc.ClearBySession(context.Background(), sessionID)
 	})
 
 	// Tailscale tsnet listener (optional — daemon works fine without it)
