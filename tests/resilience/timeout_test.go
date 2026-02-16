@@ -5,15 +5,10 @@ package resilience
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/leonletto/thrum/internal/daemon"
-	"github.com/leonletto/thrum/internal/daemon/state"
 )
 
 // TestTimeout_HandlerDeadlineEnforced verifies that the server's 10s per-request
@@ -21,18 +16,8 @@ import (
 // and verify the client gets an error within a reasonable window.
 func TestTimeout_HandlerDeadlineEnforced(t *testing.T) {
 	thrumDir := setupFixture(t)
-
-	st, err := state.NewState(thrumDir, thrumDir, "test-timeout")
-	if err != nil {
-		t.Fatalf("NewState: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-
-	socketPath := shortSocketPath(t)
-	server := daemon.NewServer(socketPath)
-
-	// Register all normal handlers
-	registerAllHandlers(server, st)
+	_, server, socketPath := startDaemonManual(t, thrumDir, "test-timeout")
+	defer server.Stop()
 
 	// Register a deliberately slow handler that blocks until context expires
 	server.RegisterHandler("test.slow", func(ctx context.Context, params json.RawMessage) (any, error) {
@@ -40,24 +25,9 @@ func TestTimeout_HandlerDeadlineEnforced(t *testing.T) {
 		return nil, ctx.Err()
 	})
 
-	if err := server.Start(context.Background()); err != nil {
-		t.Fatalf("server start: %v", err)
-	}
-	t.Cleanup(func() { server.Stop() })
-
-	// Wait for socket to be ready
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", socketPath); err == nil {
-			conn.Close()
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
 	// Call the slow handler and measure response time
 	start := time.Now()
-	_, err = rpcCallRaw(socketPath, "test.slow", nil)
+	_, err := rpcCallRaw(socketPath, "test.slow", nil)
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -79,37 +49,14 @@ func TestTimeout_HandlerDeadlineEnforced(t *testing.T) {
 // doesn't block other concurrent requests on different connections.
 func TestTimeout_ConcurrentRequestsIndependent(t *testing.T) {
 	thrumDir := setupFixture(t)
-
-	st, err := state.NewState(thrumDir, thrumDir, "test-timeout-concurrent")
-	if err != nil {
-		t.Fatalf("NewState: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-
-	socketPath := shortSocketPath(t)
-	server := daemon.NewServer(socketPath)
-
-	registerAllHandlers(server, st)
+	_, server, socketPath := startDaemonManual(t, thrumDir, "test-timeout-concurrent")
+	defer server.Stop()
 
 	// Slow handler that blocks for the full timeout
 	server.RegisterHandler("test.slow", func(ctx context.Context, params json.RawMessage) (any, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
-
-	if err := server.Start(context.Background()); err != nil {
-		t.Fatalf("server start: %v", err)
-	}
-	t.Cleanup(func() { server.Stop() })
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", socketPath); err == nil {
-			conn.Close()
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
 
 	// Start a slow request in the background
 	var slowDone sync.WaitGroup
@@ -157,17 +104,8 @@ func TestTimeout_ConcurrentRequestsIndependent(t *testing.T) {
 // from the server's per-request timeout propagates through to safedb queries.
 func TestTimeout_ContextCancellationPropagates(t *testing.T) {
 	thrumDir := setupFixture(t)
-
-	st, err := state.NewState(thrumDir, thrumDir, "test-timeout-safedb")
-	if err != nil {
-		t.Fatalf("NewState: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-
-	socketPath := shortSocketPath(t)
-	server := daemon.NewServer(socketPath)
-
-	registerAllHandlers(server, st)
+	_, server, socketPath := startDaemonManual(t, thrumDir, "test-timeout-safedb")
+	defer server.Stop()
 
 	// Register a handler that starts a long-running DB query and
 	// verifies the context gets cancelled
@@ -183,21 +121,7 @@ func TestTimeout_ContextCancellationPropagates(t *testing.T) {
 		}
 	})
 
-	if err := server.Start(context.Background()); err != nil {
-		t.Fatalf("server start: %v", err)
-	}
-	t.Cleanup(func() { server.Stop() })
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", socketPath); err == nil {
-			conn.Close()
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	_, err = rpcCallRaw(socketPath, "test.dbTimeout", nil)
+	_, err := rpcCallRaw(socketPath, "test.dbTimeout", nil)
 	if err == nil {
 		t.Fatal("expected error from timed-out handler")
 	}
@@ -212,17 +136,8 @@ func TestTimeout_ContextCancellationPropagates(t *testing.T) {
 // different connections each get their own independent timeout.
 func TestTimeout_MultipleSlowRequests(t *testing.T) {
 	thrumDir := setupFixture(t)
-
-	st, err := state.NewState(thrumDir, thrumDir, "test-timeout-multi")
-	if err != nil {
-		t.Fatalf("NewState: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-
-	socketPath := shortSocketPath(t)
-	server := daemon.NewServer(socketPath)
-
-	registerAllHandlers(server, st)
+	_, server, socketPath := startDaemonManual(t, thrumDir, "test-timeout-multi")
+	defer server.Stop()
 
 	var handlerCalls atomic.Int64
 	server.RegisterHandler("test.slow", func(ctx context.Context, params json.RawMessage) (any, error) {
@@ -230,20 +145,6 @@ func TestTimeout_MultipleSlowRequests(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
-
-	if err := server.Start(context.Background()); err != nil {
-		t.Fatalf("server start: %v", err)
-	}
-	t.Cleanup(func() { server.Stop() })
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", socketPath); err == nil {
-			conn.Close()
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
 
 	// Fire 3 slow requests concurrently
 	var wg sync.WaitGroup
@@ -272,9 +173,4 @@ func TestTimeout_MultipleSlowRequests(t *testing.T) {
 		t.Errorf("expected 3 handler calls, got %d", handlerCalls.Load())
 	}
 	t.Logf("All %d slow requests handled independently", handlerCalls.Load())
-}
-
-func init() {
-	// Suppress unused import warning for fmt
-	_ = fmt.Sprint
 }

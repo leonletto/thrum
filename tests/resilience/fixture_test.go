@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,25 +25,62 @@ import (
 
 const fixturePath = "testdata/thrum-fixture.tar.gz"
 
-// setupFixture extracts the fixture to a temp directory and returns the .thrum path.
-func setupFixture(t *testing.T) string {
+var rpcRequestID atomic.Int64
+var sharedFixtureDir string
+
+func TestMain(m *testing.M) {
+	// Extract fixture once
+	tmpDir, err := os.MkdirTemp("", "thrum-resilience-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create temp dir: %v\n", err)
+		os.Exit(1)
+	}
+	if err := extractTarGz(fixturePath, tmpDir); err != nil {
+		fmt.Fprintf(os.Stderr, "extract fixture: %v\n", err)
+		os.Exit(1)
+	}
+	sharedFixtureDir = filepath.Join(tmpDir, ".thrum")
+
+	code := m.Run()
+	os.RemoveAll(tmpDir)
+	os.Exit(code)
+}
+
+// setupSharedFixture returns the shared fixture path. The fixture is read-only —
+// tests MUST NOT modify files in the returned directory.
+func setupSharedFixture(t testing.TB) string {
+	t.Helper()
+	if sharedFixtureDir == "" {
+		t.Fatal("shared fixture not initialized (TestMain not run?)")
+	}
+	return sharedFixtureDir
+}
+
+// setupMutableFixture copies the shared fixture to a test-specific temp dir.
+// Use this for tests that modify the DB, JSONL files, or other fixture data.
+func setupMutableFixture(t *testing.T) string {
 	t.Helper()
 
-	if _, err := os.Stat(fixturePath); os.IsNotExist(err) {
-		t.Fatalf("Fixture not found at %s. Run: go generate -tags=resilience ./tests/resilience/...", fixturePath)
+	if sharedFixtureDir == "" {
+		t.Fatal("shared fixture not initialized (TestMain not run?)")
 	}
 
 	tmpDir := t.TempDir()
-	if err := extractTarGz(fixturePath, tmpDir); err != nil {
-		t.Fatalf("Failed to extract fixture: %v", err)
-	}
-
 	thrumDir := filepath.Join(tmpDir, ".thrum")
-	if _, err := os.Stat(thrumDir); os.IsNotExist(err) {
-		t.Fatalf("Extracted fixture missing .thrum directory")
+
+	// Copy shared fixture to test-specific directory using cp -a (preserves permissions, fast)
+	cpCmd := exec.Command("cp", "-a", sharedFixtureDir, thrumDir)
+	if out, err := cpCmd.CombinedOutput(); err != nil {
+		t.Fatalf("cp shared fixture: %v\n%s", err, out)
 	}
 
 	return thrumDir
+}
+
+// setupFixture is kept for compatibility — it creates a mutable copy.
+// All tests that start a daemon modify the DB/JSONL files and need a mutable copy.
+func setupFixture(t *testing.T) string {
+	return setupMutableFixture(t)
 }
 
 // extractTarGz extracts a .tar.gz file to the destination directory.
@@ -201,6 +239,43 @@ func startDaemonAt(t TB, thrumDir, socketPath string) (*state.State, *daemon.Ser
 	return st, server
 }
 
+// startDaemonManual starts a daemon WITHOUT registering cleanup.
+// Callers control the full lifecycle (must call server.Stop() and st.Close() themselves).
+// A safety-net t.Cleanup for st.Close() IS registered since it's idempotent.
+func startDaemonManual(t *testing.T, thrumDir, agentName string) (*state.State, *daemon.Server, string) {
+	t.Helper()
+
+	socketPath := shortSocketPath(t)
+
+	st, err := state.NewState(thrumDir, thrumDir, agentName)
+	if err != nil {
+		t.Fatalf("NewState failed: %v", err)
+	}
+
+	// Register safety-net cleanup for state only (idempotent)
+	t.Cleanup(func() { st.Close() })
+
+	server := daemon.NewServer(socketPath)
+	registerAllHandlers(server, st)
+
+	if err := server.Start(context.Background()); err != nil {
+		st.Close()
+		t.Fatalf("Server start failed: %v", err)
+	}
+
+	// Wait for socket to be ready
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if conn, err := net.Dial("unix", socketPath); err == nil {
+			conn.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	return st, server, socketPath
+}
+
 // startTestDaemon starts a daemon against the fixture's thrumDir.
 // Returns the state, server, and socket path. Registers cleanup.
 func startTestDaemon(t TB, thrumDir string) (*state.State, *daemon.Server, string) {
@@ -302,7 +377,7 @@ func rpcCall(t *testing.T, socketPath, method string, params any, result any) {
 
 	conn.SetDeadline(time.Now().Add(10 * time.Second))
 
-	reqID := time.Now().UnixNano()
+	reqID := rpcRequestID.Add(1)
 	request := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      reqID,
@@ -351,7 +426,7 @@ func rpcCallRaw(socketPath, method string, params any) (json.RawMessage, error) 
 
 	request := map[string]any{
 		"jsonrpc": "2.0",
-		"id":      time.Now().UnixNano(),
+		"id":      rpcRequestID.Add(1),
 		"method":  method,
 		"params":  params,
 	}
