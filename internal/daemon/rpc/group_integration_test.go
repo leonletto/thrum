@@ -185,7 +185,7 @@ func TestGroupIntegration_GroupScope_NotMentionRef(t *testing.T) {
 
 	// Verify: should have group scope, NOT mention ref
 	var scopeCount int
-	err := st.DB().QueryRow(
+	err := st.RawDB().QueryRow(
 		"SELECT COUNT(*) FROM message_scopes WHERE message_id = ? AND scope_type = 'group' AND scope_value = 'reviewers'",
 		msgID,
 	).Scan(&scopeCount)
@@ -198,7 +198,7 @@ func TestGroupIntegration_GroupScope_NotMentionRef(t *testing.T) {
 
 	// Should have group audit ref, NOT mention ref
 	var groupRefCount, mentionRefCount int
-	err = st.DB().QueryRow(
+	err = st.RawDB().QueryRow(
 		"SELECT COUNT(*) FROM message_refs WHERE message_id = ? AND ref_type = 'group' AND ref_value = 'reviewers'",
 		msgID,
 	).Scan(&groupRefCount)
@@ -209,7 +209,7 @@ func TestGroupIntegration_GroupScope_NotMentionRef(t *testing.T) {
 		t.Errorf("expected 1 group audit ref, got %d", groupRefCount)
 	}
 
-	err = st.DB().QueryRow(
+	err = st.RawDB().QueryRow(
 		"SELECT COUNT(*) FROM message_refs WHERE message_id = ? AND ref_type = 'mention' AND ref_value = 'reviewers'",
 		msgID,
 	).Scan(&mentionRefCount)
@@ -230,7 +230,7 @@ func TestGroupIntegration_NonGroupMention_FallsThrough(t *testing.T) {
 
 	// Should have mention ref, NOT group scope
 	var mentionCount int
-	err := st.DB().QueryRow(
+	err := st.RawDB().QueryRow(
 		"SELECT COUNT(*) FROM message_refs WHERE message_id = ? AND ref_type = 'mention' AND ref_value = 'charlie'",
 		msgID,
 	).Scan(&mentionCount)
@@ -242,7 +242,7 @@ func TestGroupIntegration_NonGroupMention_FallsThrough(t *testing.T) {
 	}
 
 	var scopeCount int
-	err = st.DB().QueryRow(
+	err = st.RawDB().QueryRow(
 		"SELECT COUNT(*) FROM message_scopes WHERE message_id = ? AND scope_type = 'group'",
 		msgID,
 	).Scan(&scopeCount)

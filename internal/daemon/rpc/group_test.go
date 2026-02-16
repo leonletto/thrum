@@ -323,14 +323,14 @@ func TestEnsureEveryoneGroup(t *testing.T) {
 
 	// Verify group exists
 	var name string
-	err := st.DB().QueryRow("SELECT name FROM groups WHERE name = 'everyone'").Scan(&name)
+	err := st.RawDB().QueryRow("SELECT name FROM groups WHERE name = 'everyone'").Scan(&name)
 	if err != nil {
 		t.Fatalf("everyone group not created: %v", err)
 	}
 
 	// Verify role:* member
 	var memberType, memberValue string
-	err = st.DB().QueryRow(
+	err = st.RawDB().QueryRow(
 		"SELECT member_type, member_value FROM group_members WHERE group_id = 'grp_everyone'",
 	).Scan(&memberType, &memberValue)
 	if err != nil {
@@ -347,7 +347,7 @@ func TestEnsureEveryoneGroup(t *testing.T) {
 
 	// Should still be exactly 1 group named everyone
 	var count int
-	err = st.DB().QueryRow("SELECT COUNT(*) FROM groups WHERE name = 'everyone'").Scan(&count)
+	err = st.RawDB().QueryRow("SELECT COUNT(*) FROM groups WHERE name = 'everyone'").Scan(&count)
 	if err != nil {
 		t.Fatalf("count everyone: %v", err)
 	}

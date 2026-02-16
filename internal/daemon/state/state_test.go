@@ -450,7 +450,7 @@ func TestStateAccessors(t *testing.T) {
 	defer func() { _ = state.Close() }()
 
 	// Test DB() returns non-nil
-	if state.DB() == nil {
+	if state.RawDB() == nil {
 		t.Error("DB() returned nil, expected non-nil database")
 	}
 

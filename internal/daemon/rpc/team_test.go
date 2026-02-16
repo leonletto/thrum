@@ -64,20 +64,20 @@ func TestTeamHandleList(t *testing.T) {
 	session2ID := startResp2.(*SessionStartResponse).SessionID
 
 	// Insert a directed message from agent1 to agent2 (mention ref)
-	_, err = s.DB().Exec(`INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content)
+	_, err = s.RawDB().Exec(`INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content)
 		VALUES (?, ?, ?, datetime('now'), 'markdown', 'hey agent2')`,
 		"msg_directed001", agent1ID, "ses_test001")
 	if err != nil {
 		t.Fatalf("insert directed message: %v", err)
 	}
-	_, err = s.DB().Exec(`INSERT INTO message_refs (message_id, ref_type, ref_value) VALUES (?, 'mention', ?)`,
+	_, err = s.RawDB().Exec(`INSERT INTO message_refs (message_id, ref_type, ref_value) VALUES (?, 'mention', ?)`,
 		"msg_directed001", agent2ID)
 	if err != nil {
 		t.Fatalf("insert mention ref: %v", err)
 	}
 
 	// Insert a broadcast message (no mention refs, no group scopes — shows in shared footer)
-	_, err = s.DB().Exec(`INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content)
+	_, err = s.RawDB().Exec(`INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content)
 		VALUES (?, ?, ?, datetime('now'), 'markdown', 'hello everyone')`,
 		"msg_broadcast001", agent1ID, "ses_test001")
 	if err != nil {

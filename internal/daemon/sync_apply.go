@@ -25,7 +25,7 @@ func NewSyncApplier(st *state.State) *SyncApplier {
 // ApplyRemoteEvents applies a batch of remote events to the local store.
 // Returns the number of events applied and skipped (duplicates).
 func (a *SyncApplier) ApplyRemoteEvents(ctx context.Context, events []eventlog.Event) (applied, skipped int, err error) {
-	db := a.state.SafeDB()
+	db := a.state.DB()
 
 	for _, evt := range events {
 		// Deduplication: check if event already exists
@@ -89,7 +89,7 @@ func (a *SyncApplier) ApplyAndCheckpoint(ctx context.Context, peerID string, eve
 
 	// Update checkpoint with safe sequence
 	if applied > 0 || skipped > 0 {
-		if err := checkpoint.UpdateCheckpoint(a.state.DB(), peerID, safeNextSeq, time.Now().Unix()); err != nil {
+		if err := checkpoint.UpdateCheckpoint(a.state.RawDB(), peerID, safeNextSeq, time.Now().Unix()); err != nil {
 			return applied, skipped, fmt.Errorf("update checkpoint: %w", err)
 		}
 	}
@@ -99,7 +99,7 @@ func (a *SyncApplier) ApplyAndCheckpoint(ctx context.Context, peerID string, eve
 
 // GetCheckpoint returns the checkpoint for a peer daemon.
 func (a *SyncApplier) GetCheckpoint(peerID string) (int64, error) {
-	cp, err := checkpoint.GetCheckpoint(a.state.DB(), peerID)
+	cp, err := checkpoint.GetCheckpoint(a.state.RawDB(), peerID)
 	if err != nil {
 		return 0, err
 	}
@@ -130,5 +130,5 @@ func (a *SyncApplier) applyEvent(ctx context.Context, evt eventlog.Event) error 
 
 // DB returns the database for direct queries (used by tests).
 func (a *SyncApplier) DB() *sql.DB {
-	return a.state.DB()
+	return a.state.RawDB()
 }
