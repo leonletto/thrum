@@ -258,7 +258,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 	}
 
 	// Verify checkpoint
-	cp, err := checkpoint.GetCheckpoint(daemonB.state.RawDB(), peerID)
+	cp, err := checkpoint.GetCheckpoint(context.Background(), daemonB.state.DB(), peerID)
 	if err != nil {
 		t.Fatalf("GetCheckpoint: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestPullSyncCheckpointing(t *testing.T) {
 	}
 
 	// Verify checkpoint updated
-	cp2, err := checkpoint.GetCheckpoint(daemonB.state.RawDB(), peerID)
+	cp2, err := checkpoint.GetCheckpoint(context.Background(), daemonB.state.DB(), peerID)
 	if err != nil {
 		t.Fatalf("GetCheckpoint (second): %v", err)
 	}
@@ -395,7 +395,7 @@ func TestPullSyncEndToEnd_SyncManager(t *testing.T) {
 	}
 
 	// Verify checkpoint was set
-	cp, err := checkpoint.GetCheckpoint(stB.RawDB(), peerID)
+	cp, err := checkpoint.GetCheckpoint(context.Background(), stB.DB(), peerID)
 	if err != nil {
 		t.Fatalf("GetCheckpoint: %v", err)
 	}

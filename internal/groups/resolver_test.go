@@ -1,9 +1,11 @@
 package groups
 
 import (
+	"context"
 	"database/sql"
 	"testing"
 
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/schema"
 )
 
@@ -63,11 +65,12 @@ func insertAgent(t *testing.T, db *sql.DB, agentID, role string) {
 
 func TestIsGroup(t *testing.T) {
 	db := setupTestDB(t)
-	r := NewResolver(db)
+	sdb := safedb.New(db)
+	r := NewResolver(sdb)
 
 	insertGroup(t, db, "grp_1", "reviewers", "Code reviewers")
 
-	ok, err := r.IsGroup("reviewers")
+	ok, err := r.IsGroup(context.Background(), "reviewers")
 	if err != nil {
 		t.Fatalf("IsGroup: %v", err)
 	}
@@ -75,7 +78,7 @@ func TestIsGroup(t *testing.T) {
 		t.Error("expected IsGroup('reviewers') = true")
 	}
 
-	ok, err = r.IsGroup("nonexistent")
+	ok, err = r.IsGroup(context.Background(), "nonexistent")
 	if err != nil {
 		t.Fatalf("IsGroup: %v", err)
 	}
@@ -86,13 +89,14 @@ func TestIsGroup(t *testing.T) {
 
 func TestExpandMembers_AgentOnly(t *testing.T) {
 	db := setupTestDB(t)
-	r := NewResolver(db)
+	sdb := safedb.New(db)
+	r := NewResolver(sdb)
 
 	insertGroup(t, db, "grp_1", "reviewers", "")
 	insertMember(t, db, "grp_1", "agent", "alice")
 	insertMember(t, db, "grp_1", "agent", "bob")
 
-	members, err := r.ExpandMembers("reviewers")
+	members, err := r.ExpandMembers(context.Background(), "reviewers")
 	if err != nil {
 		t.Fatalf("ExpandMembers: %v", err)
 	}
@@ -111,7 +115,8 @@ func TestExpandMembers_AgentOnly(t *testing.T) {
 
 func TestExpandMembers_RoleMembers(t *testing.T) {
 	db := setupTestDB(t)
-	r := NewResolver(db)
+	sdb := safedb.New(db)
+	r := NewResolver(sdb)
 
 	insertAgent(t, db, "agent:charlie:1", "reviewer")
 	insertAgent(t, db, "agent:dana:1", "reviewer")
@@ -120,7 +125,7 @@ func TestExpandMembers_RoleMembers(t *testing.T) {
 	insertGroup(t, db, "grp_1", "reviewers", "")
 	insertMember(t, db, "grp_1", "role", "reviewer")
 
-	members, err := r.ExpandMembers("reviewers")
+	members, err := r.ExpandMembers(context.Background(), "reviewers")
 	if err != nil {
 		t.Fatalf("ExpandMembers: %v", err)
 	}
@@ -139,7 +144,8 @@ func TestExpandMembers_RoleMembers(t *testing.T) {
 
 func TestExpandMembers_WildcardRole(t *testing.T) {
 	db := setupTestDB(t)
-	r := NewResolver(db)
+	sdb := safedb.New(db)
+	r := NewResolver(sdb)
 
 	insertAgent(t, db, "agent:alice:1", "reviewer")
 	insertAgent(t, db, "agent:bob:1", "deployer")
@@ -147,7 +153,7 @@ func TestExpandMembers_WildcardRole(t *testing.T) {
 	insertGroup(t, db, "grp_everyone", "everyone", "All agents")
 	insertMember(t, db, "grp_everyone", "role", "*")
 
-	members, err := r.ExpandMembers("everyone")
+	members, err := r.ExpandMembers(context.Background(), "everyone")
 	if err != nil {
 		t.Fatalf("ExpandMembers: %v", err)
 	}
@@ -158,11 +164,12 @@ func TestExpandMembers_WildcardRole(t *testing.T) {
 
 func TestExpandMembers_EmptyGroup(t *testing.T) {
 	db := setupTestDB(t)
-	r := NewResolver(db)
+	sdb := safedb.New(db)
+	r := NewResolver(sdb)
 
 	insertGroup(t, db, "grp_empty", "empty", "")
 
-	members, err := r.ExpandMembers("empty")
+	members, err := r.ExpandMembers(context.Background(), "empty")
 	if err != nil {
 		t.Fatalf("ExpandMembers: %v", err)
 	}
@@ -173,9 +180,10 @@ func TestExpandMembers_EmptyGroup(t *testing.T) {
 
 func TestExpandMembers_NonExistentGroup(t *testing.T) {
 	db := setupTestDB(t)
-	r := NewResolver(db)
+	sdb := safedb.New(db)
+	r := NewResolver(sdb)
 
-	members, err := r.ExpandMembers("nonexistent")
+	members, err := r.ExpandMembers(context.Background(), "nonexistent")
 	if err != nil {
 		t.Fatalf("ExpandMembers: %v", err)
 	}
@@ -186,7 +194,8 @@ func TestExpandMembers_NonExistentGroup(t *testing.T) {
 
 func TestExpandMembers_Deduplication(t *testing.T) {
 	db := setupTestDB(t)
-	r := NewResolver(db)
+	sdb := safedb.New(db)
+	r := NewResolver(sdb)
 
 	// alice appears in both direct membership and via role
 	insertAgent(t, db, "alice", "reviewer")
@@ -195,7 +204,7 @@ func TestExpandMembers_Deduplication(t *testing.T) {
 	insertMember(t, db, "grp_1", "agent", "alice")   // direct member
 	insertMember(t, db, "grp_1", "role", "reviewer") // also included via role
 
-	members, err := r.ExpandMembers("team-a")
+	members, err := r.ExpandMembers(context.Background(), "team-a")
 	if err != nil {
 		t.Fatalf("ExpandMembers: %v", err)
 	}
@@ -210,13 +219,14 @@ func TestExpandMembers_Deduplication(t *testing.T) {
 
 func TestIsMember(t *testing.T) {
 	db := setupTestDB(t)
-	r := NewResolver(db)
+	sdb := safedb.New(db)
+	r := NewResolver(sdb)
 
 	insertAgent(t, db, "agent:alice:1", "reviewer")
 	insertGroup(t, db, "grp_1", "reviewers", "")
 	insertMember(t, db, "grp_1", "agent", "agent:alice:1")
 
-	ok, err := r.IsMember("reviewers", "agent:alice:1", "reviewer")
+	ok, err := r.IsMember(context.Background(), "reviewers", "agent:alice:1", "reviewer")
 	if err != nil {
 		t.Fatalf("IsMember: %v", err)
 	}
@@ -224,7 +234,7 @@ func TestIsMember(t *testing.T) {
 		t.Error("expected alice to be a member")
 	}
 
-	ok, err = r.IsMember("reviewers", "agent:bob:1", "deployer")
+	ok, err = r.IsMember(context.Background(), "reviewers", "agent:bob:1", "deployer")
 	if err != nil {
 		t.Fatalf("IsMember: %v", err)
 	}

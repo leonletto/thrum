@@ -23,7 +23,7 @@ type GroupHandler struct {
 func NewGroupHandler(st *state.State) *GroupHandler {
 	return &GroupHandler{
 		state:    st,
-		resolver: groups.NewResolver(st.RawDB()),
+		resolver: groups.NewResolver(st.DB()),
 	}
 }
 
@@ -152,7 +152,7 @@ func (h *GroupHandler) HandleCreate(ctx context.Context, params json.RawMessage)
 
 	// Check if group already exists
 	h.state.RLock()
-	exists, err := h.resolver.IsGroup(req.Name)
+	exists, err := h.resolver.IsGroup(ctx, req.Name)
 	h.state.RUnlock()
 	if err != nil {
 		return nil, fmt.Errorf("check group exists: %w", err)
@@ -520,7 +520,7 @@ func (h *GroupHandler) HandleMembers(ctx context.Context, params json.RawMessage
 
 	// Expand if requested
 	if req.Expand {
-		expanded, err := h.resolver.ExpandMembers(req.Name)
+		expanded, err := h.resolver.ExpandMembers(ctx, req.Name)
 		if err != nil {
 			return nil, fmt.Errorf("expand members: %w", err)
 		}

@@ -1,9 +1,11 @@
 package subscriptions
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/types"
 )
@@ -15,12 +17,12 @@ type ClientNotifier interface {
 
 // Dispatcher manages notification dispatch for new messages.
 type Dispatcher struct {
-	db      *sql.DB
+	db      *safedb.DB
 	clients ClientNotifier
 }
 
 // NewDispatcher creates a new notification dispatcher.
-func NewDispatcher(db *sql.DB) *Dispatcher {
+func NewDispatcher(db *safedb.DB) *Dispatcher {
 	return &Dispatcher{
 		db:      db,
 		clients: nil, // Can be set later with SetClientNotifier
@@ -53,7 +55,7 @@ type SubscriptionMatch struct {
 
 // DispatchForMessage finds all subscriptions that match a message and pushes notifications.
 // Returns a list of sessions that were notified.
-func (d *Dispatcher) DispatchForMessage(msg *MessageInfo) ([]SubscriptionMatch, error) {
+func (d *Dispatcher) DispatchForMessage(ctx context.Context, msg *MessageInfo) ([]SubscriptionMatch, error) {
 	// Query all active subscriptions with agent info for mention matching
 	query := `SELECT s.id, s.session_id, s.scope_type, s.scope_value, s.mention_role,
 	                 a.agent_id, a.role
@@ -61,7 +63,7 @@ func (d *Dispatcher) DispatchForMessage(msg *MessageInfo) ([]SubscriptionMatch, 
 	          LEFT JOIN sessions sess ON s.session_id = sess.session_id
 	          LEFT JOIN agents a ON sess.agent_id = a.agent_id`
 
-	rows, err := d.db.Query(query)
+	rows, err := d.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("query subscriptions: %w", err)
 	}
@@ -209,7 +211,7 @@ type ThreadUpdateInfo struct {
 
 // DispatchThreadUpdated sends thread.updated notifications to subscribed sessions.
 // This is a real-time notification (not persisted to JSONL).
-func (d *Dispatcher) DispatchThreadUpdated(info *ThreadUpdateInfo) error {
+func (d *Dispatcher) DispatchThreadUpdated(ctx context.Context, info *ThreadUpdateInfo) error {
 	if d.clients == nil {
 		// No client notifier configured, skip
 		return nil
@@ -217,7 +219,7 @@ func (d *Dispatcher) DispatchThreadUpdated(info *ThreadUpdateInfo) error {
 
 	// Query all active subscriptions
 	query := `SELECT DISTINCT session_id FROM subscriptions`
-	rows, err := d.db.Query(query)
+	rows, err := d.db.QueryContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("query subscriptions: %w", err)
 	}

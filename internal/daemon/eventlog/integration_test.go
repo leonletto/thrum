@@ -49,7 +49,7 @@ func TestIntegration_FullSyncWorkflow(t *testing.T) {
 
 		if len(events) > 0 {
 			// Update checkpoint after each batch
-			if err := checkpoint.UpdateCheckpoint(db, peerID, nextSeq, 1700000000+int64(batchNum)); err != nil {
+			if err := checkpoint.UpdateCheckpoint(context.Background(), safedb.New(db), peerID, nextSeq, 1700000000+int64(batchNum)); err != nil {
 				t.Fatalf("update checkpoint: %v", err)
 			}
 		}
@@ -76,7 +76,7 @@ func TestIntegration_FullSyncWorkflow(t *testing.T) {
 	}
 
 	// Verify checkpoint reflects final state
-	cp, err := checkpoint.GetCheckpoint(db, peerID)
+	cp, err := checkpoint.GetCheckpoint(context.Background(), safedb.New(db), peerID)
 	if err != nil {
 		t.Fatalf("get checkpoint: %v", err)
 	}
