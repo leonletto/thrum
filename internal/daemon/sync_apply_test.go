@@ -157,7 +157,7 @@ func TestSyncApplier_ApplyAndCheckpoint(t *testing.T) {
 	}
 
 	// Verify checkpoint
-	cp, err := checkpoint.GetCheckpoint(st.RawDB(), "d_peer")
+	cp, err := checkpoint.GetCheckpoint(context.Background(), st.DB(), "d_peer")
 	if err != nil {
 		t.Fatalf("GetCheckpoint: %v", err)
 	}

@@ -1,9 +1,11 @@
 package checkpoint_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/checkpoint"
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/schema"
 )
 
@@ -16,8 +18,9 @@ func TestGetCheckpoint_NonExistent(t *testing.T) {
 	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	sdb := safedb.New(db)
 
-	cp, err := checkpoint.GetCheckpoint(db, "d_nonexistent")
+	cp, err := checkpoint.GetCheckpoint(context.Background(), sdb, "d_nonexistent")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -35,16 +38,17 @@ func TestCheckpoint_CreateReadUpdate(t *testing.T) {
 	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	sdb := safedb.New(db)
 
 	peerID := "d_peer1"
 
 	// Create checkpoint
-	if err := checkpoint.UpdateCheckpoint(db, peerID, 42, 1700000000); err != nil {
+	if err := checkpoint.UpdateCheckpoint(context.Background(), sdb, peerID, 42, 1700000000); err != nil {
 		t.Fatalf("create checkpoint: %v", err)
 	}
 
 	// Read it back
-	cp, err := checkpoint.GetCheckpoint(db, peerID)
+	cp, err := checkpoint.GetCheckpoint(context.Background(), sdb, peerID)
 	if err != nil {
 		t.Fatalf("get checkpoint: %v", err)
 	}
@@ -65,11 +69,11 @@ func TestCheckpoint_CreateReadUpdate(t *testing.T) {
 	}
 
 	// Update checkpoint (idempotent)
-	if err := checkpoint.UpdateCheckpoint(db, peerID, 100, 1700001000); err != nil {
+	if err := checkpoint.UpdateCheckpoint(context.Background(), sdb, peerID, 100, 1700001000); err != nil {
 		t.Fatalf("update checkpoint: %v", err)
 	}
 
-	cp, err = checkpoint.GetCheckpoint(db, peerID)
+	cp, err = checkpoint.GetCheckpoint(context.Background(), sdb, peerID)
 	if err != nil {
 		t.Fatalf("get updated checkpoint: %v", err)
 	}
@@ -90,17 +94,18 @@ func TestCheckpoint_UpdateSameMultipleTimes(t *testing.T) {
 	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	sdb := safedb.New(db)
 
 	peerID := "d_peer_multi"
 
 	// Update same checkpoint multiple times
 	for i := int64(1); i <= 10; i++ {
-		if err := checkpoint.UpdateCheckpoint(db, peerID, i*10, 1700000000+i); err != nil {
+		if err := checkpoint.UpdateCheckpoint(context.Background(), sdb, peerID, i*10, 1700000000+i); err != nil {
 			t.Fatalf("update %d: %v", i, err)
 		}
 	}
 
-	cp, err := checkpoint.GetCheckpoint(db, peerID)
+	cp, err := checkpoint.GetCheckpoint(context.Background(), sdb, peerID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -118,9 +123,10 @@ func TestCheckpoint_ListCheckpoints(t *testing.T) {
 	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	sdb := safedb.New(db)
 
 	// Empty list
-	cps, err := checkpoint.ListCheckpoints(db)
+	cps, err := checkpoint.ListCheckpoints(context.Background(), sdb)
 	if err != nil {
 		t.Fatalf("list empty: %v", err)
 	}
@@ -130,12 +136,12 @@ func TestCheckpoint_ListCheckpoints(t *testing.T) {
 
 	// Add 3 peers
 	for _, peerID := range []string{"d_alpha", "d_beta", "d_gamma"} {
-		if err := checkpoint.UpdateCheckpoint(db, peerID, 10, 1700000000); err != nil {
+		if err := checkpoint.UpdateCheckpoint(context.Background(), sdb, peerID, 10, 1700000000); err != nil {
 			t.Fatalf("create: %v", err)
 		}
 	}
 
-	cps, err = checkpoint.ListCheckpoints(db)
+	cps, err = checkpoint.ListCheckpoints(context.Background(), sdb)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -157,25 +163,26 @@ func TestCheckpoint_ErrorPaths(t *testing.T) {
 	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	sdb := safedb.New(db)
 	// Close DB to trigger errors
 	db.Close()
 
-	_, err = checkpoint.GetCheckpoint(db, "d_test")
+	_, err = checkpoint.GetCheckpoint(context.Background(), sdb, "d_test")
 	if err == nil {
 		t.Error("expected error from GetCheckpoint on closed db")
 	}
 
-	err = checkpoint.UpdateCheckpoint(db, "d_test", 1, 100)
+	err = checkpoint.UpdateCheckpoint(context.Background(), sdb, "d_test", 1, 100)
 	if err == nil {
 		t.Error("expected error from UpdateCheckpoint on closed db")
 	}
 
-	err = checkpoint.UpdateSyncStatus(db, "d_test", "syncing")
+	err = checkpoint.UpdateSyncStatus(context.Background(), sdb, "d_test", "syncing")
 	if err == nil {
 		t.Error("expected error from UpdateSyncStatus on closed db")
 	}
 
-	_, err = checkpoint.ListCheckpoints(db)
+	_, err = checkpoint.ListCheckpoints(context.Background(), sdb)
 	if err == nil {
 		t.Error("expected error from ListCheckpoints on closed db")
 	}
@@ -190,18 +197,19 @@ func TestCheckpoint_UpdateSyncStatus(t *testing.T) {
 	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	sdb := safedb.New(db)
 
 	peerID := "d_statustest"
-	if err := checkpoint.UpdateCheckpoint(db, peerID, 1, 1700000000); err != nil {
+	if err := checkpoint.UpdateCheckpoint(context.Background(), sdb, peerID, 1, 1700000000); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	// Update status to syncing
-	if err := checkpoint.UpdateSyncStatus(db, peerID, "syncing"); err != nil {
+	if err := checkpoint.UpdateSyncStatus(context.Background(), sdb, peerID, "syncing"); err != nil {
 		t.Fatalf("update status: %v", err)
 	}
 
-	cp, err := checkpoint.GetCheckpoint(db, peerID)
+	cp, err := checkpoint.GetCheckpoint(context.Background(), sdb, peerID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -210,11 +218,11 @@ func TestCheckpoint_UpdateSyncStatus(t *testing.T) {
 	}
 
 	// Update to error
-	if err := checkpoint.UpdateSyncStatus(db, peerID, "error"); err != nil {
+	if err := checkpoint.UpdateSyncStatus(context.Background(), sdb, peerID, "error"); err != nil {
 		t.Fatalf("update status: %v", err)
 	}
 
-	cp, err = checkpoint.GetCheckpoint(db, peerID)
+	cp, err = checkpoint.GetCheckpoint(context.Background(), sdb, peerID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}

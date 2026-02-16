@@ -122,7 +122,7 @@ func TestPushSync_EndToEndEventSync(t *testing.T) {
 	syncManager.SyncFromPeerByID(daemonA.state.DaemonID())
 
 	// Verify event was synced
-	cp, err := checkpoint.GetCheckpoint(daemonB.state.RawDB(), daemonA.state.DaemonID())
+	cp, err := checkpoint.GetCheckpoint(context.Background(), daemonB.state.DB(), daemonA.state.DaemonID())
 	if err != nil {
 		t.Fatalf("get checkpoint: %v", err)
 	}

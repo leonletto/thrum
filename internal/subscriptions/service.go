@@ -1,20 +1,22 @@
 package subscriptions
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
 
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/types"
 )
 
 // Service manages subscriptions.
 type Service struct {
-	db *sql.DB
+	db *safedb.DB
 }
 
 // NewService creates a new subscription service.
-func NewService(db *sql.DB) *Service {
+func NewService(db *safedb.DB) *Service {
 	return &Service{db: db}
 }
 
@@ -30,7 +32,7 @@ type Subscription struct {
 
 // Subscribe creates a new subscription for the given session.
 // At least one of scope, mentionRole, or all must be specified.
-func (s *Service) Subscribe(sessionID string, scope *types.Scope, mentionRole *string, all bool) (*Subscription, error) {
+func (s *Service) Subscribe(ctx context.Context, sessionID string, scope *types.Scope, mentionRole *string, all bool) (*Subscription, error) {
 	// Validation: at least one of scope, mentionRole, or all must be specified
 	if scope == nil && mentionRole == nil && !all {
 		return nil, fmt.Errorf("at least one of scope, mention_role, or all must be specified")
@@ -53,7 +55,7 @@ func (s *Service) Subscribe(sessionID string, scope *types.Scope, mentionRole *s
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Check for existing subscription (SQLite UNIQUE constraint doesn't handle NULLs correctly)
-	exists, err := s.subscriptionExists(sessionID, scopeType, scopeValue, mentionRole)
+	exists, err := s.subscriptionExists(ctx, sessionID, scopeType, scopeValue, mentionRole)
 	if err != nil {
 		return nil, fmt.Errorf("check subscription exists: %w", err)
 	}
@@ -65,7 +67,7 @@ func (s *Service) Subscribe(sessionID string, scope *types.Scope, mentionRole *s
 	query := `INSERT INTO subscriptions (session_id, scope_type, scope_value, mention_role, created_at)
 	          VALUES (?, ?, ?, ?, ?)`
 
-	result, err := s.db.Exec(query, sessionID, scopeType, scopeValue, mentionRole, now)
+	result, err := s.db.ExecContext(ctx, query, sessionID, scopeType, scopeValue, mentionRole, now)
 	if err != nil {
 		return nil, fmt.Errorf("insert subscription: %w", err)
 	}
@@ -86,9 +88,9 @@ func (s *Service) Subscribe(sessionID string, scope *types.Scope, mentionRole *s
 }
 
 // Unsubscribe removes a subscription by ID, but only if it belongs to the given session.
-func (s *Service) Unsubscribe(subscriptionID int, sessionID string) (bool, error) {
+func (s *Service) Unsubscribe(ctx context.Context, subscriptionID int, sessionID string) (bool, error) {
 	query := `DELETE FROM subscriptions WHERE id = ? AND session_id = ?`
-	result, err := s.db.Exec(query, subscriptionID, sessionID)
+	result, err := s.db.ExecContext(ctx, query, subscriptionID, sessionID)
 	if err != nil {
 		return false, fmt.Errorf("delete subscription: %w", err)
 	}
@@ -103,9 +105,9 @@ func (s *Service) Unsubscribe(subscriptionID int, sessionID string) (bool, error
 
 // ClearBySession removes all subscriptions for the given session.
 // Called when a WebSocket client disconnects to prevent "already exists" errors on reconnect.
-func (s *Service) ClearBySession(sessionID string) (int, error) {
+func (s *Service) ClearBySession(ctx context.Context, sessionID string) (int, error) {
 	query := `DELETE FROM subscriptions WHERE session_id = ?`
-	result, err := s.db.Exec(query, sessionID)
+	result, err := s.db.ExecContext(ctx, query, sessionID)
 	if err != nil {
 		return 0, fmt.Errorf("delete subscriptions for session: %w", err)
 	}
@@ -119,13 +121,13 @@ func (s *Service) ClearBySession(sessionID string) (int, error) {
 }
 
 // List returns all subscriptions for the given session.
-func (s *Service) List(sessionID string) ([]Subscription, error) {
+func (s *Service) List(ctx context.Context, sessionID string) ([]Subscription, error) {
 	query := `SELECT id, session_id, scope_type, scope_value, mention_role, created_at
 	          FROM subscriptions
 	          WHERE session_id = ?
 	          ORDER BY created_at DESC`
 
-	rows, err := s.db.Query(query, sessionID)
+	rows, err := s.db.QueryContext(ctx, query, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("query subscriptions: %w", err)
 	}
@@ -163,7 +165,7 @@ func (s *Service) List(sessionID string) ([]Subscription, error) {
 
 // subscriptionExists checks if a subscription with the exact same parameters already exists.
 // This is needed because SQLite's UNIQUE constraint doesn't treat NULL values as equal.
-func (s *Service) subscriptionExists(sessionID string, scopeType, scopeValue, mentionRole *string) (bool, error) {
+func (s *Service) subscriptionExists(ctx context.Context, sessionID string, scopeType, scopeValue, mentionRole *string) (bool, error) {
 	var query string
 	var args []any
 
@@ -214,7 +216,7 @@ func (s *Service) subscriptionExists(sessionID string, scopeType, scopeValue, me
 	}
 
 	var exists bool
-	err := s.db.QueryRow(query, args...).Scan(&exists)
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("query subscription exists: %w", err)
 	}

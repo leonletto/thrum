@@ -1,11 +1,13 @@
 package cleanup_test
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 	"github.com/leonletto/thrum/internal/schema"
 )
 
@@ -84,7 +86,8 @@ func TestCleanupStaleContexts(t *testing.T) {
 	insertContext("ses4", "agent4", &gitFresh, `[]`)
 
 	t.Run("cleanup_removes_stale", func(t *testing.T) {
-		deleted, err := cleanup.CleanupStaleContexts(db, now)
+		sdb := safedb.New(db)
+		deleted, err := cleanup.CleanupStaleContexts(context.Background(), sdb, now)
 		if err != nil {
 			t.Fatalf("CleanupStaleContexts failed: %v", err)
 		}
@@ -137,7 +140,8 @@ func TestCleanupStaleContexts(t *testing.T) {
 
 	t.Run("cleanup_idempotent", func(t *testing.T) {
 		// Run cleanup again - should delete nothing
-		deleted, err := cleanup.CleanupStaleContexts(db, now)
+		sdb := safedb.New(db)
+		deleted, err := cleanup.CleanupStaleContexts(context.Background(), sdb, now)
 		if err != nil {
 			t.Fatalf("CleanupStaleContexts failed: %v", err)
 		}
@@ -191,7 +195,8 @@ func TestCleanupNoGitData(t *testing.T) {
 	}
 
 	// Should delete context with no git data
-	deleted, err := cleanup.CleanupStaleContexts(db, now)
+	sdb := safedb.New(db)
+	deleted, err := cleanup.CleanupStaleContexts(context.Background(), sdb, now)
 	if err != nil {
 		t.Fatalf("CleanupStaleContexts failed: %v", err)
 	}
