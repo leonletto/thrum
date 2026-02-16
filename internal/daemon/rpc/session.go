@@ -228,7 +228,7 @@ func (h *SessionHandler) HandleEnd(ctx context.Context, params json.RawMessage) 
 	// This prevents subscription records from accumulating from crashed clients.
 	if _, err := h.state.DB().ExecContext(ctx,
 		"DELETE FROM subscriptions WHERE session_id = ?", req.SessionID); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup subscriptions for session %s: %v\n", req.SessionID, err)
+		return nil, fmt.Errorf("cleanup subscriptions for session %s: %w", req.SessionID, err)
 	}
 
 	// Create session.end event

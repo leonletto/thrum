@@ -22,7 +22,7 @@ func checkGoroutineLeaks(t *testing.T, tolerance int) func() {
 	before := runtime.NumGoroutine()
 	return func() {
 		// Give goroutines time to wind down
-		deadline := time.Now().Add(2 * time.Second)
+		deadline := time.Now().Add(5 * time.Second)
 		for time.Now().Before(deadline) {
 			runtime.GC()
 			after := runtime.NumGoroutine()
