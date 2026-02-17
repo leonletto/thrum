@@ -444,6 +444,19 @@ during Git sync.
 The `.thrum/redirect` pattern allows multiple worktrees to share a single daemon
 and state directory without hardcoding paths.
 
+### 8. Timeout Enforcement (v0.4.3)
+
+All I/O paths enforce timeouts to prevent indefinite hangs:
+
+- **5s** CLI dial timeout (net.DialTimeout)
+- **10s** RPC call timeout (context.WithTimeout)
+- **10s** server per-request timeout (http.TimeoutHandler)
+- **10s** WebSocket handshake timeout
+- **5s/10s** git command timeouts (via `safecmd` wrapper)
+- **Context-scoped** SQLite queries (via `safedb` wrapper)
+
+Lock scope has been reduced — no mutex is held during I/O, git, or WebSocket dispatch operations.
+
 ## References
 
 - Design document: `dev-docs/2026-02-03-thrum-design.md`

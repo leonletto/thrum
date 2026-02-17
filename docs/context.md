@@ -289,39 +289,79 @@ thrum context preamble --agent furiosa
 
 ---
 
-### thrum context update
+### thrum context prime
 
-Install or update the `/update-context` skill for Claude Code agents.
+Collect all context needed for agent session initialization or recovery. This is a comprehensive context collection command that gathers identity, session info, agent list, unread messages, git context, and daemon health into a single output.
 
 ```bash
-thrum context update
+thrum context prime [flags]
 ```
 
-**What it does:**
+| Flag     | Description                              | Default |
+| -------- | ---------------------------------------- | ------- |
+| `--json` | Structured JSON output for scripting     | `false` |
 
-Detects the `/update-context` skill in these locations (in priority order):
+**Examples:**
 
-1. **Project-level**: `.claude/commands/update-context.md` (relative to repo root)
-2. **Global**: `~/.claude/commands/update-context.md`
+```bash
+# Human-readable summary
+thrum context prime
 
-If the skill is found, prints its location and status. If not found, provides installation instructions.
+# Structured JSON output
+thrum context prime --json
+```
+
+**What it includes:**
+
+- Agent identity (name, role, module)
+- Active session information
+- List of registered agents and their status
+- Unread messages count
+- Git context (branch, commits, files)
+- Daemon health status
+
+**Use cases:**
+
+- Session initialization - quickly orient a new session
+- Session recovery - restore context after crash or compaction
+- Debugging - gather all relevant state in one command
+- Agent onboarding - provide comprehensive context to new agents
+
+**Note:** This command is an alias for `thrum prime`. The PreCompact hook automatically saves context before compaction to `.thrum/context/{name}.md` and `/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md`, but the agent-initiated `/update-context` skill captures richer context including decisions and rationale.
+
+---
+
+### thrum context update
+
+The `/update-context` skill is now integrated with the Thrum MCP server. Use the
+MCP server for guided context updates:
+
+```bash
+thrum mcp serve
+```
+
+**In Claude Code:**
+
+Configure the MCP server in `.claude/settings.json` and use the `wait_for_message`
+and `send_message` tools for context coordination.
 
 ---
 
 ## The /update-context Skill
 
-The `/update-context` skill is a Claude Code command that provides a guided workflow for updating agent context. It prompts for continuation context, formats it as markdown, and saves it via `thrum context save`.
+The `/update-context` skill is now integrated into the Thrum MCP server. The MCP
+server provides message-based context coordination through the `send_message` and
+`wait_for_message` tools.
 
-**Installation:**
+**Usage:**
 
-1. Create `.claude/commands/update-context.md` in your repo or globally at `~/.claude/commands/update-context.md`
-2. Restart Claude Code
-3. Use `/update-context` from the chat to invoke the skill
+Configure the MCP server in `.claude/settings.json` and agents can coordinate
+context updates via messages.
 
 **Workflow:**
 
-1. Skill prompts: "What context should I preserve for the next session?"
-2. You provide notes, decisions, TODOs, or findings
+1. Agent sends context via `send_message`
+2. Other agents receive via `wait_for_message` or `check_messages`
 3. Skill formats your input as markdown and saves it via `thrum context save --file /tmp/context.md`
 
 **Example:**

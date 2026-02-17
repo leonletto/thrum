@@ -17,7 +17,9 @@ Everything is inspectable — messages are JSONL files on a Git branch, state is
 queryable SQLite database, and sync is plain Git push/pull.
 
 **Quick Setup:** After initialization, run `thrum setup claude-md --apply` to
-generate agent coordination instructions for your CLAUDE.md file.
+generate agent coordination instructions for your CLAUDE.md file. Running
+`thrum prime` (or `thrum context prime`) checks for CLAUDE.md and suggests
+`thrum setup claude-md --apply` if no Thrum section is found.
 
 ## System Architecture
 

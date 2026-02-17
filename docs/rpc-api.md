@@ -85,13 +85,13 @@ Health check and daemon status.
 
 **Response:**
 
-| Field        | Type    | Description                           |
-| ------------ | ------- | ------------------------------------- |
-| `status`     | string  | `"ok"` or `"degraded"`                |
-| `uptime_ms`  | integer | Daemon uptime in milliseconds         |
-| `version`    | string  | Daemon version (e.g., `"0.1.0"`)      |
-| `repo_id`    | string  | Repository identifier                 |
-| `sync_state` | string  | `"synced"`, `"pending"`, or `"error"` |
+| Field        | Type    | Description                                                   |
+| ------------ | ------- | ------------------------------------------------------------- |
+| `status`     | string  | `"ok"` or `"degraded"`                                        |
+| `uptime_ms`  | integer | Daemon uptime in milliseconds                                 |
+| `version`    | string  | Daemon version (e.g., `"0.1.0"`)                              |
+| `repo_id`    | string  | Repository identifier                                         |
+| `sync_state` | string  | `"synced"`, `"pending"`, or `"error"` (requires active sync loop) |
 
 **Errors:**
 
@@ -458,18 +458,20 @@ Send a message to the messaging system. Triggers subscription notifications.
 
 **Request:**
 
-| Parameter    | Type    | Required | Description                                              |
-| ------------ | ------- | -------- | -------------------------------------------------------- |
-| `content`    | string  | yes      | Message body text                                        |
-| `format`     | string  | no       | `"markdown"` (default), `"plain"`, or `"json"`           |
-| `structured` | object  | no       | Typed JSON payload                                       |
-| `scopes`     | array   | no       | Message scopes (`[{"type": "...", "value": "..."}]`)     |
-| `refs`       | array   | no       | Message references (`[{"type": "...", "value": "..."}]`) |
-| `mentions`   | array   | no       | Mention roles (e.g., `["@reviewer"]`)                    |
-| `tags`       | array   | no       | Message tags                                             |
-| `priority`   | string  | no       | `"low"`, `"normal"` (default), `"high"`                  |
-| `acting_as`  | string  | no       | Impersonate this agent ID (users only)                   |
-| `disclose`   | boolean | no       | Show `[via user:X]` tag when impersonating               |
+| Parameter    | Type    | Required | Description                                                       |
+| ------------ | ------- | -------- | ----------------------------------------------------------------- |
+| `content`    | string  | yes      | Message body text                                                 |
+| `format`     | string  | no       | `"markdown"` (default), `"plain"`, or `"json"`                    |
+| `structured` | object  | no       | Typed JSON payload                                                |
+| `thread_id`  | string  | no       | Thread identifier (deprecated in v0.4.0, use `reply_to` instead) |
+| `reply_to`   | string  | no       | Message ID to reply to (creates a reply chain)                    |
+| `scopes`     | array   | no       | Message scopes (`[{"type": "...", "value": "..."}]`)              |
+| `refs`       | array   | no       | Message references (`[{"type": "...", "value": "..."}]`)          |
+| `mentions`   | array   | no       | Mention roles (e.g., `["@reviewer"]`)                             |
+| `tags`       | array   | no       | Message tags                                                      |
+| `priority`   | string  | no       | `"low"`, `"normal"` (default), `"high"`                           |
+| `acting_as`  | string  | no       | Impersonate this agent ID (users only)                            |
+| `disclose`   | boolean | no       | Show `[via user:X]` tag when impersonating                        |
 
 **Response:**
 
@@ -531,19 +533,25 @@ List messages with filtering, pagination, and sorting.
 
 **Request:**
 
-| Parameter          | Type    | Required | Description                                                                                        |
-| ------------------ | ------- | -------- | -------------------------------------------------------------------------------------------------- |
-| `scope`            | object  | no       | Filter by scope (`{"type": "...", "value": "..."}`)                                                |
-| `ref`              | object  | no       | Filter by ref (`{"type": "...", "value": "..."}`)                                                  |
-| `author_id`        | string  | no       | Filter by author agent ID                                                                          |
-| `mentions`         | boolean | no       | Only messages mentioning current agent (resolved from config)                                      |
-| `unread`           | boolean | no       | Only unread messages (resolved from config)                                                        |
-| `mention_role`     | string  | no       | Explicit filter: messages with mention ref matching this role (for remote callers like MCP server) |
-| `unread_for_agent` | string  | no       | Explicit filter: messages unread by this agent ID (for remote callers like MCP server)             |
-| `page_size`        | integer | no       | Items per page (default: 10, max: 100)                                                             |
-| `page`             | integer | no       | Page number (default: 1)                                                                           |
-| `sort_by`          | string  | no       | `"created_at"` (default) or `"updated_at"`                                                         |
-| `sort_order`       | string  | no       | `"asc"` or `"desc"` (default)                                                                      |
+| Parameter              | Type    | Required | Description                                                                                        |
+| ---------------------- | ------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `scope`                | object  | no       | Filter by scope (`{"type": "...", "value": "..."}`)                                                |
+| `ref`                  | object  | no       | Filter by ref (`{"type": "...", "value": "..."}`)                                                  |
+| `thread_id`            | string  | no       | Filter by thread ID                                                                                |
+| `author_id`            | string  | no       | Filter by author agent ID                                                                          |
+| `mentions`             | boolean | no       | Only messages mentioning current agent (resolved from config)                                      |
+| `unread`               | boolean | no       | Only unread messages (resolved from config)                                                        |
+| `mention_role`         | string  | no       | Explicit filter: messages with mention ref matching this role (for remote callers like MCP server) |
+| `unread_for_agent`     | string  | no       | Explicit filter: messages unread by this agent ID (for remote callers like MCP server)             |
+| `exclude_self`         | boolean | no       | Exclude messages authored by current agent (inbox mode)                                            |
+| `caller_agent_id`      | string  | no       | For worktree callers to pass their agent ID                                                        |
+| `caller_mention_role`  | string  | no       | For worktree callers to pass their role for mentions filter                                        |
+| `for_agent`            | string  | no       | Filter for messages addressed to this agent name (mentions + broadcasts)                           |
+| `for_agent_role`       | string  | no       | Filter for messages addressed to this agent role (mentions + broadcasts)                           |
+| `page_size`            | integer | no       | Items per page (default: 10, max: 100)                                                             |
+| `page`                 | integer | no       | Page number (default: 1)                                                                           |
+| `sort_by`              | string  | no       | `"created_at"` (default) or `"updated_at"`                                                         |
+| `sort_order`           | string  | no       | `"asc"` or `"desc"` (default)                                                                      |
 
 **Response:**
 

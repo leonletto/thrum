@@ -42,7 +42,11 @@ messaging system for AI agent coordination.
 | `thrum context show`       | Show agent context                                   |
 | `thrum context clear`      | Clear agent context                                  |
 | `thrum context sync`       | Sync context to a-sync branch                        |
+| `thrum context prime`      | Collect all context for session initialization       |
 | `thrum context update`     | Install/update the /update-context skill             |
+| `thrum runtime`            | Manage runtime presets (list, show, edit)            |
+| `thrum peer`               | Manage Tailscale peers                               |
+| `thrum config`             | Manage configuration (show, init)                    |
 | `thrum group create`       | Create a named group                                 |
 | `thrum group delete`       | Delete a group                                       |
 | `thrum group add`          | Add member to a group                                |

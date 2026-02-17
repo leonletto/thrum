@@ -130,6 +130,23 @@ go test ./internal/config/... -v
 
 # Run with race detector
 go test -race ./...
+
+# Run resilience tests (requires build tag)
+go test -tags=resilience ./internal/daemon/...
+```
+
+**Resilience Test Suite (v0.4.3):**
+
+The resilience test suite includes 39 tests covering crash recovery, concurrent access, and timeout enforcement. These tests require the `-tags=resilience` build flag:
+
+- Crash recovery scenarios (daemon restart, state restoration)
+- Concurrent access patterns (multiple goroutines, race conditions)
+- Timeout enforcement (I/O timeouts, RPC timeouts, WebSocket timeouts)
+
+Run the full resilience suite:
+
+```bash
+go test -tags=resilience -v ./internal/daemon/resilience_test.go
 ```
 
 #### UI Tests

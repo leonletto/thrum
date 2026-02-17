@@ -149,6 +149,9 @@ using the local agent config (via `THRUM_ROLE` / identity file). The
 `mention_role` and `unread_for_agent` string filters are explicit overrides for
 remote callers (like the MCP server) that cannot access local config.
 
+**Subscription cleanup:** As of v0.4.3, subscriptions are automatically deleted
+when a session ends.
+
 ### 3. message.get
 
 Retrieves a single message by ID with full details including scopes, refs,

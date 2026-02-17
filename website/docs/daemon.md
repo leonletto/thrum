@@ -449,7 +449,13 @@ All I/O paths enforce timeouts to prevent indefinite hangs:
 | Git commands | 5s/10s | safecmd wrapper |
 | SQLite queries | context-scoped | safedb wrapper |
 
-The `safedb` and `safecmd` packages wrap all database and command operations with context-aware timeouts. Lock scope has been reduced — no mutex is held during I/O, git, or WebSocket dispatch operations.
+The `safedb` and `safecmd` packages wrap all database and command operations
+with context-aware timeouts. All DB operations go through `safedb` wrappers and
+all command executions go through `safecmd` wrappers for context-aware timeout
+enforcement.
+
+Lock scope has been reduced in v0.4.3 — no mutex is held during I/O, git, or
+WebSocket dispatch operations.
 
 ### 11. Client Library
 

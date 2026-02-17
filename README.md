@@ -73,6 +73,9 @@ thrum inbox
 - **Git Sync** — Automatic 60-second sync via the daemon, or manual `thrum sync`
 - **Multi-Worktree** — Each git worktree gets its own agent identity via `.thrum/redirect`
 
+**v0.4.3 highlights:** Timeout enforcement (safedb/safecmd wrappers), resilience
+tests, `thrum setup claude-md` for CLAUDE.md generation, lock scope reduction.
+
 ## Installation
 
 ### Install Script (recommended)

@@ -72,7 +72,7 @@ time it returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
 thrum send "message" --to @name       # Direct message
 thrum send "message" --broadcast      # Broadcast to all
 thrum inbox --unread                  # Check for new messages
-thrum reply <msg-id> "response"       # Reply (creates thread)
+thrum reply <msg-id> "response"       # Reply (creates a reply-to reference)
 
 ## MCP Tools (11 total)
 
