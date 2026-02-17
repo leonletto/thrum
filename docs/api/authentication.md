@@ -322,11 +322,11 @@ Users can impersonate agents to send messages "as" an agent.
 - `acting_as` must reference an existing agent
 - `acting_as` cannot be a `user:*` ID
 
-**Error codes**:
+**Errors**:
 
-- `-32001`: Only users can impersonate
-- `-32002`: Target agent does not exist
-- `-32003`: Users can only impersonate agents, not other users
+- "only users can impersonate agents" - Non-user caller attempted impersonation
+- "users can only impersonate agents, not other users" - User tried to impersonate another user
+- "agent not found" - Target agent does not exist
 
 ### Message Ownership
 

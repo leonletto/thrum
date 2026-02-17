@@ -20,6 +20,7 @@ replying to, and managing messages.
 | `thrum send MESSAGE`      | Send a message (with optional `--to`, `--scope`, `--ref`, `--mention`) |
 | `thrum reply MSG_ID TEXT` | Reply to a message, creating a reply-to reference                      |
 | `thrum inbox`             | List messages with read/unread indicators                              |
+| `thrum message read`      | Mark messages as read (single, multiple, or --all)                     |
 
 ### Message Subcommands
 

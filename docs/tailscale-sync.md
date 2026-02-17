@@ -29,7 +29,7 @@ agent events, and session updates propagate automatically.
 ## Prerequisites
 
 1. **Tailscale installed** on all machines running Thrum daemons
-2. **Thrum v0.3.2+** installed on all machines
+2. **Thrum v0.4.0+** installed on all machines (Tailscale support added in v0.4.0)
 
 ## Getting Started
 

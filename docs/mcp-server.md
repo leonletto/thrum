@@ -159,6 +159,7 @@ Send a message to another agent, role, or group.
 | ---------- | ------ | -------- | ----------------------------------------------------------------------------- |
 | `to`       | string | yes      | Recipient: `@role`, agent name, `@groupname`, or composite `agent:role:hash` |
 | `content`  | string | yes      | Message text (markdown)                                                       |
+| `reply_to` | string | no       | Message ID to reply to (creates a reply chain)                                |
 | `priority` | string | no       | `critical`, `high`, `normal` (default), or `low`                              |
 | `metadata` | object | no       | Key-value metadata (passed as structured data)                                |
 
