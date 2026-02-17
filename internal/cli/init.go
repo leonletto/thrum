@@ -263,7 +263,9 @@ func initASyncBranch(repoPath string) error {
 		return fmt.Errorf("git add in sync worktree: %w", err)
 	}
 
-	cmd = exec.Command("git", "commit", "-m", "Initialize Thrum sync data")
+	cmd = exec.Command("git",
+		"-c", "user.name=Thrum", "-c", "user.email=thrum@local",
+		"commit", "-m", "Initialize Thrum sync data")
 	cmd.Dir = syncDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -271,7 +273,7 @@ func initASyncBranch(repoPath string) error {
 		// "nothing to commit" is acceptable (idempotent re-init)
 		if !strings.Contains(outStr, "nothing to commit") &&
 			!strings.Contains(outStr, "nothing added to commit") {
-			return fmt.Errorf("git commit in sync worktree: %w", err)
+			return fmt.Errorf("git commit in sync worktree: %w\noutput: %s", err, strings.TrimSpace(string(output)))
 		}
 	}
 

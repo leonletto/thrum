@@ -243,7 +243,9 @@ func commitSyncData(syncDir string) error {
 		return fmt.Errorf("git add in sync worktree: %w", err)
 	}
 
-	cmd = exec.Command("git", "commit", "-m", "migrate: import data from main branch")
+	cmd = exec.Command("git",
+		"-c", "user.name=Thrum", "-c", "user.email=thrum@local",
+		"commit", "-m", "migrate: import data from main branch")
 	cmd.Dir = syncDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
