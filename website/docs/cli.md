@@ -1258,7 +1258,7 @@ internally for identity resolution.
 | `check_messages`    | Poll for unread messages mentioning this agent (auto-marks read) |
 | `wait_for_message`  | Block until a message arrives (WebSocket push) or timeout        |
 | `list_agents`       | List registered agents with active/offline status                |
-| `broadcast_message` | Send to all active agents with exclude filters                   |
+| `broadcast_message` | **Deprecated.** Use `send_message` with `to=@everyone` instead |
 
 **Group management (6):**
 

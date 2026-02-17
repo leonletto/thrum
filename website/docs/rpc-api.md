@@ -726,7 +726,6 @@ Add a member to a group. Members can be agents (by name) or roles.
 | `group`        | string | Group name                      |
 | `member_type`  | string | Type of member added            |
 | `member_value` | string | ID of member added              |
-| `added_at`     | string | ISO 8601 timestamp              |
 
 **Errors:**
 
@@ -756,7 +755,6 @@ Remove a member from a group.
 | `group`        | string | Group name                      |
 | `member_type`  | string | Type of member removed          |
 | `member_value` | string | ID of member removed            |
-| `removed_at`   | string | ISO 8601 timestamp              |
 
 **Errors:**
 
@@ -786,7 +784,6 @@ List all groups in the system.
 | `groups[].name`            | string  | Group name                              |
 | `groups[].description`     | string  | Group description (may be empty)        |
 | `groups[].created_at`      | string  | ISO 8601 creation timestamp             |
-| `groups[].created_by`      | string  | Agent ID of creator                     |
 | `groups[].member_count`    | integer | Number of direct members                |
 
 **Errors:**
@@ -814,8 +811,8 @@ Get detailed information about a specific group.
 | `created_at`           | string  | ISO 8601 creation timestamp             |
 | `created_by`           | string  | Agent ID of creator                     |
 | `members`              | array   | List of member objects                  |
-| `members[].type`       | string  | `"agent"` or `"role"`                   |
-| `members[].value`      | string  | Agent name or role name                 |
+| `members[].member_type`  | string  | `"agent"` or `"role"`                   |
+| `members[].member_value` | string  | Agent name or role name                 |
 | `members[].added_at`   | string  | ISO 8601 timestamp when member was added|
 | `members[].added_by`   | string  | Agent ID who added this member          |
 
@@ -840,18 +837,16 @@ Get members of a group with optional expansion. When `expand` is `true`, resolve
 
 | Field             | Type   | Description                           |
 | ----------------- | ------ | ------------------------------------- |
-| `name`            | string | Group name                            |
-| `members`         | array  | List of direct member objects         |
-| `members[].type`  | string | `"agent"` or `"role"`                 |
-| `members[].value` | string | Agent name or role name               |
+| `members`              | array  | List of direct member objects         |
+| `members[].member_type`  | string | `"agent"` or `"role"`               |
+| `members[].member_value` | string | Agent name or role name             |
 
 **Response (with expand=true):**
 
 | Field         | Type    | Description                           |
 | ------------- | ------- | ------------------------------------- |
-| `name`        | string  | Group name                            |
-| `agent_ids`   | array   | List of resolved agent IDs (strings)  |
-| `count`       | integer | Number of resolved agents             |
+| `members`     | array   | List of direct member objects         |
+| `expanded`    | array   | List of resolved agent IDs (strings, only when expand=true) |
 
 **Errors:**
 
