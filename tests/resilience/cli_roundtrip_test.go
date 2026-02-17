@@ -327,7 +327,7 @@ func TestCLI_AgentContext(t *testing.T) {
 
 	var result struct {
 		HasContext bool   `json:"has_context"`
-		Content   string `json:"content"`
+		Content    string `json:"content"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
 		// Context show might not support --json; that's ok, just verify it ran

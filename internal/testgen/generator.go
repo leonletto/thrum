@@ -750,4 +750,3 @@ func CompressToTarGz(sourceDir, outputPath string) error {
 		return err
 	})
 }
-

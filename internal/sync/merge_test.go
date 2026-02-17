@@ -661,7 +661,7 @@ func TestMerger_MergeFile(t *testing.T) {
 	}
 
 	// Merge with non-existent remote (should succeed)
-	result, err := m.mergeFile(context.Background(),localPath, "nonexistent.jsonl")
+	result, err := m.mergeFile(context.Background(), localPath, "nonexistent.jsonl")
 	if err != nil {
 		t.Fatalf("mergeFile failed: %v", err)
 	}
