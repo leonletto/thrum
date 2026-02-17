@@ -266,7 +266,7 @@ func generateGroups(rng *rand.Rand, agents []agentInfo, n int) []groupInfo {
 
 // Generate creates a complete .thrum directory at outputDir.
 func Generate(outputDir string, cfg Config) error {
-	rng := rand.New(rand.NewSource(cfg.Seed))
+	rng := rand.New(rand.NewSource(cfg.Seed)) //nolint:gosec // intentional use of weak random for deterministic test data
 	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	// Create directory structure
@@ -326,7 +326,7 @@ func writeConfigJSON(outputDir string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(outputDir, "config.json"), data, 0640)
+	return os.WriteFile(filepath.Join(outputDir, "config.json"), data, 0600)
 }
 
 func writeIdentityFiles(outputDir string, agents []agentInfo) error {
@@ -350,7 +350,7 @@ func writeIdentityFiles(outputDir string, agents []agentInfo) error {
 			return fmt.Errorf("marshal identity %s: %w", a.Name, err)
 		}
 		path := filepath.Join(outputDir, "identities", a.Name+".json")
-		if err := os.WriteFile(path, data, 0640); err != nil {
+		if err := os.WriteFile(path, data, 0600); err != nil {
 			return fmt.Errorf("write identity %s: %w", a.Name, err)
 		}
 	}
@@ -371,7 +371,7 @@ func writeContextFiles(outputDir string, agents []agentInfo) error {
 			"- Next milestone: v1.0 release\n",
 			a.Display, a.Role, a.Module, a.Module, a.Module)
 		path := filepath.Join(outputDir, "context", a.Name+".md")
-		if err := os.WriteFile(path, []byte(content), 0640); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 			return fmt.Errorf("write context %s: %w", a.Name, err)
 		}
 	}
@@ -380,11 +380,11 @@ func writeContextFiles(outputDir string, agents []agentInfo) error {
 
 func writeJSONLEvents(outputDir string, agents []agentInfo, sessions []sessionInfo, messages []messageInfo, groups []groupInfo, baseTime time.Time) error {
 	// events.jsonl — agent register, session start/end, group create/member.add
-	eventsFile, err := os.Create(filepath.Join(outputDir, "events.jsonl"))
+	eventsFile, err := os.Create(filepath.Join(outputDir, "events.jsonl")) //nolint:gosec // controlled path in test data generation
 	if err != nil {
 		return fmt.Errorf("create events.jsonl: %w", err)
 	}
-	defer eventsFile.Close()
+	defer func() { _ = eventsFile.Close() }()
 	eventsEnc := json.NewEncoder(eventsFile)
 
 	eventSeq := 0
@@ -481,14 +481,14 @@ func writeJSONLEvents(outputDir string, agents []agentInfo, sessions []sessionIn
 	messageFiles := make(map[string]*os.File)
 	defer func() {
 		for _, f := range messageFiles {
-			f.Close()
+			_ = f.Close()
 		}
 	}()
 
 	for _, msg := range messages {
 		enc, ok := messageWriters[msg.AgentID]
 		if !ok {
-			f, err := os.Create(filepath.Join(outputDir, "messages", msg.AgentID+".jsonl"))
+			f, err := os.Create(filepath.Join(outputDir, "messages", msg.AgentID+".jsonl")) //nolint:gosec // controlled path in test data generation
 			if err != nil {
 				return fmt.Errorf("create message file for %s: %w", msg.AgentID, err)
 			}
@@ -528,7 +528,7 @@ func populateSQLite(outputDir string, agents []agentInfo, sessions []sessionInfo
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if err := schema.InitDB(db); err != nil {
 		return fmt.Errorf("init db: %w", err)
@@ -545,7 +545,7 @@ func populateSQLite(outputDir string, agents []agentInfo, sessions []sessionInfo
 	if err != nil {
 		return fmt.Errorf("prepare agent insert: %w", err)
 	}
-	defer agentStmt.Close()
+	defer func() { _ = agentStmt.Close() }()
 	for i, a := range agents {
 		ts := baseTime.Add(time.Duration(i) * time.Second).Format(time.RFC3339)
 		if _, err := agentStmt.Exec(a.AgentID, a.Kind, a.Role, a.Module, a.Display, a.Hostname, ts, ts); err != nil {
@@ -558,7 +558,7 @@ func populateSQLite(outputDir string, agents []agentInfo, sessions []sessionInfo
 	if err != nil {
 		return fmt.Errorf("prepare session insert: %w", err)
 	}
-	defer sessionStmt.Close()
+	defer func() { _ = sessionStmt.Close() }()
 	for _, s := range sessions {
 		startTS := s.StartedAt.Format(time.RFC3339)
 		var endTS *string
@@ -576,13 +576,13 @@ func populateSQLite(outputDir string, agents []agentInfo, sessions []sessionInfo
 	if err != nil {
 		return fmt.Errorf("prepare message insert: %w", err)
 	}
-	defer msgStmt.Close()
+	defer func() { _ = msgStmt.Close() }()
 
 	scopeStmt, err := tx.Prepare("INSERT INTO message_scopes (message_id, scope_type, scope_value) VALUES (?, ?, ?)")
 	if err != nil {
 		return fmt.Errorf("prepare scope insert: %w", err)
 	}
-	defer scopeStmt.Close()
+	defer func() { _ = scopeStmt.Close() }()
 
 	for _, m := range messages {
 		ts := m.Timestamp.Format(time.RFC3339)
@@ -601,13 +601,13 @@ func populateSQLite(outputDir string, agents []agentInfo, sessions []sessionInfo
 	if err != nil {
 		return fmt.Errorf("prepare group insert: %w", err)
 	}
-	defer groupStmt.Close()
+	defer func() { _ = groupStmt.Close() }()
 
 	memberStmt, err := tx.Prepare("INSERT INTO group_members (group_id, member_type, member_value, added_by, added_at) VALUES (?, ?, ?, ?, ?)")
 	if err != nil {
 		return fmt.Errorf("prepare member insert: %w", err)
 	}
-	defer memberStmt.Close()
+	defer func() { _ = memberStmt.Close() }()
 
 	groupTS := baseTime.Add(1 * time.Hour).Format(time.RFC3339)
 	for _, g := range groups {
@@ -626,7 +626,7 @@ func populateSQLite(outputDir string, agents []agentInfo, sessions []sessionInfo
 	if err != nil {
 		return fmt.Errorf("prepare read insert: %w", err)
 	}
-	defer readStmt.Close()
+	defer func() { _ = readStmt.Close() }()
 
 	// Build agent->sessions map for assigning reads to sessions
 	agentSessions := make(map[string][]sessionInfo)
@@ -656,7 +656,7 @@ func populateSQLite(outputDir string, agents []agentInfo, sessions []sessionInfo
 	if err != nil {
 		return fmt.Errorf("prepare event insert: %w", err)
 	}
-	defer eventStmt.Close()
+	defer func() { _ = eventStmt.Close() }()
 
 	seq := 0
 	for i, a := range agents {
@@ -703,17 +703,17 @@ func CompressToTarGz(sourceDir, outputPath string) error {
 		return fmt.Errorf("create output dir: %w", err)
 	}
 
-	outFile, err := os.Create(outputPath)
+	outFile, err := os.Create(outputPath) //nolint:gosec // controlled path in test data generation
 	if err != nil {
 		return fmt.Errorf("create output: %w", err)
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	gzWriter := gzip.NewWriter(outFile)
-	defer gzWriter.Close()
+	defer func() { _ = gzWriter.Close() }()
 
 	tarWriter := tar.NewWriter(gzWriter)
-	defer tarWriter.Close()
+	defer func() { _ = tarWriter.Close() }()
 
 	baseDir := filepath.Dir(sourceDir)
 	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
@@ -740,11 +740,11 @@ func CompressToTarGz(sourceDir, outputPath string) error {
 			return nil
 		}
 
-		f, err := os.Open(path)
+		f, err := os.Open(path) //nolint:gosec // controlled path in test data generation
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		_, err = io.Copy(tarWriter, f)
 		return err

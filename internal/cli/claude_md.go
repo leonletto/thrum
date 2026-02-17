@@ -73,7 +73,7 @@ func GenerateClaudeMd(opts ClaudeMdOptions) (*ClaudeMdResult, error) {
 		existingStr += content
 	}
 
-	if err := os.WriteFile(claudeMdPath, []byte(existingStr), 0644); err != nil {
+	if err := os.WriteFile(claudeMdPath, []byte(existingStr), 0600); err != nil {
 		return nil, fmt.Errorf("write CLAUDE.md: %w", err)
 	}
 
@@ -109,7 +109,6 @@ func replaceThrumSection(existing, newContent string) string {
 		if inSection && !sectionEnded {
 			// Section ends at next top-level header or --- separator
 			if (strings.HasPrefix(trimmed, "# ") && trimmed != claudeMdHeader) || trimmed == "---" {
-				sectionEnded = true
 				// If it's a separator before more content, skip the separator
 				if trimmed == "---" {
 					// Check if there's content after the separator

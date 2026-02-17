@@ -24,7 +24,7 @@ func TestGit_CancelledContext(t *testing.T) {
 	cancel()
 	_, err := safecmd.Git(ctx, ".", "--version")
 	if err == nil {
-		t.Fatal("expected error from cancelled context")
+		t.Fatal("expected error from canceled context")
 	}
 }
 
@@ -63,6 +63,6 @@ func TestGitLong_CancelledContext(t *testing.T) {
 	cancel()
 	_, err := safecmd.GitLong(ctx, ".", "--version")
 	if err == nil {
-		t.Fatal("expected error from cancelled context")
+		t.Fatal("expected error from canceled context")
 	}
 }
