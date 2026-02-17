@@ -298,6 +298,21 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 	out.WriteString("  thrum wait                     Block until message arrives\n")
 	out.WriteString("  thrum <cmd> --help             Detailed command usage\n")
 
+	// Tip: suggest thrum setup claude-md if CLAUDE.md lacks thrum section
+	if ctx.RepoPath != "" {
+		claudeMdPath := filepath.Join(ctx.RepoPath, "CLAUDE.md")
+		showTip := false
+		content, err := os.ReadFile(filepath.Clean(claudeMdPath))
+		if err != nil {
+			showTip = true // No CLAUDE.md at all
+		} else if !hasThrumSection(string(content)) {
+			showTip = true
+		}
+		if showTip {
+			out.WriteString("\nTip: Run 'thrum setup claude-md --apply' to add agent coordination instructions to your CLAUDE.md\n")
+		}
+	}
+
 	// Listener auto-spawn instruction for Claude Code sessions with active identity
 	if ctx.Identity != nil && ctx.Runtime == "claude" {
 		repoPath := ctx.RepoPath
