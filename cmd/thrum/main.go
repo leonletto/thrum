@@ -154,16 +154,21 @@ func initCmd() *cobra.Command {
 Creates the .thrum/ directory structure, sets up the a-sync branch for
 message synchronization, and updates .gitignore.
 
+Use --stealth to avoid any footprint in tracked files: exclusions are
+written to .git/info/exclude instead of .gitignore.
+
 Detects installed AI runtimes and prompts you to select one (interactive).
 When --runtime is specified, uses that runtime directly without prompting.
 
 Examples:
   thrum init                          # Init + interactive runtime selection
+  thrum init --stealth                # Init with zero tracked-file footprint
   thrum init --runtime claude         # Init + generate Claude configs
   thrum init --runtime codex --force  # Init + overwrite Codex configs
   thrum init --runtime all --dry-run  # Preview all runtime configs`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			force, _ := cmd.Flags().GetBool("force")
+			stealth, _ := cmd.Flags().GetBool("stealth")
 			runtimeFlag, _ := cmd.Flags().GetString("runtime")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			agentName, _ := cmd.Flags().GetString("agent-name")
@@ -213,6 +218,7 @@ Examples:
 				opts := cli.InitOptions{
 					RepoPath: flagRepo,
 					Force:    force,
+					Stealth:  stealth,
 				}
 
 				if err := cli.Init(opts); err != nil {
@@ -227,7 +233,11 @@ Examples:
 					fmt.Printf("  Repository: %s\n", flagRepo)
 					fmt.Println("  Created: .thrum/ directory structure")
 					fmt.Println("  Created: a-sync branch for message sync")
-					fmt.Println("  Updated: .gitignore")
+					if stealth {
+						fmt.Println("  Updated: .git/info/exclude (stealth mode)")
+					} else {
+						fmt.Println("  Updated: .gitignore")
+					}
 				}
 			}
 
@@ -330,6 +340,7 @@ Examples:
 	}
 
 	cmd.Flags().Bool("force", false, "Force reinitialization / overwrite existing files")
+	cmd.Flags().Bool("stealth", false, "Use .git/info/exclude instead of .gitignore (zero footprint in tracked files)")
 	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files")
 	cmd.Flags().String("runtime", "", "Generate runtime-specific configs (claude|codex|cursor|gemini|cli-only|all)")
 	cmd.Flags().String("agent-name", "", "Agent name for templates (default: default_agent)")
