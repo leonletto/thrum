@@ -71,20 +71,29 @@ thrum daemon status
 
 ## Installation
 
-### From GitHub (self-hosted)
+### From GitHub (self-hosted marketplace)
 
-The plugin is distributed as a self-hosted marketplace via the repository:
+The plugin is distributed as a self-hosted marketplace. First add the
+marketplace, then install the plugin:
 
 ```bash
-claude plugin add --from https://github.com/leonletto/thrum
+# Add the Thrum marketplace
+claude plugin marketplace add https://github.com/leonletto/thrum
+
+# Install the plugin
+claude plugin install thrum
 ```
 
 ### From local clone
 
-If you've cloned the Thrum repository:
+If you've cloned the Thrum repository locally:
 
 ```bash
-claude plugin add --from /path/to/thrum
+# Add as a local marketplace
+claude plugin marketplace add /path/to/thrum
+
+# Install the plugin
+claude plugin install thrum
 ```
 
 ### Verify installation
@@ -235,7 +244,7 @@ The listener runs 6 cycles of 15 minutes each (~90 min coverage), blocks on
 
 | Feature | Plugin | Manual (toolkit/agents/) |
 |---------|--------|-------------------------|
-| Installation | `claude plugin add` | Copy `.md` files to `.claude/agents/` |
+| Installation | `claude plugin marketplace add` + `install` | Copy `.md` files to `.claude/agents/` |
 | Updates | Re-install from source | Manual file replacement |
 | Slash commands | 10 commands included | None |
 | Hooks | SessionStart + PreCompact | Manual hook configuration |
