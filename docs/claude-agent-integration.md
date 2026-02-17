@@ -81,7 +81,7 @@ thrum reply <msg-id> "response"       # Reply (creates a reply-to reference)
 - check_messages — Poll inbox, auto-mark read
 - wait_for_message — Block until message arrives
 - list_agents — Show registered agents
-- broadcast_message — Send to all agents
+- broadcast_message _(deprecated)_ — Send to all agents
 
 **Group management (6):**
 - create_group — Create a named messaging group

@@ -652,7 +652,7 @@ running in Claude Code or similar environments. It exposes 11 MCP tools organize
 | `check_messages`    | Poll for unread messages mentioning this agent, auto-marks read                                    |
 | `wait_for_message`  | Block until a message arrives via WebSocket push or timeout (max 600s)                             |
 | `list_agents`       | List registered agents with active/offline status                                                  |
-| `broadcast_message` | Send to all active agents (with optional exclude filter)                                           |
+| `broadcast_message` | **Deprecated.** Use `send_message` with `to=@everyone` instead |
 
 **Group management (6 tools):**
 
