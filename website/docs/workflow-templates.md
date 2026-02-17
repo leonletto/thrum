@@ -120,7 +120,7 @@ The `setup-worktree-thrum.sh` script handles full worktree bootstrapping in a si
   --role implementer
 ```
 
-This creates the worktree, sets up thrum and beads redirects, and registers the agent identity. The `thrum quickstart` command (used internally) auto-creates a default preamble with thrum quick-reference commands.
+This creates the worktree, sets up thrum and beads redirects, and registers the agent identity. The `thrum quickstart` command (used internally) auto-creates a default preamble with thrum quick-reference commands. For projects using custom agent docs in `.agents/`, run `thrum setup claude-md --apply` to configure the worktree's CLAUDE.md.
 
 ## Use the implementation template
 
