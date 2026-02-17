@@ -3499,8 +3499,8 @@ Examples:
 			if !forceInit {
 				existingCfg, err := config.LoadWithPath(flagRepo, "", "")
 				if err == nil && existingCfg.Agent.Name != "" {
-					switch {
-					case name == "":
+					switch name {
+					case "":
 						// No --name given (automated/template call): fully adopt existing identity.
 						name = existingCfg.Agent.Name
 						flagRole = existingCfg.Agent.Role
@@ -3508,7 +3508,7 @@ Examples:
 						if display == "" && existingCfg.Agent.Display != "" {
 							display = existingCfg.Agent.Display
 						}
-					case name == existingCfg.Agent.Name:
+					case existingCfg.Agent.Name:
 						// Same --name as existing: re-register (update role/module if changed).
 					default:
 						// Different --name than existing: warn about replacing the identity.
