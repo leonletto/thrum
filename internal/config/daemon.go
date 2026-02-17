@@ -56,6 +56,8 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 }
 
 // applyDefaults fills in sensible defaults for zero-value fields.
+// Note: LocalOnly defaults to true (local-first). Users must explicitly
+// set local_only=false in config.json to enable remote git sync.
 func applyDefaults(cfg *ThrumConfig) {
 	if cfg.Daemon.SyncInterval == 0 {
 		cfg.Daemon.SyncInterval = DefaultSyncInterval

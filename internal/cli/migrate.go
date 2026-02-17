@@ -245,7 +245,7 @@ func commitSyncData(syncDir string) error {
 
 	cmd = exec.Command("git",
 		"-c", "user.name=Thrum", "-c", "user.email=thrum@local",
-		"commit", "-m", "migrate: import data from main branch")
+		"commit", "--no-verify", "-m", "migrate: import data from main branch")
 	cmd.Dir = syncDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
