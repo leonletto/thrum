@@ -161,6 +161,31 @@ Example:
     ✓ Thrum worktree setup complete
 
 
+### thrum setup claude-md
+
+Generate Thrum agent coordination instructions for CLAUDE.md.
+
+```bash
+thrum setup claude-md              # Print to stdout
+thrum setup claude-md --apply      # Append to CLAUDE.md (creates if missing)
+thrum setup claude-md --apply --force  # Replace existing Thrum section
+```
+
+Flags:
+- `--apply` — Append generated content to CLAUDE.md (with duplicate detection)
+- `--force` — Replace existing Thrum section instead of skipping (used with --apply)
+
+This command generates comprehensive agent coordination instructions including:
+- Registration and session management
+- Message protocols
+- MCP server configuration
+- Background listener setup
+- Group management
+
+The instructions are automatically injected by `thrum prime` when agents start
+sessions, providing immediate context on how to use Thrum for coordination.
+
+
 ### thrum migrate
 
 Migrate an existing Thrum repository from the old layout (JSONL files tracked on
@@ -1219,7 +1244,9 @@ MCP tools instead of shelling out to the CLI.
 Requires the Thrum daemon to be running. The `--agent-id` flag sets `THRUM_NAME`
 internally for identity resolution.
 
-**MCP Tools provided:**
+**MCP Tools provided (11 total):**
+
+**Core messaging (5):**
 
 | Tool                | Description                                                      |
 | ------------------- | ---------------------------------------------------------------- |
@@ -1228,6 +1255,17 @@ internally for identity resolution.
 | `wait_for_message`  | Block until a message arrives (WebSocket push) or timeout        |
 | `list_agents`       | List registered agents with active/offline status                |
 | `broadcast_message` | Send to all active agents with exclude filters                   |
+
+**Group management (6):**
+
+| Tool                  | Description                                              |
+| --------------------- | -------------------------------------------------------- |
+| `create_group`        | Create a named messaging group                           |
+| `delete_group`        | Delete a messaging group                                 |
+| `add_group_member`    | Add an agent or role as a member of a group              |
+| `remove_group_member` | Remove a member from a group                             |
+| `list_groups`         | List all messaging groups                                |
+| `get_group`           | Get group details including members (expand=true resolves roles) |
 
 **Configuration in Claude Code's `.claude/settings.json`:**
 

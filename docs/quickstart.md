@@ -88,7 +88,19 @@ This creates:
 If you are upgrading an existing repo that has JSONL files tracked on `main`,
 run `thrum migrate` instead.
 
-### 2. Start the Daemon
+### 2. Generate CLAUDE.md Coordination Instructions
+
+For Claude Code and other AI agents, generate Thrum coordination instructions:
+
+```bash
+thrum setup claude-md --apply
+```
+
+This appends agent coordination instructions to your CLAUDE.md file (creates it
+if missing). Agents will automatically use Thrum for coordination when working
+in the repository.
+
+### 3. Start the Daemon
 
 ```bash
 thrum daemon start
@@ -103,7 +115,7 @@ The daemon handles:
 - Push notifications for subscriptions
 - Browser auto-registration via git config
 
-### 3. Register Your Agent and Start a Session
+### 4. Register Your Agent and Start a Session
 
 The fastest way is the quickstart command, which registers, starts a session,
 and sets your intent in one step:
@@ -133,7 +145,7 @@ thrum agent register
 
 Priority: `THRUM_NAME` env var > `--name` flag > solo-agent auto-select.
 
-### 4. Send Your First Message
+### 5. Send Your First Message
 
 ```bash
 thrum send "Started working on user authentication" \
@@ -141,7 +153,7 @@ thrum send "Started working on user authentication" \
   --ref issue:beads-123
 ```
 
-### 5. Check Your Inbox
+### 6. Check Your Inbox
 
 ```bash
 thrum inbox
@@ -246,8 +258,9 @@ Configure in `.claude/settings.json`:
 }
 ```
 
-MCP tools: `send_message`, `check_messages`, `wait_for_message`, `list_agents`,
-`broadcast_message`.
+MCP tools (11 total): Core messaging — `send_message`, `check_messages`, `wait_for_message`, `list_agents`,
+`broadcast_message`. Group management — `create_group`, `delete_group`, `add_group_member`,
+`remove_group_member`, `list_groups`, `get_group`.
 
 ## Typical Workflow
 

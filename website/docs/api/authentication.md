@@ -1,14 +1,3 @@
----
-title: "Authentication Guide"
-description:
-  "Agent and user authentication, registration, sessions, impersonation, and
-  security considerations"
-category: "api"
-order: 4
-tags:
-  ["authentication", "authorization", "sessions", "users", "agents", "security"]
-last_updated: "2026-02-08"
----
 
 # Authentication Guide
 
@@ -376,34 +365,44 @@ request.
 
 ## Security Considerations
 
-### Current (MVP)
+### Local Access (Unix Domain Socket)
 
-1. **No encryption**: WebSocket traffic is unencrypted (`ws://`, not `wss://`)
-2. **No authentication tokens**: No password or token verification for initial
-   connection
-3. **Local-only**: Daemon binds to `127.0.0.1` (localhost only)
-4. **Trust-based**: Clients on the same machine are trusted
-5. **Single port**: WebSocket and embedded SPA share port 9999
+Unix domain sockets (`$REPO/.thrum/daemon.sock`) provide inherent security:
 
-**Acceptable for**:
+1. **No network exposure**: Socket files are not accessible over the network
+2. **Filesystem permissions**: Access controlled via file permissions (mode 0600)
+3. **Local-only**: Only processes on the same machine with appropriate permissions can connect
 
-- Local development
-- Single-user machines
-- Trusted environments
+**Use cases**:
+- CLI tools (`thrum` command)
+- MCP server (`thrum mcp serve`)
+- Local agents and automation scripts
+- Development workflows
 
-**Not acceptable for**:
+### Remote Access (Tailscale WireGuard)
 
-- Multi-user machines
-- Production deployments
-- Untrusted networks
+For remote or multi-machine deployments, Thrum uses Tailscale's WireGuard mesh network:
 
-### Future Enhancements
+1. **End-to-end encryption**: All WebSocket traffic encrypted via WireGuard tunnel
+2. **Zero-trust networking**: Each peer authenticates via Tailscale identity
+3. **Automatic key rotation**: WireGuard keys managed by Tailscale
+4. **Pairing codes**: Initial connection uses time-limited pairing codes
+5. **Per-peer tokens**: Ongoing authentication via per-peer tokens after pairing
 
-1. **TLS/SSL**: Support `wss://` for encrypted WebSocket connections
-2. **Token-based auth**: JWT or similar for user authentication
-3. **Role-based access control (RBAC)**: Permission system for operations
-4. **API keys**: For programmatic agent access
-5. **Audit logging**: Comprehensive audit trail for all operations
+**Security properties**:
+- WebSocket connections run over Tailscale's encrypted tunnel (`ws://` over WireGuard)
+- No separate TLS/SSL layer needed
+- Network isolation via Tailscale ACLs
+- Authentication handled by Tailscale identity + Thrum pairing
+
+**Reference**: See `docs/tailscale-security.md` for detailed security model and threat analysis.
+
+### Authentication Layers
+
+1. **Transport layer**: Tailscale WireGuard encryption and peer authentication
+2. **Application layer**: Thrum pairing codes and per-peer tokens
+3. **Session layer**: Session management and heartbeat tracking
+4. **Message layer**: Author attribution and ownership verification
 
 ## Session Lifecycle
 

@@ -74,13 +74,22 @@ thrum send "message" --broadcast      # Broadcast to all
 thrum inbox --unread                  # Check for new messages
 thrum reply <msg-id> "response"       # Reply (creates thread)
 
-## MCP Tools
+## MCP Tools (11 total)
 
+**Core messaging (5):**
 - send_message — Send to specific agent via @name
 - check_messages — Poll inbox, auto-mark read
 - wait_for_message — Block until message arrives
 - list_agents — Show registered agents
 - broadcast_message — Send to all agents
+
+**Group management (6):**
+- create_group — Create a named messaging group
+- delete_group — Delete a messaging group
+- add_group_member — Add agent or role to group
+- remove_group_member — Remove member from group
+- list_groups — List all groups
+- get_group — Get group details with optional expansion
 
 ## Priority Handling
 

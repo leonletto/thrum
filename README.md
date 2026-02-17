@@ -133,7 +133,7 @@ Thrum includes an MCP server for native integration with Claude Code and other M
 }
 ```
 
-This gives agents direct access to `send_message`, `check_messages`, `wait_for_message`, `list_agents`, and `broadcast_message` as native tools.
+This gives agents direct access to 11 MCP tools: 5 core messaging tools (`send_message`, `check_messages`, `wait_for_message`, `list_agents`, `broadcast_message`) and 6 group management tools (`create_group`, `delete_group`, `add_group_member`, `remove_group_member`, `list_groups`, `get_group`).
 
 ## Agent Naming
 
