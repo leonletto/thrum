@@ -121,7 +121,7 @@ func (s *Syncer) stageChanges(ctx context.Context) error {
 
 // commitChanges creates a commit with the given message.
 func (s *Syncer) commitChanges(ctx context.Context, message string) error {
-	output, err := safecmd.Git(ctx, s.syncDir, "commit", "-m", message)
+	output, err := safecmd.Git(ctx, s.syncDir, "commit", "--no-verify", "-m", message)
 	if err != nil {
 		// Check if the error is "nothing to commit" or "nothing added to commit"
 		outputStr := strings.ToLower(string(output))

@@ -6,10 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.3] - 2026-02-16
+## [0.4.3] - 2026-02-17
+
+### Changed
+
+- Init is local-only by default — remote git sync must be explicitly enabled via `local_only: false` in `.thrum/config.json`
 
 ### Fixed
 
+- Internal git commits in the a-sync worktree now skip pre-commit hooks (`--no-verify`) to avoid failures from project-level hooks
 - Daemon, CLI client, and MCP server can no longer hang indefinitely. All I/O
   paths now enforce timeouts: 5s CLI dial, 10s RPC calls, 10s server
   per-request, 10s WebSocket handshake, 5s/10s git commands, and context-scoped

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/sync"
 )
@@ -135,7 +136,23 @@ func Init(opts InitOptions) error {
 		return retErr
 	}
 
-	// 5. Initialize a-sync branch
+	// 5. Write default config.json (local-only by default — user must opt in to remote sync)
+	configPath := filepath.Join(thrumDir, "config.json")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		cfg := &config.ThrumConfig{
+			Daemon: config.DaemonConfig{
+				LocalOnly:    true,
+				SyncInterval: config.DefaultSyncInterval,
+				WSPort:       config.DefaultWSPort,
+			},
+		}
+		if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+			retErr = fmt.Errorf("failed to write config.json: %w", err)
+			return retErr
+		}
+	}
+
+	// 6. Initialize a-sync branch
 	if err := initASyncBranch(opts.RepoPath); err != nil {
 		retErr = fmt.Errorf("failed to initialize a-sync branch: %w", err)
 		return retErr
@@ -227,7 +244,7 @@ func updateGitignore(repoPath string) error {
 
 // initASyncBranch creates the a-sync branch and worktree for message synchronization.
 func initASyncBranch(repoPath string) error {
-	bm := sync.NewBranchManager(repoPath, false)
+	bm := sync.NewBranchManager(repoPath, true)
 
 	// Create orphan a-sync branch (safe plumbing — no working tree touch)
 	if err := bm.CreateSyncBranch(); err != nil {
@@ -265,7 +282,7 @@ func initASyncBranch(repoPath string) error {
 
 	cmd = exec.Command("git",
 		"-c", "user.name=Thrum", "-c", "user.email=thrum@local",
-		"commit", "-m", "Initialize Thrum sync data")
+		"commit", "--no-verify", "-m", "Initialize Thrum sync data")
 	cmd.Dir = syncDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
