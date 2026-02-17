@@ -297,16 +297,17 @@ local-only mode to disable all remote sync:
 thrum daemon start --local
 ```
 
-In local-only mode, the sync loop still runs but skips `git fetch` and
-`git push`. Local JSONL files and the SQLite projection continue to update
-normally. See [Daemon Architecture](daemon.md#local-only-mode) for details.
+In local-only mode, the sync loop still runs but skips remote operations
+(`git fetch` and `git push` to/from the remote). Local JSONL files and the
+SQLite projection continue to update normally. See [Daemon Architecture](daemon.md#local-only-mode) for details.
 
 ### No Remote
 
 When no remote is configured:
 
 - Sync loop runs normally
-- Fetch/push operations are skipped
+- Remote operations (`git fetch` and `git push`) are skipped
+- Local worktree state and database updates continue as normal
 - Local JSONL in the sync worktree is still maintained
 
 ### Network Unavailable

@@ -291,7 +291,7 @@ schema_version      # Migration tracking
 
 ### Schema Version
 
-Current version: **8**
+Current version: **13**
 
 Key migrations:
 

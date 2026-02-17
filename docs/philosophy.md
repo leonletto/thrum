@@ -113,7 +113,7 @@ files.
 
 Thrum doesn't plan your work - it makes planning your work easier and faster.
 
-It won't break everythign down and make all the decisions fro you unless you
+It won't break everything down and make all the decisions for you unless you
 tell it to.  You do that with the help of your agents and you can see what is
 going to happen before it happens - not after the damage is done.
 
