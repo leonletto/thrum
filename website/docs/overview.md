@@ -16,6 +16,9 @@ across sessions, worktrees, and machines. It provides:
 Everything is inspectable — messages are JSONL files on a Git branch, state is a
 queryable SQLite database, and sync is plain Git push/pull.
 
+**Quick Setup:** After initialization, run `thrum setup claude-md --apply` to
+generate agent coordination instructions for your CLAUDE.md file.
+
 ## System Architecture
 
 ```
@@ -110,9 +113,10 @@ messages and agent activity. Served from the same port as WebSocket (default
 **MCP Server** (`thrum mcp serve`): Exposes Thrum functionality as native MCP
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
 directly through MCP protocol without CLI shell-outs. Connects to the daemon via
-Unix socket for RPC and WebSocket for real-time push notifications. Tools:
-`send_message`, `check_messages`, `wait_for_message`, `list_agents`,
-`broadcast_message`.
+Unix socket for RPC and WebSocket for real-time push notifications. Provides 11 tools:
+5 core messaging tools (`send_message`, `check_messages`, `wait_for_message`, `list_agents`,
+`broadcast_message`) and 6 group management tools (`create_group`, `delete_group`, `add_group_member`,
+`remove_group_member`, `list_groups`, `get_group`).
 
 ## Key Features
 

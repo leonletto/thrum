@@ -21,9 +21,6 @@ Located at `.thrum/config.json` in your repository:
 
 ```json
 {
-  "runtime": {
-    "primary": "claude"
-  },
   "daemon": {
     "local_only": true,
     "sync_interval": 60,
@@ -34,18 +31,7 @@ Located at `.thrum/config.json` in your repository:
 
 This file is created during `thrum init` and can be edited at any time.
 
-**Git worktree auto-detection:** Since v0.4.1, `thrum init` automatically detects if you're in a git worktree and sets up a `.thrum/redirect` file pointing to the main repo's `.thrum/` directory instead of creating a new config. All worktrees share the same configuration and daemon.
-
 ## Schema Reference
-
-### `runtime.primary`
-
-Which AI coding runtime to generate configs for.
-
-- **Type:** string
-- **Default:** auto-detected or `"cli-only"`
-- **Values:** `"claude"`, `"codex"`, `"cursor"`, `"gemini"`, `"auggie"`, `"cli-only"`
-- **Set by:** `thrum init` (interactive prompt or `--runtime` flag)
 
 ### `daemon.local_only`
 
@@ -94,33 +80,19 @@ configuration. For day-to-day use, edit `config.json`.
 | `THRUM_ROLE` | Agent role | `THRUM_ROLE=planner` |
 | `THRUM_MODULE` | Agent module | `THRUM_MODULE=backend` |
 
-## Runtime Tiers
+## Runtime Templates
 
-Thrum supports multiple AI coding runtimes at different levels of maturity:
+During `thrum init`, Thrum can generate configuration files for various AI coding runtimes:
 
-| Tier | Runtimes | Support Level |
-|------|----------|---------------|
-| **Tier 1** (Fully Supported) | Claude Code, Augment | Tested in production, MCP native |
-| **Tier 2** (Community Supported) | Cursor, Codex | Templates available, community-maintained |
-| **Tier 3** (Experimental) | Gemini, Amp | Community templates, not guaranteed |
+- **Claude Code** - CLAUDE.md and .claude/agents/
+- **Augment** - .augment/ directory
+- **Cursor** - .cursorrules
+- **Codex** - codex.yaml
+- **Gemini** - .gemini/
+- **CLI-only** - No runtime configuration files
 
-### Runtime Selection
-
-During `thrum init`, Thrum detects installed runtimes and prompts you to
-select one:
-
-```
-Detected AI runtimes:
-  1. Claude Code    (found .claude/settings.json)
-  2. Augment        (found .augment/)
-
-Which is your primary runtime? [1]:
-```
-
-You can also specify directly: `thrum init --runtime claude`
-
-To change your runtime after init, edit `.thrum/config.json` directly or
-run `thrum init --runtime <name> --force`.
+Use `thrum init --runtime <name>` to specify which runtime template to generate.
+Runtime templates are created during initialization and are not tracked in `config.json`.
 
 ## Viewing Configuration
 

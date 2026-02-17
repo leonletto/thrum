@@ -12,6 +12,8 @@ It runs as a long-lived child process (`thrum mcp serve`) communicating over
 stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for
 message operations and via WebSocket for real-time push notifications.
 
+The server provides 11 MCP tools: 5 for core messaging operations and 6 for group management.
+
 The primary motivation is eliminating polling overhead. Without MCP, agents must
 periodically call `thrum inbox` (burning tokens and context). With MCP, a cheap
 background sub-agent blocks on `wait_for_message` and wakes the main agent
@@ -68,7 +70,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command
    `identity.GenerateAgentID(repoID, role, module, name)`
 7. Create MCP server with the official Go SDK
    (`github.com/modelcontextprotocol/go-sdk/mcp`)
-8. Register all 5 tool handlers
+8. Register all 11 tool handlers (5 core messaging + 6 group management)
 9. Initialize WebSocket waiter (best-effort -- reads port from
    `.thrum/var/ws.port`)
    - Connect to `ws://localhost:{port}/ws`
@@ -103,7 +105,7 @@ When Claude Code terminates the process (closes stdin) or a signal is received
   mutex.
 - **Best-effort WebSocket**: If the WebSocket connection fails at startup, the
   MCP server still operates -- only `wait_for_message` returns errors. The other
-  4 tools work via Unix socket RPC.
+  10 tools work via Unix socket RPC.
 
 ## Usage
 
@@ -601,11 +603,23 @@ priorities as follows:
 
 The project `CLAUDE.md` includes instructions for agents to use MCP tools:
 
+**Core messaging:**
 ```
 mcp__thrum__send_message(to="@reviewer", content="...", priority="normal")
 mcp__thrum__check_messages()
 mcp__thrum__list_agents()
 mcp__thrum__broadcast_message(content="...")
+mcp__thrum__wait_for_message(timeout=300)
+```
+
+**Group management:**
+```
+mcp__thrum__create_group(name="backend", description="Backend team")
+mcp__thrum__add_group_member(group="backend", member_type="role", member_id="implementer")
+mcp__thrum__list_groups()
+mcp__thrum__get_group(name="backend", expand=true)
+mcp__thrum__remove_group_member(group="backend", member_type="agent", member_id="alice")
+mcp__thrum__delete_group(name="backend")
 ```
 
 ## Development
@@ -617,7 +631,7 @@ mcp__thrum__broadcast_message(content="...")
 | `internal/mcp/server.go`             | Server struct, NewServer(), Run(), InitWaiter(), tool registration     |
 | `internal/mcp/tools.go`              | Tool handlers, address parsing, status derivation, priority validation |
 | `internal/mcp/waiter.go`             | WebSocket connection, readLoop, WaitForMessage, notification queue     |
-| `internal/mcp/types.go`              | Input/output structs for all 5 tools                                   |
+| `internal/mcp/types.go`              | Input/output structs for all 11 tools                                  |
 | `cmd/thrum/mcp.go`                   | Cobra command, daemon health check, waiter init, signal handling       |
 | `.claude/agents/message-listener.md` | Haiku sub-agent definition                                             |
 

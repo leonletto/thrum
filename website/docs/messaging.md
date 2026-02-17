@@ -52,7 +52,7 @@ SQLite.
 | `--ref`        | `type:value`            | Attach reference (repeatable)           |
 | `--mention`    | `@role`                 | Mention an agent role (repeatable)      |
 | `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)    |
-| `--priority`   | `low\|normal\|high`     | Message priority (default: `normal`)    |
+| `--priority`   | `critical\|high\|normal\|low` | Message priority (default: `normal`)    |
 | `--structured` | JSON string             | Typed payload for machine-readable data |
 
 ### Direct Messaging with --to
@@ -641,7 +641,9 @@ Optimized for common query patterns:
 ## MCP Server Integration
 
 The MCP server (`thrum mcp serve`) provides native messaging tools for AI agents
-running in Claude Code or similar environments:
+running in Claude Code or similar environments. It exposes 11 MCP tools organized into two categories:
+
+**Core messaging (5 tools):**
 
 | MCP Tool            | Description                                                                                        |
 | ------------------- | -------------------------------------------------------------------------------------------------- |
@@ -650,6 +652,17 @@ running in Claude Code or similar environments:
 | `wait_for_message`  | Block until a message arrives via WebSocket push or timeout (max 600s)                             |
 | `list_agents`       | List registered agents with active/offline status                                                  |
 | `broadcast_message` | Send to all active agents (with optional exclude filter)                                           |
+
+**Group management (6 tools):**
+
+| MCP Tool              | Description                                                     |
+| --------------------- | --------------------------------------------------------------- |
+| `create_group`        | Create a named messaging group                                  |
+| `delete_group`        | Delete a messaging group                                        |
+| `add_group_member`    | Add an agent or role as a member of a group                     |
+| `remove_group_member` | Remove a member from a group                                    |
+| `list_groups`         | List all messaging groups                                       |
+| `get_group`           | Get group details including members (expand=true resolves roles)|
 
 MCP tools use the same underlying RPC methods (`message.send`, `message.list`,
 `message.markRead`) but add convenience features like `@role` addressing and

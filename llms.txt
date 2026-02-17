@@ -1,4 +1,4 @@
-# Thrum v0.4.1
+# Thrum v0.4.3
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
 
@@ -39,6 +39,11 @@ All commands accept these flags:
 
   thrum setup WORKTREE_PATH
     Configure a feature worktree with .thrum/redirect to share the main issue database.
+
+  thrum setup claude-md [--apply] [--force]
+    Generate Thrum agent coordination instructions for CLAUDE.md. Prints to stdout
+    by default. Use --apply to append to CLAUDE.md (creates if missing). Use --force
+    with --apply to replace existing Thrum section.
 
   thrum migrate [--repo PATH]
     Migrate old-layout repos (JSONL on main branch) to worktree architecture.

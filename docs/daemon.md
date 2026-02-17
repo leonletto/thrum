@@ -436,7 +436,22 @@ SQLite projection.
 - `Projector()` - Returns the projection engine
 - `Close()` - Closes all JSONL writers and SQLite connection
 
-### 10. Client Library
+### 10. Timeout Enforcement (v0.4.3)
+
+All I/O paths enforce timeouts to prevent indefinite hangs:
+
+| Path | Timeout | Implementation |
+|------|---------|----------------|
+| CLI dial | 5s | net.DialTimeout |
+| RPC call | 10s | context.WithTimeout |
+| Server per-request | 10s | http.TimeoutHandler |
+| WebSocket handshake | 10s | websocket.Upgrader |
+| Git commands | 5s/10s | safecmd wrapper |
+| SQLite queries | context-scoped | safedb wrapper |
+
+The `safedb` and `safecmd` packages wrap all database and command operations with context-aware timeouts. Lock scope has been reduced — no mutex is held during I/O, git, or WebSocket dispatch operations.
+
+### 11. Client Library
 
 **Location:** `internal/daemon/client.go`
 

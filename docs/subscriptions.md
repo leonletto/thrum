@@ -30,6 +30,8 @@ when messages match their interests. Agents can subscribe to:
   agent name (e.g., `@furiosa`)
 - **All messages** - Wildcard subscription to receive all messages
 
+Subscriptions are automatically deleted when a session ends (added in v0.4.3).
+
 When a new message matches a subscription, the daemon:
 
 1. Identifies matching subscriptions via the **dispatcher**

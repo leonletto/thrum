@@ -184,6 +184,19 @@ All commands accept:
   Related:  `thrum migrate` upgrades repos from the old tracked-on-main layout.
             `thrum setup` configures .thrum/ in feature worktrees (creates redirect).
 
+
+### thrum setup claude-md
+
+  Usage:    thrum setup claude-md [flags]
+  Flags:    --apply     Append to CLAUDE.md (create if missing)
+            --force     Overwrite existing Thrum section
+  Action:   Generates comprehensive Thrum agent coordination instructions for CLAUDE.md.
+            Prints to stdout by default. Use --apply to append to CLAUDE.md (with
+            duplicate detection). Use --force with --apply to replace existing Thrum
+            section. Includes registration, messaging protocols, MCP configuration,
+            background listener setup, and group management instructions.
+
+
 ### thrum quickstart
 
   Usage:    thrum quickstart --role ROLE --module MODULE [flags]
