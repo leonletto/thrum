@@ -170,7 +170,7 @@ func TestSyncer_CommitChanges(t *testing.T) {
 
 	// Commit
 	commitMsg := "test: commit message"
-	if err := s.commitChanges(context.Background(),commitMsg); err != nil {
+	if err := s.commitChanges(context.Background(), commitMsg); err != nil {
 		t.Fatalf("commitChanges failed: %v", err)
 	}
 
@@ -202,7 +202,7 @@ func TestSyncer_CommitChanges_NothingToCommit(t *testing.T) {
 	_ = cmd.Run()
 
 	// Commit without staging anything — should not error
-	err := s.commitChanges(context.Background(),"test: empty commit")
+	err := s.commitChanges(context.Background(), "test: empty commit")
 	if err != nil {
 		t.Errorf("commitChanges should not fail when nothing to commit: %v", err)
 	}
