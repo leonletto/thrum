@@ -3333,7 +3333,7 @@ Examples:
 				return fmt.Errorf("stage context file: %s: %w", string(out), err)
 			}
 
-			commitCmd := exec.Command("git", "-C", syncDir, "commit", "-m", fmt.Sprintf("context: sync %s", agentID), "--allow-empty") //nolint:gosec // G204 - internal path construction
+			commitCmd := exec.Command("git", "-C", syncDir, "-c", "user.name=Thrum", "-c", "user.email=thrum@local", "commit", "-m", fmt.Sprintf("context: sync %s", agentID), "--allow-empty") //nolint:gosec // G204 - internal path construction
 			if out, err := commitCmd.CombinedOutput(); err != nil {
 				// "nothing to commit" is OK
 				if !strings.Contains(string(out), "nothing to commit") {
