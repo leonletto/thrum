@@ -607,7 +607,7 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().StringP("priority", "p", "normal", "Message priority (low, normal, high)")
 	cmd.Flags().String("format", "markdown", "Message format (markdown, plain, json)")
 	cmd.Flags().String("to", "", "Direct recipient (format: @role)")
-	cmd.Flags().BoolP("broadcast", "b", false, "Send as broadcast to all agents (no specific recipient)")
+	cmd.Flags().BoolP("broadcast", "b", false, "Deprecated: use --to @everyone instead")
 
 	return cmd
 }

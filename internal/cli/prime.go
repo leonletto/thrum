@@ -292,7 +292,7 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 	out.WriteString("  thrum send \"msg\" --to @name    Send direct message\n")
 	out.WriteString("  thrum inbox                    Check messages\n")
 	out.WriteString("  thrum reply <id> \"msg\"         Reply to message\n")
-	out.WriteString("  thrum send \"msg\" --broadcast   Broadcast to all\n")
+	out.WriteString("  thrum send \"msg\" --to @everyone Broadcast to all\n")
 	out.WriteString("  thrum status                   Agent/daemon status\n")
 	out.WriteString("  thrum team                     List team members\n")
 	out.WriteString("  thrum wait                     Block until message arrives\n")

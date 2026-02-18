@@ -73,8 +73,8 @@ All commands accept these flags:
 
 ### Messaging
 
-  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @role] [--broadcast|-b] [-p|--priority low|normal|high|critical] [--format markdown|plain|json] [--structured JSON]
-    Send a message. Use --broadcast to send to all agents. Use --to @group to send to a group.
+  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @role|@everyone] [-p|--priority low|normal|high|critical] [--format markdown|plain|json] [--structured JSON]
+    Send a message. Use --to @everyone to broadcast to all agents. Use --to @group to send to a group.
 
   thrum reply MSG_ID TEXT [--format markdown|plain|json]
     Reply to a message, copying the parent's audience (mentions/scopes). Includes reply_to reference.
@@ -291,7 +291,7 @@ All commands accept these flags:
 
 ### Broadcast to all agents
 
-  thrum send "Stopping for lunch, back in 30" --broadcast
+  thrum send "Stopping for lunch, back in 30" --to @everyone
 
 ### Send to a group
 

@@ -252,7 +252,7 @@ All commands accept:
             --mention @role         Mention a role (repeatable, stored as ref type "mention")
             --thread ID             Reply to thread
             --to @role              Direct recipient (also accepts @group names)
-            --broadcast, -b         Send as broadcast to all agents (no specific recipient)
+            --broadcast, -b         Deprecated: use --to @everyone instead
             --priority low|normal|high  Message priority (default: normal)
             --format markdown|plain|json  Message format (default: markdown)
             --structured JSON       Structured payload
@@ -997,7 +997,7 @@ Unknown event types are silently ignored (forward compatibility).
   thrum peer join 100.x.y.z  # Enter code 4821
   # Direct sync established, no Git remote needed
 
-  thrum send "Ready for integration" --broadcast
+  thrum send "Ready for integration" --to @everyone
   # Message arrives on Machine A within seconds
 
 ### Session lifecycle management
