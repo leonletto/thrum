@@ -17,7 +17,7 @@ Complete command syntax for `thrum`. Run `thrum <command> --help` for detailed f
 
 ```
 thrum send <message> --to @name [--priority critical|high|normal|low]
-thrum send <message> --broadcast              # Deprecated: use --to @everyone
+thrum send <message> --to @everyone            # Broadcast to all agents
 thrum reply <msg-id> <response>
 thrum inbox [--unread] [--json]
 thrum message get <msg-id>
