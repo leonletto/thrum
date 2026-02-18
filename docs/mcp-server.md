@@ -389,20 +389,20 @@ Add a member (agent or role) to a group.
 
 **Input:**
 
-| Parameter     | Type   | Required | Description                 |
-| ------------- | ------ | -------- | --------------------------- |
-| `group`       | string | yes      | Group name to add member to |
-| `member_type` | string | yes      | `agent` or `role`           |
-| `member_id`   | string | yes      | Agent name or role name     |
+| Parameter      | Type   | Required | Description                 |
+| -------------- | ------ | -------- | --------------------------- |
+| `group`        | string | yes      | Group name to add member to |
+| `member_type`  | string | yes      | `agent` or `role`           |
+| `member_value` | string | yes      | Agent name or role name     |
 
 **Output:**
 
-| Field         | Type   | Description                 |
-| ------------- | ------ | --------------------------- |
-| `status`      | string | `added`                     |
-| `group`       | string | Group name                  |
-| `member_type` | string | Type of member added        |
-| `member_id`   | string | ID of member added          |
+| Field          | Type   | Description                 |
+| -------------- | ------ | --------------------------- |
+| `status`       | string | `added`                     |
+| `group`        | string | Group name                  |
+| `member_type`  | string | Type of member added        |
+| `member_value` | string | Value of member added       |
 
 **Daemon RPC:** `group.member.add`
 
@@ -413,20 +413,20 @@ Remove a member from a group.
 
 **Input:**
 
-| Parameter     | Type   | Required | Description                      |
-| ------------- | ------ | -------- | -------------------------------- |
-| `group`       | string | yes      | Group name to remove member from |
-| `member_type` | string | yes      | `agent` or `role`                |
-| `member_id`   | string | yes      | Agent name or role name          |
+| Parameter      | Type   | Required | Description                      |
+| -------------- | ------ | -------- | -------------------------------- |
+| `group`        | string | yes      | Group name to remove member from |
+| `member_type`  | string | yes      | `agent` or `role`                |
+| `member_value` | string | yes      | Agent name or role name          |
 
 **Output:**
 
-| Field         | Type   | Description                 |
-| ------------- | ------ | --------------------------- |
-| `status`      | string | `removed`                   |
-| `group`       | string | Group name                  |
-| `member_type` | string | Type of member removed      |
-| `member_id`   | string | ID of member removed        |
+| Field          | Type   | Description                 |
+| -------------- | ------ | --------------------------- |
+| `status`       | string | `removed`                   |
+| `group`        | string | Group name                  |
+| `member_type`  | string | Type of member removed      |
+| `member_value` | string | Value of member removed     |
 
 **Daemon RPC:** `group.member.remove`
 
@@ -616,10 +616,10 @@ mcp__thrum__wait_for_message(timeout=300)
 **Group management:**
 ```
 mcp__thrum__create_group(name="backend", description="Backend team")
-mcp__thrum__add_group_member(group="backend", member_type="role", member_id="implementer")
+mcp__thrum__add_group_member(group="backend", member_type="role", member_value="implementer")
 mcp__thrum__list_groups()
 mcp__thrum__get_group(name="backend", expand=true)
-mcp__thrum__remove_group_member(group="backend", member_type="agent", member_id="alice")
+mcp__thrum__remove_group_member(group="backend", member_type="agent", member_value="alice")
 mcp__thrum__delete_group(name="backend")
 ```
 

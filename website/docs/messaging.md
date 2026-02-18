@@ -166,6 +166,7 @@ thrum inbox
 | `--mentions`         | Only messages mentioning the current agent |
 | `--unread`           | Only unread messages                       |
 | `--page-size N`      | Results per page (default: 10)             |
+| `--limit N`          | Alias for `--page-size`                    |
 | `--page N`           | Page number (default: 1)                   |
 
 ### Read/Unread Indicators

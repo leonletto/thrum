@@ -306,6 +306,10 @@ thrum status
 
 ## Working Across Machines
 
+> **Note:** `thrum init` sets `local_only: true` by default. To enable
+> cross-machine sync, set `local_only: false` in `.thrum/config.json` or run
+> `THRUM_LOCAL=false thrum daemon start`.
+
 Thrum uses Git for synchronization:
 
 ### On Machine A

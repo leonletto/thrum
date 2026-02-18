@@ -38,8 +38,8 @@ This file is created during `thrum init` and can be edited at any time.
 Disable remote git sync (local-only mode).
 
 - **Type:** boolean
-- **Default:** `false`
-- **Override:** `THRUM_LOCAL=true` environment variable
+- **Default:** `true`
+- **Override:** `THRUM_LOCAL=false` environment variable
 
 ### `daemon.sync_interval`
 
@@ -73,7 +73,7 @@ configuration. For day-to-day use, edit `config.json`.
 
 | Variable | Overrides | Example |
 |----------|-----------|---------|
-| `THRUM_LOCAL` | `daemon.local_only` | `THRUM_LOCAL=true` |
+| `THRUM_LOCAL` | `daemon.local_only` | `THRUM_LOCAL=false` |
 | `THRUM_SYNC_INTERVAL` | `daemon.sync_interval` | `THRUM_SYNC_INTERVAL=120` |
 | `THRUM_WS_PORT` | `daemon.ws_port` | `THRUM_WS_PORT=9999` |
 | `THRUM_NAME` | Agent identity selection | `THRUM_NAME=alice` |
