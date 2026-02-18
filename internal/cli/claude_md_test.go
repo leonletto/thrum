@@ -255,6 +255,46 @@ func TestGenerateClaudeMd_SectionBoundary(t *testing.T) {
 	}
 }
 
+func TestGenerateClaudeMd_DuplicateHeaders(t *testing.T) {
+	// When a user accidentally pastes the Thrum section twice, only the first
+	// occurrence should be replaced. The second header is treated as regular
+	// content (it's part of the "after" block once the first section ends).
+	tmpDir := t.TempDir()
+	existing := "# My Project\n\nIntro.\n\n---\n\n" +
+		claudeMdHeader + "\n\nFirst thrum section.\n\n---\n\n" +
+		claudeMdHeader + "\n\nDuplicate thrum section.\n"
+	_ = os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte(existing), 0600)
+
+	result, err := GenerateClaudeMd(ClaudeMdOptions{
+		RepoPath: tmpDir,
+		Apply:    true,
+		Force:    true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !result.Applied {
+		t.Error("expected Applied=true")
+	}
+
+	content, _ := os.ReadFile(filepath.Clean(filepath.Join(tmpDir, "CLAUDE.md")))
+	contentStr := string(content)
+
+	// The first section is replaced; the duplicate header survives in the "after" block.
+	if !strings.Contains(contentStr, "# My Project") {
+		t.Error("content before thrum section should be preserved")
+	}
+	if strings.Contains(contentStr, "First thrum section.") {
+		t.Error("first thrum section should be replaced")
+	}
+	// The duplicate header and its content are preserved because they're in the
+	// "after" portion (past the first ---  separator that ends the first section).
+	if !strings.Contains(contentStr, "Duplicate thrum section.") {
+		t.Error("content after first section boundary should be preserved (including duplicate header)")
+	}
+}
+
 func TestGenerateClaudeMd_PreservesContent(t *testing.T) {
 	tmpDir := t.TempDir()
 	existing := "# My Project\n\nBefore thrum.\n\n---\n\n" + claudeMdHeader + "\n\nOld thrum.\n\n---\n\n# After Section\n\nAfter thrum.\n"
