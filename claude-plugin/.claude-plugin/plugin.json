@@ -1,7 +1,7 @@
 {
   "name": "thrum",
   "description": "Git-backed messaging for AI agent coordination across sessions, worktrees, and machines.",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "author": {
     "name": "Leon Letto",
     "url": "https://github.com/leonletto"

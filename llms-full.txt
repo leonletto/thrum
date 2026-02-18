@@ -171,6 +171,7 @@ All commands accept:
 
   Usage:    thrum init [flags]
   Flags:    --force              Force reinitialization / overwrite existing files
+            --stealth            Write exclusions to .git/info/exclude instead of .gitignore
             --runtime STRING     Generate runtime-specific configs (claude|codex|cursor|gemini|cli-only|all)
             --dry-run            Preview changes without writing files
             --agent-name STRING  Agent name for templates (default: default_agent)
@@ -178,8 +179,9 @@ All commands accept:
             --agent-module STRING Agent module for templates (default: main)
   Action:   Creates .thrum/ directory structure, sets up .git/thrum-sync/a-sync as a git
             worktree on the `a-sync` orphan branch, creates identities/ directory,
-            updates .gitignore to ignore .thrum/ entirely. Optionally detects installed
-            AI runtimes and generates runtime-specific config files.
+            updates .gitignore (or .git/info/exclude with --stealth) to ignore .thrum/.
+            Writes config.json with local_only: true by default. Optionally detects
+            installed AI runtimes and generates runtime-specific config files.
   Errors:   Fails if .thrum/ exists (unless --force). Fails if not a git repo.
   Related:  `thrum migrate` upgrades repos from the old tracked-on-main layout.
             `thrum setup` configures .thrum/ in feature worktrees (creates redirect).
@@ -252,8 +254,9 @@ All commands accept:
             --mention @role         Mention a role (repeatable, stored as ref type "mention")
             --thread ID             Reply to thread
             --to @role              Direct recipient (also accepts @group names)
-            --broadcast, -b         Deprecated: use --to @everyone instead
-            --priority low|normal|high  Message priority (default: normal)
+            --everyone              Alias for --to @everyone (broadcast to all agents)
+            --broadcast, -b         Deprecated: use --to @everyone or --everyone instead
+            --priority low|normal|high|critical  Message priority (default: normal)
             --format markdown|plain|json  Message format (default: markdown)
             --structured JSON       Structured payload
   Requires: Daemon running, active session.
@@ -278,7 +281,9 @@ All commands accept:
             --unread             Only unread messages
             --all, -a            Show all messages (disable auto-filtering)
             --page-size N        Results per page (default: 10)
+            --limit N            Alias for --page-size
             --page N             Page number (default: 1)
+            --mark-read          Mark returned messages as read (default behavior)
   Action:   Lists messages. By default auto-filters to messages addressed to you (via --to)
             plus broadcasts and general messages. Use --all to see everything.
             Auto-marks displayed messages as read (unless --unread).

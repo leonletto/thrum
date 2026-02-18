@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2026-02-18
+
+### Added
+
+- `thrum init --stealth`: writes exclusions to `.git/info/exclude` instead of
+  `.gitignore`, leaving zero footprint in tracked files.
+- `--limit N` alias for `--page-size N` on `thrum inbox`.
+- `--mark-read` flag on `thrum inbox` (explicit name for default behavior).
+- `--everyone` flag on `thrum send` (alias for `--to @everyone`).
+- Plugin ships `agents/message-listener.md` for auto-discovery by Claude Code.
+- `make deploy-remote REMOTE=host` for scp + codesign to remote macOS machines.
+
+### Changed
+
+- `thrum init` defaults to `local_only: true` — remote git sync requires
+  explicit opt-in via `local_only: false` in config.
+- `thrum prime` listener instruction upgraded from soft tip to
+  `⚠ ACTION REQUIRED:` directive.
+
+### Fixed
+
+- Replaced all prescriptive `--broadcast` references with `--to @everyone`.
+- Plugin install docs corrected to two-step marketplace flow.
+- `thrum setup claude-md` added to README Essential Commands table.
+- Defensive test for duplicate thrum section headers in CLAUDE.md.
+- Clarifying comment on separator edge case in `replaceThrumSection()`.
+
+### Deprecated
+
+- `thrum send --broadcast` — use `--to @everyone` or `--everyone` instead.
+- `broadcast_message` MCP tool — use `send_message(to="@everyone")` instead.
+
 ## [0.4.3] - 2026-02-17
 
 ### Changed

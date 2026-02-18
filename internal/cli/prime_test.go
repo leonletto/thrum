@@ -289,8 +289,8 @@ func TestFormatPrimeContext_ListenerInstruction_ClaudeRuntime(t *testing.T) {
 	output := FormatPrimeContext(ctx)
 
 	checks := []string{
-		"Listener:",
-		"Active identity detected",
+		"ACTION REQUIRED",
+		"Start background message listener",
 		"message-listener",
 		"--timeout 15m",
 		tmpDir,

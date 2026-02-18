@@ -90,13 +90,14 @@ Initialize Thrum in the current repository. Creates the `.thrum/` directory
 structure, sets up the `a-sync` branch for message synchronization, and updates
 `.gitignore`. Detects installed AI runtimes and prompts you to select one.
 
-    thrum init [flags]
+    thrum init [--stealth] [flags]
 
 | Flag             | Description                                              | Default |
 | ---------------- | -------------------------------------------------------- | ------- |
 | `--force`        | Force reinitialization if already initialized            | `false` |
 | `--runtime`      | Specify runtime directly (skip detection prompt)         | (auto)  |
 | `--dry-run`      | Preview changes without writing files                    | `false` |
+| `--stealth`      | Write exclusions to `.git/info/exclude` instead of `.gitignore` (zero tracked-file footprint) | `false` |
 | `--agent-name`   | Agent name for templates                                 |         |
 | `--agent-role`   | Agent role for templates                                 |         |
 | `--agent-module` | Agent module for templates                               |         |
@@ -291,6 +292,7 @@ have an active session.
 | Flag                | Description                                                                    | Default    |
 | ------------------- | ------------------------------------------------------------------------------ | ---------- |
 | `--to`              | Direct recipient (format: `@role`, `@name`, or `@groupname`)                  |            |
+| `--everyone`        | Alias for `--to @everyone` (send to all agents)                               |            |
 | `--broadcast`, `-b` | Send as broadcast to all agents (deprecated: use `--to @everyone` instead)    | `false`    |
 | `--scope`           | Add scope (repeatable, format: `type:value`)            |            |
 | `--ref`             | Add reference (repeatable, format: `type:value`)        |            |
@@ -352,6 +354,8 @@ are automatically marked as read (unless filtering with `--unread`).
 | `--mentions`  | Only messages mentioning me            | `false` |
 | `--unread`    | Only unread messages                   | `false` |
 | `--page-size` | Results per page                       | `10`    |
+| `--limit N`   | Alias for `--page-size`                | `10`    |
+| `--mark-read` | Mark returned messages as read (default behavior) | `true` |
 | `--page`      | Page number                            | `1`     |
 
 The output adapts to terminal width and shows read/unread indicators.

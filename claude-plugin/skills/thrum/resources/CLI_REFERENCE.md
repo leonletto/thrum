@@ -18,8 +18,9 @@ Complete command syntax for `thrum`. Run `thrum <command> --help` for detailed f
 ```
 thrum send <message> --to @name [--priority critical|high|normal|low]
 thrum send <message> --to @everyone            # Broadcast to all agents
+thrum send <message> --everyone                # Alias for --to @everyone
 thrum reply <msg-id> <response>
-thrum inbox [--unread] [--json]
+thrum inbox [--unread] [--limit N] [--json]
 thrum message get <msg-id>
 thrum message edit <msg-id> <new-text>
 thrum message delete <msg-id>
@@ -87,7 +88,7 @@ thrum context clear [--agent <name>]
 thrum daemon start [--foreground]
 thrum daemon stop
 thrum daemon status [--json]
-thrum init [--repo <path>]
+thrum init [--stealth] [--force] [--repo <path>]
 ```
 
 ## Sync
