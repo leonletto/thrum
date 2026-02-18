@@ -1,21 +1,3 @@
----
-title: "Subscriptions & Notifications"
-description:
-  "Real-time push notification system with scope, mention, and all-message
-  filters - subscription lifecycle and dispatch"
-category: "messaging"
-order: 2
-tags:
-  [
-    "subscriptions",
-    "notifications",
-    "push",
-    "filtering",
-    "dispatcher",
-    "broadcaster",
-  ]
-last_updated: "2026-02-10"
----
 
 # Subscriptions & Notifications
 

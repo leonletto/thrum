@@ -1,21 +1,3 @@
----
-title: "Multi-Agent Support"
-description:
-  "Agent groups, runtime presets, context prime, and coordination patterns for
-  running multiple AI agents across worktrees and platforms"
-category: "guides"
-order: 2
-tags:
-  [
-    "multi-agent",
-    "groups",
-    "runtime",
-    "coordination",
-    "teams",
-    "context-prime",
-  ]
-last_updated: "2026-02-11"
----
 
 # Multi-Agent Support
 

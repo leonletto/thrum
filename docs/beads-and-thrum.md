@@ -1,11 +1,3 @@
----
-title: "Beads and Thrum"
-description: "How persistent task tracking and agent messaging work together for multi-agent development"
-category: "guides"
-order: 4
-tags: ["beads", "thrum", "agents", "coordination", "memory", "messaging"]
-last_updated: "2026-02-10"
----
 
 # Beads and Thrum
 

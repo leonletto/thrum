@@ -1,11 +1,3 @@
----
-title: "Workflow Templates"
-description: "Three-phase development templates for planning, preparing, and implementing features with AI agents"
-category: "guides"
-order: 3
-tags: ["templates", "workflow", "planning", "implementation", "agents", "toolkit"]
-last_updated: "2026-02-12"
----
 
 # Workflow Templates
 
