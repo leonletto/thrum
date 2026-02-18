@@ -119,6 +119,9 @@ make install    # Builds UI + Go binary → ~/.local/bin/thrum
 | `thrum who-has FILE` | Check which agents are editing a file |
 | `thrum overview` | Combined status, team, inbox, and sync view |
 | `thrum mcp serve` | Start MCP server for AI agent integration |
+| `thrum setup claude-md` | Preview CLAUDE.md agent instructions |
+| `thrum setup claude-md --apply` | Append Thrum section to CLAUDE.md |
+| `thrum setup claude-md --apply --force` | Overwrite existing Thrum section |
 
 ## MCP Server Integration
 

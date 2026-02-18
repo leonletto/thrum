@@ -111,7 +111,12 @@ func replaceThrumSection(existing, newContent string) string {
 			if (strings.HasPrefix(trimmed, "# ") && trimmed != claudeMdHeader) || trimmed == "---" {
 				// If it's a separator before more content, skip the separator
 				if trimmed == "---" {
-					// Check if there's content after the separator
+					// A trailing "---" with no content after it is part of the
+					// thrum section (the separator that was added when the section
+					// was originally appended). We drop it so the replacement
+					// doesn't produce a dangling separator at the end of the file.
+					// If there IS content after it, the separator belongs to the
+					// next section and must be preserved.
 					hasMore := false
 					for j := i + 1; j < len(lines); j++ {
 						if strings.TrimSpace(lines[j]) != "" {
