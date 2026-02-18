@@ -1,3 +1,11 @@
+---
+title: "Tailscale Sync Security"
+description:
+  "Security model for Thrum's Tailscale peer sync — pairing, encryption,
+  access control, and threat mitigations"
+category: "guides"
+---
+
 # Tailscale Sync Security
 
 > See also: [Tailscale Sync](tailscale-sync.md) for setup, architecture, and

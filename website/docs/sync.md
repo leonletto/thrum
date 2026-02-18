@@ -415,6 +415,9 @@ Use `thrum migrate` to upgrade to the worktree layout. This command:
 }
 ```
 
+> **Note:** `thrum init` sets `local_only: true` by default. The example above
+> shows a repo where remote sync has been explicitly enabled.
+
 States:
 
 - `stopped` -- Sync loop not running

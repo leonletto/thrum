@@ -1,3 +1,10 @@
+---
+title: "Event Reference"
+description:
+  "All events emitted by the Thrum daemon over WebSocket — message,
+  agent, session, sync, and subscription events"
+category: "api"
+---
 
 # Event Reference
 

@@ -1,3 +1,10 @@
+---
+title: "CLI Reference"
+description:
+  "Complete reference for the thrum command-line interface — all commands,
+  flags, and usage examples"
+category: "reference"
+---
 
 # Thrum CLI Reference
 

@@ -41,7 +41,7 @@ agents.
 ```
 
 MCP tools: `send_message`, `check_messages`, `wait_for_message`, `list_agents`,
-`broadcast_message`.
+`broadcast_message` _(deprecated — use `send_message` with `to="@everyone"`)_.
 
 ### CLI (Fallback)
 

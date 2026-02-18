@@ -1,3 +1,10 @@
+---
+title: "Architecture"
+description:
+  "Thrum foundation architecture — packages, storage layer, daemon,
+  sync engine, and event system"
+category: "architecture"
+---
 
 # Thrum Foundation Architecture
 

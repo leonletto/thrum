@@ -301,7 +301,9 @@ List all registered agents and their status.
 **Daemon RPC:** `agent.list`
 
 
-### broadcast_message
+### broadcast_message _(deprecated)_
+
+> **Deprecated:** Use `send_message` with `to="@everyone"` instead.
 
 Send a message to all agents via the `@everyone` group, with optional filtering. The sender is automatically excluded. This is a simplified wrapper around sending to `@everyone`.
 
@@ -609,7 +611,7 @@ The project `CLAUDE.md` includes instructions for agents to use MCP tools:
 mcp__thrum__send_message(to="@reviewer", content="...", priority="normal")
 mcp__thrum__check_messages()
 mcp__thrum__list_agents()
-mcp__thrum__broadcast_message(content="...")
+mcp__thrum__send_message(to="@everyone", content="...")  # preferred over broadcast_message
 mcp__thrum__wait_for_message(timeout=300)
 ```
 

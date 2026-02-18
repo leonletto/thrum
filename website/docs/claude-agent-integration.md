@@ -1,3 +1,11 @@
+---
+title: "Claude Code Agent Integration"
+description:
+  "Agent definitions for multi-agent coordination in Claude Code —
+  thrum-agent and message-listener setup"
+category: "guides"
+---
+
 # Claude Code Agent Integration
 
 Thrum ships two Claude Code agent definitions for multi-agent coordination.
@@ -132,8 +140,8 @@ when it returns.
 name: message-listener
 description: >
   Background listener for incoming Thrum messages. Runs on Haiku for cost
-  efficiency (~$0.00003/cycle). Loops inbox checks with sleep intervals for up
-  to ~5 minutes, returning immediately when new messages arrive.
+  efficiency (~$0.00003/cycle). Uses `thrum wait` for efficient blocking instead
+  of polling loops. Returns immediately when new messages arrive.
 model: haiku
 allowed-tools:
   - Bash
@@ -148,18 +156,18 @@ run thrum CLI commands.
 
 ## Instructions
 
-You run a polling loop: check inbox, sleep, repeat. Return immediately when you
-find messages from other agents. Otherwise loop until your budget is exhausted.
+You use `thrum wait` to block efficiently until a message arrives. No polling
+loops needed — `thrum wait` uses the daemon's WebSocket push internally.
 
-Your prompt contains the EXACT command to use after "INBOX_CMD=". Use that
+Your prompt contains the EXACT command to use after "WAIT_CMD=". Use that
 command verbatim.
 
-**LOOP** (repeat up to 10 cycles):
+**LOOP** (repeat up to 6 cycles, ~90 min coverage):
 
-1. Check inbox (Bash): Run the INBOX_CMD from your prompt EXACTLY as given.
-2. If messages found, return them immediately.
-3. If no messages, sleep 30 seconds.
-4. Go back to step 1.
+1. Run the WAIT_CMD from your prompt EXACTLY as given (Bash).
+2. If messages found (exit code 0), return them immediately.
+3. If timeout (exit code 1), go back to step 1.
+4. If error (exit code 2), return the error.
 
 After exhausting all cycles with no messages, return NO_MESSAGES_TIMEOUT.
 
