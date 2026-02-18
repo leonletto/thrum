@@ -1,13 +1,3 @@
----
-title: "Configuration"
-description:
-  "Thrum configuration model — config.json schema, runtime tiers, priority
-  chain, and the config show command"
-category: "guides"
-order: 3
-tags: ["configuration", "config", "runtime", "daemon", "settings", "config-show"]
-last_updated: "2026-02-12"
----
 
 # Configuration
 

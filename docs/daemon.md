@@ -1,13 +1,3 @@
----
-title: "Daemon Architecture"
-description:
-  "Background service managing state, RPC handlers, sync loop, WebSocket server,
-  and embedded UI on single port"
-category: "daemon"
-order: 1
-tags: ["daemon", "background-service", "rpc", "websocket", "lifecycle", "sync"]
-last_updated: "2026-02-10"
----
 
 # Thrum Daemon Architecture
 

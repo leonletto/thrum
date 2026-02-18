@@ -1,13 +1,3 @@
----
-title: "Inbox Query Methods"
-description:
-  "RPC methods for querying messages, agents, and managing read state
-  with filtering and pagination"
-category: "api"
-order: 3
-tags: ["inbox", "query", "filtering", "pagination", "read-state", "rpc"]
-last_updated: "2026-02-08"
----
 
 # Inbox Query RPC Methods
 

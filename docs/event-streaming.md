@@ -1,21 +1,3 @@
----
-title: "Event Streaming"
-description:
-  "Real-time push notifications via Broadcaster and Dispatcher - subscription
-  matching, delivery, and client registries"
-category: "api"
-order: 2
-tags:
-  [
-    "events",
-    "streaming",
-    "notifications",
-    "websocket",
-    "broadcaster",
-    "dispatcher",
-  ]
-last_updated: "2026-02-08"
----
 
 # Event Streaming
 

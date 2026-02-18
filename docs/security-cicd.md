@@ -1,13 +1,3 @@
----
-title: "Security & CI/CD"
-description:
-  "Automated security scanning, CI/CD pipelines, and deployment workflows for
-  Thrum"
-category: "development"
-order: 3
-tags: ["security", "ci", "cd", "github-actions", "workflows", "deployment"]
-last_updated: "2026-02-10"
----
 
 # Security & CI/CD
 

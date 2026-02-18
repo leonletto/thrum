@@ -1,14 +1,3 @@
----
-title: "Agent Coordination"
-description:
-  "Multi-agent workflows, Beads integration, session templates, and coordination
-  patterns for AI agent teams"
-category: "guides"
-order: 1
-tags:
-  ["coordination", "multi-agent", "beads", "workflows", "patterns", "sessions"]
-last_updated: "2026-02-09"
----
 
 # Agent Coordination
 

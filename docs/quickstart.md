@@ -1,13 +1,3 @@
----
-title: "Quickstart Guide"
-description:
-  "Get up and running with Thrum in 5 minutes - initialization, daemon setup,
-  agent registration, and first message"
-category: "quickstart"
-order: 1
-tags: ["quickstart", "getting-started", "installation", "setup", "tutorial"]
-last_updated: "2026-02-12"
----
 
 # Thrum Quickstart Guide
 

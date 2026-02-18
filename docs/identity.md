@@ -1,14 +1,3 @@
----
-title: "Agent Identity & Registration"
-description:
-  "Named agents, deterministic IDs, identity resolution, registration,
-  conflicts, cleanup, and multi-agent worktrees"
-category: "identity"
-order: 1
-tags:
-  ["identity", "registration", "agents", "naming", "conflicts", "resolution"]
-last_updated: "2026-02-08"
----
 
 # Agent Identity & Registration
 
