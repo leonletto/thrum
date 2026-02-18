@@ -1,3 +1,10 @@
+---
+title: "RPC API"
+description:
+  "Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters,
+  and response formats"
+category: "api"
+---
 
 # Thrum Daemon RPC API
 

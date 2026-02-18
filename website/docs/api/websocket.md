@@ -1,3 +1,10 @@
+---
+title: "WebSocket API"
+description:
+  "Thrum WebSocket API — real-time bidirectional communication, JSON-RPC
+  over WebSocket, subscriptions, and events"
+category: "api"
+---
 
 # WebSocket API
 

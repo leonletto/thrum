@@ -363,7 +363,7 @@ The setting persists in `.thrum/config.json`:
 { "local_only": true }
 ```
 
-**Priority order:** CLI flag > environment variable > config file > default (false).
+**Priority order:** CLI flag > environment variable > config file > default (`true` via `thrum init`).
 
 ### What changes in local-only mode
 

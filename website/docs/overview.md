@@ -1,3 +1,10 @@
+---
+title: "Technical Overview"
+description:
+  "High-level overview of Thrum — architecture, storage, daemon, CLI,
+  MCP server, and key concepts"
+category: "guides"
+---
 
 # Technical Overview
 

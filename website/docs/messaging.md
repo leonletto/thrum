@@ -1,3 +1,10 @@
+---
+title: "Messaging"
+description:
+  "Thrum messaging system — sending, receiving, replies, priorities,
+  scopes, mentions, and inbox filtering"
+category: "guides"
+---
 
 # Thrum Messaging System
 

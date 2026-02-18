@@ -1,3 +1,10 @@
+---
+title: "Authentication"
+description:
+  "Authentication and authorization in the Thrum API — agent identity,
+  session tokens, and security model"
+category: "api"
+---
 
 # Authentication Guide
 
@@ -626,8 +633,8 @@ thrum mcp serve --agent-id furiosa
 ```
 
 The MCP server provides 5 tools: `send_message`, `check_messages`,
-`wait_for_message`, `list_agents`, `broadcast_message`. Identity is resolved
-once at startup.
+`wait_for_message`, `list_agents`, `broadcast_message` _(deprecated)_. Identity
+is resolved once at startup.
 
 ### User Registration (Browser Auto-Registration)
 

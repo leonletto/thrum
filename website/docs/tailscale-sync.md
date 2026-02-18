@@ -1,3 +1,10 @@
+---
+title: "Tailscale Sync"
+description:
+  "Direct machine-to-machine sync via Tailscale — setup, architecture,
+  pairing, and CLI commands"
+category: "guides"
+---
 
 # Tailscale Sync
 
