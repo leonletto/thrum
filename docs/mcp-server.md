@@ -301,11 +301,9 @@ List all registered agents and their status.
 **Daemon RPC:** `agent.list`
 
 
-### broadcast_message _(deprecated)_
+### broadcast_message
 
-> **Deprecated:** Use `send_message` with `to="@everyone"` instead.
-
-Send a message to all agents via the `@everyone` group, with optional filtering. The sender is automatically excluded. This is a simplified wrapper around sending to `@everyone`.
+Send a message to all agents via the `@everyone` group, with optional filtering. The sender is automatically excluded. This is a convenience wrapper around sending to `@everyone`.
 
 **Input:**
 

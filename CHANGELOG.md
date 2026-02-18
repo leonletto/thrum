@@ -13,7 +13,6 @@ and this project adheres to
 - `thrum init --stealth`: writes exclusions to `.git/info/exclude` instead of
   `.gitignore`, leaving zero footprint in tracked files.
 - `--limit N` alias for `--page-size N` on `thrum inbox`.
-- `--mark-read` flag on `thrum inbox` (explicit name for default behavior).
 - `--everyone` flag on `thrum send` (alias for `--to @everyone`).
 - Plugin ships `agents/message-listener.md` for auto-discovery by Claude Code.
 - `make deploy-remote REMOTE=host` for scp + codesign to remote macOS machines.
@@ -27,16 +26,11 @@ and this project adheres to
 
 ### Fixed
 
-- Replaced all prescriptive `--broadcast` references with `--to @everyone`.
+- `--broadcast` is now a proper alias for `--to @everyone` (not deprecated).
 - Plugin install docs corrected to two-step marketplace flow.
 - `thrum setup claude-md` added to README Essential Commands table.
 - Defensive test for duplicate thrum section headers in CLAUDE.md.
 - Clarifying comment on separator edge case in `replaceThrumSection()`.
-
-### Deprecated
-
-- `thrum send --broadcast` — use `--to @everyone` or `--everyone` instead.
-- `broadcast_message` MCP tool — use `send_message(to="@everyone")` instead.
 
 ## [0.4.3] - 2026-02-17
 

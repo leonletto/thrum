@@ -55,14 +55,12 @@ modified.
 thrum send "Deploy complete, all clear" --to @everyone
 ```
 
-This replaces the deprecated `--broadcast` flag:
+All three forms are equivalent:
 
 ```bash
-# Old (deprecated):
 thrum send "Deploy complete" --broadcast
-
-# New (recommended):
 thrum send "Deploy complete" --to @everyone
+thrum send "Deploy complete" --everyone
 ```
 
 ### Creating and Managing Groups

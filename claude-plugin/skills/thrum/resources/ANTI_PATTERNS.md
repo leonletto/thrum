@@ -21,12 +21,17 @@ Common mistakes when using Thrum and how to avoid them.
 Task(subagent_type="message-listener", run_in_background=true, prompt="...")
 ```
 
-## 4. Using --broadcast Instead of @everyone
+## 4. Broadcasting Without the @everyone Group
 
-**Wrong:** `thrum send "msg" --broadcast`
-**Right:** `thrum send "msg" --to @everyone`
+All three forms are equivalent — use whichever reads best in context:
 
-The `--broadcast` flag is deprecated. The `@everyone` group is auto-created and handles membership dynamically.
+```bash
+thrum send "msg" --broadcast
+thrum send "msg" --to @everyone
+thrum send "msg" --everyone
+```
+
+The `@everyone` group is auto-created and handles membership dynamically.
 
 ## 5. Skipping Registration
 

@@ -639,7 +639,7 @@ over stdin/stdout).
 | `check_messages`    | Poll for unread messages mentioning this agent            |
 | `wait_for_message`  | Block until a message arrives (WebSocket push) or timeout |
 | `list_agents`       | List registered agents with active/offline status         |
-| `broadcast_message` | **Deprecated.** Use `send_message` with `to=@everyone` instead |
+| `broadcast_message` | Send to all agents (convenience wrapper around `send_message` to `@everyone`) |
 
 **Architecture:**
 

@@ -249,7 +249,7 @@ Configure in `.claude/settings.json`:
 ```
 
 MCP tools (11 total): Core messaging — `send_message`, `check_messages`, `wait_for_message`, `list_agents`,
-`broadcast_message` _(deprecated)_. Group management — `create_group`, `delete_group`, `add_group_member`,
+`broadcast_message`. Group management — `create_group`, `delete_group`, `add_group_member`,
 `remove_group_member`, `list_groups`, `get_group`.
 
 ## Typical Workflow

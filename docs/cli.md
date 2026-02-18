@@ -293,7 +293,7 @@ have an active session.
 | ------------------- | ------------------------------------------------------------------------------ | ---------- |
 | `--to`              | Direct recipient (format: `@role`, `@name`, or `@groupname`)                  |            |
 | `--everyone`        | Alias for `--to @everyone` (send to all agents)                               |            |
-| `--broadcast`, `-b` | Send as broadcast to all agents (deprecated: use `--to @everyone` instead)    | `false`    |
+| `--broadcast`, `-b` | Send to all agents (alias for `--to @everyone`)                               | `false`    |
 | `--scope`           | Add scope (repeatable, format: `type:value`)            |            |
 | `--ref`             | Add reference (repeatable, format: `type:value`)        |            |
 | `--mention`         | Mention a role (repeatable, format: `@role`)            |            |
@@ -305,7 +305,7 @@ The `--to` flag adds the recipient as a mention, making it a directed message.
 Recipients can be agents (`@alice`), roles (`@reviewer`), or groups (`@everyone`, `@backend`).
 The `--broadcast` and `--to` flags are mutually exclusive.
 
-The `--broadcast` flag is deprecated. Use `--to @everyone` instead to send to all agents.
+The `--broadcast` flag is an alias for `--to @everyone`.
 
 Example:
 
@@ -355,7 +355,6 @@ are automatically marked as read (unless filtering with `--unread`).
 | `--unread`    | Only unread messages                   | `false` |
 | `--page-size` | Results per page                       | `10`    |
 | `--limit N`   | Alias for `--page-size`                | `10`    |
-| `--mark-read` | Mark returned messages as read (default behavior) | `true` |
 | `--page`      | Page number                            | `1`     |
 
 The output adapts to terminal width and shows read/unread indicators.
@@ -1262,7 +1261,7 @@ internally for identity resolution.
 | `check_messages`    | Poll for unread messages mentioning this agent (auto-marks read) |
 | `wait_for_message`  | Block until a message arrives (WebSocket push) or timeout        |
 | `list_agents`       | List registered agents with active/offline status                |
-| `broadcast_message` | **Deprecated.** Use `send_message` with `to=@everyone` instead |
+| `broadcast_message` | Send to all agents (convenience wrapper around `send_message` to `@everyone`) |
 
 **Group management (6):**
 
