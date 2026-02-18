@@ -633,7 +633,7 @@ thrum mcp serve --agent-id furiosa
 ```
 
 The MCP server provides 5 tools: `send_message`, `check_messages`,
-`wait_for_message`, `list_agents`, `broadcast_message` _(deprecated)_. Identity
+`wait_for_message`, `list_agents`, `broadcast_message`. Identity
 is resolved once at startup.
 
 ### User Registration (Browser Auto-Registration)

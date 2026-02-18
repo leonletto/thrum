@@ -756,7 +756,7 @@ bd sync
 - **Don't skip registration** - System won't route messages correctly
 - **Don't leave sessions open** - End when done to avoid stale status
 - **Don't use vague intents** - Be specific about current work
-- **Don't use --broadcast flag** - Deprecated, use `--to @everyone` instead
+- **`--broadcast`, `--to @everyone`, and `--everyone` are all equivalent** - Use whichever reads best
 - **Don't delete @everyone group** - It's protected and auto-created
 
 ## Common Patterns
@@ -1110,7 +1110,7 @@ thrum session end
 
 **Version:** 1.3 **Last Updated:** 2026-02-11 **Status:** Production-Ready
 
-**Changes in v1.3:** Agent Groups feature added — `thrum group create/add/remove/list/info/members`, 6 new MCP tools (`create_group`, `delete_group`, `add_group_member`, `remove_group_member`, `list_groups`, `get_group`). Built-in `@everyone` group for broadcasts. `--broadcast` flag deprecated in favor of `--to @everyone`. Groups support nesting (groups can contain other groups/roles) with cycle detection.
+**Changes in v1.3:** Agent Groups feature added — `thrum group create/add/remove/list/info/members`, 6 new MCP tools (`create_group`, `delete_group`, `add_group_member`, `remove_group_member`, `list_groups`, `get_group`). Built-in `@everyone` group for broadcasts. `--broadcast` is now an alias for `--to @everyone`. Groups support nesting (groups can contain other groups/roles) with cycle detection.
 
 **Changes in v1.2:** `thrum wait --mention` fixed — maps to `mention_role` RPC
 param, strips `@` prefix. Added `thrum message read --all` for batch

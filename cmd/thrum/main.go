@@ -614,7 +614,7 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().String("format", "markdown", "Message format (markdown, plain, json)")
 	cmd.Flags().String("to", "", "Direct recipient (format: @role)")
 	cmd.Flags().Bool("everyone", false, "Send to all agents (alias for --to @everyone)")
-	cmd.Flags().BoolP("broadcast", "b", false, "Deprecated: use --to @everyone instead")
+	cmd.Flags().BoolP("broadcast", "b", false, "Send to all agents (alias for --to @everyone)")
 
 	return cmd
 }
@@ -1023,8 +1023,7 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().Bool("unread", false, "Only unread messages")
 	cmd.Flags().BoolP("all", "a", false, "Show all messages (disable auto-filtering)")
 	cmd.Flags().Int("page-size", 10, "Results per page")
-	cmd.Flags().Int("limit", 10, "Alias for --page-size")
-	cmd.Flags().Bool("mark-read", false, "Mark all returned messages as read (default behavior, kept for compatibility)")
+	cmd.Flags().Int("limit", 0, "Alias for --page-size")
 	cmd.Flags().Int("page", 1, "Page number")
 
 	return cmd

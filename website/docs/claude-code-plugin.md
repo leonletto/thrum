@@ -210,7 +210,7 @@ server in your project's `.claude/settings.json`:
 ```
 
 This provides 11 MCP tools: 5 for core messaging (`send_message`, `check_messages`,
-`wait_for_message`, `list_agents`, `broadcast_message` _(deprecated)_) and 6 for group management
+`wait_for_message`, `list_agents`, `broadcast_message`) and 6 for group management
 (`create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
 `list_groups`, `get_group`). See [MCP Server](mcp-server.md) for the full API.
 
@@ -249,7 +249,7 @@ The listener runs 6 cycles of 15 minutes each (~90 min coverage), blocks on
 | Slash commands | 10 commands included | None |
 | Hooks | SessionStart + PreCompact | Manual hook configuration |
 | Resource docs | 8 progressive disclosure docs | Single monolithic agent file |
-| Maintenance | Versioned (v0.4.0) | Ad-hoc |
+| Maintenance | Versioned (v0.4.4) | Ad-hoc |
 
 The manual agent definitions (`thrum-agent.md`, `message-listener.md`) still
 work and are available in `toolkit/agents/` for environments that don't support

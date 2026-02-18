@@ -513,16 +513,14 @@ This means:
 - The `@everyone` group dynamically includes all registered agents
 - Role-based members are resolved to all agents with that role at query time
 
-### Broadcast Deprecation
+### Broadcast
 
-The `--broadcast` flag is deprecated. Use `--to @everyone` instead:
+Both `--broadcast` and `--to @everyone` send to all agents:
 
 ```bash
-# Old (deprecated):
 thrum send "Deploy complete" --broadcast
-
-# New (recommended):
 thrum send "Deploy complete" --to @everyone
+thrum send "Deploy complete" --everyone
 ```
 
 ## Global Flags
@@ -660,7 +658,7 @@ running in Claude Code or similar environments. It exposes 11 MCP tools organize
 | `check_messages`    | Poll for unread messages mentioning this agent, auto-marks read                                    |
 | `wait_for_message`  | Block until a message arrives via WebSocket push or timeout (max 600s)                             |
 | `list_agents`       | List registered agents with active/offline status                                                  |
-| `broadcast_message` | **Deprecated.** Use `send_message` with `to=@everyone` instead |
+| `broadcast_message` | Send to all agents (convenience wrapper around `send_message` with `to=@everyone`) |
 
 **Group management (6 tools):**
 

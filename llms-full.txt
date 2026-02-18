@@ -1,4 +1,4 @@
-# Thrum -- Complete Agent Reference
+# Thrum v0.4.4 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
 
@@ -255,7 +255,7 @@ All commands accept:
             --thread ID             Reply to thread
             --to @role              Direct recipient (also accepts @group names)
             --everyone              Alias for --to @everyone (broadcast to all agents)
-            --broadcast, -b         Deprecated: use --to @everyone or --everyone instead
+            --broadcast, -b         Send to all agents (alias for --to @everyone)
             --priority low|normal|high|critical  Message priority (default: normal)
             --format markdown|plain|json  Message format (default: markdown)
             --structured JSON       Structured payload
@@ -283,7 +283,6 @@ All commands accept:
             --page-size N        Results per page (default: 10)
             --limit N            Alias for --page-size
             --page N             Page number (default: 1)
-            --mark-read          Mark returned messages as read (default behavior)
   Action:   Lists messages. By default auto-filters to messages addressed to you (via --to)
             plus broadcasts and general messages. Use --all to see everything.
             Auto-marks displayed messages as read (unless --unread).
@@ -1235,7 +1234,7 @@ Unknown event types are silently ignored (forward compatibility).
     check_messages      Poll for unread messages mentioning this agent, auto-marks read
     wait_for_message    Block until a message arrives (WebSocket push) or timeout
     list_agents         List registered agents with active/offline status
-    broadcast_message   Deprecated -- use send_message with to="@everyone" instead
+    broadcast_message   Send to all agents (convenience wrapper around send_message to @everyone)
     create_group        Create a named group
     delete_group        Delete a group
     add_group_member    Add member to group (agent, role, or nested group)
