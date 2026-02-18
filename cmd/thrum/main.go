@@ -550,6 +550,12 @@ The daemon must be running and you must have an active session.`,
 			format, _ := cmd.Flags().GetString("format")
 			to, _ := cmd.Flags().GetString("to")
 			broadcast, _ := cmd.Flags().GetBool("broadcast")
+			everyone, _ := cmd.Flags().GetBool("everyone")
+
+			// --everyone is an alias for --to @everyone
+			if everyone {
+				to = "@everyone"
+			}
 
 			opts := cli.SendOptions{
 				Content:       args[0],
@@ -607,6 +613,7 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().StringP("priority", "p", "normal", "Message priority (low, normal, high)")
 	cmd.Flags().String("format", "markdown", "Message format (markdown, plain, json)")
 	cmd.Flags().String("to", "", "Direct recipient (format: @role)")
+	cmd.Flags().Bool("everyone", false, "Send to all agents (alias for --to @everyone)")
 	cmd.Flags().BoolP("broadcast", "b", false, "Deprecated: use --to @everyone instead")
 
 	return cmd
@@ -937,6 +944,11 @@ The daemon must be running and you must have an active session.`,
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 			page, _ := cmd.Flags().GetInt("page")
 
+			// --limit is an alias for --page-size
+			if cmd.Flags().Changed("limit") {
+				pageSize, _ = cmd.Flags().GetInt("limit")
+			}
+
 			agentID, err := resolveLocalAgentID()
 			if err != nil {
 				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
@@ -1011,6 +1023,8 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().Bool("unread", false, "Only unread messages")
 	cmd.Flags().BoolP("all", "a", false, "Show all messages (disable auto-filtering)")
 	cmd.Flags().Int("page-size", 10, "Results per page")
+	cmd.Flags().Int("limit", 10, "Alias for --page-size")
+	cmd.Flags().Bool("mark-read", false, "Mark all returned messages as read (default behavior, kept for compatibility)")
 	cmd.Flags().Int("page", 1, "Page number")
 
 	return cmd
