@@ -5,12 +5,12 @@
 
 ### CLI Commands
 
-| Command                   | Description                                     |
-| ------------------------- | ----------------------------------------------- |
-| `thrum subscribe`         | Subscribe to notifications (scope, mention, all)|
-| `thrum unsubscribe ID`    | Remove a subscription by ID                     |
-| `thrum subscriptions`     | List active subscriptions for current session   |
-| `thrum wait`              | Block until notification arrives or timeout     |
+| Command                | Description                                      |
+| ---------------------- | ------------------------------------------------ |
+| `thrum subscribe`      | Subscribe to notifications (scope, mention, all) |
+| `thrum unsubscribe ID` | Remove a subscription by ID                      |
+| `thrum subscriptions`  | List active subscriptions for current session    |
+| `thrum wait`           | Block until notification arrives or timeout      |
 
 ## Overview
 

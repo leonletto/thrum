@@ -42,25 +42,27 @@ cross-cutting decisions.
 
 | Task                        | Agent Type                  | Model  | Background? |
 | --------------------------- | --------------------------- | ------ | ----------- |
-| Implement a complex task    | `general-purpose`           | sonnet | no*         |
-| Implement a simple task     | `general-purpose`           | haiku  | no*         |
+| Implement a complex task    | `general-purpose`           | sonnet | no\*        |
+| Implement a simple task     | `general-purpose`           | haiku  | no\*        |
 | Explore unfamiliar code     | `Explore`                   | sonnet | yes         |
 | Run tests / lint            | `general-purpose`           | haiku  | yes         |
 | Review implementation       | `feature-dev:code-reviewer` | sonnet | no          |
 | Doc updates / config tweaks | `general-purpose`           | haiku  | yes         |
 
-*Use foreground when you need the result before proceeding. Use background when
+\*Use foreground when you need the result before proceeding. Use background when
 you can continue other work while they run.
 
 ### When to Parallelize vs. Work Sequentially
 
 **Parallel** (sub-agents):
+
 - Tasks touching different files/packages with no shared state
 - Independent verification (tests, lint, coverage)
 - Research into multiple unrelated code areas
 - Doc/config updates alongside implementation
 
 **Sequential** (direct work):
+
 - Tasks modifying shared files or depending on prior task output
 - Tasks requiring deep context from current session's changes
 - Tasks needing judgment calls mid-implementation
@@ -247,8 +249,8 @@ bd close {{TASK_ID_1}} {{TASK_ID_2}} {{TASK_ID_3}}
 
 ### Parallel Task Implementation
 
-When multiple tasks are unblocked and independent, implement them simultaneously.
-This is the biggest context and time win.
+When multiple tasks are unblocked and independent, implement them
+simultaneously. This is the biggest context and time win.
 
 #### Identify Parallelizable Tasks
 

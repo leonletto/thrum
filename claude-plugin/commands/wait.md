@@ -3,7 +3,8 @@ description: Block until a message arrives
 argument-hint: [--timeout 30s]
 ---
 
-Block until a message arrives or timeout expires. Used by the message-listener pattern.
+Block until a message arrives or timeout expires. Used by the message-listener
+pattern.
 
 ```bash
 thrum wait                           # Default 30s timeout

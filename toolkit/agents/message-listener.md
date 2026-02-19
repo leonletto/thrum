@@ -32,8 +32,9 @@ blocks until a message arrives or times out.
 
 After exhausting all cycles with no messages, return `NO_MESSAGES_TIMEOUT`.
 
-**Budget**: You have up to 12 Bash tool calls (6 wait cycles × ~15 min each = ~90
-minutes). Return EARLY as soon as you receive a message. Do not continue looping.
+**Budget**: You have up to 12 Bash tool calls (6 wait cycles × ~15 min each =
+~90 minutes). Return EARLY as soon as you receive a message. Do not continue
+looping.
 
 ## Spawning
 

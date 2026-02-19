@@ -36,11 +36,13 @@ and this project adheres to
 
 ### Changed
 
-- Init is local-only by default — remote git sync must be explicitly enabled via `local_only: false` in `.thrum/config.json`
+- Init is local-only by default — remote git sync must be explicitly enabled via
+  `local_only: false` in `.thrum/config.json`
 
 ### Fixed
 
-- Internal git commits in the a-sync worktree now skip pre-commit hooks (`--no-verify`) to avoid failures from project-level hooks
+- Internal git commits in the a-sync worktree now skip pre-commit hooks
+  (`--no-verify`) to avoid failures from project-level hooks
 - Daemon, CLI client, and MCP server can no longer hang indefinitely. All I/O
   paths now enforce timeouts: 5s CLI dial, 10s RPC calls, 10s server
   per-request, 10s WebSocket handshake, 5s/10s git commands, and context-scoped
@@ -104,8 +106,8 @@ and this project adheres to
 
 - Context prime identity resolution in worktrees and unread hint
 - 6 bugs closed (thrum-pwaa, thrum-16lv, thrum-pgoc, thrum-5611, thrum-en2c,
-  thrum-8ws1): daemon accept loop race condition, gofmt formatting, golangci-lint
-  errors, macOS quarantine attribute in install script
+  thrum-8ws1): daemon accept loop race condition, gofmt formatting,
+  golangci-lint errors, macOS quarantine attribute in install script
 
 ### Changed
 
@@ -160,8 +162,8 @@ generation.
 - Auto-detection for 6 platforms: Claude Code, Codex, Cursor, Gemini, Auggie,
   CLI-only
 - `thrum runtime list|show|set-default` CLI commands
-- `thrum init --runtime <name>` generates runtime-specific config files
-  (MCP settings, hooks, instructions)
+- `thrum init --runtime <name>` generates runtime-specific config files (MCP
+  settings, hooks, instructions)
 - Embedded templates for each runtime with shared startup script
 - File marker detection (`.claude/settings.json`, `.codex`, `.cursorrules`,
   `.augment`) with env var fallback

@@ -1,8 +1,8 @@
 ---
 title: "Claude Code Agent Integration"
 description:
-  "Agent definitions for multi-agent coordination in Claude Code —
-  thrum-agent and message-listener setup"
+  "Agent definitions for multi-agent coordination in Claude Code — thrum-agent
+  and message-listener setup"
 category: "guides"
 ---
 
@@ -13,8 +13,8 @@ Place these in `.claude/agents/` in any project that uses Thrum.
 
 ## thrum-agent
 
-A comprehensive coordination guide that teaches Claude Code how to use Thrum
-for multi-agent workflows. Covers:
+A comprehensive coordination guide that teaches Claude Code how to use Thrum for
+multi-agent workflows. Covers:
 
 - MCP server integration and configuration
 - CLI commands for messaging, sessions, and coordination
@@ -52,7 +52,8 @@ limits, session restarts, and machine boundaries.
 
 ### 1. Register and Start Session
 
-thrum quickstart --name <your-name> --role <role> --module <module> --intent "<description>"
+thrum quickstart --name <your-name> --role <role> --module <module> --intent
+"<description>"
 
 Common roles: planner, implementer, reviewer, tester, coordinator
 
@@ -60,15 +61,8 @@ Common roles: planner, implementer, reviewer, tester, coordinator
 
 Add to .claude/settings.json:
 
-{
-  "mcpServers": {
-    "thrum": {
-      "type": "stdio",
-      "command": "thrum",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
+{ "mcpServers": { "thrum": { "type": "stdio", "command": "thrum", "args":
+["mcp", "serve"] } } }
 
 ### 3. Launch Background Listener
 
@@ -77,14 +71,14 @@ time it returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
 
 ### 4. Communicate
 
-thrum send "message" --to @name       # Direct message
-thrum send "message" --to @everyone   # Broadcast to all
-thrum inbox --unread                  # Check for new messages
-thrum reply <msg-id> "response"       # Reply (creates a reply-to reference)
+thrum send "message" --to @name # Direct message thrum send "message" --to
+@everyone # Broadcast to all thrum inbox --unread # Check for new messages thrum
+reply <msg-id> "response" # Reply (creates a reply-to reference)
 
 ## MCP Tools (11 total)
 
 **Core messaging (5):**
+
 - send_message — Send to specific agent via @name
 - check_messages — Poll inbox, auto-mark read
 - wait_for_message — Block until message arrives
@@ -92,6 +86,7 @@ thrum reply <msg-id> "response"       # Reply (creates a reply-to reference)
 - broadcast_message — Send to all agents (alias for send_message to @everyone)
 
 **Group management (6):**
+
 - create_group — Create a named messaging group
 - delete_group — Delete a messaging group
 - add_group_member — Add agent or role to group
@@ -101,23 +96,26 @@ thrum reply <msg-id> "response"       # Reply (creates a reply-to reference)
 
 ## Priority Handling
 
-| Priority | Action |
-|----------|--------|
-| critical | Stop current work immediately |
-| high | Process at next breakpoint |
-| normal | Process when current sub-task completes |
-| low | Queue, process when convenient |
+| Priority | Action                                  |
+| -------- | --------------------------------------- |
+| critical | Stop current work immediately           |
+| high     | Process at next breakpoint              |
+| normal   | Process when current sub-task completes |
+| low      | Queue, process when convenient          |
 
 ## Session Template
 
 # Start
+
 thrum quickstart --name <name> --role <role> --module <module> --intent "<desc>"
 thrum inbox --unread
 
 # During work
+
 thrum send "status update" --to @coordinator
 
 # End
+
 thrum session end
 ```
 
@@ -175,11 +173,10 @@ After exhausting all cycles with no messages, return NO_MESSAGES_TIMEOUT.
 
 When messages received:
 
-MESSAGES_RECEIVED
----
-FROM: [sender]
-PRIORITY: [priority]
-CONTENT: [message content]
+## MESSAGES_RECEIVED
+
+FROM: [sender] PRIORITY: [priority] CONTENT: [message content]
+
 ---
 
 When timeout:

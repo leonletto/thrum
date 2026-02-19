@@ -3,20 +3,27 @@
 
 ## Overview
 
-Agents lose state between sessions due to context window compaction, session resets, or switching machines. The context system preserves volatile session state so agents can pick up where they left off.
+Agents lose state between sessions due to context window compaction, session
+resets, or switching machines. The context system preserves volatile session
+state so agents can pick up where they left off.
 
-**Why this exists:** When an agent session ends (context compacted, Claude Code restarted, new worktree), the work-in-progress state vanishes. Context files capture that state so the next session can continue seamlessly.
+**Why this exists:** When an agent session ends (context compacted, Claude Code
+restarted, new worktree), the work-in-progress state vanishes. Context files
+capture that state so the next session can continue seamlessly.
 
-**Primary use case:** The `/update-context` skill in Claude Code uses this system to save session summaries before compaction or session end.
+**Primary use case:** The `/update-context` skill in Claude Code uses this
+system to save session summaries before compaction or session end.
 
-**Storage:** Context files live in `.thrum/context/` (gitignored by default). Each agent gets two files:
+**Storage:** Context files live in `.thrum/context/` (gitignored by default).
+Each agent gets two files:
 
 - `.thrum/context/{name}.md` - Volatile session state (updated frequently)
 - `.thrum/context/{name}_preamble.md` - Stable reference (rarely changes)
 
 ## Context Files
 
-Context files hold volatile session state that doesn't belong in git commits but needs to survive session boundaries.
+Context files hold volatile session state that doesn't belong in git commits but
+needs to survive session boundaries.
 
 **What to put in context:**
 
@@ -45,15 +52,21 @@ Context files hold volatile session state that doesn't belong in git commits but
 │   └── coordinator_1B9K33T6RK.md   # Hash-based agent ID
 ```
 
-Context files are local by default. Use `thrum context sync` to manually share across worktrees via the a-sync branch.
+Context files are local by default. Use `thrum context sync` to manually share
+across worktrees via the a-sync branch.
 
 ## Preamble
 
-Each agent can have a preamble - a stable, user-editable header stored at `.thrum/context/{agent}_preamble.md`. The preamble is automatically prepended when showing context, providing a persistent reference that survives context saves.
+Each agent can have a preamble - a stable, user-editable header stored at
+`.thrum/context/{agent}_preamble.md`. The preamble is automatically prepended
+when showing context, providing a persistent reference that survives context
+saves.
 
-**Default preamble:** When you run `thrum quickstart`, a default preamble is created automatically with thrum quick-reference commands.
+**Default preamble:** When you run `thrum quickstart`, a default preamble is
+created automatically with thrum quick-reference commands.
 
-**User-editable:** The preamble is just a markdown file. You can edit it directly or replace it with `thrum context preamble --file custom.md`.
+**User-editable:** The preamble is just a markdown file. You can edit it
+directly or replace it with `thrum context preamble --file custom.md`.
 
 **Key properties:**
 
@@ -67,18 +80,17 @@ Each agent can have a preamble - a stable, user-editable header stored at `.thru
 ```markdown
 ## Thrum Quick Reference
 
-**Check messages:** `thrum inbox --unread`
-**Send message:** `thrum send "message" --to @role`
-**Reply:** `thrum reply <MSG_ID> "response"`
-**Status:** `thrum status`
-**Who's online:** `thrum agent list --context`
-**Save context:** `thrum context save`
-**Wait for messages:** `thrum wait --all --after -30s --timeout 5m`
+**Check messages:** `thrum inbox --unread` **Send message:**
+`thrum send "message" --to @role` **Reply:** `thrum reply <MSG_ID> "response"`
+**Status:** `thrum status` **Who's online:** `thrum agent list --context` **Save
+context:** `thrum context save` **Wait for messages:**
+`thrum wait --all --after -30s --timeout 5m`
 ```
 
 **Customization examples:**
 
-You can edit the preamble to add project conventions, role-specific instructions, team rosters, or boot sequences:
+You can edit the preamble to add project conventions, role-specific
+instructions, team rosters, or boot sequences:
 
 ```bash
 # Edit the preamble directly
@@ -109,10 +121,10 @@ Save context content from a file or stdin.
 thrum context save [flags]
 ```
 
-| Flag       | Description                                         | Default  |
-| ---------- | --------------------------------------------------- | -------- |
-| `--file`   | Path to markdown file to save as context           |          |
-| `--agent`  | Override agent name (defaults to current identity) |          |
+| Flag      | Description                                        | Default |
+| --------- | -------------------------------------------------- | ------- |
+| `--file`  | Path to markdown file to save as context           |         |
+| `--agent` | Override agent name (defaults to current identity) |         |
 
 **Examples:**
 
@@ -137,11 +149,11 @@ Display the saved context for the current agent.
 thrum context show [flags]
 ```
 
-| Flag              | Description                                         | Default |
-| ----------------- | --------------------------------------------------- | ------- |
-| `--agent`         | Override agent name (defaults to current identity)  |         |
-| `--raw`           | No header, file boundary markers for piping         | `false` |
-| `--no-preamble`   | Exclude preamble from output                        | `false` |
+| Flag            | Description                                        | Default |
+| --------------- | -------------------------------------------------- | ------- |
+| `--agent`       | Override agent name (defaults to current identity) |         |
+| `--raw`         | No header, file boundary markers for piping        | `false` |
+| `--no-preamble` | Exclude preamble from output                       | `false` |
 
 **Examples:**
 
@@ -162,6 +174,7 @@ thrum context show --no-preamble
 **Output modes:**
 
 Default (preamble + context with header):
+
 ```
 # Context for furiosa (1234 bytes, updated 2026-02-11T10:00:00Z)
 
@@ -173,6 +186,7 @@ Default (preamble + context with header):
 ```
 
 Raw (`--raw`, shows file boundaries):
+
 ```
 <!-- preamble: .thrum/context/furiosa_preamble.md -->
 ## Thrum Quick Reference
@@ -193,8 +207,8 @@ Remove the context file for the current agent.
 thrum context clear [flags]
 ```
 
-| Flag      | Description                                         | Default |
-| --------- | --------------------------------------------------- | ------- |
+| Flag      | Description                                        | Default |
+| --------- | -------------------------------------------------- | ------- |
 | `--agent` | Override agent name (defaults to current identity) |         |
 
 **Examples:**
@@ -213,14 +227,15 @@ Note: Idempotent - running clear when no context exists is a no-op.
 
 ### thrum context sync
 
-Copy the context file to the a-sync branch for sharing across worktrees and machines.
+Copy the context file to the a-sync branch for sharing across worktrees and
+machines.
 
 ```bash
 thrum context sync [flags]
 ```
 
-| Flag      | Description                                         | Default |
-| --------- | --------------------------------------------------- | ------- |
+| Flag      | Description                                        | Default |
+| --------- | -------------------------------------------------- | ------- |
 | `--agent` | Override agent name (defaults to current identity) |         |
 
 **Examples:**
@@ -235,7 +250,8 @@ thrum context sync --agent furiosa
 
 **What it does:**
 
-1. Copies `.thrum/context/{agent}.md` to the sync worktree at `.git/thrum-sync/a-sync/context/{agent}.md`
+1. Copies `.thrum/context/{agent}.md` to the sync worktree at
+   `.git/thrum-sync/a-sync/context/{agent}.md`
 2. Commits the change with message `"context: update {agent}"`
 3. Pushes to the remote a-sync branch
 
@@ -255,11 +271,11 @@ Show or manage the preamble for the current agent.
 thrum context preamble [flags]
 ```
 
-| Flag       | Description                                         | Default  |
-| ---------- | --------------------------------------------------- | -------- |
-| `--agent`  | Override agent name (defaults to current identity)  |          |
-| `--init`   | Create or reset to default preamble                |          |
-| `--file`   | Set preamble from file                              |          |
+| Flag      | Description                                        | Default |
+| --------- | -------------------------------------------------- | ------- |
+| `--agent` | Override agent name (defaults to current identity) |         |
+| `--init`  | Create or reset to default preamble                |         |
+| `--file`  | Set preamble from file                             |         |
 
 **Examples:**
 
@@ -281,15 +297,18 @@ thrum context preamble --agent furiosa
 
 ### thrum context prime
 
-Collect all context needed for agent session initialization or recovery. This is a comprehensive context collection command that gathers identity, session info, agent list, unread messages, git context, and daemon health into a single output.
+Collect all context needed for agent session initialization or recovery. This is
+a comprehensive context collection command that gathers identity, session info,
+agent list, unread messages, git context, and daemon health into a single
+output.
 
 ```bash
 thrum context prime [flags]
 ```
 
-| Flag     | Description                              | Default |
-| -------- | ---------------------------------------- | ------- |
-| `--json` | Structured JSON output for scripting     | `false` |
+| Flag     | Description                          | Default |
+| -------- | ------------------------------------ | ------- |
+| `--json` | Structured JSON output for scripting | `false` |
 
 **Examples:**
 
@@ -317,7 +336,11 @@ thrum context prime --json
 - Debugging - gather all relevant state in one command
 - Agent onboarding - provide comprehensive context to new agents
 
-**Note:** This command is an alias for `thrum prime`. The PreCompact hook automatically saves context before compaction to `.thrum/context/{name}.md` and `/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md`, but the agent-initiated `/update-context` skill captures richer context including decisions and rationale.
+**Note:** This command is an alias for `thrum prime`. The PreCompact hook
+automatically saves context before compaction to `.thrum/context/{name}.md` and
+`/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md`, but the
+agent-initiated `/update-context` skill captures richer context including
+decisions and rationale.
 
 ---
 
@@ -332,16 +355,16 @@ thrum mcp serve
 
 **In Claude Code:**
 
-Configure the MCP server in `.claude/settings.json` and use the `wait_for_message`
-and `send_message` tools for context coordination.
+Configure the MCP server in `.claude/settings.json` and use the
+`wait_for_message` and `send_message` tools for context coordination.
 
 ---
 
 ## The /update-context Skill
 
 The `/update-context` skill is now integrated into the Thrum MCP server. The MCP
-server provides message-based context coordination through the `send_message` and
-`wait_for_message` tools.
+server provides message-based context coordination through the `send_message`
+and `wait_for_message` tools.
 
 **Usage:**
 
@@ -352,7 +375,8 @@ context updates via messages.
 
 1. Agent sends context via `send_message`
 2. Other agents receive via `wait_for_message` or `check_messages`
-3. Skill formats your input as markdown and saves it via `thrum context save --file /tmp/context.md`
+3. Skill formats your input as markdown and saves it via
+   `thrum context save --file /tmp/context.md`
 
 **Example:**
 
@@ -365,7 +389,8 @@ Agent: [Saves formatted context]
       ✓ Context saved (248 bytes)
 ```
 
-The skill reduces the friction of updating context and ensures consistent formatting.
+The skill reduces the friction of updating context and ensures consistent
+formatting.
 
 ---
 
@@ -398,7 +423,8 @@ thrum context show --agent furiosa
 
 ### Context Updates at Decision Points
 
-Save context when you make a significant decision, discover something important, or reach a natural breakpoint:
+Save context when you make a significant decision, discover something important,
+or reach a natural breakpoint:
 
 ```bash
 # After architectural decision
@@ -599,11 +625,14 @@ Context RPC handlers follow the daemon's standard locking patterns:
 - `context.save` and `context.clear` acquire a write lock (`Lock()`)
 - `context.show` acquires a read lock (`RLock()`)
 
-This ensures thread-safe access when multiple clients interact with context files.
+This ensures thread-safe access when multiple clients interact with context
+files.
 
 ### File Format
 
-Context files are plain markdown (`.md`). No special format or structure is enforced - agents are free to use any markdown convention that suits their workflow.
+Context files are plain markdown (`.md`). No special format or structure is
+enforced - agents are free to use any markdown convention that suits their
+workflow.
 
 **Common patterns:**
 
@@ -620,7 +649,9 @@ Context sync is manual-only to avoid noise and respect agent autonomy:
 - Agents must explicitly run `thrum context sync` to share
 - Sync respects local-only mode (no-op when `--local` is set on the daemon)
 
-**Rationale:** Context is volatile and session-specific. Auto-syncing would create unnecessary churn. Manual sync gives agents control over when and what to share.
+**Rationale:** Context is volatile and session-specific. Auto-syncing would
+create unnecessary churn. Manual sync gives agents control over when and what to
+share.
 
 ---
 
@@ -628,7 +659,8 @@ Context sync is manual-only to avoid noise and respect agent autonomy:
 
 ### Keep Context Concise
 
-Context files should be high-signal summaries, not exhaustive logs. Prefer bullet points over paragraphs.
+Context files should be high-signal summaries, not exhaustive logs. Prefer
+bullet points over paragraphs.
 
 **Good:**
 
@@ -653,7 +685,8 @@ minute...
 
 ### Update Context at Decision Points
 
-Save context when you make a significant decision, discover something important, or reach a natural breakpoint.
+Save context when you make a significant decision, discover something important,
+or reach a natural breakpoint.
 
 **When to update:**
 
@@ -664,11 +697,13 @@ Save context when you make a significant decision, discover something important,
 
 ### Use the /update-context Skill
 
-The skill provides a consistent, low-friction workflow for updating context. Install it and use it regularly.
+The skill provides a consistent, low-friction workflow for updating context.
+Install it and use it regularly.
 
 ### Sync Selectively
 
-Only sync context that is useful to other agents or future sessions on different machines. Local notes and WIP context can stay local.
+Only sync context that is useful to other agents or future sessions on different
+machines. Local notes and WIP context can stay local.
 
 ---
 

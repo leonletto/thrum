@@ -216,24 +216,82 @@ bd dep add {{LATER_TASK_ID}} {{EARLIER_TASK_ID}}
 **Tip:** When creating > 6 tasks, use the Bulk Task Creation Pattern from the
 Sub-Agent Strategy section to parallelize creation across epics.
 
+### Task Description Format (TDD-Quality)
+
+Every beads task description is a **self-contained implementation guide**. An
+agent reading only the task description (plus the design doc reference) should
+be able to implement the task without additional context.
+
+**Required sections in every task description:**
+
+````markdown
+## Files
+
+- Create: `exact/path/to/new_file.go`
+- Modify: `exact/path/to/existing.go` (add XyzService interface)
+- Test: `exact/path/to/new_file_test.go`
+
+## Steps
+
+### Step 1: Write the failing test
+
+```go
+func TestSpecificBehavior(t *testing.T) {
+    result := Function(input)
+    assert.Equal(t, expected, result)
+}
+```
+
+### Step 2: Verify test fails
+
+Run: `go test ./path/to/package/... -run TestSpecificBehavior -v` Expected: FAIL
+— "Function not defined"
+
+### Step 3: Implement
+
+```go
+func Function(input Type) ReturnType {
+    // implementation
+}
+```
+
+### Step 4: Verify test passes
+
+Run: `go test ./path/to/package/... -run TestSpecificBehavior -v` Expected: PASS
+
+### Step 5: Commit
+
+```bash
+git add path/to/files
+git commit -m "feat(module): add specific feature"
+```
+
+## Acceptance Criteria
+
+- [ ] All tests pass: `{{QUALITY_COMMANDS}}`
+- [ ] Function handles edge case X
+- [ ] Error returns are typed, not generic
+````
+
 ### Task Detail Calibration
 
-Adjust detail level in the task description based on task nature:
+Adjust **code completeness** based on task type, but always include the full
+structure above:
 
-| Task Type            | Detail Level             | Include in Description                        |
+| Task Type            | Code in Steps            | Test Detail                                   |
 | -------------------- | ------------------------ | --------------------------------------------- |
-| API/Interface design | Signatures + contracts   | Function signatures, types, error cases       |
-| Business logic       | Algorithms + edge cases  | Pseudocode or code examples, test scenarios   |
-| UI/Styling           | Full implementation code | CSS/component code, visual verification steps |
-| Integration/Wiring   | Connection points        | Which modules connect, data flow, config      |
-| Testing              | Test plan + scenarios    | Test categories, edge cases, coverage targets |
-| Documentation        | Outline + locations      | What docs, where they go, what to cover       |
+| API/Interface design | Full signatures + types  | Contract tests, error case tests              |
+| Business logic       | Full implementation code | TDD: failing test → implement → pass          |
+| Integration/Wiring   | Connection code + config | Integration test against mock/real dependency |
+| UI/Styling           | Full CSS/component code  | Visual verification steps, screenshot check   |
+| Testing-only         | N/A                      | Full test code with scenarios and edge cases  |
+| Documentation        | N/A (outline only)       | Verification: doc renders, links work         |
 
-Every task description should include:
+**Granularity rule:** Each task should be completable in one focused session
+(30-90 minutes). If a task has more than 5 steps, split it into multiple tasks.
 
-- **File paths** to create or modify
-- **Acceptance criteria** — how to verify the task is done
-- **Verification commands** — what to run (e.g., `make test`, `npm run test`)
+**Code rule:** Prefer complete code over pseudocode. "Add validation" is not a
+step — `if err := validate(input); err != nil { return fmt.Errorf(...) }` is.
 
 ### Step 4: Set Dependencies Between Epics
 
@@ -261,15 +319,93 @@ Before finishing, validate:
 
 ---
 
+## Phase 4: Generate Implementation Prompts
+
+For each epic (or group of related epics sharing a worktree), generate an
+implementation prompt by filling in the `implementation-agent.md` template.
+
+### Step 1: Determine Worktree Assignments
+
+Map epics to worktrees/branches:
+
+```bash
+# Check existing worktrees
+git worktree list
+
+# Plan assignments:
+# Epic A ({{EPIC_A_ID}}) → branch: feature/{{FEATURE_A}} → worktree: {{WORKTREE_A}}
+# Epic B ({{EPIC_B_ID}}) → branch: feature/{{FEATURE_B}} → worktree: {{WORKTREE_B}}
+```
+
+Independent epics get separate worktrees. Related epics sharing files can share
+a worktree with file ownership rules.
+
+### Step 2: Fill Implementation Template
+
+For each worktree assignment, create a prompt file at
+`dev-docs/prompts/{feature-name}.md` by filling in `implementation-agent.md`
+placeholders:
+
+| Placeholder            | Source                               |
+| ---------------------- | ------------------------------------ |
+| `{{EPIC_ID}}`          | The beads epic ID from Phase 3       |
+| `{{WORKTREE_PATH}}`    | From worktree assignment above       |
+| `{{BRANCH_NAME}}`      | Branch name for this epic            |
+| `{{DESIGN_DOC}}`       | Path to the design spec from Phase 2 |
+| `{{REFERENCE_CODE}}`   | Relevant reference implementations   |
+| `{{QUALITY_COMMANDS}}` | Project-specific test/lint commands  |
+| `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., >80%)      |
+| `{{AGENT_NAME}}`       | Unique name (e.g., `impl-{feature}`) |
+
+### Step 3: Write the Prompt File
+
+Save the filled-in template to `dev-docs/prompts/{feature-name}.md`. Add a
+header with context the implementing agent needs:
+
+```markdown
+# Implementation Prompt: {{FEATURE_NAME}}
+
+> Generated by planning agent on YYYY-MM-DD Design doc: {{DESIGN_DOC}} Epic:
+> {{EPIC_ID}} (N tasks)
+
+## Quick Context
+
+<!-- 2-3 sentences about what this epic delivers and key architectural decisions -->
+
+## Worktree Setup
+
+<!-- Command to create/prepare the worktree -->
+
+./scripts/setup-worktree-thrum.sh {{WORKTREE_PATH}} {{BRANCH_NAME}} \
+ --identity {{AGENT_NAME}} --role implementer
+
+## Implementation Agent Template
+
+<!-- The filled-in implementation-agent.md follows below -->
+```
+
+### Step 4: Commit Prompt Files
+
+```bash
+git add dev-docs/prompts/
+git commit -m "plan: add implementation prompts for {{FEATURE_NAME}}"
+```
+
+---
+
 ## Output Summary
 
 When complete, the planning agent should have produced:
 
 1. **Design spec** at `{{DESIGN_DOC_DIR}}/YYYY-MM-DD-<topic>-design.md`
 2. **Beads epics** with dependency relationships
-3. **Beads tasks** under each epic with detailed descriptions
+3. **Beads tasks** under each epic with TDD-quality descriptions (file paths,
+   test code, implementation code, verification commands, acceptance criteria)
 4. **Dependency DAG** showing build order
-5. **Implementation prompt(s)** at `dev-docs/prompts/{feature-name}.md`
+5. **Implementation prompt(s)** at `dev-docs/prompts/{feature-name}.md` — filled
+   from `implementation-agent.md` template with all placeholders resolved
+6. **All artifacts committed** to git
 
-The implementing agent uses the beads tasks as its source of truth — not this
-prompt template.
+The implementing agent uses the beads tasks as its source of truth. The prompt
+file provides worktree setup, design doc reference, and quality commands. The
+task descriptions provide the step-by-step implementation guide.

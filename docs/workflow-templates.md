@@ -1,7 +1,9 @@
 
 # Workflow Templates
 
-Thrum ships ready-to-use templates that guide AI agents through planning, preparing, and implementing features. You copy them into your project and customize the placeholders for your environment.
+Thrum ships ready-to-use templates that guide AI agents through planning,
+preparing, and implementing features. You copy them into your project and
+customize the placeholders for your environment.
 
 Templates live in `toolkit/templates/` in the Thrum repository.
 
@@ -17,11 +19,16 @@ Create tasks         beads redirect        Quality gates
 Set deps             Run quickstart        Merge to main
 ```
 
-**Plan** — Explore codebase, propose approaches, write design spec, decompose into beads epics with detailed task descriptions.
+**Plan** — Explore codebase, propose approaches, write design spec, decompose
+into beads epics with detailed task descriptions.
 
-**Prepare** — Select or create git worktree, configure thrum and beads redirects so all worktrees share the same daemon and issue database. Bootstrap agent identity.
+**Prepare** — Select or create git worktree, configure thrum and beads redirects
+so all worktrees share the same daemon and issue database. Bootstrap agent
+identity.
 
-**Implement** — Work through tasks in dependency order: claim → read → implement → test → commit → close. Orient phase reads beads status and git history for resume after context loss.
+**Implement** — Work through tasks in dependency order: claim → read → implement
+→ test → commit → close. Orient phase reads beads status and git history for
+resume after context loss.
 
 ## Install the templates
 
@@ -31,11 +38,13 @@ Copy the templates into your project documentation:
 cp toolkit/templates/*.md your-project/docs/templates/
 ```
 
-Or reference them directly from the Thrum repo when starting a new agent session.
+Or reference them directly from the Thrum repo when starting a new agent
+session.
 
 ## Customize the placeholders
 
-Templates use `{{PLACEHOLDER}}` syntax for project-specific values. Replace these before giving a template to an agent.
+Templates use `{{PLACEHOLDER}}` syntax for project-specific values. Replace
+these before giving a template to an agent.
 
 ### Planning agent placeholders
 
@@ -70,7 +79,8 @@ Templates use `{{PLACEHOLDER}}` syntax for project-specific values. Replace thes
 
 ### Example: Fill in for a real project
 
-You're building authentication for a Go service. Here's how you customize the implementation template:
+You're building authentication for a Go service. Here's how you customize the
+implementation template:
 
 ```bash
 {{EPIC_ID}}          → bd-k7m2
@@ -83,27 +93,35 @@ You're building authentication for a Go service. Here's how you customize the im
 {{AGENT_NAME}}       → impl-auth-jwt
 ```
 
-Save the filled-in template as a file or paste it directly into your agent's prompt.
+Save the filled-in template as a file or paste it directly into your agent's
+prompt.
 
 ## Use the planning template
 
-Give `planning-agent.md` to a planning agent when you have a feature idea and need actionable tasks.
+Give `planning-agent.md` to a planning agent when you have a feature idea and
+need actionable tasks.
 
-**Produces:** Design spec, beads epics, detailed task descriptions, dependency relationships.
+**Produces:** Design spec, beads epics, detailed task descriptions, dependency
+relationships.
 
-Planning agents front-load detail into task descriptions so implementation agents work autonomously without conversation history.
+Planning agents front-load detail into task descriptions so implementation
+agents work autonomously without conversation history.
 
 ## Use the worktree setup guide
 
 Follow `worktree-setup.md` when an epic needs an isolated workspace.
 
-**Does:** Check existing worktrees for reuse, create new worktree + branch if needed, configure thrum and beads redirects, bootstrap agent identity, verify with `bd where`, `bd ready`, and `thrum context show`.
+**Does:** Check existing worktrees for reuse, create new worktree + branch if
+needed, configure thrum and beads redirects, bootstrap agent identity, verify
+with `bd where`, `bd ready`, and `thrum context show`.
 
-Without redirect configuration, agents in different worktrees see different tasks and different daemon instances.
+Without redirect configuration, agents in different worktrees see different
+tasks and different daemon instances.
 
 ### Setup script
 
-The `setup-worktree-thrum.sh` script handles full worktree bootstrapping in a single command:
+The `setup-worktree-thrum.sh` script handles full worktree bootstrapping in a
+single command:
 
 ```bash
 # Full worktree setup with identity
@@ -112,24 +130,35 @@ The `setup-worktree-thrum.sh` script handles full worktree bootstrapping in a si
   --role implementer
 ```
 
-This creates the worktree, sets up thrum and beads redirects, and registers the agent identity. The `thrum quickstart` command (used internally) auto-creates a default preamble with thrum quick-reference commands. For projects using custom agent docs in `.agents/`, run `thrum setup claude-md --apply` to configure the worktree's CLAUDE.md.
+This creates the worktree, sets up thrum and beads redirects, and registers the
+agent identity. The `thrum quickstart` command (used internally) auto-creates a
+default preamble with thrum quick-reference commands. For projects using custom
+agent docs in `.agents/`, run `thrum setup claude-md --apply` to configure the
+worktree's CLAUDE.md.
 
 ## Use the implementation template
 
-Give `implementation-agent.md` to an implementation agent when an epic has tasks and a worktree is ready.
+Give `implementation-agent.md` to an implementation agent when an epic has tasks
+and a worktree is ready.
 
-**Orient** — Check beads status and git state to find starting point (works for fresh starts and resumes).
+**Orient** — Check beads status and git state to find starting point (works for
+fresh starts and resumes).
 
-**Implement** — Work through tasks: claim → read → implement → test → commit → close.
+**Implement** — Work through tasks: claim → read → implement → test → commit →
+close.
 
 **Verify** — Run full quality gates after all tasks complete.
 
 **Land** — Close epic, merge to main, push.
 
-After context loss, restart with the same filled-in template. Orient re-runs and picks up from the first incomplete task. Completed work is never redone.
+After context loss, restart with the same filled-in template. Orient re-runs and
+picks up from the first incomplete task. Completed work is never redone.
 
 ## See also
 
-- [Agent Configuration](agent-configs.md) — How to configure agents for autonomous operation
-- [Beads and Thrum Integration](beads-and-thrum.md) — How the workflow uses beads for task tracking and Thrum for coordination
-- [Quick Start](quickstart.md) — Set up Thrum and run your first multi-agent workflow
+- [Agent Configuration](agent-configs.md) — How to configure agents for
+  autonomous operation
+- [Beads and Thrum Integration](beads-and-thrum.md) — How the workflow uses
+  beads for task tracking and Thrum for coordination
+- [Quick Start](quickstart.md) — Set up Thrum and run your first multi-agent
+  workflow

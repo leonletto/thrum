@@ -299,7 +299,8 @@ thrum daemon start --local
 
 In local-only mode, the sync loop still runs but skips remote operations
 (`git fetch` and `git push` to/from the remote). Local JSONL files and the
-SQLite projection continue to update normally. See [Daemon Architecture](daemon.md#local-only-mode) for details.
+SQLite projection continue to update normally. See
+[Daemon Architecture](daemon.md#local-only-mode) for details.
 
 ### No Remote
 

@@ -3,9 +3,10 @@
 
 > See also: [Why Thrum Exists](philosophy.md) for the philosophy behind
 > human-directed coordination, [Agent Coordination](agent-coordination.md) for
-> workflow patterns and Beads integration, [Workflow Templates](workflow-templates.md)
-> for structured planning and implementation workflows, [Identity System](identity.md)
-> for agent naming and registration.
+> workflow patterns and Beads integration,
+> [Workflow Templates](workflow-templates.md) for structured planning and
+> implementation workflows, [Identity System](identity.md) for agent naming and
+> registration.
 
 ## Overview
 
@@ -33,15 +34,15 @@ one individually. Groups can contain specific agents or all agents with a role.
 
 ### Quick Reference
 
-| Command                            | Description                                     |
-| ---------------------------------- | ----------------------------------------------- |
-| `thrum group create NAME`          | Create a new group                              |
-| `thrum group delete NAME`          | Delete a group (cannot delete `@everyone`)      |
-| `thrum group add GROUP MEMBER`     | Add agent or role                               |
-| `thrum group remove GROUP MEMBER`  | Remove a member                                 |
-| `thrum group list`                 | List all groups                                 |
-| `thrum group info NAME`            | Show group details                              |
-| `thrum group members NAME`         | List members (`--expand` resolves to agent IDs) |
+| Command                           | Description                                     |
+| --------------------------------- | ----------------------------------------------- |
+| `thrum group create NAME`         | Create a new group                              |
+| `thrum group delete NAME`         | Delete a group (cannot delete `@everyone`)      |
+| `thrum group add GROUP MEMBER`    | Add agent or role                               |
+| `thrum group remove GROUP MEMBER` | Remove a member                                 |
+| `thrum group list`                | List all groups                                 |
+| `thrum group info NAME`           | Show group details                              |
+| `thrum group members NAME`        | List members (`--expand` resolves to agent IDs) |
 
 ### Built-in @everyone Group
 
@@ -123,8 +124,8 @@ Output:
 ```json
 {
   "members": [
-    {"type": "agent", "value": "alice"},
-    {"type": "role", "value": "reviewer"}
+    { "type": "agent", "value": "alice" },
+    { "type": "role", "value": "reviewer" }
   ],
   "expanded": ["alice", "bob", "carol"]
 }
@@ -135,14 +136,14 @@ Output:
 When using the MCP server (`thrum mcp serve`), groups are managed via native MCP
 tools:
 
-| MCP Tool              | Parameters                               | Description               |
-| --------------------- | ---------------------------------------- | ------------------------- |
-| `create_group`        | `name`, `description?`                   | Create a named group      |
-| `delete_group`        | `name`                                   | Delete a group            |
-| `add_group_member`    | `group`, `member_type`, `member_value`   | Add member to group       |
-| `remove_group_member` | `group`, `member_type`, `member_value`   | Remove member from group  |
-| `list_groups`         | --                                       | List all groups           |
-| `get_group`           | `name`, `expand?`                        | Get details with optional expansion |
+| MCP Tool              | Parameters                             | Description                         |
+| --------------------- | -------------------------------------- | ----------------------------------- |
+| `create_group`        | `name`, `description?`                 | Create a named group                |
+| `delete_group`        | `name`                                 | Delete a group                      |
+| `add_group_member`    | `group`, `member_type`, `member_value` | Add member to group                 |
+| `remove_group_member` | `group`, `member_type`, `member_value` | Remove member from group            |
+| `list_groups`         | --                                     | List all groups                     |
+| `get_group`           | `name`, `expand?`                      | Get details with optional expansion |
 
 Example MCP usage:
 
@@ -162,14 +163,14 @@ a specific platform.
 
 ### Built-in Presets
 
-| Preset    | Display Name    | MCP | Hooks | Instructions File               |
-| --------- | --------------- | --- | ----- | -------------------------------- |
-| `claude`  | Claude Code     | Yes | Yes   | `CLAUDE.md`                      |
-| `codex`   | OpenAI Codex    | Yes | No    | `AGENTS.md`                      |
-| `cursor`  | Cursor          | Yes | No    | `.cursorrules`                   |
-| `gemini`  | Google Gemini   | Yes | No    | `~/.gemini/instructions.md`      |
-| `auggie`  | Augment         | No  | No    | `CLAUDE.md`                      |
-| `amp`     | Sourcegraph Amp | No  | No    | `CLAUDE.md`                      |
+| Preset   | Display Name    | MCP | Hooks | Instructions File           |
+| -------- | --------------- | --- | ----- | --------------------------- |
+| `claude` | Claude Code     | Yes | Yes   | `CLAUDE.md`                 |
+| `codex`  | OpenAI Codex    | Yes | No    | `AGENTS.md`                 |
+| `cursor` | Cursor          | Yes | No    | `.cursorrules`              |
+| `gemini` | Google Gemini   | Yes | No    | `~/.gemini/instructions.md` |
+| `auggie` | Augment         | No  | No    | `CLAUDE.md`                 |
+| `amp`    | Sourcegraph Amp | No  | No    | `CLAUDE.md`                 |
 
 ### CLI Commands
 
@@ -191,21 +192,21 @@ and environment variables:
 
 **File markers:**
 
-| Marker File                | Detected Runtime |
-| -------------------------- | ---------------- |
-| `.claude/settings.json`    | `claude`         |
-| `.codex`                   | `codex`          |
-| `.cursorrules`             | `cursor`         |
-| `.augment`                 | `auggie`         |
+| Marker File             | Detected Runtime |
+| ----------------------- | ---------------- |
+| `.claude/settings.json` | `claude`         |
+| `.codex`                | `codex`          |
+| `.cursorrules`          | `cursor`         |
+| `.augment`              | `auggie`         |
 
 **Environment variables:**
 
-| Variable          | Detected Runtime |
-| ----------------- | ---------------- |
-| `CLAUDE_SESSION_ID` | `claude`       |
-| `CURSOR_SESSION`    | `cursor`       |
-| `GEMINI_CLI`        | `gemini`       |
-| `AUGMENT_AGENT`     | `auggie`       |
+| Variable            | Detected Runtime |
+| ------------------- | ---------------- |
+| `CLAUDE_SESSION_ID` | `claude`         |
+| `CURSOR_SESSION`    | `cursor`         |
+| `GEMINI_CLI`        | `gemini`         |
+| `AUGMENT_AGENT`     | `auggie`         |
 
 If no runtime is detected, Thrum falls back to CLI-only mode (no MCP
 configuration generated).
@@ -286,14 +287,14 @@ thrum context prime --json
 
 Context prime collects information from multiple sources in one call:
 
-| Section    | Source              | Content                                           |
-| ---------- | ------------------- | ------------------------------------------------- |
-| Identity   | Identity file       | Agent ID, role, module, display name              |
-| Session    | Daemon RPC          | Session ID, intent, task, uptime                  |
-| Agents     | Daemon RPC          | List of registered agents with status and roles   |
-| Inbox      | Daemon RPC          | Unread message count, total messages              |
-| Git        | Local git state     | Current branch, recent commits, changed files     |
-| Context    | Context file        | Saved context from previous session (if exists)   |
+| Section  | Source          | Content                                         |
+| -------- | --------------- | ----------------------------------------------- |
+| Identity | Identity file   | Agent ID, role, module, display name            |
+| Session  | Daemon RPC      | Session ID, intent, task, uptime                |
+| Agents   | Daemon RPC      | List of registered agents with status and roles |
+| Inbox    | Daemon RPC      | Unread message count, total messages            |
+| Git      | Local git state | Current branch, recent commits, changed files   |
+| Context  | Context file    | Saved context from previous session (if exists) |
 
 ### Example Output
 
@@ -491,13 +492,13 @@ thrum wait --all --after -30s --timeout 5m --json
 thrum wait --mention @reviewer --timeout 5m
 ```
 
-| Flag        | Format                    | Description                        |
-| ----------- | ------------------------- | ---------------------------------- |
-| `--timeout` | Duration (e.g., `5m`)     | Max wait time (default: `30s`)     |
-| `--all`     | Boolean                   | Subscribe to all messages          |
-| `--mention` | `@role`                   | Wait for mentions of a role        |
+| Flag        | Format                       | Description                     |
+| ----------- | ---------------------------- | ------------------------------- |
+| `--timeout` | Duration (e.g., `5m`)        | Max wait time (default: `30s`)  |
+| `--all`     | Boolean                      | Subscribe to all messages       |
+| `--mention` | `@role`                      | Wait for mentions of a role     |
 | `--after`   | Relative time (e.g., `-30s`) | Only messages after this offset |
-| `--json`    | Boolean                   | Output messages as JSON            |
+| `--json`    | Boolean                      | Output messages as JSON         |
 
 **Exit codes:**
 

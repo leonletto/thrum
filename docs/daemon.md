@@ -204,15 +204,15 @@ on both the Unix socket and WebSocket servers unless noted.
 
 **Registered handlers:**
 
-| Category         | Methods                                                                                                     | Notes                                             |
-| ---------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **Health**       | `health`                                                                                                    |                                                   |
-| **Agent**        | `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`, `agent.delete`, `agent.cleanup`        | `delete` and `cleanup` are Unix socket only       |
-| **Session**      | `session.start`, `session.end`, `session.list`, `session.heartbeat`, `session.setIntent`, `session.setTask` |                                                   |
-| **Message**      | `message.send`, `message.get`, `message.list`, `message.edit`, `message.delete`, `message.markRead`         |                                                   |
+| Category         | Methods                                                                                                     | Notes                                              |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| **Health**       | `health`                                                                                                    |                                                    |
+| **Agent**        | `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`, `agent.delete`, `agent.cleanup`        | `delete` and `cleanup` are Unix socket only        |
+| **Session**      | `session.start`, `session.end`, `session.list`, `session.heartbeat`, `session.setIntent`, `session.setTask` |                                                    |
+| **Message**      | `message.send`, `message.get`, `message.list`, `message.edit`, `message.delete`, `message.markRead`         |                                                    |
 | **Subscription** | `subscribe`, `unsubscribe`, `subscriptions.list`                                                            | Subscriptions auto-cleanup on session end (v0.4.3) |
-| **Sync**         | `sync.force`, `sync.status`                                                                                 | Both Unix socket and WebSocket                    |
-| **User**         | `user.register`, `user.identify`                                                                            | `user.register` restricted to WebSocket transport |
+| **Sync**         | `sync.force`, `sync.status`                                                                                 | Both Unix socket and WebSocket                     |
+| **User**         | `user.register`, `user.identify`                                                                            | `user.register` restricted to WebSocket transport  |
 
 See [RPC API Reference](rpc-api.md) for full documentation.
 
@@ -363,19 +363,20 @@ The setting persists in `.thrum/config.json`:
 { "local_only": true }
 ```
 
-**Priority order:** CLI flag > environment variable > config file > default (`true` via `thrum init`).
+**Priority order:** CLI flag > environment variable > config file > default
+(`true` via `thrum init`).
 
 ### What changes in local-only mode
 
-| Component | Normal mode | Local-only mode |
-|-----------|-------------|-----------------|
-| Messaging | Works | Works |
-| Sessions | Works | Works |
-| SQLite projection | Works | Works |
-| WebSocket / MCP | Works | Works |
-| `git push origin a-sync` | Every 60s | **Skipped** |
-| `git fetch origin a-sync` | Every 60s | **Skipped** |
-| Remote branch setup | Automatic | **Skipped** |
+| Component                 | Normal mode | Local-only mode |
+| ------------------------- | ----------- | --------------- |
+| Messaging                 | Works       | Works           |
+| Sessions                  | Works       | Works           |
+| SQLite projection         | Works       | Works           |
+| WebSocket / MCP           | Works       | Works           |
+| `git push origin a-sync`  | Every 60s   | **Skipped**     |
+| `git fetch origin a-sync` | Every 60s   | **Skipped**     |
+| Remote branch setup       | Automatic   | **Skipped**     |
 
 ### Check if local-only mode is active
 
@@ -430,14 +431,14 @@ SQLite projection.
 
 All I/O paths enforce timeouts to prevent indefinite hangs:
 
-| Path | Timeout | Implementation |
-|------|---------|----------------|
-| CLI dial | 5s | net.DialTimeout |
-| RPC call | 10s | context.WithTimeout |
-| Server per-request | 10s | http.TimeoutHandler |
-| WebSocket handshake | 10s | websocket.Upgrader |
-| Git commands | 5s/10s | safecmd wrapper |
-| SQLite queries | context-scoped | safedb wrapper |
+| Path                | Timeout        | Implementation      |
+| ------------------- | -------------- | ------------------- |
+| CLI dial            | 5s             | net.DialTimeout     |
+| RPC call            | 10s            | context.WithTimeout |
+| Server per-request  | 10s            | http.TimeoutHandler |
+| WebSocket handshake | 10s            | websocket.Upgrader  |
+| Git commands        | 5s/10s         | safecmd wrapper     |
+| SQLite queries      | context-scoped | safedb wrapper      |
 
 The `safedb` and `safecmd` packages wrap all database and command operations
 with context-aware timeouts. All DB operations go through `safedb` wrappers and
@@ -641,23 +642,23 @@ rm .thrum/var/thrum.pid
 
 ## Implemented Features
 
-| Epic           | Feature                                                     | Status   |
-| -------------- | ----------------------------------------------------------- | -------- |
-| Epic 2         | Daemon core (Unix socket, JSON-RPC)                         | Complete |
-| Epic 3         | Agent & session management                                  | Complete |
-| Epic 4         | Message send/receive                                        | Complete |
-| Epic 5         | Git sync protocol                                           | Complete |
-| Epic 6         | Subscription & notifications                                | Complete |
-| Epic 8         | WebSocket server                                            | Complete |
-| Epic F         | Embedded SPA (single port)                                  | Complete |
-| Epic 21        | Agent Work Context (live git state)                         | Complete |
-| DLH            | Daemon Lifecycle Hardening (flock, JSON PID, defer cleanup) | Complete |
-| MCP            | MCP Server (`thrum mcp serve`)                              | Complete |
-| JSONL Sharding | Per-agent JSONL files, event_id, naming, cleanup            | Complete |
-| Sync WT        | Sync worktree at `.git/thrum-sync/a-sync/`                  | Complete |
-| Agent Naming   | Human-readable agent names (`--name`, `THRUM_NAME`)         | Complete |
-| Agent Cleanup  | `agent.delete`, `agent.cleanup` (orphan detection)          | Complete |
-| Browser Auth   | Browser auto-registration via git config                    | Complete |
+| Epic            | Feature                                                     | Status   |
+| --------------- | ----------------------------------------------------------- | -------- |
+| Epic 2          | Daemon core (Unix socket, JSON-RPC)                         | Complete |
+| Epic 3          | Agent & session management                                  | Complete |
+| Epic 4          | Message send/receive                                        | Complete |
+| Epic 5          | Git sync protocol                                           | Complete |
+| Epic 6          | Subscription & notifications                                | Complete |
+| Epic 8          | WebSocket server                                            | Complete |
+| Epic F          | Embedded SPA (single port)                                  | Complete |
+| Epic 21         | Agent Work Context (live git state)                         | Complete |
+| DLH             | Daemon Lifecycle Hardening (flock, JSON PID, defer cleanup) | Complete |
+| MCP             | MCP Server (`thrum mcp serve`)                              | Complete |
+| JSONL Sharding  | Per-agent JSONL files, event_id, naming, cleanup            | Complete |
+| Sync WT         | Sync worktree at `.git/thrum-sync/a-sync/`                  | Complete |
+| Agent Naming    | Human-readable agent names (`--name`, `THRUM_NAME`)         | Complete |
+| Agent Cleanup   | `agent.delete`, `agent.cleanup` (orphan detection)          | Complete |
+| Browser Auth    | Browser auto-registration via git config                    | Complete |
 | Local-Only Mode | Disable remote sync for public repos                        | Complete |
 
 ## References

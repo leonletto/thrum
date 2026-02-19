@@ -1,17 +1,20 @@
 ---
-description: Restore saved agent work context after compaction or session restart
+description:
+  Restore saved agent work context after compaction or session restart
 ---
 
-Load your previously saved agent work context. This recovers what you were working on,
-decisions made, and next steps — essential after context compaction or session restart.
+Load your previously saved agent work context. This recovers what you were
+working on, decisions made, and next steps — essential after context compaction
+or session restart.
 
 ```bash
 thrum context show
 ```
 
-If the context is empty, check for a `/tmp` backup. Backups are named with the agent's
-identity (`name-role-module`) and an epoch timestamp. Find YOUR backup and **skip it if
-older than 30 minutes** (it predates a more recent `/thrum:update-context` save):
+If the context is empty, check for a `/tmp` backup. Backups are named with the
+agent's identity (`name-role-module`) and an epoch timestamp. Find YOUR backup
+and **skip it if older than 30 minutes** (it predates a more recent
+`/thrum:update-context` save):
 
 ```bash
 # Get your identity to find the right backup

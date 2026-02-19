@@ -5,15 +5,16 @@ description:
   chain, and the config show command"
 category: "guides"
 order: 3
-tags: ["configuration", "config", "runtime", "daemon", "settings", "config-show"]
+tags:
+  ["configuration", "config", "runtime", "daemon", "settings", "config-show"]
 last_updated: "2026-02-12"
 ---
 
 # Configuration
 
 Thrum uses `.thrum/config.json` as the single source of truth for user
-preferences. Everything works with sensible defaults — you only need to
-edit config.json when you want to change something.
+preferences. Everything works with sensible defaults — you only need to edit
+config.json when you want to change something.
 
 ## Config File
 
@@ -71,18 +72,19 @@ configuration. For day-to-day use, edit `config.json`.
 
 ### Environment Variable Reference
 
-| Variable | Overrides | Example |
-|----------|-----------|---------|
-| `THRUM_LOCAL` | `daemon.local_only` | `THRUM_LOCAL=false` |
-| `THRUM_SYNC_INTERVAL` | `daemon.sync_interval` | `THRUM_SYNC_INTERVAL=120` |
-| `THRUM_WS_PORT` | `daemon.ws_port` | `THRUM_WS_PORT=9999` |
-| `THRUM_NAME` | Agent identity selection | `THRUM_NAME=alice` |
-| `THRUM_ROLE` | Agent role | `THRUM_ROLE=planner` |
-| `THRUM_MODULE` | Agent module | `THRUM_MODULE=backend` |
+| Variable              | Overrides                | Example                   |
+| --------------------- | ------------------------ | ------------------------- |
+| `THRUM_LOCAL`         | `daemon.local_only`      | `THRUM_LOCAL=false`       |
+| `THRUM_SYNC_INTERVAL` | `daemon.sync_interval`   | `THRUM_SYNC_INTERVAL=120` |
+| `THRUM_WS_PORT`       | `daemon.ws_port`         | `THRUM_WS_PORT=9999`      |
+| `THRUM_NAME`          | Agent identity selection | `THRUM_NAME=alice`        |
+| `THRUM_ROLE`          | Agent role               | `THRUM_ROLE=planner`      |
+| `THRUM_MODULE`        | Agent module             | `THRUM_MODULE=backend`    |
 
 ## Runtime Templates
 
-During `thrum init`, Thrum can generate configuration files for various AI coding runtimes:
+During `thrum init`, Thrum can generate configuration files for various AI
+coding runtimes:
 
 - **Claude Code** - CLAUDE.md and .claude/agents/
 - **Augment** - .augment/ directory
@@ -92,12 +94,13 @@ During `thrum init`, Thrum can generate configuration files for various AI codin
 - **CLI-only** - No runtime configuration files
 
 Use `thrum init --runtime <name>` to specify which runtime template to generate.
-Runtime templates are created during initialization and are not tracked in `config.json`.
+Runtime templates are created during initialization and are not tracked in
+`config.json`.
 
 ## Viewing Configuration
 
-Use `thrum config show` to see the effective configuration and where each
-value comes from:
+Use `thrum config show` to see the effective configuration and where each value
+comes from:
 
 ```
 Thrum Configuration
@@ -129,8 +132,8 @@ Use `thrum config show --json` for machine-readable output.
 
 These remain separate for good reasons:
 
-- **Identity files** (`.thrum/identities/*.json`) — per-agent config, one
-  file per registered agent
+- **Identity files** (`.thrum/identities/*.json`) — per-agent config, one file
+  per registered agent
 - **Context files** (`.thrum/context/*.md`) — volatile session state
-- **Runtime templates** — generated config files for your AI runtime
-  (CLAUDE.md, .cursorrules, etc.)
+- **Runtime templates** — generated config files for your AI runtime (CLAUDE.md,
+  .cursorrules, etc.)

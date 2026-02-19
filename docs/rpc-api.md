@@ -70,7 +70,6 @@ exception:
 - `user.register` is only available over WebSocket (returns `-32001` on Unix
   socket)
 
-
 ## Method Reference
 
 ### health
@@ -85,18 +84,17 @@ Health check and daemon status.
 
 **Response:**
 
-| Field        | Type    | Description                                                   |
-| ------------ | ------- | ------------------------------------------------------------- |
-| `status`     | string  | `"ok"` or `"degraded"`                                        |
-| `uptime_ms`  | integer | Daemon uptime in milliseconds                                 |
-| `version`    | string  | Daemon version (e.g., `"0.1.0"`)                              |
-| `repo_id`    | string  | Repository identifier                                         |
+| Field        | Type    | Description                                                       |
+| ------------ | ------- | ----------------------------------------------------------------- |
+| `status`     | string  | `"ok"` or `"degraded"`                                            |
+| `uptime_ms`  | integer | Daemon uptime in milliseconds                                     |
+| `version`    | string  | Daemon version (e.g., `"0.1.0"`)                                  |
+| `repo_id`    | string  | Repository identifier                                             |
 | `sync_state` | string  | `"synced"`, `"pending"`, or `"error"` (requires active sync loop) |
 
 **Errors:**
 
 - No method-specific errors.
-
 
 ### agent.register
 
@@ -130,7 +128,6 @@ Register or update an agent identity.
 - `role is required`: Missing `role` field
 - `module is required`: Missing `module` field
 
-
 ### agent.list
 
 List registered agents with optional filters.
@@ -159,7 +156,6 @@ List registered agents with optional filters.
 
 - `invalid request`: Malformed JSON params
 
-
 ### agent.whoami
 
 Get current agent identity and active session.
@@ -186,7 +182,6 @@ Get current agent identity and active session.
 
 - `resolve identity`: Could not determine agent identity from environment or
   identity file
-
 
 ### agent.listContext
 
@@ -224,7 +219,6 @@ List agent work contexts (branch, commits, files, intent, task).
 
 - `invalid request`: Malformed JSON params
 
-
 ### agent.delete
 
 Delete an agent by name. Removes the identity file, per-agent JSONL message
@@ -249,7 +243,6 @@ file, and SQLite record. Emits an `agent.cleanup` event.
 - `agent name is required`: Missing `name` field
 - `invalid agent name`: Name does not match validation regex
 - `agent not found`: No agent with given name
-
 
 ### agent.cleanup
 
@@ -288,7 +281,6 @@ inactive beyond the threshold.
 
 - `invalid request`: Malformed JSON params
 
-
 ### session.start
 
 Start a new work session for an agent. Automatically recovers any orphaned
@@ -315,7 +307,6 @@ sessions for the same agent.
 - `agent_id is required`: Missing `agent_id` field
 - `agent not found`: Agent with given ID is not registered
 
-
 ### session.end
 
 End an active work session. Syncs work contexts to JSONL on end.
@@ -339,7 +330,6 @@ End an active work session. Syncs work contexts to JSONL on end.
 
 - `session_id is required`: Missing `session_id` field
 - `get session`: Session ID not found
-
 
 ### session.heartbeat
 
@@ -369,7 +359,6 @@ Extracts git work context if a `worktree` ref is set.
 - `session not found`: Session ID does not exist
 - `session has already ended`: Session was previously ended
 
-
 ### session.setIntent
 
 Set a free-text intent describing what the agent is working on.
@@ -395,7 +384,6 @@ Set a free-text intent describing what the agent is working on.
 - `session not found`: Session ID does not exist
 - `session has already ended`: Session was previously ended
 
-
 ### session.setTask
 
 Set the current task identifier for the session.
@@ -420,7 +408,6 @@ Set the current task identifier for the session.
 - `session_id is required`: Missing `session_id` field
 - `session not found`: Session ID does not exist
 - `session has already ended`: Session was previously ended
-
 
 ### session.list
 
@@ -451,27 +438,26 @@ List sessions with optional filters.
 
 - `invalid request`: Malformed JSON params
 
-
 ### message.send
 
 Send a message to the messaging system. Triggers subscription notifications.
 
 **Request:**
 
-| Parameter    | Type    | Required | Description                                                       |
-| ------------ | ------- | -------- | ----------------------------------------------------------------- |
-| `content`    | string  | yes      | Message body text                                                 |
-| `format`     | string  | no       | `"markdown"` (default), `"plain"`, or `"json"`                    |
-| `structured` | object  | no       | Typed JSON payload                                                |
+| Parameter    | Type    | Required | Description                                                      |
+| ------------ | ------- | -------- | ---------------------------------------------------------------- |
+| `content`    | string  | yes      | Message body text                                                |
+| `format`     | string  | no       | `"markdown"` (default), `"plain"`, or `"json"`                   |
+| `structured` | object  | no       | Typed JSON payload                                               |
 | `thread_id`  | string  | no       | Thread identifier (deprecated in v0.4.0, use `reply_to` instead) |
-| `reply_to`   | string  | no       | Message ID to reply to (creates a reply chain)                    |
-| `scopes`     | array   | no       | Message scopes (`[{"type": "...", "value": "..."}]`)              |
-| `refs`       | array   | no       | Message references (`[{"type": "...", "value": "..."}]`)          |
-| `mentions`   | array   | no       | Mention roles (e.g., `["@reviewer"]`)                             |
-| `tags`       | array   | no       | Message tags                                                      |
-| `priority`   | string  | no       | `"low"`, `"normal"` (default), `"high"`                           |
-| `acting_as`  | string  | no       | Impersonate this agent ID (users only)                            |
-| `disclose`   | boolean | no       | Show `[via user:X]` tag when impersonating                        |
+| `reply_to`   | string  | no       | Message ID to reply to (creates a reply chain)                   |
+| `scopes`     | array   | no       | Message scopes (`[{"type": "...", "value": "..."}]`)             |
+| `refs`       | array   | no       | Message references (`[{"type": "...", "value": "..."}]`)         |
+| `mentions`   | array   | no       | Mention roles (e.g., `["@reviewer"]`)                            |
+| `tags`       | array   | no       | Message tags                                                     |
+| `priority`   | string  | no       | `"low"`, `"normal"` (default), `"high"`                          |
+| `acting_as`  | string  | no       | Impersonate this agent ID (users only)                           |
+| `disclose`   | boolean | no       | Show `[via user:X]` tag when impersonating                       |
 
 **Response:**
 
@@ -487,7 +473,6 @@ Send a message to the messaging system. Triggers subscription notifications.
 - `no active session found`: Agent does not have an active session
 - `only users can impersonate agents`: Non-user tried to use `acting_as`
 - `target agent does not exist`: `acting_as` references nonexistent agent
-
 
 ### message.get
 
@@ -526,32 +511,31 @@ Retrieve a single message by ID with full details.
 - `message_id is required`: Missing `message_id` field
 - `message not found`: No message with given ID
 
-
 ### message.list
 
 List messages with filtering, pagination, and sorting.
 
 **Request:**
 
-| Parameter              | Type    | Required | Description                                                                                        |
-| ---------------------- | ------- | -------- | -------------------------------------------------------------------------------------------------- |
-| `scope`                | object  | no       | Filter by scope (`{"type": "...", "value": "..."}`)                                                |
-| `ref`                  | object  | no       | Filter by ref (`{"type": "...", "value": "..."}`)                                                  |
-| `thread_id`            | string  | no       | Filter by thread ID                                                                                |
-| `author_id`            | string  | no       | Filter by author agent ID                                                                          |
-| `mentions`             | boolean | no       | Only messages mentioning current agent (resolved from config)                                      |
-| `unread`               | boolean | no       | Only unread messages (resolved from config)                                                        |
-| `mention_role`         | string  | no       | Explicit filter: messages with mention ref matching this role (for remote callers like MCP server) |
-| `unread_for_agent`     | string  | no       | Explicit filter: messages unread by this agent ID (for remote callers like MCP server)             |
-| `exclude_self`         | boolean | no       | Exclude messages authored by current agent (inbox mode)                                            |
-| `caller_agent_id`      | string  | no       | For worktree callers to pass their agent ID                                                        |
-| `caller_mention_role`  | string  | no       | For worktree callers to pass their role for mentions filter                                        |
-| `for_agent`            | string  | no       | Filter for messages addressed to this agent name (mentions + broadcasts)                           |
-| `for_agent_role`       | string  | no       | Filter for messages addressed to this agent role (mentions + broadcasts)                           |
-| `page_size`            | integer | no       | Items per page (default: 10, max: 100)                                                             |
-| `page`                 | integer | no       | Page number (default: 1)                                                                           |
-| `sort_by`              | string  | no       | `"created_at"` (default) or `"updated_at"`                                                         |
-| `sort_order`           | string  | no       | `"asc"` or `"desc"` (default)                                                                      |
+| Parameter             | Type    | Required | Description                                                                                        |
+| --------------------- | ------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `scope`               | object  | no       | Filter by scope (`{"type": "...", "value": "..."}`)                                                |
+| `ref`                 | object  | no       | Filter by ref (`{"type": "...", "value": "..."}`)                                                  |
+| `thread_id`           | string  | no       | Filter by thread ID                                                                                |
+| `author_id`           | string  | no       | Filter by author agent ID                                                                          |
+| `mentions`            | boolean | no       | Only messages mentioning current agent (resolved from config)                                      |
+| `unread`              | boolean | no       | Only unread messages (resolved from config)                                                        |
+| `mention_role`        | string  | no       | Explicit filter: messages with mention ref matching this role (for remote callers like MCP server) |
+| `unread_for_agent`    | string  | no       | Explicit filter: messages unread by this agent ID (for remote callers like MCP server)             |
+| `exclude_self`        | boolean | no       | Exclude messages authored by current agent (inbox mode)                                            |
+| `caller_agent_id`     | string  | no       | For worktree callers to pass their agent ID                                                        |
+| `caller_mention_role` | string  | no       | For worktree callers to pass their role for mentions filter                                        |
+| `for_agent`           | string  | no       | Filter for messages addressed to this agent name (mentions + broadcasts)                           |
+| `for_agent_role`      | string  | no       | Filter for messages addressed to this agent role (mentions + broadcasts)                           |
+| `page_size`           | integer | no       | Items per page (default: 10, max: 100)                                                             |
+| `page`                | integer | no       | Page number (default: 1)                                                                           |
+| `sort_by`             | string  | no       | `"created_at"` (default) or `"updated_at"`                                                         |
+| `sort_order`          | string  | no       | `"asc"` or `"desc"` (default)                                                                      |
 
 **Response:**
 
@@ -574,7 +558,6 @@ List messages with filtering, pagination, and sorting.
 
 - `invalid sort_by`: Must be `"created_at"` or `"updated_at"`
 - `invalid sort_order`: Must be `"asc"` or `"desc"`
-
 
 ### message.edit
 
@@ -605,7 +588,6 @@ Edit a message's content or structured data. Only the original author can edit.
 - `only message author can edit`: Current agent is not the message author
 - `no active session found`: Agent does not have an active session
 
-
 ### message.delete
 
 Soft-delete a message. The message remains in the database and JSONL log but is
@@ -631,7 +613,6 @@ marked as deleted.
 - `message not found`: No message with given ID
 - `message already deleted`: Message was already soft-deleted
 
-
 ### message.markRead
 
 Batch mark messages as read for the current agent and session. Returns
@@ -656,10 +637,10 @@ collaboration info (other agents who also read the messages).
   `message_ids` array
 - `no active session found`: Agent does not have an active session
 
-
 ### group.create
 
-Create a named group for targeted messaging. Groups can contain agents and roles.
+Create a named group for targeted messaging. Groups can contain agents and
+roles.
 
 **Request:**
 
@@ -670,35 +651,35 @@ Create a named group for targeted messaging. Groups can contain agents and roles
 
 **Response:**
 
-| Field        | Type   | Description                     |
-| ------------ | ------ | ------------------------------- |
-| `group_id`   | string | Unique group identifier         |
-| `name`       | string | Group name                      |
-| `created_at` | string | ISO 8601 creation timestamp     |
-| `created_by` | string | Agent ID of creator             |
+| Field        | Type   | Description                 |
+| ------------ | ------ | --------------------------- |
+| `group_id`   | string | Unique group identifier     |
+| `name`       | string | Group name                  |
+| `created_at` | string | ISO 8601 creation timestamp |
+| `created_by` | string | Agent ID of creator         |
 
 **Errors:**
 
 - `name is required`: Missing `name` field
 - `group already exists`: Group with this name already exists
 
-
 ### group.delete
 
-Delete a group by name. The `@everyone` group is protected and cannot be deleted.
+Delete a group by name. The `@everyone` group is protected and cannot be
+deleted.
 
 **Request:**
 
-| Parameter | Type   | Required | Description     |
-| --------- | ------ | -------- | --------------- |
-| `name`    | string | yes      | Group name      |
+| Parameter | Type   | Required | Description |
+| --------- | ------ | -------- | ----------- |
+| `name`    | string | yes      | Group name  |
 
 **Response:**
 
-| Field        | Type   | Description                     |
-| ------------ | ------ | ------------------------------- |
-| `name`       | string | Name of deleted group           |
-| `deleted_at` | string | ISO 8601 deletion timestamp     |
+| Field        | Type   | Description                 |
+| ------------ | ------ | --------------------------- |
+| `name`       | string | Name of deleted group       |
+| `deleted_at` | string | ISO 8601 deletion timestamp |
 
 **Errors:**
 
@@ -706,26 +687,25 @@ Delete a group by name. The `@everyone` group is protected and cannot be deleted
 - `cannot delete protected group`: Attempted to delete `@everyone`
 - `group not found`: No group with given name
 
-
 ### group.member.add
 
 Add a member to a group. Members can be agents (by name) or roles.
 
 **Request:**
 
-| Parameter      | Type   | Required | Description                              |
-| -------------- | ------ | -------- | ---------------------------------------- |
-| `group`        | string | yes      | Group to add member to                   |
-| `member_type`  | string | yes      | `"agent"` or `"role"`                    |
-| `member_value` | string | yes      | Agent name or role name                  |
+| Parameter      | Type   | Required | Description             |
+| -------------- | ------ | -------- | ----------------------- |
+| `group`        | string | yes      | Group to add member to  |
+| `member_type`  | string | yes      | `"agent"` or `"role"`   |
+| `member_value` | string | yes      | Agent name or role name |
 
 **Response:**
 
-| Field          | Type   | Description                     |
-| -------------- | ------ | ------------------------------- |
-| `group`        | string | Group name                      |
-| `member_type`  | string | Type of member added            |
-| `member_value` | string | ID of member added              |
+| Field          | Type   | Description          |
+| -------------- | ------ | -------------------- |
+| `group`        | string | Group name           |
+| `member_type`  | string | Type of member added |
+| `member_value` | string | ID of member added   |
 
 **Errors:**
 
@@ -735,26 +715,25 @@ Add a member to a group. Members can be agents (by name) or roles.
 - `group not found`: No group with given name
 - `invalid member_type`: Must be `"agent"` or `"role"`
 
-
 ### group.member.remove
 
 Remove a member from a group.
 
 **Request:**
 
-| Parameter      | Type   | Required | Description                              |
-| -------------- | ------ | -------- | ---------------------------------------- |
-| `group`        | string | yes      | Group to remove member from              |
-| `member_type`  | string | yes      | `"agent"` or `"role"`                    |
-| `member_value` | string | yes      | Agent name or role name                  |
+| Parameter      | Type   | Required | Description                 |
+| -------------- | ------ | -------- | --------------------------- |
+| `group`        | string | yes      | Group to remove member from |
+| `member_type`  | string | yes      | `"agent"` or `"role"`       |
+| `member_value` | string | yes      | Agent name or role name     |
 
 **Response:**
 
-| Field          | Type   | Description                     |
-| -------------- | ------ | ------------------------------- |
-| `group`        | string | Group name                      |
-| `member_type`  | string | Type of member removed          |
-| `member_value` | string | ID of member removed            |
+| Field          | Type   | Description            |
+| -------------- | ------ | ---------------------- |
+| `group`        | string | Group name             |
+| `member_type`  | string | Type of member removed |
+| `member_value` | string | ID of member removed   |
 
 **Errors:**
 
@@ -763,7 +742,6 @@ Remove a member from a group.
 - `member_value is required`: Missing `member_value` field
 - `group not found`: No group with given name
 - `member not found`: Member is not in the group
-
 
 ### group.list
 
@@ -777,19 +755,18 @@ List all groups in the system.
 
 **Response:**
 
-| Field                      | Type    | Description                             |
-| -------------------------- | ------- | --------------------------------------- |
-| `groups`                   | array   | List of group objects                   |
-| `groups[].group_id`        | string  | Unique group identifier                 |
-| `groups[].name`            | string  | Group name                              |
-| `groups[].description`     | string  | Group description (may be empty)        |
-| `groups[].created_at`      | string  | ISO 8601 creation timestamp             |
-| `groups[].member_count`    | integer | Number of direct members                |
+| Field                   | Type    | Description                      |
+| ----------------------- | ------- | -------------------------------- |
+| `groups`                | array   | List of group objects            |
+| `groups[].group_id`     | string  | Unique group identifier          |
+| `groups[].name`         | string  | Group name                       |
+| `groups[].description`  | string  | Group description (may be empty) |
+| `groups[].created_at`   | string  | ISO 8601 creation timestamp      |
+| `groups[].member_count` | integer | Number of direct members         |
 
 **Errors:**
 
 - No method-specific errors.
-
 
 ### group.info
 
@@ -803,56 +780,55 @@ Get detailed information about a specific group.
 
 **Response:**
 
-| Field                  | Type    | Description                             |
-| ---------------------- | ------- | --------------------------------------- |
-| `group_id`             | string  | Unique group identifier                 |
-| `name`                 | string  | Group name                              |
-| `description`          | string  | Group description (may be empty)        |
-| `created_at`           | string  | ISO 8601 creation timestamp             |
-| `created_by`           | string  | Agent ID of creator                     |
-| `members`              | array   | List of member objects                  |
-| `members[].member_type`  | string  | `"agent"` or `"role"`                   |
-| `members[].member_value` | string  | Agent name or role name                 |
-| `members[].added_at`   | string  | ISO 8601 timestamp when member was added|
-| `members[].added_by`   | string  | Agent ID who added this member          |
+| Field                    | Type   | Description                              |
+| ------------------------ | ------ | ---------------------------------------- |
+| `group_id`               | string | Unique group identifier                  |
+| `name`                   | string | Group name                               |
+| `description`            | string | Group description (may be empty)         |
+| `created_at`             | string | ISO 8601 creation timestamp              |
+| `created_by`             | string | Agent ID of creator                      |
+| `members`                | array  | List of member objects                   |
+| `members[].member_type`  | string | `"agent"` or `"role"`                    |
+| `members[].member_value` | string | Agent name or role name                  |
+| `members[].added_at`     | string | ISO 8601 timestamp when member was added |
+| `members[].added_by`     | string | Agent ID who added this member           |
 
 **Errors:**
 
 - `name is required`: Missing `name` field
 - `group not found`: No group with given name
-
 
 ### group.members
 
-Get members of a group with optional expansion. When `expand` is `true`, resolves roles to individual agent IDs.
+Get members of a group with optional expansion. When `expand` is `true`,
+resolves roles to individual agent IDs.
 
 **Request:**
 
-| Parameter | Type    | Required | Description                                          |
-| --------- | ------- | -------- | ---------------------------------------------------- |
-| `name`    | string  | yes      | Group name                                           |
-| `expand`  | boolean | no       | Resolve roles to agent IDs (default: `false`)        |
+| Parameter | Type    | Required | Description                                   |
+| --------- | ------- | -------- | --------------------------------------------- |
+| `name`    | string  | yes      | Group name                                    |
+| `expand`  | boolean | no       | Resolve roles to agent IDs (default: `false`) |
 
 **Response (without expand):**
 
-| Field             | Type   | Description                           |
-| ----------------- | ------ | ------------------------------------- |
-| `members`              | array  | List of direct member objects         |
-| `members[].member_type`  | string | `"agent"` or `"role"`               |
-| `members[].member_value` | string | Agent name or role name             |
+| Field                    | Type   | Description                   |
+| ------------------------ | ------ | ----------------------------- |
+| `members`                | array  | List of direct member objects |
+| `members[].member_type`  | string | `"agent"` or `"role"`         |
+| `members[].member_value` | string | Agent name or role name       |
 
 **Response (with expand=true):**
 
-| Field         | Type    | Description                           |
-| ------------- | ------- | ------------------------------------- |
-| `members`     | array   | List of direct member objects         |
-| `expanded`    | array   | List of resolved agent IDs (strings, only when expand=true) |
+| Field      | Type  | Description                                                 |
+| ---------- | ----- | ----------------------------------------------------------- |
+| `members`  | array | List of direct member objects                               |
+| `expanded` | array | List of resolved agent IDs (strings, only when expand=true) |
 
 **Errors:**
 
 - `name is required`: Missing `name` field
 - `group not found`: No group with given name
-
 
 ### subscribe
 
@@ -883,7 +859,6 @@ Exactly one of `scope`, `mention_role`, or `all` must be provided.
   subscription type given
 - `no active session found`: Agent does not have an active session
 
-
 ### unsubscribe
 
 Remove a subscription by ID.
@@ -904,7 +879,6 @@ Remove a subscription by ID.
 
 - `subscription_id is required`: Missing or zero `subscription_id`
 - `no active session found`: Agent does not have an active session
-
 
 ### subscriptions.list
 
@@ -931,7 +905,6 @@ List all subscriptions for the current session.
 **Errors:**
 
 - `no active session found`: Agent does not have an active session
-
 
 ### user.register
 
@@ -967,7 +940,6 @@ Register a human user identity. Only available over WebSocket.
 - Registration is idempotent: if the user already exists, returns the existing
   info with a fresh token and status `"existing"`.
 
-
 ### user.identify
 
 Get the current user's identity from git config. Used for browser
@@ -991,7 +963,6 @@ auto-registration.
 
 - `git config user.name not set`: Git user.name is not configured in the
   repository
-
 
 ## Push Notifications
 
@@ -1036,7 +1007,6 @@ When a message matches a subscription, the daemon sends a JSON-RPC notification
 4. Clients disconnected at notification time will see messages via
    `message.list` when reconnecting
 
-
 ### sync.status
 
 Get current sync loop status and health. Available when the sync loop is active
@@ -1062,7 +1032,6 @@ Get current sync loop status and health. Available when the sync loop is active
 - This method is only registered when the sync loop is initialized (i.e., the
   repository has a remote origin). Returns method-not-found (`-32601`)
   otherwise.
-
 
 ### sync.force
 
@@ -1090,7 +1059,6 @@ Trigger an immediate sync (non-blocking). Available when the sync loop is active
   otherwise.
 - The sync loop runs every 60 seconds by default (configurable via
   `--sync-interval`).
-
 
 ## Using the API
 
@@ -1196,7 +1164,6 @@ callRPC("health").then((result) => {
 });
 ```
 
-
 ## Best Practices
 
 ### Connection Management
@@ -1216,7 +1183,6 @@ callRPC("health").then((result) => {
 1. **Use unique IDs** - Helps correlate requests and responses
 2. **Can be strings or numbers** - Both are valid per JSON-RPC 2.0
 3. **Optional for notifications** - Omit ID if you don't need a response
-
 
 ## Troubleshooting
 
@@ -1246,7 +1212,6 @@ Common causes:
 - Check method name spelling (case-sensitive)
 - Verify daemon version supports the method
 - See available methods section above
-
 
 ## References
 

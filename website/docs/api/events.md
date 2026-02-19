@@ -1,8 +1,8 @@
 ---
 title: "Event Reference"
 description:
-  "All events emitted by the Thrum daemon over WebSocket — message,
-  agent, session, sync, and subscription events"
+  "All events emitted by the Thrum daemon over WebSocket — message, agent,
+  session, sync, and subscription events"
 category: "api"
 ---
 
@@ -179,7 +179,6 @@ ws.onmessage = (event) => {
 };
 ```
 
-
 #### message.edit
 
 Emitted when a message is edited.
@@ -238,7 +237,6 @@ ws.onmessage = (event) => {
 };
 ```
 
-
 #### message.delete
 
 Emitted when a message is soft-deleted.
@@ -289,7 +287,6 @@ ws.onmessage = (event) => {
 };
 ```
 
-
 ### Thread Events
 
 #### thread.create
@@ -327,7 +324,6 @@ Emitted when a new thread is created.
 
 **Related methods**: `thread.create`, `thread.list`, `thread.get`
 
-
 #### thread.updated
 
 Real-time notification emitted when a thread is updated with new messages. This
@@ -363,7 +359,6 @@ event is a WebSocket notification only and is **not persisted** to JSONL.
 - `last_activity`: Timestamp of latest activity
 - `last_sender`: Agent who sent the latest message
 - `preview`: Optional preview of latest message content
-
 
 ### Agent Events
 
@@ -417,7 +412,6 @@ Names must match `[a-z0-9_]+` and cannot use reserved words (`daemon`, `system`,
 
 **Related methods**: `agent.register`, `agent.list`
 
-
 #### agent.cleanup
 
 Emitted when an agent is deleted or cleaned up.
@@ -453,7 +447,6 @@ Emitted when an agent is deleted or cleaned up.
 - `method`: How cleanup was triggered (`"manual"`, `"automated"`, `"ui"`)
 
 **Related methods**: `agent.delete`, `agent.cleanup`
-
 
 #### agent.update
 
@@ -511,7 +504,6 @@ Emitted when an agent's work context changes (git state, intent, task).
 **Projection**: Work contexts are merged by `session_id` -- for contexts with
 the same session, the one with the newer `git_updated_at` wins.
 
-
 ### Session Events
 
 #### agent.session.start
@@ -555,7 +547,6 @@ Emitted when a session starts.
 
 **Related methods**: `session.start`, `session.end`
 
-
 #### agent.session.end
 
 Emitted when a session ends.
@@ -594,7 +585,6 @@ Emitted when a session ends.
 - `crash`: Unexpected termination or timeout
 
 **Related methods**: `session.end`, `session.start`
-
 
 ## Subscription Filtering
 

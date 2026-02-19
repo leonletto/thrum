@@ -175,7 +175,8 @@ incoming messages and notifies the main agent when they arrive.
 ### How It Works
 
 1. The main agent spawns a message-listener as a background task
-2. The listener uses `thrum wait --all` (blocks until message arrives or timeout)
+2. The listener uses `thrum wait --all` (blocks until message arrives or
+   timeout)
 3. When a message arrives, the listener returns immediately with the message
    content
 4. The main agent processes the message and re-arms the listener
@@ -431,8 +432,10 @@ bd list --status=in_progress
 
 ## See Also
 
-- [Workflow Templates](workflow-templates.md) -- three-phase agent development workflows (plan, prepare, implement)
-- [Multi-Agent Support](multi-agent.md) -- groups, runtime presets, and team coordination
+- [Workflow Templates](workflow-templates.md) -- three-phase agent development
+  workflows (plan, prepare, implement)
+- [Multi-Agent Support](multi-agent.md) -- groups, runtime presets, and team
+  coordination
 - [Tailscale Sync](tailscale-sync.md) -- cross-machine sync via Tailscale
 - [CLI Reference](cli.md) -- complete command documentation
 - [MCP Server](mcp-server.md) -- MCP tools and message-listener details

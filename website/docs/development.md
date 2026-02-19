@@ -137,7 +137,9 @@ go test -tags=resilience ./internal/daemon/...
 
 **Resilience Test Suite (v0.4.3):**
 
-The resilience test suite includes 39 tests covering crash recovery, concurrent access, and timeout enforcement. These tests require the `-tags=resilience` build flag:
+The resilience test suite includes 39 tests covering crash recovery, concurrent
+access, and timeout enforcement. These tests require the `-tags=resilience`
+build flag:
 
 - Crash recovery scenarios (daemon restart, state restoration)
 - Concurrent access patterns (multiple goroutines, race conditions)
@@ -643,12 +645,12 @@ over stdin/stdout).
 
 **MCP Tools (5):**
 
-| Tool                | Description                                               |
-| ------------------- | --------------------------------------------------------- |
-| `send_message`      | Send a message to another agent via @role addressing      |
-| `check_messages`    | Poll for unread messages mentioning this agent            |
-| `wait_for_message`  | Block until a message arrives (WebSocket push) or timeout |
-| `list_agents`       | List registered agents with active/offline status         |
+| Tool                | Description                                                                   |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `send_message`      | Send a message to another agent via @role addressing                          |
+| `check_messages`    | Poll for unread messages mentioning this agent                                |
+| `wait_for_message`  | Block until a message arrives (WebSocket push) or timeout                     |
+| `list_agents`       | List registered agents with active/offline status                             |
 | `broadcast_message` | Send to all agents (convenience wrapper around `send_message` to `@everyone`) |
 
 **Architecture:**
@@ -878,5 +880,6 @@ Or build the UI first: `make build-ui`
 - **Quickstart Guide**: `docs/quickstart.md`
 - **CLI Reference**: `docs/cli.md`
 - **Identity System**: `docs/identity.md`
-- **Workflow Templates**: `docs/workflow-templates.md` (structured feature development with AI agents)
+- **Workflow Templates**: `docs/workflow-templates.md` (structured feature
+  development with AI agents)
 - **Agent Reference**: `llms.txt` (concise) and `llms-full.txt` (detailed)

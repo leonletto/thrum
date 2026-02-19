@@ -1,8 +1,8 @@
 ---
 title: "MCP Server"
 description:
-  "Thrum MCP server for native AI agent integration — tools, identity,
-  message handling, and Claude Code setup"
+  "Thrum MCP server for native AI agent integration — tools, identity, message
+  handling, and Claude Code setup"
 category: "reference"
 ---
 
@@ -19,7 +19,8 @@ It runs as a long-lived child process (`thrum mcp serve`) communicating over
 stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for
 message operations and via WebSocket for real-time push notifications.
 
-The server provides 11 MCP tools: 5 for core messaging operations and 6 for group management.
+The server provides 11 MCP tools: 5 for core messaging operations and 6 for
+group management.
 
 The primary motivation is eliminating polling overhead. Without MCP, agents must
 periodically call `thrum inbox` (burning tokens and context). With MCP, a cheap
@@ -162,13 +163,13 @@ Send a message to another agent, role, or group.
 
 **Input:**
 
-| Parameter  | Type   | Required | Description                                                                   |
-| ---------- | ------ | -------- | ----------------------------------------------------------------------------- |
+| Parameter  | Type   | Required | Description                                                                  |
+| ---------- | ------ | -------- | ---------------------------------------------------------------------------- |
 | `to`       | string | yes      | Recipient: `@role`, agent name, `@groupname`, or composite `agent:role:hash` |
-| `content`  | string | yes      | Message text (markdown)                                                       |
-| `reply_to` | string | no       | Message ID to reply to (creates a reply chain)                                |
-| `priority` | string | no       | `critical`, `high`, `normal` (default), or `low`                              |
-| `metadata` | object | no       | Key-value metadata (passed as structured data)                                |
+| `content`  | string | yes      | Message text (markdown)                                                      |
+| `reply_to` | string | no       | Message ID to reply to (creates a reply chain)                               |
+| `priority` | string | no       | `critical`, `high`, `normal` (default), or `low`                             |
+| `metadata` | object | no       | Key-value metadata (passed as structured data)                               |
 
 **Output:**
 
@@ -185,7 +186,6 @@ Send a message to another agent, role, or group.
 - `ops` is used as-is
 
 **Daemon RPC:** `message.send`
-
 
 ### check_messages
 
@@ -227,7 +227,6 @@ ID.
    call)
 
 **Daemon RPC:** `message.list` + `message.markRead`
-
 
 ### wait_for_message
 
@@ -272,7 +271,6 @@ connect, this tool returns an error.
 
 **Daemon RPC:** WebSocket notifications + `message.get` + `message.markRead`
 
-
 ### list_agents
 
 List all registered agents and their status.
@@ -307,10 +305,11 @@ List all registered agents and their status.
 
 **Daemon RPC:** `agent.list`
 
-
 ### broadcast_message
 
-Send a message to all agents via the `@everyone` group, with optional filtering. The sender is automatically excluded. This is a convenience wrapper around sending to `@everyone`.
+Send a message to all agents via the `@everyone` group, with optional filtering.
+The sender is automatically excluded. This is a convenience wrapper around
+sending to `@everyone`.
 
 **Input:**
 
@@ -348,7 +347,6 @@ Send a message to all agents via the `@everyone` group, with optional filtering.
 
 **Daemon RPC:** `agent.list` + `message.send` (one per recipient)
 
-
 ### create_group
 
 Create a named group for targeted messaging.
@@ -362,33 +360,32 @@ Create a named group for targeted messaging.
 
 **Output:**
 
-| Field    | Type   | Description                 |
-| -------- | ------ | --------------------------- |
-| `status` | string | `created`                   |
-| `name`   | string | Name of the created group   |
+| Field    | Type   | Description               |
+| -------- | ------ | ------------------------- |
+| `status` | string | `created`                 |
+| `name`   | string | Name of the created group |
 
 **Daemon RPC:** `group.create`
 
-
 ### delete_group
 
-Delete a group by name. The `@everyone` group is protected and cannot be deleted.
+Delete a group by name. The `@everyone` group is protected and cannot be
+deleted.
 
 **Input:**
 
-| Parameter | Type   | Required | Description                     |
-| --------- | ------ | -------- | ------------------------------- |
-| `name`    | string | yes      | Group name to delete            |
+| Parameter | Type   | Required | Description          |
+| --------- | ------ | -------- | -------------------- |
+| `name`    | string | yes      | Group name to delete |
 
 **Output:**
 
-| Field    | Type   | Description                 |
-| -------- | ------ | --------------------------- |
-| `status` | string | `deleted`                   |
-| `name`   | string | Name of the deleted group   |
+| Field    | Type   | Description               |
+| -------- | ------ | ------------------------- |
+| `status` | string | `deleted`                 |
+| `name`   | string | Name of the deleted group |
 
 **Daemon RPC:** `group.delete`
-
 
 ### add_group_member
 
@@ -404,15 +401,14 @@ Add a member (agent or role) to a group.
 
 **Output:**
 
-| Field          | Type   | Description                 |
-| -------------- | ------ | --------------------------- |
-| `status`       | string | `added`                     |
-| `group`        | string | Group name                  |
-| `member_type`  | string | Type of member added        |
-| `member_value` | string | Value of member added       |
+| Field          | Type   | Description           |
+| -------------- | ------ | --------------------- |
+| `status`       | string | `added`               |
+| `group`        | string | Group name            |
+| `member_type`  | string | Type of member added  |
+| `member_value` | string | Value of member added |
 
 **Daemon RPC:** `group.member.add`
-
 
 ### remove_group_member
 
@@ -428,15 +424,14 @@ Remove a member from a group.
 
 **Output:**
 
-| Field          | Type   | Description                 |
-| -------------- | ------ | --------------------------- |
-| `status`       | string | `removed`                   |
-| `group`        | string | Group name                  |
-| `member_type`  | string | Type of member removed      |
-| `member_value` | string | Value of member removed     |
+| Field          | Type   | Description             |
+| -------------- | ------ | ----------------------- |
+| `status`       | string | `removed`               |
+| `group`        | string | Group name              |
+| `member_type`  | string | Type of member removed  |
+| `member_value` | string | Value of member removed |
 
 **Daemon RPC:** `group.member.remove`
-
 
 ### list_groups
 
@@ -450,21 +445,21 @@ List all groups in the system.
 
 **Output:**
 
-| Field                     | Type   | Description                                   |
-| ------------------------- | ------ | --------------------------------------------- |
-| `groups`                  | array  | List of `GroupInfo` objects                   |
-| `groups[].name`           | string | Group name                                    |
-| `groups[].description`    | string | Group description (may be empty)              |
-| `groups[].created_at`     | string | ISO 8601 creation timestamp                   |
-| `groups[].created_by`     | string | Agent ID of creator                           |
-| `groups[].member_count`   | integer | Number of direct members                     |
+| Field                   | Type    | Description                      |
+| ----------------------- | ------- | -------------------------------- |
+| `groups`                | array   | List of `GroupInfo` objects      |
+| `groups[].name`         | string  | Group name                       |
+| `groups[].description`  | string  | Group description (may be empty) |
+| `groups[].created_at`   | string  | ISO 8601 creation timestamp      |
+| `groups[].created_by`   | string  | Agent ID of creator              |
+| `groups[].member_count` | integer | Number of direct members         |
 
 **Daemon RPC:** `group.list`
 
-
 ### get_group
 
-Get detailed information about a specific group. Supports expansion to resolve roles to individual agent IDs.
+Get detailed information about a specific group. Supports expansion to resolve
+roles to individual agent IDs.
 
 **Input:**
 
@@ -488,7 +483,6 @@ Get detailed information about a specific group. Supports expansion to resolve r
 | `expanded_agents_count` | integer | (Only if `expand=true`) Count of agent IDs |
 
 **Daemon RPC:** `group.info` (without expand) or `group.members` (with expand)
-
 
 ## Identity Resolution
 
@@ -612,6 +606,7 @@ priorities as follows:
 The project `CLAUDE.md` includes instructions for agents to use MCP tools:
 
 **Core messaging:**
+
 ```
 mcp__thrum__send_message(to="@reviewer", content="...", priority="normal")
 mcp__thrum__check_messages()
@@ -621,6 +616,7 @@ mcp__thrum__wait_for_message(timeout=300)
 ```
 
 **Group management:**
+
 ```
 mcp__thrum__create_group(name="backend", description="Backend team")
 mcp__thrum__add_group_member(group="backend", member_type="role", member_value="implementer")
