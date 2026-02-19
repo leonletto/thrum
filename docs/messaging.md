@@ -4,9 +4,9 @@
 ## Overview
 
 The Thrum messaging system provides structured communication between agents with
-support for direct messaging, read tracking, scoping, references, and rich content
-formats. Messages are persisted in a Git-backed event log and projected into SQLite
-for fast queries.
+support for direct messaging, read tracking, scoping, references, and rich
+content formats. Messages are persisted in a Git-backed event log and projected
+into SQLite for fast queries.
 
 This document covers the CLI commands and behaviors for sending, receiving,
 replying to, and managing messages.
@@ -46,21 +46,21 @@ SQLite.
 
 ### Flags
 
-| Flag           | Format                  | Description                             |
-| -------------- | ----------------------- | --------------------------------------- |
-| `--to`         | `@role`                 | Direct recipient (adds a mention ref)   |
-| `--scope`      | `type:value`            | Attach scope context (repeatable)       |
-| `--ref`        | `type:value`            | Attach reference (repeatable)           |
-| `--mention`    | `@role`                 | Mention an agent role (repeatable)      |
-| `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)    |
+| Flag           | Format                        | Description                             |
+| -------------- | ----------------------------- | --------------------------------------- |
+| `--to`         | `@role`                       | Direct recipient (adds a mention ref)   |
+| `--scope`      | `type:value`                  | Attach scope context (repeatable)       |
+| `--ref`        | `type:value`                  | Attach reference (repeatable)           |
+| `--mention`    | `@role`                       | Mention an agent role (repeatable)      |
+| `--format`     | `markdown\|plain\|json`       | Content format (default: `markdown`)    |
 | `--priority`   | `critical\|high\|normal\|low` | Message priority (default: `normal`)    |
-| `--structured` | JSON string             | Typed payload for machine-readable data |
+| `--structured` | JSON string                   | Typed payload for machine-readable data |
 
 ### Direct Messaging with --to
 
-The `--to` flag provides a shorthand for directing a message to a specific agent,
-role, or group. Under the hood, `--to @reviewer` appends `@reviewer` to the mentions
-list, which is stored as a `mention` ref on the message.
+The `--to` flag provides a shorthand for directing a message to a specific
+agent, role, or group. Under the hood, `--to @reviewer` appends `@reviewer` to
+the mentions list, which is stored as a `mention` ref on the message.
 
 ```bash
 # These are equivalent:
@@ -463,8 +463,8 @@ single `--to @groupname` address.
 
 ### Built-in Groups
 
-**`@everyone`** — Automatically created on daemon startup. All registered agents are
-implicit members. This group cannot be deleted.
+**`@everyone`** — Automatically created on daemon startup. All registered agents
+are implicit members. This group cannot be deleted.
 
 ```bash
 # Send to all agents
@@ -499,8 +499,8 @@ thrum send "PR ready for review" --to @reviewers
 
 ### Message Resolution
 
-When a message is sent to a group, the daemon resolves group membership at **read time**.
-This means:
+When a message is sent to a group, the daemon resolves group membership at
+**read time**. This means:
 
 - New agents added to a group automatically receive messages sent to that group
 - The `@everyone` group dynamically includes all registered agents
@@ -641,7 +641,8 @@ Optimized for common query patterns:
 ## MCP Server Integration
 
 The MCP server (`thrum mcp serve`) provides native messaging tools for AI agents
-running in Claude Code or similar environments. It exposes 11 MCP tools organized into two categories:
+running in Claude Code or similar environments. It exposes 11 MCP tools
+organized into two categories:
 
 **Core messaging (5 tools):**
 
@@ -651,18 +652,18 @@ running in Claude Code or similar environments. It exposes 11 MCP tools organize
 | `check_messages`    | Poll for unread messages mentioning this agent, auto-marks read                                    |
 | `wait_for_message`  | Block until a message arrives via WebSocket push or timeout (max 600s)                             |
 | `list_agents`       | List registered agents with active/offline status                                                  |
-| `broadcast_message` | Send to all agents (convenience wrapper around `send_message` with `to=@everyone`) |
+| `broadcast_message` | Send to all agents (convenience wrapper around `send_message` with `to=@everyone`)                 |
 
 **Group management (6 tools):**
 
-| MCP Tool              | Description                                                     |
-| --------------------- | --------------------------------------------------------------- |
-| `create_group`        | Create a named messaging group                                  |
-| `delete_group`        | Delete a messaging group                                        |
-| `add_group_member`    | Add an agent or role as a member of a group                     |
-| `remove_group_member` | Remove a member from a group                                    |
-| `list_groups`         | List all messaging groups                                       |
-| `get_group`           | Get group details including members (expand=true resolves roles)|
+| MCP Tool              | Description                                                      |
+| --------------------- | ---------------------------------------------------------------- |
+| `create_group`        | Create a named messaging group                                   |
+| `delete_group`        | Delete a messaging group                                         |
+| `add_group_member`    | Add an agent or role as a member of a group                      |
+| `remove_group_member` | Remove a member from a group                                     |
+| `list_groups`         | List all messaging groups                                        |
+| `get_group`           | Get group details including members (expand=true resolves roles) |
 
 MCP tools use the same underlying RPC methods (`message.send`, `message.list`,
 `message.markRead`) but add convenience features like `@role` addressing and

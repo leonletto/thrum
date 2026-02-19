@@ -4,7 +4,8 @@ Groups enable sending messages to collections of agents.
 
 ## Built-in Groups
 
-- **@everyone** — Auto-created, contains all registered agents. Cannot be deleted.
+- **@everyone** — Auto-created, contains all registered agents. Cannot be
+  deleted.
 
 ## Creating Groups
 
@@ -30,7 +31,9 @@ thrum send "Sprint planning" --to @backend-team
 thrum send "All-hands update" --to @everyone
 ```
 
-Group membership is resolved at read time (pull model). If a new agent joins with `--role implementer`, they automatically receive messages sent to groups that include that role.
+Group membership is resolved at read time (pull model). If a new agent joins
+with `--role implementer`, they automatically receive messages sent to groups
+that include that role.
 
 ## Viewing Groups
 

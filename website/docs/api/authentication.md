@@ -1,8 +1,8 @@
 ---
 title: "Authentication"
 description:
-  "Authentication and authorization in the Thrum API — agent identity,
-  session tokens, and security model"
+  "Authentication and authorization in the Thrum API — agent identity, session
+  tokens, and security model"
 category: "api"
 ---
 
@@ -332,7 +332,8 @@ Users can impersonate agents to send messages "as" an agent.
 **Errors**:
 
 - "only users can impersonate agents" - Non-user caller attempted impersonation
-- "users can only impersonate agents, not other users" - User tried to impersonate another user
+- "users can only impersonate agents, not other users" - User tried to
+  impersonate another user
 - "agent not found" - Target agent does not exist
 
 ### Message Ownership
@@ -377,10 +378,13 @@ request.
 Unix domain sockets (`$REPO/.thrum/daemon.sock`) provide inherent security:
 
 1. **No network exposure**: Socket files are not accessible over the network
-2. **Filesystem permissions**: Access controlled via file permissions (mode 0600)
-3. **Local-only**: Only processes on the same machine with appropriate permissions can connect
+2. **Filesystem permissions**: Access controlled via file permissions
+   (mode 0600)
+3. **Local-only**: Only processes on the same machine with appropriate
+   permissions can connect
 
 **Use cases**:
+
 - CLI tools (`thrum` command)
 - MCP server (`thrum mcp serve`)
 - Local agents and automation scripts
@@ -388,21 +392,26 @@ Unix domain sockets (`$REPO/.thrum/daemon.sock`) provide inherent security:
 
 ### Remote Access (Tailscale WireGuard)
 
-For remote or multi-machine deployments, Thrum uses Tailscale's WireGuard mesh network:
+For remote or multi-machine deployments, Thrum uses Tailscale's WireGuard mesh
+network:
 
-1. **End-to-end encryption**: All WebSocket traffic encrypted via WireGuard tunnel
+1. **End-to-end encryption**: All WebSocket traffic encrypted via WireGuard
+   tunnel
 2. **Zero-trust networking**: Each peer authenticates via Tailscale identity
 3. **Automatic key rotation**: WireGuard keys managed by Tailscale
 4. **Pairing codes**: Initial connection uses time-limited pairing codes
 5. **Per-peer tokens**: Ongoing authentication via per-peer tokens after pairing
 
 **Security properties**:
-- WebSocket connections run over Tailscale's encrypted tunnel (`ws://` over WireGuard)
+
+- WebSocket connections run over Tailscale's encrypted tunnel (`ws://` over
+  WireGuard)
 - No separate TLS/SSL layer needed
 - Network isolation via Tailscale ACLs
 - Authentication handled by Tailscale identity + Thrum pairing
 
-**Reference**: See `docs/tailscale-security.md` for detailed security model and threat analysis.
+**Reference**: See `docs/tailscale-security.md` for detailed security model and
+threat analysis.
 
 ### Authentication Layers
 
@@ -633,8 +642,8 @@ thrum mcp serve --agent-id furiosa
 ```
 
 The MCP server provides 5 tools: `send_message`, `check_messages`,
-`wait_for_message`, `list_agents`, `broadcast_message`. Identity
-is resolved once at startup.
+`wait_for_message`, `list_agents`, `broadcast_message`. Identity is resolved
+once at startup.
 
 ### User Registration (Browser Auto-Registration)
 

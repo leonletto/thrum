@@ -1,6 +1,7 @@
 # Multi-Worktree Coordination
 
-Thrum enables agents in different git worktrees to communicate via a shared daemon and git-backed message storage.
+Thrum enables agents in different git worktrees to communicate via a shared
+daemon and git-backed message storage.
 
 ## Setup
 
@@ -18,7 +19,8 @@ thrum quickstart --role implementer --module feature --intent "Feature implement
 
 ## Shared Daemon
 
-All worktrees share one daemon instance. The daemon auto-discovers worktrees via the shared `.thrum/` directory at the git root.
+All worktrees share one daemon instance. The daemon auto-discovers worktrees via
+the shared `.thrum/` directory at the git root.
 
 ```bash
 # Start daemon once (from any worktree)
@@ -53,11 +55,13 @@ thrum send "Need to edit login.ts, are you done?" --to @feature_impl
 
 ## Sync
 
-Messages sync via git. The daemon handles push/pull automatically. Force sync if needed:
+Messages sync via git. The daemon handles push/pull automatically. Force sync if
+needed:
 
 ```bash
 thrum sync force
 thrum sync status
 ```
 
-For multi-machine setups, ensure all machines can push/pull to the same git remote.
+For multi-machine setups, ensure all machines can push/pull to the same git
+remote.

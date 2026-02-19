@@ -4,8 +4,8 @@
 ## Overview
 
 The Thrum daemon provides a complete set of RPC methods for querying the inbox,
-listing agents, and managing read state. These methods power
-both the CLI (`thrum inbox`) and the Web UI.
+listing agents, and managing read state. These methods power both the CLI
+(`thrum inbox`) and the Web UI.
 
 All methods use JSON-RPC 2.0 over Unix socket (`.thrum/var/thrum.sock`) or
 WebSocket (`ws://localhost:9999`). See `docs/rpc-api.md` for the full API
@@ -268,8 +268,7 @@ Several CLI commands mark messages as read automatically:
 ## Features Summary
 
 - **Agent listing** -- List all agents with role/module filters and metadata
-- **Message listing** -- Filter by author, scope, ref, mentions, unread
-  status
+- **Message listing** -- Filter by author, scope, ref, mentions, unread status
 - **Pagination** -- Configurable page size (max 100), page numbers, total counts
 - **Sorting** -- By `created_at` or `updated_at`, ascending or descending
 - **Read tracking** -- Per-session and per-agent read state, auto mark-as-read

@@ -42,21 +42,21 @@ with a proposed solution. You can chat about it, ask questions, and make changes
 until you like it.
 
 **2. Plan.** You ask the agent to investigate the codebase, docs, or whatever
-needs changing. It does the boring detailed slog of finding all the dependencies,
-figuring out what will break, and adding that to the plan. Rewriting the docs to
-fit the new code, etc. Then it gives you a spec that you can read and understand
-and approve or change as you see fit.
+needs changing. It does the boring detailed slog of finding all the
+dependencies, figuring out what will break, and adding that to the plan.
+Rewriting the docs to fit the new code, etc. Then it gives you a spec that you
+can read and understand and approve or change as you see fit.
 
-**3. Document.** Now you have an agreed-on plan so you tell the agent to break it
-down into idempotent steps, optimized for making it very organized and
+**3. Document.** Now you have an agreed-on plan so you tell the agent to break
+it down into idempotent steps, optimized for making it very organized and
 parallelizable where possible. Then it uses the Beads issue tracker to create
 Epics and Tasks which are the full record of what to do. Then the agent writes a
 prompt file which you give to a different agent to implement. It has all the
-details needed — the spec is referenced, the Epics and Tasks are talked about, it
-has directions on how you like it to execute (use sub-agents, make sure test
-coverage is 80%, run all tests, code review when you are done, etc.). Now you can
-read this if you like, or don't trust the agent yet, and you can see exactly what
-is going to happen.
+details needed — the spec is referenced, the Epics and Tasks are talked about,
+it has directions on how you like it to execute (use sub-agents, make sure test
+coverage is 80%, run all tests, code review when you are done, etc.). Now you
+can read this if you like, or don't trust the agent yet, and you can see exactly
+what is going to happen.
 
 **4. Implement.** You hand that prompt to an agent on a worktree. It claims
 tasks, writes code, runs tests, commits. Thrum lets you see what it's doing
@@ -105,7 +105,7 @@ files.
 Thrum doesn't plan your work - it makes planning your work easier and faster.
 
 It won't break everything down and make all the decisions for you unless you
-tell it to.  You do that with the help of your agents and you can see what is
+tell it to. You do that with the help of your agents and you can see what is
 going to happen before it happens - not after the damage is done.
 
 Thrum doesn't orchestrate your agents. It gives agents a way to message each
@@ -113,23 +113,24 @@ other across worktrees and machines, so you can run several in parallel without
 being the message relay yourself.
 
 Thrum doesn't stop agents or interrupt their work. If you need to stop an agent,
-you stop the process. Thrum provides the communication layer — you provide
-the control.
+you stop the process. Thrum provides the communication layer — you provide the
+control.
 
 It's not a framework either. Any agent that can run shell commands or use MCP
 tools can use Thrum. There's no SDK to integrate, no protocol to implement
 beyond basic messaging.
 
 And it's not trying to replace you. You're the one who understands the codebase.
-Thrum just makes it practical to direct multiple agents at once.  And the process
-keeps you in the loop as much as you want.  Transparent and auditable.  You
-are in control.
+Thrum just makes it practical to direct multiple agents at once. And the process
+keeps you in the loop as much as you want. Transparent and auditable. You are in
+control.
 
 ## For Working Developers
 
 I built Thrum for myself — someone who ships production code and needs to
-understand the codebase they're working in. Not for AI researchers building novel
-agent architectures. Not for platform teams building orchestration systems.
+understand the codebase they're working in. Not for AI researchers building
+novel agent architectures. Not for platform teams building orchestration
+systems.
 
 If you want agents to autonomously tackle your backlog while you do something
 else, there are good tools for that. If you want to direct the work yourself and

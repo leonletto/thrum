@@ -19,11 +19,18 @@ the SPA is served at `/`. When no UI is embedded, WebSocket handles requests at
 
 ### Security
 
-**Local connections**: Unix domain socket connections (`$REPO/.thrum/daemon.sock`) are inherently secure with no network exposure. Access is controlled via filesystem permissions.
+**Local connections**: Unix domain socket connections
+(`$REPO/.thrum/daemon.sock`) are inherently secure with no network exposure.
+Access is controlled via filesystem permissions.
 
-**Remote connections**: When using Tailscale for remote access, WebSocket connections are encrypted end-to-end via Tailscale's WireGuard tunnel. No separate TLS layer is needed—the `ws://` protocol runs over the encrypted WireGuard tunnel, providing equivalent security to `wss://` but managed at the network layer.
+**Remote connections**: When using Tailscale for remote access, WebSocket
+connections are encrypted end-to-end via Tailscale's WireGuard tunnel. No
+separate TLS layer is needed—the `ws://` protocol runs over the encrypted
+WireGuard tunnel, providing equivalent security to `wss://` but managed at the
+network layer.
 
-See `docs/tailscale-security.md` for detailed security architecture and threat model.
+See `docs/tailscale-security.md` for detailed security architecture and threat
+model.
 
 ### Connection Flow
 

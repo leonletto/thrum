@@ -1,12 +1,21 @@
 # Resilience Testing Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to
+> implement this plan task-by-task.
 
-**Goal:** Build a production-realistic test fixture generator and comprehensive resilience test suite for Thrum.
+**Goal:** Build a production-realistic test fixture generator and comprehensive
+resilience test suite for Thrum.
 
-**Architecture:** A Go generator (`internal/testgen/`) creates a deterministic `.thrum/` directory with 50 agents, 10K messages, and full JSONL+SQLite state. Test files in `tests/resilience/` exercise CLI, RPC, concurrency, recovery, and multi-daemon scenarios against this fixture. Build-tag-gated so normal `go test ./...` skips them.
+**Architecture:** A Go generator (`internal/testgen/`) creates a deterministic
+`.thrum/` directory with 50 agents, 10K messages, and full JSONL+SQLite state.
+Test files in `tests/resilience/` exercise CLI, RPC, concurrency, recovery, and
+multi-daemon scenarios against this fixture. Build-tag-gated so normal
+`go test ./...` skips them.
 
-**Tech Stack:** Go testing, `database/sql` + `modernc.org/sqlite`, `archive/tar` + `compress/gzip`, existing `internal/schema`, `internal/daemon/state`, `internal/daemon/rpc`, `internal/identity`, `internal/types`, `internal/projection` packages.
+**Tech Stack:** Go testing, `database/sql` + `modernc.org/sqlite`,
+`archive/tar` + `compress/gzip`, existing `internal/schema`,
+`internal/daemon/state`, `internal/daemon/rpc`, `internal/identity`,
+`internal/types`, `internal/projection` packages.
 
 **Design doc:** `docs/plans/2026-02-15-resilience-testing-design.md`
 
@@ -15,10 +24,12 @@
 ### Task 1: Create testgen package scaffold
 
 **Files:**
+
 - Create: `internal/testgen/generator.go`
 - Create: `internal/testgen/cmd/main.go`
 
-**Step 1: Create the generator package with core types and Generate function signature**
+**Step 1: Create the generator package with core types and Generate function
+signature**
 
 ```go
 // internal/testgen/generator.go
@@ -165,6 +176,7 @@ git commit -m "feat: scaffold testgen package for resilience fixture generation"
 ### Task 2: Implement agent and session generation
 
 **Files:**
+
 - Modify: `internal/testgen/generator.go`
 
 **Step 1: Implement agent generation**
@@ -288,8 +300,7 @@ func TestGenerateSessions(t *testing.T) {
 
 **Step 3: Run tests**
 
-Run: `go test ./internal/testgen/ -v -run TestGenerate`
-Expected: PASS
+Run: `go test ./internal/testgen/ -v -run TestGenerate` Expected: PASS
 
 **Step 4: Commit**
 
@@ -303,6 +314,7 @@ git commit -m "feat: implement agent and session generation for testgen"
 ### Task 3: Implement message generation
 
 **Files:**
+
 - Modify: `internal/testgen/generator.go`
 
 **Step 1: Add message generation**
@@ -423,8 +435,7 @@ func TestGenerateMessages(t *testing.T) {
 
 **Step 3: Run tests**
 
-Run: `go test ./internal/testgen/ -v -run TestGenerate`
-Expected: PASS
+Run: `go test ./internal/testgen/ -v -run TestGenerate` Expected: PASS
 
 **Step 4: Commit**
 
@@ -438,6 +449,7 @@ git commit -m "feat: implement message generation for testgen"
 ### Task 4: Implement group generation
 
 **Files:**
+
 - Modify: `internal/testgen/generator.go`
 
 **Step 1: Add group generation**
@@ -533,8 +545,7 @@ func generateGroups(rng *rand.Rand, agents []agentInfo, n int) []groupInfo {
 
 **Step 2: Run tests**
 
-Run: `go test ./internal/testgen/ -v`
-Expected: PASS
+Run: `go test ./internal/testgen/ -v` Expected: PASS
 
 **Step 3: Commit**
 
@@ -548,11 +559,13 @@ git commit -m "feat: implement group generation with nesting for testgen"
 ### Task 5: Implement full Generate function (JSONL + SQLite + identities)
 
 **Files:**
+
 - Modify: `internal/testgen/generator.go`
 
 **Step 1: Implement the Generate function**
 
 This is the core function that ties everything together. It needs to:
+
 1. Create directory structure
 2. Generate all data
 3. Write identity JSON files
@@ -562,12 +575,14 @@ This is the core function that ties everything together. It needs to:
 7. Write config.json
 
 Key API usage:
+
 - `schema.OpenDB(dbPath)` + `schema.InitDB(db)` for database
 - Identity files follow `config.IdentityFile` format (version 2)
 - JSONL uses `json.NewEncoder` writing one event per line
 - Messages sharded to `messages/{agent_name}.jsonl`
 - Non-message events go to `events.jsonl`
-- SQLite populated via direct SQL INSERT (not `state.WriteEvent` to avoid JSONL double-write)
+- SQLite populated via direct SQL INSERT (not `state.WriteEvent` to avoid JSONL
+  double-write)
 
 The Generate function should:
 
@@ -625,19 +640,26 @@ func Generate(outputDir string, cfg Config) error {
 }
 ```
 
-Each helper function (`writeConfigJSON`, `writeIdentityFiles`, `writeContextFiles`, `writeJSONLEvents`, `populateSQLite`) should be implemented as separate private functions.
+Each helper function (`writeConfigJSON`, `writeIdentityFiles`,
+`writeContextFiles`, `writeJSONLEvents`, `populateSQLite`) should be implemented
+as separate private functions.
 
 Key details for `populateSQLite`:
+
 - Use `schema.OpenDB()` then `schema.InitDB()` for database setup
-- INSERT agents directly: `INSERT INTO agents (agent_id, kind, role, module, display, hostname, registered_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-- INSERT sessions: `INSERT INTO sessions (session_id, agent_id, started_at, ended_at, last_seen_at) VALUES (?, ?, ?, ?, ?)`
-- INSERT messages: `INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content) VALUES (?, ?, ?, ?, ?, ?)`
+- INSERT agents directly:
+  `INSERT INTO agents (agent_id, kind, role, module, display, hostname, registered_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+- INSERT sessions:
+  `INSERT INTO sessions (session_id, agent_id, started_at, ended_at, last_seen_at) VALUES (?, ?, ?, ?, ?)`
+- INSERT messages:
+  `INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content) VALUES (?, ?, ?, ?, ?, ?)`
 - INSERT message_scopes for scoped messages
 - INSERT groups and group_members
 - INSERT message_reads for ~70% of messages (random readers)
 - INSERT subscriptions (one per active session)
 
 Key details for `writeJSONLEvents`:
+
 - Agent register events → `events.jsonl`
 - Session start/end events → `events.jsonl`
 - Group create/member.add events → `events.jsonl`
@@ -645,21 +667,25 @@ Key details for `writeJSONLEvents`:
 - Each event needs `event_id`, `timestamp`, `type`, `v: 1` fields
 
 Key details for `writeIdentityFiles`:
+
 - Format: `config.IdentityFile` struct → JSON
 - Path: `identities/{agent_name}.json`
 
 Key details for `writeContextFiles`:
+
 - Path: `context/{agent_name}.md`
 - Content: realistic session summary markdown
 
 **Step 2: Run the generator end-to-end**
 
-Run: `cd /Users/leon/dev/opensource/thrum && go run ./internal/testgen/cmd -output /tmp/test-fixture.tar.gz -seed 42`
+Run:
+`cd /Users/leon/dev/opensource/thrum && go run ./internal/testgen/cmd -output /tmp/test-fixture.tar.gz -seed 42`
 Expected: Completes without error, creates tar.gz file
 
 **Step 3: Verify the generated fixture**
 
 Run:
+
 ```bash
 mkdir -p /tmp/test-fixture && tar xzf /tmp/test-fixture.tar.gz -C /tmp/test-fixture
 ls -la /tmp/test-fixture/.thrum/
@@ -683,6 +709,7 @@ git commit -m "feat: implement full testgen Generate function with JSONL, SQLite
 ### Task 6: Implement CompressToTarGz and generate checked-in fixture
 
 **Files:**
+
 - Modify: `internal/testgen/generator.go`
 - Create: `tests/resilience/testdata/` (directory)
 - Create: `tests/resilience/testdata/thrum-fixture.tar.gz`
@@ -743,6 +770,7 @@ func CompressToTarGz(sourceDir, outputPath string) error {
 **Step 2: Generate the checked-in fixture**
 
 Run:
+
 ```bash
 mkdir -p tests/resilience/testdata
 go run ./internal/testgen/cmd -output tests/resilience/testdata/thrum-fixture.tar.gz -seed 42
@@ -761,6 +789,7 @@ git commit -m "feat: add tar.gz compression and generate resilience test fixture
 ### Task 7: Create test infrastructure (fixture_test.go)
 
 **Files:**
+
 - Create: `tests/resilience/doc.go`
 - Create: `tests/resilience/fixture_test.go`
 
@@ -1021,11 +1050,13 @@ git commit -m "feat: add resilience test infrastructure with fixture extraction 
 ### Task 8: Implement RPC direct tests
 
 **Files:**
+
 - Create: `tests/resilience/rpc_direct_test.go`
 
 **Step 1: Create RPC tests that exercise the fixture at scale**
 
 Tests to implement:
+
 - `TestRPC_FixtureIntegrity` — verify agent/message/session counts in DB
 - `TestRPC_SendAllScopeTypes` — broadcast, directed, module-scoped sends
 - `TestRPC_InboxPagination` — paginate over 10K messages
@@ -1033,7 +1064,8 @@ Tests to implement:
 - `TestRPC_GroupResolveNested` — nested group resolution
 - `TestRPC_MessageReadTracking` — mark read, verify unread counts
 
-Each test calls `setupFixture(t)` + `startTestDaemon(t, thrumDir)` then uses `rpcCall()`.
+Each test calls `setupFixture(t)` + `startTestDaemon(t, thrumDir)` then uses
+`rpcCall()`.
 
 **Step 2: Run RPC tests**
 
@@ -1052,18 +1084,24 @@ git commit -m "feat: add RPC direct resilience tests"
 ### Task 9: Implement CLI round-trip tests
 
 **Files:**
+
 - Create: `tests/resilience/cli_roundtrip_test.go`
 
 **Step 1: Create CLI tests**
 
-These tests use `exec.Command` to run the actual `thrum` binary against the test daemon. Need a helper that sets `THRUM_SOCKET` or configures the CLI to use the test socket.
+These tests use `exec.Command` to run the actual `thrum` binary against the test
+daemon. Need a helper that sets `THRUM_SOCKET` or configures the CLI to use the
+test socket.
 
 Tests to implement:
+
 - `TestCLI_SendAndInbox` — send via RPC, verify via CLI inbox
 - `TestCLI_TeamList` — `thrum team` lists 50 agents
 - `TestCLI_AgentContext` — `thrum agent list --context`
 
-Note: The CLI connects via `DefaultSocketPath(repoPath)` which resolves `.thrum/var/thrum.sock`. The test daemon's socket is already at that path, so running CLI commands from the temp directory should work.
+Note: The CLI connects via `DefaultSocketPath(repoPath)` which resolves
+`.thrum/var/thrum.sock`. The test daemon's socket is already at that path, so
+running CLI commands from the temp directory should work.
 
 **Step 2: Run CLI tests**
 
@@ -1082,16 +1120,20 @@ git commit -m "feat: add CLI round-trip resilience tests"
 ### Task 10: Implement concurrency tests
 
 **Files:**
+
 - Create: `tests/resilience/concurrent_test.go`
 
 **Step 1: Create concurrency tests**
 
 Key patterns:
+
 - Use `sync.WaitGroup` + goroutines to simulate concurrent access
-- Use `t.Errorf` (not `t.Fatalf`) inside goroutines (Fatal from non-test goroutine panics)
+- Use `t.Errorf` (not `t.Fatalf`) inside goroutines (Fatal from non-test
+  goroutine panics)
 - Use `atomic` counters for tracking results
 
 Tests to implement:
+
 - `TestConcurrent_10Senders` — 10 goroutines each sending 100 messages
 - `TestConcurrent_ReadWriteMix` — 5 writers + 5 readers simultaneous
 - `TestConcurrent_InboxUnderLoad` — inbox queries during sends
@@ -1099,7 +1141,8 @@ Tests to implement:
 
 **Step 2: Run concurrency tests**
 
-Run: `go test -tags=resilience ./tests/resilience/ -v -run TestConcurrent -timeout 5m -race`
+Run:
+`go test -tags=resilience ./tests/resilience/ -v -run TestConcurrent -timeout 5m -race`
 Expected: All PASS with no race conditions
 
 **Step 3: Commit**
@@ -1114,18 +1157,24 @@ git commit -m "feat: add concurrency resilience tests"
 ### Task 11: Implement recovery tests
 
 **Files:**
+
 - Create: `tests/resilience/recovery_test.go`
 
 **Step 1: Create recovery tests**
 
 Tests to implement:
+
 - `TestRecovery_FixtureRestore` — extract fixture, start daemon, health check
-- `TestRecovery_ProjectionConsistency` — rebuild SQLite from JSONL, compare row counts
-- `TestRecovery_DaemonRestart` — start, send message, stop, restart, verify message persisted
+- `TestRecovery_ProjectionConsistency` — rebuild SQLite from JSONL, compare row
+  counts
+- `TestRecovery_DaemonRestart` — start, send message, stop, restart, verify
+  message persisted
 - `TestRecovery_WALRecovery` — truncate WAL file, verify daemon starts cleanly
-- `TestRecovery_CorruptedMessage` — add malformed JSONL line, verify projector skips it
+- `TestRecovery_CorruptedMessage` — add malformed JSONL line, verify projector
+  skips it
 
 Key pattern for `ProjectionConsistency`:
+
 ```go
 // 1. Extract fixture → get pre-built DB counts
 // 2. Delete the SQLite DB
@@ -1136,7 +1185,8 @@ Key pattern for `ProjectionConsistency`:
 
 **Step 2: Run recovery tests**
 
-Run: `go test -tags=resilience ./tests/resilience/ -v -run TestRecovery -timeout 5m`
+Run:
+`go test -tags=resilience ./tests/resilience/ -v -run TestRecovery -timeout 5m`
 Expected: All PASS
 
 **Step 3: Commit**
@@ -1151,19 +1201,25 @@ git commit -m "feat: add database recovery resilience tests"
 ### Task 12: Implement multi-daemon tests
 
 **Files:**
+
 - Create: `tests/resilience/multi_daemon_test.go`
 
 **Step 1: Create multi-daemon tests**
 
-Each test creates 2-3 separate `.thrum` directories, each with its own state and daemon. Tests verify:
+Each test creates 2-3 separate `.thrum` directories, each with its own state and
+daemon. Tests verify:
 
-- `TestMultiDaemon_DaemonRestart` — start daemon, write data, stop, start fresh daemon on same data, verify state preserved
-- `TestMultiDaemon_IndependentDaemons` — two daemons run independently on separate DBs without interference
-- `TestMultiDaemon_SharedFixture` — two daemons starting from identical fixtures diverge cleanly
+- `TestMultiDaemon_DaemonRestart` — start daemon, write data, stop, start fresh
+  daemon on same data, verify state preserved
+- `TestMultiDaemon_IndependentDaemons` — two daemons run independently on
+  separate DBs without interference
+- `TestMultiDaemon_SharedFixture` — two daemons starting from identical fixtures
+  diverge cleanly
 
 **Step 2: Run multi-daemon tests**
 
-Run: `go test -tags=resilience ./tests/resilience/ -v -run TestMultiDaemon -timeout 5m`
+Run:
+`go test -tags=resilience ./tests/resilience/ -v -run TestMultiDaemon -timeout 5m`
 Expected: All PASS
 
 **Step 3: Commit**
@@ -1178,6 +1234,7 @@ git commit -m "feat: add multi-daemon resilience tests"
 ### Task 13: Implement benchmarks
 
 **Files:**
+
 - Create: `tests/resilience/benchmark_test.go`
 
 **Step 1: Create benchmark functions**
@@ -1198,6 +1255,7 @@ func BenchmarkSendMessage(b *testing.B) {
 ```
 
 Benchmarks:
+
 - `BenchmarkSendMessage` — single message send
 - `BenchmarkInbox10K` — inbox query over 10K messages
 - `BenchmarkInboxUnread` — unread-only query
@@ -1209,7 +1267,8 @@ Note: Need `setupFixtureForBench` variant that works with `*testing.B`.
 
 **Step 2: Run benchmarks**
 
-Run: `go test -tags=resilience ./tests/resilience/ -bench=. -benchmem -count=1 -timeout 10m`
+Run:
+`go test -tags=resilience ./tests/resilience/ -bench=. -benchmem -count=1 -timeout 10m`
 Expected: Benchmarks complete and report ns/op, B/op, allocs/op
 
 **Step 3: Commit**
@@ -1224,6 +1283,7 @@ git commit -m "feat: add performance benchmarks for resilience suite"
 ### Task 14: Add convenience script and final integration
 
 **Files:**
+
 - Create: `scripts/run-resilience-tests.sh`
 - Modify: `.gitignore` (if needed)
 
@@ -1253,8 +1313,8 @@ Run: `chmod +x scripts/run-resilience-tests.sh`
 
 **Step 3: Run the full suite**
 
-Run: `./scripts/run-resilience-tests.sh`
-Expected: All tests pass, benchmarks complete
+Run: `./scripts/run-resilience-tests.sh` Expected: All tests pass, benchmarks
+complete
 
 **Step 4: Commit**
 
@@ -1270,20 +1330,24 @@ git commit -m "feat: add convenience script for resilience test suite"
 **Step 1: Run full test suite (existing + resilience)**
 
 Run:
+
 ```bash
 go test ./... -timeout 5m                                           # Existing tests still pass
 go test -tags=resilience ./tests/resilience/ -v -timeout 10m        # Resilience tests pass
 go test -tags=resilience ./tests/resilience/ -bench=. -benchmem     # Benchmarks work
 ```
+
 Expected: All pass
 
 **Step 2: Verify fixture determinism**
 
 Run:
+
 ```bash
 go generate -tags=resilience ./tests/resilience/...
 git diff --exit-code tests/resilience/testdata/
 ```
+
 Expected: No diff (fixture is identical when regenerated with same seed)
 
 **Step 3: Commit final state**

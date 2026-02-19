@@ -137,7 +137,8 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)
 - ULID format: 26 characters, sortable by time, 128-bit random
 - Thread-safe generation with mutex-protected monotonic entropy
 
-Agent IDs are generated internally from the role and a hash. See [Development Guide](development.md) for implementation details.
+Agent IDs are generated internally from the role and a hash. See
+[Development Guide](development.md) for implementation details.
 
 ## Paths (`internal/paths`)
 
@@ -299,7 +300,8 @@ Key migrations:
 - v5 -> v6: Agent work contexts table, message reads, session scopes/refs
 - v6 -> v7: Event ID backfill (ULID `event_id` on all JSONL events), JSONL
   sharding migration
-- v7 -> v8: Groups feature (`groups` and `group_members` tables), `@everyone` built-in group
+- v7 -> v8: Groups feature (`groups` and `group_members` tables), `@everyone`
+  built-in group
 
 ### Initialization
 
@@ -455,7 +457,8 @@ All I/O paths enforce timeouts to prevent indefinite hangs:
 - **5s/10s** git command timeouts (via `safecmd` wrapper)
 - **Context-scoped** SQLite queries (via `safedb` wrapper)
 
-Lock scope has been reduced — no mutex is held during I/O, git, or WebSocket dispatch operations.
+Lock scope has been reduced — no mutex is held during I/O, git, or WebSocket
+dispatch operations.
 
 ## References
 

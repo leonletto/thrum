@@ -1,15 +1,15 @@
 ---
 title: "Tailscale Sync"
 description:
-  "Direct machine-to-machine sync via Tailscale — setup, architecture,
-  pairing, and CLI commands"
+  "Direct machine-to-machine sync via Tailscale — setup, architecture, pairing,
+  and CLI commands"
 category: "guides"
 ---
 
 # Tailscale Sync
 
-> See also: [Tailscale Security](tailscale-security.md) for the security
-> model, [Multi-Agent Support](multi-agent.md) for team coordination patterns,
+> See also: [Tailscale Security](tailscale-security.md) for the security model,
+> [Multi-Agent Support](multi-agent.md) for team coordination patterns,
 > [Sync Protocol](sync.md) for Git-based synchronization.
 
 ## Overview
@@ -17,8 +17,8 @@ category: "guides"
 Thrum's Tailscale sync enables real-time event synchronization between daemon
 instances running on different machines connected via a
 [Tailscale](https://tailscale.com) network. Agents on separate laptops, VMs, or
-CI runners can coordinate as if they were on the same machine -- messages,
-agent events, and session updates propagate automatically.
+CI runners can coordinate as if they were on the same machine -- messages, agent
+events, and session updates propagate automatically.
 
 **Key capabilities:**
 
@@ -36,7 +36,8 @@ agent events, and session updates propagate automatically.
 ## Prerequisites
 
 1. **Tailscale installed** on all machines running Thrum daemons
-2. **Thrum v0.4.0+** installed on all machines (Tailscale support added in v0.4.0)
+2. **Thrum v0.4.0+** installed on all machines (Tailscale support added in
+   v0.4.0)
 
 ## Getting Started
 
@@ -122,16 +123,16 @@ Machine A                           Machine B
 
 ### Component Overview
 
-| Component | Purpose |
-|-----------|---------|
-| **Event Log** | Sequenced event store with origin tracking and dedup |
-| **tsnet Listener** | Tailscale-native TCP listener (no port forwarding needed) |
-| **Sync Manager** | Orchestrates pull sync, push notifications, and the scheduler |
-| **Sync Client** | Pulls events from peers in batches with checkpointing |
-| **Sync Server** | Exposes `sync.*` and `pair.*` RPC methods to peers (token-authenticated) |
-| **Peer Registry** | Thread-safe registry of paired peers with JSON persistence |
-| **Pairing Manager** | Handles the 4-digit code pairing flow |
-| **Sync Scheduler** | Periodic fallback sync (5-minute interval, skips recently synced peers) |
+| Component           | Purpose                                                                  |
+| ------------------- | ------------------------------------------------------------------------ |
+| **Event Log**       | Sequenced event store with origin tracking and dedup                     |
+| **tsnet Listener**  | Tailscale-native TCP listener (no port forwarding needed)                |
+| **Sync Manager**    | Orchestrates pull sync, push notifications, and the scheduler            |
+| **Sync Client**     | Pulls events from peers in batches with checkpointing                    |
+| **Sync Server**     | Exposes `sync.*` and `pair.*` RPC methods to peers (token-authenticated) |
+| **Peer Registry**   | Thread-safe registry of paired peers with JSON persistence               |
+| **Pairing Manager** | Handles the 4-digit code pairing flow                                    |
+| **Sync Scheduler**  | Periodic fallback sync (5-minute interval, skips recently synced peers)  |
 
 ## Sync Protocol
 
@@ -235,14 +236,14 @@ Machine A (thrum peer add)           Machine B (thrum peer join)
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `THRUM_TS_ENABLED` | `false` | Enable Tailscale sync |
-| `THRUM_TS_HOSTNAME` | (auto) | Hostname for the tsnet listener |
-| `THRUM_TS_PORT` | `9100` | Port for the sync RPC listener |
-| `THRUM_TS_AUTH_KEY` | (none) | Tailscale auth key for headless setup |
-| `THRUM_TS_CONTROL_URL` | (default) | Custom control server URL |
-| `THRUM_TS_STATE_DIR` | `.thrum/var/tsnet` | tsnet state directory |
+| Variable               | Default            | Description                           |
+| ---------------------- | ------------------ | ------------------------------------- |
+| `THRUM_TS_ENABLED`     | `false`            | Enable Tailscale sync                 |
+| `THRUM_TS_HOSTNAME`    | (auto)             | Hostname for the tsnet listener       |
+| `THRUM_TS_PORT`        | `9100`             | Port for the sync RPC listener        |
+| `THRUM_TS_AUTH_KEY`    | (none)             | Tailscale auth key for headless setup |
+| `THRUM_TS_CONTROL_URL` | (default)          | Custom control server URL             |
+| `THRUM_TS_STATE_DIR`   | `.thrum/var/tsnet` | tsnet state directory                 |
 
 ## CLI Commands
 

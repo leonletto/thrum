@@ -54,7 +54,8 @@ Unix Socket    WebSocket
 Clients        Clients (port 9999, /ws endpoint)
 ```
 
-> **Note:** All WebSocket connections enforce a 10s handshake timeout. Server-side requests have a 10s per-request timeout (v0.4.3).
+> **Note:** All WebSocket connections enforce a 10s handshake timeout.
+> Server-side requests have a 10s per-request timeout (v0.4.3).
 
 ## Implementation Details
 

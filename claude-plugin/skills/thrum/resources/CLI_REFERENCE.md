@@ -1,6 +1,7 @@
 # CLI Reference
 
-Complete command syntax for `thrum`. Run `thrum <command> --help` for detailed flag descriptions.
+Complete command syntax for `thrum`. Run `thrum <command> --help` for detailed
+flag descriptions.
 
 ## Global Flags
 

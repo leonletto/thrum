@@ -82,6 +82,7 @@ cd /Users/leon/dev/opensource/thrum
 ```
 
 The script handles:
+
 1. Branch creation (new) or reuse (existing)
 2. Worktree creation at the specified path
 3. Thrum redirect → shared daemon and messages
@@ -90,16 +91,16 @@ The script handles:
 
 **Flags reference:**
 
-| Flag | Default | Purpose |
-|------|---------|---------|
-| `--identity <name>` | *(none)* | Agent identity name (triggers quickstart) |
-| `--role <role>` | `implementer` | Agent role |
-| `--base <branch>` | `main` | Base branch for new branch creation |
+| Flag                | Default       | Purpose                                   |
+| ------------------- | ------------- | ----------------------------------------- |
+| `--identity <name>` | _(none)_      | Agent identity name (triggers quickstart) |
+| `--role <role>`     | `implementer` | Agent role                                |
+| `--base <branch>`   | `main`        | Base branch for new branch creation       |
 
 Module is auto-derived from the branch name (`feature/auth` → `auth`).
 
-**Without `--identity`**, the script only creates the worktree and redirects
-(no quickstart, no identity/context files).
+**Without `--identity`**, the script only creates the worktree and redirects (no
+quickstart, no identity/context files).
 
 ### Verify Setup
 

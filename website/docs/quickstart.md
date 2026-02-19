@@ -36,8 +36,8 @@ This registers your agent with a human-readable name (re-registering
 automatically on conflict), starts a session, and optionally sets your work
 intent in one step. The sections below walk through each step individually.
 
-Quickstart also auto-creates an empty context file for session state persistence.
-See [Agent Context Management](context.md) for details.
+Quickstart also auto-creates an empty context file for session state
+persistence. See [Agent Context Management](context.md) for details.
 
 ## Prerequisites
 
@@ -258,9 +258,10 @@ Configure in `.claude/settings.json`:
 }
 ```
 
-MCP tools (11 total): Core messaging — `send_message`, `check_messages`, `wait_for_message`, `list_agents`,
-`broadcast_message`. Group management — `create_group`, `delete_group`, `add_group_member`,
-`remove_group_member`, `list_groups`, `get_group`.
+MCP tools (11 total): Core messaging — `send_message`, `check_messages`,
+`wait_for_message`, `list_agents`, `broadcast_message`. Group management —
+`create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
+`list_groups`, `get_group`.
 
 ## Typical Workflow
 
@@ -362,7 +363,8 @@ through Git.
 
 ### Use the setup scripts for batch configuration
 
-Two shell scripts automate redirect file creation for all your worktrees at once:
+Two shell scripts automate redirect file creation for all your worktrees at
+once:
 
 ```bash
 # Set up Thrum redirects for all worktrees
