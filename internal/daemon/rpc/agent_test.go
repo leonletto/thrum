@@ -960,3 +960,215 @@ func TestNewMessageHandlerWithDispatcher(t *testing.T) {
 		t.Error("Handler state mismatch")
 	}
 }
+
+// TestBuildForAgentValues_NameOnly verifies that buildForAgentValues returns only
+// the agent name/ID, not the role, after the name-only routing change.
+func TestBuildForAgentValues_NameOnly(t *testing.T) {
+	values := buildForAgentValues("impl_api", "implementer")
+	if len(values) != 1 || values[0] != "impl_api" {
+		t.Errorf("expected [impl_api], got %v", values)
+	}
+}
+
+func TestBuildForAgentValues_EmptyAgent(t *testing.T) {
+	// When forAgent is empty, even with a role, should return nil
+	values := buildForAgentValues("", "implementer")
+	if values != nil {
+		t.Errorf("expected nil when forAgent is empty, got %v", values)
+	}
+}
+
+func TestBuildForAgentValues_BothEmpty(t *testing.T) {
+	values := buildForAgentValues("", "")
+	if values != nil {
+		t.Errorf("expected nil when both are empty, got %v", values)
+	}
+}
+
+// TestRegisterCreatesRoleGroup verifies that registering an agent with a role
+// auto-creates a group for that role in the groups and group_members tables.
+func TestRegisterCreatesRoleGroup(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_rolegroup")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+	ctx := context.Background()
+
+	req := RegisterRequest{
+		Role:   "implementer",
+		Module: "auth",
+	}
+	reqJSON, _ := json.Marshal(req)
+	_, err = handler.HandleRegister(ctx, reqJSON)
+	if err != nil {
+		t.Fatalf("HandleRegister() error = %v", err)
+	}
+
+	// Verify the group "implementer" was created
+	var groupCount int
+	err = s.RawDB().QueryRow(`SELECT COUNT(*) FROM groups WHERE name = ?`, "implementer").Scan(&groupCount)
+	if err != nil {
+		t.Fatalf("query groups: %v", err)
+	}
+	if groupCount != 1 {
+		t.Errorf("expected 1 group named 'implementer', got %d", groupCount)
+	}
+
+	// Verify a group_member of type 'role' with value 'implementer' exists
+	var memberCount int
+	err = s.RawDB().QueryRow(`
+		SELECT COUNT(*) FROM group_members gm
+		JOIN groups g ON g.group_id = gm.group_id
+		WHERE g.name = ? AND gm.member_type = 'role' AND gm.member_value = ?
+	`, "implementer", "implementer").Scan(&memberCount)
+	if err != nil {
+		t.Fatalf("query group_members: %v", err)
+	}
+	if memberCount != 1 {
+		t.Errorf("expected 1 group member of type 'role' for 'implementer', got %d", memberCount)
+	}
+}
+
+// TestRegisterRoleGroupIdempotent verifies that re-registering an agent does not
+// create duplicate groups.
+func TestRegisterRoleGroupIdempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_idempotent")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+	ctx := context.Background()
+
+	// Register same role twice (re-register)
+	req := RegisterRequest{Role: "planner", Module: "arch"}
+	reqJSON, _ := json.Marshal(req)
+	_, err = handler.HandleRegister(ctx, reqJSON)
+	if err != nil {
+		t.Fatalf("first HandleRegister() error = %v", err)
+	}
+
+	req2 := RegisterRequest{Role: "planner", Module: "arch", ReRegister: true}
+	req2JSON, _ := json.Marshal(req2)
+	_, err = handler.HandleRegister(ctx, req2JSON)
+	if err != nil {
+		t.Fatalf("second HandleRegister() error = %v", err)
+	}
+
+	// Verify only 1 group named 'planner' exists
+	var groupCount int
+	err = s.RawDB().QueryRow(`SELECT COUNT(*) FROM groups WHERE name = ?`, "planner").Scan(&groupCount)
+	if err != nil {
+		t.Fatalf("query groups: %v", err)
+	}
+	if groupCount != 1 {
+		t.Errorf("expected 1 group named 'planner' after two registrations, got %d", groupCount)
+	}
+}
+
+// TestRegisterNameRoleValidation verifies the name≠role collision checks.
+func TestRegisterNameRoleValidation(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_namecheck")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+	ctx := context.Background()
+
+	t.Run("name_equals_own_role", func(t *testing.T) {
+		req := RegisterRequest{
+			Name:   "implementer",
+			Role:   "implementer",
+			Module: "test",
+		}
+		reqJSON, _ := json.Marshal(req)
+		_, err := handler.HandleRegister(ctx, reqJSON)
+		if err == nil {
+			t.Fatal("expected error when name == role, got nil")
+		}
+		if !containsString(err.Error(), "cannot be the same as its role") {
+			t.Errorf("expected 'cannot be the same as its role' in error, got: %v", err)
+		}
+	})
+
+	t.Run("name_conflicts_with_existing_role", func(t *testing.T) {
+		// Register agent1 with name="coordinator", role="worker"
+		req1 := RegisterRequest{Name: "coordinator", Role: "worker", Module: "test"}
+		req1JSON, _ := json.Marshal(req1)
+		_, err := handler.HandleRegister(ctx, req1JSON)
+		if err != nil {
+			t.Fatalf("register agent1: %v", err)
+		}
+
+		// Try to register with name="worker" (which is an existing role)
+		req2 := RegisterRequest{Name: "worker", Role: "tester", Module: "test"}
+		req2JSON, _ := json.Marshal(req2)
+		_, err = handler.HandleRegister(ctx, req2JSON)
+		if err == nil {
+			t.Fatal("expected error when name conflicts with existing role, got nil")
+		}
+		if !containsString(err.Error(), "conflicts with existing role") {
+			t.Errorf("expected 'conflicts with existing role' in error, got: %v", err)
+		}
+	})
+
+	t.Run("role_conflicts_with_existing_agent_name", func(t *testing.T) {
+		// Register agent with name="alice", role="planner"
+		req1 := RegisterRequest{Name: "alice", Role: "planner", Module: "test"}
+		req1JSON, _ := json.Marshal(req1)
+		_, err := handler.HandleRegister(ctx, req1JSON)
+		if err != nil {
+			t.Fatalf("register alice: %v", err)
+		}
+
+		// Try to register with role="alice" (which is an existing agent name/ID)
+		req2 := RegisterRequest{Name: "bob", Role: "alice", Module: "test"}
+		req2JSON, _ := json.Marshal(req2)
+		_, err = handler.HandleRegister(ctx, req2JSON)
+		if err == nil {
+			t.Fatal("expected error when role conflicts with existing agent name, got nil")
+		}
+		if !containsString(err.Error(), "conflicts with existing agent name") {
+			t.Errorf("expected 'conflicts with existing agent name' in error, got: %v", err)
+		}
+	})
+
+	t.Run("reregister_skips_validation", func(t *testing.T) {
+		// Re-registering an agent should skip name≠role validation
+		req := RegisterRequest{Name: "coordinator", Role: "worker", Module: "test", ReRegister: true}
+		reqJSON, _ := json.Marshal(req)
+		_, err := handler.HandleRegister(ctx, reqJSON)
+		if err != nil {
+			t.Errorf("re-registration should not fail due to name≠role validation, got: %v", err)
+		}
+	})
+}
+
+// containsString is a helper that checks if s contains substr.
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && stringContains(s, substr))
+}
+
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

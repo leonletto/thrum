@@ -154,8 +154,8 @@ type AgentHandler struct {
 }
 
 // NewAgentHandler creates a new agent handler.
-func NewAgentHandler(state *state.State) *AgentHandler {
-	return &AgentHandler{state: state}
+func NewAgentHandler(s *state.State) *AgentHandler {
+	return &AgentHandler{state: s}
 }
 
 // HandleRegister handles the agent.register RPC method.
@@ -183,6 +183,37 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 	// Lock for conflict detection and registration
 	h.state.Lock()
 	defer h.state.Unlock()
+
+	// Validate name≠role: these checks prevent addressing ambiguity.
+	// Skip during re-registration since the agent already exists.
+	if !req.ReRegister {
+		// Check 1: name == own role
+		if req.Name != "" && req.Name == req.Role {
+			return nil, fmt.Errorf("agent name %q cannot be the same as its role — use a distinct name (e.g., '%s_main')", req.Name, req.Role)
+		}
+
+		// Check 2: name matches an existing role in the agents table
+		if req.Name != "" {
+			var roleCount int
+			_ = h.state.DB().QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM agents WHERE role = ?`, req.Name,
+			).Scan(&roleCount)
+			if roleCount > 0 {
+				return nil, fmt.Errorf("agent name %q conflicts with existing role '%s' — choose a different name", req.Name, req.Name)
+			}
+		}
+
+		// Check 3: role matches an existing agent name/ID
+		if req.Role != "" {
+			var nameCount int
+			_ = h.state.DB().QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM agents WHERE agent_id = ?`, req.Role,
+			).Scan(&nameCount)
+			if nameCount > 0 {
+				return nil, fmt.Errorf("role %q conflicts with existing agent name '%s' — choose a different role", req.Role, req.Role)
+			}
+		}
+	}
 
 	// Check for duplicate agent name (name must be unique across all agents)
 	if req.Name != "" {
@@ -426,6 +457,32 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 	// Write event to JSONL and SQLite
 	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write agent.register event: %w", err)
+	}
+
+	// Auto-create role group if role is non-empty and group doesn't exist yet.
+	// This makes role-based addressing work through the explicit group system.
+	if role != "" {
+		var groupExists bool
+		_ = h.state.DB().QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM groups WHERE name = ?)`, role,
+		).Scan(&groupExists)
+		if !groupExists {
+			groupID := "grp_role_" + role
+			_, err := h.state.DB().ExecContext(ctx,
+				`INSERT OR IGNORE INTO groups (group_id, name, description, created_at, created_by)
+				 VALUES (?, ?, ?, ?, 'system')`,
+				groupID, role,
+				fmt.Sprintf("Auto-created group for role '%s'", role),
+				now,
+			)
+			if err == nil {
+				_, _ = h.state.DB().ExecContext(ctx,
+					`INSERT OR IGNORE INTO group_members (group_id, member_type, member_value, added_at)
+					 VALUES (?, 'role', ?, ?)`,
+					groupID, role, now,
+				)
+			}
+		}
 	}
 
 	return &RegisterResponse{

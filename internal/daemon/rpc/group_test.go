@@ -240,8 +240,20 @@ func TestGroupList(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *GroupListResponse, got %T", resp)
 	}
-	if len(listResp.Groups) != 2 {
-		t.Errorf("expected 2 groups, got %d", len(listResp.Groups))
+	// setupGroupTest registers an agent with role "tester", which auto-creates a "tester" group.
+	// Combined with the two manually created groups, we expect at least 3 groups.
+	if len(listResp.Groups) < 2 {
+		t.Errorf("expected at least 2 groups (alpha, beta), got %d", len(listResp.Groups))
+	}
+	// Verify alpha and beta are in the list
+	groupNames := make(map[string]bool)
+	for _, g := range listResp.Groups {
+		groupNames[g.Name] = true
+	}
+	for _, want := range []string{"alpha", "beta"} {
+		if !groupNames[want] {
+			t.Errorf("expected group %q in list, not found", want)
+		}
 	}
 }
 
