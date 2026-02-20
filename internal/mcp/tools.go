@@ -81,10 +81,13 @@ func (s *Server) handleCheckMessages(
 		limit = 50
 	}
 
-	// Step 1: List unread messages mentioning this agent's role
+	// Step 1: List unread messages for this agent (by ID and role)
 	listReq := rpc.ListMessagesRequest{
-		MentionRole:    s.agentRole,
+		ForAgent:       s.agentID,
+		ForAgentRole:   s.agentRole,
+		CallerAgentID:  s.agentID,
 		UnreadForAgent: s.agentID,
+		ExcludeSelf:    true,
 		PageSize:       limit,
 		SortBy:         "created_at",
 		SortOrder:      "asc",
@@ -116,6 +119,7 @@ func (s *Server) handleCheckMessages(
 			MessageID: msg.MessageID,
 			From:      msg.AgentID,
 			Content:   msg.Body.Content,
+			Priority:  msg.Priority,
 			Timestamp: msg.CreatedAt,
 		})
 		messageIDs = append(messageIDs, msg.MessageID)
@@ -138,7 +142,10 @@ func (s *Server) handleCheckMessages(
 	}
 	defer func() { _ = markClient.Close() }()
 
-	markReq := rpc.MarkReadRequest{MessageIDs: messageIDs}
+	markReq := rpc.MarkReadRequest{
+		MessageIDs:    messageIDs,
+		CallerAgentID: s.agentID,
+	}
 	var markResp rpc.MarkReadResponse
 	_ = markClient.Call("message.markRead", markReq, &markResp) // best-effort
 
@@ -199,8 +206,13 @@ func (s *Server) handleListAgents(
 			continue
 		}
 
+		name := a.Display
+		if name == "" {
+			name = a.AgentID
+		}
+
 		agents = append(agents, AgentInfo{
-			Name:       a.Display,
+			Name:       name,
 			Role:       a.Role,
 			Module:     a.Module,
 			Status:     status,

@@ -127,6 +127,7 @@ type MessageSummary struct {
 	ReplyTo   string            `json:"reply_to,omitempty"`
 	AgentID   string            `json:"agent_id"`
 	Body      types.MessageBody `json:"body"`
+	Priority  string            `json:"priority,omitempty"` // Message priority: critical, high, normal, or low
 	CreatedAt string            `json:"created_at"`
 	Deleted   bool              `json:"deleted"`
 	IsRead    bool              `json:"is_read"` // Computed from message_reads (session_id OR agent_id match)
