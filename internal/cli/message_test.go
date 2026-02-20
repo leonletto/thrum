@@ -322,6 +322,244 @@ func TestMessageDelete(t *testing.T) {
 	}
 }
 
+func TestReplyIncludesSender(t *testing.T) {
+	// Parent message: author is "coordinator", with a mention ref to "implementer"
+	parentResponse := map[string]any{
+		"message": map[string]any{
+			"message_id": "msg_parent_01",
+			"thread_id":  "thr_01",
+			"author": map[string]string{
+				"agent_id":   "coordinator",
+				"session_id": "ses_01",
+			},
+			"body": map[string]any{
+				"format":  "markdown",
+				"content": "Hey implementer, do this task",
+			},
+			"scopes":     []map[string]string{},
+			"refs":       []map[string]string{{"type": "mention", "value": "implementer"}},
+			"metadata":   map[string]string{},
+			"created_at": "2026-02-03T10:00:00Z",
+		},
+	}
+
+	daemon, socketPath := newMockDaemon(t)
+	defer daemon.stop()
+
+	var capturedParams map[string]any
+
+	daemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		// First request: message.get
+		var req1 map[string]any
+		if err := decoder.Decode(&req1); err != nil {
+			t.Logf("Failed to decode message.get request: %v", err)
+			return
+		}
+		if req1["method"] != "message.get" {
+			t.Errorf("Expected first method 'message.get', got %v", req1["method"])
+		}
+		resp1 := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      req1["id"],
+			"result":  parentResponse,
+		}
+		if err := encoder.Encode(resp1); err != nil {
+			t.Logf("Failed to encode message.get response: %v", err)
+			return
+		}
+
+		// Second request: message.send
+		var req2 map[string]any
+		if err := decoder.Decode(&req2); err != nil {
+			t.Logf("Failed to decode message.send request: %v", err)
+			return
+		}
+		if req2["method"] != "message.send" {
+			t.Errorf("Expected second method 'message.send', got %v", req2["method"])
+		}
+		var ok bool
+		capturedParams, ok = req2["params"].(map[string]any)
+		if !ok {
+			t.Error("message.send params should be map[string]any")
+		}
+		resp2 := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      req2["id"],
+			"result": map[string]any{
+				"message_id": "msg_reply_01",
+				"created_at": "2026-02-03T10:01:00Z",
+			},
+		}
+		_ = encoder.Encode(resp2)
+	})
+
+	<-daemon.Ready()
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	result, err := Reply(client, ReplyOptions{
+		MessageID:     "msg_parent_01",
+		Content:       "Got it!",
+		CallerAgentID: "impl_api",
+	})
+	if err != nil {
+		t.Fatalf("Reply() error = %v", err)
+	}
+	if result.MessageID != "msg_reply_01" {
+		t.Errorf("Expected message_id 'msg_reply_01', got %s", result.MessageID)
+	}
+
+	// Verify mentions include both "implementer" (original audience) and "coordinator" (original sender)
+	mentions, ok := capturedParams["mentions"].([]any)
+	if !ok {
+		t.Fatalf("Expected mentions to be []any, got %T: %v", capturedParams["mentions"], capturedParams["mentions"])
+	}
+
+	mentionSet := make(map[string]bool)
+	for _, m := range mentions {
+		if ms, ok := m.(string); ok {
+			mentionSet[ms] = true
+		}
+	}
+
+	if !mentionSet["implementer"] {
+		t.Errorf("Expected mentions to include 'implementer' (original audience), got %v", mentions)
+	}
+	if !mentionSet["coordinator"] {
+		t.Errorf("Expected mentions to include 'coordinator' (original sender), got %v", mentions)
+	}
+}
+
+func TestReplyGroupScope(t *testing.T) {
+	// Parent message: group scope "reviewers", and a group ref
+	parentResponse := map[string]any{
+		"message": map[string]any{
+			"message_id": "msg_parent_02",
+			"thread_id":  "thr_02",
+			"author": map[string]string{
+				"agent_id":   "lead_agent",
+				"session_id": "ses_02",
+			},
+			"body": map[string]any{
+				"format":  "markdown",
+				"content": "Reviewers, please check this",
+			},
+			"scopes":     []map[string]string{{"type": "group", "value": "reviewers"}},
+			"refs":       []map[string]string{{"type": "group", "value": "reviewers"}},
+			"metadata":   map[string]string{},
+			"created_at": "2026-02-03T10:00:00Z",
+		},
+	}
+
+	daemon, socketPath := newMockDaemon(t)
+	defer daemon.stop()
+
+	var capturedParams map[string]any
+
+	daemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		// First request: message.get
+		var req1 map[string]any
+		if err := decoder.Decode(&req1); err != nil {
+			t.Logf("Failed to decode message.get request: %v", err)
+			return
+		}
+		if req1["method"] != "message.get" {
+			t.Errorf("Expected first method 'message.get', got %v", req1["method"])
+		}
+		resp1 := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      req1["id"],
+			"result":  parentResponse,
+		}
+		if err := encoder.Encode(resp1); err != nil {
+			t.Logf("Failed to encode message.get response: %v", err)
+			return
+		}
+
+		// Second request: message.send
+		var req2 map[string]any
+		if err := decoder.Decode(&req2); err != nil {
+			t.Logf("Failed to decode message.send request: %v", err)
+			return
+		}
+		if req2["method"] != "message.send" {
+			t.Errorf("Expected second method 'message.send', got %v", req2["method"])
+		}
+		var ok bool
+		capturedParams, ok = req2["params"].(map[string]any)
+		if !ok {
+			t.Error("message.send params should be map[string]any")
+		}
+		resp2 := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      req2["id"],
+			"result": map[string]any{
+				"message_id": "msg_reply_02",
+				"created_at": "2026-02-03T10:01:00Z",
+			},
+		}
+		_ = encoder.Encode(resp2)
+	})
+
+	<-daemon.Ready()
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	result, err := Reply(client, ReplyOptions{
+		MessageID:     "msg_parent_02",
+		Content:       "Reviewed!",
+		CallerAgentID: "reviewer_1",
+	})
+	if err != nil {
+		t.Fatalf("Reply() error = %v", err)
+	}
+	if result.MessageID != "msg_reply_02" {
+		t.Errorf("Expected message_id 'msg_reply_02', got %s", result.MessageID)
+	}
+
+	// Verify mentions contain "@reviewers" and NOT "@group:reviewers"
+	mentions, ok := capturedParams["mentions"].([]any)
+	if !ok {
+		t.Fatalf("Expected mentions to be []any, got %T: %v", capturedParams["mentions"], capturedParams["mentions"])
+	}
+
+	foundReviewers := false
+	for _, m := range mentions {
+		ms, ok := m.(string)
+		if !ok {
+			continue
+		}
+		if ms == "@reviewers" {
+			foundReviewers = true
+		}
+		if strings.Contains(ms, "group:") {
+			t.Errorf("Mention should not contain 'group:' substring, got %q", ms)
+		}
+	}
+
+	if !foundReviewers {
+		t.Errorf("Expected mentions to contain '@reviewers', got %v", mentions)
+	}
+}
+
 func TestMessageMarkRead(t *testing.T) {
 	daemon, socketPath := newMockDaemon(t)
 	defer daemon.stop()
