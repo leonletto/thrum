@@ -265,6 +265,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	refs := req.Refs
 	scopes := req.Scopes
 	resolvedTo := 0
+	var warnings []string
 	var unknownRecipients []string
 	for _, mention := range req.Mentions {
 		// Remove @ prefix if present
@@ -285,6 +286,10 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 			// Also store audit ref for queryability
 			refs = append(refs, types.Ref{Type: "group", Value: role})
 			resolvedTo++
+			// Warn sender that this resolved to a group, not an individual
+			if role != "everyone" {
+				warnings = append(warnings, fmt.Sprintf("@%s resolved to a group, not an individual agent", role))
+			}
 		} else {
 			// Not a group — validate against agents table (by agent_id or role)
 			var agentCount int
@@ -380,6 +385,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		ThreadID:   req.ThreadID,
 		CreatedAt:  now,
 		ResolvedTo: resolvedTo,
+		Warnings:   warnings,
 	}, nil
 }
 
