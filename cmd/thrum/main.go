@@ -599,6 +599,9 @@ The daemon must be running and you must have an active session.`,
 					fmt.Printf("  Thread: %s\n", result.ThreadID)
 				}
 				fmt.Printf("  Created: %s\n", result.CreatedAt)
+				for _, w := range result.Warnings {
+					fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
+				}
 			}
 
 			return nil

@@ -36,9 +36,11 @@ type SendRequest struct {
 
 // SendResponse represents the response from message.send RPC.
 type SendResponse struct {
-	MessageID string `json:"message_id"`
-	ThreadID  string `json:"thread_id,omitempty"`
-	CreatedAt string `json:"created_at"`
+	MessageID  string   `json:"message_id"`
+	ThreadID   string   `json:"thread_id,omitempty"`
+	CreatedAt  string   `json:"created_at"`
+	ResolvedTo int      `json:"resolved_to"`           // count of resolved mentions
+	Warnings   []string `json:"warnings,omitempty"`    // informational warnings
 }
 
 // GetMessageRequest represents the request for message.get RPC.
@@ -259,9 +261,11 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		structuredJSON = string(data)
 	}
 
-	// Convert mentions to refs (with group detection)
+	// Convert mentions to refs (with group detection and recipient validation)
 	refs := req.Refs
 	scopes := req.Scopes
+	resolvedTo := 0
+	var unknownRecipients []string
 	for _, mention := range req.Mentions {
 		// Remove @ prefix if present
 		role := mention
@@ -280,10 +284,32 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 			scopes = append(scopes, types.Scope{Type: "group", Value: role})
 			// Also store audit ref for queryability
 			refs = append(refs, types.Ref{Type: "group", Value: role})
+			resolvedTo++
 		} else {
-			// Not a group — treat as regular mention (push model)
-			refs = append(refs, types.Ref{Type: "mention", Value: role})
+			// Not a group — validate against agents table (by agent_id or role)
+			var agentCount int
+			err := h.state.DB().QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM agents WHERE agent_id = ? OR role = ?`,
+				role, role,
+			).Scan(&agentCount)
+			if err != nil {
+				return nil, fmt.Errorf("validate recipient %q: %w", role, err)
+			}
+			if agentCount > 0 {
+				// Known agent or role — treat as regular mention (push model)
+				refs = append(refs, types.Ref{Type: "mention", Value: role})
+				resolvedTo++
+			} else {
+				// Unknown recipient
+				unknownRecipients = append(unknownRecipients, "@"+role)
+			}
 		}
+	}
+
+	// Fail hard if any recipients could not be resolved
+	if len(unknownRecipients) > 0 {
+		return nil, fmt.Errorf("unknown recipients: %s — no matching agent, role, or group found",
+			strings.Join(unknownRecipients, ", "))
 	}
 
 	// Handle reply_to: validate parent message exists and add reply_to ref
@@ -350,9 +376,10 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	}
 
 	return &SendResponse{
-		MessageID: messageID,
-		ThreadID:  req.ThreadID,
-		CreatedAt: now,
+		MessageID:  messageID,
+		ThreadID:   req.ThreadID,
+		CreatedAt:  now,
+		ResolvedTo: resolvedTo,
 	}, nil
 }
 

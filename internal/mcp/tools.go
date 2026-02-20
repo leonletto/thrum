@@ -64,9 +64,10 @@ func (s *Server) handleSendMessage(
 	}
 
 	return nil, SendMessageOutput{
-		Status:          "delivered",
-		MessageID:       sendResp.MessageID,
-		RecipientStatus: "unknown", // would need agent.list to determine
+		Status:     "delivered",
+		MessageID:  sendResp.MessageID,
+		ResolvedTo: sendResp.ResolvedTo,
+		Warnings:   sendResp.Warnings,
 	}, nil
 }
 

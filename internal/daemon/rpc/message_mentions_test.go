@@ -43,6 +43,18 @@ func TestMessageSend_WithMentions(t *testing.T) {
 		t.Fatalf("failed to register agent: %v", err)
 	}
 
+	// Register reviewer and implementer agents so recipient validation passes
+	reviewerID := identity.GenerateAgentID(repoID, "reviewer", "test-module", "")
+	reviewerParams, _ := json.Marshal(RegisterRequest{Role: "reviewer", Module: "test-module"})
+	if _, err := agentHandler.HandleRegister(context.Background(), reviewerParams); err != nil {
+		t.Fatalf("failed to register reviewer: %v", err)
+	}
+	implementerID := identity.GenerateAgentID(repoID, "implementer", "test-module", "")
+	implementerParams, _ := json.Marshal(RegisterRequest{Role: "implementer", Module: "test-module"})
+	if _, err := agentHandler.HandleRegister(context.Background(), implementerParams); err != nil {
+		t.Fatalf("failed to register implementer: %v", err)
+	}
+
 	// Start session
 	sessionHandler := NewSessionHandler(st)
 	sessionReq := SessionStartRequest{
@@ -52,6 +64,16 @@ func TestMessageSend_WithMentions(t *testing.T) {
 	_, err = sessionHandler.HandleStart(context.Background(), sessionParams)
 	if err != nil {
 		t.Fatalf("failed to start session: %v", err)
+	}
+
+	// Start sessions for reviewer and implementer
+	reviewerSessionParams, _ := json.Marshal(SessionStartRequest{AgentID: reviewerID})
+	if _, err := sessionHandler.HandleStart(context.Background(), reviewerSessionParams); err != nil {
+		t.Fatalf("failed to start reviewer session: %v", err)
+	}
+	implementerSessionParams, _ := json.Marshal(SessionStartRequest{AgentID: implementerID})
+	if _, err := sessionHandler.HandleStart(context.Background(), implementerSessionParams); err != nil {
+		t.Fatalf("failed to start implementer session: %v", err)
 	}
 
 	// Create message handler
