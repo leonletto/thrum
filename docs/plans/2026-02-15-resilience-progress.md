@@ -3,21 +3,30 @@
 ## Status: COMPLETE — All 32 tests passing (26s)
 
 ## Branch & Worktree
-- **Worktree**: `/Users/leon/.workspaces/thrum/team-fix` (branch: `feature/team-fix`)
+
+- **Worktree**: `/Users/leon/.workspaces/thrum/team-fix` (branch:
+  `feature/team-fix`)
 - **Base commit**: `c306f74` (main tip as of 2026-02-15)
 
 ## What's Done
 
 ### Tasks 1-6: Generator + Fixture (COMMITTED: afe71ef)
-- `internal/testgen/generator.go` — Full generator with message_reads fix and active session fix
+
+- `internal/testgen/generator.go` — Full generator with message_reads fix and
+  active session fix
 - `internal/testgen/generator_test.go` — 6 passing tests
 - `internal/testgen/cmd/main.go` — CLI entry point
-- `tests/resilience/testdata/thrum-fixture.tar.gz` — Checked-in fixture (50 agents, 10K msgs, 100 sessions, 20 groups)
+- `tests/resilience/testdata/thrum-fixture.tar.gz` — Checked-in fixture (50
+  agents, 10K msgs, 100 sessions, 20 groups)
 
 ### Tasks 7-14: Test Files
+
 All 8 files in `tests/resilience/`:
+
 - `doc.go` — build tag + go:generate with `-seed 42`
-- `fixture_test.go` — shared helpers: setupFixture, setupCLIFixture, startDaemonAt, registerAllHandlers, rpcCall, rpcCallRaw, extractTarGz, fixtureAgentName, ensureSession, ensureSessionRaw
+- `fixture_test.go` — shared helpers: setupFixture, setupCLIFixture,
+  startDaemonAt, registerAllHandlers, rpcCall, rpcCallRaw, extractTarGz,
+  fixtureAgentName, ensureSession, ensureSessionRaw
 - `rpc_direct_test.go` — 11 RPC tests
 - `concurrent_test.go` — 4 concurrency tests
 - `recovery_test.go` — 5 recovery tests
@@ -26,9 +35,13 @@ All 8 files in `tests/resilience/`:
 - `cli_roundtrip_test.go` — 9 CLI round-trip tests
 
 ### CLI Round-Trip Tests (NEW)
+
 9 tests that exec the actual `thrum` binary against the fixture:
-- `TestCLI_SendAndInbox` — Send directed message, verify in recipient inbox (29ms send, 29ms inbox)
-- `TestCLI_InboxFiltering` — Full vs unread inbox at 10K scale (22ms full, 24ms unread)
+
+- `TestCLI_SendAndInbox` — Send directed message, verify in recipient inbox
+  (29ms send, 29ms inbox)
+- `TestCLI_InboxFiltering` — Full vs unread inbox at 10K scale (22ms full, 24ms
+  unread)
 - `TestCLI_TeamList` — Team list with 50 agents (121ms)
 - `TestCLI_StatusOverview` — Status with populated data (23ms)
 - `TestCLI_GroupSend` — Send to @coordinators group (25ms)
@@ -38,7 +51,9 @@ All 8 files in `tests/resilience/`:
 - `TestCLI_QuickstartPopulated` — Register new agent in populated env (43ms)
 
 ### Scripts
-- `scripts/run-resilience-tests.sh` — Convenience script for running resilience tests
+
+- `scripts/run-resilience-tests.sh` — Convenience script for running resilience
+  tests
 
 ## Test Run Results (32/32 pass)
 
@@ -81,26 +96,36 @@ Total: 26.0s
 
 ## Fixes Applied
 
-1. **Generator `message_reads` INSERT** — Added `session_id` column with agent->session lookup
-2. **Generator active sessions** — First 10 sessions stay active (`ended_at IS NULL`)
-3. **`fixtureAgentName(idx)`** — Correct `{role}_{idx:04d}` naming for all test references
+1. **Generator `message_reads` INSERT** — Added `session_id` column with
+   agent->session lookup
+2. **Generator active sessions** — First 10 sessions stay active
+   (`ended_at IS NULL`)
+3. **`fixtureAgentName(idx)`** — Correct `{role}_{idx:04d}` naming for all test
+   references
 4. **`ensureSessionForBench`** — Benchmark helper for session setup
-5. **CLI fixture setup** — `setupCLIFixture` with `registerAllHandlers`, `startDaemonAt`, socket path redirect via `.thrum/redirect`
+5. **CLI fixture setup** — `setupCLIFixture` with `registerAllHandlers`,
+   `startDaemonAt`, socket path redirect via `.thrum/redirect`
 6. **`doc.go`** — Added `-seed 42` to go:generate directive
 
 ## Key Architecture Notes
 
 ### Fixture Agent Naming
+
 ```
 fixtureAgentName(idx) = fmt.Sprintf("%s_%04d", roles[idx%5], idx)
 roles = ["coordinator", "implementer", "reviewer", "planner", "tester"]
 ```
+
 Active sessions (indices 0-9) always have `ended_at IS NULL`.
 
 ### Socket Path
-Unix sockets have 108-char limit on macOS. `startDaemonAt` creates socket in `/tmp/ts-*/t.sock`.
+
+Unix sockets have 108-char limit on macOS. `startDaemonAt` creates socket in
+`/tmp/ts-*/t.sock`.
 
 ## Next Steps
-1. Run benchmarks: `go test -tags=resilience ./tests/resilience/ -bench=. -timeout 5m`
+
+1. Run benchmarks:
+   `go test -tags=resilience ./tests/resilience/ -bench=. -timeout 5m`
 2. Commit everything
 3. Merge back to main

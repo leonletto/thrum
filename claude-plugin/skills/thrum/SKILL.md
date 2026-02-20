@@ -4,14 +4,15 @@ description: >
   Multi-agent coordination via messaging, groups, and shared context. Use when
   agents need to communicate, delegate work, or coordinate across worktrees.
 allowed-tools: "Bash(thrum:*)"
-version: "0.4.1"
+version: "0.4.4"
 author: "Leon Letto <https://github.com/leonletto>"
 license: "MIT"
 ---
 
 # Thrum - Git-Backed Agent Messaging
 
-Run `thrum prime` for full session context (auto-injected by hooks on SessionStart and PreCompact).
+Run `thrum prime` for full session context (auto-injected by hooks on
+SessionStart and PreCompact).
 
 ## Quick Command Reference
 
@@ -20,7 +21,7 @@ Run `thrum prime` for full session context (auto-injected by hooks on SessionSta
 ```
 thrum send "msg" --to @name              Direct message
 thrum send "msg" --to @name -p high      High priority (critical|high|normal|low)
-thrum send "msg" --broadcast             Broadcast to all agents
+thrum send "msg" --to @everyone          Broadcast to all agents
 thrum reply <msg-id> "response"          Reply (same audience)
 thrum inbox                              List messages (unread first)
 thrum inbox --unread                     Unread only
@@ -84,17 +85,19 @@ thrum <cmd> --help                       Detailed command usage
 
 ## When to Use Thrum
 
-| Thrum | TaskList/SendMessage | Neither |
-|-------|---------------------|---------|
-| Cross-worktree messaging | Same-session task tracking | Single-agent, no coordination |
-| Persistent messages (survive compaction) | Ephemeral task lists | Temporary scratch notes |
-| Background listener pattern | Inline progress tracking | Simple linear execution |
-| Multi-machine sync via git | Local to conversation | No persistence needed |
-| Group messaging | Direct teammate DMs | No audience beyond self |
+| Thrum                                    | TaskList/SendMessage       | Neither                       |
+| ---------------------------------------- | -------------------------- | ----------------------------- |
+| Cross-worktree messaging                 | Same-session task tracking | Single-agent, no coordination |
+| Persistent messages (survive compaction) | Ephemeral task lists       | Temporary scratch notes       |
+| Background listener pattern              | Inline progress tracking   | Simple linear execution       |
+| Multi-machine sync via git               | Local to conversation      | No persistence needed         |
+| Group messaging                          | Direct teammate DMs        | No audience beyond self       |
 
-**Decision test:** "Do messages need to survive session restart or reach agents in other worktrees?" YES = Thrum.
+**Decision test:** "Do messages need to survive session restart or reach agents
+in other worktrees?" YES = Thrum.
 
-**Thrum + TaskList coexist:** Use TaskList for immediate session work. Use Thrum for cross-session/cross-worktree coordination messages.
+**Thrum + TaskList coexist:** Use TaskList for immediate session work. Use Thrum
+for cross-session/cross-worktree coordination messages.
 
 ## Message Protocol
 
@@ -115,7 +118,8 @@ Task(subagent_type: "message-listener", model: "haiku", run_in_background: true)
 ```
 
 The listener calls `thrum wait` (blocking), then returns when messages arrive.
-Re-arm after processing. See [LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md).
+Re-arm after processing. See
+[LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md).
 
 ### Context Management
 
@@ -127,15 +131,15 @@ Re-arm after processing. See [LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md
 
 ## Resources
 
-| Resource | Content |
-|----------|---------|
-| [BOUNDARIES.md](resources/BOUNDARIES.md) | Thrum vs TaskList/SendMessage decision guide |
-| [MESSAGING.md](resources/MESSAGING.md) | Protocol patterns, priority, context management |
-| [ANTI_PATTERNS.md](resources/ANTI_PATTERNS.md) | Common mistakes and how to avoid them |
-| [LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md) | Background message listener template |
-| [CLI_REFERENCE.md](resources/CLI_REFERENCE.md) | Complete command syntax reference |
-| [GROUPS.md](resources/GROUPS.md) | Group management patterns |
-| [IDENTITY.md](resources/IDENTITY.md) | Agent identity and multi-worktree patterns |
-| [WORKTREES.md](resources/WORKTREES.md) | Multi-worktree coordination |
+| Resource                                             | Content                                         |
+| ---------------------------------------------------- | ----------------------------------------------- |
+| [BOUNDARIES.md](resources/BOUNDARIES.md)             | Thrum vs TaskList/SendMessage decision guide    |
+| [MESSAGING.md](resources/MESSAGING.md)               | Protocol patterns, priority, context management |
+| [ANTI_PATTERNS.md](resources/ANTI_PATTERNS.md)       | Common mistakes and how to avoid them           |
+| [LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md) | Background message listener template            |
+| [CLI_REFERENCE.md](resources/CLI_REFERENCE.md)       | Complete command syntax reference               |
+| [GROUPS.md](resources/GROUPS.md)                     | Group management patterns                       |
+| [IDENTITY.md](resources/IDENTITY.md)                 | Agent identity and multi-worktree patterns      |
+| [WORKTREES.md](resources/WORKTREES.md)               | Multi-worktree coordination                     |
 
 Run `thrum <command> --help` for any command's full usage.

@@ -1,4 +1,4 @@
-# Thrum -- Complete Agent Reference
+# Thrum v0.4.4 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
 
@@ -171,6 +171,7 @@ All commands accept:
 
   Usage:    thrum init [flags]
   Flags:    --force              Force reinitialization / overwrite existing files
+            --stealth            Write exclusions to .git/info/exclude instead of .gitignore
             --runtime STRING     Generate runtime-specific configs (claude|codex|cursor|gemini|cli-only|all)
             --dry-run            Preview changes without writing files
             --agent-name STRING  Agent name for templates (default: default_agent)
@@ -178,11 +179,25 @@ All commands accept:
             --agent-module STRING Agent module for templates (default: main)
   Action:   Creates .thrum/ directory structure, sets up .git/thrum-sync/a-sync as a git
             worktree on the `a-sync` orphan branch, creates identities/ directory,
-            updates .gitignore to ignore .thrum/ entirely. Optionally detects installed
-            AI runtimes and generates runtime-specific config files.
+            updates .gitignore (or .git/info/exclude with --stealth) to ignore .thrum/.
+            Writes config.json with local_only: true by default. Optionally detects
+            installed AI runtimes and generates runtime-specific config files.
   Errors:   Fails if .thrum/ exists (unless --force). Fails if not a git repo.
   Related:  `thrum migrate` upgrades repos from the old tracked-on-main layout.
             `thrum setup` configures .thrum/ in feature worktrees (creates redirect).
+
+
+### thrum setup claude-md
+
+  Usage:    thrum setup claude-md [flags]
+  Flags:    --apply     Append to CLAUDE.md (create if missing)
+            --force     Overwrite existing Thrum section
+  Action:   Generates comprehensive Thrum agent coordination instructions for CLAUDE.md.
+            Prints to stdout by default. Use --apply to append to CLAUDE.md (with
+            duplicate detection). Use --force with --apply to replace existing Thrum
+            section. Includes registration, messaging protocols, MCP configuration,
+            background listener setup, and group management instructions.
+
 
 ### thrum quickstart
 
@@ -239,8 +254,9 @@ All commands accept:
             --mention @role         Mention a role (repeatable, stored as ref type "mention")
             --thread ID             Reply to thread
             --to @role              Direct recipient (also accepts @group names)
-            --broadcast, -b         Send as broadcast to all agents (no specific recipient)
-            --priority low|normal|high  Message priority (default: normal)
+            --everyone              Alias for --to @everyone (broadcast to all agents)
+            --broadcast, -b         Send to all agents (alias for --to @everyone)
+            --priority low|normal|high|critical  Message priority (default: normal)
             --format markdown|plain|json  Message format (default: markdown)
             --structured JSON       Structured payload
   Requires: Daemon running, active session.
@@ -265,6 +281,7 @@ All commands accept:
             --unread             Only unread messages
             --all, -a            Show all messages (disable auto-filtering)
             --page-size N        Results per page (default: 10)
+            --limit N            Alias for --page-size
             --page N             Page number (default: 1)
   Action:   Lists messages. By default auto-filters to messages addressed to you (via --to)
             plus broadcasts and general messages. Use --all to see everything.
@@ -984,7 +1001,7 @@ Unknown event types are silently ignored (forward compatibility).
   thrum peer join 100.x.y.z  # Enter code 4821
   # Direct sync established, no Git remote needed
 
-  thrum send "Ready for integration" --broadcast
+  thrum send "Ready for integration" --to @everyone
   # Message arrives on Machine A within seconds
 
 ### Session lifecycle management
@@ -1217,7 +1234,7 @@ Unknown event types are silently ignored (forward compatibility).
     check_messages      Poll for unread messages mentioning this agent, auto-marks read
     wait_for_message    Block until a message arrives (WebSocket push) or timeout
     list_agents         List registered agents with active/offline status
-    broadcast_message   Deprecated -- use send_message with to="@everyone" instead
+    broadcast_message   Send to all agents (convenience wrapper around send_message to @everyone)
     create_group        Create a named group
     delete_group        Delete a group
     add_group_member    Add member to group (agent, role, or nested group)

@@ -29,7 +29,7 @@ func TestSubscribe_Scope(t *testing.T) {
 	svc := subscriptions.NewService(sdb)
 
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	sub, err := svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
+	sub, err := svc.Subscribe(context.Background(), "ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestSubscribe_MentionRole(t *testing.T) {
 	svc := subscriptions.NewService(sdb)
 
 	role := "implementer"
-	sub, err := svc.Subscribe(context.Background(),"ses_001", nil, &role, false)
+	sub, err := svc.Subscribe(context.Background(), "ses_001", nil, &role, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestSubscribe_All(t *testing.T) {
 	sdb := safedb.New(db)
 	svc := subscriptions.NewService(sdb)
 
-	sub, err := svc.Subscribe(context.Background(),"ses_001", nil, nil, true)
+	sub, err := svc.Subscribe(context.Background(), "ses_001", nil, nil, true)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestSubscribe_Validation(t *testing.T) {
 	svc := subscriptions.NewService(sdb)
 
 	// Should fail: no scope, mention_role, or all
-	_, err = svc.Subscribe(context.Background(),"ses_001", nil, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", nil, nil, false)
 	if err == nil {
 		t.Error("Expected validation error when all parameters are missing")
 	}
@@ -159,13 +159,13 @@ func TestSubscribe_Duplicate(t *testing.T) {
 	scope := &types.Scope{Type: "module", Value: "auth"}
 
 	// First subscription should succeed
-	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("First Subscribe() failed: %v", err)
 	}
 
 	// Duplicate subscription should fail
-	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", scope, nil, false)
 	if err == nil {
 		t.Error("Expected error for duplicate subscription")
 	}
@@ -189,13 +189,13 @@ func TestUnsubscribe(t *testing.T) {
 	svc := subscriptions.NewService(sdb)
 
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	sub, err := svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
+	sub, err := svc.Subscribe(context.Background(), "ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
 
 	// Unsubscribe with correct session
-	removed, err := svc.Unsubscribe(context.Background(),sub.ID, "ses_001")
+	removed, err := svc.Unsubscribe(context.Background(), sub.ID, "ses_001")
 	if err != nil {
 		t.Fatalf("Unsubscribe() failed: %v", err)
 	}
@@ -231,13 +231,13 @@ func TestUnsubscribe_WrongSession(t *testing.T) {
 	svc := subscriptions.NewService(sdb)
 
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	sub, err := svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
+	sub, err := svc.Subscribe(context.Background(), "ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
 
 	// Try to unsubscribe with different session
-	removed, err := svc.Unsubscribe(context.Background(),sub.ID, "ses_002")
+	removed, err := svc.Unsubscribe(context.Background(), sub.ID, "ses_002")
 	if err != nil {
 		t.Fatalf("Unsubscribe() failed: %v", err)
 	}
@@ -265,26 +265,26 @@ func TestList(t *testing.T) {
 
 	// Create multiple subscriptions
 	scope1 := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe(context.Background(),"ses_001", scope1, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", scope1, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() #1 failed: %v", err)
 	}
 
 	role := "reviewer"
-	_, err = svc.Subscribe(context.Background(),"ses_001", nil, &role, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", nil, &role, false)
 	if err != nil {
 		t.Fatalf("Subscribe() #2 failed: %v", err)
 	}
 
 	// Create subscription for different session
 	scope2 := &types.Scope{Type: "module", Value: "sync"}
-	_, err = svc.Subscribe(context.Background(),"ses_002", scope2, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_002", scope2, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() #3 failed: %v", err)
 	}
 
 	// List subscriptions for ses_001
-	subs, err := svc.List(context.Background(),"ses_001")
+	subs, err := svc.List(context.Background(), "ses_001")
 	if err != nil {
 		t.Fatalf("List() failed: %v", err)
 	}
@@ -323,24 +323,24 @@ func TestClearBySession(t *testing.T) {
 
 	// Create subscriptions for two sessions
 	scope1 := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe(context.Background(),"ses_001", scope1, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", scope1, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() #1 failed: %v", err)
 	}
 
-	_, err = svc.Subscribe(context.Background(),"ses_001", nil, nil, true)
+	_, err = svc.Subscribe(context.Background(), "ses_001", nil, nil, true)
 	if err != nil {
 		t.Fatalf("Subscribe() #2 failed: %v", err)
 	}
 
 	scope2 := &types.Scope{Type: "module", Value: "sync"}
-	_, err = svc.Subscribe(context.Background(),"ses_002", scope2, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_002", scope2, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() #3 failed: %v", err)
 	}
 
 	// Clear ses_001 subscriptions
-	cleared, err := svc.ClearBySession(context.Background(),"ses_001")
+	cleared, err := svc.ClearBySession(context.Background(), "ses_001")
 	if err != nil {
 		t.Fatalf("ClearBySession() failed: %v", err)
 	}
@@ -349,7 +349,7 @@ func TestClearBySession(t *testing.T) {
 	}
 
 	// ses_001 should have no subscriptions
-	subs, err := svc.List(context.Background(),"ses_001")
+	subs, err := svc.List(context.Background(), "ses_001")
 	if err != nil {
 		t.Fatalf("List() failed: %v", err)
 	}
@@ -367,7 +367,7 @@ func TestClearBySession(t *testing.T) {
 	}
 
 	// After clearing, ses_001 should be able to re-subscribe (no "already exists" error)
-	_, err = svc.Subscribe(context.Background(),"ses_001", scope1, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", scope1, nil, false)
 	if err != nil {
 		t.Errorf("Re-subscribe after clear should succeed, got: %v", err)
 	}
@@ -390,7 +390,7 @@ func TestList_Empty(t *testing.T) {
 	sdb := safedb.New(db)
 	svc := subscriptions.NewService(sdb)
 
-	subs, err := svc.List(context.Background(),"ses_nonexistent")
+	subs, err := svc.List(context.Background(), "ses_nonexistent")
 	if err != nil {
 		t.Fatalf("List() failed: %v", err)
 	}

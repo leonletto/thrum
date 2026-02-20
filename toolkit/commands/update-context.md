@@ -1,6 +1,7 @@
 # Update Agent Context
 
-Guide for composing and saving structured agent context via `thrum context save`.
+Guide for composing and saving structured agent context via
+`thrum context save`.
 
 ## Instructions
 
@@ -11,7 +12,8 @@ Before delegating, write a brief narrative from your own memory covering:
 - **What you worked on** - tasks, features, bugs, investigations
 - **Key decisions** - approach changes, trade-offs, rejected alternatives
 - **Current state** - what's in-progress, what's blocked, what's done
-- **What a future session needs to know** - gotchas, incomplete work, important context
+- **What a future session needs to know** - gotchas, incomplete work, important
+  context
 
 Keep it concise. The subagent will gather mechanical state automatically.
 
@@ -28,34 +30,42 @@ Delegate to a **general-purpose subagent** that will:
    - `bd ready` (next available work, if beads is available)
    - Skip any command that fails - not all tools are installed everywhere
 
-2. **Read existing context** via `thrum context show` to understand what's already saved
+2. **Read existing context** via `thrum context show` to understand what's
+   already saved
 
-3. **Merge** your narrative summary (from Step 1) with the gathered state into a structured markdown document:
+3. **Merge** your narrative summary (from Step 1) with the gathered state into a
+   structured markdown document:
 
    ```markdown
    # Agent Context
 
    ## Session Summary
+
    <!-- Your narrative from Step 1 -->
 
    ## Git State
+
    - **Branch:** ...
    - **Recent commits:** ...
    - **Uncommitted changes:** ...
 
    ## Task State
+
    - **In-progress:** ...
    - **Ready:** ...
    - **Stats:** ...
 
    ## Open Questions / Blockers
+
    <!-- Anything unresolved -->
 
    ## Next Steps
+
    <!-- What the next session should pick up -->
    ```
 
 4. **Save** the composed document by piping it to `thrum context save`:
+
    ```bash
    echo "$CONTENT" | thrum context save
    ```
@@ -91,6 +101,8 @@ Task(
 
 - **Subagent handles investigation** - main context window stays clean
 - **Narrative + mechanical** - agent insight combined with ground truth
-- **Reads before writing** - merges with existing context, doesn't blindly replace
+- **Reads before writing** - merges with existing context, doesn't blindly
+  replace
 - **Graceful degradation** - skips unavailable tools (no beads? no problem)
-- **Storage-agnostic** - uses `thrum context save` as the primitive, doesn't care how it's stored
+- **Storage-agnostic** - uses `thrum context save` as the primitive, doesn't
+  care how it's stored

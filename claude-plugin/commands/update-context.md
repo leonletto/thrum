@@ -2,7 +2,8 @@
 description: Update agent context with session summary and repo state
 ---
 
-Guide for composing and saving structured agent context via `thrum context save`.
+Guide for composing and saving structured agent context via
+`thrum context save`.
 
 ### Step 1: Compose Your Session Summary
 
@@ -11,13 +12,16 @@ Before delegating, write a brief narrative from your own memory covering:
 - **What you worked on** — tasks, features, bugs, investigations
 - **Key decisions** — approach changes, trade-offs, rejected alternatives
 - **Current state** — what's in-progress, what's blocked, what's done
-- **What a future session needs to know** — gotchas, incomplete work, important context
+- **What a future session needs to know** — gotchas, incomplete work, important
+  context
 
 ### Step 2: Spawn the Update Agent
 
 Delegate to a **general-purpose subagent** that will:
 
-1. Gather mechanical state: `git log --oneline -10`, `git status --short`, `git branch --show-current`, `bd stats`, `bd list --status=in_progress`, `bd ready` (skip any that fail)
+1. Gather mechanical state: `git log --oneline -10`, `git status --short`,
+   `git branch --show-current`, `bd stats`, `bd list --status=in_progress`,
+   `bd ready` (skip any that fail)
 2. Read existing context via `thrum context show`
 3. Merge your narrative with gathered state into structured markdown:
 
@@ -25,14 +29,17 @@ Delegate to a **general-purpose subagent** that will:
 # Agent Context
 
 ## Session Summary
+
 <!-- Your narrative from Step 1 -->
 
 ## Git State
+
 - **Branch:** ...
 - **Recent commits:** ...
 - **Uncommitted changes:** ...
 
 ## Task State
+
 - **In-progress:** ...
 - **Ready:** ...
 

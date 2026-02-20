@@ -1,7 +1,15 @@
+---
+title: "Tailscale Sync Security"
+description:
+  "Security model for Thrum's Tailscale peer sync — pairing, encryption, access
+  control, and threat mitigations"
+category: "guides"
+---
+
 # Tailscale Sync Security
 
-> See also: [Tailscale Sync](tailscale-sync.md) for setup, architecture, and
-> CLI commands.
+> See also: [Tailscale Sync](tailscale-sync.md) for setup, architecture, and CLI
+> commands.
 
 Security model for the Tailscale-based sync protocol.
 
@@ -14,8 +22,8 @@ The sync protocol uses three layers of defense:
 3. **Token Authentication** -- 32-byte token authenticates every request
 
 This replaces the previous overengineered security stack (Ed25519 signing,
-validation pipeline, WhoIs authorization, rate limiting, quarantine system)
-with a simpler model that provides equivalent practical security.
+validation pipeline, WhoIs authorization, rate limiting, quarantine system) with
+a simpler model that provides equivalent practical security.
 
 ## Layer 1: Tailscale Encryption
 
@@ -95,8 +103,8 @@ network security makes this extremely unlikely.
 
 ## Layer 3: Token Authentication
 
-After pairing, a 32-byte hex token (256 bits of entropy) is shared between
-the two peers. Every sync request includes this token.
+After pairing, a 32-byte hex token (256 bits of entropy) is shared between the
+two peers. Every sync request includes this token.
 
 ### Token Lifecycle
 
@@ -127,8 +135,8 @@ Incoming sync request
 
 - **256 bits of entropy** -- Computationally infeasible to guess
 - **Per-peer tokens** -- Each peer relationship has its own token
-- **Central validation** -- All RPCs are authenticated in the sync server
-  before handler dispatch
+- **Central validation** -- All RPCs are authenticated in the sync server before
+  handler dispatch
 - **Exempt only pair.request** -- The pairing RPC is the only unauthenticated
   method (protected by the pairing code instead)
 
@@ -137,25 +145,25 @@ Incoming sync request
 No security-specific configuration is needed. The security model is built into
 the pairing and sync flow.
 
-| Aspect | Configuration |
-|--------|--------------|
-| Encryption | Automatic (Tailscale) |
-| Pairing timeout | 5 minutes (hardcoded) |
-| Pairing attempts | 3 per session (hardcoded) |
-| Token length | 32 bytes / 256 bits (hardcoded) |
-| Network ACLs | Configure in Tailscale admin console |
+| Aspect           | Configuration                        |
+| ---------------- | ------------------------------------ |
+| Encryption       | Automatic (Tailscale)                |
+| Pairing timeout  | 5 minutes (hardcoded)                |
+| Pairing attempts | 3 per session (hardcoded)            |
+| Token length     | 32 bytes / 256 bits (hardcoded)      |
+| Network ACLs     | Configure in Tailscale admin console |
 
 ## Comparison with Previous Model
 
-| Previous (Removed) | Current (Simplified) |
-|---------------------|---------------------|
-| Ed25519 event signing | Not needed -- Tailscale provides transport integrity |
-| 3-stage validation pipeline | Not needed -- token auth is sufficient |
-| WhoIs authorization | Not needed -- pairing code + Tailscale ACLs |
-| Per-peer rate limiting | Not needed -- Tailscale rate limits at network level |
-| Quarantine system | Not needed -- invalid tokens are simply rejected |
-| TOFU key pinning | Replaced by explicit human-mediated pairing |
-| ~1,074 lines of security code | ~40 lines of token validation |
+| Previous (Removed)            | Current (Simplified)                                 |
+| ----------------------------- | ---------------------------------------------------- |
+| Ed25519 event signing         | Not needed -- Tailscale provides transport integrity |
+| 3-stage validation pipeline   | Not needed -- token auth is sufficient               |
+| WhoIs authorization           | Not needed -- pairing code + Tailscale ACLs          |
+| Per-peer rate limiting        | Not needed -- Tailscale rate limits at network level |
+| Quarantine system             | Not needed -- invalid tokens are simply rejected     |
+| TOFU key pinning              | Replaced by explicit human-mediated pairing          |
+| ~1,074 lines of security code | ~40 lines of token validation                        |
 
 ## Troubleshooting
 
@@ -189,5 +197,5 @@ Machine B within 5 minutes.
 
 Three incorrect codes were entered.
 
-**Fix**: Run `thrum peer add` again on Machine A to start a fresh session with
-a new code.
+**Fix**: Run `thrum peer add` again on Machine A to start a fresh session with a
+new code.

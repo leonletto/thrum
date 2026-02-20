@@ -13,7 +13,7 @@
       "name": "thrum",
       "source": "./claude-plugin",
       "description": "Git-backed messaging for AI agent coordination across sessions, worktrees, and machines.",
-      "version": "0.4.2",
+      "version": "0.4.4",
       "author": {
         "name": "Leon Letto"
       },

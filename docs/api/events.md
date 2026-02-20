@@ -93,7 +93,7 @@ can be rebuilt from the JSONL at any time.
 
 ### Message Events
 
-#### message.created
+#### message.create
 
 Emitted when a new message is created in the system.
 
@@ -163,7 +163,7 @@ Emitted when a new message is created in the system.
 ```javascript
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
-  if (msg.method === "message.created") {
+  if (msg.method === "message.create") {
     const message = msg.params;
     console.log(
       `New message from ${message.agent_id}: ${message.body.content}`,
@@ -172,8 +172,7 @@ ws.onmessage = (event) => {
 };
 ```
 
-
-#### message.edited
+#### message.edit
 
 Emitted when a message is edited.
 
@@ -224,15 +223,14 @@ table) and includes:
 ```javascript
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
-  if (msg.method === "message.edited") {
+  if (msg.method === "message.edit") {
     const edit = msg.params;
     updateMessageInUI(edit.message_id, edit.body.content);
   }
 };
 ```
 
-
-#### message.deleted
+#### message.delete
 
 Emitted when a message is soft-deleted.
 
@@ -275,17 +273,16 @@ param)
 ```javascript
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
-  if (msg.method === "message.deleted") {
+  if (msg.method === "message.delete") {
     const deletion = msg.params;
     removeMessageFromUI(deletion.message_id);
   }
 };
 ```
 
-
 ### Thread Events
 
-#### thread.created
+#### thread.create
 
 Emitted when a new thread is created.
 
@@ -319,7 +316,6 @@ Emitted when a new thread is created.
 - `created_by`: Agent/user that created the thread
 
 **Related methods**: `thread.create`, `thread.list`, `thread.get`
-
 
 #### thread.updated
 
@@ -357,10 +353,9 @@ event is a WebSocket notification only and is **not persisted** to JSONL.
 - `last_sender`: Agent who sent the latest message
 - `preview`: Optional preview of latest message content
 
-
 ### Agent Events
 
-#### agent.registered
+#### agent.register
 
 Emitted when an agent registers with the daemon.
 
@@ -410,7 +405,6 @@ Names must match `[a-z0-9_]+` and cannot use reserved words (`daemon`, `system`,
 
 **Related methods**: `agent.register`, `agent.list`
 
-
 #### agent.cleanup
 
 Emitted when an agent is deleted or cleaned up.
@@ -446,7 +440,6 @@ Emitted when an agent is deleted or cleaned up.
 - `method`: How cleanup was triggered (`"manual"`, `"automated"`, `"ui"`)
 
 **Related methods**: `agent.delete`, `agent.cleanup`
-
 
 #### agent.update
 
@@ -504,10 +497,9 @@ Emitted when an agent's work context changes (git state, intent, task).
 **Projection**: Work contexts are merged by `session_id` -- for contexts with
 the same session, the one with the newer `git_updated_at` wins.
 
-
 ### Session Events
 
-#### session.started
+#### agent.session.start
 
 Emitted when a session starts.
 
@@ -548,8 +540,7 @@ Emitted when a session starts.
 
 **Related methods**: `session.start`, `session.end`
 
-
-#### session.ended
+#### agent.session.end
 
 Emitted when a session ends.
 
@@ -587,7 +578,6 @@ Emitted when a session ends.
 - `crash`: Unexpected termination or timeout
 
 **Related methods**: `session.end`, `session.start`
-
 
 ## Subscription Filtering
 
@@ -780,17 +770,17 @@ for the same message).
 
 ```typescript
 const eventHandlers = {
-  "message.created": (params: MessageCreateEvent) => {
+  "message.create": (params: MessageCreateEvent) => {
     console.log(`New message: ${params.message_id}`);
     addMessageToUI(params);
   },
 
-  "message.edited": (params: MessageEditEvent) => {
+  "message.edit": (params: MessageEditEvent) => {
     console.log(`Message edited: ${params.message_id}`);
     updateMessageInUI(params);
   },
 
-  "message.deleted": (params: MessageDeleteEvent) => {
+  "message.delete": (params: MessageDeleteEvent) => {
     console.log(`Message deleted: ${params.message_id}`);
     removeMessageFromUI(params);
   },
@@ -822,7 +812,7 @@ ws.onmessage = (event) => {
 type EventHandler func(json.RawMessage) error
 
 handlers := map[string]EventHandler{
-    "message.created": func(params json.RawMessage) error {
+    "message.create": func(params json.RawMessage) error {
         var event types.MessageCreateEvent
         if err := json.Unmarshal(params, &event); err != nil {
             return err
@@ -831,7 +821,7 @@ handlers := map[string]EventHandler{
         return addMessageToUI(event)
     },
 
-    "message.edited": func(params json.RawMessage) error {
+    "message.edit": func(params json.RawMessage) error {
         var event types.MessageEditEvent
         if err := json.Unmarshal(params, &event); err != nil {
             return err

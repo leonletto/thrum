@@ -154,16 +154,21 @@ func initCmd() *cobra.Command {
 Creates the .thrum/ directory structure, sets up the a-sync branch for
 message synchronization, and updates .gitignore.
 
+Use --stealth to avoid any footprint in tracked files: exclusions are
+written to .git/info/exclude instead of .gitignore.
+
 Detects installed AI runtimes and prompts you to select one (interactive).
 When --runtime is specified, uses that runtime directly without prompting.
 
 Examples:
   thrum init                          # Init + interactive runtime selection
+  thrum init --stealth                # Init with zero tracked-file footprint
   thrum init --runtime claude         # Init + generate Claude configs
   thrum init --runtime codex --force  # Init + overwrite Codex configs
   thrum init --runtime all --dry-run  # Preview all runtime configs`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			force, _ := cmd.Flags().GetBool("force")
+			stealth, _ := cmd.Flags().GetBool("stealth")
 			runtimeFlag, _ := cmd.Flags().GetString("runtime")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			agentName, _ := cmd.Flags().GetString("agent-name")
@@ -213,6 +218,7 @@ Examples:
 				opts := cli.InitOptions{
 					RepoPath: flagRepo,
 					Force:    force,
+					Stealth:  stealth,
 				}
 
 				if err := cli.Init(opts); err != nil {
@@ -227,7 +233,11 @@ Examples:
 					fmt.Printf("  Repository: %s\n", flagRepo)
 					fmt.Println("  Created: .thrum/ directory structure")
 					fmt.Println("  Created: a-sync branch for message sync")
-					fmt.Println("  Updated: .gitignore")
+					if stealth {
+						fmt.Println("  Updated: .git/info/exclude (stealth mode)")
+					} else {
+						fmt.Println("  Updated: .gitignore")
+					}
 				}
 			}
 
@@ -330,6 +340,7 @@ Examples:
 	}
 
 	cmd.Flags().Bool("force", false, "Force reinitialization / overwrite existing files")
+	cmd.Flags().Bool("stealth", false, "Use .git/info/exclude instead of .gitignore (zero footprint in tracked files)")
 	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files")
 	cmd.Flags().String("runtime", "", "Generate runtime-specific configs (claude|codex|cursor|gemini|cli-only|all)")
 	cmd.Flags().String("agent-name", "", "Agent name for templates (default: default_agent)")
@@ -539,6 +550,12 @@ The daemon must be running and you must have an active session.`,
 			format, _ := cmd.Flags().GetString("format")
 			to, _ := cmd.Flags().GetString("to")
 			broadcast, _ := cmd.Flags().GetBool("broadcast")
+			everyone, _ := cmd.Flags().GetBool("everyone")
+
+			// --everyone is an alias for --to @everyone
+			if everyone {
+				to = "@everyone"
+			}
 
 			opts := cli.SendOptions{
 				Content:       args[0],
@@ -596,7 +613,8 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().StringP("priority", "p", "normal", "Message priority (low, normal, high)")
 	cmd.Flags().String("format", "markdown", "Message format (markdown, plain, json)")
 	cmd.Flags().String("to", "", "Direct recipient (format: @role)")
-	cmd.Flags().BoolP("broadcast", "b", false, "Send as broadcast to all agents (no specific recipient)")
+	cmd.Flags().Bool("everyone", false, "Send to all agents (alias for --to @everyone)")
+	cmd.Flags().BoolP("broadcast", "b", false, "Send to all agents (alias for --to @everyone)")
 
 	return cmd
 }
@@ -926,6 +944,11 @@ The daemon must be running and you must have an active session.`,
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 			page, _ := cmd.Flags().GetInt("page")
 
+			// --limit is an alias for --page-size
+			if cmd.Flags().Changed("limit") {
+				pageSize, _ = cmd.Flags().GetInt("limit")
+			}
+
 			agentID, err := resolveLocalAgentID()
 			if err != nil {
 				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
@@ -1000,6 +1023,7 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().Bool("unread", false, "Only unread messages")
 	cmd.Flags().BoolP("all", "a", false, "Show all messages (disable auto-filtering)")
 	cmd.Flags().Int("page-size", 10, "Results per page")
+	cmd.Flags().Int("limit", 0, "Alias for --page-size")
 	cmd.Flags().Int("page", 1, "Page number")
 
 	return cmd
@@ -3333,7 +3357,7 @@ Examples:
 				return fmt.Errorf("stage context file: %s: %w", string(out), err)
 			}
 
-			commitCmd := exec.Command("git", "-C", syncDir, "commit", "-m", fmt.Sprintf("context: sync %s", agentID), "--allow-empty") //nolint:gosec // G204 - internal path construction
+			commitCmd := exec.Command("git", "-C", syncDir, "-c", "user.name=Thrum", "-c", "user.email=thrum@local", "commit", "--no-verify", "-m", fmt.Sprintf("context: sync %s", agentID), "--allow-empty") //nolint:gosec // G204 - internal path construction
 			if out, err := commitCmd.CombinedOutput(); err != nil {
 				// "nothing to commit" is OK
 				if !strings.Contains(string(out), "nothing to commit") {
@@ -3499,8 +3523,8 @@ Examples:
 			if !forceInit {
 				existingCfg, err := config.LoadWithPath(flagRepo, "", "")
 				if err == nil && existingCfg.Agent.Name != "" {
-					switch {
-					case name == "":
+					switch name {
+					case "":
 						// No --name given (automated/template call): fully adopt existing identity.
 						name = existingCfg.Agent.Name
 						flagRole = existingCfg.Agent.Role
@@ -3508,7 +3532,7 @@ Examples:
 						if display == "" && existingCfg.Agent.Display != "" {
 							display = existingCfg.Agent.Display
 						}
-					case name == existingCfg.Agent.Name:
+					case existingCfg.Agent.Name:
 						// Same --name as existing: re-register (update role/module if changed).
 					default:
 						// Different --name than existing: warn about replacing the identity.

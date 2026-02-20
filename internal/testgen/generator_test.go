@@ -10,7 +10,7 @@ import (
 )
 
 func TestGenerateAgents(t *testing.T) {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(42)) //nolint:gosec // intentional use of weak random for deterministic test data
 	agents := generateAgents(rng, 50)
 
 	if len(agents) != 50 {
@@ -18,7 +18,7 @@ func TestGenerateAgents(t *testing.T) {
 	}
 
 	// Verify determinism
-	rng2 := rand.New(rand.NewSource(42))
+	rng2 := rand.New(rand.NewSource(42)) //nolint:gosec // intentional use of weak random for deterministic test data
 	agents2 := generateAgents(rng2, 50)
 	for i := range agents {
 		if agents[i].AgentID != agents2[i].AgentID {
@@ -39,7 +39,7 @@ func TestGenerateAgents(t *testing.T) {
 }
 
 func TestGenerateSessions(t *testing.T) {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(42)) //nolint:gosec // intentional use of weak random for deterministic test data
 	agents := generateAgents(rng, 50)
 	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	sessions := generateSessions(rng, agents, 100, baseTime)
@@ -61,7 +61,7 @@ func TestGenerateSessions(t *testing.T) {
 }
 
 func TestGenerateMessages(t *testing.T) {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(42)) //nolint:gosec // intentional use of weak random for deterministic test data
 	agents := generateAgents(rng, 50)
 	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	sessions := generateSessions(rng, agents, 100, baseTime)
@@ -94,7 +94,7 @@ func TestGenerateMessages(t *testing.T) {
 }
 
 func TestGenerateGroups(t *testing.T) {
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(42)) //nolint:gosec // intentional use of weak random for deterministic test data
 	agents := generateAgents(rng, 50)
 	groups := generateGroups(rng, agents, 20)
 

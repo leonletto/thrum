@@ -51,6 +51,11 @@ linters:
       - path: '_test\.go'
         linters:
           - forcetypeassert
+      # safecmd: subprocess with variable is by design (git wrapper)
+      - path: 'safecmd/'
+        text: "G204"
+        linters:
+          - gosec
       # Test files: allow subprocess with variable (exec.Command("git", tmpDir))
       - path: '_test\.go'
         text: "G204"
