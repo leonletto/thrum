@@ -5,26 +5,29 @@ import (
 	"time"
 )
 
-func TestParseMentionRole(t *testing.T) {
+func TestParseMention(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected string
 	}{
 		{"@ops", "ops"},
 		{"@reviewer", "reviewer"},
+		{"@impl_api", "impl_api"},
 		{"ops", "ops"},
 		{"reviewer", "reviewer"},
+		{"impl_api", "impl_api"},
 		{"agent:ops:abc123", "ops"},
 		{"agent:reviewer:xyz", "reviewer"},
 		{"agent:", ""},
 		{"@", ""},
+		{"@everyone", "everyone"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := parseMentionRole(tt.input)
+			got := parseMention(tt.input)
 			if got != tt.expected {
-				t.Errorf("parseMentionRole(%q) = %q, want %q", tt.input, got, tt.expected)
+				t.Errorf("parseMention(%q) = %q, want %q", tt.input, got, tt.expected)
 			}
 		})
 	}
