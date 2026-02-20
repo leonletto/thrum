@@ -1,4 +1,4 @@
-# Thrum v0.4.1
+# Thrum v0.4.4
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
 
@@ -34,11 +34,16 @@ All commands accept these flags:
 
 ### Setup & Orientation
 
-  thrum init [--force] [--runtime claude|codex|cursor|gemini|cli-only|all] [--dry-run] [--agent-name NAME] [--agent-role ROLE] [--agent-module MODULE]
+  thrum init [--force] [--stealth] [--runtime claude|codex|cursor|gemini|cli-only|all] [--dry-run] [--agent-name NAME] [--agent-role ROLE] [--agent-module MODULE]
     Initialize Thrum in the current repository. Optionally generate runtime-specific configs.
 
   thrum setup WORKTREE_PATH
     Configure a feature worktree with .thrum/redirect to share the main issue database.
+
+  thrum setup claude-md [--apply] [--force]
+    Generate Thrum agent coordination instructions for CLAUDE.md. Prints to stdout
+    by default. Use --apply to append to CLAUDE.md (creates if missing). Use --force
+    with --apply to replace existing Thrum section.
 
   thrum migrate [--repo PATH]
     Migrate old-layout repos (JSONL on main branch) to worktree architecture.
@@ -68,13 +73,13 @@ All commands accept these flags:
 
 ### Messaging
 
-  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @role] [--broadcast|-b] [-p|--priority low|normal|high|critical] [--format markdown|plain|json] [--structured JSON]
-    Send a message. Use --broadcast to send to all agents. Use --to @group to send to a group.
+  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @role|@everyone] [--everyone] [-p|--priority low|normal|high|critical] [--format markdown|plain|json] [--structured JSON]
+    Send a message. Use --to @everyone to broadcast to all agents. Use --to @group to send to a group.
 
   thrum reply MSG_ID TEXT [--format markdown|plain|json]
     Reply to a message, copying the parent's audience (mentions/scopes). Includes reply_to reference.
 
-  thrum inbox [--scope type:value] [--mentions] [--unread] [--all|-a] [--page-size N] [--page N]
+  thrum inbox [--scope type:value] [--mentions] [--unread] [--all|-a] [--page-size N] [--limit N] [--page N]
     List messages in your inbox. Auto-filters to messages addressed to you + broadcasts.
     Use --all to disable auto-filtering and show everything.
 
@@ -286,7 +291,7 @@ All commands accept these flags:
 
 ### Broadcast to all agents
 
-  thrum send "Stopping for lunch, back in 30" --broadcast
+  thrum send "Stopping for lunch, back in 30" --to @everyone
 
 ### Send to a group
 
@@ -379,7 +384,7 @@ All commands accept these flags:
       - include_offline: include inactive agents (optional, default: true)
 
     broadcast_message(content, priority?)
-      Deprecated -- use send_message with to="@everyone" instead.
+      Send to all agents (convenience wrapper around send_message to @everyone).
 
     create_group(name, description?)
       Create a named group.
@@ -440,7 +445,7 @@ All commands accept these flags:
   THRUM_LOCAL=1 thrum daemon start       # Via environment variable
 
   Persists in .thrum/config.json: { "local_only": true }
-  Priority: CLI flag > env var > config file > default (false)
+  Priority: CLI flag > env var > config file > default (true via thrum init)
   Check status: thrum sync status (shows "Mode: local-only" or "Mode: normal")
 
 ## Worktree Setup Scripts

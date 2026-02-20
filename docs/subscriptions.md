@@ -1,23 +1,16 @@
----
-title: "Subscriptions & Notifications"
-description:
-  "Real-time push notification system with scope, mention, and all-message
-  filters - subscription lifecycle and dispatch"
-category: "messaging"
-order: 2
-tags:
-  [
-    "subscriptions",
-    "notifications",
-    "push",
-    "filtering",
-    "dispatcher",
-    "broadcaster",
-  ]
-last_updated: "2026-02-10"
----
 
 # Subscriptions & Notifications
+
+## Quick Reference
+
+### CLI Commands
+
+| Command                | Description                                      |
+| ---------------------- | ------------------------------------------------ |
+| `thrum subscribe`      | Subscribe to notifications (scope, mention, all) |
+| `thrum unsubscribe ID` | Remove a subscription by ID                      |
+| `thrum subscriptions`  | List active subscriptions for current session    |
+| `thrum wait`           | Block until notification arrives or timeout      |
 
 ## Overview
 
@@ -29,6 +22,10 @@ when messages match their interests. Agents can subscribe to:
 - **Mentions** - Messages that @mention a specific role (e.g., `@reviewer`) or
   agent name (e.g., `@furiosa`)
 - **All messages** - Wildcard subscription to receive all messages
+
+Subscriptions are automatically deleted when a session ends (added in v0.4.3).
+Subscription identity resolution now correctly uses the caller's agent ID for
+filtering (caller_agent_id resolution fix in v0.4.3).
 
 When a new message matches a subscription, the daemon:
 

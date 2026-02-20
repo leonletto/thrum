@@ -6,14 +6,7 @@ description:
 category: "guides"
 order: 3
 tags:
-  [
-    "claude-code",
-    "plugin",
-    "installation",
-    "slash-commands",
-    "mcp",
-    "hooks",
-  ]
+  ["claude-code", "plugin", "installation", "slash-commands", "mcp", "hooks"]
 last_updated: "2026-02-13"
 ---
 
@@ -33,7 +26,8 @@ disclosure resource docs. It replaces the manual agent definition approach
 
 **What you get:**
 
-- **10 slash commands** — `/thrum:send`, `/thrum:inbox`, `/thrum:quickstart`, and more
+- **10 slash commands** — `/thrum:send`, `/thrum:inbox`, `/thrum:quickstart`,
+  and more
 - **Automatic context** — SessionStart and PreCompact hooks run `thrum prime` to
   inject identity, team roster, inbox, and git state
 - **8 resource docs** — Progressive disclosure for messaging patterns, groups,
@@ -55,8 +49,13 @@ cd thrum && make install
 # Initialize in your repository
 cd /path/to/your/repo
 thrum init
+thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
 thrum daemon start
 ```
+
+The `thrum setup claude-md` command generates comprehensive agent coordination
+instructions and adds them to your CLAUDE.md file. This provides agents with
+immediate context on how to use Thrum for coordination.
 
 Verify the daemon is running:
 
@@ -66,20 +65,29 @@ thrum daemon status
 
 ## Installation
 
-### From GitHub (self-hosted)
+### From GitHub (self-hosted marketplace)
 
-The plugin is distributed as a self-hosted marketplace via the repository:
+The plugin is distributed as a self-hosted marketplace. First add the
+marketplace, then install the plugin:
 
 ```bash
-claude plugin add --from https://github.com/leonletto/thrum
+# Add the Thrum marketplace
+claude plugin marketplace add https://github.com/leonletto/thrum
+
+# Install the plugin
+claude plugin install thrum
 ```
 
 ### From local clone
 
-If you've cloned the Thrum repository:
+If you've cloned the Thrum repository locally:
 
 ```bash
-claude plugin add --from /path/to/thrum
+# Add as a local marketplace
+claude plugin marketplace add /path/to/thrum
+
+# Install the plugin
+claude plugin install thrum
 ```
 
 ### Verify installation
@@ -92,18 +100,18 @@ and unread messages in the session preamble.
 
 All commands live under the `/thrum:` namespace.
 
-| Command | Purpose |
-|---------|---------|
-| `/thrum:quickstart` | Register agent and start session (interactive or with flags) |
-| `/thrum:send` | Send direct, group, or broadcast messages with priority |
-| `/thrum:inbox` | Check message inbox (all or unread only) |
-| `/thrum:reply` | Reply to a message (inherits original audience) |
-| `/thrum:wait` | Block until a message arrives (background listener use) |
-| `/thrum:team` | Show active team members with roles and intents |
-| `/thrum:group` | Create, manage, and message agent groups |
-| `/thrum:overview` | Combined status + team + inbox view |
-| `/thrum:prime` | Load full session context (identity, team, inbox, git) |
-| `/thrum:update-context` | Guided workflow to save session narrative + state |
+| Command                 | Purpose                                                      |
+| ----------------------- | ------------------------------------------------------------ |
+| `/thrum:quickstart`     | Register agent and start session (interactive or with flags) |
+| `/thrum:send`           | Send direct, group, or broadcast messages with priority      |
+| `/thrum:inbox`          | Check message inbox (all or unread only)                     |
+| `/thrum:reply`          | Reply to a message (inherits original audience)              |
+| `/thrum:wait`           | Block until a message arrives (background listener use)      |
+| `/thrum:team`           | Show active team members with roles and intents              |
+| `/thrum:group`          | Create, manage, and message agent groups                     |
+| `/thrum:overview`       | Combined status + team + inbox view                          |
+| `/thrum:prime`          | Load full session context (identity, team, inbox, git)       |
+| `/thrum:update-context` | Guided workflow to save session narrative + state            |
 
 ### Common workflows
 
@@ -167,21 +175,21 @@ track of who it is or what messages are pending.
 The plugin includes 8 resource documents that Claude loads on demand for deeper
 guidance:
 
-| Resource | When it's used |
-|----------|---------------|
-| `MESSAGING.md` | Message lifecycle, priority handling, addressing patterns |
-| `GROUPS.md` | Creating groups, adding members, group messaging |
-| `IDENTITY.md` | Agent naming, registration, multi-worktree identity |
-| `WORKTREES.md` | Cross-worktree coordination, shared daemon, file tracking |
-| `LISTENER_PATTERN.md` | Background message listener sub-agent template |
-| `BOUNDARIES.md` | When to use Thrum vs TaskList/SendMessage |
-| `ANTI_PATTERNS.md` | 12 common mistakes and how to avoid them |
-| `CLI_REFERENCE.md` | Complete command syntax for all `thrum` commands |
+| Resource              | When it's used                                            |
+| --------------------- | --------------------------------------------------------- |
+| `MESSAGING.md`        | Message lifecycle, priority handling, addressing patterns |
+| `GROUPS.md`           | Creating groups, adding members, group messaging          |
+| `IDENTITY.md`         | Agent naming, registration, multi-worktree identity       |
+| `WORKTREES.md`        | Cross-worktree coordination, shared daemon, file tracking |
+| `LISTENER_PATTERN.md` | Background message listener sub-agent template            |
+| `BOUNDARIES.md`       | When to use Thrum vs TaskList/SendMessage                 |
+| `ANTI_PATTERNS.md`    | 12 common mistakes and how to avoid them                  |
+| `CLI_REFERENCE.md`    | Complete command syntax for all `thrum` commands          |
 
 ## MCP Server Integration
 
-For native tool-call integration (no shell-outs), configure the Thrum MCP
-server in your project's `.claude/settings.json`:
+For native tool-call integration (no shell-outs), configure the Thrum MCP server
+in your project's `.claude/settings.json`:
 
 ```json
 {
@@ -195,8 +203,10 @@ server in your project's `.claude/settings.json`:
 }
 ```
 
-This provides MCP tools like `send_message`, `check_messages`,
-`wait_for_message`, `list_agents`, and group management tools. See
+This provides 11 MCP tools: 5 for core messaging (`send_message`,
+`check_messages`, `wait_for_message`, `list_agents`, `broadcast_message`) and 6
+for group management (`create_group`, `delete_group`, `add_group_member`,
+`remove_group_member`, `list_groups`, `get_group`). See
 [MCP Server](mcp-server.md) for the full API.
 
 **Plugin vs MCP:** The plugin's slash commands use the CLI (`Bash(thrum:*)`).
@@ -227,14 +237,14 @@ The listener runs 6 cycles of 15 minutes each (~90 min coverage), blocks on
 
 ## Plugin vs Manual Agent Definitions
 
-| Feature | Plugin | Manual (toolkit/agents/) |
-|---------|--------|-------------------------|
-| Installation | `claude plugin add` | Copy `.md` files to `.claude/agents/` |
-| Updates | Re-install from source | Manual file replacement |
-| Slash commands | 10 commands included | None |
-| Hooks | SessionStart + PreCompact | Manual hook configuration |
-| Resource docs | 8 progressive disclosure docs | Single monolithic agent file |
-| Maintenance | Versioned (v0.4.1) | Ad-hoc |
+| Feature        | Plugin                                      | Manual (toolkit/agents/)              |
+| -------------- | ------------------------------------------- | ------------------------------------- |
+| Installation   | `claude plugin marketplace add` + `install` | Copy `.md` files to `.claude/agents/` |
+| Updates        | Re-install from source                      | Manual file replacement               |
+| Slash commands | 10 commands included                        | None                                  |
+| Hooks          | SessionStart + PreCompact                   | Manual hook configuration             |
+| Resource docs  | 8 progressive disclosure docs               | Single monolithic agent file          |
+| Maintenance    | Versioned (v0.4.4)                          | Ad-hoc                                |
 
 The manual agent definitions (`thrum-agent.md`, `message-listener.md`) still
 work and are available in `toolkit/agents/` for environments that don't support

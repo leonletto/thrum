@@ -36,8 +36,8 @@ This registers your agent with a human-readable name (re-registering
 automatically on conflict), starts a session, and optionally sets your work
 intent in one step. The sections below walk through each step individually.
 
-Quickstart also auto-creates an empty context file for session state persistence.
-See [Agent Context Management](context.md) for details.
+Quickstart also auto-creates an empty context file for session state
+persistence. See [Agent Context Management](context.md) for details.
 
 ## Prerequisites
 
@@ -85,12 +85,22 @@ This creates:
 - `.thrum/var/` for daemon runtime files
 - `a-sync` orphan branch for message synchronization
 
-**Git worktree auto-detection:** Since v0.4.1, `thrum init` automatically detects if you're in a git worktree and sets up a `.thrum/redirect` file pointing to the main repo's `.thrum/` directory. All worktrees share the same daemon and message history — no manual worktree configuration needed.
-
 If you are upgrading an existing repo that has JSONL files tracked on `main`,
 run `thrum migrate` instead.
 
-### 2. Start the Daemon
+### 2. Generate CLAUDE.md Coordination Instructions
+
+For Claude Code and other AI agents, generate Thrum coordination instructions:
+
+```bash
+thrum setup claude-md --apply
+```
+
+This appends agent coordination instructions to your CLAUDE.md file (creates it
+if missing). Agents will automatically use Thrum for coordination when working
+in the repository.
+
+### 3. Start the Daemon
 
 ```bash
 thrum daemon start
@@ -105,7 +115,7 @@ The daemon handles:
 - Push notifications for subscriptions
 - Browser auto-registration via git config
 
-### 3. Register Your Agent and Start a Session
+### 4. Register Your Agent and Start a Session
 
 The fastest way is the quickstart command, which registers, starts a session,
 and sets your intent in one step:
@@ -135,7 +145,7 @@ thrum agent register
 
 Priority: `THRUM_NAME` env var > `--name` flag > solo-agent auto-select.
 
-### 4. Send Your First Message
+### 5. Send Your First Message
 
 ```bash
 thrum send "Started working on user authentication" \
@@ -143,7 +153,7 @@ thrum send "Started working on user authentication" \
   --ref issue:beads-123
 ```
 
-### 5. Check Your Inbox
+### 6. Check Your Inbox
 
 ```bash
 thrum inbox
@@ -248,8 +258,10 @@ Configure in `.claude/settings.json`:
 }
 ```
 
-MCP tools: `send_message`, `check_messages`, `wait_for_message`, `list_agents`,
-`broadcast_message`.
+MCP tools (11 total): Core messaging — `send_message`, `check_messages`,
+`wait_for_message`, `list_agents`, `broadcast_message`. Group management —
+`create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
+`list_groups`, `get_group`.
 
 ## Typical Workflow
 
@@ -294,6 +306,10 @@ thrum status
 ```
 
 ## Working Across Machines
+
+> **Note:** `thrum init` sets `local_only: true` by default. To enable
+> cross-machine sync, set `local_only: false` in `.thrum/config.json` or run
+> `THRUM_LOCAL=false thrum daemon start`.
 
 Thrum uses Git for synchronization:
 
@@ -347,7 +363,8 @@ through Git.
 
 ### Use the setup scripts for batch configuration
 
-Two shell scripts automate redirect file creation for all your worktrees at once:
+Two shell scripts automate redirect file creation for all your worktrees at
+once:
 
 ```bash
 # Set up Thrum redirects for all worktrees

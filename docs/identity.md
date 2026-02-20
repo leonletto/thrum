@@ -1,14 +1,3 @@
----
-title: "Agent Identity & Registration"
-description:
-  "Named agents, deterministic IDs, identity resolution, registration,
-  conflicts, cleanup, and multi-agent worktrees"
-category: "identity"
-order: 1
-tags:
-  ["identity", "registration", "agents", "naming", "conflicts", "resolution"]
-last_updated: "2026-02-08"
----
 
 # Agent Identity & Registration
 
@@ -135,13 +124,15 @@ Thrum resolves agent identity using a priority chain:
 ```
 1. THRUM_NAME env var → selects identity file     [Highest priority]
    ↓
-2. CLI flags (--name, --role, --module)
+2. --agent-id flag (CLI)
    ↓
-3. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_DISPLAY)
+3. CLI flags (--name, --role, --module)
    ↓
-4. Identity file in .thrum/identities/ directory
+4. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_DISPLAY)
    ↓
-5. Error if required fields missing                [Lowest priority]
+5. Identity file auto-selection (.thrum/identities/ directory)
+   ↓
+6. Error if required fields missing                [Lowest priority]
 ```
 
 ### Environment Variables
@@ -153,9 +144,11 @@ export THRUM_MODULE=auth           # Override module
 export THRUM_DISPLAY="Auth Agent"  # Override display name
 ```
 
-`THRUM_NAME` is the primary way to select which identity file to load,
-especially in multi-agent worktrees. It is also used by external orchestrators
-(e.g., Gastown) to inject identity into agent processes.
+`THRUM_NAME` environment variable takes highest priority in identity resolution,
+overriding the `--agent-id` flag and identity file auto-selection. It is the
+primary way to select which identity file to load, especially in multi-agent
+worktrees. It is also used by external orchestrators (e.g., Gastown) to inject
+identity into agent processes.
 
 When `THRUM_NAME` is set and the corresponding identity file does not exist,
 loading **fails** rather than falling back to env vars. This ensures validation

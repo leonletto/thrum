@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go install clean fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks
+.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go install deploy-remote clean fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks
 
 # Tool versions - pinned for supply chain security
 GOLANGCI_LINT_VERSION := v1.64.5
@@ -10,7 +10,7 @@ GOVULNCHECK_VERSION := latest
 BINARY_NAME := thrum
 BUILD_DIR := bin
 INSTALL_DIR := $(HOME)/.local/bin
-VERSION := 0.4.3
+VERSION := 0.4.4
 
 # Default target
 help:
@@ -21,6 +21,7 @@ help:
 	@echo "  make build-ui          - Build UI and copy to embed location"
 	@echo "  make build-go          - Build Go binary only (skip UI rebuild)"
 	@echo "  make install           - Full build and install thrum to ~/.local/bin"
+	@echo "  make deploy-remote REMOTE=host - Install + scp + sign on remote macOS"
 	@echo "  make fmt               - Format Go code"
 	@echo "  make fmt-md            - Format Markdown files with prettier"
 	@echo "  make fmt-all           - Format all files (Go + Markdown)"
@@ -116,6 +117,18 @@ install: build
 	@# Remove stale go install binary so PATH resolves to INSTALL_DIR
 	@rm -f $(shell go env GOPATH)/bin/$(BINARY_NAME)
 	@echo "Installed $(BINARY_NAME) to $(INSTALL_DIR)/$(BINARY_NAME)"
+
+# Deploy binary to a remote macOS machine via scp
+# Usage: make deploy-remote REMOTE=leontest
+#        make deploy-remote REMOTE=user@192.168.1.10
+deploy-remote: install
+ifndef REMOTE
+	$(error REMOTE is required. Usage: make deploy-remote REMOTE=leontest)
+endif
+	@echo "Deploying $(BINARY_NAME) to $(REMOTE)..."
+	scp $(INSTALL_DIR)/$(BINARY_NAME) $(REMOTE):~/.local/bin/$(BINARY_NAME)
+	ssh $(REMOTE) "xattr -cr ~/.local/bin/$(BINARY_NAME) && codesign -s - -f ~/.local/bin/$(BINARY_NAME)"
+	@echo "Deployed and signed $(BINARY_NAME) on $(REMOTE)"
 
 # Clean build artifacts
 clean:

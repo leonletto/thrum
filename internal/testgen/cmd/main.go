@@ -25,7 +25,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error creating temp dir: %v\n", err)
 		os.Exit(1)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	cfg := testgen.DefaultConfig()

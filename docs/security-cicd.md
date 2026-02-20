@@ -1,13 +1,3 @@
----
-title: "Security & CI/CD"
-description:
-  "Automated security scanning, CI/CD pipelines, and deployment workflows for
-  Thrum"
-category: "development"
-order: 3
-tags: ["security", "ci", "cd", "github-actions", "workflows", "deployment"]
-last_updated: "2026-02-10"
----
 
 # Security & CI/CD
 
@@ -83,7 +73,16 @@ cd website
 ./scripts/sync-docs.sh --dry-run  # preview changes
 ```
 
+## Tailscale Security
+
+For remote access and cross-machine synchronization, Thrum uses Tailscale as the
+primary security model. Tailscale provides end-to-end WireGuard encryption,
+zero-trust networking, and automatic key rotation. See
+[Tailscale Security](tailscale-security.md) for detailed security model and
+threat analysis.
+
 ## See Also
 
 - [Development Guide](development.md) — contributing and local setup
 - [Quickstart Guide](quickstart.md) — getting started with Thrum
+- [Tailscale Security](tailscale-security.md) — remote access security model

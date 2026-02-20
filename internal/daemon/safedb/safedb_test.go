@@ -76,7 +76,7 @@ func TestCancelledContext(t *testing.T) {
 
 	_, err := db.ExecContext(ctx, "INSERT INTO test (name) VALUES (?)", "carol")
 	if err == nil {
-		t.Fatal("expected error from cancelled context")
+		t.Fatal("expected error from canceled context")
 	}
 }
 

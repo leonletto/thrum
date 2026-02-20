@@ -1,3 +1,10 @@
+---
+title: "Architecture"
+description:
+  "Thrum foundation architecture — packages, storage layer, daemon, sync engine,
+  and event system"
+category: "architecture"
+---
 
 # Thrum Foundation Architecture
 
@@ -137,7 +144,8 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)
 - ULID format: 26 characters, sortable by time, 128-bit random
 - Thread-safe generation with mutex-protected monotonic entropy
 
-Agent IDs are generated internally from the role and a hash. See [Development Guide](development.md) for implementation details.
+Agent IDs are generated internally from the role and a hash. See
+[Development Guide](development.md) for implementation details.
 
 ## Paths (`internal/paths`)
 
@@ -291,7 +299,7 @@ schema_version      # Migration tracking
 
 ### Schema Version
 
-Current version: **8**
+Current version: **13**
 
 Key migrations:
 
@@ -299,7 +307,8 @@ Key migrations:
 - v5 -> v6: Agent work contexts table, message reads, session scopes/refs
 - v6 -> v7: Event ID backfill (ULID `event_id` on all JSONL events), JSONL
   sharding migration
-- v7 -> v8: Groups feature (`groups` and `group_members` tables), `@everyone` built-in group
+- v7 -> v8: Groups feature (`groups` and `group_members` tables), `@everyone`
+  built-in group
 
 ### Initialization
 
@@ -443,6 +452,20 @@ during Git sync.
 
 The `.thrum/redirect` pattern allows multiple worktrees to share a single daemon
 and state directory without hardcoding paths.
+
+### 8. Timeout Enforcement (v0.4.3)
+
+All I/O paths enforce timeouts to prevent indefinite hangs:
+
+- **5s** CLI dial timeout (net.DialTimeout)
+- **10s** RPC call timeout (context.WithTimeout)
+- **10s** server per-request timeout (http.TimeoutHandler)
+- **10s** WebSocket handshake timeout
+- **5s/10s** git command timeouts (via `safecmd` wrapper)
+- **Context-scoped** SQLite queries (via `safedb` wrapper)
+
+Lock scope has been reduced — no mutex is held during I/O, git, or WebSocket
+dispatch operations.
 
 ## References
 

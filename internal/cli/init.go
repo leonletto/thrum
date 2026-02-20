@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/sync"
 )
@@ -15,6 +16,7 @@ import (
 type InitOptions struct {
 	RepoPath string
 	Force    bool
+	Stealth  bool // Use .git/info/exclude instead of .gitignore
 }
 
 // IsGitWorktree checks if repoPath is a git worktree (not the main working tree).
@@ -129,13 +131,36 @@ func Init(opts InitOptions) error {
 		return retErr
 	}
 
-	// 4. Add .thrum/ to .gitignore
-	if err := updateGitignore(opts.RepoPath); err != nil {
-		retErr = fmt.Errorf("failed to update .gitignore: %w", err)
-		return retErr
+	// 4. Add exclusions (.gitignore or .git/info/exclude in stealth mode)
+	if opts.Stealth {
+		if err := updateGitExclude(opts.RepoPath); err != nil {
+			retErr = fmt.Errorf("failed to update .git/info/exclude: %w", err)
+			return retErr
+		}
+	} else {
+		if err := updateGitignore(opts.RepoPath); err != nil {
+			retErr = fmt.Errorf("failed to update .gitignore: %w", err)
+			return retErr
+		}
 	}
 
-	// 5. Initialize a-sync branch
+	// 5. Write default config.json (local-only by default — user must opt in to remote sync)
+	configPath := filepath.Join(thrumDir, "config.json")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		cfg := &config.ThrumConfig{
+			Daemon: config.DaemonConfig{
+				LocalOnly:    true,
+				SyncInterval: config.DefaultSyncInterval,
+				WSPort:       config.DefaultWSPort,
+			},
+		}
+		if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+			retErr = fmt.Errorf("failed to write config.json: %w", err)
+			return retErr
+		}
+	}
+
+	// 6. Initialize a-sync branch
 	if err := initASyncBranch(opts.RepoPath); err != nil {
 		retErr = fmt.Errorf("failed to initialize a-sync branch: %w", err)
 		return retErr
@@ -146,16 +171,21 @@ func Init(opts InitOptions) error {
 	return nil
 }
 
+// thrumExcludeEntries are the patterns thrum needs excluded from git tracking.
+var thrumExcludeEntries = []string{
+	".thrum/",
+	".thrum.*.json",
+	"scripts/thrum-startup.sh",
+}
+
 // updateGitignore adds Thrum-related entries to .gitignore.
 func updateGitignore(repoPath string) error {
 	gitignorePath := filepath.Join(repoPath, ".gitignore")
 
 	// Entries to add
-	entries := []string{
+	entries := append([]string{
 		"# Thrum data directory (all data lives on a-sync branch via worktree)",
-		".thrum/",
-		".thrum.*.json",
-	}
+	}, thrumExcludeEntries...)
 
 	// Read existing .gitignore if it exists
 	var existing []byte
@@ -225,9 +255,93 @@ func updateGitignore(repoPath string) error {
 	return nil
 }
 
+// updateGitExclude adds Thrum-related entries to .git/info/exclude (stealth mode).
+// This avoids any footprint in tracked files like .gitignore.
+func updateGitExclude(repoPath string) error {
+	// Resolve the git dir (handles worktrees correctly)
+	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-dir")
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("resolve git dir: %w", err)
+	}
+	gitDir := strings.TrimSpace(string(out))
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(repoPath, gitDir)
+	}
+
+	infoDir := filepath.Join(gitDir, "info")
+	if err := os.MkdirAll(infoDir, 0750); err != nil {
+		return fmt.Errorf("create .git/info/: %w", err)
+	}
+
+	excludePath := filepath.Join(infoDir, "exclude")
+
+	entries := append([]string{
+		"# Thrum stealth mode (added by thrum init --stealth)",
+	}, thrumExcludeEntries...)
+
+	// Read existing exclude file
+	var existing []byte
+	if _, statErr := os.Stat(excludePath); statErr == nil {
+		existing, err = os.ReadFile(excludePath) //nolint:gosec // G304 - git internal path
+		if err != nil {
+			return err
+		}
+	}
+
+	// Check if entries already present
+	existingLines := strings.Split(string(existing), "\n")
+	needsUpdate := false
+	for _, entry := range entries {
+		if strings.HasPrefix(entry, "#") {
+			continue
+		}
+		found := false
+		for _, line := range existingLines {
+			if strings.TrimSpace(line) == entry {
+				found = true
+				break
+			}
+		}
+		if !found {
+			needsUpdate = true
+			break
+		}
+	}
+
+	if !needsUpdate {
+		return nil
+	}
+
+	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600) //nolint:gosec // G304 - git internal path
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	if len(existing) > 0 && existing[len(existing)-1] != '\n' {
+		if _, err := f.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+	if len(existing) > 0 {
+		if _, err := f.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+
+	for _, entry := range entries {
+		if _, err := f.WriteString(entry + "\n"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // initASyncBranch creates the a-sync branch and worktree for message synchronization.
 func initASyncBranch(repoPath string) error {
-	bm := sync.NewBranchManager(repoPath, false)
+	bm := sync.NewBranchManager(repoPath, true)
 
 	// Create orphan a-sync branch (safe plumbing — no working tree touch)
 	if err := bm.CreateSyncBranch(); err != nil {
@@ -263,7 +377,9 @@ func initASyncBranch(repoPath string) error {
 		return fmt.Errorf("git add in sync worktree: %w", err)
 	}
 
-	cmd = exec.Command("git", "commit", "-m", "Initialize Thrum sync data")
+	cmd = exec.Command("git",
+		"-c", "user.name=Thrum", "-c", "user.email=thrum@local",
+		"commit", "--no-verify", "-m", "Initialize Thrum sync data")
 	cmd.Dir = syncDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -271,7 +387,7 @@ func initASyncBranch(repoPath string) error {
 		// "nothing to commit" is acceptable (idempotent re-init)
 		if !strings.Contains(outStr, "nothing to commit") &&
 			!strings.Contains(outStr, "nothing added to commit") {
-			return fmt.Errorf("git commit in sync worktree: %w", err)
+			return fmt.Errorf("git commit in sync worktree: %w\noutput: %s", err, strings.TrimSpace(string(output)))
 		}
 	}
 

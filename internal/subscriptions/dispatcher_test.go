@@ -57,7 +57,7 @@ func TestDispatchForMessage_ScopeMatch(t *testing.T) {
 
 	// Create subscription for scope module:auth
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestDispatchForMessage_NoMatch(t *testing.T) {
 
 	// Create subscription for scope module:auth
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestDispatchForMessage_MentionMatch(t *testing.T) {
 
 	// Create subscription for mentions of @reviewer
 	role := "reviewer"
-	_, err = svc.Subscribe(context.Background(),"ses_001", nil, &role, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", nil, &role, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestDispatchForMessage_AllMatch(t *testing.T) {
 	dispatcher := subscriptions.NewDispatcher(sdb)
 
 	// Create "all" subscription
-	_, err = svc.Subscribe(context.Background(),"ses_001", nil, nil, true)
+	_, err = svc.Subscribe(context.Background(), "ses_001", nil, nil, true)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -249,12 +249,12 @@ func TestDispatchForMessage_MultipleMatches(t *testing.T) {
 
 	// Create multiple subscriptions
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() #1 failed: %v", err)
 	}
 
-	_, err = svc.Subscribe(context.Background(),"ses_002", nil, nil, true) // all subscription
+	_, err = svc.Subscribe(context.Background(), "ses_002", nil, nil, true) // all subscription
 	if err != nil {
 		t.Fatalf("Subscribe() #2 failed: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestDispatchForMessage_MultipleScopes(t *testing.T) {
 
 	// Create subscription for module:auth
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestDispatcher_WithClientNotifier(t *testing.T) {
 
 	// Create subscription
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	sub, err := svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
+	sub, err := svc.Subscribe(context.Background(), "ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -506,7 +506,7 @@ func TestDispatcher_PreviewTruncation(t *testing.T) {
 	dispatcher.SetClientNotifier(notifier)
 
 	// Create subscription
-	_, err = svc.Subscribe(context.Background(),"ses_001", nil, nil, true)
+	_, err = svc.Subscribe(context.Background(), "ses_001", nil, nil, true)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}
@@ -572,7 +572,7 @@ func TestDispatcher_NotificationWithoutClientNotifier(t *testing.T) {
 
 	// Create subscription
 	scope := &types.Scope{Type: "module", Value: "auth"}
-	_, err = svc.Subscribe(context.Background(),"ses_001", scope, nil, false)
+	_, err = svc.Subscribe(context.Background(), "ses_001", scope, nil, false)
 	if err != nil {
 		t.Fatalf("Subscribe() failed: %v", err)
 	}

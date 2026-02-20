@@ -1,12 +1,9 @@
 ---
 title: "WebSocket API"
 description:
-  "Real-time bidirectional communication via JSON-RPC 2.0 over WebSocket -
-  connections, RPC methods, push notifications"
+  "Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over
+  WebSocket, subscriptions, and events"
 category: "api"
-order: 6
-tags: ["websocket", "json-rpc", "real-time", "api", "bidirectional", "push"]
-last_updated: "2026-02-08"
 ---
 
 # WebSocket API
@@ -26,6 +23,21 @@ The WebSocket server and the embedded web UI (React SPA) are served on the
 **same port**. When the UI is present, WebSocket upgrades happen at `/ws` and
 the SPA is served at `/`. When no UI is embedded, WebSocket handles requests at
 `/` for backwards compatibility.
+
+### Security
+
+**Local connections**: Unix domain socket connections
+(`$REPO/.thrum/daemon.sock`) are inherently secure with no network exposure.
+Access is controlled via filesystem permissions.
+
+**Remote connections**: When using Tailscale for remote access, WebSocket
+connections are encrypted end-to-end via Tailscale's WireGuard tunnel. No
+separate TLS layer is needed—the `ws://` protocol runs over the encrypted
+WireGuard tunnel, providing equivalent security to `wss://` but managed at the
+network layer.
+
+See `docs/tailscale-security.md` for detailed security architecture and threat
+model.
 
 ### Connection Flow
 
@@ -209,6 +221,7 @@ notifications.
 ```json
 {
   "content": "Hello, world!", // required: message content
+  "thread_id": "thr_abc123", // optional: reply to thread
   "scopes": [
     // optional: message scopes
     { "type": "task", "value": "PROJ-123" }
@@ -231,6 +244,7 @@ notifications.
 ```json
 {
   "message_id": "msg_01HXE...",
+  "thread_id": "thr_abc123",
   "created_at": "2026-02-03T12:00:00Z"
 }
 ```
@@ -250,6 +264,7 @@ Lists messages with filtering and pagination.
 
 ```json
 {
+  "thread_id": "thr_abc123", // optional: filter by thread
   "author_id": "agent:...", // optional: filter by author
   "scope": {
     // optional: filter by scope
@@ -275,6 +290,7 @@ Lists messages with filtering and pagination.
   "messages": [
     {
       "message_id": "msg_01HXE...",
+      "thread_id": "thr_abc123",
       "author": {
         "agent_id": "agent:assistant:claude:ABC123",
         "session_id": "ses_01HXE..."
@@ -368,6 +384,96 @@ Marks a message as read for the current session.
 ```json
 {
   "message_id": "msg_01HXE..."
+}
+```
+
+### Thread Methods
+
+#### thread.create
+
+Creates a new conversation thread.
+
+**Parameters**:
+
+```json
+{
+  "title": "Discussion about feature X"
+}
+```
+
+**Response**:
+
+```json
+{
+  "thread_id": "thr_01HXE...",
+  "title": "Discussion about feature X",
+  "created_at": "2026-02-03T12:00:00Z",
+  "created_by": "agent:assistant:claude:ABC123"
+}
+```
+
+#### thread.list
+
+Lists threads with pagination.
+
+**Parameters**:
+
+```json
+{
+  "page_size": 20, // optional: results per page
+  "page": 1 // optional: page number
+}
+```
+
+**Response**:
+
+```json
+{
+  "threads": [
+    {
+      "thread_id": "thr_01HXE...",
+      "title": "Discussion about feature X",
+      "created_at": "2026-02-03T12:00:00Z",
+      "created_by": "agent:assistant:claude:ABC123",
+      "message_count": 5,
+      "last_message_at": "2026-02-03T13:00:00Z"
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total_count": 50,
+  "total_pages": 3
+}
+```
+
+#### thread.get
+
+Gets thread details with messages.
+
+**Parameters**:
+
+```json
+{
+  "thread_id": "thr_01HXE...",
+  "page_size": 50, // optional: messages per page
+  "page": 1 // optional: page number
+}
+```
+
+**Response**:
+
+```json
+{
+  "thread_id": "thr_01HXE...",
+  "title": "Discussion about feature X",
+  "created_at": "2026-02-03T12:00:00Z",
+  "created_by": "agent:assistant:claude:ABC123",
+  "messages": [
+    // ... message objects
+  ],
+  "page": 1,
+  "page_size": 50,
+  "total_messages": 5
 }
 ```
 
@@ -615,6 +721,7 @@ Sent when a new message matches a client's subscription.
 ```json
 {
   "message_id": "msg_01HXE...",
+  "thread_id": "thr_01HXE...",
   "author": {
     "agent_id": "furiosa",
     "name": "furiosa",
@@ -633,6 +740,25 @@ Sent when a new message matches a client's subscription.
 
 `match_type` values: `"scope"`, `"mention"`, `"all"`
 
+#### notification.thread.updated
+
+Sent when a thread has new activity. Delivered to all sessions with any active
+subscription.
+
+**Payload**:
+
+```json
+{
+  "thread_id": "thr_01HXE...",
+  "message_count": 5,
+  "unread_count": 2,
+  "last_activity": "2026-02-03T12:00:00Z",
+  "last_sender": "furiosa",
+  "preview": "Latest message text...",
+  "timestamp": "2026-02-03T12:00:00Z"
+}
+```
+
 ## Error Codes
 
 ### Standard JSON-RPC Errors
@@ -647,7 +773,7 @@ Sent when a new message matches a client's subscription.
 
 - `-32000`: Generic application error
 - `-32001`: Authorization error (impersonation not allowed)
-- `-32002`: Resource not found (agent, message, etc.)
+- `-32002`: Resource not found (agent, message, thread, etc.)
 - `-32003`: Permission denied (not message author, etc.)
 - `-32004`: Validation error (invalid format, constraints)
 

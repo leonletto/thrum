@@ -28,12 +28,15 @@ actionable work.
 1. Explores the codebase and clarifies requirements with the user
 2. Proposes 2-3 architectural approaches with trade-offs
 3. Writes a design spec to `{{DESIGN_DOC_DIR}}`
-4. Decomposes the spec into beads epics with detailed child tasks
+4. Decomposes the spec into beads epics with TDD-quality child tasks
 5. Sets dependency relationships between epics and between tasks
+6. Generates implementation prompt files from `implementation-agent.md` template
 
-**Key principle:** Beads task descriptions are the source of truth. The planning
-agent front-loads detail into task descriptions so implementing agents can work
-autonomously.
+**Key principle:** Beads task descriptions are the source of truth. Each task
+description is a self-contained implementation guide with file paths, test code,
+implementation code, verification commands, and acceptance criteria — detailed
+enough for an implementing agent to work autonomously without additional
+context.
 
 ### Phase 2: Prepare (`worktree-setup.md`)
 
@@ -81,6 +84,42 @@ The module is auto-derived from the branch name (`feature/auth` → `auth`).
 **Key principle:** The orient phase is always the entry point. After context
 loss (compaction, new session), the agent re-runs orient and picks up exactly
 where it left off. Completed work is never redone.
+
+---
+
+## MANDATORY: Prompt Generation Rules
+
+**When creating implementation prompts (`dev-docs/prompts/*.md`), you MUST use
+`implementation-agent.md` as the base template.** Do NOT write standalone
+prompts from scratch. The template contains critical workflow infrastructure
+(sub-agent strategy, parallel execution patterns, thrum registration,
+orient/resume handling, verification phases) that must be present in every
+prompt.
+
+**Process:**
+
+1. Copy the full `implementation-agent.md` template
+2. Replace all `{{PLACEHOLDER}}` values with feature-specific values
+3. Add a feature-specific **Context** section with architectural details, task
+   descriptions, file ownership, and reference code paths
+4. The result is a complete prompt that includes BOTH the template workflow AND
+   the feature-specific instructions
+
+**What goes in the Context section (feature-specific):**
+
+- Epic/task IDs and their dependency order
+- Key files and code patterns to follow
+- Architectural decisions and constraints
+- Reference docs and reference code paths
+
+**What stays from the template (do NOT rewrite or omit):**
+
+- Thrum registration and message listener setup
+- Phase 1-4 workflow (Orient → Implement → Verify → Complete)
+- Sub-agent strategy and parallel execution patterns
+- Task execution loop (claim → read → build → test → commit → close)
+- Resume/recovery instructions
+- Blocker handling and communication patterns
 
 ---
 
@@ -184,10 +223,10 @@ the code. The agent doesn't need conversation history to resume.
 
 Each implementation agent has two layers of context:
 
-| Layer | File | Persistence | Content | Maintained By |
-|-------|------|-------------|---------|---------------|
-| Prompt | `dev-docs/prompts/{feature}.md` | Given at session start | Feature-specific: epic IDs, owned packages, design doc, architectural constraints, quality commands | Planning agent |
-| Context | `.thrum/context/{name}.md` | Updated each session | Volatile session state: current task, decisions made, blockers hit | `/update-context` skill |
+| Layer   | File                            | Persistence            | Content                                                                                             | Maintained By           |
+| ------- | ------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------- | ----------------------- |
+| Prompt  | `dev-docs/prompts/{feature}.md` | Given at session start | Feature-specific: epic IDs, owned packages, design doc, architectural constraints, quality commands | Planning agent          |
+| Context | `.thrum/context/{name}.md`      | Updated each session   | Volatile session state: current task, decisions made, blockers hit                                  | `/update-context` skill |
 
 The **prompt** (implementation template) contains all feature-specific
 instructions: which epic/tasks to implement, which packages to modify, design
@@ -195,20 +234,21 @@ doc references, feature-specific constraints, and scoped quality commands. It is
 given directly to the agent at session start, not stored in thrum.
 
 The **context** file is volatile — the `/update-context` skill rewrites it each
-session with current state (active task, decisions, blockers). It is auto-created
-as an empty file by `thrum quickstart` and populated at runtime by the skill.
+session with current state (active task, decisions, blockers). It is
+auto-created as an empty file by `thrum quickstart` and populated at runtime by
+the skill.
 
 ## Source of Truth Hierarchy
 
-| What                               | Lives In                                       | Used By                              |
-| ---------------------------------- | ---------------------------------------------- | ------------------------------------ |
-| Design decisions                   | Design spec (markdown in `{{DESIGN_DOC_DIR}}`) | Planning agent, implementation agent |
-| Task details & acceptance criteria | Beads task descriptions                        | Implementation agent                 |
-| Epic structure & dependencies      | Beads epic + `bd dep` relationships            | All agents                           |
-| Implementation progress            | Beads task status + git commit history         | Implementation agent (orient phase)  |
+| What                               | Lives In                                       | Used By                                |
+| ---------------------------------- | ---------------------------------------------- | -------------------------------------- |
+| Design decisions                   | Design spec (markdown in `{{DESIGN_DOC_DIR}}`) | Planning agent, implementation agent   |
+| Task details & acceptance criteria | Beads task descriptions                        | Implementation agent                   |
+| Epic structure & dependencies      | Beads epic + `bd dep` relationships            | All agents                             |
+| Implementation progress            | Beads task status + git commit history         | Implementation agent (orient phase)    |
 | Feature-specific instructions      | Prompt (`dev-docs/prompts/{feature}.md`)       | Implementation agent (session start)   |
 | Session state & decisions          | Context (`.thrum/context/{name}.md`)           | Implementation agent (current session) |
-| Code                               | Git worktree                                   | Implementation agent                 |
+| Code                               | Git worktree                                   | Implementation agent                   |
 
 The templates themselves are guides for how to use these sources — they don't
 duplicate the content.
@@ -217,11 +257,11 @@ duplicate the content.
 
 ## Template Index
 
-| Template | Purpose | Phase |
-|----------|---------|-------|
-| `planning-agent.md` | Brainstorm, spec, create epics & tasks | Plan |
-| `worktree-setup.md` | Create/select worktree, set up redirects | Prepare |
-| `implementation-agent.md` | Implement tasks, verify, merge | Implement |
+| Template                  | Purpose                                  | Phase     |
+| ------------------------- | ---------------------------------------- | --------- |
+| `planning-agent.md`       | Brainstorm, spec, create epics & tasks   | Plan      |
+| `worktree-setup.md`       | Create/select worktree, set up redirects | Prepare   |
+| `implementation-agent.md` | Implement tasks, verify, merge           | Implement |
 
 ## Completed Examples
 

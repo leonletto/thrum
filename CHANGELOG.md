@@ -6,15 +6,91 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.3] - 2026-02-15
+## [0.4.4] - 2026-02-18
+
+### Added
+
+- `thrum init --stealth`: writes exclusions to `.git/info/exclude` instead of
+  `.gitignore`, leaving zero footprint in tracked files.
+- `--limit N` alias for `--page-size N` on `thrum inbox`.
+- `--everyone` flag on `thrum send` (alias for `--to @everyone`).
+- Plugin ships `agents/message-listener.md` for auto-discovery by Claude Code.
+- `make deploy-remote REMOTE=host` for scp + codesign to remote macOS machines.
+
+### Changed
+
+- `thrum init` defaults to `local_only: true` — remote git sync requires
+  explicit opt-in via `local_only: false` in config.
+- `thrum prime` listener instruction upgraded from soft tip to
+  `⚠ ACTION REQUIRED:` directive.
 
 ### Fixed
 
+- `--broadcast` is now a proper alias for `--to @everyone` (not deprecated).
+- Plugin install docs corrected to two-step marketplace flow.
+- `thrum setup claude-md` added to README Essential Commands table.
+- Defensive test for duplicate thrum section headers in CLAUDE.md.
+- Clarifying comment on separator edge case in `replaceThrumSection()`.
+
+## [0.4.3] - 2026-02-17
+
+### Changed
+
+- Init is local-only by default — remote git sync must be explicitly enabled via
+  `local_only: false` in `.thrum/config.json`
+
+### Fixed
+
+- Internal git commits in the a-sync worktree now skip pre-commit hooks
+  (`--no-verify`) to avoid failures from project-level hooks
 - Daemon, CLI client, and MCP server can no longer hang indefinitely. All I/O
   paths now enforce timeouts: 5s CLI dial, 10s RPC calls, 10s server
   per-request, 10s WebSocket handshake, 5s/10s git commands, and context-scoped
   SQLite queries. Lock scopes reduced in high-risk handlers so no mutex is held
   during file I/O, git operations, or WebSocket dispatch.
+- Subscription cleanup on session end — orphaned subscriptions from crashed
+  clients are now deleted when `session.end` fires (thrum-620c)
+- Subscription commands (`thrum subscriptions`) now resolve caller identity
+  correctly by passing `caller_agent_id` through the RPC layer (thrum-efjv)
+- Context propagation in subscription handlers changed from
+  `context.Background()` to request context for proper cancellation
+- Template rendering test expectations aligned with identity-reuse design
+
+### Added
+
+- Crash recovery tests: kill-during-write, DB integrity after abrupt shutdown,
+  daemon restart, projection rebuild from JSONL
+- Negative path tests: send to non-existent agent, malformed JSON-RPC requests
+  (6 cases), connection drops mid-request, mixed valid/invalid concurrent load
+- Timeout enforcement tests verifying 10s per-request handler deadline and
+  concurrent request isolation
+- Goroutine leak detection helper (`checkGoroutineLeaks`) added to concurrent
+  resilience tests
+- E2E agent-cleanup tests: agent delete removes all artifacts (identity,
+  messages, events), delete non-existent agent returns error, cleanup emits
+  event in events.jsonl, `--force` and `--dry-run` mutual exclusion (thrum-6xjs,
+  thrum-mfiv, thrum-x29q, thrum-i2fe)
+- E2E init tests updated to match sharded file layout (`events.jsonl` +
+  `messages/` directory) (thrum-lwls, thrum-xlig)
+- `thrum setup claude-md` command generates recommended CLAUDE.md content for
+  thrum-enabled repos. Prints to stdout by default; `--apply` appends to
+  existing CLAUDE.md with duplicate detection; `--force` replaces existing
+  section (thrum-rimg)
+- `thrum setup` restructured with `worktree` and `claude-md` subcommands
+  (backwards compatible — bare `thrum setup` still works)
+- `thrum prime` shows a tip to run `thrum setup claude-md --apply` when
+  CLAUDE.md lacks a Thrum section
+
+### Changed
+
+- Resilience test infrastructure refactored: shared fixture extraction via
+  `TestMain` (extracts once, copies per-test), atomic JSON-RPC request IDs to
+  prevent race conditions
+- Race detection (`-race`) enabled in resilience test script
+- CLI roundtrip test helper `runThrum` now enforces 30s context timeout to
+  prevent hangs
+- Benchmark `BenchmarkConcurrentSend10` protected with `select`-based deadlock
+  timeout
 
 ## [0.4.2] - 2026-02-14
 
@@ -30,8 +106,8 @@ and this project adheres to
 
 - Context prime identity resolution in worktrees and unread hint
 - 6 bugs closed (thrum-pwaa, thrum-16lv, thrum-pgoc, thrum-5611, thrum-en2c,
-  thrum-8ws1): daemon accept loop race condition, gofmt formatting, golangci-lint
-  errors, macOS quarantine attribute in install script
+  thrum-8ws1): daemon accept loop race condition, gofmt formatting,
+  golangci-lint errors, macOS quarantine attribute in install script
 
 ### Changed
 
@@ -86,8 +162,8 @@ generation.
 - Auto-detection for 6 platforms: Claude Code, Codex, Cursor, Gemini, Auggie,
   CLI-only
 - `thrum runtime list|show|set-default` CLI commands
-- `thrum init --runtime <name>` generates runtime-specific config files
-  (MCP settings, hooks, instructions)
+- `thrum init --runtime <name>` generates runtime-specific config files (MCP
+  settings, hooks, instructions)
 - Embedded templates for each runtime with shared startup script
 - File marker detection (`.claude/settings.json`, `.codex`, `.cursorrules`,
   `.augment`) with env var fallback
