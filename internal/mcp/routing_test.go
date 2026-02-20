@@ -201,9 +201,11 @@ func TestMCPRoutingParity(t *testing.T) {
 	env := newRoutingTestEnv(t)
 	ctx := context.Background()
 
-	// Register impl_api and coordinator agents.
+	// Register impl_api and coord_main agents.
+	// Note: agent name cannot equal its role (name≠role validation),
+	// so we use "coord_main" instead of "coordinator".
 	env.activateRoutingAgent("impl_api", "implementer", "backend")
-	env.activateRoutingAgent("coordinator", "coordinator", "orchestration")
+	env.activateRoutingAgent("coord_main", "coordinator", "orchestration")
 
 	// Register a sender agent to send the test messages.
 	env.activateRoutingAgent("sender_agent", "sender", "test")
@@ -284,7 +286,7 @@ func TestMCPRoutingParity(t *testing.T) {
 	}
 
 	// --- Verify coordinator receives only the broadcast (message 3) ---
-	coordMCP := env.newRoutingMCPServer("coordinator", "coordinator", "orchestration")
+	coordMCP := env.newRoutingMCPServer("coord_main", "coordinator", "orchestration")
 
 	_, coordOut, err := coordMCP.handleCheckMessages(ctx, nil, CheckMessagesInput{})
 	if err != nil {
