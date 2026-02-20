@@ -29,11 +29,12 @@ func (s *Server) handleSendMessage(
 
 	// Build the daemon RPC request
 	sendReq := rpc.SendRequest{
-		Content:  input.Content,
-		Format:   "markdown",
-		Mentions: []string{mentionRole},
-		Priority: input.Priority,
-		ReplyTo:  input.ReplyTo,
+		Content:       input.Content,
+		Format:        "markdown",
+		Mentions:      []string{mentionRole},
+		Priority:      input.Priority,
+		ReplyTo:       input.ReplyTo,
+		CallerAgentID: s.agentID,
 	}
 	if sendReq.Priority == "" {
 		sendReq.Priority = "normal"
@@ -240,10 +241,11 @@ func (s *Server) handleBroadcast(
 	defer func() { _ = client.Close() }()
 
 	sendReq := rpc.SendRequest{
-		Content:  input.Content,
-		Format:   "markdown",
-		Mentions: []string{"everyone"},
-		Priority: priority,
+		Content:       input.Content,
+		Format:        "markdown",
+		Mentions:      []string{"everyone"},
+		Priority:      priority,
+		CallerAgentID: s.agentID,
 	}
 
 	var sendResp rpc.SendResponse
