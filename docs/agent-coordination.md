@@ -164,16 +164,14 @@ incoming messages and notifies the main agent when they arrive.
 ### How It Works
 
 1. The main agent spawns a message-listener as a background task
-2. The listener uses `thrum wait --all` (blocks until message arrives or
-   timeout)
+2. The listener uses `thrum wait` (blocks until message arrives or timeout)
 3. When a message arrives, the listener returns immediately with the message
    content
 4. The main agent processes the message and re-arms the listener
 
-**Recommended approach:** Use `thrum wait --all` which blocks until a message
+**Recommended approach:** Use `thrum wait` which blocks until a message
 arrives or times out. This is more efficient than polling loops with sleep
-intervals. The `--all` flag subscribes to all messages (broadcasts + directed),
-and `--after -30s` skips old messages, returning only recent/new ones.
+intervals. Use `--after -30s` to skip old messages, returning only recent/new ones.
 
 ### Return Format
 

@@ -1175,13 +1175,12 @@ func waitCmd() *cobra.Command {
 
 Useful for automation and hooks that need to wait for specific messages.
 
-Use --all to subscribe to all messages including broadcasts.
 Use --after to only accept messages created after a relative time offset:
   -30s  = messages from the last 30 seconds
   -5m   = messages from the last 5 minutes
   +60s  = messages arriving at least 60 seconds from now
 
-When --all is used without --after, defaults to "now" (only new messages).
+When --after is not specified, defaults to "now" (only new messages).
 
 Exit codes:
   0 = message received
@@ -1196,7 +1195,6 @@ Exit codes:
 
 			scope, _ := cmd.Flags().GetString("scope")
 			mention, _ := cmd.Flags().GetString("mention")
-			allMsgs, _ := cmd.Flags().GetBool("all")
 			afterStr, _ := cmd.Flags().GetString("after")
 
 			// Parse --after relative time
@@ -1221,9 +1219,8 @@ Exit codes:
 				} else {
 					afterTime = time.Now().Add(d)
 				}
-			} else if allMsgs {
-				// Default: when --all without --after, default to now
-				// (only show messages arriving after this point)
+			} else {
+				// Default: only show messages arriving after this point
 				afterTime = time.Now()
 			}
 
@@ -1231,14 +1228,19 @@ Exit codes:
 			if err != nil {
 				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
 			}
+			agentRole, err := resolveLocalMentionRole()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent role: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
 
 			opts := cli.WaitOptions{
 				Timeout:       timeout,
 				Scope:         scope,
 				Mention:       mention,
-				All:           allMsgs,
 				After:         afterTime,
 				CallerAgentID: agentID,
+				ForAgent:      agentID,
+				ForAgentRole:  agentRole,
 			}
 
 			if flagVerbose && !afterTime.IsZero() {
@@ -1280,7 +1282,6 @@ Exit codes:
 	cmd.Flags().String("timeout", "30s", "Max wait time (e.g., 30s, 5m)")
 	cmd.Flags().String("scope", "", "Filter by scope (format: type:value)")
 	cmd.Flags().String("mention", "", "Wait for mentions of role (format: @role)")
-	cmd.Flags().Bool("all", false, "Subscribe to all messages (broadcasts + directed)")
 	cmd.Flags().String("after", "", "Only return messages after this relative time (e.g., -30s, -5m, +60s)")
 
 	return cmd

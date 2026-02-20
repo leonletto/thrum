@@ -215,7 +215,7 @@ Task(
   model="haiku",
   run_in_background=true,
   prompt="Listen for Thrum messages.
-    WAIT_CMD=cd /path/to/repo && thrum wait --all --timeout 15m --after -30s --json"
+    WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -30s --json"
 )
 ```
 

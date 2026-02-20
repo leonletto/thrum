@@ -754,11 +754,11 @@ rm -rf /tmp/thrum-settings-test
 cd ~/.workspaces/thrum/test-coordinator
 
 # Start wait with short timeout
-timeout 3 thrum wait --all --timeout 5s; echo "Exit: $?"
+timeout 3 thrum wait --timeout 5s; echo "Exit: $?"
 # Expected: Exits cleanly (124 = timeout, or 0 = no messages)
 
 # Immediately start another wait — should NOT error
-timeout 3 thrum wait --all --timeout 5s; echo "Exit: $?"
+timeout 3 thrum wait --timeout 5s; echo "Exit: $?"
 # Expected: Exits cleanly again (no "subscription already exists" error)
 # Previously: Second wait failed with "subscribe: subscription already exists"
 ```

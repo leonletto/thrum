@@ -242,9 +242,11 @@ func TestWait_WithFilters(t *testing.T) {
 	}
 }
 
-func TestWait_WithAllFlag(t *testing.T) {
+func TestWait_AgentFiltered(t *testing.T) {
 	daemon, socketPath := newMockDaemon(t)
 	defer daemon.stop()
+
+	var listParams map[string]any
 
 	daemon.start(t, func(conn net.Conn) {
 		defer func() { _ = conn.Close() }()
@@ -258,17 +260,20 @@ func TestWait_WithAllFlag(t *testing.T) {
 				return
 			}
 
+			// Capture message.list params for verification
+			listParams, _ = request["params"].(map[string]any)
+
 			response := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      request["id"],
 				"result": map[string]any{
 					"messages": []map[string]any{
 						{
-							"message_id": "msg_broadcast",
+							"message_id": "msg_directed",
 							"agent_id":   "agent:coordinator:XYZ",
 							"body": map[string]any{
 								"format":  "markdown",
-								"content": "Broadcast message",
+								"content": "Directed message",
 							},
 							"created_at": time.Now().Format(time.RFC3339Nano),
 						},
@@ -296,8 +301,9 @@ func TestWait_WithAllFlag(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	opts := WaitOptions{
-		Timeout: 5 * time.Second,
-		All:     true,
+		Timeout:      5 * time.Second,
+		ForAgent:     "test_agent",
+		ForAgentRole: "tester",
 	}
 
 	message, err := Wait(client, opts)
@@ -305,8 +311,16 @@ func TestWait_WithAllFlag(t *testing.T) {
 		t.Fatalf("Wait failed: %v", err)
 	}
 
-	if message.MessageID != "msg_broadcast" {
-		t.Errorf("Expected message_id 'msg_broadcast', got %s", message.MessageID)
+	if message.MessageID != "msg_directed" {
+		t.Errorf("Expected message_id 'msg_directed', got %s", message.MessageID)
+	}
+
+	// Verify RPC request includes for_agent and for_agent_role parameters
+	if forAgent, ok := listParams["for_agent"].(string); !ok || forAgent != "test_agent" {
+		t.Errorf("Expected for_agent 'test_agent' in message.list params, got %v", listParams["for_agent"])
+	}
+	if forAgentRole, ok := listParams["for_agent_role"].(string); !ok || forAgentRole != "tester" {
+		t.Errorf("Expected for_agent_role 'tester' in message.list params, got %v", listParams["for_agent_role"])
 	}
 }
 

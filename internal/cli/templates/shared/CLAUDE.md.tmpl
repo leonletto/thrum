@@ -82,11 +82,11 @@ Task(
   subagent_type="message-listener",
   model="haiku",
   run_in_background=true,
-  prompt="Listen for Thrum messages. WAIT_CMD=thrum wait --all --timeout 5m --after -30s --json"
+  prompt="Listen for Thrum messages. WAIT_CMD=thrum wait --timeout 5m --after -30s --json"
 )
 ```
 
-The listener uses `thrum wait --all` which blocks until a message arrives or
+The listener uses `thrum wait` which blocks until a message arrives or
 times out — no polling loops needed.
 
 ### Context Management
