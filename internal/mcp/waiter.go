@@ -122,6 +122,23 @@ func (w *Waiter) setup() error {
 		}
 	}
 
+	// 3. Subscribe to @everyone group scope so broadcasts wake the waiter.
+	everyoneParams := map[string]any{
+		"scope": map[string]any{
+			"type":  "group",
+			"value": "everyone",
+		},
+	}
+	if w.agentID != "" {
+		everyoneParams["caller_agent_id"] = w.agentID
+	}
+	_, err = w.wsRPC("subscribe", everyoneParams)
+	if err != nil {
+		if !isAlreadyExistsError(err) {
+			return fmt.Errorf("subscribe everyone: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -363,7 +380,10 @@ func (w *Waiter) fetchAndMark(messageID string) (*MessageInfo, error) {
 	// Mark as read (best-effort, new client)
 	markClient, err := cli.NewClient(w.socketPath)
 	if err == nil {
-		_ = markClient.Call("message.markRead", rpc.MarkReadRequest{MessageIDs: []string{messageID}}, nil)
+		_ = markClient.Call("message.markRead", rpc.MarkReadRequest{
+			MessageIDs:    []string{messageID},
+			CallerAgentID: w.agentID,
+		}, nil)
 		_ = markClient.Close()
 	}
 
