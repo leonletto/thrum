@@ -94,7 +94,7 @@ directly or replace it with `thrum context preamble --file custom.md`.
 `thrum send "message" --to @role` **Reply:** `thrum reply <MSG_ID> "response"`
 **Status:** `thrum status` **Who's online:** `thrum agent list --context` **Save
 context:** `thrum context save` **Wait for messages:**
-`thrum wait --all --after -30s --timeout 5m`
+`thrum wait --after -30s --timeout 5m`
 ```
 
 **Customization examples:**

@@ -82,7 +82,7 @@ cycles.
 
 **Key capabilities:**
 
-- Blocking wait via `thrum wait --all --timeout 15m` (6 cycles max)
+- Blocking wait via `thrum wait --timeout 15m` (6 cycles max)
 - Immediate return on message arrival
 - Time-based filtering with `--after` flag (skips old messages)
 - CLI-only (no MCP tools — sub-agents can't access MCP)
@@ -101,13 +101,12 @@ Task({
   model: "haiku",
   run_in_background: true,
   prompt:
-    "Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --all --timeout 15m --after -30s --json",
+    "Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -30s --json",
 });
 ```
 
 **Wait command flags:**
 
-- `--all` — Subscribe to all messages (broadcasts + directed)
 - `--timeout 15m` — Block up to 15 minutes per cycle
 - `--after -30s` — Only return messages from the last 30 seconds (skips old)
 - `--json` — Machine-readable output

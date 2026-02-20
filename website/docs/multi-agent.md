@@ -493,11 +493,11 @@ Block until a matching message arrives or a timeout expires. This is the
 foundation of the message-listener pattern for async agent coordination.
 
 ```bash
-# Wait for any message (broadcasts + directed)
-thrum wait --all --timeout 5m
+# Wait for any message
+thrum wait --timeout 5m
 
 # Wait for messages since a time offset (skip old messages)
-thrum wait --all --after -30s --timeout 5m --json
+thrum wait --after -30s --timeout 5m --json
 
 # Wait for mentions of your role
 thrum wait --mention @reviewer --timeout 5m
@@ -506,7 +506,6 @@ thrum wait --mention @reviewer --timeout 5m
 | Flag        | Format                       | Description                     |
 | ----------- | ---------------------------- | ------------------------------- |
 | `--timeout` | Duration (e.g., `5m`)        | Max wait time (default: `30s`)  |
-| `--all`     | Boolean                      | Subscribe to all messages       |
 | `--mention` | `@role`                      | Wait for mentions of a role     |
 | `--after`   | Relative time (e.g., `-30s`) | Only messages after this offset |
 | `--json`    | Boolean                      | Output messages as JSON         |

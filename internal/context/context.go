@@ -99,7 +99,7 @@ func DefaultPreamble() []byte {
 **Status:** ` + "`thrum status`" + `
 **Who's online:** ` + "`thrum agent list --context`" + `
 **Save context:** ` + "`thrum context save`" + `
-**Wait for messages:** ` + "`thrum wait --all --after -30s --timeout 5m`" + `
+**Wait for messages:** ` + "`thrum wait --after -30s --timeout 5m`" + `
 `)
 }
 

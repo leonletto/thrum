@@ -9,7 +9,7 @@ pattern.
 ```bash
 thrum wait                           # Default 30s timeout
 thrum wait --timeout 120             # 120 seconds
-thrum wait --all --after -30s --json # All messages, recent only
+thrum wait --after -30s --json # Recent messages only
 ```
 
 See LISTENER_PATTERN.md resource for the full background listener template.
