@@ -216,10 +216,25 @@ func Reply(client *Client, opts ReplyOptions) (*SendResult, error) {
 		}
 	}
 
+	// 3. Add original sender so the reply routes back to them
+	senderID := parent.Author.AgentID
+	if senderID != "" && senderID != opts.CallerAgentID {
+		alreadyMentioned := false
+		for _, m := range mentions {
+			if m == senderID {
+				alreadyMentioned = true
+				break
+			}
+		}
+		if !alreadyMentioned {
+			mentions = append(mentions, senderID)
+		}
+	}
+
 	// 2. Add group scopes as mentions (@group:value format)
 	for _, scope := range parent.Scopes {
 		if scope.Type == "group" {
-			mentions = append(mentions, "@"+scope.Type+":"+scope.Value)
+			mentions = append(mentions, "@"+scope.Value)
 		}
 	}
 
