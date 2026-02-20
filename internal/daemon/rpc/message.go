@@ -1061,19 +1061,13 @@ func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string)
 
 // buildForAgentValues returns the unique set of values to match against mention refs
 // for the for-agent inbox filter. Returns nil if no filtering should be applied.
+// Only the agent's own name/ID is used for direct mention matching; role-based
+// fan-out is handled via the group membership subquery in buildForAgentClause.
 func buildForAgentValues(forAgent, forAgentRole string) []string {
-	if forAgent == "" && forAgentRole == "" {
-		return nil
+	if forAgent != "" {
+		return []string{forAgent}
 	}
-	seen := map[string]bool{}
-	var values []string
-	for _, v := range []string{forAgent, forAgentRole} {
-		if v != "" && !seen[v] {
-			seen[v] = true
-			values = append(values, v)
-		}
-	}
-	return values
+	return nil
 }
 
 // resolveAgentAndSession returns the current agent ID and session ID.

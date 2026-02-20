@@ -1925,9 +1925,11 @@ func TestHandleSend_GroupScope(t *testing.T) {
 	})
 
 	t.Run("send_to_non_group_stores_mention_ref", func(t *testing.T) {
-		// Register an agent with role "alice" so the recipient validation passes
-		aliceID := identity.GenerateAgentID(repoID, "alice", "core", "")
-		aliceRegParams, _ := json.Marshal(RegisterRequest{Role: "alice", Module: "core"})
+		// Register a named agent ("alice-agent") with a distinct role ("alice-role").
+		// The auto-created group is named "alice-role" — NOT "alice-agent".
+		// Sending @alice-agent targets the agent by name (not a group), so it stores a mention ref.
+		aliceID := identity.GenerateAgentID(repoID, "alice-role", "core", "alice-agent")
+		aliceRegParams, _ := json.Marshal(RegisterRequest{Name: "alice-agent", Role: "alice-role", Module: "core"})
 		if _, err := agentHandler.HandleRegister(context.Background(), aliceRegParams); err != nil {
 			t.Fatalf("register alice: %v", err)
 		}
@@ -1937,8 +1939,8 @@ func TestHandleSend_GroupScope(t *testing.T) {
 		}
 
 		sendReq, _ := json.Marshal(SendRequest{
-			Content:       "Hey alice",
-			Mentions:      []string{"@alice"},
+			Content:       "Hey alice-agent",
+			Mentions:      []string{"@alice-agent"},
 			CallerAgentID: agentID,
 		})
 
@@ -1948,7 +1950,7 @@ func TestHandleSend_GroupScope(t *testing.T) {
 		}
 		sendResp := resp.(*SendResponse)
 
-		// Should have mention ref, not group scope
+		// Should have mention ref, not group scope (alice-agent is a name, not a group)
 		var refType, refValue string
 		err = st.RawDB().QueryRow(
 			"SELECT ref_type, ref_value FROM message_refs WHERE message_id = ?",
@@ -1957,8 +1959,8 @@ func TestHandleSend_GroupScope(t *testing.T) {
 		if err != nil {
 			t.Fatalf("query ref: %v", err)
 		}
-		if refType != "mention" || refValue != "alice" {
-			t.Errorf("expected ref mention:alice, got %s:%s", refType, refValue)
+		if refType != "mention" || refValue != "alice-agent" {
+			t.Errorf("expected ref mention:alice-agent, got %s:%s", refType, refValue)
 		}
 
 		// No group scopes

@@ -97,51 +97,58 @@ func TestMessageSend_WithMentions(t *testing.T) {
 		t.Fatalf("expected *SendResponse, got %T", resp)
 	}
 
-	// Verify mentions were stored as refs
-	query := `SELECT ref_type, ref_value FROM message_refs WHERE message_id = ? ORDER BY ref_value`
+	// With auto role groups, @reviewer and implementer are now group-scoped (not mention refs).
+	// Verify that the message was resolved (resolvedTo >= 2).
+	if sendResp.ResolvedTo < 2 {
+		t.Errorf("expected at least 2 resolved mentions, got %d", sendResp.ResolvedTo)
+	}
+
+	// Verify group scopes were created for reviewer and implementer
+	query := `SELECT scope_type, scope_value FROM message_scopes WHERE message_id = ? ORDER BY scope_value`
 	rows, err := st.RawDB().Query(query, sendResp.MessageID)
 	if err != nil {
-		t.Fatalf("failed to query refs: %v", err)
+		t.Fatalf("failed to query scopes: %v", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var refs []struct {
+	var scopes []struct {
 		Type  string
 		Value string
 	}
 	for rows.Next() {
-		var ref struct {
+		var scope struct {
 			Type  string
 			Value string
 		}
-		if err := rows.Scan(&ref.Type, &ref.Value); err != nil {
-			t.Fatalf("failed to scan ref: %v", err)
+		if err := rows.Scan(&scope.Type, &scope.Value); err != nil {
+			t.Fatalf("failed to scan scope: %v", err)
 		}
-		refs = append(refs, ref)
+		scopes = append(scopes, scope)
 	}
 
-	if len(refs) != 2 {
-		t.Errorf("expected 2 mention refs, got %d", len(refs))
+	// Should have 2 group scopes (reviewer and implementer)
+	if len(scopes) != 2 {
+		t.Errorf("expected 2 group scopes, got %d", len(scopes))
 	}
 
-	// Check that @ was stripped and refs are sorted
-	expectedRefs := []struct {
+	// Check that @ was stripped and group scopes are correct
+	expectedScopes := []struct {
 		Type  string
 		Value string
 	}{
-		{"mention", "implementer"},
-		{"mention", "reviewer"},
+		{"group", "implementer"},
+		{"group", "reviewer"},
 	}
 
-	for i, expected := range expectedRefs {
-		if i >= len(refs) {
+	for i, expected := range expectedScopes {
+		if i >= len(scopes) {
 			break
 		}
-		if refs[i].Type != expected.Type {
-			t.Errorf("ref[%d]: expected type=%s, got %s", i, expected.Type, refs[i].Type)
+		if scopes[i].Type != expected.Type {
+			t.Errorf("scope[%d]: expected type=%s, got %s", i, expected.Type, scopes[i].Type)
 		}
-		if refs[i].Value != expected.Value {
-			t.Errorf("ref[%d]: expected value=%s, got %s", i, expected.Value, refs[i].Value)
+		if scopes[i].Value != expected.Value {
+			t.Errorf("scope[%d]: expected value=%s, got %s", i, expected.Value, scopes[i].Value)
 		}
 	}
 }
