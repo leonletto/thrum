@@ -24,9 +24,11 @@ type SendOptions struct {
 
 // SendResult contains the result of sending a message.
 type SendResult struct {
-	MessageID string `json:"message_id"`
-	ThreadID  string `json:"thread_id,omitempty"`
-	CreatedAt string `json:"created_at"`
+	MessageID  string   `json:"message_id"`
+	ThreadID   string   `json:"thread_id,omitempty"`
+	CreatedAt  string   `json:"created_at"`
+	ResolvedTo int      `json:"resolved_to"`
+	Warnings   []string `json:"warnings,omitempty"`
 }
 
 // Send sends a message via the daemon.

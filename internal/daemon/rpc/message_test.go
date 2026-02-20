@@ -1925,6 +1925,17 @@ func TestHandleSend_GroupScope(t *testing.T) {
 	})
 
 	t.Run("send_to_non_group_stores_mention_ref", func(t *testing.T) {
+		// Register an agent with role "alice" so the recipient validation passes
+		aliceID := identity.GenerateAgentID(repoID, "alice", "core", "")
+		aliceRegParams, _ := json.Marshal(RegisterRequest{Role: "alice", Module: "core"})
+		if _, err := agentHandler.HandleRegister(context.Background(), aliceRegParams); err != nil {
+			t.Fatalf("register alice: %v", err)
+		}
+		aliceSessionParams, _ := json.Marshal(SessionStartRequest{AgentID: aliceID})
+		if _, err := sessionHandler.HandleStart(context.Background(), aliceSessionParams); err != nil {
+			t.Fatalf("start alice session: %v", err)
+		}
+
 		sendReq, _ := json.Marshal(SendRequest{
 			Content:       "Hey alice",
 			Mentions:      []string{"@alice"},

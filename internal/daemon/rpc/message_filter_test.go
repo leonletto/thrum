@@ -39,6 +39,13 @@ func setupFilterTest(t *testing.T) (handler *MessageHandler, agentID string, cle
 		t.Fatalf("register agent: %v", err)
 	}
 
+	// Also register an "ops" agent so tests that send to @ops pass validation
+	opsID := identity.GenerateAgentID(repoID, "ops", "core", "")
+	opsRegParams, _ := json.Marshal(RegisterRequest{Role: "ops", Module: "core"})
+	if _, err := agentHandler.HandleRegister(context.Background(), opsRegParams); err != nil {
+		t.Fatalf("register ops agent: %v", err)
+	}
+
 	sessionHandler := NewSessionHandler(st)
 	sessionReq := SessionStartRequest{AgentID: agentID}
 	sessionParams, _ := json.Marshal(sessionReq)
@@ -51,6 +58,12 @@ func setupFilterTest(t *testing.T) (handler *MessageHandler, agentID string, cle
 		t.Fatalf("expected *SessionStartResponse, got %T", sessionResp)
 	}
 	_ = sessionStartResp.SessionID // sessionID not used by callers
+
+	// Start a session for the ops agent too
+	opsSessionParams, _ := json.Marshal(SessionStartRequest{AgentID: opsID})
+	if _, err := sessionHandler.HandleStart(context.Background(), opsSessionParams); err != nil {
+		t.Fatalf("start ops session: %v", err)
+	}
 
 	handler = NewMessageHandler(st)
 	return handler, agentID, func() { _ = st.Close() }

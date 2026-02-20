@@ -11,9 +11,10 @@ type SendMessageInput struct {
 
 // SendMessageOutput is the output for the send_message MCP tool.
 type SendMessageOutput struct {
-	Status          string `json:"status" jsonschema:"Delivery status: delivered or queued"`
-	MessageID       string `json:"message_id" jsonschema:"ID of the sent message"`
-	RecipientStatus string `json:"recipient_status" jsonschema:"Recipient status: listening, queued, or unknown"`
+	Status     string   `json:"status" jsonschema:"Delivery status: delivered or error"`
+	MessageID  string   `json:"message_id" jsonschema:"ID of the sent message"`
+	ResolvedTo int      `json:"resolved_to" jsonschema:"Number of mentions resolved to a known agent or group"`
+	Warnings   []string `json:"warnings,omitempty" jsonschema:"Informational warnings"`
 }
 
 // CheckMessagesInput is the input for the check_messages MCP tool.

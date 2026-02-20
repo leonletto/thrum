@@ -225,6 +225,19 @@ func TestGroupIntegration_NonGroupMention_FallsThrough(t *testing.T) {
 	_, msgH, st, _, bobID, cleanup := setupGroupIntegrationTest(t)
 	defer cleanup()
 
+	// Register charlie so the recipient validation passes
+	agentHandler := NewAgentHandler(st)
+	sessionHandler := NewSessionHandler(st)
+	charlieID := identity.GenerateAgentID("r_GROUP_INTEG", "charlie", "charlie-mod", "charlie")
+	charlieReg, _ := json.Marshal(RegisterRequest{Name: "charlie", Role: "charlie", Module: "charlie-mod", Display: "charlie"})
+	if _, err := agentHandler.HandleRegister(context.Background(), charlieReg); err != nil {
+		t.Fatalf("register charlie: %v", err)
+	}
+	charlieSession, _ := json.Marshal(SessionStartRequest{AgentID: charlieID})
+	if _, err := sessionHandler.HandleStart(context.Background(), charlieSession); err != nil {
+		t.Fatalf("start charlie session: %v", err)
+	}
+
 	// Send to @charlie (not a group, should fall through to mention ref)
 	msgID := sendMessage(t, msgH, "Direct message", []string{"@charlie"}, bobID)
 
