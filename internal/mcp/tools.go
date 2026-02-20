@@ -24,8 +24,8 @@ func (s *Server) handleSendMessage(
 		return nil, SendMessageOutput{}, fmt.Errorf("'content' is required")
 	}
 
-	// Parse the recipient into a mention role
-	mentionRole := parseMentionRole(input.To)
+	// Parse the recipient into a mention
+	mentionRole := parseMention(input.To)
 
 	// Build the daemon RPC request
 	sendReq := rpc.SendRequest{
@@ -287,11 +287,12 @@ func isValidPriority(p string) bool {
 	return false
 }
 
-// parseMentionRole extracts the role from various addressing formats.
-// - "@ops" → "ops"
-// - "agent:ops:abc123" → "ops"
-// - "ops" → "ops".
-func parseMentionRole(to string) string {
+// parseMention extracts the recipient identifier from various addressing formats.
+// - "@impl_api" → "impl_api" (agent name)
+// - "@reviewer" → "reviewer" (role or name)
+// - "agent:ops:abc123" → "ops" (legacy format extracts role)
+// - "ops" → "ops" (bare string passthrough)
+func parseMention(to string) string {
 	// Strip @ prefix
 	if strings.HasPrefix(to, "@") {
 		return to[1:]
