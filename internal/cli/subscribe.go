@@ -133,26 +133,26 @@ func FormatSubscriptionsList(result *ListSubscriptionsResponse) string {
 
 	var output strings.Builder
 
-	output.WriteString(fmt.Sprintf("Active subscriptions (%d):\n\n", len(result.Subscriptions)))
+	fmt.Fprintf(&output, "Active subscriptions (%d):\n\n", len(result.Subscriptions))
 
 	for _, sub := range result.Subscriptions {
-		output.WriteString(fmt.Sprintf("┌─ Subscription #%d\n", sub.ID))
+		fmt.Fprintf(&output, "┌─ Subscription #%d\n", sub.ID)
 
 		// Determine subscription type
 		if sub.All {
 			output.WriteString("│  Type:       All messages (firehose)\n")
 		} else if sub.MentionRole != "" {
-			output.WriteString(fmt.Sprintf("│  Type:       Mention (@%s)\n", sub.MentionRole))
+			fmt.Fprintf(&output, "│  Type:       Mention (@%s)\n", sub.MentionRole)
 		} else if sub.ScopeType != "" {
-			output.WriteString(fmt.Sprintf("│  Type:       Scope (%s:%s)\n", sub.ScopeType, sub.ScopeValue))
+			fmt.Fprintf(&output, "│  Type:       Scope (%s:%s)\n", sub.ScopeType, sub.ScopeValue)
 		}
 
 		// Created time
 		if sub.CreatedAt != "" {
 			if t, err := time.Parse(time.RFC3339, sub.CreatedAt); err == nil {
 				duration := time.Since(t)
-				output.WriteString(fmt.Sprintf("│  Created:    %s (%s ago)\n",
-					t.Format("2006-01-02 15:04:05"), formatDuration(duration)))
+				fmt.Fprintf(&output, "│  Created:    %s (%s ago)\n",
+					t.Format("2006-01-02 15:04:05"), formatDuration(duration))
 			}
 		}
 

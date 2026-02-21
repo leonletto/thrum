@@ -267,7 +267,7 @@ func FormatGroupList(groups []GroupSummaryItem) string {
 		if desc == "" {
 			desc = "(no description)"
 		}
-		b.WriteString(fmt.Sprintf("  %-20s %-40s %d members\n", g.Name, desc, g.MemberCount))
+		fmt.Fprintf(&b, "  %-20s %-40s %d members\n", g.Name, desc, g.MemberCount)
 	}
 	return b.String()
 }
@@ -275,15 +275,15 @@ func FormatGroupList(groups []GroupSummaryItem) string {
 // FormatGroupInfo formats group info as human-readable output.
 func FormatGroupInfo(info *GroupInfoResult) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Group: %s\n", info.Name))
+	fmt.Fprintf(&b, "Group: %s\n", info.Name)
 	if info.Description != "" {
-		b.WriteString(fmt.Sprintf("Description: %s\n", info.Description))
+		fmt.Fprintf(&b, "Description: %s\n", info.Description)
 	}
-	b.WriteString(fmt.Sprintf("ID: %s\n", info.GroupID))
-	b.WriteString(fmt.Sprintf("Created: %s by %s\n", info.CreatedAt, info.CreatedBy))
-	b.WriteString(fmt.Sprintf("Members (%d):\n", len(info.Members)))
+	fmt.Fprintf(&b, "ID: %s\n", info.GroupID)
+	fmt.Fprintf(&b, "Created: %s by %s\n", info.CreatedAt, info.CreatedBy)
+	fmt.Fprintf(&b, "Members (%d):\n", len(info.Members))
 	for _, m := range info.Members {
-		b.WriteString(fmt.Sprintf("  %s\n", FormatMemberDisplay(m.MemberType, m.MemberValue)))
+		fmt.Fprintf(&b, "  %s\n", FormatMemberDisplay(m.MemberType, m.MemberValue))
 	}
 	return b.String()
 }
@@ -291,14 +291,14 @@ func FormatGroupInfo(info *GroupInfoResult) string {
 // FormatGroupMembers formats group members as human-readable output.
 func FormatGroupMembers(result *GroupMembersResult) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Members (%d):\n", len(result.Members)))
+	fmt.Fprintf(&b, "Members (%d):\n", len(result.Members))
 	for _, m := range result.Members {
-		b.WriteString(fmt.Sprintf("  %s\n", FormatMemberDisplay(m.MemberType, m.MemberValue)))
+		fmt.Fprintf(&b, "  %s\n", FormatMemberDisplay(m.MemberType, m.MemberValue))
 	}
 	if len(result.Expanded) > 0 {
-		b.WriteString(fmt.Sprintf("\nExpanded (%d agents):\n", len(result.Expanded)))
+		fmt.Fprintf(&b, "\nExpanded (%d agents):\n", len(result.Expanded))
 		for _, a := range result.Expanded {
-			b.WriteString(fmt.Sprintf("  @%s\n", a))
+			fmt.Fprintf(&b, "  @%s\n", a)
 		}
 	}
 	return b.String()

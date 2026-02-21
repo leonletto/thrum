@@ -85,10 +85,10 @@ func FormatTeam(resp *TeamListResponse) string {
 
 		// Worktree and hostname as separate fields
 		if m.WorktreePath != "" {
-			out.WriteString(fmt.Sprintf("Worktree: %s\n", filepath.Base(m.WorktreePath)))
+			fmt.Fprintf(&out, "Worktree: %s\n", filepath.Base(m.WorktreePath))
 		}
 		if m.Hostname != "" {
-			out.WriteString(fmt.Sprintf("Host:     %s\n", m.Hostname))
+			fmt.Fprintf(&out, "Host:     %s\n", m.Hostname)
 		}
 
 		// Session
@@ -105,7 +105,7 @@ func FormatTeam(resp *TeamListResponse) string {
 					duration = fmt.Sprintf(" (active %s)", formatDuration(time.Since(t)))
 				}
 			}
-			out.WriteString(fmt.Sprintf("Session:  %s%s\n", sessionDisplay, duration))
+			fmt.Fprintf(&out, "Session:  %s%s\n", sessionDisplay, duration)
 		} else if m.Status == "offline" {
 			lastSeen := ""
 			if m.LastSeen != "" {
@@ -115,21 +115,21 @@ func FormatTeam(resp *TeamListResponse) string {
 					lastSeen = fmt.Sprintf(" (last seen %s)", formatTimeAgo(t))
 				}
 			}
-			out.WriteString(fmt.Sprintf("Session:  offline%s\n", lastSeen))
+			fmt.Fprintf(&out, "Session:  offline%s\n", lastSeen)
 		}
 
 		// Intent
 		if m.Intent != "" {
-			out.WriteString(fmt.Sprintf("Intent:   %s\n", m.Intent))
+			fmt.Fprintf(&out, "Intent:   %s\n", m.Intent)
 		}
 
 		// Current task
 		if m.CurrentTask != "" {
-			out.WriteString(fmt.Sprintf("Task:     %s\n", m.CurrentTask))
+			fmt.Fprintf(&out, "Task:     %s\n", m.CurrentTask)
 		}
 
 		// Inbox
-		out.WriteString(fmt.Sprintf("Inbox:    %d unread / %d total\n", m.InboxUnread, m.InboxTotal))
+		fmt.Fprintf(&out, "Inbox:    %d unread / %d total\n", m.InboxUnread, m.InboxTotal)
 
 		// Branch
 		if m.Branch != "" {
@@ -137,7 +137,7 @@ func FormatTeam(resp *TeamListResponse) string {
 			if m.UnmergedCommits > 0 {
 				commitInfo = fmt.Sprintf(" (%d commits ahead)", m.UnmergedCommits)
 			}
-			out.WriteString(fmt.Sprintf("Branch:   %s%s\n", m.Branch, commitInfo))
+			fmt.Fprintf(&out, "Branch:   %s%s\n", m.Branch, commitInfo)
 		}
 
 		// Files
@@ -152,7 +152,7 @@ func FormatTeam(resp *TeamListResponse) string {
 						timeAgo = formatTimeAgo(t)
 					}
 				}
-				out.WriteString(fmt.Sprintf("  %-30s %-8s +%-4d -%d\n", f.Path, timeAgo, f.Additions, f.Deletions))
+				fmt.Fprintf(&out, "  %-30s %-8s +%-4d -%d\n", f.Path, timeAgo, f.Additions, f.Deletions)
 			}
 		} else if m.Status == "active" {
 			out.WriteString("Files:    (no changes)\n")
@@ -163,10 +163,10 @@ func FormatTeam(resp *TeamListResponse) string {
 	if sm := resp.SharedMessages; sm != nil {
 		out.WriteString("\n--- Shared ---\n")
 		if sm.BroadcastTotal > 0 {
-			out.WriteString(fmt.Sprintf("Broadcasts: %d messages\n", sm.BroadcastTotal))
+			fmt.Fprintf(&out, "Broadcasts: %d messages\n", sm.BroadcastTotal)
 		}
 		for _, g := range sm.Groups {
-			out.WriteString(fmt.Sprintf("@%s: %d messages\n", g.Name, g.Total))
+			fmt.Fprintf(&out, "@%s: %d messages\n", g.Name, g.Total)
 		}
 	}
 

@@ -185,39 +185,39 @@ func FormatConfigShow(result *ConfigShowResult) string {
 	var b strings.Builder
 
 	b.WriteString("Thrum Configuration\n")
-	b.WriteString(fmt.Sprintf("  Config file: %s\n", result.ConfigFile))
+	fmt.Fprintf(&b, "  Config file: %s\n", result.ConfigFile)
 
 	// Runtime section
 	b.WriteString("\nRuntime\n")
-	b.WriteString(fmt.Sprintf("  Primary:     %s (%s)\n", result.Runtime.Primary, result.Runtime.Source))
+	fmt.Fprintf(&b, "  Primary:     %s (%s)\n", result.Runtime.Primary, result.Runtime.Source)
 	if len(result.Runtime.Detected) > 0 {
-		b.WriteString(fmt.Sprintf("  Detected:    %s\n", strings.Join(result.Runtime.Detected, ", ")))
+		fmt.Fprintf(&b, "  Detected:    %s\n", strings.Join(result.Runtime.Detected, ", "))
 	}
 
 	// Daemon section
 	b.WriteString("\nDaemon\n")
-	b.WriteString(fmt.Sprintf("  Local-only:    %s (%s)\n", result.Daemon.LocalOnly.Value, result.Daemon.LocalOnly.Source))
-	b.WriteString(fmt.Sprintf("  Sync interval: %s (%s)\n", result.Daemon.SyncInterval.Value, result.Daemon.SyncInterval.Source))
-	b.WriteString(fmt.Sprintf("  WS port:       %s (%s)\n", result.Daemon.WSPort.Value, result.Daemon.WSPort.Source))
-	b.WriteString(fmt.Sprintf("  Status:        %s\n", result.Daemon.Status))
+	fmt.Fprintf(&b, "  Local-only:    %s (%s)\n", result.Daemon.LocalOnly.Value, result.Daemon.LocalOnly.Source)
+	fmt.Fprintf(&b, "  Sync interval: %s (%s)\n", result.Daemon.SyncInterval.Value, result.Daemon.SyncInterval.Source)
+	fmt.Fprintf(&b, "  WS port:       %s (%s)\n", result.Daemon.WSPort.Value, result.Daemon.WSPort.Source)
+	fmt.Fprintf(&b, "  Status:        %s\n", result.Daemon.Status)
 	if result.Daemon.Socket != "" {
-		b.WriteString(fmt.Sprintf("  Socket:        %s\n", result.Daemon.Socket))
+		fmt.Fprintf(&b, "  Socket:        %s\n", result.Daemon.Socket)
 	}
 
 	// Identity section
 	if result.Identity.Agent != "" || result.Identity.Role != "" {
 		b.WriteString("\nIdentity\n")
 		if result.Identity.Agent != "" {
-			b.WriteString(fmt.Sprintf("  Agent:       %s\n", result.Identity.Agent))
+			fmt.Fprintf(&b, "  Agent:       %s\n", result.Identity.Agent)
 		}
 		if result.Identity.Role != "" {
-			b.WriteString(fmt.Sprintf("  Role:        %s\n", result.Identity.Role))
+			fmt.Fprintf(&b, "  Role:        %s\n", result.Identity.Role)
 		}
 		if result.Identity.Module != "" {
-			b.WriteString(fmt.Sprintf("  Module:      %s\n", result.Identity.Module))
+			fmt.Fprintf(&b, "  Module:      %s\n", result.Identity.Module)
 		}
 		if result.Identity.File != "" {
-			b.WriteString(fmt.Sprintf("  File:        %s\n", result.Identity.File))
+			fmt.Fprintf(&b, "  File:        %s\n", result.Identity.File)
 		}
 	}
 
@@ -225,7 +225,7 @@ func FormatConfigShow(result *ConfigShowResult) string {
 	if len(result.Overrides) > 0 {
 		b.WriteString("\nOverrides (environment)\n")
 		for _, o := range result.Overrides {
-			b.WriteString(fmt.Sprintf("  %s=%s\n", o.EnvVar, o.Value))
+			fmt.Fprintf(&b, "  %s=%s\n", o.EnvVar, o.Value)
 		}
 	}
 
