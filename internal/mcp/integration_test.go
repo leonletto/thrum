@@ -81,6 +81,20 @@ func newTestDaemon(t *testing.T) *testDaemon {
 	sessionHandler := rpc.NewSessionHandler(st)
 	server.RegisterHandler("session.start", sessionHandler.HandleStart)
 
+	// Group handler
+	groupHandler := rpc.NewGroupHandler(st)
+	server.RegisterHandler("group.create", groupHandler.HandleCreate)
+	server.RegisterHandler("group.delete", groupHandler.HandleDelete)
+	server.RegisterHandler("group.member.add", groupHandler.HandleMemberAdd)
+	server.RegisterHandler("group.member.remove", groupHandler.HandleMemberRemove)
+	server.RegisterHandler("group.list", groupHandler.HandleList)
+	server.RegisterHandler("group.info", groupHandler.HandleInfo)
+
+	// Ensure @everyone group exists (as daemon startup would)
+	if err := rpc.EnsureEveryoneGroup(context.Background(), st); err != nil {
+		t.Fatalf("ensure everyone group: %v", err)
+	}
+
 	// Health handler
 	healthHandler := rpc.NewHealthHandler(time.Now(), "test-1.0.0", repoID)
 	server.RegisterHandler("health", healthHandler.Handle)
@@ -120,8 +134,7 @@ func (td *testDaemon) stop() {
 }
 
 // createIdentity creates a test identity in the daemon's repo.
-// For integration tests, we create identities without names so they can
-// be resolved purely by role+module environment variables.
+// Name-only routing requires a non-empty agent name in the identity file.
 func (td *testDaemon) createIdentity(t *testing.T, filename, role, module string) {
 	t.Helper()
 
@@ -130,17 +143,15 @@ func (td *testDaemon) createIdentity(t *testing.T, filename, role, module string
 		t.Fatalf("create identities dir: %v", err)
 	}
 
-	// Create identity WITHOUT a name field (or with empty name)
-	// This allows environment-based resolution via THRUM_ROLE/THRUM_MODULE
 	identity := map[string]any{
 		"version": 1,
 		"repo_id": "test-repo-123",
 		"agent": map[string]any{
 			"kind":    "agent",
-			"name":    "", // Empty name for environment-based resolution
+			"name":    filename,
 			"role":    role,
 			"module":  module,
-			"display": role, // Use role as display name
+			"display": filename,
 		},
 		"worktree":     "test",
 		"confirmed_by": "test",
@@ -163,8 +174,6 @@ func (td *testDaemon) newClient() (*cli.Client, error) {
 }
 
 // registerAndStartSession registers an agent and starts a session.
-// NOTE: Does NOT use the Name parameter for registration to match how
-// environment-based agent resolution works (uses role+module only).
 func (td *testDaemon) registerAndStartSession(t *testing.T, role, module, name string) string {
 	t.Helper()
 
@@ -174,12 +183,11 @@ func (td *testDaemon) registerAndStartSession(t *testing.T, role, module, name s
 	}
 	defer client.Close()
 
-	// Register agent WITHOUT name to ensure agent ID matches environment-based lookup
 	var regResp rpc.RegisterResponse
 	err = client.Call("agent.register", rpc.RegisterRequest{
+		Name:   name,
 		Role:   role,
 		Module: module,
-		// Intentionally NOT setting Name here - let it be auto-generated
 	}, &regResp)
 	if err != nil {
 		t.Fatalf("failed to register agent %s: %v", name, err)
@@ -213,6 +221,7 @@ func TestSendMessageAndCheckMessages(t *testing.T) {
 	td.registerAndStartSession(t, "test-receiver", "mcp", "receiver")
 
 	// Set environment variables so daemon can resolve agent
+	t.Setenv("THRUM_NAME", "sender")
 	t.Setenv("THRUM_ROLE", "test-sender")
 	t.Setenv("THRUM_MODULE", "mcp")
 
@@ -222,12 +231,11 @@ func TestSendMessageAndCheckMessages(t *testing.T) {
 		t.Fatalf("NewServer for sender failed: %v", err)
 	}
 
-	// Send a message to receiver
+	// Send a message to receiver (by agent name, not role)
 	ctx := context.Background()
 	input := SendMessageInput{
-		To:       "@test-receiver",
+		To:       "@receiver",
 		Content:  "hello from integration test",
-		Priority: "normal",
 	}
 
 	_, output, err := mcpServer.handleSendMessage(ctx, nil, input)
@@ -293,9 +301,8 @@ func TestCheckMessagesMarksAsRead(t *testing.T) {
 	}
 
 	_, _, err = mcpSender.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@test-receiver",
+		To:       "@receiver",
 		Content:  "test message",
-		Priority: "normal",
 	})
 	if err != nil {
 		t.Fatalf("handleSendMessage failed: %v", err)
@@ -408,7 +415,6 @@ func TestBroadcastMessage(t *testing.T) {
 
 	_, _, err = mcpAlice.handleBroadcast(ctx, nil, BroadcastInput{
 		Content:  "broadcast from alice",
-		Priority: "normal",
 	})
 	if err != nil {
 		t.Fatalf("handleBroadcast failed: %v", err)
@@ -484,7 +490,6 @@ func TestMCPServerStartupFailsWithoutDaemon(t *testing.T) {
 	_, _, err = mcpServer.handleSendMessage(ctx, nil, SendMessageInput{
 		To:       "@someone",
 		Content:  "test",
-		Priority: "normal",
 	})
 
 	if err == nil {
@@ -582,9 +587,8 @@ func TestWaitForMessageReceivesMessage(t *testing.T) {
 	}
 
 	_, _, err = mcpSender.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@test-waiter",
+		To:       "@waiter",
 		Content:  "wake up!",
-		Priority: "normal",
 	})
 	if err != nil {
 		t.Fatalf("handleSendMessage failed: %v", err)
