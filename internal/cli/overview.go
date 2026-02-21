@@ -90,32 +90,27 @@ func FormatOverview(result *OverviewResult) string {
 
 	// Identity section
 	if result.Agent != nil {
-		output.WriteString(fmt.Sprintf("You: @%s (%s)\n", result.Agent.Role, result.Agent.AgentID))
-
-		// Session info
-		if result.Agent.SessionID != "" {
-			sessionAge := ""
-			if result.Agent.SessionStart != "" {
-				if t, err := time.Parse(time.RFC3339, result.Agent.SessionStart); err == nil {
-					sessionAge = fmt.Sprintf(" for %s", formatDuration(time.Since(t)))
-				}
-			}
-			output.WriteString(fmt.Sprintf("Session: active%s\n", sessionAge))
-		} else {
-			output.WriteString("Session: none\n")
+		summary := &AgentSummary{
+			AgentID:      result.Agent.AgentID,
+			Role:         result.Agent.Role,
+			Module:       result.Agent.Module,
+			Display:      result.Agent.Display,
+			SessionID:    result.Agent.SessionID,
+			SessionStart: result.Agent.SessionStart,
 		}
+		if result.WorkContext != nil {
+			summary.Branch = result.WorkContext.Branch
+			summary.Intent = result.WorkContext.Intent
+		}
+		output.WriteString(FormatAgentSummary(summary))
 
-		// Work context
+		// Work context — remaining fields not in AgentSummary
 		if result.WorkContext != nil {
 			ctx := result.WorkContext
-			if ctx.Intent != "" {
-				output.WriteString(fmt.Sprintf("Intent: %s\n", ctx.Intent))
-			}
 			if ctx.CurrentTask != "" {
 				output.WriteString(fmt.Sprintf("Task: %s\n", ctx.CurrentTask))
 			}
 			if ctx.Branch != "" {
-				branchInfo := ctx.Branch
 				parts := []string{}
 				if len(ctx.UnmergedCommits) > 0 {
 					parts = append(parts, fmt.Sprintf("%d commits", len(ctx.UnmergedCommits)))
@@ -125,9 +120,8 @@ func FormatOverview(result *OverviewResult) string {
 					parts = append(parts, fmt.Sprintf("%d files", totalFiles))
 				}
 				if len(parts) > 0 {
-					branchInfo += " (" + strings.Join(parts, ", ") + ")"
+					output.WriteString(fmt.Sprintf("Branch info: %s\n", strings.Join(parts, ", ")))
 				}
-				output.WriteString(fmt.Sprintf("Branch: %s\n", branchInfo))
 			}
 		}
 	} else {

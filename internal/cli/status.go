@@ -145,49 +145,32 @@ func FormatStatus(result *StatusResult) string {
 
 	// Agent info
 	if result.Agent != nil {
-		output.WriteString(fmt.Sprintf("Agent:    %s (@%s)\n", result.Agent.AgentID, result.Agent.Role))
-		if result.Agent.Module != "" {
-			output.WriteString(fmt.Sprintf("Module:   %s\n", result.Agent.Module))
+		summary := &AgentSummary{
+			AgentID:      result.Agent.AgentID,
+			Role:         result.Agent.Role,
+			Module:       result.Agent.Module,
+			Display:      result.Agent.Display,
+			SessionID:    result.Agent.SessionID,
+			SessionStart: result.Agent.SessionStart,
 		}
-		if result.Agent.Display != "" {
-			output.WriteString(fmt.Sprintf("Display:  %s\n", result.Agent.Display))
+		if result.WorkContext != nil {
+			summary.Branch = result.WorkContext.Branch
+			summary.Intent = result.WorkContext.Intent
 		}
+		output.WriteString(FormatAgentSummary(summary))
 
-		// Session info
-		if result.Agent.SessionID != "" {
-			sessionAge := ""
-			if result.Agent.SessionStart != "" {
-				if t, err := time.Parse(time.RFC3339, result.Agent.SessionStart); err == nil {
-					duration := time.Since(t)
-					sessionAge = fmt.Sprintf(" (duration: %s)", formatDuration(duration))
-				}
-			}
-			output.WriteString(fmt.Sprintf("Session:  %s%s\n", result.Agent.SessionID, sessionAge))
-		} else {
-			output.WriteString("Session:  none (use 'thrum session start' to begin)\n")
-		}
-
-		// Work context (only if session is active)
+		// Work context (only if session is active) — remaining fields not in AgentSummary
 		if result.WorkContext != nil {
 			ctx := result.WorkContext
-
-			// Current intent
-			if ctx.Intent != "" {
-				output.WriteString(fmt.Sprintf("Intent:   %s\n", ctx.Intent))
-			}
 
 			// Current task
 			if ctx.CurrentTask != "" {
 				output.WriteString(fmt.Sprintf("Task:     %s\n", ctx.CurrentTask))
 			}
 
-			// Branch and commit info
-			if ctx.Branch != "" {
-				commitInfo := ""
-				if len(ctx.UnmergedCommits) > 0 {
-					commitInfo = fmt.Sprintf(" (%d commits ahead)", len(ctx.UnmergedCommits))
-				}
-				output.WriteString(fmt.Sprintf("Branch:   %s%s\n", ctx.Branch, commitInfo))
+			// Branch commit info (branch itself shown in AgentSummary)
+			if ctx.Branch != "" && len(ctx.UnmergedCommits) > 0 {
+				output.WriteString(fmt.Sprintf("Commits:  %d ahead\n", len(ctx.UnmergedCommits)))
 			}
 
 			// Changed files count

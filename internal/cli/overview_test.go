@@ -54,7 +54,7 @@ func TestFormatOverview(t *testing.T) {
 			},
 			contains: []string{
 				"@implementer",
-				"active",
+				"ses_01HXE...",
 				"Implementing login flow",
 				"beads:thrum-xyz",
 				"feature/auth",
