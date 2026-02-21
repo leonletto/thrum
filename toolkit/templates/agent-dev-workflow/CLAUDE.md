@@ -86,8 +86,8 @@ where it left off. Completed work is never redone.
 
 ## Reference Templates
 
-These templates can be used directly for customization or when the skill
-pipeline does not fit your workflow.
+All templates live in `toolkit/templates/agent-dev-workflow/`. They can be used
+directly for customization or when the skill pipeline does not fit your workflow.
 
 | Template | Status | Purpose |
 |---|---|---|
