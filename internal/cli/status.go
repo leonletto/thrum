@@ -167,12 +167,12 @@ func FormatStatus(result *StatusResult) string {
 
 			// Current task
 			if ctx.CurrentTask != "" {
-				output.WriteString(fmt.Sprintf("Task:     %s\n", ctx.CurrentTask))
+				fmt.Fprintf(&output, "Task:     %s\n", ctx.CurrentTask)
 			}
 
 			// Branch commit info (branch itself shown in AgentSummary)
 			if ctx.Branch != "" && len(ctx.UnmergedCommits) > 0 {
-				output.WriteString(fmt.Sprintf("Commits:  %d ahead\n", len(ctx.UnmergedCommits)))
+				fmt.Fprintf(&output, "Commits:  %d ahead\n", len(ctx.UnmergedCommits))
 			}
 
 			// Changed files count
@@ -182,7 +182,7 @@ func FormatStatus(result *StatusResult) string {
 				if len(ctx.UncommittedFiles) > 0 {
 					uncommittedInfo = fmt.Sprintf(", %d uncommitted", len(ctx.UncommittedFiles))
 				}
-				output.WriteString(fmt.Sprintf("Files:    %d changed%s\n", totalChanged, uncommittedInfo))
+				fmt.Fprintf(&output, "Files:    %d changed%s\n", totalChanged, uncommittedInfo)
 			}
 		}
 	} else {
@@ -197,7 +197,7 @@ func FormatStatus(result *StatusResult) string {
 				age = fmt.Sprintf(" (updated %s ago)", formatDuration(time.Since(t)))
 			}
 		}
-		output.WriteString(fmt.Sprintf("Context:  %d bytes%s\n", result.Context.Size, age))
+		fmt.Fprintf(&output, "Context:  %d bytes%s\n", result.Context.Size, age)
 	}
 
 	// Inbox info
@@ -206,7 +206,7 @@ func FormatStatus(result *StatusResult) string {
 		if result.Inbox.Unread > 0 {
 			unreadInfo = fmt.Sprintf(" (%d unread)", result.Inbox.Unread)
 		}
-		output.WriteString(fmt.Sprintf("Inbox:    %d messages%s\n", result.Inbox.Total, unreadInfo))
+		fmt.Fprintf(&output, "Inbox:    %d messages%s\n", result.Inbox.Total, unreadInfo)
 	}
 
 	// Sync status
@@ -214,25 +214,25 @@ func FormatStatus(result *StatusResult) string {
 	if syncStatus == "synced" {
 		output.WriteString("Sync:     ✓ synced\n")
 	} else {
-		output.WriteString(fmt.Sprintf("Sync:     %s\n", syncStatus))
+		fmt.Fprintf(&output, "Sync:     %s\n", syncStatus)
 	}
 
 	// Tailscale sync info
 	if ts := result.Health.Tailscale; ts != nil && ts.Enabled {
-		output.WriteString(fmt.Sprintf("Tailscale: %s (%d peers)\n", ts.Hostname, ts.ConnectedPeers))
+		fmt.Fprintf(&output, "Tailscale: %s (%d peers)\n", ts.Hostname, ts.ConnectedPeers)
 		for _, peer := range ts.Peers {
-			output.WriteString(fmt.Sprintf("  - %s (last sync: %s)\n", peer.Hostname, peer.LastSync))
+			fmt.Fprintf(&output, "  - %s (last sync: %s)\n", peer.Hostname, peer.LastSync)
 		}
 	}
 
 	// Daemon info
 	uptime := formatDuration(time.Duration(result.Health.UptimeMs) * time.Millisecond)
-	output.WriteString(fmt.Sprintf("Daemon:   running (%s uptime, v%s)\n", uptime, result.Health.Version))
+	fmt.Fprintf(&output, "Daemon:   running (%s uptime, v%s)\n", uptime, result.Health.Version)
 
 	// WebSocket and UI
 	if result.WebSocketPort > 0 {
-		output.WriteString(fmt.Sprintf("WebSocket: ws://localhost:%d/ws\n", result.WebSocketPort))
-		output.WriteString(fmt.Sprintf("UI:        http://localhost:%d\n", result.WebSocketPort))
+		fmt.Fprintf(&output, "WebSocket: ws://localhost:%d/ws\n", result.WebSocketPort)
+		fmt.Fprintf(&output, "UI:        http://localhost:%d\n", result.WebSocketPort)
 	}
 
 	return output.String()

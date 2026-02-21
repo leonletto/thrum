@@ -78,20 +78,20 @@ func BuildAgentSummary(idFile *config.IdentityFile, idPath string, daemonInfo *W
 func FormatAgentSummary(s *AgentSummary) string {
 	var out strings.Builder
 
-	out.WriteString(fmt.Sprintf("Agent ID:  %s\n", s.AgentID))
-	out.WriteString(fmt.Sprintf("Role:      @%s\n", s.Role))
+	fmt.Fprintf(&out, "Agent ID:  %s\n", s.AgentID)
+	fmt.Fprintf(&out, "Role:      @%s\n", s.Role)
 
 	if s.Module != "" {
-		out.WriteString(fmt.Sprintf("Module:    %s\n", s.Module))
+		fmt.Fprintf(&out, "Module:    %s\n", s.Module)
 	}
 	if s.Display != "" {
-		out.WriteString(fmt.Sprintf("Display:   %s\n", s.Display))
+		fmt.Fprintf(&out, "Display:   %s\n", s.Display)
 	}
 	if s.Branch != "" {
-		out.WriteString(fmt.Sprintf("Branch:    %s\n", s.Branch))
+		fmt.Fprintf(&out, "Branch:    %s\n", s.Branch)
 	}
 	if s.Intent != "" {
-		out.WriteString(fmt.Sprintf("Intent:    %s\n", s.Intent))
+		fmt.Fprintf(&out, "Intent:    %s\n", s.Intent)
 	}
 
 	if s.SessionID != "" {
@@ -101,16 +101,16 @@ func FormatAgentSummary(s *AgentSummary) string {
 				sessionAge = fmt.Sprintf(" (%s ago)", formatDuration(time.Since(t)))
 			}
 		}
-		out.WriteString(fmt.Sprintf("Session:   %s%s\n", s.SessionID, sessionAge))
+		fmt.Fprintf(&out, "Session:   %s%s\n", s.SessionID, sessionAge)
 	} else {
 		out.WriteString("Session:   none (use 'thrum session start' to begin)\n")
 	}
 
 	if s.Worktree != "" {
-		out.WriteString(fmt.Sprintf("Worktree:  %s\n", s.Worktree))
+		fmt.Fprintf(&out, "Worktree:  %s\n", s.Worktree)
 	}
 	if s.IdentityFile != "" {
-		out.WriteString(fmt.Sprintf("Identity:  %s\n", s.IdentityFile))
+		fmt.Fprintf(&out, "Identity:  %s\n", s.IdentityFile)
 	}
 
 	return out.String()

@@ -58,12 +58,12 @@ func FormatMessageGet(resp *MessageGetResponse) string {
 	agentName := extractAgentName(msg.Author.AgentID)
 	relTime := formatRelativeTime(msg.CreatedAt)
 
-	out.WriteString(fmt.Sprintf("Message: %s\n", msg.MessageID))
-	out.WriteString(fmt.Sprintf("  From:    %s\n", agentName))
-	out.WriteString(fmt.Sprintf("  Time:    %s\n", relTime))
+	fmt.Fprintf(&out, "Message: %s\n", msg.MessageID)
+	fmt.Fprintf(&out, "  From:    %s\n", agentName)
+	fmt.Fprintf(&out, "  Time:    %s\n", relTime)
 
 	if msg.ThreadID != "" {
-		out.WriteString(fmt.Sprintf("  Thread:  %s\n", msg.ThreadID))
+		fmt.Fprintf(&out, "  Thread:  %s\n", msg.ThreadID)
 	}
 
 	if len(msg.Scopes) > 0 {
@@ -71,7 +71,7 @@ func FormatMessageGet(resp *MessageGetResponse) string {
 		for i, s := range msg.Scopes {
 			scopeStrs[i] = s.Type + ":" + s.Value
 		}
-		out.WriteString(fmt.Sprintf("  Scopes:  %s\n", strings.Join(scopeStrs, ", ")))
+		fmt.Fprintf(&out, "  Scopes:  %s\n", strings.Join(scopeStrs, ", "))
 	}
 
 	if len(msg.Refs) > 0 {
@@ -79,11 +79,11 @@ func FormatMessageGet(resp *MessageGetResponse) string {
 		for i, r := range msg.Refs {
 			refStrs[i] = r.Type + ":" + r.Value
 		}
-		out.WriteString(fmt.Sprintf("  Refs:    %s\n", strings.Join(refStrs, ", ")))
+		fmt.Fprintf(&out, "  Refs:    %s\n", strings.Join(refStrs, ", "))
 	}
 
 	if msg.UpdatedAt != "" {
-		out.WriteString(fmt.Sprintf("  Edited:  %s\n", formatRelativeTime(msg.UpdatedAt)))
+		fmt.Fprintf(&out, "  Edited:  %s\n", formatRelativeTime(msg.UpdatedAt))
 	}
 
 	if msg.Deleted {

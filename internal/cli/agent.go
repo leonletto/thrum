@@ -192,26 +192,26 @@ func FormatRegisterResponse(result *RegisterResponse) string {
 
 	switch result.Status {
 	case "registered":
-		output.WriteString(fmt.Sprintf("✓ Agent registered: %s\n", result.AgentID))
+		fmt.Fprintf(&output, "✓ Agent registered: %s\n", result.AgentID)
 
 	case "updated":
-		output.WriteString(fmt.Sprintf("✓ Agent re-registered: %s\n", result.AgentID))
+		fmt.Fprintf(&output, "✓ Agent re-registered: %s\n", result.AgentID)
 
 	case "conflict":
 		if result.Conflict != nil {
 			output.WriteString("✗ Registration conflict\n")
 			output.WriteString("  Another agent already registered with the same role/module:\n")
-			output.WriteString(fmt.Sprintf("  Agent ID:  %s\n", result.Conflict.ExistingAgentID))
+			fmt.Fprintf(&output, "  Agent ID:  %s\n", result.Conflict.ExistingAgentID)
 
 			// Format timestamps
 			if result.Conflict.RegisteredAt != "" {
 				if t, err := time.Parse(time.RFC3339, result.Conflict.RegisteredAt); err == nil {
-					output.WriteString(fmt.Sprintf("  Registered: %s\n", t.Format("2006-01-02 15:04:05")))
+					fmt.Fprintf(&output, "  Registered: %s\n", t.Format("2006-01-02 15:04:05"))
 				}
 			}
 			if result.Conflict.LastSeenAt != "" {
 				if t, err := time.Parse(time.RFC3339, result.Conflict.LastSeenAt); err == nil {
-					output.WriteString(fmt.Sprintf("  Last seen:  %s\n", t.Format("2006-01-02 15:04:05")))
+					fmt.Fprintf(&output, "  Last seen:  %s\n", t.Format("2006-01-02 15:04:05"))
 				}
 			}
 
@@ -222,7 +222,7 @@ func FormatRegisterResponse(result *RegisterResponse) string {
 		}
 
 	default:
-		output.WriteString(fmt.Sprintf("Agent registration status: %s\n", result.Status))
+		fmt.Fprintf(&output, "Agent registration status: %s\n", result.Status)
 	}
 
 	return output.String()
@@ -237,35 +237,35 @@ func FormatAgentList(result *ListAgentsResponse) string {
 
 	var output strings.Builder
 
-	output.WriteString(fmt.Sprintf("Registered agents (%d):\n\n", len(result.Agents)))
+	fmt.Fprintf(&output, "Registered agents (%d):\n\n", len(result.Agents))
 
 	for _, agent := range result.Agents {
 		// Format agent ID with role highlighted
-		output.WriteString(fmt.Sprintf("┌─ @%s (%s)\n", agent.Role, agent.AgentID))
+		fmt.Fprintf(&output, "┌─ @%s (%s)\n", agent.Role, agent.AgentID)
 
 		// Module
 		if agent.Module != "" {
-			output.WriteString(fmt.Sprintf("│  Module:     %s\n", agent.Module))
+			fmt.Fprintf(&output, "│  Module:     %s\n", agent.Module)
 		}
 
 		// Display name
 		if agent.Display != "" {
-			output.WriteString(fmt.Sprintf("│  Display:    %s\n", agent.Display))
+			fmt.Fprintf(&output, "│  Display:    %s\n", agent.Display)
 		}
 
 		// Kind
 		if agent.Kind != "" {
-			output.WriteString(fmt.Sprintf("│  Kind:       %s\n", agent.Kind))
+			fmt.Fprintf(&output, "│  Kind:       %s\n", agent.Kind)
 		}
 
 		// Registration time
 		if agent.RegisteredAt != "" {
 			if t, err := time.Parse(time.RFC3339, agent.RegisteredAt); err == nil {
 				duration := time.Since(t)
-				output.WriteString(fmt.Sprintf("│  Registered: %s (%s ago)\n",
-					t.Format("2006-01-02 15:04:05"), formatDuration(duration)))
+				fmt.Fprintf(&output, "│  Registered: %s (%s ago)\n",
+					t.Format("2006-01-02 15:04:05"), formatDuration(duration))
 			} else {
-				output.WriteString(fmt.Sprintf("│  Registered: %s\n", agent.RegisteredAt))
+				fmt.Fprintf(&output, "│  Registered: %s\n", agent.RegisteredAt)
 			}
 		}
 
@@ -273,10 +273,10 @@ func FormatAgentList(result *ListAgentsResponse) string {
 		if agent.LastSeenAt != "" {
 			if t, err := time.Parse(time.RFC3339, agent.LastSeenAt); err == nil {
 				duration := time.Since(t)
-				output.WriteString(fmt.Sprintf("│  Last seen:  %s (%s ago)\n",
-					t.Format("2006-01-02 15:04:05"), formatDuration(duration)))
+				fmt.Fprintf(&output, "│  Last seen:  %s (%s ago)\n",
+					t.Format("2006-01-02 15:04:05"), formatDuration(duration))
 			} else {
-				output.WriteString(fmt.Sprintf("│  Last seen:  %s\n", agent.LastSeenAt))
+				fmt.Fprintf(&output, "│  Last seen:  %s\n", agent.LastSeenAt)
 			}
 		}
 
@@ -310,33 +310,33 @@ func FormatAgentCleanup(result *CleanupAgentResponse) string {
 	}
 
 	for _, orphan := range result.Orphans {
-		output.WriteString(fmt.Sprintf("Agent: %s (%s, module: %s)\n", orphan.AgentID, orphan.Role, orphan.Module))
+		fmt.Fprintf(&output, "Agent: %s (%s, module: %s)\n", orphan.AgentID, orphan.Role, orphan.Module)
 		if orphan.Worktree != "" {
 			status := "exists"
 			if orphan.WorktreeMissing {
 				status = "DELETED"
 			}
-			output.WriteString(fmt.Sprintf("  Worktree: %s [%s]\n", orphan.Worktree, status))
+			fmt.Fprintf(&output, "  Worktree: %s [%s]\n", orphan.Worktree, status)
 		}
 		if orphan.Branch != "" {
 			status := "exists"
 			if orphan.BranchMissing {
 				status = "DELETED"
 			}
-			output.WriteString(fmt.Sprintf("  Branch:   %s [%s]\n", orphan.Branch, status))
+			fmt.Fprintf(&output, "  Branch:   %s [%s]\n", orphan.Branch, status)
 		}
 		if orphan.LastSeenAt != "" {
-			output.WriteString(fmt.Sprintf("  Last seen: %s (%d days ago)\n", orphan.LastSeenAt, orphan.DaysSinceLastSeen))
+			fmt.Fprintf(&output, "  Last seen: %s (%d days ago)\n", orphan.LastSeenAt, orphan.DaysSinceLastSeen)
 		}
-		output.WriteString(fmt.Sprintf("  Messages: %d\n\n", orphan.MessageCount))
+		fmt.Fprintf(&output, "  Messages: %d\n\n", orphan.MessageCount)
 	}
 
 	if !result.DryRun && len(result.Deleted) > 0 {
-		output.WriteString(fmt.Sprintf("✓ Deleted %d orphaned agent(s): %s\n", len(result.Deleted), strings.Join(result.Deleted, ", ")))
+		fmt.Fprintf(&output, "✓ Deleted %d orphaned agent(s): %s\n", len(result.Deleted), strings.Join(result.Deleted, ", "))
 	}
 
 	if result.Message != "" {
-		output.WriteString(fmt.Sprintf("\n%s\n", result.Message))
+		fmt.Fprintf(&output, "\n%s\n", result.Message)
 	}
 
 	return output.String()
@@ -359,7 +359,7 @@ func FormatAgentListWithContext(agents *ListAgentsResponse, contexts *ListContex
 		}
 	}
 
-	output.WriteString(fmt.Sprintf("Registered agents (%d):\n\n", len(agents.Agents)))
+	fmt.Fprintf(&output, "Registered agents (%d):\n\n", len(agents.Agents))
 
 	for _, agent := range agents.Agents {
 		// Get work context for this agent (if any)
@@ -374,11 +374,11 @@ func FormatAgentListWithContext(agents *ListAgentsResponse, contexts *ListContex
 		}
 
 		// Format agent ID with role and status
-		output.WriteString(fmt.Sprintf("┌─ %s @%s (%s)\n", status, agent.Role, statusText))
+		fmt.Fprintf(&output, "┌─ %s @%s (%s)\n", status, agent.Role, statusText)
 
 		// Module
 		if agent.Module != "" {
-			output.WriteString(fmt.Sprintf("│  Module:  %s\n", agent.Module))
+			fmt.Fprintf(&output, "│  Module:  %s\n", agent.Module)
 		}
 
 		// Session info for active agents
@@ -389,12 +389,12 @@ func FormatAgentListWithContext(agents *ListAgentsResponse, contexts *ListContex
 				if len(intent) > 50 {
 					intent = intent[:47] + "..."
 				}
-				output.WriteString(fmt.Sprintf("│  Intent:  %s\n", intent))
+				fmt.Fprintf(&output, "│  Intent:  %s\n", intent)
 			}
 
 			// Task
 			if ctx.CurrentTask != "" {
-				output.WriteString(fmt.Sprintf("│  Task:    %s\n", ctx.CurrentTask))
+				fmt.Fprintf(&output, "│  Task:    %s\n", ctx.CurrentTask)
 			}
 
 			// Branch info
@@ -403,33 +403,33 @@ func FormatAgentListWithContext(agents *ListAgentsResponse, contexts *ListContex
 				if len(ctx.UnmergedCommits) > 0 {
 					branchInfo += fmt.Sprintf(" (%d commits)", len(ctx.UnmergedCommits))
 				}
-				output.WriteString(fmt.Sprintf("│  Branch:  %s\n", branchInfo))
+				fmt.Fprintf(&output, "│  Branch:  %s\n", branchInfo)
 			}
 
 			// Session duration
 			if ctx.GitUpdatedAt != "" {
 				if t, err := time.Parse(time.RFC3339, ctx.GitUpdatedAt); err == nil {
-					output.WriteString(fmt.Sprintf("│  Active:  %s\n", formatTimeAgo(t)))
+					fmt.Fprintf(&output, "│  Active:  %s\n", formatTimeAgo(t))
 				}
 			}
 		} else {
 			// Last seen for inactive agents
 			if agent.LastSeenAt != "" {
 				if t, err := time.Parse(time.RFC3339, agent.LastSeenAt); err == nil {
-					output.WriteString(fmt.Sprintf("│  Last seen: %s\n", formatTimeAgo(t)))
+					fmt.Fprintf(&output, "│  Last seen: %s\n", formatTimeAgo(t))
 				}
 			}
 			// Also show branch/intent for offline agents if context has them
 			if ctx != nil {
 				if ctx.Branch != "" {
-					output.WriteString(fmt.Sprintf("│  Branch:  %s\n", ctx.Branch))
+					fmt.Fprintf(&output, "│  Branch:  %s\n", ctx.Branch)
 				}
 				if ctx.Intent != "" {
 					intent := ctx.Intent
 					if len(intent) > 50 {
 						intent = intent[:47] + "..."
 					}
-					output.WriteString(fmt.Sprintf("│  Intent:  %s\n", intent))
+					fmt.Fprintf(&output, "│  Intent:  %s\n", intent)
 				}
 			}
 		}
@@ -518,8 +518,8 @@ func FormatContextList(result *ListContextResponse) string {
 	// Header
 	headerFmt := fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%%ds %%%ds %%-%ds %%s\n",
 		agentW, sessionW, branchW, commitsW, filesW, intentW)
-	output.WriteString(fmt.Sprintf(headerFmt,
-		"AGENT", "SESSION", "BRANCH", "COMMITS", "FILES", "INTENT", "UPDATED"))
+	fmt.Fprintf(&output, headerFmt,
+		"AGENT", "SESSION", "BRANCH", "COMMITS", "FILES", "INTENT", "UPDATED")
 	output.WriteString(strings.Repeat("-", termWidth) + "\n")
 
 	// Rows
@@ -569,8 +569,8 @@ func FormatContextList(result *ListContextResponse) string {
 			}
 		}
 
-		output.WriteString(fmt.Sprintf(rowFmt,
-			role, sessionShort, branch, commitCount, fileCount, intent, updated))
+		fmt.Fprintf(&output, rowFmt,
+			role, sessionShort, branch, commitCount, fileCount, intent, updated)
 	}
 
 	return output.String()
@@ -583,14 +583,14 @@ func FormatContextDetail(ctx *AgentWorkContext) string {
 	// Extract role from agent_id
 	role := extractRole(ctx.AgentID)
 
-	output.WriteString(fmt.Sprintf("Agent: %s (%s)\n", role, ctx.SessionID))
+	fmt.Fprintf(&output, "Agent: %s (%s)\n", role, ctx.SessionID)
 
 	if ctx.Branch != "" {
-		output.WriteString(fmt.Sprintf("Branch: %s\n", ctx.Branch))
+		fmt.Fprintf(&output, "Branch: %s\n", ctx.Branch)
 	}
 
 	if ctx.WorktreePath != "" {
-		output.WriteString(fmt.Sprintf("Worktree: %s\n", ctx.WorktreePath))
+		fmt.Fprintf(&output, "Worktree: %s\n", ctx.WorktreePath)
 	}
 
 	if ctx.Intent != "" {
@@ -600,7 +600,7 @@ func FormatContextDetail(ctx *AgentWorkContext) string {
 				updatedAgo = fmt.Sprintf(" (set %s)", formatTimeAgo(t))
 			}
 		}
-		output.WriteString(fmt.Sprintf("Intent: %s%s\n", ctx.Intent, updatedAgo))
+		fmt.Fprintf(&output, "Intent: %s%s\n", ctx.Intent, updatedAgo)
 	}
 
 	if ctx.CurrentTask != "" {
@@ -610,12 +610,12 @@ func FormatContextDetail(ctx *AgentWorkContext) string {
 				updatedAgo = fmt.Sprintf(" (set %s)", formatTimeAgo(t))
 			}
 		}
-		output.WriteString(fmt.Sprintf("Task: %s%s\n", ctx.CurrentTask, updatedAgo))
+		fmt.Fprintf(&output, "Task: %s%s\n", ctx.CurrentTask, updatedAgo)
 	}
 
 	// Unmerged commits
 	if len(ctx.UnmergedCommits) > 0 {
-		output.WriteString(fmt.Sprintf("\nUnmerged Commits (%d):\n", len(ctx.UnmergedCommits)))
+		fmt.Fprintf(&output, "\nUnmerged Commits (%d):\n", len(ctx.UnmergedCommits))
 		for _, commit := range ctx.UnmergedCommits {
 			sha := commit.SHA
 			if len(sha) > 7 {
@@ -625,23 +625,23 @@ func FormatContextDetail(ctx *AgentWorkContext) string {
 			if len(commit.Files) > 0 {
 				files = fmt.Sprintf(" [%s]", strings.Join(commit.Files, ", "))
 			}
-			output.WriteString(fmt.Sprintf("  %s %s%s\n", sha, commit.Message, files))
+			fmt.Fprintf(&output, "  %s %s%s\n", sha, commit.Message, files)
 		}
 	}
 
 	// Changed files
 	if len(ctx.ChangedFiles) > 0 {
-		output.WriteString(fmt.Sprintf("\nChanged Files (vs main): %d\n", len(ctx.ChangedFiles)))
+		fmt.Fprintf(&output, "\nChanged Files (vs main): %d\n", len(ctx.ChangedFiles))
 		for _, file := range ctx.ChangedFiles {
-			output.WriteString(fmt.Sprintf("  %s\n", file))
+			fmt.Fprintf(&output, "  %s\n", file)
 		}
 	}
 
 	// Uncommitted files
 	if len(ctx.UncommittedFiles) > 0 {
-		output.WriteString(fmt.Sprintf("\nUncommitted: %d\n", len(ctx.UncommittedFiles)))
+		fmt.Fprintf(&output, "\nUncommitted: %d\n", len(ctx.UncommittedFiles))
 		for _, file := range ctx.UncommittedFiles {
-			output.WriteString(fmt.Sprintf("  %s\n", file))
+			fmt.Fprintf(&output, "  %s\n", file)
 		}
 	}
 
@@ -682,8 +682,8 @@ func FormatWhoHas(file string, result *ListContextResponse) string {
 			fileDetails = fmt.Sprintf(" (%d uncommitted changes)", uncommitted)
 		}
 
-		output.WriteString(fmt.Sprintf("@%s is editing %s%s, branch: %s\n",
-			role, file, fileDetails, branch))
+		fmt.Fprintf(&output, "@%s is editing %s%s, branch: %s\n",
+			role, file, fileDetails, branch)
 	}
 
 	return output.String()
@@ -734,16 +734,16 @@ func FormatPing(name string, agents *ListAgentsResponse, contexts *ListContextRe
 				sessionDuration = fmt.Sprintf(", last heartbeat %s", formatTimeAgo(t))
 			}
 		}
-		output.WriteString(fmt.Sprintf("@%s: active%s\n", name, sessionDuration))
+		fmt.Fprintf(&output, "@%s: active%s\n", name, sessionDuration)
 
 		if ctx.Intent != "" {
-			output.WriteString(fmt.Sprintf("  Intent: %s\n", ctx.Intent))
+			fmt.Fprintf(&output, "  Intent: %s\n", ctx.Intent)
 		}
 		if ctx.CurrentTask != "" {
-			output.WriteString(fmt.Sprintf("  Task: %s\n", ctx.CurrentTask))
+			fmt.Fprintf(&output, "  Task: %s\n", ctx.CurrentTask)
 		}
 		if ctx.Branch != "" {
-			output.WriteString(fmt.Sprintf("  Branch: %s\n", ctx.Branch))
+			fmt.Fprintf(&output, "  Branch: %s\n", ctx.Branch)
 		}
 	} else {
 		// Offline agent
@@ -753,7 +753,7 @@ func FormatPing(name string, agents *ListAgentsResponse, contexts *ListContextRe
 				lastSeen = fmt.Sprintf(" (last seen %s)", formatTimeAgo(t))
 			}
 		}
-		output.WriteString(fmt.Sprintf("@%s: offline%s\n", name, lastSeen))
+		fmt.Fprintf(&output, "@%s: offline%s\n", name, lastSeen)
 	}
 
 	return output.String()

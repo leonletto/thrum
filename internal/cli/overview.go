@@ -108,7 +108,7 @@ func FormatOverview(result *OverviewResult) string {
 		if result.WorkContext != nil {
 			ctx := result.WorkContext
 			if ctx.CurrentTask != "" {
-				output.WriteString(fmt.Sprintf("Task: %s\n", ctx.CurrentTask))
+				fmt.Fprintf(&output, "Task: %s\n", ctx.CurrentTask)
 			}
 			if ctx.Branch != "" {
 				parts := []string{}
@@ -120,7 +120,7 @@ func FormatOverview(result *OverviewResult) string {
 					parts = append(parts, fmt.Sprintf("%d files", totalFiles))
 				}
 				if len(parts) > 0 {
-					output.WriteString(fmt.Sprintf("Branch info: %s\n", strings.Join(parts, ", ")))
+					fmt.Fprintf(&output, "Branch info: %s\n", strings.Join(parts, ", "))
 				}
 			}
 		}
@@ -170,8 +170,8 @@ func FormatOverview(result *OverviewResult) string {
 				}
 			}
 
-			output.WriteString(fmt.Sprintf("  %-*s %-*s %-*s %s\n",
-				roleW, role, branchW, branch, intentW, intent, updated))
+			fmt.Fprintf(&output, "  %-*s %-*s %-*s %s\n",
+				roleW, role, branchW, branch, intentW, intent, updated)
 		}
 	}
 
@@ -179,9 +179,9 @@ func FormatOverview(result *OverviewResult) string {
 	if result.Inbox != nil {
 		output.WriteString("\n")
 		if result.Inbox.Unread > 0 {
-			output.WriteString(fmt.Sprintf("Inbox: %d unread (%d total)\n", result.Inbox.Unread, result.Inbox.Total))
+			fmt.Fprintf(&output, "Inbox: %d unread (%d total)\n", result.Inbox.Unread, result.Inbox.Total)
 		} else if result.Inbox.Total > 0 {
-			output.WriteString(fmt.Sprintf("Inbox: %d messages (all read)\n", result.Inbox.Total))
+			fmt.Fprintf(&output, "Inbox: %d messages (all read)\n", result.Inbox.Total)
 		} else {
 			output.WriteString("Inbox: empty\n")
 		}
@@ -192,13 +192,13 @@ func FormatOverview(result *OverviewResult) string {
 	if syncStatus == "synced" {
 		output.WriteString("Sync: ✓ synced\n")
 	} else if syncStatus != "" {
-		output.WriteString(fmt.Sprintf("Sync: %s\n", syncStatus))
+		fmt.Fprintf(&output, "Sync: %s\n", syncStatus)
 	}
 
 	// WebSocket and UI
 	if result.WebSocketPort > 0 {
-		output.WriteString(fmt.Sprintf("WebSocket: ws://localhost:%d/ws\n", result.WebSocketPort))
-		output.WriteString(fmt.Sprintf("UI: http://localhost:%d\n", result.WebSocketPort))
+		fmt.Fprintf(&output, "WebSocket: ws://localhost:%d/ws\n", result.WebSocketPort)
+		fmt.Fprintf(&output, "UI: http://localhost:%d\n", result.WebSocketPort)
 	}
 
 	return output.String()
