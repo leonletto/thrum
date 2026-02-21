@@ -4,9 +4,15 @@
 package context
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"text/template"
+
+	"github.com/leonletto/thrum/internal/config"
 )
 
 // Save writes context content for the named agent.
@@ -111,4 +117,195 @@ func EnsurePreamble(thrumDir, agentName string) error {
 		return nil // already exists
 	}
 	return SavePreamble(thrumDir, agentName, DefaultPreamble())
+}
+
+// RoleTemplateData holds variables available to role templates.
+type RoleTemplateData struct {
+	AgentName       string
+	Role            string
+	Module          string
+	WorktreePath    string
+	RepoRoot        string
+	CoordinatorName string
+}
+
+// RenderRoleTemplate renders the role template for the given agent.
+// It checks for .thrum/role_templates/{role}.md, and if found, renders it
+// with the agent's identity data. Returns nil, nil if no template exists.
+func RenderRoleTemplate(thrumDir, agentName, role string) ([]byte, error) {
+	templatePath := filepath.Join(thrumDir, "role_templates", role+".md")
+	tmplContent, err := os.ReadFile(templatePath) //nolint:gosec // G304 - path from internal thrum directory
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read role template: %w", err)
+	}
+
+	// Load identity data for template variables
+	data, err := buildTemplateData(thrumDir, agentName, role)
+	if err != nil {
+		return nil, fmt.Errorf("build template data: %w", err)
+	}
+
+	tmpl, err := template.New(role + ".md").Parse(string(tmplContent))
+	if err != nil {
+		return nil, fmt.Errorf("parse role template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("render role template: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+// DeployAll re-renders preambles for all registered agents that have matching
+// role templates. Returns a summary of what was updated.
+type DeployResult struct {
+	Updated []string // agent names that were updated
+	Skipped []string // agent names with no matching template
+}
+
+// DeployAll iterates all identities and renders role templates for each.
+// If agentFilter is non-empty, only that agent is processed.
+// If dryRun is true, no files are written.
+func DeployAll(thrumDir string, agentFilter string, dryRun bool) (*DeployResult, error) {
+	identities, err := loadAllIdentities(thrumDir)
+	if err != nil {
+		return nil, fmt.Errorf("load identities: %w", err)
+	}
+
+	result := &DeployResult{}
+	for _, id := range identities {
+		name := id.Agent.Name
+		if agentFilter != "" && name != agentFilter {
+			continue
+		}
+
+		rendered, err := RenderRoleTemplate(thrumDir, name, id.Agent.Role)
+		if err != nil {
+			return nil, fmt.Errorf("render template for %s: %w", name, err)
+		}
+		if rendered == nil {
+			result.Skipped = append(result.Skipped, name)
+			continue
+		}
+
+		if !dryRun {
+			if err := SavePreamble(thrumDir, name, rendered); err != nil {
+				return nil, fmt.Errorf("save preamble for %s: %w", name, err)
+			}
+		}
+		result.Updated = append(result.Updated, name)
+	}
+
+	return result, nil
+}
+
+// ListRoleTemplates returns a map of template name -> list of agents with that role.
+func ListRoleTemplates(thrumDir string) (map[string][]string, error) {
+	templatesDir := filepath.Join(thrumDir, "role_templates")
+	entries, err := os.ReadDir(templatesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read role_templates directory: %w", err)
+	}
+
+	identities, err := loadAllIdentities(thrumDir)
+	if err != nil {
+		return nil, fmt.Errorf("load identities: %w", err)
+	}
+
+	// Build role -> agents map
+	roleAgents := make(map[string][]string)
+	for _, id := range identities {
+		roleAgents[id.Agent.Role] = append(roleAgents[id.Agent.Role], id.Agent.Name)
+	}
+
+	result := make(map[string][]string)
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
+			continue
+		}
+		role := strings.TrimSuffix(entry.Name(), ".md")
+		result[entry.Name()] = roleAgents[role]
+	}
+
+	return result, nil
+}
+
+// buildTemplateData constructs the template data for a given agent.
+func buildTemplateData(thrumDir, agentName, role string) (*RoleTemplateData, error) {
+	data := &RoleTemplateData{
+		AgentName: agentName,
+		Role:      role,
+	}
+
+	// Load the agent's identity file for module/worktree info
+	identityPath := filepath.Join(thrumDir, "identities", agentName+".json")
+	idData, err := os.ReadFile(identityPath) //nolint:gosec // G304 - path from internal thrum directory
+	if err == nil {
+		var id config.IdentityFile
+		if jsonErr := json.Unmarshal(idData, &id); jsonErr == nil {
+			data.Module = id.Agent.Module
+			data.WorktreePath = id.Worktree
+		}
+	}
+
+	// Resolve RepoRoot from thrumDir (thrumDir is .thrum/, parent is repo root)
+	data.RepoRoot = filepath.Dir(thrumDir)
+
+	// Find coordinator name by scanning identities
+	data.CoordinatorName = findCoordinatorName(thrumDir)
+
+	return data, nil
+}
+
+// findCoordinatorName scans identities for the first agent with role=coordinator.
+func findCoordinatorName(thrumDir string) string {
+	identities, err := loadAllIdentities(thrumDir)
+	if err != nil {
+		return "coordinator"
+	}
+	for _, id := range identities {
+		if id.Agent.Role == "coordinator" {
+			return id.Agent.Name
+		}
+	}
+	return "coordinator" // fallback
+}
+
+// loadAllIdentities loads all identity files from .thrum/identities/.
+func loadAllIdentities(thrumDir string) ([]*config.IdentityFile, error) {
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	entries, err := os.ReadDir(identitiesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read identities directory: %w", err)
+	}
+
+	var identities []*config.IdentityFile
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(identitiesDir, entry.Name())
+		data, err := os.ReadFile(path) //nolint:gosec // G304 - path from internal thrum directory
+		if err != nil {
+			continue
+		}
+		var id config.IdentityFile
+		if err := json.Unmarshal(data, &id); err != nil {
+			continue
+		}
+		identities = append(identities, &id)
+	}
+
+	return identities, nil
 }
