@@ -74,6 +74,7 @@ func Wait(client *Client, opts WaitOptions) (*Message, error) {
 			if opts.ForAgentRole != "" {
 				listParams["for_agent_role"] = opts.ForAgentRole
 			}
+			listParams["exclude_self"] = true
 
 			if err := client.Call("message.list", listParams, &inbox); err != nil {
 				continue // Ignore errors and keep waiting
