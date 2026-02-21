@@ -419,6 +419,19 @@ func FormatAgentListWithContext(agents *ListAgentsResponse, contexts *ListContex
 					output.WriteString(fmt.Sprintf("│  Last seen: %s\n", formatTimeAgo(t)))
 				}
 			}
+			// Also show branch/intent for offline agents if context has them
+			if ctx != nil {
+				if ctx.Branch != "" {
+					output.WriteString(fmt.Sprintf("│  Branch:  %s\n", ctx.Branch))
+				}
+				if ctx.Intent != "" {
+					intent := ctx.Intent
+					if len(intent) > 50 {
+						intent = intent[:47] + "..."
+					}
+					output.WriteString(fmt.Sprintf("│  Intent:  %s\n", intent))
+				}
+			}
 		}
 
 		output.WriteString("└─\n\n")
