@@ -280,7 +280,7 @@ func deriveAgentStatus(lastSeenAt string, now time.Time) string {
 // - "@impl_api" → "impl_api" (agent name)
 // - "@reviewer" → "reviewer" (role or name)
 // - "agent:ops:abc123" → "ops" (legacy format extracts role)
-// - "ops" → "ops" (bare string passthrough)
+// - "ops" → "ops" (bare string passthrough).
 func parseMention(to string) string {
 	// Strip @ prefix
 	if strings.HasPrefix(to, "@") {

@@ -6,7 +6,7 @@ description:
 category: "reference"
 ---
 
-# MCP Server
+## MCP Server
 
 > **See also:** [Daemon Architecture](daemon.md) for the underlying daemon the
 > MCP server connects to, [Identity](identity.md) for agent identity resolution.
@@ -29,7 +29,7 @@ instantly when a message arrives.
 
 ## Architecture
 
-```
+````text
 Claude Code (Opus/Sonnet)
   |
   +-- long-lived child: thrum mcp serve (stdio JSON-RPC)
@@ -52,11 +52,11 @@ Claude Code (Opus/Sonnet)
   |
   +-- background sub-agent: message-listener (Haiku)
         +-- calls wait_for_message(timeout=300) -> blocks until message or timeout
-```
+```text
 
 ### Package Structure
 
-```
+```text
 internal/mcp/
   server.go    -- NewServer(), tool registration, Run(), InitWaiter()
   tools.go     -- send_message, check_messages, list_agents, broadcast_message handlers
@@ -64,7 +64,7 @@ internal/mcp/
   types.go     -- MCP-specific input/output structs
 
 cmd/thrum/mcp.go  -- thrum mcp serve cobra command
-```
+```go
 
 ### Startup Sequence
 
@@ -121,7 +121,7 @@ When Claude Code terminates the process (closes stdin) or a signal is received
 
 ```bash
 thrum mcp serve [--agent-id NAME]
-```
+```go
 
 **Prerequisites:**
 
@@ -150,7 +150,7 @@ Add to `.claude/settings.json` (project or user level):
     }
   }
 }
-```
+```go
 
 Once configured, Claude Code starts `thrum mcp serve` as a child process and
 exposes its tools as `mcp__thrum__<tool_name>`.
@@ -308,10 +308,10 @@ sending to `@everyone`.
 
 **Input:**
 
-| Parameter | Type   | Required | Description                        |
-| --------- | ------ | -------- | ---------------------------------- |
-| `content` | string | yes      | Message text to broadcast          |
-| `filter`  | object | no       | Optional recipient filters         |
+| Parameter | Type   | Required | Description                |
+| --------- | ------ | -------- | -------------------------- |
+| `content` | string | yes      | Message text to broadcast  |
+| `filter`  | object | no       | Optional recipient filters |
 
 **BroadcastFilter:**
 
@@ -516,9 +516,9 @@ On initialization, the waiter:
 
 ### Notification Flow
 
-```
+```text
 Daemon WebSocket -> readLoop -> queue ([]MessageNotification) -> waiterCh -> WaitForMessage
-```
+```text
 
 The `readLoop` goroutine:
 
@@ -561,18 +561,18 @@ Haiku sub-agent that blocks on `wait_for_message`. This is defined in
 
 When messages are received:
 
-```
+```text
 MESSAGES_RECEIVED
 FROM: [sender]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]
-```
+```text
 
 When timeout occurs:
 
-```
+```text
 NO_MESSAGES_TIMEOUT
-```
+```text
 
 **Cost:** Approximately $0.00003 per cycle (Haiku-class model).
 
@@ -588,37 +588,37 @@ The project `CLAUDE.md` includes instructions for agents to use MCP tools:
 
 **Core messaging:**
 
-```
+```text
 mcp__thrum__send_message(to="@reviewer", content="...")
 mcp__thrum__check_messages()
 mcp__thrum__list_agents()
 mcp__thrum__send_message(to="@everyone", content="...")  # preferred over broadcast_message
 mcp__thrum__wait_for_message(timeout=300)
-```
+```text
 
 **Group management:**
 
-```
+```text
 mcp__thrum__create_group(name="backend", description="Backend team")
 mcp__thrum__add_group_member(group="backend", member_type="role", member_value="implementer")
 mcp__thrum__list_groups()
 mcp__thrum__get_group(name="backend", expand=true)
 mcp__thrum__remove_group_member(group="backend", member_type="agent", member_value="alice")
 mcp__thrum__delete_group(name="backend")
-```
+```text
 
 ## Development
 
 ### Source Files
 
-| File                                 | Purpose                                                                |
-| ------------------------------------ | ---------------------------------------------------------------------- |
-| `internal/mcp/server.go`             | Server struct, NewServer(), Run(), InitWaiter(), tool registration     |
-| `internal/mcp/tools.go`              | Tool handlers, address parsing, status derivation                      |
-| `internal/mcp/waiter.go`             | WebSocket connection, readLoop, WaitForMessage, notification queue     |
-| `internal/mcp/types.go`              | Input/output structs for all 11 tools                                  |
-| `cmd/thrum/mcp.go`                   | Cobra command, daemon health check, waiter init, signal handling       |
-| `.claude/agents/message-listener.md` | Haiku sub-agent definition                                             |
+| File                                 | Purpose                                                            |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| `internal/mcp/server.go`             | Server struct, NewServer(), Run(), InitWaiter(), tool registration |
+| `internal/mcp/tools.go`              | Tool handlers, address parsing, status derivation                  |
+| `internal/mcp/waiter.go`             | WebSocket connection, readLoop, WaitForMessage, notification queue |
+| `internal/mcp/types.go`              | Input/output structs for all 11 tools                              |
+| `cmd/thrum/mcp.go`                   | Cobra command, daemon health check, waiter init, signal handling   |
+| `.claude/agents/message-listener.md` | Haiku sub-agent definition                                         |
 
 ### Testing
 
@@ -628,7 +628,7 @@ go test ./internal/mcp/...
 
 # With verbose output
 go test -v ./internal/mcp/...
-```
+```text
 
 Test coverage includes:
 
@@ -666,3 +666,4 @@ The MCP server logs warnings to stderr. Check for:
 - RPC API reference: `docs/rpc-api.md`
 - Identity system: `docs/identity.md`
 - Agent reference: `llms.txt`
+````

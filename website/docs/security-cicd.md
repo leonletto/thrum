@@ -9,7 +9,7 @@ tags: ["security", "ci", "cd", "github-actions", "workflows", "deployment"]
 last_updated: "2026-02-10"
 ---
 
-# Security & CI/CD
+## Security & CI/CD
 
 Thrum uses GitHub Actions for continuous integration, security scanning, and
 automated deployment. This guide covers the available workflows and how to

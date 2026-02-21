@@ -2,9 +2,9 @@ package mcp
 
 // SendMessageInput is the input for the send_message MCP tool.
 type SendMessageInput struct {
-	To      string            `json:"to" jsonschema:"Recipient: @role name or agent name"`
-	Content string            `json:"content" jsonschema:"Message text"`
-	ReplyTo string            `json:"reply_to,omitempty" jsonschema:"Message ID to reply to"`
+	To       string            `json:"to" jsonschema:"Recipient: @role name or agent name"`
+	Content  string            `json:"content" jsonschema:"Message text"`
+	ReplyTo  string            `json:"reply_to,omitempty" jsonschema:"Message ID to reply to"`
 	Metadata map[string]string `json:"metadata,omitempty" jsonschema:"Optional key-value metadata"`
 }
 

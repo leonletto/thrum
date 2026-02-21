@@ -420,4 +420,3 @@ func TestFormatPing(t *testing.T) {
 		})
 	}
 }
-

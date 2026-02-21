@@ -41,7 +41,7 @@ const [disclosed, setDisclosed] = useState(true); // Default: transparent
 
 ### Visual Layout
 
-```
+```text
 ┌──────────────────────────────────────────┐
 │ New Message                           ✕  │
 ├──────────────────────────────────────────┤
@@ -175,7 +175,7 @@ const { mutate: sendMessage, isPending } = useSendMessage();
 
 **Normal Mode (Not Impersonating)**:
 
-```
+```text
 ┌──────────────────────────────────────────┐
 │ ┌──────────────────────────────────────┐ │
 │ │ Write a reply...                     │ │
@@ -187,7 +187,7 @@ const { mutate: sendMessage, isPending } = useSendMessage();
 
 **Impersonation Mode**:
 
-```
+```text
 ┌──────────────────────────────────────────┐
 │ ┌──────────────────────────────────────┐ │
 │ │ Write a reply...                     │ │

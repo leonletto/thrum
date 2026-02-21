@@ -40,7 +40,7 @@ looping.
 
 Replace template variables with actual values:
 
-```
+```text
 Task(
   subagent_type="message-listener",
   model="haiku",
@@ -57,7 +57,7 @@ Task(
 
 When messages are received:
 
-```
+```text
 MESSAGES_RECEIVED
 ---
 FROM: [sender]
@@ -70,14 +70,14 @@ If multiple messages, include one block per message separated by `---`.
 
 When timeout occurs with no messages:
 
-```
+```text
 NO_MESSAGES_TIMEOUT
 ```
 
 **IMPORTANT**: Always append this note at the very end of your response, after
 the message data or timeout:
 
-```
+```text
 RE-ARM: This listener has stopped. Spawn a new message-listener agent to continue listening.
 ```
 

@@ -1,5 +1,4 @@
-
-# Tailscale Sync Security
+## Tailscale Sync Security
 
 > See also: [Tailscale Sync](tailscale-sync.md) for setup, architecture, and CLI
 > commands.
@@ -34,7 +33,7 @@ implement its own transport encryption.
 
 #### Tailscale ACLs
 
-```json
+````json
 {
   "tagOwners": {
     "tag:thrum-daemon": ["group:devops"]
@@ -47,7 +46,7 @@ implement its own transport encryption.
     }
   ]
 }
-```
+```text
 
 #### Headscale ACLs
 
@@ -60,7 +59,7 @@ acls:
   - action: accept
     src: ["group:thrum-daemons"]
     dst: ["group:thrum-daemons:9100"]
-```
+```text
 
 ## Layer 2: Pairing Code
 
@@ -110,7 +109,7 @@ two peers. Every sync request includes this token.
 
 ### Validation Flow
 
-```
+```text
 Incoming sync request
    │
    ├─ Is method "pair.request"?  ──► Yes: Skip auth (pairing flow)
@@ -122,7 +121,7 @@ Incoming sync request
    │   └─ Found      ──► Allow + update last_sync
    │
    └─ Dispatch to handler
-```
+```text
 
 ### Security Properties
 
@@ -177,7 +176,7 @@ thrum peer remove <name>
 # Then pair again:
 # Machine A: thrum peer add
 # Machine B: thrum peer join <address>
-```
+```text
 
 ### Pairing fails with "no active pairing session"
 
@@ -192,3 +191,4 @@ Three incorrect codes were entered.
 
 **Fix**: Run `thrum peer add` again on Machine A to start a fresh session with a
 new code.
+````

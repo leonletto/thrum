@@ -18,7 +18,7 @@ SessionStart and PreCompact).
 
 ### Messaging
 
-```
+```bash
 thrum send "msg" --to @name              Direct message
 thrum send "msg" --to @everyone          Broadcast to all agents
 thrum reply <msg-id> "response"          Reply (same audience)
@@ -30,7 +30,7 @@ thrum wait --timeout 120                 Custom timeout (seconds)
 
 ### Agents
 
-```
+```bash
 thrum quickstart --role R --module M --intent "..."   Register + start session
 thrum whoami                                          Show identity
 thrum status                                          Agent + daemon status
@@ -41,7 +41,7 @@ thrum who-has <file>                                  Who's editing a file
 
 ### Groups
 
-```
+```bash
 thrum group create <name>                Create group
 thrum group add <name> @agent            Add agent to group
 thrum group add <name> --role <role>     Add all agents with role
@@ -51,7 +51,7 @@ thrum send "msg" --to @group-name        Message a group
 
 ### Sessions & Context
 
-```
+```bash
 thrum session start                      Start session
 thrum session end                        End session
 thrum session set-intent "..."           Update work description
@@ -65,7 +65,7 @@ thrum overview                           Combined status + team + inbox
 
 ### Daemon & Sync
 
-```
+```bash
 thrum daemon start                       Start daemon
 thrum daemon stop                        Stop daemon
 thrum daemon status                      Daemon health
@@ -75,7 +75,7 @@ thrum sync status                        Sync state
 
 ### Utility
 
-```
+```bash
 thrum init                               Initialize thrum in repo
 thrum prime                              Full session context
 thrum prime --json                       Machine-readable output
@@ -106,7 +106,7 @@ When `thrum prime` detects a Claude Code session with an active identity, it
 outputs a ready-to-use listener spawn instruction. Launch it to monitor for
 messages in the background (~90 min coverage, 6 cycles × 15 min):
 
-```
+```text
 Task(subagent_type: "message-listener", model: "haiku", run_in_background: true)
 ```
 
@@ -124,15 +124,15 @@ Re-arm after processing. See
 
 ## Resources
 
-| Resource                                             | Content                                         |
-| ---------------------------------------------------- | ----------------------------------------------- |
-| [BOUNDARIES.md](resources/BOUNDARIES.md)             | Thrum vs TaskList/SendMessage decision guide    |
-| [MESSAGING.md](resources/MESSAGING.md)               | Protocol patterns, context management           |
-| [ANTI_PATTERNS.md](resources/ANTI_PATTERNS.md)       | Common mistakes and how to avoid them           |
-| [LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md) | Background message listener template            |
-| [CLI_REFERENCE.md](resources/CLI_REFERENCE.md)       | Complete command syntax reference               |
-| [GROUPS.md](resources/GROUPS.md)                     | Group management patterns                       |
-| [IDENTITY.md](resources/IDENTITY.md)                 | Agent identity and multi-worktree patterns      |
-| [WORKTREES.md](resources/WORKTREES.md)               | Multi-worktree coordination                     |
+| Resource                                             | Content                                      |
+| ---------------------------------------------------- | -------------------------------------------- |
+| [BOUNDARIES.md](resources/BOUNDARIES.md)             | Thrum vs TaskList/SendMessage decision guide |
+| [MESSAGING.md](resources/MESSAGING.md)               | Protocol patterns, context management        |
+| [ANTI_PATTERNS.md](resources/ANTI_PATTERNS.md)       | Common mistakes and how to avoid them        |
+| [LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md) | Background message listener template         |
+| [CLI_REFERENCE.md](resources/CLI_REFERENCE.md)       | Complete command syntax reference            |
+| [GROUPS.md](resources/GROUPS.md)                     | Group management patterns                    |
+| [IDENTITY.md](resources/IDENTITY.md)                 | Agent identity and multi-worktree patterns   |
+| [WORKTREES.md](resources/WORKTREES.md)               | Multi-worktree coordination                  |
 
 Run `thrum <command> --help` for any command's full usage.

@@ -6,7 +6,7 @@ description:
 category: "guides"
 ---
 
-# Technical Overview
+## Technical Overview
 
 > **New here?** Start with [Why Thrum Exists](philosophy.md) for the philosophy
 > behind the project, or the [Quickstart Guide](quickstart.md) to get running in
@@ -30,7 +30,7 @@ generate agent coordination instructions for your CLAUDE.md file. Running
 
 ## System Architecture
 
-```
+````go
                     ┌─────────────────────────────────────────────────────────┐
                     │                     Thrum Daemon                         │
                     │  (Background service managing coordination & sync)       │
@@ -70,7 +70,7 @@ generate agent coordination instructions for your CLAUDE.md file. Running
                                         │  (a-sync    │
                                         │   branch)   │
                                         └─────────────┘
-```
+```text
 
 ## The Daemon: Central Coordinator
 
@@ -90,7 +90,7 @@ server all go through it.
 
 ### Everything Depends on the Daemon
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                     CLIENTS (Depend on Daemon)               │
 ├─────────────────────────────────────────────────────────────┤
@@ -110,7 +110,7 @@ server all go through it.
     │                    DAEMON                        │
     │  (Single source of truth for all clients)        │
     └─────────────────────────────────────────────────┘
-```
+```text
 
 **CLI** (`thrum` command): Sends messages, checks inbox, manages sessions. All
 commands go through the daemon via Unix socket.
@@ -135,7 +135,7 @@ core messaging tools (`send_message`, `check_messages`, `wait_for_message`,
 Messages are stored in append-only JSONL logs on a dedicated `a-sync` orphan
 branch, accessed via a sync worktree at `.git/thrum-sync/a-sync/`:
 
-```
+```go
 .git/thrum-sync/a-sync/   ← Sync worktree on a-sync branch
 ├── events.jsonl          ← Agent lifecycle events
 └── messages/
@@ -154,7 +154,7 @@ branch, accessed via a sync worktree at `.git/thrum-sync/a-sync/`:
 ├── context/              ← Per-agent context storage
 │   └── {agent_name}.md
 └── redirect              ← (feature worktrees only) points to main .thrum/
-```
+```text
 
 Messages survive:
 
@@ -169,7 +169,7 @@ The daemon automatically syncs messages via the sync worktree at
 `.git/thrum-sync/a-sync/`, checked out on the `a-sync` orphan branch. No branch
 switching is needed -- all git operations happen within the worktree:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │          Sync Loop (60s) in .git/thrum-sync/a-sync/          │
 ├─────────────────────────────────────────────────────────────┤
@@ -181,7 +181,7 @@ switching is needed -- all git operations happen within the worktree:
 │  6. Commit & push local changes in worktree                  │
 │  7. Release lock                                             │
 └─────────────────────────────────────────────────────────────┘
-```
+```text
 
 **Why Git?**
 
@@ -196,7 +196,7 @@ Agents register with a human-readable name, role, and module:
 
 ```bash
 thrum agent register --name furiosa --role=implementer --module=auth
-```
+```go
 
 Agent names follow the pattern `[a-z0-9_]+` (lowercase alphanumeric and
 underscores). Reserved names: `daemon`, `system`, `thrum`, `all`, `broadcast`.
@@ -213,7 +213,7 @@ Sessions track active work periods:
 thrum session start   # Begin working
 # ... do work ...
 thrum session end     # Finish
-```
+```text
 
 Agents can be deleted and orphaned agents cleaned up:
 
@@ -221,7 +221,7 @@ Agents can be deleted and orphaned agents cleaned up:
 thrum agent delete furiosa           # Delete a specific agent
 thrum agent cleanup --dry-run        # Preview orphaned agents
 thrum agent cleanup --force          # Delete all orphaned agents
-```
+```text
 
 This enables:
 
@@ -241,7 +241,7 @@ thrum subscribe --scope module:auth
 
 # Subscribe to @mentions
 thrum subscribe --mention @reviewer
-```
+```text
 
 When matching messages arrive, subscribers receive real-time notifications:
 
@@ -256,7 +256,7 @@ When matching messages arrive, subscribers receive real-time notifications:
     }
   }
 }
-```
+```text
 
 ### 5. Live Git State Tracking (Epic 21)
 
@@ -267,7 +267,7 @@ The daemon tracks what each agent is working on in real-time:
 session_id        | agent_id        | branch      | unmerged_commits | uncommitted_files
 ses_01HXE...      | furiosa         | feature/auth| 3                | ["src/auth.go"]
 ses_02HXF...      | maximus         | feature/db  | 1                | []
-```
+```text
 
 **What it tracks:**
 
@@ -317,7 +317,7 @@ Full message lifecycle management beyond send/receive:
 thrum message get MSG_ID        # Retrieve a message with full details
 thrum message edit MSG_ID TEXT   # Edit your own messages (full replacement)
 thrum message delete MSG_ID     # Delete a message (requires --force)
-```
+```text
 
 Messages are automatically marked as read when viewed via `thrum inbox` or
 `thrum message get`. Explicit mark-read is also available via the
@@ -330,7 +330,7 @@ Lightweight commands for checking team activity:
 ```bash
 thrum who-has auth.go           # Which agents are editing a file?
 thrum ping @reviewer            # Is an agent online? Show last-seen time
-```
+```text
 
 These query agent work contexts to provide quick answers without full status
 output.
@@ -350,7 +350,7 @@ thrum context show
 
 # Share context across worktrees (manual sync)
 thrum context sync
-```
+```text
 
 Context files are stored at `.thrum/context/{agent-name}.md` and integrated into
 `thrum status` output. Use the `/update-context` skill in Claude Code for guided
@@ -427,7 +427,7 @@ users:
 
 Thrum uses event sourcing with CQRS:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    Event Sourcing + CQRS                     │
 ├─────────────────────────────────────────────────────────────┤
@@ -446,7 +446,7 @@ Thrum uses event sourcing with CQRS:
          │                              │
          ▼                              ▼
     Sync via worktree           Local CLI/UI queries
-```
+```go
 
 **Benefits:**
 
@@ -514,7 +514,7 @@ Configure in Claude Code's `.claude/settings.json`:
     }
   }
 }
-```
+```text
 
 Use `--agent-id NAME` to override the agent identity, or set `THRUM_NAME` env
 var. The MCP server connects to the daemon via Unix socket for RPC and WebSocket
@@ -540,7 +540,7 @@ thrum send "Starting work on feature X" --scope module:feature
 
 # 5. Subscribe to your module
 thrum subscribe --scope module:feature
-```
+```text
 
 ### Check What Other Agents Are Working On
 
@@ -552,14 +552,14 @@ thrum agent list --context
 # AGENT      BRANCH         UNMERGED  FILES
 # furiosa    feature/auth   3         src/auth.go, src/auth_test.go
 # maximus    feature/db     1         internal/db/schema.go
-```
+```text
 
 ### Monitor Messages in Real-Time
 
 ```bash
 # Wait for relevant messages
 thrum wait --scope module:feature --timeout 5m
-```
+```text
 
 ## Documentation Index
 
@@ -630,3 +630,4 @@ Thrum's daemon is the foundation that enables:
 The CLI, Web UI, and MCP server are all thin clients that communicate through
 the daemon. This architecture ensures consistency, enables real-time updates,
 and provides a single point for synchronization and coordination.
+````

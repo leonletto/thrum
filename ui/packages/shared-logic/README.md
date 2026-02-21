@@ -5,7 +5,7 @@ applications.
 
 ## Package Structure
 
-```
+```text
 shared-logic/
 ├── src/
 │   ├── api/           # WebSocket client, RPC calls

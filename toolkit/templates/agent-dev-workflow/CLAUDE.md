@@ -6,7 +6,7 @@ These templates encode a three-phase workflow for planning and executing feature
 work with AI agents. The process uses **beads** for issue tracking and **git
 worktrees** for isolated development.
 
-```
+```text
 1. PLAN          2. PREPARE          3. IMPLEMENT
 ─────────────    ──────────────      ─────────────────────
 Brainstorm       Select/create       Orient from beads

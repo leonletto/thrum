@@ -6,7 +6,7 @@ description:
 category: "guides"
 ---
 
-# Thrum Messaging System
+## Thrum Messaging System
 
 ## Overview
 
@@ -42,9 +42,9 @@ replying to, and managing messages.
 
 ### Basic Send
 
-```bash
+````bash
 thrum send "Test suite is green, ready for review"
-```
+```go
 
 The daemon resolves the current agent identity and session automatically. The
 message is written as a `message.create` event to the agent's sharded JSONL log
@@ -78,7 +78,7 @@ thrum send "Deploy complete" --to @everyone
 
 # Send to a custom group
 thrum send "Backend review needed" --to @backend
-```
+```go
 
 The `@` prefix is optional -- `--to reviewer` and `--to @reviewer` both work.
 
@@ -90,13 +90,13 @@ as the value:
 
 ```json
 { "type": "mention", "value": "reviewer" }
-```
+```text
 
 Agents can then filter their inbox to only messages that mention them:
 
 ```bash
 thrum inbox --mentions
-```
+```text
 
 This queries for messages where a `mention` ref matches the current agent's
 role.
@@ -106,12 +106,12 @@ role.
 Thrum routes `@mentions` differently depending on whether the target is a name
 or a role:
 
-| Target        | Routing behaviour                                                                 |
-| ------------- | --------------------------------------------------------------------------------- |
-| `@furiosa`    | Routes directly to agent named `furiosa`                                         |
-| `@reviewer`   | Routes via the auto-created `reviewer` role group (all agents with role reviewer) |
-| `@everyone`   | Broadcasts to all agents                                                          |
-| `@mygroup`    | Routes to the named custom group                                                  |
+| Target      | Routing behaviour                                                                 |
+| ----------- | --------------------------------------------------------------------------------- |
+| `@furiosa`  | Routes directly to agent named `furiosa`                                          |
+| `@reviewer` | Routes via the auto-created `reviewer` role group (all agents with role reviewer) |
+| `@everyone` | Broadcasts to all agents                                                          |
+| `@mygroup`  | Routes to the named custom group                                                  |
 
 **Important:** Sending to an unknown name/group that doesn't exist is a **hard
 error** — the message is rejected and not stored. Unknown recipients must be
@@ -135,7 +135,7 @@ thrum inbox --mentions
 
 # Reviewer replies to the message
 thrum reply msg_01HXE... "Looks good, merging now"
-```
+```text
 
 ## Replying to Messages
 
@@ -144,7 +144,7 @@ original:
 
 ```bash
 thrum reply MSG_ID "Your reply text"
-```
+```text
 
 **What happens internally:**
 
@@ -166,14 +166,14 @@ thrum reply msg_01HXE... "Good idea, let's do that"
 
 # Reply with plain text format
 thrum reply msg_01HXF... "Acknowledged" --format plain
-```
+```text
 
 **Output:**
 
-```
+```text
 > Reply sent: msg_01HXG...
   In reply to: msg_01HXE...
-```
+```text
 
 ## Inbox
 
@@ -182,7 +182,7 @@ and pagination.
 
 ```bash
 thrum inbox
-```
+```text
 
 ### Flags
 
@@ -204,11 +204,11 @@ Each message in the inbox shows a read-state indicator:
 
 The header line for each message follows this format:
 
-```
+```text
 │ ● msg_01HXE...  @implementer  5m ago                     │
 │ ○ msg_01HXF...  @reviewer     1h ago  (edited)           │
 │ ↳ msg_01HXG...  @implementer  10m ago                    │
-```
+```text
 
 Messages that have been edited show an `(edited)` tag in the header. Replies are
 displayed with a `↳` prefix and grouped with the original message.
@@ -222,9 +222,9 @@ not clear them before you act on them.
 
 The footer shows pagination and unread count:
 
-```
+```text
 Showing 1-10 of 23 messages (3 unread)
-```
+```text
 
 ### Empty States
 
@@ -239,7 +239,7 @@ thrum inbox
 thrum inbox --scope module:auth
 # Output: No messages matching filter --scope module:auth
 #         Showing 0 of 15 total messages (filter: scope=module:auth)
-```
+```text
 
 ## Message Operations
 
@@ -250,11 +250,11 @@ refs, edit and delete status.
 
 ```bash
 thrum message get msg_01HXE...
-```
+```text
 
 **Output:**
 
-```
+```yaml
 Message: msg_01HXE...
   From:    @implementer
   Time:    5m ago
@@ -263,7 +263,7 @@ Message: msg_01HXE...
   Edited:  2m ago
 
 Auth module complete, all tests passing
-```
+```text
 
 The `get` command automatically marks the message as read.
 
@@ -274,13 +274,13 @@ Replace a message's content entirely. Only the original author (matching
 
 ```bash
 thrum message edit msg_01HXE... "Updated: auth module complete with rate limiting"
-```
+```text
 
 **Output:**
 
-```
+```text
 > Message edited: msg_01HXE... (version 2)
-```
+```text
 
 Each edit is recorded in the `message_edits` table with before/after content,
 the editor's session, and a timestamp. The version number reflects the total
@@ -293,13 +293,13 @@ Soft-delete a message. Requires the `--force` flag as a safety confirmation.
 
 ```bash
 thrum message delete msg_01HXE... --force
-```
+```text
 
 **Output:**
 
-```
+```text
 > Message deleted: msg_01HXE...
-```
+```text
 
 Deleted messages:
 
@@ -320,13 +320,13 @@ mark-as-read was skipped or when processing messages programmatically. Use
 thrum message read msg_01HXE...
 thrum message read msg_01 msg_02 msg_03
 thrum message read --all
-```
+```text
 
 **Output:**
 
-```
+```text
 > Marked 3 messages as read
-```
+```text
 
 Read state is tracked per session and per agent in the `message_reads` table. A
 message is considered "read" if any session or agent matching the current
@@ -370,7 +370,7 @@ Every message has these core fields:
   "updated_at": "2026-02-03T11:00:00Z",
   "deleted": false
 }
-```
+```text
 
 ### Body Formats
 
@@ -381,21 +381,21 @@ status updates:
 
 ```json
 { "format": "markdown", "content": "# Heading\n\nWith **formatting**" }
-```
+```text
 
 **Plain text** -- best for log messages, simple status, and system
 notifications:
 
 ```json
 { "format": "plain", "content": "Simple unformatted text" }
-```
+```go
 
 **JSON** -- best for machine-readable data, API responses, and structured
 status:
 
 ```json
 { "format": "json", "content": "{\"type\":\"status\",\"value\":\"complete\"}" }
-```
+```go
 
 ### Structured Data
 
@@ -405,7 +405,7 @@ the `--structured` flag:
 ```bash
 thrum send "Test results for feature X" \
   --structured '{"type":"test_result","passed":45,"failed":2,"coverage":85.9}'
-```
+```go
 
 The `structured` field allows agents to parse machine-readable payloads, build
 dashboards, trigger automated workflows, and index by structured fields.
@@ -419,7 +419,7 @@ message about?"
 
 ```json
 { "type": "scope_type", "value": "scope_value" }
-```
+```text
 
 ### Common Scope Types
 
@@ -441,14 +441,14 @@ thrum send "Fixed authentication bug" \
   --scope repo:github.com/user/repo \
   --scope file:src/auth.go \
   --scope feature:user-authentication
-```
+```text
 
 ### Filtering by Scope
 
 ```bash
 thrum inbox --scope file:src/main.go
 thrum inbox --scope module:auth
-```
+```go
 
 ## References (Refs)
 
@@ -459,7 +459,7 @@ message reference?"
 
 ```json
 { "type": "ref_type", "value": "ref_value" }
-```
+```text
 
 ### Common Ref Types
 
@@ -480,7 +480,7 @@ thrum send "Implemented feature from design doc, closes issue" \
   --ref issue:beads-123 \
   --ref commit:abc123def \
   --ref url:https://docs.example.com/design
-```
+```text
 
 ## Groups
 
@@ -495,7 +495,7 @@ are implicit members. This group cannot be deleted.
 ```bash
 # Send to all agents
 thrum send "Deploy complete" --to @everyone
-```
+```text
 
 ### Creating Custom Groups
 
@@ -509,7 +509,7 @@ thrum group add reviewers --role reviewer
 
 # Send to the group
 thrum send "PR ready for review" --to @reviewers
-```
+```text
 
 ### Group Operations
 
@@ -540,7 +540,7 @@ Both `--broadcast` and `--to @everyone` send to all agents:
 thrum send "Deploy complete" --broadcast
 thrum send "Deploy complete" --to @everyone
 thrum send "Deploy complete" --everyone
-```
+```go
 
 ## Global Flags
 
@@ -592,7 +592,7 @@ CREATE TABLE messages (
   body_content TEXT NOT NULL,
   body_structured TEXT
 )
-```
+```text
 
 #### message_scopes
 
@@ -603,7 +603,7 @@ CREATE TABLE message_scopes (
   scope_value TEXT NOT NULL,
   PRIMARY KEY (message_id, scope_type, scope_value)
 )
-```
+```text
 
 #### message_refs
 
@@ -614,7 +614,7 @@ CREATE TABLE message_refs (
   ref_value TEXT NOT NULL,
   PRIMARY KEY (message_id, ref_type, ref_value)
 )
-```
+```text
 
 #### message_edits
 
@@ -629,7 +629,7 @@ CREATE TABLE message_edits (
   old_structured TEXT,
   new_structured TEXT
 )
-```
+```text
 
 Each row represents one edit operation with before/after values for both content
 and structured data.
@@ -645,7 +645,7 @@ CREATE TABLE message_reads (
   PRIMARY KEY (message_id, session_id),
   FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
 )
-```
+```text
 
 Read state is tracked per message per session. A message is considered read for
 an agent if any matching `session_id` or `agent_id` has a record. This means
@@ -672,13 +672,13 @@ organized into two categories:
 
 **Core messaging (5 tools):**
 
-| MCP Tool            | Description                                                                     |
-| ------------------- | ------------------------------------------------------------------------------- |
-| `send_message`      | Send a message to `@role` or agent name                                         |
-| `check_messages`    | Poll for unread messages mentioning this agent, auto-marks read                 |
-| `wait_for_message`  | Block until a message arrives via WebSocket push or timeout (max 600s)                             |
-| `list_agents`       | List registered agents with active/offline status                                                  |
-| `broadcast_message` | Send to all agents (convenience wrapper around `send_message` with `to=@everyone`)                 |
+| MCP Tool            | Description                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| `send_message`      | Send a message to `@role` or agent name                                            |
+| `check_messages`    | Poll for unread messages mentioning this agent, auto-marks read                    |
+| `wait_for_message`  | Block until a message arrives via WebSocket push or timeout (max 600s)             |
+| `list_agents`       | List registered agents with active/offline status                                  |
+| `broadcast_message` | Send to all agents (convenience wrapper around `send_message` with `to=@everyone`) |
 
 **Group management (6 tools):**
 
@@ -716,3 +716,4 @@ shard.
 - RPC API Reference: `docs/rpc-api.md`
 - Daemon Architecture: `docs/daemon.md`
 - Development Guide: `docs/development.md`
+````

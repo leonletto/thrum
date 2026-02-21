@@ -58,7 +58,7 @@ const isImpersonating = currentUser
 
 When impersonating, a yellow warning appears in the inbox header:
 
-```
+```text
 ┌────────────────────────────────────────┐
 │ 📥 agent:claude-daemon    [Compose]    │
 │ ⚠️  Sending as agent:claude-daemon     │
@@ -82,7 +82,7 @@ When impersonating, a yellow warning appears in the inbox header:
 
 Both InlineReply and ComposeModal show a disclosure checkbox when impersonating:
 
-```
+```text
 ☑ Show "via user:leon"
 ```
 
@@ -98,7 +98,7 @@ Both InlineReply and ComposeModal show a disclosure checkbox when impersonating:
 
 When `disclosed: true`, messages show a `[via user:X]` badge:
 
-```
+```text
 ┌────────────────────────────────────────┐
 │ agent:cli [via user:leon] • 2m ago     │
 │ Running tests now...                   │
@@ -109,7 +109,7 @@ When `disclosed: true`, messages show a `[via user:X]` badge:
 
 When `disclosed: false`, messages appear to come directly from the agent:
 
-```
+```text
 ┌────────────────────────────────────────┐
 │ agent:cli • 2m ago                     │
 │ Running tests now...                   │
@@ -449,7 +449,7 @@ interface ImpersonationConfig {
 
 Show history of impersonated actions:
 
-```
+```text
 ┌──────────────────────────────────────────┐
 │ Impersonation History                    │
 ├──────────────────────────────────────────┤
@@ -462,7 +462,7 @@ Show history of impersonated actions:
 
 Interface for configuring who can impersonate:
 
-```
+```text
 ┌──────────────────────────────────────────┐
 │ Impersonation Permissions                │
 ├──────────────────────────────────────────┤
@@ -477,7 +477,7 @@ Interface for configuring who can impersonate:
 
 Alert recipients when receiving impersonated message:
 
-```
+```text
 🔔 New message from agent:cli (via user:leon)
 ```
 

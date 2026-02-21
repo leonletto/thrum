@@ -5,7 +5,7 @@ flag descriptions.
 
 ## Global Flags
 
-```
+```bash
 --json            JSON output for scripting
 --quiet           Suppress non-essential output
 --verbose         Debug output
@@ -16,7 +16,7 @@ flag descriptions.
 
 ## Messaging
 
-```
+```bash
 thrum send <message> --to @name
 thrum send <message> --to @everyone            # Broadcast to all agents
 thrum send <message> --everyone                # Alias for --to @everyone
@@ -32,7 +32,7 @@ thrum wait [--timeout <duration>] [--after <duration>] [--mention <role>] [--sco
 
 ## Agent Management
 
-```
+```bash
 thrum quickstart --role <role> --module <module> --intent "<text>"
 thrum agent register [--role <role>] [--module <module>]
 thrum agent list [--json]
@@ -44,7 +44,7 @@ thrum team [--json]
 
 ## Sessions
 
-```
+```bash
 thrum session start
 thrum session end
 thrum session heartbeat
@@ -53,7 +53,7 @@ thrum session set-intent "<text>"
 
 ## Groups
 
-```
+```bash
 thrum group create <name> [--description "<text>"]
 thrum group delete <name>
 thrum group add <group> @agent                 # Add agent
@@ -67,7 +67,7 @@ thrum group members <name> [--expand] [--json]
 
 ## Coordination
 
-```
+```bash
 thrum who-has <file>
 thrum ping @name
 thrum overview [--json]
@@ -75,7 +75,7 @@ thrum overview [--json]
 
 ## Context
 
-```
+```bash
 thrum prime [--json]
 thrum context prime [--json]                   # Alias for thrum prime
 thrum context save [--file <path>] [--agent <name>]
@@ -85,7 +85,7 @@ thrum context clear [--agent <name>]
 
 ## Daemon
 
-```
+```bash
 thrum daemon start [--foreground]
 thrum daemon stop
 thrum daemon status [--json]
@@ -94,20 +94,20 @@ thrum init [--stealth] [--force] [--repo <path>]
 
 ## Sync
 
-```
+```bash
 thrum sync force
 thrum sync status [--json]
 ```
 
 ## MCP Server
 
-```
+```bash
 thrum mcp serve                                # Start MCP stdio server
 ```
 
 ## Runtime
 
-```
+```bash
 thrum runtime list [--json]
 thrum runtime show <name> [--json]
 ```

@@ -234,8 +234,8 @@ func TestSendMessageAndCheckMessages(t *testing.T) {
 	// Send a message to receiver (by agent name, not role)
 	ctx := context.Background()
 	input := SendMessageInput{
-		To:       "@receiver",
-		Content:  "hello from integration test",
+		To:      "@receiver",
+		Content: "hello from integration test",
 	}
 
 	_, output, err := mcpServer.handleSendMessage(ctx, nil, input)
@@ -301,8 +301,8 @@ func TestCheckMessagesMarksAsRead(t *testing.T) {
 	}
 
 	_, _, err = mcpSender.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@receiver",
-		Content:  "test message",
+		To:      "@receiver",
+		Content: "test message",
 	})
 	if err != nil {
 		t.Fatalf("handleSendMessage failed: %v", err)
@@ -414,7 +414,7 @@ func TestBroadcastMessage(t *testing.T) {
 	}
 
 	_, _, err = mcpAlice.handleBroadcast(ctx, nil, BroadcastInput{
-		Content:  "broadcast from alice",
+		Content: "broadcast from alice",
 	})
 	if err != nil {
 		t.Fatalf("handleBroadcast failed: %v", err)
@@ -488,8 +488,8 @@ func TestMCPServerStartupFailsWithoutDaemon(t *testing.T) {
 	// Try to send a message - this should fail because daemon is not running
 	ctx := context.Background()
 	_, _, err = mcpServer.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@someone",
-		Content:  "test",
+		To:      "@someone",
+		Content: "test",
 	})
 
 	if err == nil {
@@ -587,8 +587,8 @@ func TestWaitForMessageReceivesMessage(t *testing.T) {
 	}
 
 	_, _, err = mcpSender.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@waiter",
-		Content:  "wake up!",
+		To:      "@waiter",
+		Content: "wake up!",
 	})
 	if err != nil {
 		t.Fatalf("handleSendMessage failed: %v", err)

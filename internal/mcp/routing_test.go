@@ -216,8 +216,8 @@ func TestMCPRoutingParity(t *testing.T) {
 	// Message 1: role-based mention — to @implementer.
 	// This should reach impl_api (ForAgentRole="implementer") but NOT coordinator.
 	_, out1, err := senderMCP.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@implementer",
-		Content:  "role-directed: hello implementer role",
+		To:      "@implementer",
+		Content: "role-directed: hello implementer role",
 	})
 	if err != nil {
 		t.Fatalf("send @implementer message: %v", err)
@@ -229,8 +229,8 @@ func TestMCPRoutingParity(t *testing.T) {
 	// Message 2: name-based mention — to @impl_api.
 	// This should reach impl_api (ForAgent="impl_api") but NOT coordinator.
 	_, out2, err := senderMCP.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@impl_api",
-		Content:  "name-directed: hello impl_api",
+		To:      "@impl_api",
+		Content: "name-directed: hello impl_api",
 	})
 	if err != nil {
 		t.Fatalf("send @impl_api message: %v", err)
@@ -242,8 +242,8 @@ func TestMCPRoutingParity(t *testing.T) {
 	// Message 3: broadcast via @everyone group.
 	// This should reach BOTH impl_api and coordinator.
 	_, out3, err := senderMCP.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@everyone",
-		Content:  "broadcast: hello everyone",
+		To:      "@everyone",
+		Content: "broadcast: hello everyone",
 	})
 	if err != nil {
 		t.Fatalf("send @everyone message: %v", err)

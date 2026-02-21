@@ -6,7 +6,7 @@ description:
 category: "guides"
 ---
 
-# Claude Code Agent Integration
+## Claude Code Agent Integration
 
 Thrum ships two Claude Code agent definitions for multi-agent coordination.
 Place these in `.claude/agents/` in any project that uses Thrum.

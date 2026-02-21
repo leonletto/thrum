@@ -1,5 +1,4 @@
-
-# Thrum Development Guide
+## Thrum Development Guide
 
 This guide explains how to set up and work with the Thrum codebase.
 
@@ -14,7 +13,7 @@ This guide explains how to set up and work with the Thrum codebase.
 
 ## Quick Start
 
-```bash
+````bash
 # Clone repository
 git clone <repo-url>
 cd thrum
@@ -32,11 +31,11 @@ make install
 # Start daemon and verify
 thrum daemon start
 thrum daemon status
-```
+```text
 
 ## Project Structure
 
-```
+```text
 thrum/
 ├── cmd/
 │   └── thrum/               # CLI entry point
@@ -94,7 +93,7 @@ thrum/
 ├── go.mod                   # Go module (github.com/leonletto/thrum)
 ├── playwright.config.ts     # Playwright E2E configuration
 └── llms.txt / llms-full.txt # Agent reference files
-```
+```text
 
 ## Development Workflow
 
@@ -123,7 +122,7 @@ go test -race ./...
 
 # Run resilience tests (requires build tag)
 go test -tags=resilience ./internal/daemon/...
-```
+```text
 
 **Resilience Test Suite (v0.4.3):**
 
@@ -139,7 +138,7 @@ Run the full resilience suite:
 
 ```bash
 go test -tags=resilience -v ./internal/daemon/resilience_test.go
-```
+```text
 
 #### UI Tests
 
@@ -158,7 +157,7 @@ cd ui/packages/web-app && pnpm test:watch
 
 # Coverage report
 cd ui/packages/web-app && pnpm test:coverage
-```
+```text
 
 #### E2E Tests (Playwright)
 
@@ -179,7 +178,7 @@ npx playwright test tests/e2e/messaging.spec.ts --workers=1
 
 # View HTML report
 npx playwright show-report
-```
+```text
 
 The E2E test suite uses `global-setup.ts` to start the daemon and register a
 test agent, and `global-teardown.ts` to stop the daemon after all tests
@@ -191,7 +190,7 @@ complete.
 # Generate Go coverage report
 make test-coverage
 # Report output: output/coverage.html
-```
+```text
 
 ### 3. Linting
 
@@ -210,7 +209,7 @@ make lint-md-fix
 
 # Run all linters (Go + Markdown)
 make lint-all
-```
+```text
 
 ### 4. Formatting
 
@@ -223,7 +222,7 @@ make fmt-md
 
 # Format all files (Go + Markdown)
 make fmt-all
-```
+```text
 
 ### 5. Building
 
@@ -243,7 +242,7 @@ make install
 
 # Run built binary
 ./bin/thrum
-```
+```go
 
 The build embeds the React SPA into the Go binary via `//go:embed` in
 `internal/web/embed.go`. The `make build-ui` step copies the Vite build output
@@ -323,7 +322,7 @@ func (p *Projector) applyMyNew(data json.RawMessage) error {
 // 3. Update switch in Apply()
 case "my.new":
     return p.applyMyNew(event)
-```
+```go
 
 ### Modifying Database Schema
 
@@ -349,7 +348,7 @@ func TestMyFeature(t *testing.T) {
     // Test your feature
     // ...
 }
-```
+```go
 
 ### Adding a New RPC Method
 
@@ -386,7 +385,7 @@ func (h *MyMethodHandler) Handle(ctx context.Context, params json.RawMessage) (a
 
     return result, nil
 }
-```
+```text
 
 2. Add tests in `internal/daemon/rpc/mymethod_test.go`
 
@@ -395,7 +394,7 @@ func (h *MyMethodHandler) Handle(ctx context.Context, params json.RawMessage) (a
 ```go
 myMethodHandler := rpc.NewMyMethodHandler()
 server.RegisterHandler("mymethod", myMethodHandler.Handle)
-```
+```go
 
 4. Update documentation in `docs/rpc-api.md`
 
@@ -417,7 +416,7 @@ export THRUM_NAME=furiosa
 export THRUM_ROLE=implementer
 export THRUM_MODULE=auth
 export THRUM_DISPLAY="Auth Agent"
-```
+```text
 
 Identity files are stored per-agent at `.thrum/identities/{name}.json` and
 contain repo ID, agent config, worktree name, and metadata.
@@ -426,7 +425,7 @@ contain repo ID, agent config, worktree name, and metadata.
 
 Thrum uses a split storage model:
 
-```
+```go
 .git/thrum-sync/a-sync/              # Sync worktree (a-sync orphan branch)
 ├── events.jsonl                     # Agent lifecycle events (register, session, update)
 └── messages/                        # Per-agent message files (sharded)
@@ -442,7 +441,7 @@ Thrum uses a split storage model:
 ├── identities/                      # Per-agent identity files
 │   └── {name}.json                  # Agent identity (repo_id, role, module, etc.)
 └── redirect                         # Points to main worktree .thrum/ (feature worktrees only)
-```
+```text
 
 ### Inspecting JSONL Files
 
@@ -458,7 +457,7 @@ cat .git/thrum-sync/a-sync/events.jsonl | jq 'select(.type == "agent.register")'
 
 # Count events
 wc -l .git/thrum-sync/a-sync/events.jsonl
-```
+```go
 
 ### Inspecting the SQLite Database
 
@@ -474,7 +473,7 @@ SELECT * FROM messages LIMIT 10;
 
 # Check schema version
 SELECT * FROM schema_version;
-```
+```text
 
 ## Daemon Development
 
@@ -526,7 +525,7 @@ thrum daemon stop
 
 # Auto-start (happens automatically via any CLI command)
 thrum send "Hello" --to @coordinator
-```
+```text
 
 ### Testing Daemon Code
 
@@ -542,7 +541,7 @@ go test ./internal/daemon/rpc/... -v
 
 # State tests
 go test ./internal/daemon/state/... -v
-```
+```text
 
 Use the `StartTestDaemon()` helper in `internal/daemon/testutil_test.go` for
 integration tests. It provides automatic `t.Cleanup()` with force-kill to
@@ -561,14 +560,14 @@ ps aux | grep thrum
 
 # Check socket
 ls -l .thrum/var/thrum.sock
-```
+```go
 
 **Test RPC calls manually:**
 
 ```bash
 # Using netcat
 echo '{"jsonrpc":"2.0","method":"health","id":1}' | nc -U .thrum/var/thrum.sock
-```
+```text
 
 **View daemon logs:**
 
@@ -576,7 +575,7 @@ echo '{"jsonrpc":"2.0","method":"health","id":1}' | nc -U .thrum/var/thrum.sock
 # Run daemon in foreground for debugging
 thrum daemon start --foreground
 # Logs appear in stdout/stderr
-```
+```text
 
 **Clean restart:**
 
@@ -590,7 +589,7 @@ rm .thrum/var/thrum.pid
 
 # Restart
 thrum daemon start
-```
+```go
 
 ### Common Daemon Issues
 
@@ -657,7 +656,7 @@ thrum mcp serve
 
 # Override agent identity
 thrum mcp serve --agent-id furiosa
-```
+```text
 
 ## Sync Engine
 
@@ -698,7 +697,7 @@ thrum setup /path/to/worktree
 # Option 3: Manual setup
 mkdir -p /path/to/worktree/.thrum/identities
 echo "/path/to/main/repo/.thrum" > /path/to/worktree/.thrum/redirect
-```
+```text
 
 ### Beads Issue Tracking for Worktrees
 
@@ -714,7 +713,7 @@ echo "/path/to/main/repo/.beads" > /path/to/worktree/.beads/redirect
 
 # Verify
 cd /path/to/worktree && bd where
-```
+```go
 
 ## Testing Best Practices
 
@@ -738,7 +737,7 @@ for _, tt := range tests {
         }
     })
 }
-```
+```text
 
 ### 2. Clean Up Resources
 
@@ -749,7 +748,7 @@ tmpDir := t.TempDir()
 // Or defer cleanup
 db, _ := schema.OpenDB(dbPath)
 defer db.Close()
-```
+```text
 
 ### 3. Test Error Cases
 
@@ -759,7 +758,7 @@ _, err := MyFunction(invalidInput)
 if err == nil {
     t.Error("expected error, got nil")
 }
-```
+```text
 
 ### 4. Use StartTestDaemon for Integration Tests
 
@@ -767,7 +766,7 @@ if err == nil {
 // Automatically cleans up on test completion (even on panic/timeout)
 daemon := StartTestDaemon(t, tmpDir)
 defer daemon.Stop()
-```
+```text
 
 ## Code Style
 
@@ -795,7 +794,7 @@ git push origin feature/my-feature
 
 # Create PR
 gh pr create
-```
+```text
 
 ## Troubleshooting
 
@@ -808,7 +807,7 @@ the daemon to rebuild from JSONL:
 rm .thrum/var/messages.db
 thrum daemon stop
 thrum daemon start
-```
+```text
 
 ### "cannot open file" error
 
@@ -817,7 +816,7 @@ Check file permissions and directory existence:
 ```bash
 ls -la .thrum/
 ls -la .thrum/var/
-```
+```text
 
 ### Tests fail with "database is locked"
 
@@ -826,7 +825,7 @@ Close any open SQLite connections or delete WAL files:
 ```bash
 rm .thrum/var/*.db-wal
 rm .thrum/var/*.db-shm
-```
+```text
 
 ### Daemon won't start (duplicate detection)
 
@@ -838,7 +837,7 @@ cat .thrum/var/thrum.pid | jq .
 # If the process is dead, remove the PID file
 rm .thrum/var/thrum.pid
 thrum daemon start
-```
+```text
 
 ### `go build` fails with embed error
 
@@ -847,7 +846,7 @@ file:
 
 ```bash
 touch internal/web/dist/.gitkeep
-```
+```text
 
 Or build the UI first: `make build-ui`
 
@@ -873,3 +872,4 @@ Or build the UI first: `make build-ui`
 - **Workflow Templates**: `docs/workflow-templates.md` (structured feature
   development with AI agents)
 - **Agent Reference**: `llms.txt` (concise) and `llms-full.txt` (detailed)
+````

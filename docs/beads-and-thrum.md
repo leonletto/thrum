@@ -1,5 +1,4 @@
-
-# Beads and Thrum
+## Beads and Thrum
 
 ## The Context Loss Problem
 
@@ -48,7 +47,7 @@ me?**
 
 Here's how an agent uses both tools together across multiple sessions.
 
-**Session 1: Starting work**
+### Session 1: Starting work
 
 ```bash
 # Check for assigned work
@@ -67,7 +66,7 @@ $ bd update thrum-a1b2 --status in_progress
 $ thrum send "Starting on search UI. Should it support dark mode?" --to @planner
 ```
 
-**Session 2: After context window compaction**
+### Session 2: After context window compaction
 
 The agent's context has been compacted. Early messages are gone. But the state
 persists in Git.
@@ -88,7 +87,7 @@ Message: "Yes, dark mode required. See design tokens in styles/theme.css"
 # Continue work with full context recovered
 ```
 
-**Session 3: Finishing up**
+### Session 3: Finishing up
 
 ```bash
 # Mark task complete
@@ -98,7 +97,7 @@ $ bd close thrum-a1b2 --comment "Implemented with dark mode support"
 $ thrum send "Search UI complete (thrum-a1b2). Ready for integration." --to @planner
 ```
 
-**Session 4: New agent picks up follow-up work**
+### Session 4: New agent picks up follow-up work
 
 A different agent needs to build on this work.
 

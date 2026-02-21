@@ -1,13 +1,13 @@
 # Thrum Documentation Website
 
-**URL:** https://docs.thrum.info
+**URL:** [https://docs.thrum.info](https://docs.thrum.info)
 
 Static documentation website for Thrum - Git-backed messaging for AI agent
 coordination.
 
 ## Structure
 
-```
+```text
 website/
 ├── index.html              # Landing page (marketing)
 ├── docs.html               # Documentation viewer

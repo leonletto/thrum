@@ -66,7 +66,7 @@ agent file. The plugin provides:
 
 Install the plugin in Claude Code:
 
-```
+```bash
 /install-plugin beads
 ```
 

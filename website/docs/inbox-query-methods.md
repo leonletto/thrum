@@ -9,7 +9,7 @@ tags: ["inbox", "query", "filtering", "pagination", "read-state", "rpc"]
 last_updated: "2026-02-08"
 ---
 
-# Inbox Query RPC Methods
+## Inbox Query RPC Methods
 
 ## Overview
 
