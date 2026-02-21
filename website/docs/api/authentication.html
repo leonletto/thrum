@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Authentication Guide — Thrum</title>
-  <meta name="description" content="Agent and user authentication, registration, sessions, impersonation, and security considerations">
+  <title>Authentication — Thrum</title>
+  <meta name="description" content="Authentication and authorization in the Thrum API — agent identity, session tokens, and security model">
   <!-- Open Graph -->
   <meta property="og:type" content="article">
-  <meta property="og:title" content="Authentication Guide — Thrum">
-  <meta property="og:description" content="Agent and user authentication, registration, sessions, impersonation, and security considerations">
+  <meta property="og:title" content="Authentication — Thrum">
+  <meta property="og:description" content="Authentication and authorization in the Thrum API — agent identity, session tokens, and security model">
   <meta property="og:url" content="https://leonletto.github.io/thrum/docs/api/authentication.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
@@ -16,8 +16,8 @@
   <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Authentication Guide — Thrum">
-  <meta name="twitter:description" content="Agent and user authentication, registration, sessions, impersonation, and security considerations">
+  <meta name="twitter:title" content="Authentication — Thrum">
+  <meta name="twitter:description" content="Authentication and authorization in the Thrum API — agent identity, session tokens, and security model">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <!-- Canonical: SPA is the primary URL -->
   <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#api/authentication.html">
@@ -264,11 +264,11 @@ thrum mcp serve --agent-id furiosa</code></pre>
 <li><code>acting_as</code> must reference an existing agent</li>
 <li><code>acting_as</code> cannot be a <code>user:*</code> ID</li>
 </ul>
-<p><strong>Error codes</strong>:</p>
+<p><strong>Errors</strong>:</p>
 <ul>
-<li><code>-32001</code>: Only users can impersonate</li>
-<li><code>-32002</code>: Target agent does not exist</li>
-<li><code>-32003</code>: Users can only impersonate agents, not other users</li>
+<li>&quot;only users can impersonate agents&quot; - Non-user caller attempted impersonation</li>
+<li>&quot;users can only impersonate agents, not other users&quot; - User tried to<br>impersonate another user</li>
+<li>&quot;agent not found&quot; - Target agent does not exist</li>
 </ul>
 <h3>Message Ownership</h3>
 <p><strong>Editing</strong>: Only the message author can edit their own messages.</p>
@@ -299,33 +299,43 @@ thrum mcp serve --agent-id furiosa</code></pre>
 <li>Audit trail</li>
 </ul>
 <h2>Security Considerations</h2>
-<h3>Current (MVP)</h3>
+<h3>Local Access (Unix Domain Socket)</h3>
+<p>Unix domain sockets (<code>$REPO/.thrum/daemon.sock</code>) provide inherent security:</p>
 <ol>
-<li><strong>No encryption</strong>: WebSocket traffic is unencrypted (<code>ws://</code>, not <code>wss://</code>)</li>
-<li><strong>No authentication tokens</strong>: No password or token verification for initial<br>connection</li>
-<li><strong>Local-only</strong>: Daemon binds to <code>127.0.0.1</code> (localhost only)</li>
-<li><strong>Trust-based</strong>: Clients on the same machine are trusted</li>
-<li><strong>Single port</strong>: WebSocket and embedded SPA share port 9999</li>
+<li><strong>No network exposure</strong>: Socket files are not accessible over the network</li>
+<li><strong>Filesystem permissions</strong>: Access controlled via file permissions<br>(mode 0600)</li>
+<li><strong>Local-only</strong>: Only processes on the same machine with appropriate<br>permissions can connect</li>
 </ol>
-<p><strong>Acceptable for</strong>:</p>
+<p><strong>Use cases</strong>:</p>
 <ul>
-<li>Local development</li>
-<li>Single-user machines</li>
-<li>Trusted environments</li>
+<li>CLI tools (<code>thrum</code> command)</li>
+<li>MCP server (<code>thrum mcp serve</code>)</li>
+<li>Local agents and automation scripts</li>
+<li>Development workflows</li>
 </ul>
-<p><strong>Not acceptable for</strong>:</p>
-<ul>
-<li>Multi-user machines</li>
-<li>Production deployments</li>
-<li>Untrusted networks</li>
-</ul>
-<h3>Future Enhancements</h3>
+<h3>Remote Access (Tailscale WireGuard)</h3>
+<p>For remote or multi-machine deployments, Thrum uses Tailscale&#39;s WireGuard mesh<br>network:</p>
 <ol>
-<li><strong>TLS/SSL</strong>: Support <code>wss://</code> for encrypted WebSocket connections</li>
-<li><strong>Token-based auth</strong>: JWT or similar for user authentication</li>
-<li><strong>Role-based access control (RBAC)</strong>: Permission system for operations</li>
-<li><strong>API keys</strong>: For programmatic agent access</li>
-<li><strong>Audit logging</strong>: Comprehensive audit trail for all operations</li>
+<li><strong>End-to-end encryption</strong>: All WebSocket traffic encrypted via WireGuard<br>tunnel</li>
+<li><strong>Zero-trust networking</strong>: Each peer authenticates via Tailscale identity</li>
+<li><strong>Automatic key rotation</strong>: WireGuard keys managed by Tailscale</li>
+<li><strong>Pairing codes</strong>: Initial connection uses time-limited pairing codes</li>
+<li><strong>Per-peer tokens</strong>: Ongoing authentication via per-peer tokens after pairing</li>
+</ol>
+<p><strong>Security properties</strong>:</p>
+<ul>
+<li>WebSocket connections run over Tailscale&#39;s encrypted tunnel (<code>ws://</code> over<br>WireGuard)</li>
+<li>No separate TLS/SSL layer needed</li>
+<li>Network isolation via Tailscale ACLs</li>
+<li>Authentication handled by Tailscale identity + Thrum pairing</li>
+</ul>
+<p><strong>Reference</strong>: See <code>docs/tailscale-security.md</code> for detailed security model and<br>threat analysis.</p>
+<h3>Authentication Layers</h3>
+<ol>
+<li><strong>Transport layer</strong>: Tailscale WireGuard encryption and peer authentication</li>
+<li><strong>Application layer</strong>: Thrum pairing codes and per-peer tokens</li>
+<li><strong>Session layer</strong>: Session management and heartbeat tracking</li>
+<li><strong>Message layer</strong>: Author attribution and ownership verification</li>
 </ol>
 <h2>Session Lifecycle</h2>
 <h3>Agent Sessions</h3>

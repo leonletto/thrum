@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>rpc-api — Thrum</title>
-  <meta name="description" content="">
+  <title>RPC API — Thrum</title>
+  <meta name="description" content="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">
   <!-- Open Graph -->
   <meta property="og:type" content="article">
-  <meta property="og:title" content="rpc-api — Thrum">
-  <meta property="og:description" content="">
+  <meta property="og:title" content="RPC API — Thrum">
+  <meta property="og:description" content="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">
   <meta property="og:url" content="https://leonletto.github.io/thrum/docs/rpc-api.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
@@ -16,8 +16,8 @@
   <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="rpc-api — Thrum">
-  <meta name="twitter:description" content="">
+  <meta name="twitter:title" content="RPC API — Thrum">
+  <meta name="twitter:description" content="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <!-- Canonical: SPA is the primary URL -->
   <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#rpc-api.html">
@@ -183,7 +183,7 @@
 <tr>
 <td><code>sync_state</code></td>
 <td>string</td>
-<td><code>&quot;synced&quot;</code>, <code>&quot;pending&quot;</code>, or <code>&quot;error&quot;</code></td>
+<td><code>&quot;synced&quot;</code>, <code>&quot;pending&quot;</code>, or <code>&quot;error&quot;</code> (requires active sync loop)</td>
 </tr>
 </tbody></table>
 <p><strong>Errors:</strong></p>
@@ -1129,6 +1129,18 @@
 <td>Typed JSON payload</td>
 </tr>
 <tr>
+<td><code>thread_id</code></td>
+<td>string</td>
+<td>no</td>
+<td>Thread identifier (deprecated in v0.4.0, use <code>reply_to</code> instead)</td>
+</tr>
+<tr>
+<td><code>reply_to</code></td>
+<td>string</td>
+<td>no</td>
+<td>Message ID to reply to (creates a reply chain)</td>
+</tr>
+<tr>
 <td><code>scopes</code></td>
 <td>array</td>
 <td>no</td>
@@ -1151,12 +1163,6 @@
 <td>array</td>
 <td>no</td>
 <td>Message tags</td>
-</tr>
-<tr>
-<td><code>priority</code></td>
-<td>string</td>
-<td>no</td>
-<td><code>&quot;low&quot;</code>, <code>&quot;normal&quot;</code> (default), <code>&quot;high&quot;</code></td>
 </tr>
 <tr>
 <td><code>acting_as</code></td>
@@ -1343,6 +1349,12 @@
 <td>Filter by ref (<code>{&quot;type&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}</code>)</td>
 </tr>
 <tr>
+<td><code>thread_id</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filter by thread ID</td>
+</tr>
+<tr>
 <td><code>author_id</code></td>
 <td>string</td>
 <td>no</td>
@@ -1371,6 +1383,36 @@
 <td>string</td>
 <td>no</td>
 <td>Explicit filter: messages unread by this agent ID (for remote callers like MCP server)</td>
+</tr>
+<tr>
+<td><code>exclude_self</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Exclude messages authored by current agent (inbox mode)</td>
+</tr>
+<tr>
+<td><code>caller_agent_id</code></td>
+<td>string</td>
+<td>no</td>
+<td>For worktree callers to pass their agent ID</td>
+</tr>
+<tr>
+<td><code>caller_mention_role</code></td>
+<td>string</td>
+<td>no</td>
+<td>For worktree callers to pass their role for mentions filter</td>
+</tr>
+<tr>
+<td><code>for_agent</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filter for messages addressed to this agent name (mentions + broadcasts)</td>
+</tr>
+<tr>
+<td><code>for_agent_role</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filter for messages addressed to this agent role (mentions + broadcasts)</td>
 </tr>
 <tr>
 <td><code>page_size</code></td>
@@ -1633,7 +1675,7 @@
 <li><code>no active session found</code>: Agent does not have an active session</li>
 </ul>
 <h3>group.create</h3>
-<p>Create a named group for targeted messaging. Groups can contain agents and roles.</p>
+<p>Create a named group for targeted messaging. Groups can contain agents and<br>roles.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -1667,6 +1709,11 @@
 </tr>
 </thead>
 <tbody><tr>
+<td><code>group_id</code></td>
+<td>string</td>
+<td>Unique group identifier</td>
+</tr>
+<tr>
 <td><code>name</code></td>
 <td>string</td>
 <td>Group name</td>
@@ -1688,7 +1735,7 @@
 <li><code>group already exists</code>: Group with this name already exists</li>
 </ul>
 <h3>group.delete</h3>
-<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be deleted.</p>
+<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be<br>deleted.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -1745,7 +1792,7 @@
 </tr>
 </thead>
 <tbody><tr>
-<td><code>group_name</code></td>
+<td><code>group</code></td>
 <td>string</td>
 <td>yes</td>
 <td>Group to add member to</td>
@@ -1757,7 +1804,7 @@
 <td><code>&quot;agent&quot;</code> or <code>&quot;role&quot;</code></td>
 </tr>
 <tr>
-<td><code>member_id</code></td>
+<td><code>member_value</code></td>
 <td>string</td>
 <td>yes</td>
 <td>Agent name or role name</td>
@@ -1773,7 +1820,7 @@
 </tr>
 </thead>
 <tbody><tr>
-<td><code>group_name</code></td>
+<td><code>group</code></td>
 <td>string</td>
 <td>Group name</td>
 </tr>
@@ -1783,21 +1830,16 @@
 <td>Type of member added</td>
 </tr>
 <tr>
-<td><code>member_id</code></td>
+<td><code>member_value</code></td>
 <td>string</td>
 <td>ID of member added</td>
-</tr>
-<tr>
-<td><code>added_at</code></td>
-<td>string</td>
-<td>ISO 8601 timestamp</td>
 </tr>
 </tbody></table>
 <p><strong>Errors:</strong></p>
 <ul>
-<li><code>group_name is required</code>: Missing <code>group_name</code> field</li>
+<li><code>group is required</code>: Missing <code>group</code> field</li>
 <li><code>member_type is required</code>: Missing <code>member_type</code> field</li>
-<li><code>member_id is required</code>: Missing <code>member_id</code> field</li>
+<li><code>member_value is required</code>: Missing <code>member_value</code> field</li>
 <li><code>group not found</code>: No group with given name</li>
 <li><code>invalid member_type</code>: Must be <code>&quot;agent&quot;</code> or <code>&quot;role&quot;</code></li>
 </ul>
@@ -1814,7 +1856,7 @@
 </tr>
 </thead>
 <tbody><tr>
-<td><code>group_name</code></td>
+<td><code>group</code></td>
 <td>string</td>
 <td>yes</td>
 <td>Group to remove member from</td>
@@ -1826,7 +1868,7 @@
 <td><code>&quot;agent&quot;</code> or <code>&quot;role&quot;</code></td>
 </tr>
 <tr>
-<td><code>member_id</code></td>
+<td><code>member_value</code></td>
 <td>string</td>
 <td>yes</td>
 <td>Agent name or role name</td>
@@ -1842,7 +1884,7 @@
 </tr>
 </thead>
 <tbody><tr>
-<td><code>group_name</code></td>
+<td><code>group</code></td>
 <td>string</td>
 <td>Group name</td>
 </tr>
@@ -1852,21 +1894,16 @@
 <td>Type of member removed</td>
 </tr>
 <tr>
-<td><code>member_id</code></td>
+<td><code>member_value</code></td>
 <td>string</td>
 <td>ID of member removed</td>
-</tr>
-<tr>
-<td><code>removed_at</code></td>
-<td>string</td>
-<td>ISO 8601 timestamp</td>
 </tr>
 </tbody></table>
 <p><strong>Errors:</strong></p>
 <ul>
-<li><code>group_name is required</code>: Missing <code>group_name</code> field</li>
+<li><code>group is required</code>: Missing <code>group</code> field</li>
 <li><code>member_type is required</code>: Missing <code>member_type</code> field</li>
-<li><code>member_id is required</code>: Missing <code>member_id</code> field</li>
+<li><code>member_value is required</code>: Missing <code>member_value</code> field</li>
 <li><code>group not found</code>: No group with given name</li>
 <li><code>member not found</code>: Member is not in the group</li>
 </ul>
@@ -1904,6 +1941,11 @@
 <td>List of group objects</td>
 </tr>
 <tr>
+<td><code>groups[].group_id</code></td>
+<td>string</td>
+<td>Unique group identifier</td>
+</tr>
+<tr>
 <td><code>groups[].name</code></td>
 <td>string</td>
 <td>Group name</td>
@@ -1917,11 +1959,6 @@
 <td><code>groups[].created_at</code></td>
 <td>string</td>
 <td>ISO 8601 creation timestamp</td>
-</tr>
-<tr>
-<td><code>groups[].created_by</code></td>
-<td>string</td>
-<td>Agent ID of creator</td>
 </tr>
 <tr>
 <td><code>groups[].member_count</code></td>
@@ -1962,6 +1999,11 @@
 </tr>
 </thead>
 <tbody><tr>
+<td><code>group_id</code></td>
+<td>string</td>
+<td>Unique group identifier</td>
+</tr>
+<tr>
 <td><code>name</code></td>
 <td>string</td>
 <td>Group name</td>
@@ -1987,12 +2029,12 @@
 <td>List of member objects</td>
 </tr>
 <tr>
-<td><code>members[].type</code></td>
+<td><code>members[].member_type</code></td>
 <td>string</td>
 <td><code>&quot;agent&quot;</code> or <code>&quot;role&quot;</code></td>
 </tr>
 <tr>
-<td><code>members[].id</code></td>
+<td><code>members[].member_value</code></td>
 <td>string</td>
 <td>Agent name or role name</td>
 </tr>
@@ -2001,6 +2043,11 @@
 <td>string</td>
 <td>ISO 8601 timestamp when member was added</td>
 </tr>
+<tr>
+<td><code>members[].added_by</code></td>
+<td>string</td>
+<td>Agent ID who added this member</td>
+</tr>
 </tbody></table>
 <p><strong>Errors:</strong></p>
 <ul>
@@ -2008,7 +2055,7 @@
 <li><code>group not found</code>: No group with given name</li>
 </ul>
 <h3>group.members</h3>
-<p>Get members of a group with optional expansion. When <code>expand</code> is <code>true</code>, resolves roles to individual agent IDs.</p>
+<p>Get members of a group with optional expansion. When <code>expand</code> is <code>true</code>,<br>resolves roles to individual agent IDs.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -2042,22 +2089,17 @@
 </tr>
 </thead>
 <tbody><tr>
-<td><code>name</code></td>
-<td>string</td>
-<td>Group name</td>
-</tr>
-<tr>
 <td><code>members</code></td>
 <td>array</td>
 <td>List of direct member objects</td>
 </tr>
 <tr>
-<td><code>members[].type</code></td>
+<td><code>members[].member_type</code></td>
 <td>string</td>
 <td><code>&quot;agent&quot;</code> or <code>&quot;role&quot;</code></td>
 </tr>
 <tr>
-<td><code>members[].id</code></td>
+<td><code>members[].member_value</code></td>
 <td>string</td>
 <td>Agent name or role name</td>
 </tr>
@@ -2072,19 +2114,14 @@
 </tr>
 </thead>
 <tbody><tr>
-<td><code>name</code></td>
-<td>string</td>
-<td>Group name</td>
-</tr>
-<tr>
-<td><code>agent_ids</code></td>
+<td><code>members</code></td>
 <td>array</td>
-<td>List of resolved agent IDs (strings)</td>
+<td>List of direct member objects</td>
 </tr>
 <tr>
-<td><code>count</code></td>
-<td>integer</td>
-<td>Number of resolved agents</td>
+<td><code>expanded</code></td>
+<td>array</td>
+<td>List of resolved agent IDs (strings, only when expand=true)</td>
 </tr>
 </tbody></table>
 <p><strong>Errors:</strong></p>

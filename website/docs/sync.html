@@ -253,12 +253,13 @@ tarCmd.Stdin, _ = gitCmd.StdoutPipe()</code></pre>
 <h3>Local-Only Mode</h3>
 <p>For public repositories where you don&#39;t want to expose agent messages, enable<br>local-only mode to disable all remote sync:</p>
 <pre><code class="language-bash hljs">thrum daemon start --<span class="hljs-built_in">local</span></code></pre>
-<p>In local-only mode, the sync loop still runs but skips <code>git fetch</code> and<br><code>git push</code>. Local JSONL files and the SQLite projection continue to update<br>normally. See <a href="daemon.html#local-only-mode">Daemon Architecture</a> for details.</p>
+<p>In local-only mode, the sync loop still runs but skips remote operations<br>(<code>git fetch</code> and <code>git push</code> to/from the remote). Local JSONL files and the<br>SQLite projection continue to update normally. See<br><a href="daemon.html#local-only-mode">Daemon Architecture</a> for details.</p>
 <h3>No Remote</h3>
 <p>When no remote is configured:</p>
 <ul>
 <li>Sync loop runs normally</li>
-<li>Fetch/push operations are skipped</li>
+<li>Remote operations (<code>git fetch</code> and <code>git push</code>) are skipped</li>
+<li>Local worktree state and database updates continue as normal</li>
 <li>Local JSONL in the sync worktree is still maintained</li>
 </ul>
 <h3>Network Unavailable</h3>
@@ -358,6 +359,9 @@ projector.Rebuild(syncDir) <span class="hljs-comment">// reads events.jsonl + me
   <span class="hljs-attr">&quot;sync_state&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;synced&quot;</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;local_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span>
 <span class="hljs-punctuation">}</span></code></pre>
+<blockquote>
+<p><strong>Note:</strong> <code>thrum init</code> sets <code>local_only: true</code> by default. The example above<br>shows a repo where remote sync has been explicitly enabled.</p>
+</blockquote>
 <p>States:</p>
 <ul>
 <li><code>stopped</code> -- Sync loop not running</li>

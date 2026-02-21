@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>messaging — Thrum</title>
-  <meta name="description" content="">
+  <title>Messaging — Thrum</title>
+  <meta name="description" content="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">
   <!-- Open Graph -->
   <meta property="og:type" content="article">
-  <meta property="og:title" content="messaging — Thrum">
-  <meta property="og:description" content="">
+  <meta property="og:title" content="Messaging — Thrum">
+  <meta property="og:description" content="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">
   <meta property="og:url" content="https://leonletto.github.io/thrum/docs/messaging.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
@@ -16,8 +16,8 @@
   <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="messaging — Thrum">
-  <meta name="twitter:description" content="">
+  <meta name="twitter:title" content="Messaging — Thrum">
+  <meta name="twitter:description" content="Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <!-- Canonical: SPA is the primary URL -->
   <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#messaging.html">
@@ -52,7 +52,7 @@
     <div class="docs-content-inner">
 <h1>Thrum Messaging System</h1>
 <h2>Overview</h2>
-<p>The Thrum messaging system provides structured communication between agents with<br>support for direct messaging, read tracking, scoping, references, and rich content<br>formats. Messages are persisted in a Git-backed event log and projected into SQLite<br>for fast queries.</p>
+<p>The Thrum messaging system provides structured communication between agents with<br>support for direct messaging, read tracking, scoping, references, and rich<br>content formats. Messages are persisted in a Git-backed event log and projected<br>into SQLite for fast queries.</p>
 <p>This document covers the CLI commands and behaviors for sending, receiving,<br>replying to, and managing messages.</p>
 <h2>Quick Reference</h2>
 <h3>Top-Level Commands</h3>
@@ -74,6 +74,10 @@
 <tr>
 <td><code>thrum inbox</code></td>
 <td>List messages with read/unread indicators</td>
+</tr>
+<tr>
+<td><code>thrum message read</code></td>
+<td>Mark messages as read (single, multiple, or --all)</td>
 </tr>
 </tbody></table>
 <h3>Message Subcommands</h3>
@@ -140,18 +144,13 @@
 <td>Content format (default: <code>markdown</code>)</td>
 </tr>
 <tr>
-<td><code>--priority</code></td>
-<td><code>low|normal|high</code></td>
-<td>Message priority (default: <code>normal</code>)</td>
-</tr>
-<tr>
 <td><code>--structured</code></td>
 <td>JSON string</td>
 <td>Typed payload for machine-readable data</td>
 </tr>
 </tbody></table>
 <h3>Direct Messaging with --to</h3>
-<p>The <code>--to</code> flag provides a shorthand for directing a message to a specific agent,<br>role, or group. Under the hood, <code>--to @reviewer</code> appends <code>@reviewer</code> to the mentions<br>list, which is stored as a <code>mention</code> ref on the message.</p>
+<p>The <code>--to</code> flag provides a shorthand for directing a message to a specific<br>agent, role, or group. Under the hood, <code>--to @reviewer</code> appends <code>@reviewer</code> to<br>the mentions list, which is stored as a <code>mention</code> ref on the message.</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># These are equivalent:</span>
 thrum send <span class="hljs-string">&quot;Please review PR #42&quot;</span> --to @reviewer
 thrum send <span class="hljs-string">&quot;Please review PR #42&quot;</span> --mention @reviewer
@@ -168,6 +167,34 @@ thrum send <span class="hljs-string">&quot;Backend review needed&quot;</span> --
 <p>Agents can then filter their inbox to only messages that mention them:</p>
 <pre><code class="language-bash hljs">thrum inbox --mentions</code></pre>
 <p>This queries for messages where a <code>mention</code> ref matches the current agent&#39;s<br>role.</p>
+<h3>Name vs Role Routing (v0.4.5+)</h3>
+<p>Thrum routes <code>@mentions</code> differently depending on whether the target is a name<br>or a role:</p>
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>Routing behaviour</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>@furiosa</code></td>
+<td>Routes directly to agent named <code>furiosa</code></td>
+</tr>
+<tr>
+<td><code>@reviewer</code></td>
+<td>Routes via the auto-created <code>reviewer</code> role group (all agents with role reviewer)</td>
+</tr>
+<tr>
+<td><code>@everyone</code></td>
+<td>Broadcasts to all agents</td>
+</tr>
+<tr>
+<td><code>@mygroup</code></td>
+<td>Routes to the named custom group</td>
+</tr>
+</tbody></table>
+<p><strong>Important:</strong> Sending to an unknown name/group that doesn&#39;t exist is a <strong>hard<br>error</strong> — the message is rejected and not stored. Unknown recipients must be<br>created as agents or groups first.</p>
+<p><strong>Registration rule:</strong> Agent names must differ from their role. Use distinct<br>names like <code>--name coord_main --role coordinator</code> rather than<br><code>--name coordinator --role coordinator</code>.</p>
 <h3>Example: Agent-to-Agent Coordination</h3>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Implementer finishes a task and notifies the reviewer</span>
 thrum send <span class="hljs-string">&quot;Auth module complete, all tests passing&quot;</span> \
@@ -239,6 +266,10 @@ thrum reply msg_01HXF... <span class="hljs-string">&quot;Acknowledged&quot;</spa
 <tr>
 <td><code>--page-size N</code></td>
 <td>Results per page (default: 10)</td>
+</tr>
+<tr>
+<td><code>--limit N</code></td>
+<td>Alias for <code>--page-size</code></td>
 </tr>
 <tr>
 <td><code>--page N</code></td>
@@ -477,7 +508,7 @@ thrum inbox --scope module:auth</code></pre>
 <h2>Groups</h2>
 <p>Groups allow you to send messages to collections of agents and roles using a<br>single <code>--to @groupname</code> address.</p>
 <h3>Built-in Groups</h3>
-<p><strong><code>@everyone</code></strong> — Automatically created on daemon startup. All registered agents are<br>implicit members. This group cannot be deleted.</p>
+<p><strong><code>@everyone</code></strong> — Automatically created on daemon startup. All registered agents<br>are implicit members. This group cannot be deleted.</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Send to all agents</span>
 thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @everyone</code></pre>
 <h3>Creating Custom Groups</h3>
@@ -528,19 +559,17 @@ thrum send <span class="hljs-string">&quot;PR ready for review&quot;</span> --to
 </tr>
 </tbody></table>
 <h3>Message Resolution</h3>
-<p>When a message is sent to a group, the daemon resolves group membership at <strong>read time</strong>.<br>This means:</p>
+<p>When a message is sent to a group, the daemon resolves group membership at<br><strong>read time</strong>. This means:</p>
 <ul>
 <li>New agents added to a group automatically receive messages sent to that group</li>
 <li>The <code>@everyone</code> group dynamically includes all registered agents</li>
 <li>Role-based members are resolved to all agents with that role at query time</li>
 </ul>
-<h3>Broadcast Deprecation</h3>
-<p>The <code>--broadcast</code> flag is deprecated. Use <code>--to @everyone</code> instead:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Old (deprecated):</span>
-thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --broadcast
-
-<span class="hljs-comment"># New (recommended):</span>
-thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @everyone</code></pre>
+<h3>Broadcast</h3>
+<p>Both <code>--broadcast</code> and <code>--to @everyone</code> send to all agents:</p>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --broadcast
+thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @everyone
+thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --everyone</code></pre>
 <h2>Global Flags</h2>
 <p>These flags are available on all commands:</p>
 <table>
@@ -652,7 +681,8 @@ thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @ev
 <li><code>idx_message_reads_message</code> -- read state by message</li>
 </ul>
 <h2>MCP Server Integration</h2>
-<p>The MCP server (<code>thrum mcp serve</code>) provides native messaging tools for AI agents<br>running in Claude Code or similar environments:</p>
+<p>The MCP server (<code>thrum mcp serve</code>) provides native messaging tools for AI agents<br>running in Claude Code or similar environments. It exposes 11 MCP tools<br>organized into two categories:</p>
+<p><strong>Core messaging (5 tools):</strong></p>
 <table>
 <thead>
 <tr>
@@ -662,7 +692,7 @@ thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @ev
 </thead>
 <tbody><tr>
 <td><code>send_message</code></td>
-<td>Send a message to <code>@role</code> or agent name (supports <code>priority</code>: <code>critical</code>, <code>high</code>, <code>normal</code>, <code>low</code>)</td>
+<td>Send a message to <code>@role</code> or agent name</td>
 </tr>
 <tr>
 <td><code>check_messages</code></td>
@@ -678,11 +708,43 @@ thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @ev
 </tr>
 <tr>
 <td><code>broadcast_message</code></td>
-<td>Send to all active agents (with optional exclude filter)</td>
+<td>Send to all agents (convenience wrapper around <code>send_message</code> with <code>to=@everyone</code>)</td>
+</tr>
+</tbody></table>
+<p><strong>Group management (6 tools):</strong></p>
+<table>
+<thead>
+<tr>
+<th>MCP Tool</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>create_group</code></td>
+<td>Create a named messaging group</td>
+</tr>
+<tr>
+<td><code>delete_group</code></td>
+<td>Delete a messaging group</td>
+</tr>
+<tr>
+<td><code>add_group_member</code></td>
+<td>Add an agent or role as a member of a group</td>
+</tr>
+<tr>
+<td><code>remove_group_member</code></td>
+<td>Remove a member from a group</td>
+</tr>
+<tr>
+<td><code>list_groups</code></td>
+<td>List all messaging groups</td>
+</tr>
+<tr>
+<td><code>get_group</code></td>
+<td>Get group details including members (expand=true resolves roles)</td>
 </tr>
 </tbody></table>
 <p>MCP tools use the same underlying RPC methods (<code>message.send</code>, <code>message.list</code>,<br><code>message.markRead</code>) but add convenience features like <code>@role</code> addressing and<br>real-time WebSocket push notifications.</p>
-<p><strong>Priority levels at the MCP layer</strong>: <code>critical</code>, <code>high</code>, <code>normal</code> (default),<br><code>low</code>. The <code>critical</code> level is available through MCP tools and is stored on the<br>message but does not have special handling at the RPC layer.</p>
 <h2>Agent Identity</h2>
 <p>Agents are identified by name using identity files stored at<br><code>.thrum/identities/{name}.json</code>. Identity is resolved in this priority order:</p>
 <ol>

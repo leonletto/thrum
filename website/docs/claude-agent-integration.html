@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>claude-agent-integration — Thrum</title>
-  <meta name="description" content="">
+  <title>Claude Code Agent Integration — Thrum</title>
+  <meta name="description" content="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">
   <!-- Open Graph -->
   <meta property="og:type" content="article">
-  <meta property="og:title" content="claude-agent-integration — Thrum">
-  <meta property="og:description" content="">
+  <meta property="og:title" content="Claude Code Agent Integration — Thrum">
+  <meta property="og:description" content="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">
   <meta property="og:url" content="https://leonletto.github.io/thrum/docs/claude-agent-integration.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
@@ -16,8 +16,8 @@
   <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="claude-agent-integration — Thrum">
-  <meta name="twitter:description" content="">
+  <meta name="twitter:title" content="Claude Code Agent Integration — Thrum">
+  <meta name="twitter:description" content="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <!-- Canonical: SPA is the primary URL -->
   <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#claude-agent-integration.html">
@@ -53,12 +53,11 @@
 <h1>Claude Code Agent Integration</h1>
 <p>Thrum ships two Claude Code agent definitions for multi-agent coordination.<br>Place these in <code>.claude/agents/</code> in any project that uses Thrum.</p>
 <h2>thrum-agent</h2>
-<p>A comprehensive coordination guide that teaches Claude Code how to use Thrum<br>for multi-agent workflows. Covers:</p>
+<p>A comprehensive coordination guide that teaches Claude Code how to use Thrum for<br>multi-agent workflows. Covers:</p>
 <ul>
 <li>MCP server integration and configuration</li>
 <li>CLI commands for messaging, sessions, and coordination</li>
 <li>Message listener pattern for async notifications</li>
-<li>Priority handling (critical/high/normal/low)</li>
 <li>Common workflows: task assignment, peer collaboration, code review</li>
 <li>Beads integration for combined task + messaging coordination</li>
 <li>Troubleshooting guide</li>
@@ -88,7 +87,8 @@ limits, session restarts, and machine boundaries.
 
 <span class="hljs-section">### 1. Register and Start Session</span>
 
-thrum quickstart --name <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">your-name</span>&gt;</span></span> --role <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">role</span>&gt;</span></span> --module <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">module</span>&gt;</span></span> --intent &quot;<span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">description</span>&gt;</span></span>&quot;
+thrum quickstart --name <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">your-name</span>&gt;</span></span> --role <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">role</span>&gt;</span></span> --module <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">module</span>&gt;</span></span> --intent
+&quot;<span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">description</span>&gt;</span></span>&quot;
 
 Common roles: planner, implementer, reviewer, tester, coordinator
 
@@ -96,16 +96,9 @@ Common roles: planner, implementer, reviewer, tester, coordinator
 
 Add to .claude/settings.json:
 
-{
-  &quot;mcpServers&quot;: {
-<span class="hljs-code">    &quot;thrum&quot;: {
-      &quot;type&quot;: &quot;stdio&quot;,
-      &quot;command&quot;: &quot;thrum&quot;,
-      &quot;args&quot;: [&quot;mcp&quot;, &quot;serve&quot;]
-    }
-  }
-}
-</span>
+{ &quot;mcpServers&quot;: { &quot;thrum&quot;: { &quot;type&quot;: &quot;stdio&quot;, &quot;command&quot;: &quot;thrum&quot;, &quot;args&quot;:
+[&quot;mcp&quot;, &quot;serve&quot;] } } }
+
 <span class="hljs-section">### 3. Launch Background Listener</span>
 
 Spawn a message-listener sub-agent to get async notifications. Re-arm it every
@@ -113,39 +106,43 @@ time it returns (both MESSAGES<span class="hljs-emphasis">_RECEIVED and NO_</spa
 
 ### 4. Communicate
 
-thrum send &quot;message&quot; --to @name       # Direct message
-thrum send &quot;message&quot; --broadcast      # Broadcast to all
-thrum inbox --unread                  # Check for new messages
-thrum reply <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">msg-id</span>&gt;</span></span> &quot;response&quot;       # Reply (creates thread)
+thrum send &quot;message&quot; --to @name # Direct message thrum send &quot;message&quot; --to
+@everyone # Broadcast to all thrum inbox --unread # Check for new messages thrum
+reply <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">msg-id</span>&gt;</span></span> &quot;response&quot; # Reply (creates a reply-to reference)
 
-## MCP Tools
+## MCP Tools (11 total)
+
+<span class="hljs-strong">**Core messaging (5):**</span>
 
 - send_</span>message — Send to specific agent via @name
 <span class="hljs-bullet">-</span> check<span class="hljs-emphasis">_messages — Poll inbox, auto-mark read
 - wait_</span>for<span class="hljs-emphasis">_message — Block until message arrives
 - list_</span>agents — Show registered agents
-<span class="hljs-bullet">-</span> broadcast<span class="hljs-emphasis">_message — Send to all agents
+<span class="hljs-bullet">-</span> broadcast<span class="hljs-emphasis">_message — Send to all agents (alias for send_</span>message to @everyone)
 
-## Priority Handling
+<span class="hljs-strong">**Group management (6):**</span>
 
-| Priority | Action |
-|----------|--------|
-| critical | Stop current work immediately |
-| high | Process at next breakpoint |
-| normal | Process when current sub-task completes |
-| low | Queue, process when convenient |
+<span class="hljs-bullet">-</span> create<span class="hljs-emphasis">_group — Create a named messaging group
+- delete_</span>group — Delete a messaging group
+<span class="hljs-bullet">-</span> add<span class="hljs-emphasis">_group_</span>member — Add agent or role to group
+<span class="hljs-bullet">-</span> remove<span class="hljs-emphasis">_group_</span>member — Remove member from group
+<span class="hljs-bullet">-</span> list<span class="hljs-emphasis">_groups — List all groups
+- get_</span>group — Get group details with optional expansion
 
-## Session Template
+<span class="hljs-section">## Session Template</span>
 
-# Start
+<span class="hljs-section"># Start</span>
+
 thrum quickstart --name <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">name</span>&gt;</span></span> --role <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">role</span>&gt;</span></span> --module <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">module</span>&gt;</span></span> --intent &quot;<span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">desc</span>&gt;</span></span>&quot;
 thrum inbox --unread
 
-# During work
+<span class="hljs-section"># During work</span>
+
 thrum send &quot;status update&quot; --to @coordinator
 
-# End
-thrum session end</span></code></pre>
+<span class="hljs-section"># End</span>
+
+thrum session end</code></pre>
 </details>
 
 <h2>message-listener</h2>
@@ -158,8 +155,8 @@ thrum session end</span></code></pre>
 name: message-listener
 description: &gt;
   Background listener for incoming Thrum messages. Runs on Haiku for cost
-  efficiency (~$0.00003/cycle). Loops inbox checks with sleep intervals for up
-  to ~5 minutes, returning immediately when new messages arrive.
+  efficiency (~$0.00003/cycle). Uses <span class="hljs-code">`thrum wait`</span> for efficient blocking instead
+  of polling loops. Returns immediately when new messages arrive.
 model: haiku
 allowed-tools:
 <span class="hljs-section">  - Bash
@@ -174,18 +171,18 @@ run thrum CLI commands.
 
 <span class="hljs-section">## Instructions</span>
 
-You run a polling loop: check inbox, sleep, repeat. Return immediately when you
-find messages from other agents. Otherwise loop until your budget is exhausted.
+You use <span class="hljs-code">`thrum wait`</span> to block efficiently until a message arrives. No polling
+loops needed — <span class="hljs-code">`thrum wait`</span> uses the daemon&#x27;s WebSocket push internally.
 
-Your prompt contains the EXACT command to use after &quot;INBOX<span class="hljs-emphasis">_CMD=&quot;. Use that
+Your prompt contains the EXACT command to use after &quot;WAIT<span class="hljs-emphasis">_CMD=&quot;. Use that
 command verbatim.
 
-<span class="hljs-strong">**LOOP**</span> (repeat up to 10 cycles):
+<span class="hljs-strong">**LOOP**</span> (repeat up to 6 cycles, ~90 min coverage):
 
-1. Check inbox (Bash): Run the INBOX_</span>CMD from your prompt EXACTLY as given.
-<span class="hljs-bullet">2.</span> If messages found, return them immediately.
-<span class="hljs-bullet">3.</span> If no messages, sleep 30 seconds.
-<span class="hljs-bullet">4.</span> Go back to step 1.
+1. Run the WAIT_</span>CMD from your prompt EXACTLY as given (Bash).
+<span class="hljs-bullet">2.</span> If messages found (exit code 0), return them immediately.
+<span class="hljs-bullet">3.</span> If timeout (exit code 1), go back to step 1.
+<span class="hljs-bullet">4.</span> If error (exit code 2), return the error.
 
 After exhausting all cycles with no messages, return NO<span class="hljs-emphasis">_MESSAGES_</span>TIMEOUT.
 
@@ -193,11 +190,10 @@ After exhausting all cycles with no messages, return NO<span class="hljs-emphasi
 
 When messages received:
 
-<span class="hljs-section">MESSAGES<span class="hljs-emphasis">_RECEIVED
----
-FROM: [sender]
-PRIORITY: [priority]
-CONTENT: [message content]
+<span class="hljs-section">## MESSAGES<span class="hljs-emphasis">_RECEIVED
+
+FROM: [sender] CONTENT: [message content]
+
 ---
 
 When timeout:

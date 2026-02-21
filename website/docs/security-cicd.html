@@ -112,10 +112,13 @@ npm run serve
 <pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> website
 ./scripts/sync-docs.sh          <span class="hljs-comment"># sync all changed files</span>
 ./scripts/sync-docs.sh --dry-run  <span class="hljs-comment"># preview changes</span></code></pre>
+<h2>Tailscale Security</h2>
+<p>For remote access and cross-machine synchronization, Thrum uses Tailscale as the<br>primary security model. Tailscale provides end-to-end WireGuard encryption,<br>zero-trust networking, and automatic key rotation. See<br><a href="tailscale-security.html">Tailscale Security</a> for detailed security model and<br>threat analysis.</p>
 <h2>See Also</h2>
 <ul>
 <li><a href="development.html">Development Guide</a> — contributing and local setup</li>
 <li><a href="quickstart.html">Quickstart Guide</a> — getting started with Thrum</li>
+<li><a href="tailscale-security.html">Tailscale Security</a> — remote access security model</li>
 </ul>
 
     </div>

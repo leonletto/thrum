@@ -63,7 +63,7 @@
 <pre><code>$ thrum quickstart --name myagent --role implementer --module auth
 $ thrum quickstart --name planner1 --role planner --module api --intent &quot;Designing REST endpoints&quot;</code></pre>
 <p>This registers your agent with a human-readable name (re-registering<br>automatically on conflict), starts a session, and optionally sets your work<br>intent in one step. The sections below walk through each step individually.</p>
-<p>Quickstart also auto-creates an empty context file for session state persistence.<br>See <a href="context.html">Agent Context Management</a> for details.</p>
+<p>Quickstart also auto-creates an empty context file for session state<br>persistence. See <a href="context.html">Agent Context Management</a> for details.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>Git repository</li>
@@ -92,7 +92,11 @@ thrum init</code></pre>
 <li><code>a-sync</code> orphan branch for message synchronization</li>
 </ul>
 <p>If you are upgrading an existing repo that has JSONL files tracked on <code>main</code>,<br>run <code>thrum migrate</code> instead.</p>
-<h3>2. Start the Daemon</h3>
+<h3>2. Generate CLAUDE.md Coordination Instructions</h3>
+<p>For Claude Code and other AI agents, generate Thrum coordination instructions:</p>
+<pre><code class="language-bash hljs">thrum setup claude-md --apply</code></pre>
+<p>This appends agent coordination instructions to your CLAUDE.md file (creates it<br>if missing). Agents will automatically use Thrum for coordination when working<br>in the repository.</p>
+<h3>3. Start the Daemon</h3>
 <pre><code class="language-bash hljs">thrum daemon start</code></pre>
 <p>The daemon handles:</p>
 <ul>
@@ -102,7 +106,7 @@ thrum init</code></pre>
 <li>Push notifications for subscriptions</li>
 <li>Browser auto-registration via git config</li>
 </ul>
-<h3>3. Register Your Agent and Start a Session</h3>
+<h3>4. Register Your Agent and Start a Session</h3>
 <p>The fastest way is the quickstart command, which registers, starts a session,<br>and sets your intent in one step:</p>
 <pre><code class="language-bash hljs">thrum quickstart --name myagent --role implementer --module auth --intent <span class="hljs-string">&quot;Working on auth&quot;</span></code></pre>
 <p>Or register manually with individual commands:</p>
@@ -115,11 +119,11 @@ thrum session start</code></pre>
 <span class="hljs-built_in">export</span> THRUM_MODULE=auth
 thrum agent register</code></pre>
 <p>Priority: <code>THRUM_NAME</code> env var &gt; <code>--name</code> flag &gt; solo-agent auto-select.</p>
-<h3>4. Send Your First Message</h3>
+<h3>5. Send Your First Message</h3>
 <pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Started working on user authentication&quot;</span> \
   --scope module:auth \
   --ref issue:beads-123</code></pre>
-<h3>5. Check Your Inbox</h3>
+<h3>6. Check Your Inbox</h3>
 <pre><code class="language-bash hljs">thrum inbox</code></pre>
 <p>View messages from other agents and humans working on the project.</p>
 <h2>Common Commands</h2>
@@ -185,7 +189,7 @@ thrum mcp serve --agent-id myagent  <span class="hljs-comment"># Override agent 
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span></code></pre>
-<p>MCP tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, <code>list_agents</code>,<br><code>broadcast_message</code>.</p>
+<p>MCP tools (11 total): Core messaging — <code>send_message</code>, <code>check_messages</code>,<br><code>wait_for_message</code>, <code>list_agents</code>, <code>broadcast_message</code>. Group management —<br><code>create_group</code>, <code>delete_group</code>, <code>add_group_member</code>, <code>remove_group_member</code>,<br><code>list_groups</code>, <code>get_group</code>.</p>
 <h2>Typical Workflow</h2>
 <h3>Morning: Start Work</h3>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># 1. Start daemon (if not running)</span>
@@ -216,6 +220,9 @@ thrum session end
 <span class="hljs-comment"># Check final status</span>
 thrum status</code></pre>
 <h2>Working Across Machines</h2>
+<blockquote>
+<p><strong>Note:</strong> <code>thrum init</code> sets <code>local_only: true</code> by default. To enable<br>cross-machine sync, set <code>local_only: false</code> in <code>.thrum/config.json</code> or run<br><code>THRUM_LOCAL=false thrum daemon start</code>.</p>
+</blockquote>
 <p>Thrum uses Git for synchronization:</p>
 <h3>On Machine A</h3>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Make changes, send messages</span>
@@ -248,7 +255,7 @@ thrum session start
 thrum send <span class="hljs-string">&quot;Experimenting with auth approaches&quot;</span></code></pre>
 <p>The <code>thrum setup</code> command creates a <code>.thrum/redirect</code> file pointing to the main<br>worktree&#39;s <code>.thrum/</code> directory. All worktrees then share the same sync worktree,<br>daemon, and message store. Messages sync across all worktrees and machines<br>through Git.</p>
 <h3>Use the setup scripts for batch configuration</h3>
-<p>Two shell scripts automate redirect file creation for all your worktrees at once:</p>
+<p>Two shell scripts automate redirect file creation for all your worktrees at<br>once:</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Set up Thrum redirects for all worktrees</span>
 ./scripts/setup-worktree-thrum.sh
 

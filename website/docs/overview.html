@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>overview — Thrum</title>
-  <meta name="description" content="">
+  <title>Technical Overview — Thrum</title>
+  <meta name="description" content="High-level overview of Thrum — architecture, storage, daemon, CLI, MCP server, and key concepts">
   <!-- Open Graph -->
   <meta property="og:type" content="article">
-  <meta property="og:title" content="overview — Thrum">
-  <meta property="og:description" content="">
+  <meta property="og:title" content="Technical Overview — Thrum">
+  <meta property="og:description" content="High-level overview of Thrum — architecture, storage, daemon, CLI, MCP server, and key concepts">
   <meta property="og:url" content="https://leonletto.github.io/thrum/docs/overview.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
@@ -16,8 +16,8 @@
   <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="overview — Thrum">
-  <meta name="twitter:description" content="">
+  <meta name="twitter:title" content="Technical Overview — Thrum">
+  <meta name="twitter:description" content="High-level overview of Thrum — architecture, storage, daemon, CLI, MCP server, and key concepts">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <!-- Canonical: SPA is the primary URL -->
   <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#overview.html">
@@ -62,6 +62,7 @@
 <li><strong>Subscription-based notifications</strong> for targeted communication</li>
 </ul>
 <p>Everything is inspectable — messages are JSONL files on a Git branch, state is a<br>queryable SQLite database, and sync is plain Git push/pull.</p>
+<p><strong>Quick Setup:</strong> After initialization, run <code>thrum setup claude-md --apply</code> to<br>generate agent coordination instructions for your CLAUDE.md file. Running<br><code>thrum prime</code> (or <code>thrum context prime</code>) checks for CLAUDE.md and suggests<br><code>thrum setup claude-md --apply</code> if no Thrum section is found.</p>
 <h2>System Architecture</h2>
 <pre><code>                    ┌─────────────────────────────────────────────────────────┐
                     │                     Thrum Daemon                         │
@@ -103,7 +104,7 @@
                                         │   branch)   │
                                         └─────────────┘</code></pre>
 <h2>The Daemon: Central Coordinator</h2>
-<p>The daemon is the one process that everything else talks to. Start it once and<br>it handles messaging, sync, and state for all your agents — CLI, Web UI, and<br>MCP server all go through it.</p>
+<p>The daemon is the one process that everything else talks to. Start it once and<br>it handles messaging, sync, and state for all your agents — CLI, Web UI, and MCP<br>server all go through it.</p>
 <h3>Core Services</h3>
 <table>
 <thead>
@@ -161,7 +162,7 @@
     └─────────────────────────────────────────────────┘</code></pre>
 <p><strong>CLI</strong> (<code>thrum</code> command): Sends messages, checks inbox, manages sessions. All<br>commands go through the daemon via Unix socket.</p>
 <p><strong>Web UI</strong> (Embedded React SPA): Provides a graphical interface for viewing<br>messages and agent activity. Served from the same port as WebSocket (default<br>9999). Browser users are auto-registered via git config.</p>
-<p><strong>MCP Server</strong> (<code>thrum mcp serve</code>): Exposes Thrum functionality as native MCP<br>tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate<br>directly through MCP protocol without CLI shell-outs. Connects to the daemon via<br>Unix socket for RPC and WebSocket for real-time push notifications. Tools:<br><code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, <code>list_agents</code>,<br><code>broadcast_message</code>.</p>
+<p><strong>MCP Server</strong> (<code>thrum mcp serve</code>): Exposes Thrum functionality as native MCP<br>tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate<br>directly through MCP protocol without CLI shell-outs. Connects to the daemon via<br>Unix socket for RPC and WebSocket for real-time push notifications. Provides 5<br>core messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,<br><code>list_agents</code>, <code>broadcast_message</code>) and 6 group management tools<br>(<code>create_group</code>, <code>delete_group</code>, <code>add_group_member</code>, <code>remove_group_member</code>,<br><code>list_groups</code>, <code>get_group</code>).</p>
 <h2>Key Features</h2>
 <h3>1. Persistent Messaging</h3>
 <p>Messages are stored in append-only JSONL logs on a dedicated <code>a-sync</code> orphan<br>branch, accessed via a sync worktree at <code>.git/thrum-sync/a-sync/</code>:</p>
@@ -612,7 +613,7 @@ thrum context <span class="hljs-built_in">sync</span></code></pre>
 </tr>
 <tr>
 <td><code>broadcast_message</code></td>
-<td>Send to all active agents with exclude filters (uses <code>@everyone</code>)</td>
+<td>Send to all agents (convenience wrapper around <code>send_message</code> to <code>@everyone</code>)</td>
 </tr>
 <tr>
 <td><code>create_group</code></td>
@@ -749,7 +750,7 @@ thrum <span class="hljs-built_in">wait</span> --scope module:feature --<span cla
 </tbody></table>
 <h2>Design Principles</h2>
 <h3>You Stay in Control</h3>
-<p>Thrum is infrastructure you can inspect, not a service you depend on. Everything<br>is files, Git branches, and a local daemon. See <a href="philosophy.html">Why Thrum Exists</a><br>for the full philosophy.</p>
+<p>Thrum is infrastructure you can inspect, not a service you depend on. Everything<br>is files, Git branches, and a local daemon. See<br><a href="philosophy.html">Why Thrum Exists</a> for the full philosophy.</p>
 <h3>Offline-First</h3>
 <p>Everything works locally. Network is optional for sync.</p>
 <h3>Git as Infrastructure</h3>

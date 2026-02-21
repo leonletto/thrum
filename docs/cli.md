@@ -1099,21 +1099,23 @@ Example:
 ### thrum wait
 
 Block until a matching message arrives or timeout occurs. Useful for automation
-and hooks.
+and hooks. Always filters by the calling agent's identity — only returns messages
+directed to this agent by name or role. There is no `--all` flag.
 
     thrum wait [flags]
 
-| Flag        | Description                                 | Default |
-| ----------- | ------------------------------------------- | ------- |
-| `--timeout` | Max wait time (e.g., `30s`, `5m`, `1h`)     | `30s`   |
-| `--scope`   | Filter by scope (format: `type:value`)      |         |
-| `--mention` | Wait for mentions of role (format: `@role`) |         |
+| Flag        | Description                                  | Default |
+| ----------- | -------------------------------------------- | ------- |
+| `--timeout` | Max wait time (e.g., `30s`, `5m`, `1h`)      | `30s`   |
+| `--after`   | Only messages after offset (e.g., `-30s`)    |         |
+| `--mention` | Wait for mentions of role (format: `@role`)  |         |
+| `--json`    | Machine-readable output                      | `false` |
 
 Exit codes: `0` = message received, `1` = timeout, `2` = error.
 
 Example:
 
-    $ thrum wait --scope module:auth --timeout=5m
+    $ thrum wait --after -30s --timeout=5m --json
     ✓ Message received: msg_01HXE8Z7 from @planner
       We should refactor the sync daemon before adding embeddings.
 

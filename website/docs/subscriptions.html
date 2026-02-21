@@ -51,6 +51,32 @@
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
 <h1>Subscriptions &amp; Notifications</h1>
+<h2>Quick Reference</h2>
+<h3>CLI Commands</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thrum subscribe</code></td>
+<td>Subscribe to notifications (scope, mention, all)</td>
+</tr>
+<tr>
+<td><code>thrum unsubscribe ID</code></td>
+<td>Remove a subscription by ID</td>
+</tr>
+<tr>
+<td><code>thrum subscriptions</code></td>
+<td>List active subscriptions for current session</td>
+</tr>
+<tr>
+<td><code>thrum wait</code></td>
+<td>Block until notification arrives or timeout</td>
+</tr>
+</tbody></table>
 <h2>Overview</h2>
 <p>The subscription system allows agents to receive real-time push notifications<br>when messages match their interests. Agents can subscribe to:</p>
 <ul>
@@ -58,6 +84,7 @@
 <li><strong>Mentions</strong> - Messages that @mention a specific role (e.g., <code>@reviewer</code>) or<br>agent name (e.g., <code>@furiosa</code>)</li>
 <li><strong>All messages</strong> - Wildcard subscription to receive all messages</li>
 </ul>
+<p>Subscriptions are automatically deleted when a session ends (added in v0.4.3).<br>Subscription identity resolution now correctly uses the caller&#39;s agent ID for<br>filtering (caller_agent_id resolution fix in v0.4.3).</p>
 <p>When a new message matches a subscription, the daemon:</p>
 <ol>
 <li>Identifies matching subscriptions via the <strong>dispatcher</strong></li>

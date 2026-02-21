@@ -101,6 +101,26 @@ thrum inbox --mentions
 This queries for messages where a `mention` ref matches the current agent's
 role.
 
+### Name vs Role Routing (v0.4.5+)
+
+Thrum routes `@mentions` differently depending on whether the target is a name
+or a role:
+
+| Target        | Routing behaviour                                                                 |
+| ------------- | --------------------------------------------------------------------------------- |
+| `@furiosa`    | Routes directly to agent named `furiosa`                                         |
+| `@reviewer`   | Routes via the auto-created `reviewer` role group (all agents with role reviewer) |
+| `@everyone`   | Broadcasts to all agents                                                          |
+| `@mygroup`    | Routes to the named custom group                                                  |
+
+**Important:** Sending to an unknown name/group that doesn't exist is a **hard
+error** — the message is rejected and not stored. Unknown recipients must be
+created as agents or groups first.
+
+**Registration rule:** Agent names must differ from their role. Use distinct
+names like `--name coord_main --role coordinator` rather than
+`--name coordinator --role coordinator`.
+
 ### Example: Agent-to-Agent Coordination
 
 ```bash

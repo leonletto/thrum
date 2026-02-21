@@ -36,5 +36,5 @@ thrum inbox --unread --json
 
 # 4. Optional: Announce presence
 if [ "${THRUM_ANNOUNCE:-false}" = "true" ]; then
-  thrum send "Agent $AGENT_NAME online" --broadcast --priority low --json
+  thrum send "Agent $AGENT_NAME online" --to @everyone --json
 fi

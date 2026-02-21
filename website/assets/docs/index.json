@@ -33,51 +33,48 @@
   },
   {
     "path": "api/authentication.html",
-    "title": "Authentication Guide",
-    "description": "Agent and user authentication, registration, sessions, impersonation, and security considerations",
+    "title": "Authentication",
+    "description": "Authentication and authorization in the Thrum API — agent identity, session tokens, and security model",
     "category": "api",
-    "order": 4,
-    "tags": [
-      "authentication",
-      "authorization",
-      "sessions",
-      "users",
-      "agents",
-      "security"
-    ],
-    "lastUpdated": "2026-02-08"
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
   },
   {
     "path": "api/events.html",
     "title": "Event Reference",
-    "description": "Complete event catalog - message, thread, agent, and session events with payloads, JSONL storage, and delivery",
+    "description": "All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events",
     "category": "api",
-    "order": 5,
-    "tags": [
-      "events",
-      "websocket",
-      "notifications",
-      "jsonl",
-      "reference",
-      "payloads"
-    ],
-    "lastUpdated": "2026-02-08"
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "rpc-api.html",
+    "title": "RPC API",
+    "description": "Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats",
+    "category": "api",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
   },
   {
     "path": "api/websocket.html",
     "title": "WebSocket API",
-    "description": "Real-time bidirectional communication via JSON-RPC 2.0 over WebSocket - connections, RPC methods, push notifications",
+    "description": "Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events",
     "category": "api",
-    "order": 6,
-    "tags": [
-      "websocket",
-      "json-rpc",
-      "real-time",
-      "api",
-      "bidirectional",
-      "push"
-    ],
-    "lastUpdated": "2026-02-08"
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "architecture.html",
+    "title": "Architecture",
+    "description": "Thrum foundation architecture — packages, storage layer, daemon, sync engine, and event system",
+    "category": "architecture",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
   },
   {
     "path": "context.html",
@@ -254,6 +251,51 @@
     "lastUpdated": "2026-02-10"
   },
   {
+    "path": "claude-agent-integration.html",
+    "title": "Claude Code Agent Integration",
+    "description": "Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup",
+    "category": "guides",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "messaging.html",
+    "title": "Messaging",
+    "description": "Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering",
+    "category": "guides",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "tailscale-sync.html",
+    "title": "Tailscale Sync",
+    "description": "Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands",
+    "category": "guides",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "tailscale-security.html",
+    "title": "Tailscale Sync Security",
+    "description": "Security model for Thrum's Tailscale peer sync — pairing, encryption, access control, and threat mitigations",
+    "category": "guides",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "overview.html",
+    "title": "Technical Overview",
+    "description": "High-level overview of Thrum — architecture, storage, daemon, CLI, MCP server, and key concepts",
+    "category": "guides",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
     "path": "identity.html",
     "title": "Agent Identity & Registration",
     "description": "Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees",
@@ -315,6 +357,24 @@
     "lastUpdated": "2026-02-12"
   },
   {
+    "path": "cli.html",
+    "title": "CLI Reference",
+    "description": "Complete reference for the thrum command-line interface — all commands, flags, and usage examples",
+    "category": "reference",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "mcp-server.html",
+    "title": "MCP Server",
+    "description": "Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup",
+    "category": "reference",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
     "path": "sync.html",
     "title": "Sync Protocol",
     "description": "Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design",
@@ -329,86 +389,5 @@
       "jsonl"
     ],
     "lastUpdated": "2026-02-10"
-  },
-  {
-    "path": "architecture.html",
-    "title": "architecture",
-    "description": "",
-    "category": "uncategorized",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "claude-agent-integration.html",
-    "title": "claude-agent-integration",
-    "description": "",
-    "category": "uncategorized",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "cli.html",
-    "title": "cli",
-    "description": "",
-    "category": "uncategorized",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "mcp-server.html",
-    "title": "mcp-server",
-    "description": "",
-    "category": "uncategorized",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "messaging.html",
-    "title": "messaging",
-    "description": "",
-    "category": "uncategorized",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "overview.html",
-    "title": "overview",
-    "description": "",
-    "category": "uncategorized",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "rpc-api.html",
-    "title": "rpc-api",
-    "description": "",
-    "category": "uncategorized",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "tailscale-security.html",
-    "title": "tailscale-security",
-    "description": "",
-    "category": "uncategorized",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "tailscale-sync.html",
-    "title": "tailscale-sync",
-    "description": "",
-    "category": "uncategorized",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
   }
 ]

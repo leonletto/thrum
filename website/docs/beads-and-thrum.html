@@ -52,13 +52,13 @@
     <div class="docs-content-inner">
 <h1>Beads and Thrum</h1>
 <h2>The Context Loss Problem</h2>
-<p>AI agents lose context. When a conversation becomes too long, the context window compacts and early messages disappear. When a session ends, the agent forgets what it was working on. When an agent teammate sends a message, that message vanishes if the receiving agent isn&#39;t actively listening.</p>
-<p>In single-agent workflows, this is annoying. In multi-agent workflows, it&#39;s catastrophic. Agents duplicate work, miss dependencies, and lose coordination. The traditional solution — stuffing everything into the prompt — doesn&#39;t scale beyond trivial tasks.</p>
+<p>AI agents lose context. When a conversation becomes too long, the context window<br>compacts and early messages disappear. When a session ends, the agent forgets<br>what it was working on. When an agent teammate sends a message, that message<br>vanishes if the receiving agent isn&#39;t actively listening.</p>
+<p>In single-agent workflows, this is annoying. In multi-agent workflows, it&#39;s<br>catastrophic. Agents duplicate work, miss dependencies, and lose coordination.<br>The traditional solution — stuffing everything into the prompt — doesn&#39;t scale<br>beyond trivial tasks.</p>
 <h2>Two Complementary Tools</h2>
-<p>Beads and Thrum solve different halves of the same problem: how to give agents persistent memory and communication that survives session boundaries.</p>
-<p><strong>Beads</strong> is a git-backed issue tracker. It handles task state, dependencies, and work discovery. When an agent needs to know &quot;what should I work on?&quot; or &quot;what was I doing?&quot;, Beads provides the answer.</p>
-<p><strong>Thrum</strong> is a git-backed messaging system. It handles coordination, notifications, and presence. When an agent needs to know &quot;what did my teammates tell me?&quot; or &quot;who&#39;s working on what?&quot;, Thrum provides the answer.</p>
-<p>Both use Git as the persistence layer. No external services, no databases, no state that lives outside the repository. Everything survives session boundaries because everything is committed to version control.</p>
+<p>Beads and Thrum solve different halves of the same problem: how to give agents<br>persistent memory and communication that survives session boundaries.</p>
+<p><strong>Beads</strong> is a git-backed issue tracker. It handles task state, dependencies,<br>and work discovery. When an agent needs to know &quot;what should I work on?&quot; or<br>&quot;what was I doing?&quot;, Beads provides the answer.</p>
+<p><strong>Thrum</strong> is a git-backed messaging system. It handles coordination,<br>notifications, and presence. When an agent needs to know &quot;what did my teammates<br>tell me?&quot; or &quot;who&#39;s working on what?&quot;, Thrum provides the answer.</p>
+<p>Both use Git as the persistence layer. No external services, no databases, no<br>state that lives outside the repository. Everything survives session boundaries<br>because everything is committed to version control.</p>
 <h2>What Each Tool Covers</h2>
 <table>
 <thead>
@@ -99,7 +99,7 @@
 <td>Optional daemon for real-time notifications</td>
 </tr>
 </tbody></table>
-<p>Beads answers: <strong>What should I work on?</strong><br>Thrum answers: <strong>What did others tell me?</strong></p>
+<p>Beads answers: <strong>What should I work on?</strong> Thrum answers: <strong>What did others tell<br>me?</strong></p>
 <h2>A Combined Workflow</h2>
 <p>Here&#39;s how an agent uses both tools together across multiple sessions.</p>
 <p><strong>Session 1: Starting work</strong></p>
@@ -118,7 +118,7 @@ $ bd update thrum-a1b2 --status in_progress
 <span class="hljs-comment"># Acknowledge and ask question</span>
 $ thrum send <span class="hljs-string">&quot;Starting on search UI. Should it support dark mode?&quot;</span> --to @planner</code></pre>
 <p><strong>Session 2: After context window compaction</strong></p>
-<p>The agent&#39;s context has been compacted. Early messages are gone. But the state persists in Git.</p>
+<p>The agent&#39;s context has been compacted. Early messages are gone. But the state<br>persists in Git.</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Recover task context</span>
 $ bd show thrum-a1b2
 Title: Implement search UI component
@@ -151,16 +151,16 @@ Message: <span class="hljs-string">&quot;Search UI complete (thrum-a1b2). Ready 
 
 <span class="hljs-comment"># Full context recovered without any conversation history</span></code></pre>
 <h2>Why Git-Backed Persistence Matters</h2>
-<p>Both Beads and Thrum store state in Git, not in memory, databases, or external services. This design choice provides several guarantees:</p>
-<p><strong>Offline operation.</strong> No network dependency. Agents work in air-gapped environments, on planes, or when external services are down.</p>
-<p><strong>State travels with the repository.</strong> Clone the repo, get all task history and message history. No separate database to back up or migrate.</p>
-<p><strong>Survives any session boundary.</strong> Context window compaction, agent restart, machine crash, or branch switch — the state persists because it&#39;s committed to version control.</p>
-<p><strong>Auditable history.</strong> Every task state change and every message is a Git commit. You can see who changed what, when, and why using standard Git tools.</p>
-<p>This architecture trades real-time performance for persistence and simplicity. For agent workflows — where context loss is the primary failure mode — that&#39;s the right tradeoff.</p>
+<p>Both Beads and Thrum store state in Git, not in memory, databases, or external<br>services. This design choice provides several guarantees:</p>
+<p><strong>Offline operation.</strong> No network dependency. Agents work in air-gapped<br>environments, on planes, or when external services are down.</p>
+<p><strong>State travels with the repository.</strong> Clone the repo, get all task history and<br>message history. No separate database to back up or migrate.</p>
+<p><strong>Survives any session boundary.</strong> Context window compaction, agent restart,<br>machine crash, or branch switch — the state persists because it&#39;s committed to<br>version control.</p>
+<p><strong>Auditable history.</strong> Every task state change and every message is a Git<br>commit. You can see who changed what, when, and why using standard Git tools.</p>
+<p>This architecture trades real-time performance for persistence and simplicity.<br>For agent workflows — where context loss is the primary failure mode — that&#39;s<br>the right tradeoff.</p>
 <h2>See Also</h2>
 <ul>
 <li><a href="./quickstart.html">Quickstart</a> — Get started with Beads and Thrum in 5 minutes</li>
-<li><a href="./agent-coordination.html">Agent Coordination</a> — Patterns for multi-agent workflows</li>
+<li><a href="./agent-coordination.html">Agent Coordination</a> — Patterns for multi-agent<br>workflows</li>
 <li><a href="./cli-reference.html">CLI Reference</a> — Complete command documentation</li>
 </ul>
 

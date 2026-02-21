@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>mcp-server — Thrum</title>
-  <meta name="description" content="">
+  <title>MCP Server — Thrum</title>
+  <meta name="description" content="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">
   <!-- Open Graph -->
   <meta property="og:type" content="article">
-  <meta property="og:title" content="mcp-server — Thrum">
-  <meta property="og:description" content="">
+  <meta property="og:title" content="MCP Server — Thrum">
+  <meta property="og:description" content="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">
   <meta property="og:url" content="https://leonletto.github.io/thrum/docs/mcp-server.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
@@ -16,8 +16,8 @@
   <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="mcp-server — Thrum">
-  <meta name="twitter:description" content="">
+  <meta name="twitter:title" content="MCP Server — Thrum">
+  <meta name="twitter:description" content="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <!-- Canonical: SPA is the primary URL -->
   <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#mcp-server.html">
@@ -56,6 +56,7 @@
 </blockquote>
 <h2>Overview</h2>
 <p>The MCP (Model Context Protocol) server enables Claude Code agents to send and<br>receive messages using native MCP tools instead of shelling out to CLI commands.<br>It runs as a long-lived child process (<code>thrum mcp serve</code>) communicating over<br>stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for<br>message operations and via WebSocket for real-time push notifications.</p>
+<p>The server provides 11 MCP tools: 5 for core messaging operations and 6 for<br>group management.</p>
 <p>The primary motivation is eliminating polling overhead. Without MCP, agents must<br>periodically call <code>thrum inbox</code> (burning tokens and context). With MCP, a cheap<br>background sub-agent blocks on <code>wait_for_message</code> and wakes the main agent<br>instantly when a message arrives.</p>
 <h2>Architecture</h2>
 <pre><code>Claude Code (Opus/Sonnet)
@@ -97,7 +98,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <li>Resolve daemon socket path (follows <code>.thrum/redirect</code> in feature worktrees)</li>
 <li>Generate composite agent ID via<br><code>identity.GenerateAgentID(repoID, role, module, name)</code></li>
 <li>Create MCP server with the official Go SDK<br>(<code>github.com/modelcontextprotocol/go-sdk/mcp</code>)</li>
-<li>Register all 5 tool handlers</li>
+<li>Register all 11 tool handlers (5 core messaging + 6 group management)</li>
 <li>Initialize WebSocket waiter (best-effort -- reads port from<br><code>.thrum/var/ws.port</code>)<ul>
 <li>Connect to <code>ws://localhost:{port}/ws</code></li>
 <li>Send <code>user.identify</code> to get git username</li>
@@ -122,7 +123,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <li><strong>Per-call <code>cli.Client</code> creation</strong>: <code>cli.Client</code> is not concurrent-safe. Each<br>tool handler creates a fresh Unix socket connection. This is cheap (local<br>socket) and avoids concurrency issues.</li>
 <li><strong>Atomic WebSocket request IDs</strong>: The waiter uses <code>atomic.Int64</code> for<br>incrementing JSON-RPC request IDs, ensuring uniqueness across concurrent<br>calls.</li>
 <li><strong>Single-waiter enforcement</strong>: Only one <code>wait_for_message</code> can be active at a<br>time per server instance. A second call returns an error. Enforced with a<br>mutex.</li>
-<li><strong>Best-effort WebSocket</strong>: If the WebSocket connection fails at startup, the<br>MCP server still operates -- only <code>wait_for_message</code> returns errors. The other<br>4 tools work via Unix socket RPC.</li>
+<li><strong>Best-effort WebSocket</strong>: If the WebSocket connection fails at startup, the<br>MCP server still operates -- only <code>wait_for_message</code> returns errors. The other<br>10 tools work via Unix socket RPC.</li>
 </ul>
 <h2>Usage</h2>
 <h3>Command</h3>
@@ -190,10 +191,10 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <td>Message text (markdown)</td>
 </tr>
 <tr>
-<td><code>priority</code></td>
+<td><code>reply_to</code></td>
 <td>string</td>
 <td>no</td>
-<td><code>critical</code>, <code>high</code>, <code>normal</code> (default), or <code>low</code></td>
+<td>Message ID to reply to (creates a reply chain)</td>
 </tr>
 <tr>
 <td><code>metadata</code></td>
@@ -222,9 +223,14 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <td>ID of the sent message</td>
 </tr>
 <tr>
-<td><code>recipient_status</code></td>
+<td><code>resolved_to</code></td>
 <td>string</td>
-<td><code>unknown</code> (recipient lookup not implemented)</td>
+<td>How the recipient was resolved (<code>name</code>, <code>role</code>, <code>group</code>)</td>
+</tr>
+<tr>
+<td><code>warnings</code></td>
+<td>array</td>
+<td>Any routing warnings (e.g., <code>@name</code> matched a role group)</td>
 </tr>
 </tbody></table>
 <p><strong>Addressing:</strong> The <code>to</code> field is parsed to extract a mention role:</p>
@@ -304,11 +310,6 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <td>Message content</td>
 </tr>
 <tr>
-<td><code>priority</code></td>
-<td>string</td>
-<td>Message priority</td>
-</tr>
-<tr>
 <td><code>timestamp</code></td>
 <td>string</td>
 <td>Creation timestamp</td>
@@ -339,14 +340,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <td>no</td>
 <td>Max seconds to wait (default 300, max 600)</td>
 </tr>
-<tr>
-<td><code>priority_filter</code></td>
-<td>string</td>
-<td>no</td>
-<td><code>all</code> (default), <code>critical</code>, <code>high_and_above</code>, or <code>normal_and_above</code></td>
-</tr>
 </tbody></table>
-<p><strong>Note:</strong> <code>priority_filter</code> is accepted but not yet implemented. All messages<br>pass through regardless of filter value.</p>
 <p><strong>Output:</strong></p>
 <table>
 <thead>
@@ -466,7 +460,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 </ul>
 <p><strong>Daemon RPC:</strong> <code>agent.list</code></p>
 <h3>broadcast_message</h3>
-<p>Send a message to all agents via the <code>@everyone</code> group, with optional filtering. The sender is automatically excluded. This is a simplified wrapper around sending to <code>@everyone</code>.</p>
+<p>Send a message to all agents via the <code>@everyone</code> group, with optional filtering.<br>The sender is automatically excluded. This is a convenience wrapper around<br>sending to <code>@everyone</code>.</p>
 <p><strong>Input:</strong></p>
 <table>
 <thead>
@@ -482,12 +476,6 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <td>string</td>
 <td>yes</td>
 <td>Message text to broadcast</td>
-</tr>
-<tr>
-<td><code>priority</code></td>
-<td>string</td>
-<td>no</td>
-<td><code>critical</code>, <code>high</code>, <code>normal</code> (default), or <code>low</code></td>
 </tr>
 <tr>
 <td><code>filter</code></td>
@@ -607,7 +595,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 </tbody></table>
 <p><strong>Daemon RPC:</strong> <code>group.create</code></p>
 <h3>delete_group</h3>
-<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be deleted.</p>
+<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be<br>deleted.</p>
 <p><strong>Input:</strong></p>
 <table>
 <thead>
@@ -671,7 +659,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <td><code>agent</code> or <code>role</code></td>
 </tr>
 <tr>
-<td><code>member_id</code></td>
+<td><code>member_value</code></td>
 <td>string</td>
 <td>yes</td>
 <td>Agent name or role name</td>
@@ -702,9 +690,9 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <td>Type of member added</td>
 </tr>
 <tr>
-<td><code>member_id</code></td>
+<td><code>member_value</code></td>
 <td>string</td>
-<td>ID of member added</td>
+<td>Value of member added</td>
 </tr>
 </tbody></table>
 <p><strong>Daemon RPC:</strong> <code>group.member.add</code></p>
@@ -733,7 +721,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <td><code>agent</code> or <code>role</code></td>
 </tr>
 <tr>
-<td><code>member_id</code></td>
+<td><code>member_value</code></td>
 <td>string</td>
 <td>yes</td>
 <td>Agent name or role name</td>
@@ -764,9 +752,9 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <td>Type of member removed</td>
 </tr>
 <tr>
-<td><code>member_id</code></td>
+<td><code>member_value</code></td>
 <td>string</td>
-<td>ID of member removed</td>
+<td>Value of member removed</td>
 </tr>
 </tbody></table>
 <p><strong>Daemon RPC:</strong> <code>group.member.remove</code></p>
@@ -831,7 +819,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 </tbody></table>
 <p><strong>Daemon RPC:</strong> <code>group.list</code></p>
 <h3>get_group</h3>
-<p>Get detailed information about a specific group. Supports expansion to resolve roles to individual agent IDs.</p>
+<p>Get detailed information about a specific group. Supports expansion to resolve<br>roles to individual agent IDs.</p>
 <p><strong>Input:</strong></p>
 <table>
 <thead>
@@ -962,38 +950,11 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <p>When messages are received:</p>
 <pre><code>MESSAGES_RECEIVED
 FROM: [sender]
-PRIORITY: [priority]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]</code></pre>
 <p>When timeout occurs:</p>
 <pre><code>NO_MESSAGES_TIMEOUT</code></pre>
 <p><strong>Cost:</strong> Approximately $0.00003 per cycle (Haiku-class model).</p>
-<h3>Priority Handling Protocol</h3>
-<p>When the main agent receives messages from the listener, it should handle<br>priorities as follows:</p>
-<table>
-<thead>
-<tr>
-<th>Priority</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>critical</code></td>
-<td>Stop current work immediately</td>
-</tr>
-<tr>
-<td><code>high</code></td>
-<td>Process at next breakpoint</td>
-</tr>
-<tr>
-<td><code>normal</code></td>
-<td>Process when current sub-task completes</td>
-</tr>
-<tr>
-<td><code>low</code></td>
-<td>Queue, process when convenient</td>
-</tr>
-</tbody></table>
 <h3>Context Management</h3>
 <ul>
 <li>Compact after 10+ message cycles to prevent context overflow</li>
@@ -1001,10 +962,19 @@ TIMESTAMP: [timestamp]</code></pre>
 </ul>
 <h3>CLAUDE.md Protocol</h3>
 <p>The project <code>CLAUDE.md</code> includes instructions for agents to use MCP tools:</p>
-<pre><code>mcp__thrum__send_message(to=&quot;@reviewer&quot;, content=&quot;...&quot;, priority=&quot;normal&quot;)
+<p><strong>Core messaging:</strong></p>
+<pre><code>mcp__thrum__send_message(to=&quot;@reviewer&quot;, content=&quot;...&quot;)
 mcp__thrum__check_messages()
 mcp__thrum__list_agents()
-mcp__thrum__broadcast_message(content=&quot;...&quot;)</code></pre>
+mcp__thrum__send_message(to=&quot;@everyone&quot;, content=&quot;...&quot;)  # preferred over broadcast_message
+mcp__thrum__wait_for_message(timeout=300)</code></pre>
+<p><strong>Group management:</strong></p>
+<pre><code>mcp__thrum__create_group(name=&quot;backend&quot;, description=&quot;Backend team&quot;)
+mcp__thrum__add_group_member(group=&quot;backend&quot;, member_type=&quot;role&quot;, member_value=&quot;implementer&quot;)
+mcp__thrum__list_groups()
+mcp__thrum__get_group(name=&quot;backend&quot;, expand=true)
+mcp__thrum__remove_group_member(group=&quot;backend&quot;, member_type=&quot;agent&quot;, member_value=&quot;alice&quot;)
+mcp__thrum__delete_group(name=&quot;backend&quot;)</code></pre>
 <h2>Development</h2>
 <h3>Source Files</h3>
 <table>
@@ -1020,7 +990,7 @@ mcp__thrum__broadcast_message(content=&quot;...&quot;)</code></pre>
 </tr>
 <tr>
 <td><code>internal/mcp/tools.go</code></td>
-<td>Tool handlers, address parsing, status derivation, priority validation</td>
+<td>Tool handlers, address parsing, status derivation</td>
 </tr>
 <tr>
 <td><code>internal/mcp/waiter.go</code></td>
@@ -1028,7 +998,7 @@ mcp__thrum__broadcast_message(content=&quot;...&quot;)</code></pre>
 </tr>
 <tr>
 <td><code>internal/mcp/types.go</code></td>
-<td>Input/output structs for all 5 tools</td>
+<td>Input/output structs for all 11 tools</td>
 </tr>
 <tr>
 <td><code>cmd/thrum/mcp.go</code></td>

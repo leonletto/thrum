@@ -91,7 +91,7 @@ cycles.
 
 **Key capabilities:**
 
-- Blocking wait via `thrum wait --timeout 15m` (6 cycles max)
+- Blocking wait via `thrum wait --timeout 15m` (6 cycles max, filters by agent identity)
 - Immediate return on message arrival
 - Time-based filtering with `--after` flag (skips old messages)
 - CLI-only (no MCP tools — sub-agents can't access MCP)

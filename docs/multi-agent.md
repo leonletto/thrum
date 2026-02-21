@@ -396,9 +396,9 @@ scripts/setup-worktree-thrum.sh ~/.workspaces/repo/auth
 Each agent in a worktree gets its own identity:
 
 ```bash
-# Main worktree: coordinator
+# Main worktree: coordinator (name must differ from role)
 cd /path/to/repo
-thrum quickstart --name coordinator --role coordinator --module main
+thrum quickstart --name coord_main --role coordinator --module main
 
 # Auth worktree: implementer
 cd ~/.workspaces/repo/auth
@@ -481,8 +481,12 @@ otherwise.
 Block until a matching message arrives or a timeout expires. This is the
 foundation of the message-listener pattern for async agent coordination.
 
+`thrum wait` always filters by the calling agent's identity — it only returns
+messages directed to this agent (by name or role group). There is no `--all`
+flag; use subscriptions if you need a firehose.
+
 ```bash
-# Wait for any message
+# Wait for any message addressed to this agent
 thrum wait --timeout 5m
 
 # Wait for messages since a time offset (skip old messages)
@@ -492,12 +496,12 @@ thrum wait --after -30s --timeout 5m --json
 thrum wait --mention @reviewer --timeout 5m
 ```
 
-| Flag        | Format                       | Description                     |
-| ----------- | ---------------------------- | ------------------------------- |
-| `--timeout` | Duration (e.g., `5m`)        | Max wait time (default: `30s`)  |
-| `--mention` | `@role`                      | Wait for mentions of a role     |
-| `--after`   | Relative time (e.g., `-30s`) | Only messages after this offset |
-| `--json`    | Boolean                      | Output messages as JSON         |
+| Flag        | Format                       | Description                        |
+| ----------- | ---------------------------- | ---------------------------------- |
+| `--timeout` | Duration (e.g., `5m`)        | Max wait time (default: `30s`)     |
+| `--mention` | `@role`                      | Wait for mentions of a role        |
+| `--after`   | Relative time (e.g., `-30s`) | Only messages after this offset    |
+| `--json`    | Boolean                      | Output messages as JSON            |
 
 **Exit codes:**
 
@@ -564,7 +568,7 @@ thrum agent set-intent "Resuming JWT implementation after compaction"
 
 ```bash
 # === Coordinator (main worktree) ===
-thrum quickstart --name coordinator --role coordinator --module main
+thrum quickstart --name coord_main --role coordinator --module main
 thrum group create backend --description "Backend team"
 thrum group add backend @furiosa
 thrum group add backend @nux
@@ -576,7 +580,7 @@ thrum send "nux: implement sync (feature/sync worktree)" --to @nux
 # Check team status
 thrum agent list --context
 # AGENT        ROLE          MODULE  BRANCH         FILES
-# coordinator  coordinator   main    main           -
+# coord_main   coordinator   main    main           -
 # furiosa      implementer   auth    feature/auth   src/auth.go
 # nux          implementer   sync    feature/sync   internal/sync/loop.go
 

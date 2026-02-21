@@ -240,7 +240,7 @@
 <tr>
 <td><strong>Subscription</strong></td>
 <td><code>subscribe</code>, <code>unsubscribe</code>, <code>subscriptions.list</code></td>
-<td></td>
+<td>Subscriptions auto-cleanup on session end (v0.4.3)</td>
 </tr>
 <tr>
 <td><strong>Sync</strong></td>
@@ -370,7 +370,7 @@ thrum daemon start --<span class="hljs-built_in">local</span>
 THRUM_LOCAL=1 thrum daemon start</code></pre>
 <p>The setting persists in <code>.thrum/config.json</code>:</p>
 <pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;local_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span></code></pre>
-<p><strong>Priority order:</strong> CLI flag &gt; environment variable &gt; config file &gt; default (false).</p>
+<p><strong>Priority order:</strong> CLI flag &gt; environment variable &gt; config file &gt; default<br>(<code>true</code> via <code>thrum init</code>).</p>
 <h3>What changes in local-only mode</h3>
 <table>
 <thead>
@@ -452,7 +452,50 @@ thrum <span class="hljs-built_in">sync</span> force
 <li><code>Projector()</code> - Returns the projection engine</li>
 <li><code>Close()</code> - Closes all JSONL writers and SQLite connection</li>
 </ul>
-<h3>10. Client Library</h3>
+<h3>10. Timeout Enforcement (v0.4.3)</h3>
+<p>All I/O paths enforce timeouts to prevent indefinite hangs:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Timeout</th>
+<th>Implementation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CLI dial</td>
+<td>5s</td>
+<td>net.DialTimeout</td>
+</tr>
+<tr>
+<td>RPC call</td>
+<td>10s</td>
+<td>context.WithTimeout</td>
+</tr>
+<tr>
+<td>Server per-request</td>
+<td>10s</td>
+<td>http.TimeoutHandler</td>
+</tr>
+<tr>
+<td>WebSocket handshake</td>
+<td>10s</td>
+<td>websocket.Upgrader</td>
+</tr>
+<tr>
+<td>Git commands</td>
+<td>5s/10s</td>
+<td>safecmd wrapper</td>
+</tr>
+<tr>
+<td>SQLite queries</td>
+<td>context-scoped</td>
+<td>safedb wrapper</td>
+</tr>
+</tbody></table>
+<p>The <code>safedb</code> and <code>safecmd</code> packages wrap all database and command operations<br>with context-aware timeouts. All DB operations go through <code>safedb</code> wrappers and<br>all command executions go through <code>safecmd</code> wrappers for context-aware timeout<br>enforcement.</p>
+<p>Lock scope has been reduced in v0.4.3 — no mutex is held during I/O, git, or<br>WebSocket dispatch operations.</p>
+<h3>11. Client Library</h3>
 <p><strong>Location:</strong> <code>internal/daemon/client.go</code></p>
 <p>Client library for connecting to the daemon.</p>
 <p><strong>Key functions:</strong></p>

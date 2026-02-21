@@ -172,11 +172,12 @@ Send a message to another agent, role, or group.
 
 **Output:**
 
-| Field              | Type   | Description                                  |
-| ------------------ | ------ | -------------------------------------------- |
-| `status`           | string | `delivered`                                  |
-| `message_id`       | string | ID of the sent message                       |
-| `recipient_status` | string | `unknown` (recipient lookup not implemented) |
+| Field         | Type   | Description                                               |
+| ------------- | ------ | --------------------------------------------------------- |
+| `status`      | string | `delivered`                                               |
+| `message_id`  | string | ID of the sent message                                    |
+| `resolved_to` | string | How the recipient was resolved (`name`, `role`, `group`)  |
+| `warnings`    | array  | Any routing warnings (e.g., `@name` matched a role group) |
 
 **Addressing:** The `to` field is parsed to extract a mention role:
 

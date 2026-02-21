@@ -64,7 +64,7 @@ executes it.
 
 ```bash
 # Register as planner
-thrum quickstart --name planner --role planner --module website \
+thrum quickstart --name planner1 --role planner --module website \
   --intent "Coordinating website development"
 
 # Assign task via message
@@ -80,7 +80,7 @@ thrum inbox
 
 ```bash
 # Register
-thrum quickstart --name implementer --role implementer --module website \
+thrum quickstart --name impl1 --role implementer --module website \
   --intent "Implementing website features"
 
 # Check inbox for assignments
@@ -227,7 +227,7 @@ use them together for full coordination:
 
 ```bash
 # 1. Register in Thrum
-thrum quickstart --name implementer --role implementer --module auth \
+thrum quickstart --name impl_auth --role implementer --module auth \
   --intent "Implementing auth system"
 
 # 2. Find work in Beads

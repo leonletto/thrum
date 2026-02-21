@@ -52,7 +52,7 @@
     <div class="docs-content-inner">
 <h1>Multi-Agent Support</h1>
 <blockquote>
-<p>See also: <a href="philosophy.html">Why Thrum Exists</a> for the philosophy behind<br>human-directed coordination, <a href="agent-coordination.html">Agent Coordination</a> for<br>workflow patterns and Beads integration, <a href="workflow-templates.html">Workflow Templates</a><br>for structured planning and implementation workflows, <a href="identity.html">Identity System</a><br>for agent naming and registration.</p>
+<p>See also: <a href="philosophy.html">Why Thrum Exists</a> for the philosophy behind<br>human-directed coordination, <a href="agent-coordination.html">Agent Coordination</a> for<br>workflow patterns and Beads integration,<br><a href="workflow-templates.html">Workflow Templates</a> for structured planning and<br>implementation workflows, <a href="identity.html">Identity System</a> for agent naming and<br>registration.</p>
 </blockquote>
 <h2>Overview</h2>
 <p>Thrum helps you coordinate multiple AI agents from the ground up. You can run<br>agents in different terminals, worktrees, or on different machines — they share<br>a single daemon and message store. Each agent gets a unique identity, and you<br>get tools to organize agents into teams, detect and configure any AI coding<br>platform, and recover full session context after compaction.</p>
@@ -106,12 +106,10 @@
 <p>Every Thrum daemon automatically creates the <code>@everyone</code> group on startup. It<br>includes all registered agents via a <code>role:*</code> wildcard, so new agents are<br>automatically reachable through it. The <code>@everyone</code> group cannot be deleted or<br>modified.</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Send to all agents</span>
 thrum send <span class="hljs-string">&quot;Deploy complete, all clear&quot;</span> --to @everyone</code></pre>
-<p>This replaces the deprecated <code>--broadcast</code> flag:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Old (deprecated):</span>
-thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --broadcast
-
-<span class="hljs-comment"># New (recommended):</span>
-thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @everyone</code></pre>
+<p>All three forms are equivalent:</p>
+<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --broadcast
+thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --to @everyone
+thrum send <span class="hljs-string">&quot;Deploy complete&quot;</span> --everyone</code></pre>
 <h3>Creating and Managing Groups</h3>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Create a group with a description</span>
 thrum group create reviewers --description <span class="hljs-string">&quot;Code review team&quot;</span>
@@ -166,8 +164,8 @@ thrum send <span class="hljs-string">&quot;Code freeze starts now&quot;</span> -
 <p>Output:</p>
 <pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
   <span class="hljs-attr">&quot;members&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;alice&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;role&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span><span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;alice&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;role&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span> <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;expanded&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;alice&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;bob&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;carol&quot;</span><span class="hljs-punctuation">]</span>
 <span class="hljs-punctuation">}</span></code></pre>
@@ -498,9 +496,9 @@ thrum setup --main-repo /path/to/repo
 scripts/setup-worktree-thrum.sh ~/.workspaces/repo/auth</code></pre>
 <h3>Running Multiple Agents</h3>
 <p>Each agent in a worktree gets its own identity:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Main worktree: coordinator</span>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Main worktree: coordinator (name must differ from role)</span>
 <span class="hljs-built_in">cd</span> /path/to/repo
-thrum quickstart --name coordinator --role coordinator --module main
+thrum quickstart --name coord_main --role coordinator --module main
 
 <span class="hljs-comment"># Auth worktree: implementer</span>
 <span class="hljs-built_in">cd</span> ~/.workspaces/repo/auth
@@ -548,11 +546,12 @@ thrum ping @furiosa
 <p>Agents are considered <code>active</code> if seen within the last 2 minutes, <code>offline</code><br>otherwise.</p>
 <h3>wait: Efficient Message Blocking</h3>
 <p>Block until a matching message arrives or a timeout expires. This is the<br>foundation of the message-listener pattern for async agent coordination.</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Wait for any message (broadcasts + directed)</span>
-thrum <span class="hljs-built_in">wait</span> --all --<span class="hljs-built_in">timeout</span> 5m
+<p><code>thrum wait</code> always filters by the calling agent&#39;s identity — it only returns<br>messages directed to this agent (by name or role group). There is no <code>--all</code><br>flag; use subscriptions if you need a firehose.</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Wait for any message addressed to this agent</span>
+thrum <span class="hljs-built_in">wait</span> --<span class="hljs-built_in">timeout</span> 5m
 
 <span class="hljs-comment"># Wait for messages since a time offset (skip old messages)</span>
-thrum <span class="hljs-built_in">wait</span> --all --after -30s --<span class="hljs-built_in">timeout</span> 5m --json
+thrum <span class="hljs-built_in">wait</span> --after -30s --<span class="hljs-built_in">timeout</span> 5m --json
 
 <span class="hljs-comment"># Wait for mentions of your role</span>
 thrum <span class="hljs-built_in">wait</span> --mention @reviewer --<span class="hljs-built_in">timeout</span> 5m</code></pre>
@@ -568,11 +567,6 @@ thrum <span class="hljs-built_in">wait</span> --mention @reviewer --<span class=
 <td><code>--timeout</code></td>
 <td>Duration (e.g., <code>5m</code>)</td>
 <td>Max wait time (default: <code>30s</code>)</td>
-</tr>
-<tr>
-<td><code>--all</code></td>
-<td>Boolean</td>
-<td>Subscribe to all messages</td>
 </tr>
 <tr>
 <td><code>--mention</code></td>
@@ -606,7 +600,7 @@ thrum group add reviewers @alice
 
 <span class="hljs-comment"># 2. Implementer finishes work and notifies the team</span>
 thrum send <span class="hljs-string">&quot;PR #42 ready for review: JWT auth implementation&quot;</span> \
-  --to @reviewers --priority high --ref <span class="hljs-built_in">pr</span>:42
+  --to @reviewers --ref <span class="hljs-built_in">pr</span>:42
 
 <span class="hljs-comment"># 3. Reviewers check their inbox</span>
 thrum inbox --mentions
@@ -639,7 +633,7 @@ thrum inbox --unread
 thrum agent set-intent <span class="hljs-string">&quot;Resuming JWT implementation after compaction&quot;</span></code></pre>
 <h3>Workflow 4: Multi-Worktree Team Coordination</h3>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># === Coordinator (main worktree) ===</span>
-thrum quickstart --name coordinator --role coordinator --module main
+thrum quickstart --name coord_main --role coordinator --module main
 thrum group create backend --description <span class="hljs-string">&quot;Backend team&quot;</span>
 thrum group add backend @furiosa
 thrum group add backend @nux
@@ -651,7 +645,7 @@ thrum send <span class="hljs-string">&quot;nux: implement sync (feature/sync wor
 <span class="hljs-comment"># Check team status</span>
 thrum agent list --context
 <span class="hljs-comment"># AGENT        ROLE          MODULE  BRANCH         FILES</span>
-<span class="hljs-comment"># coordinator  coordinator   main    main           -</span>
+<span class="hljs-comment"># coord_main   coordinator   main    main           -</span>
 <span class="hljs-comment"># furiosa      implementer   auth    feature/auth   src/auth.go</span>
 <span class="hljs-comment"># nux          implementer   sync    feature/sync   internal/sync/loop.go</span>
 
