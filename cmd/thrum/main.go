@@ -335,6 +335,182 @@ Examples:
 				fmt.Println("Config saved to .thrum/config.json — edit anytime to change")
 			}
 
+			// Step 5: Agent setup (interactive or from flags)
+			if dryRun {
+				return nil
+			}
+
+			agentNameResolved := agentName
+			agentRoleResolved := agentRole
+			agentModuleResolved := agentModule
+
+			if isInteractive() && !flagQuiet {
+				reader := bufio.NewReader(os.Stdin)
+
+				defaultRole := agentRoleResolved
+				if defaultRole == "" {
+					defaultRole = "implementer"
+				}
+				fmt.Printf("\nAgent setup:\n")
+				fmt.Printf("  Role [%s]: ", defaultRole)
+				input, _ := reader.ReadString('\n')
+				input = strings.TrimSpace(input)
+				if input != "" {
+					agentRoleResolved = input
+				} else {
+					agentRoleResolved = defaultRole
+				}
+
+				defaultName := agentNameResolved
+				if defaultName == "" {
+					defaultName = agentRoleResolved
+				}
+				fmt.Printf("  Name [%s]: ", defaultName)
+				input, _ = reader.ReadString('\n')
+				input = strings.TrimSpace(input)
+				if input != "" {
+					agentNameResolved = input
+				} else {
+					agentNameResolved = defaultName
+				}
+
+				defaultModule := agentModuleResolved
+				if defaultModule == "" {
+					defaultModule = cli.GetCurrentBranch(flagRepo)
+					if defaultModule == "" {
+						defaultModule = "main"
+					}
+				}
+				fmt.Printf("  Module [%s]: ", defaultModule)
+				input, _ = reader.ReadString('\n')
+				input = strings.TrimSpace(input)
+				if input != "" {
+					agentModuleResolved = input
+				} else {
+					agentModuleResolved = defaultModule
+				}
+			} else {
+				if agentRoleResolved == "" {
+					agentRoleResolved = "implementer"
+				}
+				if agentNameResolved == "" {
+					agentNameResolved = agentRoleResolved
+				}
+				if agentModuleResolved == "" {
+					agentModuleResolved = "main"
+				}
+			}
+
+			// Step 6: Intent
+			repoName := cli.GetRepoName(flagRepo)
+			intent := cli.DefaultIntent(agentRoleResolved, repoName)
+
+			if isInteractive() && !flagQuiet {
+				fmt.Printf("\nIntent: %s\n", intent)
+				fmt.Printf("  Edit? [Y/n]: ")
+				reader := bufio.NewReader(os.Stdin)
+				input, _ := reader.ReadString('\n')
+				input = strings.TrimSpace(input)
+				if input != "" && strings.ToLower(input) != "y" && strings.ToLower(input) != "yes" {
+					fmt.Printf("  Intent: ")
+					newIntent, _ := reader.ReadString('\n')
+					newIntent = strings.TrimSpace(newIntent)
+					if newIntent != "" {
+						intent = newIntent
+					}
+				}
+			}
+
+			// Step 7: Write identity file (v3)
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			idFile := &config.IdentityFile{
+				Version: 3,
+				RepoID:  cli.GetRepoID(flagRepo),
+				Agent: config.AgentConfig{
+					Kind:    "agent",
+					Name:    agentNameResolved,
+					Role:    agentRoleResolved,
+					Module:  agentModuleResolved,
+					Display: cli.AutoDisplay(agentRoleResolved, agentModuleResolved),
+				},
+				Worktree: cli.GetWorktreeName(flagRepo),
+				Branch:   cli.GetCurrentBranch(flagRepo),
+				Intent:   intent,
+			}
+			if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+				return fmt.Errorf("save identity file: %w", err)
+			}
+
+			// Step 8: Start daemon if not running
+			if client, err := getClient(); err != nil {
+				startCmd := exec.Command("thrum", "daemon", "start")
+				startCmd.Dir = flagRepo
+				if out, err := startCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("start daemon: %w\n%s", err, string(out))
+				}
+				if !flagQuiet {
+					fmt.Println("✓ Daemon started")
+				}
+			} else {
+				_ = client.Close()
+				if !flagQuiet {
+					fmt.Println("✓ Daemon already running")
+				}
+			}
+
+			// Step 9: Register, session, intent via quickstart logic
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon after start: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			qsOpts := cli.QuickstartOptions{
+				Name:     agentNameResolved,
+				Role:     agentRoleResolved,
+				Module:   agentModuleResolved,
+				Display:  cli.AutoDisplay(agentRoleResolved, agentModuleResolved),
+				Intent:   intent,
+				RepoPath: flagRepo,
+				NoInit:   true,
+				Force:    true,
+			}
+			qsResult, err := cli.Quickstart(client, qsOpts)
+			if err != nil {
+				return fmt.Errorf("agent setup: %w", err)
+			}
+
+			if qsResult.Session != nil {
+				idFile.SessionID = qsResult.Session.SessionID
+				_ = config.SaveIdentityFile(thrumDir, idFile)
+			}
+
+			if !flagQuiet {
+				if qsResult.Register != nil {
+					fmt.Printf("✓ Agent registered: %s\n", qsResult.Register.AgentID)
+				}
+				if qsResult.Session != nil {
+					fmt.Printf("✓ Session started: %s\n", qsResult.Session.SessionID)
+				}
+				if qsResult.Intent != nil {
+					fmt.Println("✓ Intent set")
+				}
+			}
+
+			// Step 10: Show whoami-style output
+			if !flagQuiet {
+				fmt.Println()
+				reloadedID, idPath, _ := config.LoadIdentityWithPath(flagRepo)
+				if reloadedID != nil {
+					var daemonInfo *cli.WhoamiResult
+					if result, err := cli.AgentWhoami(client, agentNameResolved); err == nil {
+						daemonInfo = result
+					}
+					summary := cli.BuildAgentSummary(reloadedID, idPath, daemonInfo)
+					fmt.Print(cli.FormatAgentSummary(summary))
+				}
+			}
+
 			return nil
 		},
 	}
