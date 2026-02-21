@@ -276,6 +276,15 @@ func TestFormatPrimeContext_ListenerInstruction_ClaudeRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Also create a context file to test context show directive
+	contextDir := tmpDir + "/.thrum/context"
+	if err := os.MkdirAll(contextDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(contextDir+"/test_agent.md", []byte("# Context"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
 	ctx := &PrimeContext{
 		Identity: &WhoamiResult{
 			AgentID: "test_agent",
@@ -294,11 +303,44 @@ func TestFormatPrimeContext_ListenerInstruction_ClaudeRuntime(t *testing.T) {
 		"message-listener",
 		"--timeout 15m",
 		tmpDir,
+		"thrum context show",
 	}
 	for _, check := range checks {
 		if !strings.Contains(output, check) {
 			t.Errorf("output missing %q:\n%s", check, output)
 		}
+	}
+}
+
+func TestFormatPrimeContext_NoContextDirective_WhenNoContextFiles(t *testing.T) {
+	// Create temp dir with identity but NO context files
+	tmpDir := t.TempDir()
+	identDir := tmpDir + "/.thrum/identities"
+	if err := os.MkdirAll(identDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(identDir+"/test_agent.json", []byte(`{"version":1}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := &PrimeContext{
+		Identity: &WhoamiResult{
+			AgentID: "test_agent",
+			Role:    "impl",
+			Module:  "auth",
+		},
+		RepoPath: tmpDir,
+		Runtime:  "claude",
+	}
+
+	output := FormatPrimeContext(ctx)
+
+	// Should have listener instruction but NOT context show
+	if !strings.Contains(output, "message-listener") {
+		t.Errorf("output should contain listener instruction:\n%s", output)
+	}
+	if strings.Contains(output, "thrum context show") {
+		t.Errorf("output should not contain context show when no context files exist:\n%s", output)
 	}
 }
 
