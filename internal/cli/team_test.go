@@ -51,9 +51,12 @@ func TestFormatTeam_SingleActive(t *testing.T) {
 		t.Errorf("missing header, got: %s", result)
 	}
 
-	// Check location
-	if !strings.Contains(result, "Location: macbook-pro / feature-auth") {
-		t.Errorf("missing location, got: %s", result)
+	// Check worktree and host as separate fields
+	if !strings.Contains(result, "Worktree: feature-auth") {
+		t.Errorf("missing worktree, got: %s", result)
+	}
+	if !strings.Contains(result, "Host:     macbook-pro") {
+		t.Errorf("missing host, got: %s", result)
 	}
 
 	// Check session with truncation (16 chars + "...")
@@ -180,16 +183,16 @@ func TestFormatTeam_Multiple(t *testing.T) {
 
 func TestFormatTeam_LocationVariants(t *testing.T) {
 	tests := []struct {
-		name     string
-		hostname string
-		worktree string
-		want     string
-		noLine   bool
+		name         string
+		hostname     string
+		worktree     string
+		wantWorktree string
+		wantHost     string
 	}{
-		{"both", "macbook", "/path/to/feature-auth", "Location: macbook / feature-auth", false},
-		{"hostname_only", "server", "", "Location: server", false},
-		{"worktree_only", "", "/path/to/my-branch", "Location: my-branch", false},
-		{"neither", "", "", "", true},
+		{"both", "macbook", "/path/to/feature-auth", "Worktree: feature-auth", "Host:     macbook"},
+		{"hostname_only", "server", "", "", "Host:     server"},
+		{"worktree_only", "", "/path/to/my-branch", "Worktree: my-branch", ""},
+		{"neither", "", "", "", ""},
 	}
 
 	for _, tt := range tests {
@@ -208,13 +211,19 @@ func TestFormatTeam_LocationVariants(t *testing.T) {
 			}
 
 			result := FormatTeam(resp)
-			if tt.noLine {
-				if strings.Contains(result, "Location:") {
-					t.Errorf("should not have Location line, got: %s", result)
+			if tt.wantWorktree != "" {
+				if !strings.Contains(result, tt.wantWorktree) {
+					t.Errorf("expected %q, got: %s", tt.wantWorktree, result)
 				}
-			} else {
-				if !strings.Contains(result, tt.want) {
-					t.Errorf("expected %q, got: %s", tt.want, result)
+			}
+			if tt.wantHost != "" {
+				if !strings.Contains(result, tt.wantHost) {
+					t.Errorf("expected %q, got: %s", tt.wantHost, result)
+				}
+			}
+			if tt.wantWorktree == "" && tt.wantHost == "" {
+				if strings.Contains(result, "Worktree:") || strings.Contains(result, "Host:") {
+					t.Errorf("should not have Worktree/Host lines, got: %s", result)
 				}
 			}
 		})

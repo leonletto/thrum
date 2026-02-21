@@ -77,22 +77,12 @@ func FormatTeam(resp *TeamListResponse) string {
 		name := m.AgentID
 		out.WriteString(fmt.Sprintf("=== @%s (%s @ %s) ===\n", name, m.Role, m.Module))
 
-		// Location: hostname / worktree
-		hostname := m.Hostname
-		worktree := ""
+		// Worktree and hostname as separate fields
 		if m.WorktreePath != "" {
-			worktree = filepath.Base(m.WorktreePath)
+			out.WriteString(fmt.Sprintf("Worktree: %s\n", filepath.Base(m.WorktreePath)))
 		}
-		if hostname != "" || worktree != "" {
-			loc := hostname
-			if worktree != "" {
-				if loc != "" {
-					loc += " / " + worktree
-				} else {
-					loc = worktree
-				}
-			}
-			out.WriteString(fmt.Sprintf("Location: %s\n", loc))
+		if m.Hostname != "" {
+			out.WriteString(fmt.Sprintf("Host:     %s\n", m.Hostname))
 		}
 
 		// Session
