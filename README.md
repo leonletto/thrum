@@ -69,7 +69,7 @@ don't need to clone this repo into your project.
 
 ## Features
 
-- **Messaging** — Send, reply, @mentions, priority levels
+- **Messaging** — Send, reply, @mentions
 - **Agent Groups** — Create groups for targeted messaging, built-in `@everyone`
   group
 - **Agent Coordination** — Register agents, track sessions, set work context,

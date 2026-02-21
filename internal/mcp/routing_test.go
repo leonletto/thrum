@@ -218,7 +218,6 @@ func TestMCPRoutingParity(t *testing.T) {
 	_, out1, err := senderMCP.handleSendMessage(ctx, nil, SendMessageInput{
 		To:       "@implementer",
 		Content:  "role-directed: hello implementer role",
-		Priority: "normal",
 	})
 	if err != nil {
 		t.Fatalf("send @implementer message: %v", err)
@@ -232,7 +231,6 @@ func TestMCPRoutingParity(t *testing.T) {
 	_, out2, err := senderMCP.handleSendMessage(ctx, nil, SendMessageInput{
 		To:       "@impl_api",
 		Content:  "name-directed: hello impl_api",
-		Priority: "normal",
 	})
 	if err != nil {
 		t.Fatalf("send @impl_api message: %v", err)
@@ -246,7 +244,6 @@ func TestMCPRoutingParity(t *testing.T) {
 	_, out3, err := senderMCP.handleSendMessage(ctx, nil, SendMessageInput{
 		To:       "@everyone",
 		Content:  "broadcast: hello everyone",
-		Priority: "normal",
 	})
 	if err != nil {
 		t.Fatalf("send @everyone message: %v", err)

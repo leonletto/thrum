@@ -19,7 +19,7 @@ func TestWaiterQueueDrain(t *testing.T) {
 	w.ctx, w.cancel = context.WithCancel(context.Background())
 	defer w.cancel()
 
-	result, err := w.WaitForMessage(context.Background(), 5, "")
+	result, err := w.WaitForMessage(context.Background(), 5)
 	if err != nil {
 		t.Fatalf("WaitForMessage: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestWaiterTimeout(t *testing.T) {
 	defer w.cancel()
 
 	start := time.Now()
-	result, err := w.WaitForMessage(context.Background(), 1, "")
+	result, err := w.WaitForMessage(context.Background(), 1)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -72,7 +72,7 @@ func TestWaiterContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := w.WaitForMessage(ctx, 30, "")
+	_, err := w.WaitForMessage(ctx, 30)
 	if err == nil {
 		t.Fatal("expected context cancellation error")
 	}
@@ -91,14 +91,14 @@ func TestWaiterSingleActive(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_, _ = w.WaitForMessage(context.Background(), 2, "")
+		_, _ = w.WaitForMessage(context.Background(), 2)
 	}()
 
 	// Give goroutine time to start waiting (intentional - ensuring operation is in-flight)
 	time.Sleep(50 * time.Millisecond)
 
 	// Second wait should fail
-	_, err := w.WaitForMessage(context.Background(), 1, "")
+	_, err := w.WaitForMessage(context.Background(), 1)
 	if err == nil {
 		t.Fatal("expected error for concurrent wait")
 	}
@@ -120,7 +120,7 @@ func TestWaiterChannelSignal(t *testing.T) {
 	// Start wait in background
 	resultCh := make(chan *WaitForMessageOutput, 1)
 	go func() {
-		result, err := w.WaitForMessage(context.Background(), 10, "")
+		result, err := w.WaitForMessage(context.Background(), 10)
 		if err != nil {
 			return
 		}

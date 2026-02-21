@@ -28,7 +28,6 @@ type SendRequest struct {
 	Refs          []types.Ref    `json:"refs,omitempty"`
 	Mentions      []string       `json:"mentions,omitempty"` // e.g., ["@reviewer"]
 	Tags          []string       `json:"tags,omitempty"`
-	Priority      string         `json:"priority,omitempty"`  // "low", "normal", "high"
 	ActingAs      string         `json:"acting_as,omitempty"` // Impersonate this agent (users only)
 	Disclose      bool           `json:"disclose,omitempty"`  // Show [via user:X] in message
 	CallerAgentID string         `json:"caller_agent_id,omitempty"`
@@ -107,6 +106,9 @@ type ListMessagesRequest struct {
 	PageSize int `json:"page_size,omitempty"` // Default: 10
 	Page     int `json:"page,omitempty"`      // Default: 1
 
+	// Time filter
+	CreatedAfter string `json:"created_after,omitempty"` // Only return messages created after this RFC3339 timestamp
+
 	// Sorting
 	SortBy    string `json:"sort_by,omitempty"`    // "created_at", "updated_at"
 	SortOrder string `json:"sort_order,omitempty"` // "asc", "desc"
@@ -129,7 +131,6 @@ type MessageSummary struct {
 	ReplyTo   string            `json:"reply_to,omitempty"`
 	AgentID   string            `json:"agent_id"`
 	Body      types.MessageBody `json:"body"`
-	Priority  string            `json:"priority,omitempty"` // Message priority: critical, high, normal, or low
 	CreatedAt string            `json:"created_at"`
 	Deleted   bool              `json:"deleted"`
 	IsRead    bool              `json:"is_read"` // Computed from message_reads (session_id OR agent_id match)
@@ -639,6 +640,12 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		args = append(args, unreadAgentID)
 	}
 
+	// Time filter: only return messages created after a given timestamp
+	if req.CreatedAfter != "" {
+		query += " AND m.created_at > ?"
+		args = append(args, req.CreatedAfter)
+	}
+
 	// For-agent filter: show messages mentioning me + messages scoped to my groups + old broadcasts (backward compat)
 	forAgentValues := buildForAgentValues(req.ForAgent, req.ForAgentRole)
 	forAgentClause, forAgentArgs := buildForAgentClause(forAgentValues, req.ForAgent, req.ForAgentRole)
@@ -647,8 +654,9 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		args = append(args, forAgentArgs...)
 	}
 
-	// Add sorting — cluster replies with parents when using inbox (for_agent) mode
-	if req.ForAgent != "" || req.ForAgentRole != "" {
+	// Add sorting — cluster replies with parents when using inbox (for_agent) mode,
+	// but respect explicit sort_order when provided (e.g., wait uses desc for newest-first)
+	if (req.ForAgent != "" || req.ForAgentRole != "") && req.SortOrder == "" {
 		// Inbox mode: group replies under their parent, then chronological within each cluster
 		query += " ORDER BY COALESCE(reply_ref.ref_value, m.message_id) ASC, m.created_at ASC"
 	} else {
@@ -685,6 +693,10 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	if unreadAgentID != "" {
 		countQuery += " AND m.message_id NOT IN (SELECT mrd.message_id FROM message_reads mrd WHERE mrd.agent_id = ?)"
 		countArgs = append(countArgs, unreadAgentID)
+	}
+	if req.CreatedAfter != "" {
+		countQuery += " AND m.created_at > ?"
+		countArgs = append(countArgs, req.CreatedAfter)
 	}
 	if forAgentClause != "" {
 		countQuery += forAgentClause

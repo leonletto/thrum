@@ -546,7 +546,6 @@ The daemon must be running and you must have an active session.`,
 			mentions, _ := cmd.Flags().GetStringSlice("mention")
 			thread, _ := cmd.Flags().GetString("thread")
 			structured, _ := cmd.Flags().GetString("structured")
-			priority, _ := cmd.Flags().GetString("priority")
 			format, _ := cmd.Flags().GetString("format")
 			to, _ := cmd.Flags().GetString("to")
 			broadcast, _ := cmd.Flags().GetBool("broadcast")
@@ -564,7 +563,6 @@ The daemon must be running and you must have an active session.`,
 				Mentions:      mentions,
 				Thread:        thread,
 				Structured:    structured,
-				Priority:      priority,
 				Format:        format,
 				To:            to,
 				Broadcast:     broadcast,
@@ -613,7 +611,6 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().StringSlice("mention", nil, "Mention a role (repeatable, format: @role)")
 	cmd.Flags().String("thread", "", "Reply to thread")
 	cmd.Flags().String("structured", "", "Structured payload (JSON)")
-	cmd.Flags().StringP("priority", "p", "normal", "Message priority (low, normal, high)")
 	cmd.Flags().String("format", "markdown", "Message format (markdown, plain, json)")
 	cmd.Flags().String("to", "", "Direct recipient (format: @role)")
 	cmd.Flags().Bool("everyone", false, "Send to all agents (alias for --to @everyone)")

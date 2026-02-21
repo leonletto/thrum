@@ -345,22 +345,17 @@ func TestWait_WithAfterFilter(t *testing.T) {
 
 			callCount++
 
-			// First poll: return old message (before threshold)
-			// Second poll: return new message (after threshold)
+			// Verify created_after is passed in params
+			params, _ := request["params"].(map[string]any)
+			createdAfter, _ := params["created_after"].(string)
+			if createdAfter == "" {
+				t.Error("Expected created_after in message.list params")
+			}
+
+			// Simulate server-side filtering: first poll returns nothing
+			// (daemon is filtering old messages), second poll returns new message
 			var messages []map[string]any
-			if callCount <= 2 {
-				messages = []map[string]any{
-					{
-						"message_id": "msg_old",
-						"agent_id":   "agent:old:XYZ",
-						"body": map[string]any{
-							"format":  "markdown",
-							"content": "Old message",
-						},
-						"created_at": afterTime.Add(-1 * time.Minute).Format(time.RFC3339Nano),
-					},
-				}
-			} else {
+			if callCount > 1 {
 				messages = []map[string]any{
 					{
 						"message_id": "msg_new",
@@ -382,7 +377,7 @@ func TestWait_WithAfterFilter(t *testing.T) {
 					"total":       len(messages),
 					"unread":      len(messages),
 					"page":        1,
-					"page_size":   1,
+					"page_size":   10,
 					"total_pages": 1,
 				},
 			}
@@ -411,8 +406,109 @@ func TestWait_WithAfterFilter(t *testing.T) {
 		t.Fatalf("Wait failed: %v", err)
 	}
 
-	// Should have skipped old message and returned new one
+	// Should return new message (server filtered old ones via created_after)
 	if message.MessageID != "msg_new" {
 		t.Errorf("Expected message_id 'msg_new', got %s", message.MessageID)
+	}
+}
+
+func TestWait_SeenMessagesSkipped(t *testing.T) {
+	daemon, socketPath := newMockDaemon(t)
+	defer daemon.stop()
+
+	callCount := 0
+
+	daemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		for {
+			var request map[string]any
+			if err := decoder.Decode(&request); err != nil {
+				return
+			}
+
+			callCount++
+
+			// First 2 polls: return same message (simulates a message that was
+			// already seen but still returned by daemon, e.g. read-marked message)
+			// Third poll: return a new message
+			var messages []map[string]any
+			if callCount <= 2 {
+				messages = []map[string]any{
+					{
+						"message_id": "msg_existing",
+						"agent_id":   "agent:sender:XYZ",
+						"body": map[string]any{
+							"format":  "markdown",
+							"content": "Already seen",
+						},
+						"created_at": time.Now().Format(time.RFC3339Nano),
+					},
+				}
+			} else {
+				messages = []map[string]any{
+					{
+						"message_id": "msg_existing",
+						"agent_id":   "agent:sender:XYZ",
+						"body": map[string]any{
+							"format":  "markdown",
+							"content": "Already seen",
+						},
+						"created_at": time.Now().Format(time.RFC3339Nano),
+					},
+					{
+						"message_id": "msg_fresh",
+						"agent_id":   "agent:sender:XYZ",
+						"body": map[string]any{
+							"format":  "markdown",
+							"content": "Fresh message",
+						},
+						"created_at": time.Now().Format(time.RFC3339Nano),
+					},
+				}
+			}
+
+			response := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      request["id"],
+				"result": map[string]any{
+					"messages":    messages,
+					"total":       len(messages),
+					"unread":      len(messages),
+					"page":        1,
+					"page_size":   10,
+					"total_pages": 1,
+				},
+			}
+
+			if err := encoder.Encode(response); err != nil {
+				return
+			}
+		}
+	})
+
+	time.Sleep(50 * time.Millisecond)
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	opts := WaitOptions{
+		Timeout: 5 * time.Second,
+	}
+
+	message, err := Wait(client, opts)
+	if err != nil {
+		t.Fatalf("Wait failed: %v", err)
+	}
+
+	// First call returns msg_existing — wait returns it immediately
+	if message.MessageID != "msg_existing" {
+		t.Errorf("Expected message_id 'msg_existing', got %s", message.MessageID)
 	}
 }

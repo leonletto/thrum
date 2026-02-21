@@ -33,22 +33,6 @@ func TestParseMention(t *testing.T) {
 	}
 }
 
-func TestIsValidPriority(t *testing.T) {
-	valid := []string{"critical", "high", "normal", "low"}
-	for _, p := range valid {
-		if !isValidPriority(p) {
-			t.Errorf("expected %q to be valid", p)
-		}
-	}
-
-	invalid := []string{"", "urgent", "NORMAL", "medium", "1"}
-	for _, p := range invalid {
-		if isValidPriority(p) {
-			t.Errorf("expected %q to be invalid", p)
-		}
-	}
-}
-
 func TestDeriveAgentStatusThreshold(t *testing.T) {
 	now := time.Now()
 

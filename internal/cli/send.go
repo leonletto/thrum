@@ -15,7 +15,6 @@ type SendOptions struct {
 	Thread        string
 	ReplyTo       string // Message ID to reply to
 	Structured    string // JSON string
-	Priority      string
 	Format        string
 	To            string // Direct recipient (e.g., "@reviewer")
 	Broadcast     bool   // Send as broadcast (no specific recipient)
@@ -103,10 +102,6 @@ func Send(client *Client, opts SendOptions) (*SendResult, error) {
 
 	if len(opts.Mentions) > 0 {
 		params["mentions"] = opts.Mentions
-	}
-
-	if opts.Priority != "" {
-		params["priority"] = opts.Priority
 	}
 
 	if opts.CallerAgentID != "" {

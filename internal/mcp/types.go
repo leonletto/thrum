@@ -2,10 +2,9 @@ package mcp
 
 // SendMessageInput is the input for the send_message MCP tool.
 type SendMessageInput struct {
-	To       string            `json:"to" jsonschema:"Recipient: @role name or agent name"`
-	Content  string            `json:"content" jsonschema:"Message text"`
-	Priority string            `json:"priority,omitempty" jsonschema:"Message priority: critical, high, normal, or low. Default: normal"`
-	ReplyTo  string            `json:"reply_to,omitempty" jsonschema:"Message ID to reply to"`
+	To      string            `json:"to" jsonschema:"Recipient: @role name or agent name"`
+	Content string            `json:"content" jsonschema:"Message text"`
+	ReplyTo string            `json:"reply_to,omitempty" jsonschema:"Message ID to reply to"`
 	Metadata map[string]string `json:"metadata,omitempty" jsonschema:"Optional key-value metadata"`
 }
 
@@ -29,7 +28,6 @@ type MessageInfo struct {
 	MessageID string `json:"message_id"`
 	From      string `json:"from"`
 	Content   string `json:"content"`
-	Priority  string `json:"priority,omitempty"`
 	Timestamp string `json:"timestamp"`
 }
 
@@ -44,8 +42,7 @@ type CheckMessagesOutput struct {
 // AgentID is intentionally omitted — the MCP server resolves identity at startup
 // via config.LoadWithPath, so the client doesn't need to pass it.
 type WaitForMessageInput struct {
-	Timeout        int    `json:"timeout,omitempty" jsonschema:"Max seconds to wait. Default 300, max 600"`
-	PriorityFilter string `json:"priority_filter,omitempty" jsonschema:"Filter: all, critical, high_and_above, or normal_and_above. Default: all"`
+	Timeout int `json:"timeout,omitempty" jsonschema:"Max seconds to wait. Default 300, max 600"`
 }
 
 // WaitForMessageOutput is the output for the wait_for_message MCP tool.
@@ -85,9 +82,8 @@ type BroadcastFilter struct {
 // AgentID/From is intentionally omitted — the MCP server resolves identity at startup
 // via config.LoadWithPath, so the client doesn't need to pass it.
 type BroadcastInput struct {
-	Content  string           `json:"content" jsonschema:"Message text to broadcast"`
-	Priority string           `json:"priority,omitempty" jsonschema:"Message priority: critical, high, normal, or low. Default: normal"`
-	Filter   *BroadcastFilter `json:"filter,omitempty" jsonschema:"Optional filters for recipient selection"`
+	Content string           `json:"content" jsonschema:"Message text to broadcast"`
+	Filter  *BroadcastFilter `json:"filter,omitempty" jsonschema:"Optional filters for recipient selection"`
 }
 
 // BroadcastOutput is the output for the broadcast_message MCP tool.
