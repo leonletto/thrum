@@ -4690,16 +4690,3 @@ func runDaemon(repoPath string, flagLocal bool) error {
 }
 
 // getWorktreeName extracts the worktree name from the repo path.
-// Returns the basename of the repo path (e.g., "daemon", "foundation", "main").
-// Uses git rev-parse --show-toplevel to get the actual worktree root, falling back
-// to filepath.Base if not in a git repo.
-func getWorktreeName(repoPath string) string {
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--show-toplevel")
-	out, err := cmd.Output()
-	if err != nil {
-		// Fallback to current behavior if not in a git repo
-		absPath, _ := filepath.Abs(repoPath)
-		return filepath.Base(absPath)
-	}
-	return filepath.Base(strings.TrimSpace(string(out)))
-}
