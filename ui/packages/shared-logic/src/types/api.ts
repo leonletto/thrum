@@ -262,3 +262,61 @@ export const AgentContextListResponseSchema = z.object({
 });
 
 export type AgentContextListResponse = z.infer<typeof AgentContextListResponseSchema>;
+
+/**
+ * Group types
+ */
+export const GroupSchema = z.object({
+  group_id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  member_count: z.number(),
+  created_at: z.string(),
+});
+
+export type Group = z.infer<typeof GroupSchema>;
+
+export const GroupMemberSchema = z.object({
+  member_type: z.enum(['agent', 'role']),
+  member_value: z.string(),
+  added_at: z.string(),
+  added_by: z.string().optional(),
+});
+
+export type GroupMember = z.infer<typeof GroupMemberSchema>;
+
+export const GroupInfoSchema = z.object({
+  group_id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  created_at: z.string(),
+  created_by: z.string().optional(),
+  members: z.array(GroupMemberSchema),
+});
+
+export type GroupInfo = z.infer<typeof GroupInfoSchema>;
+
+export const GroupListResponseSchema = z.object({
+  groups: z.array(GroupSchema),
+});
+
+export type GroupListResponse = z.infer<typeof GroupListResponseSchema>;
+
+/**
+ * Session types
+ */
+export const SessionSchema = z.object({
+  session_id: z.string(),
+  agent_id: z.string(),
+  started_at: z.string(),
+  ended_at: z.string().optional(),
+  active: z.boolean(),
+});
+
+export type Session = z.infer<typeof SessionSchema>;
+
+export const SessionListResponseSchema = z.object({
+  sessions: z.array(SessionSchema),
+});
+
+export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;
