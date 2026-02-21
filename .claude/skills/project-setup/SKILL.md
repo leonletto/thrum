@@ -280,8 +280,8 @@ For **reused worktrees**, verify redirects are intact:
 
 ```bash
 # In the existing worktree
-cat .thrum/redirect    # should point to project root
-cat .beads/redirect    # should point to project root
+cat .thrum/redirect    # should point to <project-root>/.thrum
+cat .beads/redirect    # should point to <project-root>/.beads
 ```
 
 If the project root CLAUDE.md has a worktree table, update it with any new entries.
