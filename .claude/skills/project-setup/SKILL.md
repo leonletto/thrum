@@ -232,6 +232,7 @@ For each epic/worktree assignment, fill the `toolkit/templates/agent-dev-workflo
 | `{{QUALITY_COMMANDS}}` | Test/lint commands                                  |
 | `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                   |
 | `{{AGENT_NAME}}`       | Unique name (e.g., `impl-{feature}`)                |
+| `{{PLAN_FILE}}`        | Path to the plan file (primary input)               |
 
 Add a header with quick context before the filled template:
 
