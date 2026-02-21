@@ -411,7 +411,7 @@ Examples:
 				reader := bufio.NewReader(os.Stdin)
 				input, _ := reader.ReadString('\n')
 				input = strings.TrimSpace(input)
-				if input != "" && strings.ToLower(input) != "y" && strings.ToLower(input) != "yes" {
+				if strings.ToLower(input) == "n" || strings.ToLower(input) == "no" {
 					fmt.Printf("  Intent: ")
 					newIntent, _ := reader.ReadString('\n')
 					newIntent = strings.TrimSpace(newIntent)
@@ -443,10 +443,8 @@ Examples:
 
 			// Step 8: Start daemon if not running
 			if client, err := getClient(); err != nil {
-				startCmd := exec.Command("thrum", "daemon", "start")
-				startCmd.Dir = flagRepo
-				if out, err := startCmd.CombinedOutput(); err != nil {
-					return fmt.Errorf("start daemon: %w\n%s", err, string(out))
+				if startErr := cli.DaemonStart(flagRepo, false); startErr != nil && !strings.Contains(startErr.Error(), "already running") {
+					return fmt.Errorf("start daemon: %w", startErr)
 				}
 				if !flagQuiet {
 					fmt.Println("✓ Daemon started")
@@ -1793,16 +1791,18 @@ The agent identity is determined from:
 					_ = os.Remove(legacyFile)
 				}
 				identity := &config.IdentityFile{
-					Version: 1,
+					Version: 3,
+					RepoID:  cli.GetRepoID(flagRepo),
 					Agent: config.AgentConfig{
 						Kind:    "agent",
 						Name:    savedName,
 						Role:    flagRole,
 						Module:  flagModule,
-						Display: display,
+						Display: cli.AutoDisplay(flagRole, flagModule),
 					},
-					Worktree:  getWorktreeName(flagRepo),
-					UpdatedAt: time.Now(),
+					Worktree: cli.GetWorktreeName(flagRepo),
+					Branch:   cli.GetCurrentBranch(flagRepo),
+					Intent:   cli.DefaultIntent(flagRole, cli.GetRepoName(flagRepo)),
 				}
 				thrumDir := filepath.Join(flagRepo, ".thrum")
 				if err := config.SaveIdentityFile(thrumDir, identity); err != nil {
