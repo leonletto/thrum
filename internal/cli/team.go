@@ -73,9 +73,15 @@ func FormatTeam(resp *TeamListResponse) string {
 			out.WriteString("\n")
 		}
 
-		// Header: === @name (role @ module) ===
-		name := m.AgentID
-		out.WriteString(fmt.Sprintf("=== @%s (%s @ %s) ===\n", name, m.Role, m.Module))
+		// Header via compact summary format
+		summary := &AgentSummary{
+			AgentID: m.AgentID,
+			Module:  m.Module,
+			Intent:  m.Intent,
+			Branch:  m.Branch,
+			Status:  m.Status,
+		}
+		out.WriteString(FormatAgentSummaryCompact(summary) + "\n")
 
 		// Worktree and hostname as separate fields
 		if m.WorktreePath != "" {

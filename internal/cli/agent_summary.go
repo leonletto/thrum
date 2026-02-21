@@ -24,7 +24,7 @@ type AgentSummary struct {
 	SessionStart string `json:"session_start,omitempty"`
 	IdentityFile string `json:"identity_file,omitempty"`
 	UpdatedAt    string `json:"updated_at,omitempty"`
-	Source       string `json:"source,omitempty"`
+	Source       string `json:"source"`
 	Status       string `json:"status,omitempty"`
 }
 
