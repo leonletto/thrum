@@ -74,9 +74,10 @@ echo "$CONTEXT" | thrum context save 2>/dev/null || true
 
 # Also write to /tmp as backup (in case thrum context save fails)
 # Include agent identity + epoch in filename for multi-agent disambiguation
-AGENT_NAME=$(thrum whoami --json 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
-AGENT_ROLE=$(thrum whoami --json 2>/dev/null | grep -o '"role":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
-AGENT_MODULE=$(thrum whoami --json 2>/dev/null | grep -o '"module":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+WHOAMI_JSON=$(thrum whoami --json 2>/dev/null || echo "{}")
+AGENT_NAME=$(echo "$WHOAMI_JSON" | grep '"agent_id"' | sed 's/.*"agent_id": *"\([^"]*\)".*/\1/' || echo "unknown")
+AGENT_ROLE=$(echo "$WHOAMI_JSON" | grep '"role"' | sed 's/.*"role": *"\([^"]*\)".*/\1/' || echo "unknown")
+AGENT_MODULE=$(echo "$WHOAMI_JSON" | grep '"module"' | sed 's/.*"module": *"\([^"]*\)".*/\1/' || echo "unknown")
 EPOCH=$(date +%s)
 BACKUP_FILE="/tmp/thrum-pre-compact-${AGENT_NAME}-${AGENT_ROLE}-${AGENT_MODULE}-${EPOCH}.md"
 echo "$CONTEXT" > "$BACKUP_FILE" 2>/dev/null || true
