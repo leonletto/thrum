@@ -759,3 +759,86 @@ func runGitCmd(t *testing.T, dir string, args ...string) {
 		t.Fatalf("Failed to run git %v: %v", args, err)
 	}
 }
+
+func TestIdentityFileV3Fields(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750)
+
+	identity := &config.IdentityFile{
+		Version:   3,
+		RepoID:    "r_TEST123456",
+		Agent:     config.AgentConfig{Kind: "agent", Name: "coordinator", Role: "coordinator", Module: "main", Display: "Coordinator (main)"},
+		Worktree:  "thrum",
+		Branch:    "main",
+		Intent:    "Coordinate agents and tasks in thrum",
+		SessionID: "ses_01ABC",
+	}
+
+	if err := config.SaveIdentityFile(thrumDir, identity); err != nil {
+		t.Fatalf("SaveIdentityFile: %v", err)
+	}
+
+	loaded, _, err := config.LoadIdentityWithPath(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadIdentityWithPath: %v", err)
+	}
+
+	if loaded.Version != 3 {
+		t.Errorf("Version = %d, want 3", loaded.Version)
+	}
+	if loaded.Branch != "main" {
+		t.Errorf("Branch = %q, want %q", loaded.Branch, "main")
+	}
+	if loaded.Intent != "Coordinate agents and tasks in thrum" {
+		t.Errorf("Intent = %q, want correct default", loaded.Intent)
+	}
+	if loaded.SessionID != "ses_01ABC" {
+		t.Errorf("SessionID = %q, want %q", loaded.SessionID, "ses_01ABC")
+	}
+	if loaded.Agent.Display != "Coordinator (main)" {
+		t.Errorf("Display = %q, want %q", loaded.Agent.Display, "Coordinator (main)")
+	}
+}
+
+func TestIdentityFileV1Compat(t *testing.T) {
+	tmpDir := t.TempDir()
+	identitiesDir := filepath.Join(tmpDir, ".thrum", "identities")
+	os.MkdirAll(identitiesDir, 0750)
+
+	v1Data := `{"version":1,"repo_id":"","agent":{"Kind":"agent","Name":"old_agent","Role":"implementer","Module":"main","Display":""},"worktree":"thrum","confirmed_by":"","updated_at":"2026-01-01T00:00:00Z"}`
+	os.WriteFile(filepath.Join(identitiesDir, "old_agent.json"), []byte(v1Data), 0600)
+
+	loaded, _, err := config.LoadIdentityWithPath(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadIdentityWithPath v1 file: %v", err)
+	}
+	if loaded.Branch != "" {
+		t.Errorf("v1 file Branch should be empty, got %q", loaded.Branch)
+	}
+	if loaded.Intent != "" {
+		t.Errorf("v1 file Intent should be empty, got %q", loaded.Intent)
+	}
+}
+
+func TestSaveIdentityFile_BumpsVersionTo3(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+
+	identity := &config.IdentityFile{
+		Version: 1,
+		Agent:   config.AgentConfig{Name: "test_agent", Role: "implementer", Module: "main"},
+	}
+
+	if err := config.SaveIdentityFile(thrumDir, identity); err != nil {
+		t.Fatalf("SaveIdentityFile: %v", err)
+	}
+
+	loaded, _, err := config.LoadIdentityWithPath(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadIdentityWithPath: %v", err)
+	}
+	if loaded.Version != 3 {
+		t.Errorf("Version after save = %d, want 3", loaded.Version)
+	}
+}

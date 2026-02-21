@@ -34,9 +34,12 @@ type IdentityFile struct {
 	Version     int         `json:"version"`
 	RepoID      string      `json:"repo_id"`
 	Agent       AgentConfig `json:"agent"`
-	Worktree    string      `json:"worktree"` // Worktree name (e.g., "daemon", "foundation")
-	ConfirmedBy string      `json:"confirmed_by"`
-	ContextFile string      `json:"context_file,omitempty"` // Relative path from .thrum/ (e.g., "context/coordinator.md")
+	Worktree    string      `json:"worktree"`
+	Branch      string      `json:"branch,omitempty"`
+	Intent      string      `json:"intent,omitempty"`
+	SessionID   string      `json:"session_id,omitempty"`
+	ConfirmedBy string      `json:"confirmed_by,omitempty"`
+	ContextFile string      `json:"context_file,omitempty"`
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
@@ -264,6 +267,9 @@ func SaveIdentityFile(thrumDir string, identity *IdentityFile) error {
 
 	identityPath := filepath.Join(identitiesDir, filename)
 
+	if identity.Version < 3 {
+		identity.Version = 3
+	}
 	identity.UpdatedAt = time.Now().UTC()
 	data, err := json.MarshalIndent(identity, "", "  ")
 	if err != nil {
