@@ -2,8 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
+	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/runtime"
 )
 
@@ -114,6 +116,51 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		return nil, fmt.Errorf("session start failed: %w", err)
 	}
 	result.Session = sessResult
+
+	// Step 2.5: Enrich identity file with v3 fields
+	repoPath := opts.RepoPath
+	if repoPath == "" {
+		repoPath = "."
+	}
+	if idFile, _, err := config.LoadIdentityWithPath(repoPath); err == nil {
+		thrumDir := filepath.Join(repoPath, ".thrum")
+		changed := false
+
+		if idFile.Version < 3 {
+			idFile.Version = 3
+			changed = true
+		}
+		if idFile.Branch == "" {
+			idFile.Branch = GetCurrentBranch(repoPath)
+			changed = true
+		}
+		if idFile.RepoID == "" {
+			if repoID := GetRepoID(repoPath); repoID != "" {
+				idFile.RepoID = repoID
+				changed = true
+			}
+		}
+		if idFile.Agent.Display == "" {
+			idFile.Agent.Display = AutoDisplay(idFile.Agent.Role, idFile.Agent.Module)
+			changed = true
+		}
+		if sessResult != nil && sessResult.SessionID != "" {
+			idFile.SessionID = sessResult.SessionID
+			changed = true
+		}
+		if opts.Intent != "" && idFile.Intent != opts.Intent {
+			idFile.Intent = opts.Intent
+			changed = true
+		} else if idFile.Intent == "" {
+			repoName := GetRepoName(repoPath)
+			idFile.Intent = DefaultIntent(idFile.Agent.Role, repoName)
+			changed = true
+		}
+
+		if changed {
+			_ = config.SaveIdentityFile(thrumDir, idFile)
+		}
+	}
 
 	// Step 3: Set intent (optional)
 	if opts.Intent != "" {
