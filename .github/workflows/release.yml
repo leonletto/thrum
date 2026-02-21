@@ -83,22 +83,34 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
-          # Find and notarize each signed darwin binary
+          # Find and notarize each signed darwin binary (with retries)
           for bin in dist/thrum_darwin_*/thrum; do
             echo "Notarizing $bin..."
 
-            # notarytool requires zip format
             zip_path="${bin}.zip"
             ditto -c -k "$bin" "$zip_path"
 
-            xcrun notarytool submit "$zip_path" \
-              --apple-id "$APPLE_ID" \
-              --team-id "$APPLE_TEAM_ID" \
-              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-              --wait
+            # Retry up to 3 times with 15s backoff for transient network errors
+            for attempt in 1 2 3; do
+              echo "  Attempt $attempt/3..."
+              if xcrun notarytool submit "$zip_path" \
+                --apple-id "$APPLE_ID" \
+                --team-id "$APPLE_TEAM_ID" \
+                --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+                --wait; then
+                echo "Notarization complete for $bin"
+                break
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "  Retrying in $((attempt * 15))s..."
+                sleep $((attempt * 15))
+              else
+                echo "  Notarization failed after 3 attempts for $bin"
+                exit 1
+              fi
+            done
 
             rm "$zip_path"
-            echo "Notarization complete for $bin"
           done
 
       - name: Cleanup keychain
