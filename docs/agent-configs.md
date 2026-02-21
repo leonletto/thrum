@@ -43,7 +43,6 @@ and CLI.
 - Agent registration with roles and intents
 - Direct messaging and broadcasts
 - MCP server integration with async notifications
-- Message priority handling (critical/high/normal/low)
 - Session management and heartbeats
 
 ### Beads Plugin (recommended)

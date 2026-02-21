@@ -17,7 +17,7 @@ flag descriptions.
 ## Messaging
 
 ```
-thrum send <message> --to @name [--priority critical|high|normal|low]
+thrum send <message> --to @name
 thrum send <message> --to @everyone            # Broadcast to all agents
 thrum send <message> --everyone                # Alias for --to @everyone
 thrum reply <msg-id> <response>

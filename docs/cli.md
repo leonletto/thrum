@@ -292,7 +292,6 @@ have an active session.
 | `--ref`             | Add reference (repeatable, format: `type:value`)             |            |
 | `--mention`         | Mention a role (repeatable, format: `@role`)                 |            |
 | `--structured`      | Structured payload (JSON string)                             |            |
-| `--priority`        | Message priority (`low`, `normal`, `high`)                   | `normal`   |
 | `--format`          | Message format (`markdown`, `plain`, `json`)                 | `markdown` |
 
 The `--to` flag adds the recipient as a mention, making it a directed message.

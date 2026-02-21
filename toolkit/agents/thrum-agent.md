@@ -113,20 +113,15 @@ Task({
 1. Block until a message arrives or timeout (5 minutes default)
 2. Return when messages received: `MESSAGES_RECEIVED`
 3. Return on timeout: `NO_MESSAGES_TIMEOUT`
-4. Automatically process high/critical priority messages
 
 **After listener returns:**
 
 ```typescript
-// Process messages based on priority
+// Process messages
 const messages = await mcp.thrum.check_messages();
 
 for (const msg of messages) {
-  if (msg.priority === "critical" || msg.priority === "high") {
-    // Handle immediately
-  } else {
-    // Queue for later
-  }
+  // Handle messages
 }
 
 // Re-arm the listener
@@ -197,7 +192,6 @@ Messages are the core communication primitive:
 - **To** - Direct message to specific agent (`--to @name`)
 - **Broadcast** - Send to all active agents (`--broadcast`)
 - **Reply** - Reply to existing message (creates thread)
-- **Priority** - `low`, `normal`, `high`, `critical`
 - **Mentions** - Reference agents with `@name` syntax
 
 **Message Storage:**
@@ -273,7 +267,7 @@ thrum ping @name
 thrum quickstart --name planner --role planner --module website --intent "Coordinating website development"
 
 # Assign task via message
-thrum send "Please implement build script (task thrum-235d.3). Design spec in docs/plans/. Check beads for details." --to @implementer --priority high
+thrum send "Please implement build script (task thrum-235d.3). Design spec in docs/plans/. Check beads for details." --to @implementer
 
 # Check for updates
 thrum inbox
@@ -298,7 +292,6 @@ const messages = await mcp.thrum.check_messages();
 await mcp.thrum.send_message({
   to: "@planner",
   content: "Build script complete. Tests passing. Ready for review.",
-  priority: "normal",
 });
 
 // 5. Re-arm listener
@@ -342,7 +335,7 @@ thrum send "Build script complete (commit abc123). Please review:
 - Search index generation
 - Error handling
 
-Tests passing. Beads task: thrum-235d.3" --to @reviewer --priority high
+Tests passing. Beads task: thrum-235d.3" --to @reviewer
 ```
 
 **Reviewer:**
@@ -448,20 +441,6 @@ if (listenerResult.includes("MESSAGES_RECEIVED")) {
     markAsRead: true,
   });
 
-  // Handle by priority
-  const critical = messages.filter((m) => m.priority === "critical");
-  const high = messages.filter((m) => m.priority === "high");
-
-  // Stop current work for critical messages
-  if (critical.length > 0) {
-    // Handle immediately
-  }
-
-  // Queue high priority for next breakpoint
-  if (high.length > 0) {
-    // Add to work queue
-  }
-
   // Re-arm listener
   Task({
     subagent_type: "message-listener",
@@ -479,20 +458,10 @@ if (listenerResult.includes("MESSAGES_RECEIVED")) {
     await mcp.thrum.send_message({
       to: "@coordinator",
       content: "Work complete. Going idle.",
-      priority: "low",
     });
   }
 }
 ```
-
-### Priority Handling
-
-| Priority   | Action                                              |
-| ---------- | --------------------------------------------------- |
-| `critical` | Stop current work immediately, process message      |
-| `high`     | Process at next breakpoint (end of current subtask) |
-| `normal`   | Queue, process when convenient                      |
-| `low`      | Background, process during idle time                |
 
 ### MCP Tool Reference
 
@@ -502,7 +471,6 @@ if (listenerResult.includes("MESSAGES_RECEIVED")) {
 await mcp.thrum.send_message({
   to: "@agent-name", // Required: recipient @name
   content: "Message text", // Required: message body
-  priority: "normal", // Optional: low|normal|high|critical
 });
 ```
 
@@ -539,14 +507,12 @@ const agents = await mcp.thrum.list_agents({
 // DEPRECATED: Use send_message with to="@everyone" instead
 await mcp.thrum.broadcast_message({
   content: "Deploy complete",
-  priority: "normal",
 });
 
 // PREFERRED: Send to @everyone group
 await mcp.thrum.send_message({
   to: "@everyone",
   content: "Deploy complete",
-  priority: "normal",
 });
 ```
 
@@ -617,7 +583,7 @@ thrum status
 **Messaging:**
 
 ```bash
-thrum send "message" --to @name [--priority normal]
+thrum send "message" --to @name
 thrum send "message" --to @groupname            # Send to group
 thrum send "message" --broadcast                # DEPRECATED: use --to @everyone
 thrum inbox [--unread]                          # Auto-excludes own messages, marks displayed as read
@@ -713,7 +679,7 @@ thrum send "Progress update: JWT working, found validation bug (filed bd-456)" -
 bd close bd-123 --reason "JWT auth complete with tests" --json
 
 # 9. Announce via Thrum
-thrum send "Completed bd-123. Ready for review." --to @reviewer --priority high
+thrum send "Completed bd-123. Ready for review." --to @reviewer
 
 # 10. Sync both
 bd sync
@@ -726,7 +692,6 @@ bd sync
 | ---------- | ---------------------------------- | --------------------------------------- |
 | Task ID    | `bd-123`                           | Include in message: "Working on bd-123" |
 | Status     | `bd update --status`               | Send message with update                |
-| Priority   | `bd update --priority`             | `--priority` flag on messages           |
 | Assignment | `bd update --assignee`             | Send message to specific agent          |
 | Completion | `bd close bd-123`                  | Send completion message                 |
 | Discovery  | `bd create --deps discovered-from` | Notify via message                      |
@@ -738,7 +703,6 @@ bd sync
 - **Register at session start** - Always use `thrum quickstart`
 - **Use MCP server when available** - Better than CLI polling
 - **Launch message-listener** - Get real-time notifications
-- **Handle priorities** - Respect critical/high/normal/low
 - **Send status updates** - Keep team informed
 - **Use @mentions** - Reference agents by name
 - **Use groups for team messaging** - Create groups for common recipient sets
@@ -773,13 +737,12 @@ bd sync
 bd ready --json
 
 # Assign via Thrum
-thrum send "Task bd-456 is ready for implementation. See design spec in docs/plans/. Estimated 2-3 hours." --to @implementer --priority high
+thrum send "Task bd-456 is ready for implementation. See design spec in docs/plans/. Estimated 2-3 hours." --to @implementer
 ```
 
 **Implementer (MCP):**
 
 ```typescript
-// Listener notifies of high-priority message
 const messages = await mcp.thrum.check_messages();
 const task = messages.find((m) => m.content.includes("bd-456"));
 
@@ -800,7 +763,7 @@ await mcp.thrum.send_message({
 bd update bd-789 --status blocked --json
 
 # Notify team
-thrum send "Blocked on bd-789: Need API credentials for Stripe integration. @coordinator can you help?" --to @coordinator --priority high
+thrum send "Blocked on bd-789: Need API credentials for Stripe integration. @coordinator can you help?" --to @coordinator
 ```
 
 ### Pattern 3: Review Request
@@ -816,7 +779,7 @@ thrum send "bd-123 complete (commit a1b2c3d). Please review:
 - Middleware (src/auth/middleware.ts)
 - Tests (tests/auth.test.ts)
 
-All tests passing. Ready to merge." --to @reviewer --priority high
+All tests passing. Ready to merge." --to @reviewer
 ```
 
 ### Pattern 4: Context Compaction Recovery
@@ -872,7 +835,7 @@ thrum send "Progress update: <status>" --to @coordinator
 # Process messages, respond as needed
 
 # 9. Coordinate on blockers
-thrum send "Blocked: <description>" --to @coordinator --priority high
+thrum send "Blocked: <description>" --to @coordinator
 
 # === END OF SESSION ===
 
@@ -1087,7 +1050,6 @@ Thrum provides:
 - **Launch message-listener** - Get async notifications
 - **Integrate with Beads** - Use both for full coordination
 - **Send status updates** - Keep team informed
-- **Handle priorities** - Respect critical/high messages
 - **End sessions cleanly** - `thrum session end`
 
 **Quick Start:**

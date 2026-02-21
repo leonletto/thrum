@@ -9,22 +9,6 @@
 4. **Read** — Auto-marked read when displayed via `thrum inbox`
 5. **Reply** — `thrum reply <msg-id> "response"` (same audience)
 
-## Priority Handling
-
-| Priority   | When to use                                 | How to handle                      |
-| ---------- | ------------------------------------------- | ---------------------------------- |
-| `critical` | Production outages, blocking all work       | Stop current work immediately      |
-| `high`     | Review requests, blockers, urgent questions | Process at next natural breakpoint |
-| `normal`   | Status updates, coordination, FYI           | Process when convenient            |
-| `low`      | Background info, non-urgent notifications   | Batch during idle time             |
-
-```bash
-thrum send "Production is down" --to @everyone -p critical
-thrum send "Please review PR" --to @reviewer -p high
-thrum send "Starting task bd-123" --to @lead        # default: normal
-thrum send "FYI: updated docs" --to @team -p low
-```
-
 ## Addressing
 
 - **Direct:** `--to @agent-name` — single recipient
@@ -83,5 +67,5 @@ thrum send "Progress: auth module complete" --to @lead
 
 # Complete → Beads + Thrum
 bd close bd-123 --reason "Done with tests"
-thrum send "bd-123 done, ready for review" --to @reviewer -p high
+thrum send "bd-123 done, ready for review" --to @reviewer
 ```

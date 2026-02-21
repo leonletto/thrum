@@ -92,7 +92,7 @@ All commands live under the `/thrum:` namespace.
 | Command                 | Purpose                                                      |
 | ----------------------- | ------------------------------------------------------------ |
 | `/thrum:quickstart`     | Register agent and start session (interactive or with flags) |
-| `/thrum:send`           | Send direct, group, or broadcast messages with priority      |
+| `/thrum:send`           | Send direct, group, or broadcast messages                    |
 | `/thrum:inbox`          | Check message inbox (all or unread only)                     |
 | `/thrum:reply`          | Reply to a message (inherits original audience)              |
 | `/thrum:wait`           | Block until a message arrives (background listener use)      |
@@ -122,11 +122,11 @@ thrum quickstart --role implementer --module auth --intent "Building login flow"
 /thrum:send
 ```
 
-Guided prompt for recipient, message, and priority. Direct usage:
+Guided prompt for recipient and message. Direct usage:
 
 ```bash
 thrum send "Starting auth work" --to @coordinator
-thrum send "Need review" --to @reviewers -p high
+thrum send "Need review" --to @reviewers
 thrum send "Heads up: breaking change" --to @everyone
 ```
 
@@ -166,7 +166,7 @@ guidance:
 
 | Resource              | When it's used                                            |
 | --------------------- | --------------------------------------------------------- |
-| `MESSAGING.md`        | Message lifecycle, priority handling, addressing patterns |
+| `MESSAGING.md`        | Message lifecycle, addressing patterns                    |
 | `GROUPS.md`           | Creating groups, adding members, group messaging          |
 | `IDENTITY.md`         | Agent naming, registration, multi-worktree identity       |
 | `WORKTREES.md`        | Cross-worktree coordination, shared daemon, file tracking |

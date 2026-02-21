@@ -12,7 +12,6 @@ multi-agent workflows. Covers:
 - MCP server integration and configuration
 - CLI commands for messaging, sessions, and coordination
 - Message listener pattern for async notifications
-- Priority handling (critical/high/normal/low)
 - Common workflows: task assignment, peer collaboration, code review
 - Beads integration for combined task + messaging coordination
 - Troubleshooting guide
@@ -87,15 +86,6 @@ reply <msg-id> "response" # Reply (creates a reply-to reference)
 - list_groups — List all groups
 - get_group — Get group details with optional expansion
 
-## Priority Handling
-
-| Priority | Action                                  |
-| -------- | --------------------------------------- |
-| critical | Stop current work immediately           |
-| high     | Process at next breakpoint              |
-| normal   | Process when current sub-task completes |
-| low      | Queue, process when convenient          |
-
 ## Session Template
 
 # Start
@@ -168,7 +158,7 @@ When messages received:
 
 ## MESSAGES_RECEIVED
 
-FROM: [sender] PRIORITY: [priority] CONTENT: [message content]
+FROM: [sender] CONTENT: [message content]
 
 ---
 

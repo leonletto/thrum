@@ -42,13 +42,7 @@ The `@everyone` group is auto-created and handles membership dynamically.
 Always register at session start. Without registration, messages won't be routed
 correctly and `thrum inbox` won't know who you are.
 
-## 6. Ignoring Critical Priority Messages
-
-**Wrong:** Continuing current work when a critical message arrives. **Right:**
-Stop current work immediately. Critical messages indicate production issues or
-team-blocking situations.
-
-## 7. Vague Intents
+## 6. Vague Intents
 
 **Wrong:** `thrum quickstart --intent "Working on stuff"` **Right:**
 `thrum quickstart --intent "Implementing JWT auth for login endpoint (bd-123)"`
@@ -56,30 +50,30 @@ team-blocking situations.
 Specific intents help other agents understand what you're doing via
 `thrum team`.
 
-## 8. Leaving Sessions Open
+## 7. Leaving Sessions Open
 
 **Wrong:** Finishing work but not ending the session. **Right:** Run
 `thrum session end` when done. Stale sessions make `thrum team` unreliable.
 
-## 9. Reading Files Instead of Using CLI
+## 8. Reading Files Instead of Using CLI
 
 **Wrong:** Reading `.git/thrum-sync/` files directly with the Read tool.
 **Right:** Use `thrum inbox`, `thrum status`, `thrum prime`. The SKILL.md
 `allowed-tools` is `Bash(thrum:*)` — no Read permission needed.
 
-## 10. Sending Messages to Yourself
+## 9. Sending Messages to Yourself
 
 **Wrong:** `thrum send "note to self" --to @me` **Right:** Use Beads notes
 (`bd update <id> --notes "..."`) for self-notes. Thrum is for inter-agent
 communication.
 
-## 11. Spamming Status Updates
+## 10. Spamming Status Updates
 
 **Wrong:** Sending a message after every line of code. **Right:** Batch updates
 at natural breakpoints — after completing a subtask, hitting a blocker, or
 finishing the main task.
 
-## 12. Not Including Context in Messages
+## 11. Not Including Context in Messages
 
 **Wrong:** `thrum send "done" --to @lead` **Right:**
 `thrum send "Completed bd-123: JWT auth with tests passing. 3 files changed." --to @lead`

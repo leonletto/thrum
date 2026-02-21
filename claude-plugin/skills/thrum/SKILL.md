@@ -20,7 +20,6 @@ SessionStart and PreCompact).
 
 ```
 thrum send "msg" --to @name              Direct message
-thrum send "msg" --to @name -p high      High priority (critical|high|normal|low)
 thrum send "msg" --to @everyone          Broadcast to all agents
 thrum reply <msg-id> "response"          Reply (same audience)
 thrum inbox                              List messages (unread first)
@@ -101,12 +100,6 @@ for cross-session/cross-worktree coordination messages.
 
 ## Message Protocol
 
-### Priority Handling
-
-- **critical/high**: Process immediately when received
-- **normal**: Process at natural breakpoints
-- **low**: Batch and process when idle
-
 ### Listener Pattern (Background Message Monitoring)
 
 When `thrum prime` detects a Claude Code session with an active identity, it
@@ -134,7 +127,7 @@ Re-arm after processing. See
 | Resource                                             | Content                                         |
 | ---------------------------------------------------- | ----------------------------------------------- |
 | [BOUNDARIES.md](resources/BOUNDARIES.md)             | Thrum vs TaskList/SendMessage decision guide    |
-| [MESSAGING.md](resources/MESSAGING.md)               | Protocol patterns, priority, context management |
+| [MESSAGING.md](resources/MESSAGING.md)               | Protocol patterns, context management           |
 | [ANTI_PATTERNS.md](resources/ANTI_PATTERNS.md)       | Common mistakes and how to avoid them           |
 | [LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md) | Background message listener template            |
 | [CLI_REFERENCE.md](resources/CLI_REFERENCE.md)       | Complete command syntax reference               |

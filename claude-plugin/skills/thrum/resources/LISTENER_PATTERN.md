@@ -38,11 +38,6 @@ if "MESSAGES_RECEIVED" in result:
     # Read full messages
     thrum inbox --unread
 
-    # Handle by priority:
-    # - critical: stop current work, handle immediately
-    # - high: handle at next breakpoint
-    # - normal/low: queue for later
-
     # Re-arm listener
     Task(subagent_type="message-listener", ...)
 else:
@@ -67,7 +62,6 @@ Messages received:
 MESSAGES_RECEIVED
 ---
 FROM: @coordinator
-PRIORITY: high
 CONTENT: Please review PR #42
 TIMESTAMP: 2026-02-13T10:30:00Z
 ---
