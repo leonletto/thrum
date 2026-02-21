@@ -325,6 +325,13 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 			out.WriteString("\n⚠ ACTION REQUIRED: Start background message listener now:\n")
 			fmt.Fprintf(&out, "  Task(subagent_type=\"message-listener\", model=\"haiku\", run_in_background=true,\n")
 			fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages. WAIT_CMD=cd %s && thrum wait --timeout 15m --after -30s --json\")\n", repoPath)
+
+			// Check for saved context and prompt agent to load it
+			contextDir := filepath.Join(repoPath, ".thrum", "context")
+			if ctxEntries, err := os.ReadDir(contextDir); err == nil && len(ctxEntries) > 0 {
+				out.WriteString("\n⚠ ACTION REQUIRED: Load saved work context:\n")
+				out.WriteString("  Run `thrum context show` to restore previous session context (decisions, next steps, work-in-progress).\n")
+			}
 		}
 	}
 
