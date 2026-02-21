@@ -38,8 +38,8 @@ type SendResponse struct {
 	MessageID  string   `json:"message_id"`
 	ThreadID   string   `json:"thread_id,omitempty"`
 	CreatedAt  string   `json:"created_at"`
-	ResolvedTo int      `json:"resolved_to"`           // count of resolved mentions
-	Warnings   []string `json:"warnings,omitempty"`    // informational warnings
+	ResolvedTo int      `json:"resolved_to"`        // count of resolved mentions
+	Warnings   []string `json:"warnings,omitempty"` // informational warnings
 }
 
 // GetMessageRequest represents the request for message.get RPC.
@@ -1081,7 +1081,7 @@ func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string)
 // for the for-agent inbox filter. Returns nil if no filtering should be applied.
 // Only the agent's own name/ID is used for direct mention matching; role-based
 // fan-out is handled via the group membership subquery in buildForAgentClause.
-func buildForAgentValues(forAgent, forAgentRole string) []string {
+func buildForAgentValues(forAgent, _ string) []string {
 	if forAgent != "" {
 		return []string{forAgent}
 	}
