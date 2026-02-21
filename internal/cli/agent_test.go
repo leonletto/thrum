@@ -421,30 +421,3 @@ func TestFormatPing(t *testing.T) {
 	}
 }
 
-func TestFormatWhoami(t *testing.T) {
-	result := WhoamiResult{
-		AgentID:      "agent:implementer:ABC123",
-		Role:         "implementer",
-		Module:       "auth",
-		Display:      "Auth Implementer",
-		Source:       "environment",
-		SessionID:    "ses_01HXE...",
-		SessionStart: "2026-02-03T10:00:00Z",
-	}
-
-	output := FormatWhoami(&result)
-
-	expectedFields := []string{
-		"agent:implementer:ABC123",
-		"implementer",
-		"auth",
-		"environment",
-		"ses_01HXE...",
-	}
-
-	for _, field := range expectedFields {
-		if !contains(output, field) {
-			t.Errorf("Output should contain '%s'", field)
-		}
-	}
-}

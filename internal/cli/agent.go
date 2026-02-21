@@ -440,39 +440,6 @@ func FormatAgentListWithContext(agents *ListAgentsResponse, contexts *ListContex
 	return output.String()
 }
 
-// FormatWhoami formats the whoami response for display.
-func FormatWhoami(result *WhoamiResult) string {
-	var output strings.Builder
-
-	output.WriteString(fmt.Sprintf("Agent ID:  %s\n", result.AgentID))
-	output.WriteString(fmt.Sprintf("Role:      @%s\n", result.Role))
-
-	if result.Module != "" {
-		output.WriteString(fmt.Sprintf("Module:    %s\n", result.Module))
-	}
-
-	if result.Display != "" {
-		output.WriteString(fmt.Sprintf("Display:   %s\n", result.Display))
-	}
-
-	output.WriteString(fmt.Sprintf("Source:    %s\n", result.Source))
-
-	if result.SessionID != "" {
-		sessionAge := ""
-		if result.SessionStart != "" {
-			if t, err := time.Parse(time.RFC3339, result.SessionStart); err == nil {
-				duration := time.Since(t)
-				sessionAge = fmt.Sprintf(" (%s ago)", formatDuration(duration))
-			}
-		}
-		output.WriteString(fmt.Sprintf("Session:   %s%s\n", result.SessionID, sessionAge))
-	} else {
-		output.WriteString("Session:   none (use 'thrum session start' to begin)\n")
-	}
-
-	return output.String()
-}
-
 // ListContextRequest represents the request for agent.listContext RPC.
 type ListContextRequest struct {
 	AgentID string `json:"agent_id,omitempty"`

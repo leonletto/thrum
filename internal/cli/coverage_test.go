@@ -219,22 +219,6 @@ func TestFormatAgentList_InvalidTimes(t *testing.T) {
 	}
 }
 
-func TestFormatWhoami_NoSession(t *testing.T) {
-	result := WhoamiResult{
-		AgentID: "agent:test:123",
-		Role:    "tester",
-		Module:  "test",
-		Source:  "environment",
-	}
-
-	output := FormatWhoami(&result)
-
-	// Should show "none" for session
-	if !contains(output, "none") {
-		t.Error("Output should indicate no session")
-	}
-}
-
 func TestFormatRegisterResponse_ConflictWithoutDetails(t *testing.T) {
 	result := RegisterResponse{
 		Status:   "conflict",
