@@ -168,7 +168,6 @@ Send a message to another agent, role, or group.
 | `to`       | string | yes      | Recipient: `@role`, agent name, `@groupname`, or composite `agent:role:hash` |
 | `content`  | string | yes      | Message text (markdown)                                                      |
 | `reply_to` | string | no       | Message ID to reply to (creates a reply chain)                               |
-| `priority` | string | no       | `critical`, `high`, `normal` (default), or `low`                             |
 | `metadata` | object | no       | Key-value metadata (passed as structured data)                               |
 
 **Output:**
@@ -216,7 +215,6 @@ ID.
 | `message_id` | string | Message identifier |
 | `from`       | string | Sender agent ID    |
 | `content`    | string | Message content    |
-| `priority`   | string | Message priority   |
 | `timestamp`  | string | Creation timestamp |
 
 **Behavior:**
@@ -235,13 +233,9 @@ listener sub-agents running on Haiku.
 
 **Input:**
 
-| Parameter         | Type    | Required | Description                                                          |
-| ----------------- | ------- | -------- | -------------------------------------------------------------------- |
-| `timeout`         | integer | no       | Max seconds to wait (default 300, max 600)                           |
-| `priority_filter` | string  | no       | `all` (default), `critical`, `high_and_above`, or `normal_and_above` |
-
-**Note:** `priority_filter` is accepted but not yet implemented. All messages
-pass through regardless of filter value.
+| Parameter | Type    | Required | Description                                |
+| --------- | ------- | -------- | ------------------------------------------ |
+| `timeout` | integer | no       | Max seconds to wait (default 300, max 600) |
 
 **Output:**
 
@@ -313,11 +307,10 @@ sending to `@everyone`.
 
 **Input:**
 
-| Parameter  | Type   | Required | Description                                      |
-| ---------- | ------ | -------- | ------------------------------------------------ |
-| `content`  | string | yes      | Message text to broadcast                        |
-| `priority` | string | no       | `critical`, `high`, `normal` (default), or `low` |
-| `filter`   | object | no       | Optional recipient filters                       |
+| Parameter | Type   | Required | Description                        |
+| --------- | ------ | -------- | ---------------------------------- |
+| `content` | string | yes      | Message text to broadcast          |
+| `filter`  | object | no       | Optional recipient filters         |
 
 **BroadcastFilter:**
 
@@ -570,7 +563,6 @@ When messages are received:
 ```
 MESSAGES_RECEIVED
 FROM: [sender]
-PRIORITY: [priority]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]
 ```
@@ -582,18 +574,6 @@ NO_MESSAGES_TIMEOUT
 ```
 
 **Cost:** Approximately $0.00003 per cycle (Haiku-class model).
-
-### Priority Handling Protocol
-
-When the main agent receives messages from the listener, it should handle
-priorities as follows:
-
-| Priority   | Action                                  |
-| ---------- | --------------------------------------- |
-| `critical` | Stop current work immediately           |
-| `high`     | Process at next breakpoint              |
-| `normal`   | Process when current sub-task completes |
-| `low`      | Queue, process when convenient          |
 
 ### Context Management
 
@@ -608,7 +588,7 @@ The project `CLAUDE.md` includes instructions for agents to use MCP tools:
 **Core messaging:**
 
 ```
-mcp__thrum__send_message(to="@reviewer", content="...", priority="normal")
+mcp__thrum__send_message(to="@reviewer", content="...")
 mcp__thrum__check_messages()
 mcp__thrum__list_agents()
 mcp__thrum__send_message(to="@everyone", content="...")  # preferred over broadcast_message
@@ -633,7 +613,7 @@ mcp__thrum__delete_group(name="backend")
 | File                                 | Purpose                                                                |
 | ------------------------------------ | ---------------------------------------------------------------------- |
 | `internal/mcp/server.go`             | Server struct, NewServer(), Run(), InitWaiter(), tool registration     |
-| `internal/mcp/tools.go`              | Tool handlers, address parsing, status derivation, priority validation |
+| `internal/mcp/tools.go`              | Tool handlers, address parsing, status derivation                      |
 | `internal/mcp/waiter.go`             | WebSocket connection, readLoop, WaitForMessage, notification queue     |
 | `internal/mcp/types.go`              | Input/output structs for all 11 tools                                  |
 | `cmd/thrum/mcp.go`                   | Cobra command, daemon health check, waiter init, signal handling       |

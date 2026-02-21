@@ -61,7 +61,6 @@ When messages are received:
 MESSAGES_RECEIVED
 ---
 FROM: [sender]
-PRIORITY: [priority]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]
 ---

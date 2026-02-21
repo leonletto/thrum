@@ -519,7 +519,7 @@ thrum group add reviewers @alice
 
 # 2. Implementer finishes work and notifies the team
 thrum send "PR #42 ready for review: JWT auth implementation" \
-  --to @reviewers --priority high --ref pr:42
+  --to @reviewers --ref pr:42
 
 # 3. Reviewers check their inbox
 thrum inbox --mentions

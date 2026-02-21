@@ -12,7 +12,4 @@ content.
 thrum send "message" --to @name                  # Direct
 thrum send "message" --to @group-name            # Group
 thrum send "message" --to @everyone              # Broadcast
-thrum send "message" --to @name -p high          # With priority
 ```
-
-Priorities: `critical`, `high`, `normal` (default), `low`.

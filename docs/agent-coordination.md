@@ -59,7 +59,7 @@ thrum quickstart --name planner --role planner --module website \
 # Assign task via message
 thrum send "Please implement build script (task thrum-235d.3). \
   Design spec in docs/plans/. Check beads for details." \
-  --to @implementer --priority high
+  --to @implementer
 
 # Check for updates
 thrum inbox
@@ -111,7 +111,7 @@ thrum send "Build script complete (commit abc123). Please review:
 - Search index generation
 - Error handling
 
-Tests passing. Beads task: thrum-235d.3" --to @reviewer --priority high
+Tests passing. Beads task: thrum-235d.3" --to @reviewer
 ```
 
 **Reviewer:**
@@ -181,7 +181,6 @@ When messages are received:
 MESSAGES_RECEIVED
 ---
 FROM: [sender]
-PRIORITY: [priority]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]
 ---
@@ -192,17 +191,6 @@ When timeout occurs with no messages:
 ```
 NO_MESSAGES_TIMEOUT
 ```
-
-### Priority Handling
-
-When the main agent receives messages from the listener:
-
-| Priority   | Action                                  |
-| ---------- | --------------------------------------- |
-| `critical` | Stop current work immediately           |
-| `high`     | Process at next breakpoint              |
-| `normal`   | Process when current sub-task completes |
-| `low`      | Queue, process when convenient          |
 
 ### Context Management
 
@@ -254,7 +242,7 @@ bd close bd-123 --reason="JWT auth complete with tests"
 
 # 9. Announce via Thrum
 thrum send "Completed bd-123. Ready for review." \
-  --to @reviewer --priority high
+  --to @reviewer
 
 # 10. Sync both
 bd sync
@@ -267,7 +255,6 @@ thrum sync force
 | ---------- | ---------------------- | --------------------------------------- |
 | Task ID    | `bd-123`               | Include in message: "Working on bd-123" |
 | Status     | `bd update --status`   | Send message with update                |
-| Priority   | `bd update --priority` | `--priority` flag on messages           |
 | Assignment | `bd update --assignee` | Send message to specific agent          |
 | Completion | `bd close`             | Send completion message                 |
 | Discovery  | `bd create`            | Notify via message                      |
@@ -304,7 +291,7 @@ thrum send "Progress: <status>" --to @coordinator
 thrum inbox --unread
 
 # 8. Coordinate on blockers
-thrum send "Blocked: <description>" --to @coordinator --priority high
+thrum send "Blocked: <description>" --to @coordinator
 
 # === END OF SESSION ===
 
@@ -326,7 +313,6 @@ thrum session end
 
 - **Register at session start** -- always use `thrum quickstart`
 - **Use MCP server when available** -- better than CLI polling
-- **Handle priorities** -- respect critical/high/normal/low
 - **Send status updates** -- keep the team informed
 - **Use @mentions** -- reference agents by name
 - **Include context** -- Beads IDs, file paths, commit hashes

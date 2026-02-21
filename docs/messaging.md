@@ -46,15 +46,14 @@ SQLite.
 
 ### Flags
 
-| Flag           | Format                        | Description                             |
-| -------------- | ----------------------------- | --------------------------------------- |
-| `--to`         | `@role`                       | Direct recipient (adds a mention ref)   |
-| `--scope`      | `type:value`                  | Attach scope context (repeatable)       |
-| `--ref`        | `type:value`                  | Attach reference (repeatable)           |
-| `--mention`    | `@role`                       | Mention an agent role (repeatable)      |
-| `--format`     | `markdown\|plain\|json`       | Content format (default: `markdown`)    |
-| `--priority`   | `critical\|high\|normal\|low` | Message priority (default: `normal`)    |
-| `--structured` | JSON string                   | Typed payload for machine-readable data |
+| Flag           | Format                  | Description                             |
+| -------------- | ----------------------- | --------------------------------------- |
+| `--to`         | `@role`                 | Direct recipient (adds a mention ref)   |
+| `--scope`      | `type:value`            | Attach scope context (repeatable)       |
+| `--ref`        | `type:value`            | Attach reference (repeatable)           |
+| `--mention`    | `@role`                 | Mention an agent role (repeatable)      |
+| `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)    |
+| `--structured` | JSON string             | Typed payload for machine-readable data |
 
 ### Direct Messaging with --to
 
@@ -646,10 +645,10 @@ organized into two categories:
 
 **Core messaging (5 tools):**
 
-| MCP Tool            | Description                                                                                        |
-| ------------------- | -------------------------------------------------------------------------------------------------- |
-| `send_message`      | Send a message to `@role` or agent name (supports `priority`: `critical`, `high`, `normal`, `low`) |
-| `check_messages`    | Poll for unread messages mentioning this agent, auto-marks read                                    |
+| MCP Tool            | Description                                                                     |
+| ------------------- | ------------------------------------------------------------------------------- |
+| `send_message`      | Send a message to `@role` or agent name                                         |
+| `check_messages`    | Poll for unread messages mentioning this agent, auto-marks read                 |
 | `wait_for_message`  | Block until a message arrives via WebSocket push or timeout (max 600s)                             |
 | `list_agents`       | List registered agents with active/offline status                                                  |
 | `broadcast_message` | Send to all agents (convenience wrapper around `send_message` with `to=@everyone`)                 |
@@ -668,10 +667,6 @@ organized into two categories:
 MCP tools use the same underlying RPC methods (`message.send`, `message.list`,
 `message.markRead`) but add convenience features like `@role` addressing and
 real-time WebSocket push notifications.
-
-**Priority levels at the MCP layer**: `critical`, `high`, `normal` (default),
-`low`. The `critical` level is available through MCP tools and is stored on the
-message but does not have special handling at the RPC layer.
 
 ## Agent Identity
 

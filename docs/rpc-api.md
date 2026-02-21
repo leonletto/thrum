@@ -455,7 +455,6 @@ Send a message to the messaging system. Triggers subscription notifications.
 | `refs`       | array   | no       | Message references (`[{"type": "...", "value": "..."}]`)         |
 | `mentions`   | array   | no       | Mention roles (e.g., `["@reviewer"]`)                            |
 | `tags`       | array   | no       | Message tags                                                     |
-| `priority`   | string  | no       | `"low"`, `"normal"` (default), `"high"`                          |
 | `acting_as`  | string  | no       | Impersonate this agent ID (users only)                           |
 | `disclose`   | boolean | no       | Show `[via user:X]` tag when impersonating                       |
 
