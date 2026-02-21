@@ -363,7 +363,15 @@ Examples:
 
 				defaultName := agentNameResolved
 				if defaultName == "" {
-					defaultName = agentRoleResolved
+					// Name must differ from role — suggest role_module
+					mod := agentModuleResolved
+					if mod == "" {
+						mod = cli.GetCurrentBranch(flagRepo)
+					}
+					if mod == "" {
+						mod = "main"
+					}
+					defaultName = agentRoleResolved + "_" + mod
 				}
 				fmt.Printf("  Name [%s]: ", defaultName)
 				input, _ = reader.ReadString('\n')
@@ -394,7 +402,15 @@ Examples:
 					agentRoleResolved = "implementer"
 				}
 				if agentNameResolved == "" {
-					agentNameResolved = agentRoleResolved
+					// Name must differ from role — append module or branch
+					module := agentModuleResolved
+					if module == "" {
+						module = cli.GetCurrentBranch(flagRepo)
+					}
+					if module == "" {
+						module = "main"
+					}
+					agentNameResolved = agentRoleResolved + "_" + module
 				}
 				if agentModuleResolved == "" {
 					agentModuleResolved = "main"
