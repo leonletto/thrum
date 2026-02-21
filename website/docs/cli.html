@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>cli — Thrum</title>
-  <meta name="description" content="">
+  <title>CLI Reference — Thrum</title>
+  <meta name="description" content="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">
   <!-- Open Graph -->
   <meta property="og:type" content="article">
-  <meta property="og:title" content="cli — Thrum">
-  <meta property="og:description" content="">
+  <meta property="og:title" content="CLI Reference — Thrum">
+  <meta property="og:description" content="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">
   <meta property="og:url" content="https://leonletto.github.io/thrum/docs/cli.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
@@ -16,8 +16,8 @@
   <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="cli — Thrum">
-  <meta name="twitter:description" content="">
+  <meta name="twitter:title" content="CLI Reference — Thrum">
+  <meta name="twitter:description" content="Complete reference for the thrum command-line interface — all commands, flags, and usage examples">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <!-- Canonical: SPA is the primary URL -->
   <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#cli.html">
@@ -197,8 +197,24 @@
 <td>Sync context to a-sync branch</td>
 </tr>
 <tr>
+<td><code>thrum context prime</code></td>
+<td>Collect all context for session initialization</td>
+</tr>
+<tr>
 <td><code>thrum context update</code></td>
 <td>Install/update the /update-context skill</td>
+</tr>
+<tr>
+<td><code>thrum runtime</code></td>
+<td>Manage runtime presets (list, show, edit)</td>
+</tr>
+<tr>
+<td><code>thrum peer</code></td>
+<td>Manage Tailscale peers</td>
+</tr>
+<tr>
+<td><code>thrum config</code></td>
+<td>Manage configuration (show, init)</td>
 </tr>
 <tr>
 <td><code>thrum group create</code></td>
@@ -325,7 +341,7 @@
 <h2>Core Commands</h2>
 <h3>thrum init</h3>
 <p>Initialize Thrum in the current repository. Creates the <code>.thrum/</code> directory<br>structure, sets up the <code>a-sync</code> branch for message synchronization, and updates<br><code>.gitignore</code>. Detects installed AI runtimes and prompts you to select one.</p>
-<pre><code>thrum init [flags]</code></pre>
+<pre><code>thrum init [--stealth] [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -347,6 +363,11 @@
 <tr>
 <td><code>--dry-run</code></td>
 <td>Preview changes without writing files</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--stealth</code></td>
+<td>Write exclusions to <code>.git/info/exclude</code> instead of <code>.gitignore</code> (zero tracked-file footprint)</td>
 <td><code>false</code></td>
 </tr>
 <tr>
@@ -379,7 +400,7 @@ Detected AI runtimes:
 Which is your primary runtime? [1]:
 ✓ Runtime saved to .thrum/config.json (primary: claude)</code></pre>
 <h3>thrum config show</h3>
-<p>Show effective configuration resolved from all sources. Displays each value<br>and where it came from (config.json, environment variable, default).</p>
+<p>Show effective configuration resolved from all sources. Displays each value and<br>where it came from (config.json, environment variable, default).</p>
 <pre><code>thrum config show [flags]</code></pre>
 <table>
 <thead>
@@ -430,6 +451,25 @@ Daemon
 <pre><code>$ thrum setup --main-repo /path/to/main/repo
 Connected to daemon
 ✓ Thrum worktree setup complete</code></pre>
+<h3>thrum setup claude-md</h3>
+<p>Generate Thrum agent coordination instructions for CLAUDE.md.</p>
+<pre><code class="language-bash hljs">thrum setup claude-md              <span class="hljs-comment"># Print to stdout</span>
+thrum setup claude-md --apply      <span class="hljs-comment"># Append to CLAUDE.md (creates if missing)</span>
+thrum setup claude-md --apply --force  <span class="hljs-comment"># Replace existing Thrum section</span></code></pre>
+<p>Flags:</p>
+<ul>
+<li><code>--apply</code> — Append generated content to CLAUDE.md (with duplicate detection)</li>
+<li><code>--force</code> — Replace existing Thrum section instead of skipping (used with<br>--apply)</li>
+</ul>
+<p>This command generates comprehensive agent coordination instructions including:</p>
+<ul>
+<li>Registration and session management</li>
+<li>Message protocols</li>
+<li>MCP server configuration</li>
+<li>Background listener setup</li>
+<li>Group management</li>
+</ul>
+<p>The instructions are automatically injected by <code>thrum prime</code> when agents start<br>sessions, providing immediate context on how to use Thrum for coordination.</p>
 <h3>thrum migrate</h3>
 <p>Migrate an existing Thrum repository from the old layout (JSONL files tracked on<br>main branch) to the new worktree architecture (JSONL files on <code>a-sync</code> branch<br>via <code>.git/thrum-sync/a-sync/</code> worktree). Safe to run multiple times -- it<br>detects what needs migration and skips steps that are already done.</p>
 <pre><code>thrum migrate</code></pre>
@@ -523,8 +563,13 @@ WebSocket: ws://localhost:9999</code></pre>
 <td></td>
 </tr>
 <tr>
+<td><code>--everyone</code></td>
+<td>Alias for <code>--to @everyone</code> (send to all agents)</td>
+<td></td>
+</tr>
+<tr>
 <td><code>--broadcast</code>, <code>-b</code></td>
-<td>Send as broadcast to all agents (deprecated: use <code>--to @everyone</code> instead)</td>
+<td>Send to all agents (alias for <code>--to @everyone</code>)</td>
 <td><code>false</code></td>
 </tr>
 <tr>
@@ -548,18 +593,13 @@ WebSocket: ws://localhost:9999</code></pre>
 <td></td>
 </tr>
 <tr>
-<td><code>--priority</code></td>
-<td>Message priority (<code>low</code>, <code>normal</code>, <code>high</code>)</td>
-<td><code>normal</code></td>
-</tr>
-<tr>
 <td><code>--format</code></td>
 <td>Message format (<code>markdown</code>, <code>plain</code>, <code>json</code>)</td>
 <td><code>markdown</code></td>
 </tr>
 </tbody></table>
-<p>The <code>--to</code> flag adds the recipient as a mention, making it a directed message.<br>Recipients can be agents (<code>@alice</code>), roles (<code>@reviewer</code>), or groups (<code>@everyone</code>, <code>@backend</code>).<br>The <code>--broadcast</code> and <code>--to</code> flags are mutually exclusive.</p>
-<p>The <code>--broadcast</code> flag is deprecated. Use <code>--to @everyone</code> instead to send to all agents.</p>
+<p>The <code>--to</code> flag adds the recipient as a mention, making it a directed message.<br>Recipients can be agents (<code>@alice</code>), roles (<code>@reviewer</code>), or groups<br>(<code>@everyone</code>, <code>@backend</code>). The <code>--broadcast</code> and <code>--to</code> flags are mutually<br>exclusive.</p>
+<p>The <code>--broadcast</code> flag is an alias for <code>--to @everyone</code>.</p>
 <p>Example:</p>
 <pre><code>$ thrum send &quot;PR ready for review&quot; --to @reviewer --scope module:auth --ref pr:42
 ✓ Message sent: msg_01HXE8Z7...
@@ -622,6 +662,11 @@ $ thrum send &quot;Backend review needed&quot; --to @backend
 <tr>
 <td><code>--page-size</code></td>
 <td>Results per page</td>
+<td><code>10</code></td>
+</tr>
+<tr>
+<td><code>--limit N</code></td>
+<td>Alias for <code>--page-size</code></td>
 <td><code>10</code></td>
 </tr>
 <tr>
@@ -1111,7 +1156,7 @@ Sessions (1):
 <td></td>
 </tr>
 </tbody></table>
-<p>The <code>@everyone</code> group is created automatically on daemon startup and includes all agents.</p>
+<p>The <code>@everyone</code> group is created automatically on daemon startup and includes<br>all agents.</p>
 <p>Example:</p>
 <pre><code>$ thrum group create reviewers --description &quot;Code review team&quot;
 ✓ Group created: reviewers
@@ -1119,7 +1164,7 @@ Sessions (1):
 $ thrum group create backend --description &quot;Backend developers&quot;
 ✓ Group created: backend</code></pre>
 <h3>thrum group delete</h3>
-<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be deleted.</p>
+<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be<br>deleted.</p>
 <pre><code>thrum group delete NAME</code></pre>
 <p>Example:</p>
 <pre><code>$ thrum group delete reviewers
@@ -1390,7 +1435,7 @@ Active subscriptions (2):
 │  Created:    2026-02-03 10:05:00 (1h55m ago)
 └─</code></pre>
 <h3>thrum wait</h3>
-<p>Block until a matching message arrives or timeout occurs. Useful for automation<br>and hooks.</p>
+<p>Block until a matching message arrives or timeout occurs. Useful for automation<br>and hooks. Always filters by the calling agent&#39;s identity — only returns messages<br>directed to this agent by name or role. There is no <code>--all</code> flag.</p>
 <pre><code>thrum wait [flags]</code></pre>
 <table>
 <thead>
@@ -1406,8 +1451,8 @@ Active subscriptions (2):
 <td><code>30s</code></td>
 </tr>
 <tr>
-<td><code>--scope</code></td>
-<td>Filter by scope (format: <code>type:value</code>)</td>
+<td><code>--after</code></td>
+<td>Only messages after offset (e.g., <code>-30s</code>)</td>
 <td></td>
 </tr>
 <tr>
@@ -1415,10 +1460,15 @@ Active subscriptions (2):
 <td>Wait for mentions of role (format: <code>@role</code>)</td>
 <td></td>
 </tr>
+<tr>
+<td><code>--json</code></td>
+<td>Machine-readable output</td>
+<td><code>false</code></td>
+</tr>
 </tbody></table>
 <p>Exit codes: <code>0</code> = message received, <code>1</code> = timeout, <code>2</code> = error.</p>
 <p>Example:</p>
-<pre><code>$ thrum wait --scope module:auth --timeout=5m
+<pre><code>$ thrum wait --after -30s --timeout=5m --json
 ✓ Message received: msg_01HXE8Z7 from @planner
   We should refactor the sync daemon before adding embeddings.
 
@@ -1485,7 +1535,8 @@ thrum daemon start --local</code></pre>
 </tr>
 </tbody></table>
 <p>Requires the Thrum daemon to be running. The <code>--agent-id</code> flag sets <code>THRUM_NAME</code><br>internally for identity resolution.</p>
-<p><strong>MCP Tools provided:</strong></p>
+<p><strong>MCP Tools provided (11 total):</strong></p>
+<p><strong>Core messaging (5):</strong></p>
 <table>
 <thead>
 <tr>
@@ -1511,7 +1562,40 @@ thrum daemon start --local</code></pre>
 </tr>
 <tr>
 <td><code>broadcast_message</code></td>
-<td>Send to all active agents with exclude filters</td>
+<td>Send to all agents (convenience wrapper around <code>send_message</code> to <code>@everyone</code>)</td>
+</tr>
+</tbody></table>
+<p><strong>Group management (6):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>create_group</code></td>
+<td>Create a named messaging group</td>
+</tr>
+<tr>
+<td><code>delete_group</code></td>
+<td>Delete a messaging group</td>
+</tr>
+<tr>
+<td><code>add_group_member</code></td>
+<td>Add an agent or role as a member of a group</td>
+</tr>
+<tr>
+<td><code>remove_group_member</code></td>
+<td>Remove a member from a group</td>
+</tr>
+<tr>
+<td><code>list_groups</code></td>
+<td>List all messaging groups</td>
+</tr>
+<tr>
+<td><code>get_group</code></td>
+<td>Get group details including members (expand=true resolves roles)</td>
 </tr>
 </tbody></table>
 <p><strong>Configuration in Claude Code&#39;s <code>.claude/settings.json</code>:</strong></p>

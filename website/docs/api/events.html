@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Event Reference — Thrum</title>
-  <meta name="description" content="Complete event catalog - message, thread, agent, and session events with payloads, JSONL storage, and delivery">
+  <meta name="description" content="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">
   <!-- Open Graph -->
   <meta property="og:type" content="article">
   <meta property="og:title" content="Event Reference — Thrum">
-  <meta property="og:description" content="Complete event catalog - message, thread, agent, and session events with payloads, JSONL storage, and delivery">
+  <meta property="og:description" content="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">
   <meta property="og:url" content="https://leonletto.github.io/thrum/docs/api/events.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
@@ -17,7 +17,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Event Reference — Thrum">
-  <meta name="twitter:description" content="Complete event catalog - message, thread, agent, and session events with payloads, JSONL storage, and delivery">
+  <meta name="twitter:description" content="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <!-- Canonical: SPA is the primary URL -->
   <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#api/events.html">
@@ -140,13 +140,13 @@
 </tr>
 <tr>
 <td><code>messages/{agent}.jsonl</code></td>
-<td><code>message.create</code>, <code>message.edit</code>, <code>message.delete</code>, <code>agent.update</code></td>
+<td><code>message.create</code>, <code>message.edit</code>, <code>message.delete</code>, <code>thread.create</code>, <code>agent.update</code></td>
 </tr>
 </tbody></table>
 <p>Events are append-only and immutable. The JSONL files are the source of truth;<br>the SQLite database (<code>.thrum/var/messages.db</code>) is a derived read projection that<br>can be rebuilt from the JSONL at any time.</p>
 <h2>Event Types</h2>
 <h3>Message Events</h3>
-<h4>message.created</h4>
+<h4>message.create</h4>
 <p>Emitted when a new message is created in the system.</p>
 <p><strong>When emitted</strong>:</p>
 <ul>
@@ -162,6 +162,7 @@
   <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_xyz789&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread_abc123&quot;</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;s_abc123&quot;</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
@@ -189,6 +190,7 @@
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
 <li><code>v</code>: Event schema version</li>
 <li><code>message_id</code>: Unique message identifier</li>
+<li><code>thread_id</code>: Parent thread (empty if standalone message)</li>
 <li><code>agent_id</code>: Message author&#39;s agent name or legacy ID</li>
 <li><code>session_id</code>: Session that created the message</li>
 <li><code>timestamp</code>: Message creation time (ISO 8601)</li>
@@ -204,15 +206,14 @@
 <p><strong>Example usage</strong>:</p>
 <pre><code class="language-javascript hljs">ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
   <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
-  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.created&quot;</span>) {
+  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.create&quot;</span>) {
     <span class="hljs-keyword">const</span> message = msg.<span class="hljs-property">params</span>;
     <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(
       <span class="hljs-string">`New message from <span class="hljs-subst">${message.agent_id}</span>: <span class="hljs-subst">${message.body.content}</span>`</span>,
     );
   }
 };</code></pre>
-<hr>
-<h4>message.edited</h4>
+<h4>message.edit</h4>
 <p>Emitted when a message is edited.</p>
 <p><strong>When emitted</strong>:</p>
 <ul>
@@ -252,13 +253,12 @@
 <p><strong>Example usage</strong>:</p>
 <pre><code class="language-javascript hljs">ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
   <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
-  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.edited&quot;</span>) {
+  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.edit&quot;</span>) {
     <span class="hljs-keyword">const</span> edit = msg.<span class="hljs-property">params</span>;
     <span class="hljs-title function_">updateMessageInUI</span>(edit.<span class="hljs-property">message_id</span>, edit.<span class="hljs-property">body</span>.<span class="hljs-property">content</span>);
   }
 };</code></pre>
-<hr>
-<h4>message.deleted</h4>
+<h4>message.delete</h4>
 <p>Emitted when a message is soft-deleted.</p>
 <p><strong>When emitted</strong>:</p>
 <ul>
@@ -288,14 +288,70 @@
 <p><strong>Example usage</strong>:</p>
 <pre><code class="language-javascript hljs">ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
   <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
-  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.deleted&quot;</span>) {
+  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.delete&quot;</span>) {
     <span class="hljs-keyword">const</span> deletion = msg.<span class="hljs-property">params</span>;
     <span class="hljs-title function_">removeMessageFromUI</span>(deletion.<span class="hljs-property">message_id</span>);
   }
 };</code></pre>
-<hr>
+<h3>Thread Events</h3>
+<h4>thread.create</h4>
+<p>Emitted when a new thread is created.</p>
+<p><strong>When emitted</strong>:</p>
+<ul>
+<li>After <code>thread.create</code> RPC call succeeds</li>
+<li>When thread is synced from remote</li>
+</ul>
+<p><strong>Stored in</strong>: <code>messages/{agent_name}.jsonl</code></p>
+<p><strong>Payload</strong> (ThreadCreateEvent):</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread.create&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread_abc123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Discussion about feature X&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;created_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Fields</strong>:</p>
+<ul>
+<li><code>event_id</code>: Globally unique ULID for deduplication</li>
+<li><code>thread_id</code>: Unique thread identifier</li>
+<li><code>title</code>: Thread title</li>
+<li><code>timestamp</code>: Creation time (ISO 8601)</li>
+<li><code>created_by</code>: Agent/user that created the thread</li>
+</ul>
+<p><strong>Related methods</strong>: <code>thread.create</code>, <code>thread.list</code>, <code>thread.get</code></p>
+<h4>thread.updated</h4>
+<p>Real-time notification emitted when a thread is updated with new messages. This<br>event is a WebSocket notification only and is <strong>not persisted</strong> to JSONL.</p>
+<p><strong>When emitted</strong>:</p>
+<ul>
+<li>After a new message is added to a thread</li>
+<li>Sent to clients with matching subscriptions</li>
+</ul>
+<p><strong>Payload</strong> (ThreadUpdatedEvent):</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread.updated&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread_abc123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;message_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;unread_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;last_activity&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;last_sender&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Latest message text...&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Fields</strong>:</p>
+<ul>
+<li><code>thread_id</code>: Thread that was updated</li>
+<li><code>message_count</code>: Total messages in thread</li>
+<li><code>unread_count</code>: Unread messages for the subscribing agent</li>
+<li><code>last_activity</code>: Timestamp of latest activity</li>
+<li><code>last_sender</code>: Agent who sent the latest message</li>
+<li><code>preview</code>: Optional preview of latest message content</li>
+</ul>
 <h3>Agent Events</h3>
-<h4>agent.registered</h4>
+<h4>agent.register</h4>
 <p>Emitted when an agent registers with the daemon.</p>
 <p><strong>When emitted</strong>:</p>
 <ul>
@@ -331,7 +387,6 @@
 </ul>
 <p><strong>Agent naming</strong>: Agents support human-readable names set via <code>--name</code> flag,<br><code>THRUM_NAME</code> env var, or identity files at <code>.thrum/identities/{name}.json</code>.<br>Names must match <code>[a-z0-9_]+</code> and cannot use reserved words (<code>daemon</code>, <code>system</code>,<br><code>thrum</code>, <code>all</code>, <code>broadcast</code>).</p>
 <p><strong>Related methods</strong>: <code>agent.register</code>, <code>agent.list</code></p>
-<hr>
 <h4>agent.cleanup</h4>
 <p>Emitted when an agent is deleted or cleaned up.</p>
 <p><strong>When emitted</strong>:</p>
@@ -360,7 +415,6 @@
 <li><code>method</code>: How cleanup was triggered (<code>&quot;manual&quot;</code>, <code>&quot;automated&quot;</code>, <code>&quot;ui&quot;</code>)</li>
 </ul>
 <p><strong>Related methods</strong>: <code>agent.delete</code>, <code>agent.cleanup</code></p>
-<hr>
 <h4>agent.update</h4>
 <p>Emitted when an agent&#39;s work context changes (git state, intent, task).</p>
 <p><strong>When emitted</strong>:</p>
@@ -408,9 +462,8 @@
 <li><code>work_contexts[].intent</code>: Agent&#39;s stated intent</li>
 </ul>
 <p><strong>Projection</strong>: Work contexts are merged by <code>session_id</code> -- for contexts with<br>the same session, the one with the newer <code>git_updated_at</code> wins.</p>
-<hr>
 <h3>Session Events</h3>
-<h4>session.started</h4>
+<h4>agent.session.start</h4>
 <p>Emitted when a session starts.</p>
 <p><strong>When emitted</strong>:</p>
 <ul>
@@ -443,8 +496,7 @@
 <li>Orphan recovery on next session start</li>
 </ol>
 <p><strong>Related methods</strong>: <code>session.start</code>, <code>session.end</code></p>
-<hr>
-<h4>session.ended</h4>
+<h4>agent.session.end</h4>
 <p>Emitted when a session ends.</p>
 <p><strong>When emitted</strong>:</p>
 <ul>
@@ -475,7 +527,6 @@
 <li><code>crash</code>: Unexpected termination or timeout</li>
 </ul>
 <p><strong>Related methods</strong>: <code>session.end</code>, <code>session.start</code></p>
-<hr>
 <h2>Subscription Filtering</h2>
 <p>Events are filtered based on active subscriptions:</p>
 <h3>Scope-Based Subscriptions</h3>
@@ -628,17 +679,17 @@
 <h2>Example Event Handlers</h2>
 <h3>JavaScript/TypeScript</h3>
 <pre><code class="language-typescript hljs"><span class="hljs-keyword">const</span> eventHandlers = {
-  <span class="hljs-string">&quot;message.created&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageCreateEvent</span></span>) =&gt;</span> {
+  <span class="hljs-string">&quot;message.create&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageCreateEvent</span></span>) =&gt;</span> {
     <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`New message: <span class="hljs-subst">${params.message_id}</span>`</span>);
     <span class="hljs-title function_">addMessageToUI</span>(params);
   },
 
-  <span class="hljs-string">&quot;message.edited&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageEditEvent</span></span>) =&gt;</span> {
+  <span class="hljs-string">&quot;message.edit&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageEditEvent</span></span>) =&gt;</span> {
     <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`Message edited: <span class="hljs-subst">${params.message_id}</span>`</span>);
     <span class="hljs-title function_">updateMessageInUI</span>(params);
   },
 
-  <span class="hljs-string">&quot;message.deleted&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageDeleteEvent</span></span>) =&gt;</span> {
+  <span class="hljs-string">&quot;message.delete&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageDeleteEvent</span></span>) =&gt;</span> {
     <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`Message deleted: <span class="hljs-subst">${params.message_id}</span>`</span>);
     <span class="hljs-title function_">removeMessageFromUI</span>(params);
   },
@@ -666,7 +717,7 @@ ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<
 <pre><code class="language-go hljs"><span class="hljs-keyword">type</span> EventHandler <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(json.RawMessage)</span></span> <span class="hljs-type">error</span>
 
 handlers := <span class="hljs-keyword">map</span>[<span class="hljs-type">string</span>]EventHandler{
-    <span class="hljs-string">&quot;message.created&quot;</span>: <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(params json.RawMessage)</span></span> <span class="hljs-type">error</span> {
+    <span class="hljs-string">&quot;message.create&quot;</span>: <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(params json.RawMessage)</span></span> <span class="hljs-type">error</span> {
         <span class="hljs-keyword">var</span> event types.MessageCreateEvent
         <span class="hljs-keyword">if</span> err := json.Unmarshal(params, &amp;event); err != <span class="hljs-literal">nil</span> {
             <span class="hljs-keyword">return</span> err
@@ -675,7 +726,7 @@ handlers := <span class="hljs-keyword">map</span>[<span class="hljs-type">string
         <span class="hljs-keyword">return</span> addMessageToUI(event)
     },
 
-    <span class="hljs-string">&quot;message.edited&quot;</span>: <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(params json.RawMessage)</span></span> <span class="hljs-type">error</span> {
+    <span class="hljs-string">&quot;message.edit&quot;</span>: <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(params json.RawMessage)</span></span> <span class="hljs-type">error</span> {
         <span class="hljs-keyword">var</span> event types.MessageEditEvent
         <span class="hljs-keyword">if</span> err := json.Unmarshal(params, &amp;event); err != <span class="hljs-literal">nil</span> {
             <span class="hljs-keyword">return</span> err

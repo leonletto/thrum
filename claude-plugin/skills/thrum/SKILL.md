@@ -4,7 +4,7 @@ description: >
   Multi-agent coordination via messaging, groups, and shared context. Use when
   agents need to communicate, delegate work, or coordinate across worktrees.
 allowed-tools: "Bash(thrum:*)"
-version: "0.4.4"
+version: "0.4.5"
 author: "Leon Letto <https://github.com/leonletto>"
 license: "MIT"
 ---

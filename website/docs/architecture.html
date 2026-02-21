@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>architecture — Thrum</title>
-  <meta name="description" content="">
+  <title>Architecture — Thrum</title>
+  <meta name="description" content="Thrum foundation architecture — packages, storage layer, daemon, sync engine, and event system">
   <!-- Open Graph -->
   <meta property="og:type" content="article">
-  <meta property="og:title" content="architecture — Thrum">
-  <meta property="og:description" content="">
+  <meta property="og:title" content="Architecture — Thrum">
+  <meta property="og:description" content="Thrum foundation architecture — packages, storage layer, daemon, sync engine, and event system">
   <meta property="og:url" content="https://leonletto.github.io/thrum/docs/architecture.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
@@ -16,8 +16,8 @@
   <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="architecture — Thrum">
-  <meta name="twitter:description" content="">
+  <meta name="twitter:title" content="Architecture — Thrum">
+  <meta name="twitter:description" content="Thrum foundation architecture — packages, storage layer, daemon, sync engine, and event system">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <!-- Canonical: SPA is the primary URL -->
   <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#architecture.html">
@@ -192,7 +192,7 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)</code></pre>
 <li>ULID format: 26 characters, sortable by time, 128-bit random</li>
 <li>Thread-safe generation with mutex-protected monotonic entropy</li>
 </ul>
-<p>Agent IDs are generated internally from the role and a hash. See <a href="development.html">Development Guide</a> for implementation details.</p>
+<p>Agent IDs are generated internally from the role and a hash. See<br><a href="development.html">Development Guide</a> for implementation details.</p>
 <h2>Paths (<code>internal/paths</code>)</h2>
 <h3>Path Resolution</h3>
 <p>The <code>paths</code> package handles path resolution for multi-worktree setups and sync<br>worktree location.</p>
@@ -316,13 +316,13 @@ groups              # Named collections for targeted messaging
 group_members       # Group membership (agents and roles)
 schema_version      # Migration tracking</code></pre>
 <h3>Schema Version</h3>
-<p>Current version: <strong>8</strong></p>
+<p>Current version: <strong>13</strong></p>
 <p>Key migrations:</p>
 <ul>
 <li>v3 -&gt; v4: Impersonation support (<code>authored_by</code>, <code>disclosed</code> columns)</li>
 <li>v5 -&gt; v6: Agent work contexts table, message reads, session scopes/refs</li>
 <li>v6 -&gt; v7: Event ID backfill (ULID <code>event_id</code> on all JSONL events), JSONL<br>sharding migration</li>
-<li>v7 -&gt; v8: Groups feature (<code>groups</code> and <code>group_members</code> tables), <code>@everyone</code> built-in group</li>
+<li>v7 -&gt; v8: Groups feature (<code>groups</code> and <code>group_members</code> tables), <code>@everyone</code><br>built-in group</li>
 </ul>
 <h3>Initialization</h3>
 <pre><code class="language-go hljs">db, _ := schema.OpenDB(<span class="hljs-string">&quot;thrum.db&quot;</span>)
@@ -452,6 +452,17 @@ projector.Apply(eventJSON)</code></pre>
 <p>Immutable events + ULID timestamps + per-agent sharding minimize merge conflicts<br>during Git sync.</p>
 <h3>7. Path Indirection</h3>
 <p>The <code>.thrum/redirect</code> pattern allows multiple worktrees to share a single daemon<br>and state directory without hardcoding paths.</p>
+<h3>8. Timeout Enforcement (v0.4.3)</h3>
+<p>All I/O paths enforce timeouts to prevent indefinite hangs:</p>
+<ul>
+<li><strong>5s</strong> CLI dial timeout (net.DialTimeout)</li>
+<li><strong>10s</strong> RPC call timeout (context.WithTimeout)</li>
+<li><strong>10s</strong> server per-request timeout (http.TimeoutHandler)</li>
+<li><strong>10s</strong> WebSocket handshake timeout</li>
+<li><strong>5s/10s</strong> git command timeouts (via <code>safecmd</code> wrapper)</li>
+<li><strong>Context-scoped</strong> SQLite queries (via <code>safedb</code> wrapper)</li>
+</ul>
+<p>Lock scope has been reduced — no mutex is held during I/O, git, or WebSocket<br>dispatch operations.</p>
 <h2>References</h2>
 <ul>
 <li>Design document: <code>dev-docs/2026-02-03-thrum-design.md</code></li>

@@ -156,7 +156,19 @@ make test-verbose
 go <span class="hljs-built_in">test</span> ./internal/config/... -v
 
 <span class="hljs-comment"># Run with race detector</span>
-go <span class="hljs-built_in">test</span> -race ./...</code></pre>
+go <span class="hljs-built_in">test</span> -race ./...
+
+<span class="hljs-comment"># Run resilience tests (requires build tag)</span>
+go <span class="hljs-built_in">test</span> -tags=resilience ./internal/daemon/...</code></pre>
+<p><strong>Resilience Test Suite (v0.4.3):</strong></p>
+<p>The resilience test suite includes 39 tests covering crash recovery, concurrent<br>access, and timeout enforcement. These tests require the <code>-tags=resilience</code><br>build flag:</p>
+<ul>
+<li>Crash recovery scenarios (daemon restart, state restoration)</li>
+<li>Concurrent access patterns (multiple goroutines, race conditions)</li>
+<li>Timeout enforcement (I/O timeouts, RPC timeouts, WebSocket timeouts)</li>
+</ul>
+<p>Run the full resilience suite:</p>
+<pre><code class="language-bash hljs">go <span class="hljs-built_in">test</span> -tags=resilience -v ./internal/daemon/resilience_test.go</code></pre>
 <h4>UI Tests</h4>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Run all UI tests (from monorepo root)</span>
 <span class="hljs-built_in">cd</span> ui &amp;&amp; pnpm <span class="hljs-built_in">test</span>
@@ -642,7 +654,7 @@ thrum daemon start</code></pre>
 </tr>
 <tr>
 <td><code>broadcast_message</code></td>
-<td>Send to all active agents with exclude filters</td>
+<td>Send to all agents (convenience wrapper around <code>send_message</code> to <code>@everyone</code>)</td>
 </tr>
 </tbody></table>
 <p><strong>Architecture:</strong></p>
@@ -814,7 +826,7 @@ thrum daemon start</code></pre>
 <li><strong>Quickstart Guide</strong>: <code>docs/quickstart.md</code></li>
 <li><strong>CLI Reference</strong>: <code>docs/cli.md</code></li>
 <li><strong>Identity System</strong>: <code>docs/identity.md</code></li>
-<li><strong>Workflow Templates</strong>: <code>docs/workflow-templates.md</code> (structured feature development with AI agents)</li>
+<li><strong>Workflow Templates</strong>: <code>docs/workflow-templates.md</code> (structured feature<br>development with AI agents)</li>
 <li><strong>Agent Reference</strong>: <code>llms.txt</code> (concise) and <code>llms-full.txt</code> (detailed)</li>
 </ul>
 

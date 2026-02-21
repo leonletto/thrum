@@ -39,15 +39,6 @@ When working with other agents:
    `thrum wait --timeout 5m --mention @<your-role>`
 5. **Check for messages** (non-blocking): `thrum inbox --unread`
 
-## Priority Handling
-
-| Priority   | Action                                  |
-| ---------- | --------------------------------------- |
-| `critical` | Stop current work immediately           |
-| `high`     | Process at next breakpoint              |
-| `normal`   | Process when current sub-task completes |
-| `low`      | Queue, process when convenient          |
-
 ## MCP Messaging Protocol
 
 When running with the Thrum MCP server (`{{.MCPCommand}} mcp serve`), agents use
@@ -67,7 +58,7 @@ native MCP tools instead of CLI shell-outs. Configure in `.claude/settings.json`
 
 ### MCP Tools
 
-- `mcp__thrum__send_message(to="@agent", content="...", priority="normal")` — Send to agent
+- `mcp__thrum__send_message(to="@agent", content="...")` — Send to agent
 - `mcp__thrum__send_message(to="@everyone", content="...")` — Broadcast to all
 - `mcp__thrum__check_messages()` — Poll for unread messages
 - `mcp__thrum__list_agents()` — See who's online

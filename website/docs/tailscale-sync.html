@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>tailscale-sync — Thrum</title>
-  <meta name="description" content="">
+  <title>Tailscale Sync — Thrum</title>
+  <meta name="description" content="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">
   <!-- Open Graph -->
   <meta property="og:type" content="article">
-  <meta property="og:title" content="tailscale-sync — Thrum">
-  <meta property="og:description" content="">
+  <meta property="og:title" content="Tailscale Sync — Thrum">
+  <meta property="og:description" content="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">
   <meta property="og:url" content="https://leonletto.github.io/thrum/docs/tailscale-sync.html">
   <meta property="og:site_name" content="Thrum">
   <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
@@ -16,8 +16,8 @@
   <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="tailscale-sync — Thrum">
-  <meta name="twitter:description" content="">
+  <meta name="twitter:title" content="Tailscale Sync — Thrum">
+  <meta name="twitter:description" content="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <!-- Canonical: SPA is the primary URL -->
   <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#tailscale-sync.html">
@@ -52,10 +52,10 @@
     <div class="docs-content-inner">
 <h1>Tailscale Sync</h1>
 <blockquote>
-<p>See also: <a href="tailscale-security.html">Tailscale Security</a> for the security<br>model, <a href="multi-agent.html">Multi-Agent Support</a> for team coordination patterns,<br><a href="sync.html">Sync Protocol</a> for Git-based synchronization.</p>
+<p>See also: <a href="tailscale-security.html">Tailscale Security</a> for the security model,<br><a href="multi-agent.html">Multi-Agent Support</a> for team coordination patterns,<br><a href="sync.html">Sync Protocol</a> for Git-based synchronization.</p>
 </blockquote>
 <h2>Overview</h2>
-<p>Thrum&#39;s Tailscale sync enables real-time event synchronization between daemon<br>instances running on different machines connected via a<br><a href="https://tailscale.com">Tailscale</a> network. Agents on separate laptops, VMs, or<br>CI runners can coordinate as if they were on the same machine -- messages,<br>agent events, and session updates propagate automatically.</p>
+<p>Thrum&#39;s Tailscale sync enables real-time event synchronization between daemon<br>instances running on different machines connected via a<br><a href="https://tailscale.com">Tailscale</a> network. Agents on separate laptops, VMs, or<br>CI runners can coordinate as if they were on the same machine -- messages, agent<br>events, and session updates propagate automatically.</p>
 <p><strong>Key capabilities:</strong></p>
 <ul>
 <li><strong>Cross-machine sync</strong> -- Events flow between daemons over Tailscale&#39;s<br>encrypted WireGuard tunnels</li>
@@ -67,7 +67,7 @@
 <h2>Prerequisites</h2>
 <ol>
 <li><strong>Tailscale installed</strong> on all machines running Thrum daemons</li>
-<li><strong>Thrum v0.3.2+</strong> installed on all machines</li>
+<li><strong>Thrum v0.4.0+</strong> installed on all machines (Tailscale support added in<br>v0.4.0)</li>
 </ol>
 <h2>Getting Started</h2>
 <h3>1. Enable Tailscale Sync</h3>

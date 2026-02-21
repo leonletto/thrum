@@ -52,7 +52,7 @@
     <div class="docs-content-inner">
 <h1>Inbox Query RPC Methods</h1>
 <h2>Overview</h2>
-<p>The Thrum daemon provides a complete set of RPC methods for querying the inbox,<br>listing agents, and managing read state. These methods power<br>both the CLI (<code>thrum inbox</code>) and the Web UI.</p>
+<p>The Thrum daemon provides a complete set of RPC methods for querying the inbox,<br>listing agents, and managing read state. These methods power both the CLI<br>(<code>thrum inbox</code>) and the Web UI.</p>
 <p>All methods use JSON-RPC 2.0 over Unix socket (<code>.thrum/var/thrum.sock</code>) or<br>WebSocket (<code>ws://localhost:9999</code>). See <code>docs/rpc-api.md</code> for the full API<br>reference.</p>
 <h2>Query Methods</h2>
 <h3>1. agent.list</h3>
@@ -214,6 +214,7 @@
   <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
 <span class="hljs-punctuation">}</span></code></pre>
 <p><strong>Filter resolution:</strong> The <code>mentions</code> and <code>unread</code> boolean filters are resolved<br>using the local agent config (via <code>THRUM_ROLE</code> / identity file). The<br><code>mention_role</code> and <code>unread_for_agent</code> string filters are explicit overrides for<br>remote callers (like the MCP server) that cannot access local config.</p>
+<p><strong>Subscription cleanup:</strong> As of v0.4.3, subscriptions are automatically deleted<br>when a session ends.</p>
 <h3>3. message.get</h3>
 <p>Retrieves a single message by ID with full details including scopes, refs,<br>author info, edit/delete metadata.</p>
 <p><strong>Request:</strong></p>
@@ -318,7 +319,7 @@
 <h2>Features Summary</h2>
 <ul>
 <li><strong>Agent listing</strong> -- List all agents with role/module filters and metadata</li>
-<li><strong>Message listing</strong> -- Filter by author, scope, ref, mentions, unread<br>status</li>
+<li><strong>Message listing</strong> -- Filter by author, scope, ref, mentions, unread status</li>
 <li><strong>Pagination</strong> -- Configurable page size (max 100), page numbers, total counts</li>
 <li><strong>Sorting</strong> -- By <code>created_at</code> or <code>updated_at</code>, ascending or descending</li>
 <li><strong>Read tracking</strong> -- Per-session and per-agent read state, auto mark-as-read</li>

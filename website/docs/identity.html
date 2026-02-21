@@ -80,6 +80,7 @@ agent_id = role + &quot;_&quot; + hash</code></pre>
 <li><strong>Rejected</strong>: hyphens, dots, spaces, path separators, uppercase, special<br>characters</li>
 <li><strong>Reserved names</strong>: <code>daemon</code>, <code>system</code>, <code>thrum</code>, <code>all</code>, <code>broadcast</code></li>
 <li><strong>Cannot be empty</strong> (when explicitly provided)</li>
+<li><strong>Cannot equal the role</strong> (v0.4.5+): names that match the role are rejected to<br>prevent routing ambiguity. Use a distinct name, e.g. <code>--name coord_main --role coordinator</code><br>instead of <code>--name coordinator --role coordinator</code>.</li>
 </ul>
 <p>Names must be safe for: file paths, <code>@mention</code> targets, JSONL field values, and<br>git tracking.</p>
 <p><strong>Validation regex</strong>: <code>^[a-z0-9_]+$</code></p>
@@ -121,19 +122,21 @@ agent_id = role + &quot;_&quot; + hash</code></pre>
 <p>Thrum resolves agent identity using a priority chain:</p>
 <pre><code>1. THRUM_NAME env var → selects identity file     [Highest priority]
    ↓
-2. CLI flags (--name, --role, --module)
+2. --agent-id flag (CLI)
    ↓
-3. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_DISPLAY)
+3. CLI flags (--name, --role, --module)
    ↓
-4. Identity file in .thrum/identities/ directory
+4. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_DISPLAY)
    ↓
-5. Error if required fields missing                [Lowest priority]</code></pre>
+5. Identity file auto-selection (.thrum/identities/ directory)
+   ↓
+6. Error if required fields missing                [Lowest priority]</code></pre>
 <h3>Environment Variables</h3>
 <pre><code class="language-bash hljs"><span class="hljs-built_in">export</span> THRUM_NAME=furiosa          <span class="hljs-comment"># Select identity file (highest priority)</span>
 <span class="hljs-built_in">export</span> THRUM_ROLE=implementer      <span class="hljs-comment"># Override role</span>
 <span class="hljs-built_in">export</span> THRUM_MODULE=auth           <span class="hljs-comment"># Override module</span>
 <span class="hljs-built_in">export</span> THRUM_DISPLAY=<span class="hljs-string">&quot;Auth Agent&quot;</span>  <span class="hljs-comment"># Override display name</span></code></pre>
-<p><code>THRUM_NAME</code> is the primary way to select which identity file to load,<br>especially in multi-agent worktrees. It is also used by external orchestrators<br>(e.g., Gastown) to inject identity into agent processes.</p>
+<p><code>THRUM_NAME</code> environment variable takes highest priority in identity resolution,<br>overriding the <code>--agent-id</code> flag and identity file auto-selection. It is the<br>primary way to select which identity file to load, especially in multi-agent<br>worktrees. It is also used by external orchestrators (e.g., Gastown) to inject<br>identity into agent processes.</p>
 <p>When <code>THRUM_NAME</code> is set and the corresponding identity file does not exist,<br>loading <strong>fails</strong> rather than falling back to env vars. This ensures validation<br>errors are not silently ignored.</p>
 <p><code>THRUM_ROLE</code> and <code>THRUM_MODULE</code> override the role and module from any identity<br>file but do not affect which file is loaded.</p>
 <p>Use environment variables when:</p>
@@ -339,8 +342,8 @@ thrum agent cleanup --force</code></pre>
 <h2>Identity File Best Practices</h2>
 <h3>Worktree-Specific Identity</h3>
 <p>When using git worktrees for different features/modules, each worktree can have<br>its own identity files:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Main worktree - coordinator</span>
-thrum quickstart --name coordinator --role coordinator --module all
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Main worktree - coordinator (name must differ from role)</span>
+thrum quickstart --name coord_main --role coordinator --module all
 
 <span class="hljs-comment"># Auth worktree - auth implementer</span>
 <span class="hljs-built_in">cd</span> ~/.workspaces/myapp/auth

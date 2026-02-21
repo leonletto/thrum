@@ -66,6 +66,9 @@ Human-readable name for the agent. Names are validated with strict rules:
   characters
 - **Reserved names**: `daemon`, `system`, `thrum`, `all`, `broadcast`
 - **Cannot be empty** (when explicitly provided)
+- **Cannot equal the role** (v0.4.5+): names that match the role are rejected to
+  prevent routing ambiguity. Use a distinct name, e.g. `--name coord_main --role coordinator`
+  instead of `--name coordinator --role coordinator`.
 
 Names must be safe for: file paths, `@mention` targets, JSONL field values, and
 git tracking.
@@ -427,8 +430,8 @@ When using git worktrees for different features/modules, each worktree can have
 its own identity files:
 
 ```bash
-# Main worktree - coordinator
-thrum quickstart --name coordinator --role coordinator --module all
+# Main worktree - coordinator (name must differ from role)
+thrum quickstart --name coord_main --role coordinator --module all
 
 # Auth worktree - auth implementer
 cd ~/.workspaces/myapp/auth

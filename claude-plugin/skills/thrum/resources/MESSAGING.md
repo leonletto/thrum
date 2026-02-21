@@ -11,10 +11,12 @@
 
 ## Addressing
 
-- **Direct:** `--to @agent-name` — single recipient
+- **Direct:** `--to @agent-name` — routes to named agent
+- **Role fanout:** `--to @role` — routes via auto-created role group (all agents with that role); sender gets a warning — prefer direct @name
 - **Group:** `--to @group-name` — all members of group
-- **Broadcast:** `--to @everyone` — all agents (preferred over `--broadcast`)
+- **Broadcast:** `--to @everyone` — all agents
 - **Reply:** `thrum reply <msg-id>` — same audience as original
+- **Unknown recipient** — hard error; verify names with `thrum team`
 
 ## Context Management
 

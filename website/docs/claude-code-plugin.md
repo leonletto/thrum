@@ -46,16 +46,20 @@ go install github.com/leonletto/thrum@latest
 git clone https://github.com/leonletto/thrum.git
 cd thrum && make install
 
-# Initialize in your repository
+# Initialize in your repository (v0.4.5+: init does full setup)
 cd /path/to/your/repo
 thrum init
-thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
-thrum daemon start
 ```
 
-The `thrum setup claude-md` command generates comprehensive agent coordination
-instructions and adds them to your CLAUDE.md file. This provides agents with
-immediate context on how to use Thrum for coordination.
+`thrum init` (v0.4.5+) handles the full setup: prompts for runtime detection,
+generates CLAUDE.md coordination instructions, starts the daemon, registers your
+agent, and starts a session. For manual control, you can still run individual
+steps:
+
+```bash
+thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
+thrum daemon start               # Start the daemon separately
+```
 
 Verify the daemon is running:
 
@@ -244,7 +248,7 @@ The listener runs 6 cycles of 15 minutes each (~90 min coverage), blocks on
 | Slash commands | 10 commands included                        | None                                  |
 | Hooks          | SessionStart + PreCompact                   | Manual hook configuration             |
 | Resource docs  | 8 progressive disclosure docs               | Single monolithic agent file          |
-| Maintenance    | Versioned (v0.4.4)                          | Ad-hoc                                |
+| Maintenance    | Versioned (v0.4.5)                          | Ad-hoc                                |
 
 The manual agent definitions (`thrum-agent.md`, `message-listener.md`) still
 work and are available in `toolkit/agents/` for environments that don't support

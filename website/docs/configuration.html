@@ -51,13 +51,10 @@
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
 <h1>Configuration</h1>
-<p>Thrum uses <code>.thrum/config.json</code> as the single source of truth for user<br>preferences. Everything works with sensible defaults — you only need to<br>edit config.json when you want to change something.</p>
+<p>Thrum uses <code>.thrum/config.json</code> as the single source of truth for user<br>preferences. Everything works with sensible defaults — you only need to edit<br>config.json when you want to change something.</p>
 <h2>Config File</h2>
 <p>Located at <code>.thrum/config.json</code> in your repository:</p>
 <pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;runtime&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;primary&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;claude&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
   <span class="hljs-attr">&quot;daemon&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
     <span class="hljs-attr">&quot;local_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
     <span class="hljs-attr">&quot;sync_interval&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">60</span><span class="hljs-punctuation">,</span>
@@ -66,20 +63,12 @@
 <span class="hljs-punctuation">}</span></code></pre>
 <p>This file is created during <code>thrum init</code> and can be edited at any time.</p>
 <h2>Schema Reference</h2>
-<h3><code>runtime.primary</code></h3>
-<p>Which AI coding runtime to generate configs for.</p>
-<ul>
-<li><strong>Type:</strong> string</li>
-<li><strong>Default:</strong> auto-detected or <code>&quot;cli-only&quot;</code></li>
-<li><strong>Values:</strong> <code>&quot;claude&quot;</code>, <code>&quot;codex&quot;</code>, <code>&quot;cursor&quot;</code>, <code>&quot;gemini&quot;</code>, <code>&quot;auggie&quot;</code>, <code>&quot;cli-only&quot;</code></li>
-<li><strong>Set by:</strong> <code>thrum init</code> (interactive prompt or <code>--runtime</code> flag)</li>
-</ul>
 <h3><code>daemon.local_only</code></h3>
 <p>Disable remote git sync (local-only mode).</p>
 <ul>
 <li><strong>Type:</strong> boolean</li>
-<li><strong>Default:</strong> <code>false</code></li>
-<li><strong>Override:</strong> <code>THRUM_LOCAL=true</code> environment variable</li>
+<li><strong>Default:</strong> <code>true</code></li>
+<li><strong>Override:</strong> <code>THRUM_LOCAL=false</code> environment variable</li>
 </ul>
 <h3><code>daemon.sync_interval</code></h3>
 <p>Seconds between git sync operations.</p>
@@ -112,7 +101,7 @@
 <tbody><tr>
 <td><code>THRUM_LOCAL</code></td>
 <td><code>daemon.local_only</code></td>
-<td><code>THRUM_LOCAL=true</code></td>
+<td><code>THRUM_LOCAL=false</code></td>
 </tr>
 <tr>
 <td><code>THRUM_SYNC_INTERVAL</code></td>
@@ -140,43 +129,19 @@
 <td><code>THRUM_MODULE=backend</code></td>
 </tr>
 </tbody></table>
-<h2>Runtime Tiers</h2>
-<p>Thrum supports multiple AI coding runtimes at different levels of maturity:</p>
-<table>
-<thead>
-<tr>
-<th>Tier</th>
-<th>Runtimes</th>
-<th>Support Level</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><strong>Tier 1</strong> (Fully Supported)</td>
-<td>Claude Code, Augment</td>
-<td>Tested in production, MCP native</td>
-</tr>
-<tr>
-<td><strong>Tier 2</strong> (Community Supported)</td>
-<td>Cursor, Codex</td>
-<td>Templates available, community-maintained</td>
-</tr>
-<tr>
-<td><strong>Tier 3</strong> (Experimental)</td>
-<td>Gemini, Amp</td>
-<td>Community templates, not guaranteed</td>
-</tr>
-</tbody></table>
-<h3>Runtime Selection</h3>
-<p>During <code>thrum init</code>, Thrum detects installed runtimes and prompts you to<br>select one:</p>
-<pre><code>Detected AI runtimes:
-  1. Claude Code    (found .claude/settings.json)
-  2. Augment        (found .augment/)
-
-Which is your primary runtime? [1]:</code></pre>
-<p>You can also specify directly: <code>thrum init --runtime claude</code></p>
-<p>To change your runtime after init, edit <code>.thrum/config.json</code> directly or<br>run <code>thrum init --runtime &lt;name&gt; --force</code>.</p>
+<h2>Runtime Templates</h2>
+<p>During <code>thrum init</code>, Thrum can generate configuration files for various AI<br>coding runtimes:</p>
+<ul>
+<li><strong>Claude Code</strong> - CLAUDE.md and .claude/agents/</li>
+<li><strong>Augment</strong> - .augment/ directory</li>
+<li><strong>Cursor</strong> - .cursorrules</li>
+<li><strong>Codex</strong> - codex.yaml</li>
+<li><strong>Gemini</strong> - .gemini/</li>
+<li><strong>CLI-only</strong> - No runtime configuration files</li>
+</ul>
+<p>Use <code>thrum init --runtime &lt;name&gt;</code> to specify which runtime template to generate.<br>Runtime templates are created during initialization and are not tracked in<br><code>config.json</code>.</p>
 <h2>Viewing Configuration</h2>
-<p>Use <code>thrum config show</code> to see the effective configuration and where each<br>value comes from:</p>
+<p>Use <code>thrum config show</code> to see the effective configuration and where each value<br>comes from:</p>
 <pre><code>Thrum Configuration
   Config file: .thrum/config.json
 
@@ -202,9 +167,9 @@ Overrides (environment)
 <h2>What&#39;s NOT in config.json</h2>
 <p>These remain separate for good reasons:</p>
 <ul>
-<li><strong>Identity files</strong> (<code>.thrum/identities/*.json</code>) — per-agent config, one<br>file per registered agent</li>
+<li><strong>Identity files</strong> (<code>.thrum/identities/*.json</code>) — per-agent config, one file<br>per registered agent</li>
 <li><strong>Context files</strong> (<code>.thrum/context/*.md</code>) — volatile session state</li>
-<li><strong>Runtime templates</strong> — generated config files for your AI runtime<br>(CLAUDE.md, .cursorrules, etc.)</li>
+<li><strong>Runtime templates</strong> — generated config files for your AI runtime (CLAUDE.md,<br>.cursorrules, etc.)</li>
 </ul>
 
     </div>

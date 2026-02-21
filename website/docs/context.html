@@ -52,16 +52,16 @@
     <div class="docs-content-inner">
 <h1>Agent Context Management</h1>
 <h2>Overview</h2>
-<p>Agents lose state between sessions due to context window compaction, session resets, or switching machines. The context system preserves volatile session state so agents can pick up where they left off.</p>
-<p><strong>Why this exists:</strong> When an agent session ends (context compacted, Claude Code restarted, new worktree), the work-in-progress state vanishes. Context files capture that state so the next session can continue seamlessly.</p>
-<p><strong>Primary use case:</strong> The <code>/update-context</code> skill in Claude Code uses this system to save session summaries before compaction or session end.</p>
-<p><strong>Storage:</strong> Context files live in <code>.thrum/context/</code> (gitignored by default). Each agent gets two files:</p>
+<p>Agents lose state between sessions due to context window compaction, session<br>resets, or switching machines. The context system preserves volatile session<br>state so agents can pick up where they left off.</p>
+<p><strong>Why this exists:</strong> When an agent session ends (context compacted, Claude Code<br>restarted, new worktree), the work-in-progress state vanishes. Context files<br>capture that state so the next session can continue seamlessly.</p>
+<p><strong>Primary use case:</strong> The <code>/update-context</code> skill in Claude Code uses this<br>system to save session summaries before compaction or session end.</p>
+<p><strong>Storage:</strong> Context files live in <code>.thrum/context/</code> (gitignored by default).<br>Each agent gets two files:</p>
 <ul>
 <li><code>.thrum/context/{name}.md</code> - Volatile session state (updated frequently)</li>
 <li><code>.thrum/context/{name}_preamble.md</code> - Stable reference (rarely changes)</li>
 </ul>
 <h2>Context Files</h2>
-<p>Context files hold volatile session state that doesn&#39;t belong in git commits but needs to survive session boundaries.</p>
+<p>Context files hold volatile session state that doesn&#39;t belong in git commits but<br>needs to survive session boundaries.</p>
 <p><strong>What to put in context:</strong></p>
 <ul>
 <li>Current task and progress</li>
@@ -85,11 +85,11 @@
 │   ├── maximus.md
 │   ├── maximus_preamble.md
 │   └── coordinator_1B9K33T6RK.md   # Hash-based agent ID</code></pre>
-<p>Context files are local by default. Use <code>thrum context sync</code> to manually share across worktrees via the a-sync branch.</p>
+<p>Context files are local by default. Use <code>thrum context sync</code> to manually share<br>across worktrees via the a-sync branch.</p>
 <h2>Preamble</h2>
-<p>Each agent can have a preamble - a stable, user-editable header stored at <code>.thrum/context/{agent}_preamble.md</code>. The preamble is automatically prepended when showing context, providing a persistent reference that survives context saves.</p>
-<p><strong>Default preamble:</strong> When you run <code>thrum quickstart</code>, a default preamble is created automatically with thrum quick-reference commands.</p>
-<p><strong>User-editable:</strong> The preamble is just a markdown file. You can edit it directly or replace it with <code>thrum context preamble --file custom.md</code>.</p>
+<p>Each agent can have a preamble - a stable, user-editable header stored at<br><code>.thrum/context/{agent}_preamble.md</code>. The preamble is automatically prepended<br>when showing context, providing a persistent reference that survives context<br>saves.</p>
+<p><strong>Default preamble:</strong> When you run <code>thrum quickstart</code>, a default preamble is<br>created automatically with thrum quick-reference commands.</p>
+<p><strong>User-editable:</strong> The preamble is just a markdown file. You can edit it<br>directly or replace it with <code>thrum context preamble --file custom.md</code>.</p>
 <p><strong>Key properties:</strong></p>
 <ul>
 <li>Not touched by <code>thrum context save</code> - the preamble persists across saves</li>
@@ -100,15 +100,13 @@
 <p><strong>Default content:</strong></p>
 <pre><code class="language-markdown hljs"><span class="hljs-section">## Thrum Quick Reference</span>
 
-<span class="hljs-strong">**Check messages:**</span> <span class="hljs-code">`thrum inbox --unread`</span>
-<span class="hljs-strong">**Send message:**</span> <span class="hljs-code">`thrum send &quot;message&quot; --to @role`</span>
-<span class="hljs-strong">**Reply:**</span> <span class="hljs-code">`thrum reply &lt;MSG_ID&gt; &quot;response&quot;`</span>
-<span class="hljs-strong">**Status:**</span> <span class="hljs-code">`thrum status`</span>
-<span class="hljs-strong">**Who&#x27;s online:**</span> <span class="hljs-code">`thrum agent list --context`</span>
-<span class="hljs-strong">**Save context:**</span> <span class="hljs-code">`thrum context save`</span>
-<span class="hljs-strong">**Wait for messages:**</span> <span class="hljs-code">`thrum wait --all --after -30s --timeout 5m`</span></code></pre>
+<span class="hljs-strong">**Check messages:**</span> <span class="hljs-code">`thrum inbox --unread`</span> <span class="hljs-strong">**Send message:**</span>
+<span class="hljs-code">`thrum send &quot;message&quot; --to @role`</span> <span class="hljs-strong">**Reply:**</span> <span class="hljs-code">`thrum reply &lt;MSG_ID&gt; &quot;response&quot;`</span>
+<span class="hljs-strong">**Status:**</span> <span class="hljs-code">`thrum status`</span> <span class="hljs-strong">**Who&#x27;s online:**</span> <span class="hljs-code">`thrum agent list --context`</span> <span class="hljs-strong">**Save
+context:**</span> <span class="hljs-code">`thrum context save`</span> <span class="hljs-strong">**Wait for messages:**</span>
+<span class="hljs-code">`thrum wait --after -30s --timeout 5m`</span></code></pre>
 <p><strong>Customization examples:</strong></p>
-<p>You can edit the preamble to add project conventions, role-specific instructions, team rosters, or boot sequences:</p>
+<p>You can edit the preamble to add project conventions, role-specific<br>instructions, team rosters, or boot sequences:</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Edit the preamble directly</span>
 vim .thrum/context/furiosa_preamble.md
 
@@ -241,7 +239,7 @@ thrum context clear --agent furiosa</code></pre>
 <p>Note: Idempotent - running clear when no context exists is a no-op.</p>
 <hr>
 <h3>thrum context sync</h3>
-<p>Copy the context file to the a-sync branch for sharing across worktrees and machines.</p>
+<p>Copy the context file to the a-sync branch for sharing across worktrees and<br>machines.</p>
 <pre><code class="language-bash hljs">thrum context <span class="hljs-built_in">sync</span> [flags]</code></pre>
 <table>
 <thead>
@@ -265,7 +263,7 @@ thrum context <span class="hljs-built_in">sync</span>
 thrum context <span class="hljs-built_in">sync</span> --agent furiosa</code></pre>
 <p><strong>What it does:</strong></p>
 <ol>
-<li>Copies <code>.thrum/context/{agent}.md</code> to the sync worktree at <code>.git/thrum-sync/a-sync/context/{agent}.md</code></li>
+<li>Copies <code>.thrum/context/{agent}.md</code> to the sync worktree at<br><code>.git/thrum-sync/a-sync/context/{agent}.md</code></li>
 <li>Commits the change with message <code>&quot;context: update {agent}&quot;</code></li>
 <li>Pushes to the remote a-sync branch</li>
 </ol>
@@ -316,30 +314,62 @@ thrum context preamble --file my-preamble.md
 <span class="hljs-comment"># Show preamble for a different agent</span>
 thrum context preamble --agent furiosa</code></pre>
 <hr>
+<h3>thrum context prime</h3>
+<p>Collect all context needed for agent session initialization or recovery. This is<br>a comprehensive context collection command that gathers identity, session info,<br>agent list, unread messages, git context, and daemon health into a single<br>output.</p>
+<pre><code class="language-bash hljs">thrum context prime [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--json</code></td>
+<td>Structured JSON output for scripting</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Human-readable summary</span>
+thrum context prime
+
+<span class="hljs-comment"># Structured JSON output</span>
+thrum context prime --json</code></pre>
+<p><strong>What it includes:</strong></p>
+<ul>
+<li>Agent identity (name, role, module)</li>
+<li>Active session information</li>
+<li>List of registered agents and their status</li>
+<li>Unread messages count</li>
+<li>Git context (branch, commits, files)</li>
+<li>Daemon health status</li>
+</ul>
+<p><strong>Use cases:</strong></p>
+<ul>
+<li>Session initialization - quickly orient a new session</li>
+<li>Session recovery - restore context after crash or compaction</li>
+<li>Debugging - gather all relevant state in one command</li>
+<li>Agent onboarding - provide comprehensive context to new agents</li>
+</ul>
+<p><strong>Note:</strong> This command is an alias for <code>thrum prime</code>. The PreCompact hook<br>automatically saves context before compaction to <code>.thrum/context/{name}.md</code> and<br><code>/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md</code>, but the<br>agent-initiated <code>/update-context</code> skill captures richer context including<br>decisions and rationale.</p>
+<hr>
 <h3>thrum context update</h3>
-<p>Install or update the <code>/update-context</code> skill for Claude Code agents.</p>
-<pre><code class="language-bash hljs">thrum context update</code></pre>
-<p><strong>What it does:</strong></p>
-<p>Detects the <code>/update-context</code> skill in these locations (in priority order):</p>
-<ol>
-<li><strong>Project-level</strong>: <code>.claude/commands/update-context.md</code> (relative to repo root)</li>
-<li><strong>Global</strong>: <code>~/.claude/commands/update-context.md</code></li>
-</ol>
-<p>If the skill is found, prints its location and status. If not found, provides installation instructions.</p>
+<p>The <code>/update-context</code> skill is now integrated with the Thrum MCP server. Use the<br>MCP server for guided context updates:</p>
+<pre><code class="language-bash hljs">thrum mcp serve</code></pre>
+<p><strong>In Claude Code:</strong></p>
+<p>Configure the MCP server in <code>.claude/settings.json</code> and use the<br><code>wait_for_message</code> and <code>send_message</code> tools for context coordination.</p>
 <hr>
 <h2>The /update-context Skill</h2>
-<p>The <code>/update-context</code> skill is a Claude Code command that provides a guided workflow for updating agent context. It prompts for continuation context, formats it as markdown, and saves it via <code>thrum context save</code>.</p>
-<p><strong>Installation:</strong></p>
-<ol>
-<li>Create <code>.claude/commands/update-context.md</code> in your repo or globally at <code>~/.claude/commands/update-context.md</code></li>
-<li>Restart Claude Code</li>
-<li>Use <code>/update-context</code> from the chat to invoke the skill</li>
-</ol>
+<p>The <code>/update-context</code> skill is now integrated into the Thrum MCP server. The MCP<br>server provides message-based context coordination through the <code>send_message</code><br>and <code>wait_for_message</code> tools.</p>
+<p><strong>Usage:</strong></p>
+<p>Configure the MCP server in <code>.claude/settings.json</code> and agents can coordinate<br>context updates via messages.</p>
 <p><strong>Workflow:</strong></p>
 <ol>
-<li>Skill prompts: &quot;What context should I preserve for the next session?&quot;</li>
-<li>You provide notes, decisions, TODOs, or findings</li>
-<li>Skill formats your input as markdown and saves it via <code>thrum context save --file /tmp/context.md</code></li>
+<li>Agent sends context via <code>send_message</code></li>
+<li>Other agents receive via <code>wait_for_message</code> or <code>check_messages</code></li>
+<li>Skill formats your input as markdown and saves it via<br><code>thrum context save --file /tmp/context.md</code></li>
 </ol>
 <p><strong>Example:</strong></p>
 <pre><code>User: /update-context
@@ -348,7 +378,7 @@ User: We&#39;re refactoring the auth module. Decided to use JWT with
       refresh tokens. Need to add rate limiting tests.
 Agent: [Saves formatted context]
       ✓ Context saved (248 bytes)</code></pre>
-<p>The skill reduces the friction of updating context and ensures consistent formatting.</p>
+<p>The skill reduces the friction of updating context and ensures consistent<br>formatting.</p>
 <hr>
 <h2>Use Cases and Patterns</h2>
 <h3>Single-Agent Session Continuity</h3>
@@ -369,7 +399,7 @@ thrum context <span class="hljs-built_in">sync</span>  <span class="hljs-comment
 git fetch origin
 thrum context show --agent furiosa</code></pre>
 <h3>Context Updates at Decision Points</h3>
-<p>Save context when you make a significant decision, discover something important, or reach a natural breakpoint:</p>
+<p>Save context when you make a significant decision, discover something important,<br>or reach a natural breakpoint:</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># After architectural decision</span>
 <span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;# Decision: Using JWT with refresh tokens
 - Token expiry: 15 min (access), 7 days (refresh)
@@ -505,9 +535,9 @@ Inbox:    3 unread (12 total)</code></pre>
 <li><code>context.save</code> and <code>context.clear</code> acquire a write lock (<code>Lock()</code>)</li>
 <li><code>context.show</code> acquires a read lock (<code>RLock()</code>)</li>
 </ul>
-<p>This ensures thread-safe access when multiple clients interact with context files.</p>
+<p>This ensures thread-safe access when multiple clients interact with context<br>files.</p>
 <h3>File Format</h3>
-<p>Context files are plain markdown (<code>.md</code>). No special format or structure is enforced - agents are free to use any markdown convention that suits their workflow.</p>
+<p>Context files are plain markdown (<code>.md</code>). No special format or structure is<br>enforced - agents are free to use any markdown convention that suits their<br>workflow.</p>
 <p><strong>Common patterns:</strong></p>
 <ul>
 <li>Heading-based sections (<code># Next Steps</code>, <code># Decisions</code>, <code># Questions</code>)</li>
@@ -522,11 +552,11 @@ Inbox:    3 unread (12 total)</code></pre>
 <li>Agents must explicitly run <code>thrum context sync</code> to share</li>
 <li>Sync respects local-only mode (no-op when <code>--local</code> is set on the daemon)</li>
 </ul>
-<p><strong>Rationale:</strong> Context is volatile and session-specific. Auto-syncing would create unnecessary churn. Manual sync gives agents control over when and what to share.</p>
+<p><strong>Rationale:</strong> Context is volatile and session-specific. Auto-syncing would<br>create unnecessary churn. Manual sync gives agents control over when and what to<br>share.</p>
 <hr>
 <h2>Best Practices</h2>
 <h3>Keep Context Concise</h3>
-<p>Context files should be high-signal summaries, not exhaustive logs. Prefer bullet points over paragraphs.</p>
+<p>Context files should be high-signal summaries, not exhaustive logs. Prefer<br>bullet points over paragraphs.</p>
 <p><strong>Good:</strong></p>
 <pre><code class="language-markdown hljs"><span class="hljs-section"># Next Steps</span>
 
@@ -541,7 +571,7 @@ I implemented a basic version but it&#x27;s not complete yet and I still need to
 rate limiting which I discussed with the team and we decided on 100 requests per
 minute...</code></pre>
 <h3>Update Context at Decision Points</h3>
-<p>Save context when you make a significant decision, discover something important, or reach a natural breakpoint.</p>
+<p>Save context when you make a significant decision, discover something important,<br>or reach a natural breakpoint.</p>
 <p><strong>When to update:</strong></p>
 <ul>
 <li>After choosing between architectural alternatives</li>
@@ -550,9 +580,9 @@ minute...</code></pre>
 <li>At the end of a work session</li>
 </ul>
 <h3>Use the /update-context Skill</h3>
-<p>The skill provides a consistent, low-friction workflow for updating context. Install it and use it regularly.</p>
+<p>The skill provides a consistent, low-friction workflow for updating context.<br>Install it and use it regularly.</p>
 <h3>Sync Selectively</h3>
-<p>Only sync context that is useful to other agents or future sessions on different machines. Local notes and WIP context can stay local.</p>
+<p>Only sync context that is useful to other agents or future sessions on different<br>machines. Local notes and WIP context can stay local.</p>
 <hr>
 <h2>See Also</h2>
 <ul>

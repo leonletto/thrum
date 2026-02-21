@@ -79,19 +79,19 @@ thrum reply &lt;msg-id&gt; <span class="hljs-string">&quot;Here&#x27;s my update
 <p>The most common pattern: a planner agent assigns work and an implementer<br>executes it.</p>
 <p><strong>Planner:</strong></p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Register as planner</span>
-thrum quickstart --name planner --role planner --module website \
+thrum quickstart --name planner1 --role planner --module website \
   --intent <span class="hljs-string">&quot;Coordinating website development&quot;</span>
 
 <span class="hljs-comment"># Assign task via message</span>
 thrum send <span class="hljs-string">&quot;Please implement build script (task thrum-235d.3). \
   Design spec in docs/plans/. Check beads for details.&quot;</span> \
-  --to @implementer --priority high
+  --to @implementer
 
 <span class="hljs-comment"># Check for updates</span>
 thrum inbox</code></pre>
 <p><strong>Implementer:</strong></p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Register</span>
-thrum quickstart --name implementer --role implementer --module website \
+thrum quickstart --name impl1 --role implementer --module website \
   --intent <span class="hljs-string">&quot;Implementing website features&quot;</span>
 
 <span class="hljs-comment"># Check inbox for assignments</span>
@@ -106,7 +106,7 @@ thrum send <span class="hljs-string">&quot;Build script complete. Tests passing.
 <h3>Peer Collaboration</h3>
 <p>Agents working on related areas coordinate to avoid conflicts.</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Agent A: Announce work area</span>
-thrum send <span class="hljs-string">&quot;Starting work on auth module&quot;</span> --broadcast
+thrum send <span class="hljs-string">&quot;Starting work on auth module&quot;</span> --to @everyone
 
 <span class="hljs-comment"># Agent B: Check file ownership before editing</span>
 thrum who-has src/auth/login.ts
@@ -122,7 +122,7 @@ thrum send <span class="hljs-string">&quot;Need to edit login.ts for validation.
 - Search index generation
 - Error handling
 
-Tests passing. Beads task: thrum-235d.3&quot;</span> --to @reviewer --priority high</code></pre>
+Tests passing. Beads task: thrum-235d.3&quot;</span> --to @reviewer</code></pre>
 <p><strong>Reviewer:</strong></p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Check inbox</span>
 thrum inbox --unread
@@ -156,47 +156,21 @@ thrum inbox</code></pre>
 <h3>How It Works</h3>
 <ol>
 <li>The main agent spawns a message-listener as a background task</li>
-<li>The listener polls <code>thrum inbox --unread</code> on a loop with sleep intervals</li>
+<li>The listener uses <code>thrum wait</code> (blocks until message arrives or timeout)</li>
 <li>When a message arrives, the listener returns immediately with the message<br>content</li>
 <li>The main agent processes the message and re-arms the listener</li>
 </ol>
+<p><strong>Recommended approach:</strong> Use <code>thrum wait</code> which blocks until a message<br>arrives or times out. This is more efficient than polling loops with sleep<br>intervals. Use <code>--after -30s</code> to skip old messages, returning only recent/new ones.</p>
 <h3>Return Format</h3>
 <p>When messages are received:</p>
 <pre><code>MESSAGES_RECEIVED
 ---
 FROM: [sender]
-PRIORITY: [priority]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]
 ---</code></pre>
 <p>When timeout occurs with no messages:</p>
 <pre><code>NO_MESSAGES_TIMEOUT</code></pre>
-<h3>Priority Handling</h3>
-<p>When the main agent receives messages from the listener:</p>
-<table>
-<thead>
-<tr>
-<th>Priority</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>critical</code></td>
-<td>Stop current work immediately</td>
-</tr>
-<tr>
-<td><code>high</code></td>
-<td>Process at next breakpoint</td>
-</tr>
-<tr>
-<td><code>normal</code></td>
-<td>Process when current sub-task completes</td>
-</tr>
-<tr>
-<td><code>low</code></td>
-<td>Queue, process when convenient</td>
-</tr>
-</tbody></table>
 <h3>Context Management</h3>
 <ul>
 <li>Re-arm the listener after processing messages (the listener exits after<br>returning)</li>
@@ -236,7 +210,7 @@ TIMESTAMP: [timestamp]
 </tbody></table>
 <h3>Unified Workflow</h3>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># 1. Register in Thrum</span>
-thrum quickstart --name implementer --role implementer --module auth \
+thrum quickstart --name impl_auth --role implementer --module auth \
   --intent <span class="hljs-string">&quot;Implementing auth system&quot;</span>
 
 <span class="hljs-comment"># 2. Find work in Beads</span>
@@ -262,7 +236,7 @@ bd close bd-123 --reason=<span class="hljs-string">&quot;JWT auth complete with 
 
 <span class="hljs-comment"># 9. Announce via Thrum</span>
 thrum send <span class="hljs-string">&quot;Completed bd-123. Ready for review.&quot;</span> \
-  --to @reviewer --priority high
+  --to @reviewer
 
 <span class="hljs-comment"># 10. Sync both</span>
 bd <span class="hljs-built_in">sync</span>
@@ -285,11 +259,6 @@ thrum <span class="hljs-built_in">sync</span> force</code></pre>
 <td>Status</td>
 <td><code>bd update --status</code></td>
 <td>Send message with update</td>
-</tr>
-<tr>
-<td>Priority</td>
-<td><code>bd update --priority</code></td>
-<td><code>--priority</code> flag on messages</td>
 </tr>
 <tr>
 <td>Assignment</td>
@@ -336,7 +305,7 @@ thrum send <span class="hljs-string">&quot;Progress: &lt;status&gt;&quot;</span>
 thrum inbox --unread
 
 <span class="hljs-comment"># 8. Coordinate on blockers</span>
-thrum send <span class="hljs-string">&quot;Blocked: &lt;description&gt;&quot;</span> --to @coordinator --priority high
+thrum send <span class="hljs-string">&quot;Blocked: &lt;description&gt;&quot;</span> --to @coordinator
 
 <span class="hljs-comment"># === END OF SESSION ===</span>
 
@@ -355,7 +324,6 @@ thrum session end</code></pre>
 <ul>
 <li><strong>Register at session start</strong> -- always use <code>thrum quickstart</code></li>
 <li><strong>Use MCP server when available</strong> -- better than CLI polling</li>
-<li><strong>Handle priorities</strong> -- respect critical/high/normal/low</li>
 <li><strong>Send status updates</strong> -- keep the team informed</li>
 <li><strong>Use @mentions</strong> -- reference agents by name</li>
 <li><strong>Include context</strong> -- Beads IDs, file paths, commit hashes</li>
@@ -427,8 +395,8 @@ bd ready
 bd list --status=in_progress</code></pre>
 <h2>See Also</h2>
 <ul>
-<li><a href="workflow-templates.html">Workflow Templates</a> -- three-phase agent development workflows (plan, prepare, implement)</li>
-<li><a href="multi-agent.html">Multi-Agent Support</a> -- groups, runtime presets, and team coordination</li>
+<li><a href="workflow-templates.html">Workflow Templates</a> -- three-phase agent development<br>workflows (plan, prepare, implement)</li>
+<li><a href="multi-agent.html">Multi-Agent Support</a> -- groups, runtime presets, and team<br>coordination</li>
 <li><a href="tailscale-sync.html">Tailscale Sync</a> -- cross-machine sync via Tailscale</li>
 <li><a href="cli.html">CLI Reference</a> -- complete command documentation</li>
 <li><a href="mcp-server.html">MCP Server</a> -- MCP tools and message-listener details</li>

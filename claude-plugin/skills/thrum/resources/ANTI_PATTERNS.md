@@ -80,3 +80,23 @@ finishing the main task.
 
 Include Beads IDs, file paths, commit hashes — anything that helps the recipient
 act on the message.
+
+## 12. Using @role to Address One Agent
+
+**Wrong:** `thrum send "msg" --to @implementer` when you mean a specific agent.
+**Right:** `thrum send "msg" --to @alice` — use the agent's name.
+
+`@role` sends to **all agents** with that role (via the auto-created role group)
+and emits a warning. Use `@name` for direct messages. Check names with
+`thrum team`.
+
+## 13. Sending to Unknown Recipients
+
+**Wrong:** `thrum send "msg" --to @typo` — hard error if recipient doesn't
+exist. **Right:** Verify the agent name with `thrum team` first, then send.
+
+## 14. Agent Name Same as Role
+
+**Wrong:** `thrum quickstart --name coordinator --role coordinator` —
+registration rejects name==role. **Right:** Use a descriptive name that differs
+from the role, e.g., `--name lead-agent --role coordinator`.

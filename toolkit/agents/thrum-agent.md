@@ -190,9 +190,16 @@ Sessions track agent activity:
 Messages are the core communication primitive:
 
 - **To** - Direct message to specific agent (`--to @name`)
-- **Broadcast** - Send to all active agents (`--broadcast`)
+- **Broadcast** - Send to all active agents (`--to @everyone`)
 - **Reply** - Reply to existing message (creates thread)
 - **Mentions** - Reference agents with `@name` syntax
+
+**Routing rules (v0.4.5+):**
+
+- `@name` routes directly to a named agent
+- `@role` routes via the auto-created role group (all agents with that role receive it); sender gets a warning
+- Unknown recipients are a hard error — double-check agent names with `thrum team`
+- Agent name must differ from role (registration rejects name==role)
 
 **Message Storage:**
 
@@ -264,7 +271,7 @@ thrum ping @name
 
 ```bash
 # Register as planner
-thrum quickstart --name planner --role planner --module website --intent "Coordinating website development"
+thrum quickstart --name lead-agent --role planner --module website --intent "Coordinating website development"
 
 # Assign task via message
 thrum send "Please implement build script (task thrum-235d.3). Design spec in docs/plans/. Check beads for details." --to @implementer
@@ -583,9 +590,9 @@ thrum status
 **Messaging:**
 
 ```bash
-thrum send "message" --to @name
+thrum send "message" --to @name                 # Direct to agent by name
 thrum send "message" --to @groupname            # Send to group
-thrum send "message" --broadcast                # DEPRECATED: use --to @everyone
+thrum send "message" --to @everyone             # Broadcast to all agents
 thrum inbox [--unread]                          # Auto-excludes own messages, marks displayed as read
 thrum reply <msg-id> "response"
 thrum message get <msg-id>
@@ -654,7 +661,7 @@ When both Thrum and Beads are available, use them together:
 
 ```bash
 # 1. Register in Thrum
-thrum quickstart --name implementer --role implementer --module auth --intent "Implementing auth system"
+thrum quickstart --name impl-agent --role implementer --module auth --intent "Implementing auth system"
 
 # 2. Find work in Beads
 bd ready --json
@@ -722,8 +729,9 @@ bd sync
 - **Don't skip registration** - System won't route messages correctly
 - **Don't leave sessions open** - End when done to avoid stale status
 - **Don't use vague intents** - Be specific about current work
-- **`--broadcast`, `--to @everyone`, and `--everyone` are all equivalent** - Use
-  whichever reads best
+- **Don't use @role to address a single agent** - Use @name for direct messages; @role fans out to all agents with that role
+- **Don't use unknown recipients** - Hard error; verify names with `thrum team`
+- **Don't use name==role when registering** - Registration rejects it (e.g., `--name coordinator --role coordinator`)
 - **Don't delete @everyone group** - It's protected and auto-created
 
 ## Common Patterns
@@ -1073,19 +1081,18 @@ thrum session end
 
 ---
 
-**Version:** 1.3 **Last Updated:** 2026-02-11 **Status:** Production-Ready
+**Version:** 1.4 **Last Updated:** 2026-02-20 **Status:** Production-Ready
+
+**Changes in v1.4 (thrum v0.4.5):** Name-only routing — `@name` routes directly
+to agent; `@role` routes via auto-created role group (with warning). Agent
+name must differ from role (registration rejects name==role). `thrum wait
+--all` removed — wait always filters by agent identity. Unknown recipients are
+a hard error. `--priority` flag removed from `thrum send`. `thrum init` does
+full setup; `thrum whoami` shows branch/intent.
 
 **Changes in v1.3:** Agent Groups feature added —
 `thrum group create/add/remove/list/info/members`, 6 new MCP tools
 (`create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
 `list_groups`, `get_group`). Built-in `@everyone` group for broadcasts.
-`--broadcast` is now an alias for `--to @everyone`. Groups support nesting
-(groups can contain other groups/roles) with cycle detection.
-
-**Changes in v1.2:** `thrum wait --mention` fixed — maps to `mention_role` RPC
-param, strips `@` prefix. Added `thrum message read --all` for batch
-mark-as-read. All messaging bugs resolved.
-
-**Changes in v1.1:** Message echo in inbox fixed — `exclude_self` server-side.
-Inbox `--unread` filtering fixed — proper `is_read` via LEFT JOIN, auto
-mark-as-read.
+Groups support nesting (groups can contain other groups/roles) with cycle
+detection.
