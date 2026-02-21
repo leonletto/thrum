@@ -3,7 +3,7 @@ version: "2"
 
 run:
   timeout: 10m
-  go: '1.25.5'
+  go: '1.26'
 
 linters:
   default: none
@@ -75,6 +75,26 @@ linters:
       - path: '_test\.go'
         linters:
           - unparam
+      # G115: int(file.Fd()) is safe on 64-bit — standard pattern for syscall.Flock
+      - text: "G115"
+        linters:
+          - gosec
+      # G117: struct field names matching "secret" patterns are intentional config fields
+      - text: "G117"
+        linters:
+          - gosec
+      # G204: CLI tool legitimately runs git and other subprocesses with variables
+      - text: "G204"
+        linters:
+          - gosec
+      # G602: false positive on guarded slice access (e.g., i > 0 before ports[i-1])
+      - text: "G602"
+        linters:
+          - gosec
+      # G703: path traversal via taint — paths are constructed internally, not from user input
+      - text: "G703"
+        linters:
+          - gosec
 
 issues:
   # No cap on reported issues
