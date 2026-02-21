@@ -21,7 +21,6 @@ function transformMessageToFeedItem(message: Message): FeedItem {
       session_id: message.session_id,
       is_read: message.is_read,
       mentions: message.mentions,
-      priority: message.priority,
     },
   };
 }

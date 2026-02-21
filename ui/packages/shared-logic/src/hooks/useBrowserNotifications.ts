@@ -28,7 +28,7 @@ function isMentioned(message: Message, currentIdentity: string): boolean {
  */
 function isDirectMessage(message: Message, currentUserId: string): boolean {
   // Check if message has a scope targeting this specific user
-  return message.scopes.some(
+  return (message.scopes ?? []).some(
     (scope) => scope.type === 'user' && scope.value === currentUserId
   );
 }
