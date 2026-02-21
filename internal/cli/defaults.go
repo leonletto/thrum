@@ -40,15 +40,23 @@ func AutoDisplay(role, module string) string {
 	return title
 }
 
-// GetRepoName returns the repository name from git toplevel basename.
-// Falls back to "unknown" if not in a git repo.
-func GetRepoName(repoPath string) string {
+// gitTopLevel returns the git toplevel directory, or empty string on error.
+func gitTopLevel(repoPath string) string {
 	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--show-toplevel")
 	out, err := cmd.Output()
 	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// GetRepoName returns the repository name from git toplevel basename.
+// Falls back to "unknown" if not in a git repo.
+func GetRepoName(repoPath string) string {
+	topLevel := gitTopLevel(repoPath)
+	if topLevel == "" {
 		return "unknown"
 	}
-	topLevel := strings.TrimSpace(string(out))
 	parts := strings.Split(topLevel, "/")
 	if len(parts) > 0 {
 		return parts[len(parts)-1]
@@ -93,16 +101,14 @@ func GetRepoID(repoPath string) string {
 // GetWorktreeName returns the basename of the git worktree root.
 // Falls back to the basename of repoPath.
 func GetWorktreeName(repoPath string) string {
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--show-toplevel")
-	out, err := cmd.Output()
-	if err != nil {
+	topLevel := gitTopLevel(repoPath)
+	if topLevel == "" {
 		parts := strings.Split(repoPath, "/")
 		if len(parts) > 0 {
 			return parts[len(parts)-1]
 		}
 		return ""
 	}
-	topLevel := strings.TrimSpace(string(out))
 	parts := strings.Split(topLevel, "/")
 	if len(parts) > 0 {
 		return parts[len(parts)-1]

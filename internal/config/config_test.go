@@ -821,6 +821,50 @@ func TestIdentityFileV1Compat(t *testing.T) {
 	}
 }
 
+func TestIdentityV1RoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	identitiesDir := filepath.Join(tmpDir, ".thrum", "identities")
+	os.MkdirAll(identitiesDir, 0750)
+
+	// Write a v1 identity JSON file to disk
+	v1Data := `{"version":1,"repo_id":"r_ROUNDTRIP","agent":{"Kind":"agent","Name":"roundtrip_agent","Role":"implementer","Module":"core","Display":"RT Agent"},"worktree":"myrepo","confirmed_by":"human:tester","updated_at":"2026-01-15T10:30:00Z"}`
+	os.WriteFile(filepath.Join(identitiesDir, "roundtrip_agent.json"), []byte(v1Data), 0600)
+
+	// Load it
+	loaded, _, err := config.LoadIdentityWithPath(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadIdentityWithPath: %v", err)
+	}
+
+	// Save it back (should bump to v3)
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := config.SaveIdentityFile(thrumDir, loaded); err != nil {
+		t.Fatalf("SaveIdentityFile: %v", err)
+	}
+
+	// Reload and verify
+	reloaded, _, err := config.LoadIdentityWithPath(tmpDir)
+	if err != nil {
+		t.Fatalf("Reload after save: %v", err)
+	}
+
+	if reloaded.Version != 3 {
+		t.Errorf("Version = %d, want 3", reloaded.Version)
+	}
+	if reloaded.ConfirmedBy != "human:tester" {
+		t.Errorf("ConfirmedBy = %q, want %q", reloaded.ConfirmedBy, "human:tester")
+	}
+	if reloaded.Branch != "" {
+		t.Errorf("Branch = %q, want empty (not set by migration)", reloaded.Branch)
+	}
+	if reloaded.Intent != "" {
+		t.Errorf("Intent = %q, want empty (not set by migration)", reloaded.Intent)
+	}
+	if reloaded.SessionID != "" {
+		t.Errorf("SessionID = %q, want empty (not set by migration)", reloaded.SessionID)
+	}
+}
+
 func TestSaveIdentityFile_BumpsVersionTo3(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")

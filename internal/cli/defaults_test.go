@@ -31,6 +31,7 @@ func TestAutoDisplay(t *testing.T) {
 	}{
 		{"coordinator", "main", "Coordinator (main)"},
 		{"implementer", "auth", "Implementer (auth)"},
+		{"coordinator", "", "Coordinator"},
 		{"", "main", ""},
 	}
 	for _, tt := range tests {

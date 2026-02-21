@@ -46,8 +46,8 @@ func TestFormatTeam_SingleActive(t *testing.T) {
 
 	result := FormatTeam(resp)
 
-	// Check header
-	if !strings.Contains(result, "=== @furiosa (implementer @ auth) ===") {
+	// Check header (compact summary format)
+	if !strings.Contains(result, "● @furiosa (auth)") {
 		t.Errorf("missing header, got: %s", result)
 	}
 
@@ -172,12 +172,9 @@ func TestFormatTeam_Multiple(t *testing.T) {
 	}
 
 	// Should have blank line between members
-	if !strings.Contains(result, "===\n\n===") {
-		// Check there's at least separation
-		parts := strings.Split(result, "=== @agent2")
-		if len(parts) < 2 {
-			t.Errorf("missing agent2 block, got: %s", result)
-		}
+	parts := strings.Split(result, "● @agent2")
+	if len(parts) < 2 {
+		t.Errorf("missing agent2 block, got: %s", result)
 	}
 }
 
