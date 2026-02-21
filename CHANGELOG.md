@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5] - 2026-02-20
+
+### Changed
+
+- **Name-only routing**: Messages route by agent name and group membership only.
+  Role strings are no longer used for direct inbox matching. Role-based
+  addressing (`@implementer`) now works through auto-created role groups that are
+  visible in `thrum group list` and manageable via `thrum group member`.
+- **Agent name ≠ role**: Registration rejects agents whose name matches their
+  role (e.g., `name=implementer role=implementer`). Use distinct names like
+  `impl_api` or `impl_db`.
+- **`thrum wait` always filters by agent identity**: The `--all` flag has been
+  removed. Wait now returns only messages addressed to the calling agent
+  (direct mentions, group messages, broadcasts).
+- **Recipient validation**: Sending to an unknown agent, role, or group now
+  returns a hard error listing the unresolvable addresses. The message is not
+  stored — fix the address and resend.
+
+### Fixed
+
+- MCP `check_messages` now sees name-directed messages, broadcasts, and group
+  messages (previously only role-based mentions were matched).
+- MCP send and broadcast include `CallerAgentID` so messages are attributed to
+  the correct sender in multi-worktree setups.
+- MCP mark-read records read-state under the correct agent identity.
+- MCP `check_messages` excludes the agent's own sent messages.
+- Replies now include the original sender in the audience so they route back
+  correctly.
+- Reply to group messages uses `@groupname` instead of the malformed
+  `@group:groupname` format.
+- MCP waiter subscribes to `@everyone` group scope so broadcasts trigger
+  WebSocket push notifications.
+- `list_agents` shows the agent ID when display name is empty.
+
 ## [0.4.4] - 2026-02-18
 
 ### Added

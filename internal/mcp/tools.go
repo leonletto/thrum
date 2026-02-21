@@ -32,15 +32,8 @@ func (s *Server) handleSendMessage(
 		Content:       input.Content,
 		Format:        "markdown",
 		Mentions:      []string{mentionRole},
-		Priority:      input.Priority,
 		ReplyTo:       input.ReplyTo,
 		CallerAgentID: s.agentID,
-	}
-	if sendReq.Priority == "" {
-		sendReq.Priority = "normal"
-	}
-	if !isValidPriority(sendReq.Priority) {
-		return nil, SendMessageOutput{}, fmt.Errorf("invalid priority %q: must be critical, high, normal, or low", sendReq.Priority)
 	}
 
 	// Add metadata as structured data if provided
@@ -120,7 +113,6 @@ func (s *Server) handleCheckMessages(
 			MessageID: msg.MessageID,
 			From:      msg.AgentID,
 			Content:   msg.Body.Content,
-			Priority:  msg.Priority,
 			Timestamp: msg.CreatedAt,
 		})
 		messageIDs = append(messageIDs, msg.MessageID)
@@ -167,7 +159,7 @@ func (s *Server) handleWaitForMessage(
 		return nil, WaitForMessageOutput{}, fmt.Errorf("wait_for_message requires WebSocket connection to daemon; waiter not initialized")
 	}
 
-	result, err := s.waiter.WaitForMessage(ctx, input.Timeout, input.PriorityFilter)
+	result, err := s.waiter.WaitForMessage(ctx, input.Timeout)
 	if err != nil {
 		return nil, WaitForMessageOutput{}, err
 	}
@@ -238,14 +230,6 @@ func (s *Server) handleBroadcast(
 		return nil, BroadcastOutput{}, fmt.Errorf("'content' is required")
 	}
 
-	priority := input.Priority
-	if priority == "" {
-		priority = "normal"
-	}
-	if !isValidPriority(priority) {
-		return nil, BroadcastOutput{}, fmt.Errorf("invalid priority %q: must be critical, high, normal, or low", priority)
-	}
-
 	// Map broadcast to send_message(to="@everyone")
 	client, err := s.newDaemonClient()
 	if err != nil {
@@ -257,7 +241,6 @@ func (s *Server) handleBroadcast(
 		Content:       input.Content,
 		Format:        "markdown",
 		Mentions:      []string{"everyone"},
-		Priority:      priority,
 		CallerAgentID: s.agentID,
 	}
 
@@ -291,15 +274,6 @@ func deriveAgentStatus(lastSeenAt string, now time.Time) string {
 		return "active"
 	}
 	return "offline"
-}
-
-// isValidPriority checks if a priority string is one of the allowed values.
-func isValidPriority(p string) bool {
-	switch p {
-	case "critical", "high", "normal", "low":
-		return true
-	}
-	return false
 }
 
 // parseMention extracts the recipient identifier from various addressing formats.

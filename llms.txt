@@ -73,7 +73,7 @@ All commands accept these flags:
 
 ### Messaging
 
-  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @role|@everyone] [--everyone] [-p|--priority low|normal|high|critical] [--format markdown|plain|json] [--structured JSON]
+  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @role|@everyone] [--everyone] [--format markdown|plain|json] [--structured JSON]
     Send a message. Use --to @everyone to broadcast to all agents. Use --to @group to send to a group.
 
   thrum reply MSG_ID TEXT [--format markdown|plain|json]
@@ -362,11 +362,10 @@ All commands accept these flags:
     Use --agent-id to select identity file. Configure in .claude/settings.json.
 
   MCP Tools:
-    send_message(to, content, priority?, reply_to?, metadata?)
+    send_message(to, content, reply_to?, metadata?)
       Send a message to another agent via @role or @group addressing.
       - to: recipient @role or @group (required)
       - content: message text (required)
-      - priority: critical|high|normal|low (optional, default: normal)
       - reply_to: message ID to reply to (optional)
       - metadata: optional key-value pairs (optional)
 
@@ -374,16 +373,15 @@ All commands accept these flags:
       Poll for unread messages mentioning this agent, auto-marks read.
       - limit: max messages to return (optional, default: 50)
 
-    wait_for_message(timeout?, priority_filter?)
+    wait_for_message(timeout?)
       Block until a message arrives (WebSocket push) or timeout.
       - timeout: max seconds to wait (optional, default: 300, max: 600)
-      - priority_filter: all|critical|high_and_above|normal_and_above (optional, default: all)
 
     list_agents(include_offline?)
       List registered agents with active/offline status.
       - include_offline: include inactive agents (optional, default: true)
 
-    broadcast_message(content, priority?)
+    broadcast_message(content)
       Send to all agents (convenience wrapper around send_message to @everyone).
 
     create_group(name, description?)

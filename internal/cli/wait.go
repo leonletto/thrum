@@ -37,6 +37,9 @@ func Wait(client *Client, opts WaitOptions) (*Message, error) {
 	pollTicker := time.NewTicker(500 * time.Millisecond)
 	defer pollTicker.Stop()
 
+	// Track seen message IDs to avoid returning duplicates
+	seen := make(map[string]bool)
+
 	// Poll for new messages
 	for {
 		select {
@@ -47,8 +50,14 @@ func Wait(client *Client, opts WaitOptions) (*Message, error) {
 			// Check for new messages
 			var inbox InboxResult
 			listParams := map[string]any{
-				"page_size": 1,
-				"unread":    true,
+				"page_size":  10,
+				"sort_by":    "created_at",
+				"sort_order": "desc",
+			}
+			// Use server-side created_after filter when available
+			// Always format in UTC to match database timestamp format
+			if !opts.After.IsZero() {
+				listParams["created_after"] = opts.After.UTC().Format(time.RFC3339Nano)
 			}
 			if scope != nil {
 				listParams["scope"] = scope
@@ -70,16 +79,18 @@ func Wait(client *Client, opts WaitOptions) (*Message, error) {
 				continue // Ignore errors and keep waiting
 			}
 
-			if len(inbox.Messages) > 0 {
-				msg := &inbox.Messages[0]
-				// Apply --after filter: skip messages created before threshold
-				if !opts.After.IsZero() && msg.CreatedAt != "" {
-					createdAt, parseErr := time.Parse(time.RFC3339Nano, msg.CreatedAt)
-					if parseErr == nil && !createdAt.After(opts.After) {
-						continue // Message is too old, keep waiting
-					}
+			// Return the first unseen message (newest first due to DESC sort)
+			for i := range inbox.Messages {
+				msg := &inbox.Messages[i]
+				if seen[msg.MessageID] {
+					continue
 				}
 				return msg, nil
+			}
+
+			// Mark all returned messages as seen so we don't re-process them
+			for _, msg := range inbox.Messages {
+				seen[msg.MessageID] = true
 			}
 		}
 	}

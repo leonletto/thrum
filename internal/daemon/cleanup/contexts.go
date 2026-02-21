@@ -11,9 +11,9 @@ import (
 // CleanupStaleContexts removes stale work contexts from the database.
 // Returns the number of contexts deleted.
 func CleanupStaleContexts(ctx context.Context, db *safedb.DB, now time.Time) (int, error) {
-	nowStr := now.Format(time.RFC3339)
-	cutoff24h := now.Add(-24 * time.Hour).Format(time.RFC3339)
-	cutoff7d := now.Add(-7 * 24 * time.Hour).Format(time.RFC3339)
+	nowStr := now.UTC().Format(time.RFC3339)
+	cutoff24h := now.Add(-24 * time.Hour).UTC().Format(time.RFC3339)
+	cutoff7d := now.Add(-7 * 24 * time.Hour).UTC().Format(time.RFC3339)
 
 	result, err := db.ExecContext(ctx, `
 		DELETE FROM agent_work_contexts

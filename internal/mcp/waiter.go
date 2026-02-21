@@ -258,7 +258,7 @@ func (w *Waiter) readLoop() {
 }
 
 // WaitForMessage blocks until a message arrives or the timeout expires.
-func (w *Waiter) WaitForMessage(ctx context.Context, timeout int, priorityFilter string) (*WaitForMessageOutput, error) {
+func (w *Waiter) WaitForMessage(ctx context.Context, timeout int) (*WaitForMessageOutput, error) {
 	// Validate timeout
 	if timeout <= 0 {
 		timeout = defaultWaitTimeout
@@ -266,11 +266,6 @@ func (w *Waiter) WaitForMessage(ctx context.Context, timeout int, priorityFilter
 	if timeout > maxWaitTimeout {
 		timeout = maxWaitTimeout
 	}
-
-	// TODO: priorityFilter is accepted but not yet implemented.
-	// All messages pass through regardless of priority.
-	// Implement when priority-based notification filtering is added to the daemon.
-	_ = priorityFilter
 
 	// Enforce single-waiter
 	w.mu.Lock()

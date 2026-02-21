@@ -256,7 +256,6 @@ All commands accept:
             --to @role              Direct recipient (also accepts @group names)
             --everyone              Alias for --to @everyone (broadcast to all agents)
             --broadcast, -b         Send to all agents (alias for --to @everyone)
-            --priority low|normal|high|critical  Message priority (default: normal)
             --format markdown|plain|json  Message format (default: markdown)
             --structured JSON       Structured payload
   Requires: Daemon running, active session.
@@ -790,10 +789,9 @@ All methods use JSON-RPC 2.0 protocol.
 ### message.send
 
   Request:   { content, format?, structured?, thread_id?, scopes?, refs?,
-               mentions?, tags?, priority?, acting_as?, disclose? }
+               mentions?, tags?, acting_as?, disclose? }
   Response:  { message_id, thread_id?, created_at }
   Format:    "markdown" (default) | "plain" | "json"
-  Priority:  "low" | "normal" (default) | "high"
   Mentions:  Converted to refs with type "mention".
   acting_as: For user impersonation of agents (WebSocket users only).
   Notes:     Triggers subscription notifications for matching subscriptions.
