@@ -1,5 +1,4 @@
-
-# Why Thrum Exists
+## Why Thrum Exists
 
 AI coding agents are genuinely productive. A single agent can implement a
 feature, write tests, and commit working code faster than most developers type.

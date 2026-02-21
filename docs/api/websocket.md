@@ -1,5 +1,4 @@
-
-# WebSocket API
+## WebSocket API
 
 The Thrum WebSocket API provides real-time, bidirectional communication between
 clients and the Thrum daemon using JSON-RPC 2.0 over WebSocket.

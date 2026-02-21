@@ -2,7 +2,7 @@
 
 ## Structure
 
-```
+```text
 claude-plugin/
 ├── .claude-plugin/
 │   ├── plugin.json           # Hooks (SessionStart, PreCompact)

@@ -6,7 +6,7 @@ returns when messages arrive. Runs on Haiku for cost efficiency
 
 ## Quick Start
 
-```
+```text
 Task(
   subagent_type="message-listener",
   model="haiku",
@@ -30,7 +30,7 @@ The listener loops internally (up to 6 cycles of 15 min each = ~90 min max).
 
 ## Processing Messages
 
-```
+```text
 # When listener returns, check result
 listenerResult = TaskOutput(listener_id)
 
@@ -58,7 +58,7 @@ else:
 
 Messages received:
 
-```
+```text
 MESSAGES_RECEIVED
 ---
 FROM: @coordinator
@@ -70,7 +70,7 @@ RE-ARM: This listener has stopped. Spawn a new message-listener agent to continu
 
 Timeout:
 
-```
+```text
 NO_MESSAGES_TIMEOUT
 RE-ARM: This listener has stopped. Spawn a new message-listener agent to continue listening.
 ```

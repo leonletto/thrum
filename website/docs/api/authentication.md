@@ -6,7 +6,7 @@ description:
 category: "api"
 ---
 
-# Authentication Guide
+## Authentication Guide
 
 This document explains authentication and authorization in the Thrum API.
 
@@ -50,7 +50,7 @@ The hash is computed as
 
 **Example** (named agent):
 
-```json
+````json
 {
   "jsonrpc": "2.0",
   "method": "agent.register",
@@ -62,7 +62,7 @@ The hash is computed as
   },
   "id": 1
 }
-```
+```text
 
 **Response**:
 
@@ -75,7 +75,7 @@ The hash is computed as
   },
   "id": 1
 }
-```
+```text
 
 **Example** (unnamed agent):
 
@@ -89,7 +89,7 @@ The hash is computed as
   },
   "id": 1
 }
-```
+```text
 
 **Response**:
 
@@ -102,7 +102,7 @@ The hash is computed as
   },
   "id": 1
 }
-```
+```text
 
 ### Re-Registration
 
@@ -124,7 +124,7 @@ intent setting:
 
 ```bash
 thrum quickstart --name furiosa --role implementer --module auth --intent "Working on auth"
-```
+```go
 
 ### Session Management
 
@@ -167,7 +167,7 @@ flag or `THRUM_NAME` env var for multi-agent worktrees:
 ```bash
 THRUM_NAME=furiosa thrum mcp serve
 thrum mcp serve --agent-id furiosa
-```
+```text
 
 ## User Authentication
 
@@ -216,7 +216,7 @@ Returns git user info from the repository's git config. No authentication needed
   },
   "id": 1
 }
-```
+```text
 
 The `username` field is sanitized from `git config user.name`: lowercased,
 spaces/hyphens/underscores normalized to hyphens, non-alphanumeric characters
@@ -248,7 +248,7 @@ returns existing info with a fresh session token.
   },
   "id": 1
 }
-```
+```text
 
 **Response**:
 
@@ -264,7 +264,7 @@ returns existing info with a fresh session token.
   },
   "id": 1
 }
-```
+```text
 
 When re-registering an existing user, the response has `"status": "existing"`
 and a fresh token.
@@ -283,7 +283,7 @@ The browser stores user identity in `localStorage` under the `thrum_user` key:
   "username": "leon",
   "display_name": "Leon Letto"
 }
-```
+```text
 
 On subsequent page loads, the stored username is used as a fallback if
 `user.identify` fails.
@@ -315,7 +315,7 @@ Users can impersonate agents to send messages "as" an agent.
   },
   "id": 1
 }
-```
+```text
 
 **Audit Trail**:
 
@@ -424,7 +424,7 @@ threat analysis.
 
 ### Agent Sessions
 
-```
+```text
 1. Agent starts
    |
 2. Connect to daemon (Unix socket or WebSocket)
@@ -438,11 +438,11 @@ threat analysis.
 6. End session: session.end (or crash)
    |
 7. Disconnect
-```
+```text
 
 Or use `quickstart` to combine steps 3-4 (and optionally set intent):
 
-```
+```text
 1. Agent starts
    |
 2. Connect to daemon
@@ -454,11 +454,11 @@ Or use `quickstart` to combine steps 3-4 (and optionally set intent):
 5. End session: session.end (or crash)
    |
 6. Disconnect
-```
+```text
 
 ### User Sessions
 
-```
+```text
 1. User opens UI at http://localhost:9999
    |
 2. WebSocket connects to ws://localhost:9999/ws
@@ -470,7 +470,7 @@ Or use `quickstart` to combine steps 3-4 (and optionally set intent):
 5. Send/receive messages, subscribe to events
    |
 6. Disconnect (session persists for reconnection)
-```
+```text
 
 ### Orphaned Sessions
 
@@ -575,7 +575,7 @@ thrum quickstart --name furiosa --role implementer --module auth \
 thrum agent register --name=furiosa --role=implementer --module=auth
 thrum session start
 thrum send "Starting work on auth module" --to @coordinator
-```
+```go
 
 ### Agent Registration and Session (WebSocket)
 
@@ -629,7 +629,7 @@ ws.on("message", (data: string) => {
     // Now ready to send messages
   }
 });
-```
+```text
 
 ### MCP Server (Native Agent Messaging)
 
@@ -639,7 +639,7 @@ THRUM_NAME=furiosa thrum mcp serve
 
 # Or with explicit agent-id override
 thrum mcp serve --agent-id furiosa
-```
+```text
 
 The MCP server provides 5 tools: `send_message`, `check_messages`,
 `wait_for_message`, `list_agents`, `broadcast_message`. Identity is resolved
@@ -650,9 +650,9 @@ once at startup.
 The browser handles registration automatically via `AuthProvider`. No manual
 code is needed. The flow is:
 
-```
+```text
 Page loads -> AuthProvider mounts -> user.identify -> user.register -> UI shows identity
-```
+```text
 
 For programmatic WebSocket user registration:
 
@@ -682,7 +682,7 @@ ws.on("message", (data: string) => {
     console.log(`User: ${msg.result.user_id}, Token: ${msg.result.token}`);
   }
 });
-```
+```text
 
 ## See Also
 
@@ -690,3 +690,4 @@ ws.on("message", (data: string) => {
   documentation
 - [WebSocket API](./websocket.md) - Full API reference
 - [Event Reference](./events.md) - Event types and payloads
+````

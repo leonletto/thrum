@@ -1,25 +1,35 @@
 # Thrum Release Test Plan
 
-Testing plan for thrum using a separate test repository (`littleCADev`) and its worktrees. The thrum source repo is used **only** for building (Part A) and plugin management (Part B). All runtime tests (init, daemon, agents, messaging, etc.) run in the test repo to avoid polluting the source.
+Testing plan for thrum using a separate test repository (`littleCADev`) and its
+worktrees. The thrum source repo is used **only** for building (Part A) and
+plugin management (Part B). All runtime tests (init, daemon, agents, messaging,
+etc.) run in the test repo to avoid polluting the source.
 
 ## Test Environment
 
-| Purpose | Path | Agent Identity |
-|---------|------|----------------|
-| Thrum source (build only) | `/Users/leon/dev/opensource/thrum` | — |
-| Test repo (main) | `/Users/leon/dev/testing/littleCADev` | — |
+| Purpose                    | Path                                         | Agent Identity   |
+| -------------------------- | -------------------------------------------- | ---------------- |
+| Thrum source (build only)  | `/Users/leon/dev/opensource/thrum`           | —                |
+| Test repo (main)           | `/Users/leon/dev/testing/littleCADev`        | —                |
 | Test worktree: coordinator | `~/.workspaces/littleCADev/test-coordinator` | test_coordinator |
 | Test worktree: implementer | `~/.workspaces/littleCADev/test-implementer` | test_implementer |
 
 **Important Notes:**
+
 - Self-send is filtered by design—inbox excludes your own messages automatically
 - Use `THRUM_NAME` env var to select identity in multi-agent worktrees
-- The main repo's marketplace is at `/Users/leon/dev/opensource/thrum/.claude-plugin/marketplace.json`
-- PreCompact hook script bundled at `${CLAUDE_PLUGIN_ROOT}/scripts/pre-compact-save-context.sh`
-- Pre-compact backups: `/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md`
-- **Name-only routing**: `@name` resolves to agent by name; `@role` resolves to auto-created role group (not direct agent)
-- **Name≠role validation**: Agent name cannot equal own role, match an existing role, or collide with an existing agent name
-- **`--all` removed from wait**: `thrum wait` always filters by calling agent identity — no `--all` flag
+- The main repo's marketplace is at
+  `/Users/leon/dev/opensource/thrum/.claude-plugin/marketplace.json`
+- PreCompact hook script bundled at
+  `${CLAUDE_PLUGIN_ROOT}/scripts/pre-compact-save-context.sh`
+- Pre-compact backups:
+  `/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md`
+- **Name-only routing**: `@name` resolves to agent by name; `@role` resolves to
+  auto-created role group (not direct agent)
+- **Name≠role validation**: Agent name cannot equal own role, match an existing
+  role, or collide with an existing agent name
+- **`--all` removed from wait**: `thrum wait` always filters by calling agent
+  identity — no `--all` flag
 
 ---
 
@@ -933,7 +943,9 @@ yes | thrum agent delete gamma 2>/dev/null || true
 
 ## Part K: MCP Routing Parity
 
-These tests verify that MCP tool-based messaging has equivalent routing behavior to the CLI. Run these in a Claude Code session with the Thrum MCP server active, or via `thrum mcp serve` piped to JSON-RPC.
+These tests verify that MCP tool-based messaging has equivalent routing behavior
+to the CLI. Run these in a Claude Code session with the Thrum MCP server active,
+or via `thrum mcp serve` piped to JSON-RPC.
 
 ### K1. MCP Send to Unknown Recipient
 
@@ -1177,7 +1189,8 @@ rm -f /tmp/thrum-pre-compact-test_reviewer-*.md 2>/dev/null
 
 ## Part N: Install Script & Homebrew (RELEASE DAY ONLY)
 
-⚠️ **Run these tests ONLY on release day after publishing the GitHub release and Homebrew tap.**
+⚠️ **Run these tests ONLY on release day after publishing the GitHub release and
+Homebrew tap.**
 
 ### N1. Remove Existing Binary
 
@@ -1280,12 +1293,17 @@ thrum version
 
 ## Part O: Remote VM Testing (leondev)
 
-Tests run on a clean macOS ARM64 VM (`leondev` in SSH config) to validate install paths and behavior on a separate machine. All commands prefixed with `ssh leondev`.
+Tests run on a clean macOS ARM64 VM (`leondev` in SSH config) to validate
+install paths and behavior on a separate machine. All commands prefixed with
+`ssh leondev`.
 
 **Prerequisites:**
+
 - SSH access configured as `leondev` in `~/.ssh/config`
-- Homebrew installed on VM (install manually if needed: `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`)
-- Test repo cloned at `/Users/leon/dev/testing/littleCADev` on VM (same as local)
+- Homebrew installed on VM (install manually if needed:
+  `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`)
+- Test repo cloned at `/Users/leon/dev/testing/littleCADev` on VM (same as
+  local)
 
 **VM baseline:** macOS Darwin 25.2.0, arm64 (VMAPPLE), curl 8.7.1, git 2.50.1.
 
@@ -1410,118 +1428,118 @@ ssh leondev 'which thrum 2>/dev/null && echo "FAIL: still found" || echo "OK: fu
 
 ## Results Tracker
 
-| Test ID | Description | Status | Notes |
-|---------|-------------|--------|-------|
-| **Part A: Build & Prerequisites** | | | |
-| A1 | Verify tmux installation | ☐ | |
-| A2 | Build from source | ☐ | |
-| **Part B: Plugin Management** | | | |
-| B1 | Uninstall existing plugin | ☐ | |
-| B2 | Add local marketplace | ☐ | |
-| B3 | Install from local marketplace | ☐ | |
-| B4 | Verify plugin metadata | ☐ | |
-| **Part C: Init & Daemon** | | | |
-| C1 | Initialize main repo | ☐ | thrum-5611 fix |
-| C2 | Start daemon | ☐ | |
-| C3 | Verify daemon health | ☐ | |
-| **Part D: Agent Registration** | | | |
-| D1 | Initialize test worktrees | ☐ | thrum-16lv fix |
-| D2 | Register coordinator agent | ☐ | |
-| D3 | Register implementer agent | ☐ | |
-| D4 | Verify team roster | ☐ | |
-| **Part E: CLI Messaging** | | | |
-| E1 | Direct message | ☐ | |
-| E2 | Reply message | ☐ | |
-| E3 | Priority flag removed | ☐ | -p rejected in v0.4.5 |
-| E4 | Broadcast message | ☐ | --to @everyone canonical |
-| E5 | Mark as read | ☐ | |
-| E6 | Send to unknown recipient (negative) | ☐ | thrum-lf1m |
-| E7 | Mixed valid+invalid recipients (negative) | ☐ | thrum-lf1m, atomic reject |
-| E8 | Send to role → group warning | ☐ | thrum-fsvi, auto role groups |
-| E9 | Name≠role validation on registration | ☐ | thrum-8mkl |
-| **Part F: Groups** | | | |
-| F1 | Create group | ☐ | |
-| F2 | Add members | ☐ | |
-| F3 | Add by role | ☐ | |
-| F4 | Send group message | ☐ | |
-| F5 | Nested groups | ☐ | |
-| **Part G: Plugin & Slash Commands** | | | |
-| G1 | Create tmux sessions | ☐ | |
-| G2 | Launch Claude Code sessions | ☐ | |
-| G3 | Test SessionStart hook | ☐ | thrum-5611 fix |
-| G4 | Test /thrum:prime | ☐ | |
-| G5 | Test /thrum:team | ☐ | |
-| G6 | Test /thrum:inbox | ☐ | |
-| G7 | Test /thrum:send | ☐ | |
-| G8 | Test /thrum:overview | ☐ | |
-| G9 | Test /thrum:quickstart | ☐ | |
-| G10 | Test /thrum:wait | ☐ | |
-| G11 | Test /thrum:reply | ☐ | |
-| G12 | Test /thrum:group | ☐ | |
-| **Part H: Cross-Session Messaging** | | | |
-| H1 | Verify identity resolution | ☐ | F7 worktree fix |
-| H2 | Session 1 → Session 2 | ☐ | |
-| H3 | Session 2 receives & replies | ☐ | |
-| H4 | Session 1 confirms receipt | ☐ | |
-| **Part I: Context & Compaction** | | | |
-| I1 | Test /thrum:update-context | ☐ | |
-| I2 | Verify context saved | ☐ | |
-| I3 | Test PreCompact hook | ☐ | |
-| I4 | Test /thrum:load-context | ☐ | |
-| I5 | Test context persistence | ☐ | |
-| **Part J: Bugfix Regressions** | | | |
-| J1 | Priority flag removed | ☐ | -p and --priority rejected |
-| J2 | Prime unread count accuracy | ☐ | thrum-pwaa |
-| J3 | Init detects worktree | ☐ | thrum-16lv |
-| J4 | Init no MCP in settings | ☐ | thrum-5611 |
-| J5 | Wait subscription cleanup | ☐ | thrum-pgoc |
-| J6 | Ping resolves by name | ☐ | thrum-8ws1 |
-| J7 | MCP serve doesn't crash | ☐ | NULL display fix |
-| J8 | Wait --all flag removed | ☐ | thrum-od0e |
-| J9 | Unknown recipient hard error | ☐ | thrum-lf1m |
-| J10 | Name-only routing / auto role groups | ☐ | thrum-8mkl |
-| J11 | Group-send warning excludes @everyone | ☐ | thrum-fsvi |
-| J12 | Name≠role validation | ☐ | thrum-8mkl |
-| **Part K: MCP Routing Parity** | | | |
-| K1 | MCP send to unknown recipient | ☐ | thrum-lf1m |
-| K2 | MCP send includes CallerAgentID | ☐ | thrum-hvj9 |
-| K3 | MCP check_messages filters by agent | ☐ | thrum-44ns |
-| K4 | MCP reply includes original sender | ☐ | thrum-n397 |
-| K5 | MCP waiter receives @everyone broadcasts | ☐ | thrum-3hxv |
-| K6 | MCP list_agents shows agent ID | ☐ | thrum-5fum |
-| K7 | Priority flag removed from CLI/MCP | ☐ | Removed in v0.4.5 |
-| **Part L: Unit & Integration Tests** | | | |
-| L1 | Run unit tests | ☐ | |
-| L2 | Run integration tests | ☐ | |
-| L3 | Run resilience tests | ☐ | |
-| L4 | Test coverage | ☐ | |
-| **Part M: Cleanup** | | | |
-| M1 | Exit Claude Code sessions | ☐ | |
-| M2 | Delete test agents | ☐ | |
-| M3 | Delete test groups | ☐ | |
-| M4 | Stop daemon | ☐ | |
-| M5 | Clean worktree data | ☐ | |
-| M6 | Clean temp files | ☐ | |
-| **Part N: Install & Homebrew (Release Day Only)** | | | |
-| N1 | Remove existing binary | ☐ | |
-| N2 | Install via curl \| sh | ☐ | |
-| N3 | Verify installed version | ☐ | |
-| N4 | Smoke test after install | ☐ | |
-| N5 | Verify Homebrew tap | ☐ | |
-| N6 | Install via Homebrew | ☐ | |
-| N7 | Homebrew smoke test | ☐ | |
-| N8 | Upgrade path | ☐ | |
-| **Part O: Remote VM Testing (leondev)** | | | |
-| O1 | Verify VM prerequisites | ☐ | Homebrew, test repo |
-| O2 | Install thrum via curl \| sh | ☐ | Clean machine |
-| O3 | Init & smoke test (curl install) | ☐ | Uses littleCADev repo |
-| O4 | Remote negative tests | ☐ | Unknown recipient, --all, name≠role |
-| O5 | Cleanup curl install | ☐ | |
-| O6 | Install thrum via Homebrew tap | ☐ | |
-| O7 | Smoke test (Homebrew install) | ☐ | |
-| O8 | Homebrew upgrade path | ☐ | |
-| O9 | Deploy binary via make deploy-remote | ☐ | |
-| O10 | VM full cleanup | ☐ | |
+| Test ID                                           | Description                               | Status | Notes                               |
+| ------------------------------------------------- | ----------------------------------------- | ------ | ----------------------------------- |
+| **Part A: Build & Prerequisites**                 |                                           |        |                                     |
+| A1                                                | Verify tmux installation                  | ☐      |                                     |
+| A2                                                | Build from source                         | ☐      |                                     |
+| **Part B: Plugin Management**                     |                                           |        |                                     |
+| B1                                                | Uninstall existing plugin                 | ☐      |                                     |
+| B2                                                | Add local marketplace                     | ☐      |                                     |
+| B3                                                | Install from local marketplace            | ☐      |                                     |
+| B4                                                | Verify plugin metadata                    | ☐      |                                     |
+| **Part C: Init & Daemon**                         |                                           |        |                                     |
+| C1                                                | Initialize main repo                      | ☐      | thrum-5611 fix                      |
+| C2                                                | Start daemon                              | ☐      |                                     |
+| C3                                                | Verify daemon health                      | ☐      |                                     |
+| **Part D: Agent Registration**                    |                                           |        |                                     |
+| D1                                                | Initialize test worktrees                 | ☐      | thrum-16lv fix                      |
+| D2                                                | Register coordinator agent                | ☐      |                                     |
+| D3                                                | Register implementer agent                | ☐      |                                     |
+| D4                                                | Verify team roster                        | ☐      |                                     |
+| **Part E: CLI Messaging**                         |                                           |        |                                     |
+| E1                                                | Direct message                            | ☐      |                                     |
+| E2                                                | Reply message                             | ☐      |                                     |
+| E3                                                | Priority flag removed                     | ☐      | -p rejected in v0.4.5               |
+| E4                                                | Broadcast message                         | ☐      | --to @everyone canonical            |
+| E5                                                | Mark as read                              | ☐      |                                     |
+| E6                                                | Send to unknown recipient (negative)      | ☐      | thrum-lf1m                          |
+| E7                                                | Mixed valid+invalid recipients (negative) | ☐      | thrum-lf1m, atomic reject           |
+| E8                                                | Send to role → group warning              | ☐      | thrum-fsvi, auto role groups        |
+| E9                                                | Name≠role validation on registration      | ☐      | thrum-8mkl                          |
+| **Part F: Groups**                                |                                           |        |                                     |
+| F1                                                | Create group                              | ☐      |                                     |
+| F2                                                | Add members                               | ☐      |                                     |
+| F3                                                | Add by role                               | ☐      |                                     |
+| F4                                                | Send group message                        | ☐      |                                     |
+| F5                                                | Nested groups                             | ☐      |                                     |
+| **Part G: Plugin & Slash Commands**               |                                           |        |                                     |
+| G1                                                | Create tmux sessions                      | ☐      |                                     |
+| G2                                                | Launch Claude Code sessions               | ☐      |                                     |
+| G3                                                | Test SessionStart hook                    | ☐      | thrum-5611 fix                      |
+| G4                                                | Test /thrum:prime                         | ☐      |                                     |
+| G5                                                | Test /thrum:team                          | ☐      |                                     |
+| G6                                                | Test /thrum:inbox                         | ☐      |                                     |
+| G7                                                | Test /thrum:send                          | ☐      |                                     |
+| G8                                                | Test /thrum:overview                      | ☐      |                                     |
+| G9                                                | Test /thrum:quickstart                    | ☐      |                                     |
+| G10                                               | Test /thrum:wait                          | ☐      |                                     |
+| G11                                               | Test /thrum:reply                         | ☐      |                                     |
+| G12                                               | Test /thrum:group                         | ☐      |                                     |
+| **Part H: Cross-Session Messaging**               |                                           |        |                                     |
+| H1                                                | Verify identity resolution                | ☐      | F7 worktree fix                     |
+| H2                                                | Session 1 → Session 2                     | ☐      |                                     |
+| H3                                                | Session 2 receives & replies              | ☐      |                                     |
+| H4                                                | Session 1 confirms receipt                | ☐      |                                     |
+| **Part I: Context & Compaction**                  |                                           |        |                                     |
+| I1                                                | Test /thrum:update-context                | ☐      |                                     |
+| I2                                                | Verify context saved                      | ☐      |                                     |
+| I3                                                | Test PreCompact hook                      | ☐      |                                     |
+| I4                                                | Test /thrum:load-context                  | ☐      |                                     |
+| I5                                                | Test context persistence                  | ☐      |                                     |
+| **Part J: Bugfix Regressions**                    |                                           |        |                                     |
+| J1                                                | Priority flag removed                     | ☐      | -p and --priority rejected          |
+| J2                                                | Prime unread count accuracy               | ☐      | thrum-pwaa                          |
+| J3                                                | Init detects worktree                     | ☐      | thrum-16lv                          |
+| J4                                                | Init no MCP in settings                   | ☐      | thrum-5611                          |
+| J5                                                | Wait subscription cleanup                 | ☐      | thrum-pgoc                          |
+| J6                                                | Ping resolves by name                     | ☐      | thrum-8ws1                          |
+| J7                                                | MCP serve doesn't crash                   | ☐      | NULL display fix                    |
+| J8                                                | Wait --all flag removed                   | ☐      | thrum-od0e                          |
+| J9                                                | Unknown recipient hard error              | ☐      | thrum-lf1m                          |
+| J10                                               | Name-only routing / auto role groups      | ☐      | thrum-8mkl                          |
+| J11                                               | Group-send warning excludes @everyone     | ☐      | thrum-fsvi                          |
+| J12                                               | Name≠role validation                      | ☐      | thrum-8mkl                          |
+| **Part K: MCP Routing Parity**                    |                                           |        |                                     |
+| K1                                                | MCP send to unknown recipient             | ☐      | thrum-lf1m                          |
+| K2                                                | MCP send includes CallerAgentID           | ☐      | thrum-hvj9                          |
+| K3                                                | MCP check_messages filters by agent       | ☐      | thrum-44ns                          |
+| K4                                                | MCP reply includes original sender        | ☐      | thrum-n397                          |
+| K5                                                | MCP waiter receives @everyone broadcasts  | ☐      | thrum-3hxv                          |
+| K6                                                | MCP list_agents shows agent ID            | ☐      | thrum-5fum                          |
+| K7                                                | Priority flag removed from CLI/MCP        | ☐      | Removed in v0.4.5                   |
+| **Part L: Unit & Integration Tests**              |                                           |        |                                     |
+| L1                                                | Run unit tests                            | ☐      |                                     |
+| L2                                                | Run integration tests                     | ☐      |                                     |
+| L3                                                | Run resilience tests                      | ☐      |                                     |
+| L4                                                | Test coverage                             | ☐      |                                     |
+| **Part M: Cleanup**                               |                                           |        |                                     |
+| M1                                                | Exit Claude Code sessions                 | ☐      |                                     |
+| M2                                                | Delete test agents                        | ☐      |                                     |
+| M3                                                | Delete test groups                        | ☐      |                                     |
+| M4                                                | Stop daemon                               | ☐      |                                     |
+| M5                                                | Clean worktree data                       | ☐      |                                     |
+| M6                                                | Clean temp files                          | ☐      |                                     |
+| **Part N: Install & Homebrew (Release Day Only)** |                                           |        |                                     |
+| N1                                                | Remove existing binary                    | ☐      |                                     |
+| N2                                                | Install via curl \| sh                    | ☐      |                                     |
+| N3                                                | Verify installed version                  | ☐      |                                     |
+| N4                                                | Smoke test after install                  | ☐      |                                     |
+| N5                                                | Verify Homebrew tap                       | ☐      |                                     |
+| N6                                                | Install via Homebrew                      | ☐      |                                     |
+| N7                                                | Homebrew smoke test                       | ☐      |                                     |
+| N8                                                | Upgrade path                              | ☐      |                                     |
+| **Part O: Remote VM Testing (leondev)**           |                                           |        |                                     |
+| O1                                                | Verify VM prerequisites                   | ☐      | Homebrew, test repo                 |
+| O2                                                | Install thrum via curl \| sh              | ☐      | Clean machine                       |
+| O3                                                | Init & smoke test (curl install)          | ☐      | Uses littleCADev repo               |
+| O4                                                | Remote negative tests                     | ☐      | Unknown recipient, --all, name≠role |
+| O5                                                | Cleanup curl install                      | ☐      |                                     |
+| O6                                                | Install thrum via Homebrew tap            | ☐      |                                     |
+| O7                                                | Smoke test (Homebrew install)             | ☐      |                                     |
+| O8                                                | Homebrew upgrade path                     | ☐      |                                     |
+| O9                                                | Deploy binary via make deploy-remote      | ☐      |                                     |
+| O10                                               | VM full cleanup                           | ☐      |                                     |
 
 ---
 
@@ -1534,7 +1552,8 @@ ssh leondev 'which thrum 2>/dev/null && echo "FAIL: still found" || echo "OK: fu
   - List sessions: `tmux list-sessions`
 
 - **Common issues:**
-  - If Claude Code hangs on startup, check for rogue mcpServers in .claude/settings.json
+  - If Claude Code hangs on startup, check for rogue mcpServers in
+    .claude/settings.json
   - If identity wrong in worktree, set `THRUM_NAME` env var explicitly
   - If messages not received, verify both agents registered and daemon running
   - If wait times out, check daemon logs: `cat ~/.local/state/thrum/daemon.log`

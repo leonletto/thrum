@@ -20,7 +20,7 @@ sub-agent pattern for background monitoring.
 re-arming. **Right:** After processing listener results, always spawn a new
 message-listener:
 
-```
+```text
 Task(subagent_type="message-listener", run_in_background=true, prompt="...")
 ```
 

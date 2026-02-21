@@ -31,7 +31,7 @@ interface InboxViewProps {
 
 ### Data Flow
 
-```
+```text
 useCurrentUser() → Determine identity
                 ↓
 useThreadList() → Fetch threads for identity
@@ -97,7 +97,7 @@ interface InboxHeaderProps {
 
 **Normal (Own Inbox)**:
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │ 📥 leon                      [Compose]  │
 └─────────────────────────────────────────┘
@@ -105,7 +105,7 @@ interface InboxHeaderProps {
 
 **Impersonating (Agent Inbox)**:
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │ 📥 agent:claude-daemon      [Compose]   │
 │ ⚠️  Sending as agent:claude-daemon      │
@@ -191,7 +191,7 @@ interface ThreadItemProps {
 
 ### Data Flow
 
-```
+```text
 Thread collapsed → Click → Set expanded=true
                            ↓
 useThread(id, { enabled: expanded }) → Fetch messages
@@ -225,7 +225,7 @@ useEffect(() => {
 
 **Collapsed with Unread**:
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │ ▶ Bug in login flow [2 new]            │
 │   💬 5 messages • 2h ago                │
@@ -234,7 +234,7 @@ useEffect(() => {
 
 **Expanded**:
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │ ▼ Bug in login flow [2 new]            │
 │   💬 5 messages • 2h ago                │
@@ -277,7 +277,7 @@ interface MessageBubbleProps {
 
 **Own Message**:
 
-```
+```text
                      ┌─────────────────────────┐
                      │ user:leon • 2m ago      │
                      │ Thanks for the help!    │
@@ -286,7 +286,7 @@ interface MessageBubbleProps {
 
 **Other Message**:
 
-```
+```text
 ┌─────────────────────────┐
 │ agent:claude • 5m ago   │
 │ Happy to help!          │
@@ -295,7 +295,7 @@ interface MessageBubbleProps {
 
 **Impersonated Message (Disclosed)**:
 
-```
+```text
 ┌───────────────────────────────────┐
 │ agent:cli [via user:leon] • 1m ago│
 │ Running tests now...              │

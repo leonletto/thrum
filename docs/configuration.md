@@ -1,5 +1,4 @@
-
-# Configuration
+## Configuration
 
 Thrum uses `.thrum/config.json` as the single source of truth for user
 preferences. Everything works with sensible defaults — you only need to edit
@@ -9,7 +8,7 @@ config.json when you want to change something.
 
 Located at `.thrum/config.json` in your repository:
 
-```json
+````json
 {
   "daemon": {
     "local_only": true,
@@ -17,7 +16,7 @@ Located at `.thrum/config.json` in your repository:
     "ws_port": "auto"
   }
 }
-```
+```text
 
 This file is created during `thrum init` and can be edited at any time.
 
@@ -52,9 +51,9 @@ WebSocket server port.
 
 When the same setting can come from multiple sources, this order applies:
 
-```
+```text
 CLI flag  >  Environment variable  >  config.json  >  Default
-```
+```text
 
 Environment variables are intended for CI/automation overrides, not primary
 configuration. For day-to-day use, edit `config.json`.
@@ -91,7 +90,7 @@ Runtime templates are created during initialization and are not tracked in
 Use `thrum config show` to see the effective configuration and where each value
 comes from:
 
-```
+```text
 Thrum Configuration
   Config file: .thrum/config.json
 
@@ -113,7 +112,7 @@ Identity
 
 Overrides (environment)
   THRUM_NAME=claude_planner
-```
+```text
 
 Use `thrum config show --json` for machine-readable output.
 
@@ -126,3 +125,4 @@ These remain separate for good reasons:
 - **Context files** (`.thrum/context/*.md`) — volatile session state
 - **Runtime templates** — generated config files for your AI runtime (CLAUDE.md,
   .cursorrules, etc.)
+````

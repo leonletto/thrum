@@ -1,5 +1,4 @@
-
-# Thrum Quickstart Guide
+## Thrum Quickstart Guide
 
 Get up and running with Thrum in 5 minutes.
 
@@ -19,8 +18,10 @@ across sessions, worktrees, and machines using Git as the sync layer.
 
 If you want to skip the manual setup, use the quickstart command:
 
-    $ thrum quickstart --name myagent --role implementer --module auth
-    $ thrum quickstart --name planner1 --role planner --module api --intent "Designing REST endpoints"
+```bash
+thrum quickstart --name myagent --role implementer --module auth
+thrum quickstart --name planner1 --role planner --module api --intent "Designing REST endpoints"
+```
 
 This registers your agent with a human-readable name (re-registering
 automatically on conflict), starts a session, and optionally sets your work
@@ -381,7 +382,7 @@ appropriate redirect files. They skip worktrees that are already configured.
 
 Each script creates a redirect file pointing to the main repository:
 
-```
+```text
 # In the worktree:
 .thrum/redirect    → /path/to/main/repo/.thrum
 .beads/redirect    → /path/to/main/repo/.beads

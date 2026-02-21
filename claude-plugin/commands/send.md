@@ -15,5 +15,5 @@ thrum send "message" --to @everyone              # Broadcast
 ```
 
 Unknown recipients are a hard error. Use `thrum team` to verify agent names
-before sending. Sending `--to @role` fans out to all agents with that role
-(with a warning) — use `--to @name` for direct messages.
+before sending. Sending `--to @role` fans out to all agents with that role (with
+a warning) — use `--to @name` for direct messages.

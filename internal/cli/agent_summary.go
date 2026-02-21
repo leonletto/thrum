@@ -118,7 +118,7 @@ func FormatAgentSummary(s *AgentSummary) string {
 
 // FormatAgentSummaryCompact formats an AgentSummary as a single-line summary.
 // Used in team and agent list contexts.
-// Format: "● @name (module) — intent [branch]"
+// Format: "● @name (module) — intent [branch]".
 func FormatAgentSummaryCompact(s *AgentSummary) string {
 	icon := "○"
 	if s.Status == "active" {

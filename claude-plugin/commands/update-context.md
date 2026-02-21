@@ -48,12 +48,12 @@ Delegate to a **general-purpose subagent** that will:
 ## Next Steps
 ```
 
-4. Save via: `echo "$CONTENT" | thrum context save`
-5. Return a brief summary of what was updated
+1. Save via: `echo "$CONTENT" | thrum context save`
+1. Return a brief summary of what was updated
 
 ### Subagent Prompt Template
 
-```
+```text
 Task(
   subagent_type: "general-purpose",
   description: "Update agent context",

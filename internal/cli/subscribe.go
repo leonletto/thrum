@@ -64,12 +64,7 @@ type SubscribeOptions struct {
 
 // Subscribe creates a new subscription.
 func Subscribe(client *Client, opts SubscribeOptions) (*SubscribeResponse, error) {
-	req := SubscribeRequest{
-		Scope:         opts.Scope,
-		MentionRole:   opts.MentionRole,
-		All:           opts.All,
-		CallerAgentID: opts.CallerAgentID,
-	}
+	req := SubscribeRequest(opts)
 
 	var result SubscribeResponse
 	if err := client.Call("subscribe", req, &result); err != nil {

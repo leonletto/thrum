@@ -4,7 +4,7 @@ Data flow patterns and best practices for messaging in Thrum UI.
 
 ## Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                      UI Components                          │
 │  InboxView → ThreadList → ThreadItem → MessageBubble        │

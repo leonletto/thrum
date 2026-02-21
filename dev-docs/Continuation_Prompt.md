@@ -46,7 +46,6 @@ of `thrum status`. If it fails, check that the daemon is running with
 notifications. Re-arm it every time it returns (both MESSAGES_RECEIVED and
 NO_MESSAGES_TIMEOUT).
 
-
 ## Quick Resume
 
 ```bash
@@ -71,27 +70,29 @@ npx playwright test --workers=1
 
 ## Local-Only Development Tooling
 
-After the public release squash, the following are **gitignored and local only**.
-They need to be re-initialized on a fresh clone or new machine:
+After the public release squash, the following are **gitignored and local
+only**. They need to be re-initialized on a fresh clone or new machine:
 
-| Tool | Setup | Purpose |
-|------|-------|---------|
-| **Beads** | `bd init` then `bd import < output/beads-full-export.jsonl` | Issue tracker (102 open issues) |
-| **Thrum** | `thrum init && thrum daemon start` | Agent messaging coordination |
-| **CLAUDE.md** | Restore from backup or recreate | Agent instructions |
-| **AGENTS.md** | Restore from backup or recreate | Beads onboarding for agents |
-| `.claude/agents/` | Restore from backup | Agent definitions (thrum-agent, message-listener, beads-agent) |
-| `.claude/commands/` | Restore from backup | Custom skills (update-context) |
+| Tool                | Setup                                                       | Purpose                                                        |
+| ------------------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
+| **Beads**           | `bd init` then `bd import < output/beads-full-export.jsonl` | Issue tracker (102 open issues)                                |
+| **Thrum**           | `thrum init && thrum daemon start`                          | Agent messaging coordination                                   |
+| **CLAUDE.md**       | Restore from backup or recreate                             | Agent instructions                                             |
+| **AGENTS.md**       | Restore from backup or recreate                             | Beads onboarding for agents                                    |
+| `.claude/agents/`   | Restore from backup                                         | Agent definitions (thrum-agent, message-listener, beads-agent) |
+| `.claude/commands/` | Restore from backup                                         | Custom skills (update-context)                                 |
 
 **Beads config**: `.beads/config.yaml` has `no-push: true` — beads works locally
 without pushing the sync branch to the public remote.
 
-**Gitignored paths**: `dev-docs/`, `.beads/`, `.claude/`, `CLAUDE.md`, `AGENTS.md`,
-`.agents/`, `.ref/`, `output/`
+**Gitignored paths**: `dev-docs/`, `.beads/`, `.claude/`, `CLAUDE.md`,
+`AGENTS.md`, `.agents/`, `.ref/`, `output/`
 
 **Backups** (in gitignored directories):
+
 - `output/beads-full-export.jsonl` — Full export of all issues
-- `dev-docs/open-issues-backlog.md` — Human-readable open issues with full descriptions
+- `dev-docs/open-issues-backlog.md` — Human-readable open issues with full
+  descriptions
 
 ## Worktree Setup (as needed)
 
@@ -126,23 +127,22 @@ Feature work follows a three-phase template process:
 ```
 
 **Active prompts** in `dev-docs/prompts/`:
-- None currently (config-consolidation implemented and merged)
+
+- None currently (routing-fix phases 1 and 2 implemented and merged)
 
 ---
 
 ## Session Context
 
-**Date**: 2026-02-16 (Session 38)
-**Project**: Thrum — Git-backed messaging for AI agent coordination
-**Repository**: https://github.com/leonletto/thrum
-**Visibility**: Public
-**Main Branch**: `main` — multiple unpushed commits (caaf4f3)
-**Go Version**: 1.25.7
-**Install**: `make install` (builds UI + Go binary → ~/.local/bin)
-**CI**: GitHub Actions green (format, vet, golangci-lint v2, test -race, govulncheck, build)
-**Latest Release**: v0.4.2 (published), v0.4.3 in progress
-**Version String**: `v0.4.3 (build: 68c74c9, go1.25.7)`
-**Install Script**: `curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh`
+**Date**: 2026-02-20 (Session 41) **Project**: Thrum — Git-backed messaging for
+AI agent coordination **Repository**: https://github.com/leonletto/thrum
+**Visibility**: Public **Main Branch**: `main` — HEAD at 2105828 **Go Version**:
+1.25.7 **Install**: `make install` (builds UI + Go binary → ~/.local/bin)
+**CI**: GitHub Actions green (format, vet, golangci-lint v2, test -race,
+govulncheck non-fatal, markdownlint, gosec) **Latest Release**: v0.4.4
+(published), v0.4.5 ready to tag **Version String**: `v0.4.4` **Install
+Script**:
+`curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh`
 
 ---
 
@@ -205,14 +205,13 @@ the sync layer.
 
 ### Key Stats
 
-| Category                         |                                              Count |
-| -------------------------------- | -------------------------------------------------: |
-| Total Go Files                   |                                              1,520 |
-| Go Source                         |                                        913 files (non-test) |
-| Go Tests                          |                                       607 test files |
-| Go Test Packages                  |                      27 total (all passing with -race) |
-| UI Tests                          |         332 passing (web-app) + 87 (shared-logic) |
-| E2E Tests                         | 70 scenarios, 55 passing, 0 failing, 15 skip/fixme |
+| Category         |                                              Count |
+| ---------------- | -------------------------------------------------: |
+| Go Source Files  |                                     115 (non-test) |
+| Go Test Files    |                                     117 test files |
+| Go Test Packages |                  32 total (all passing with -race) |
+| UI Tests         |          332 passing (web-app) + 87 (shared-logic) |
+| E2E Tests        | 70 scenarios, 55 passing, 0 failing, 15 skip/fixme |
 
 ### Deployment Status
 
@@ -225,7 +224,8 @@ the sync layer.
 - Sync: 60s default interval (configurable via `--sync-interval`)
 - MCP Server: `thrum mcp serve` (stdio transport, group tools, WebSocket waiter)
 - CI: GitHub Actions green (`ci.yml`)
-- Release: v0.4.2 published via GoReleaser (`release.yml`), 4 platform archives + install script, Apple codesigned
+- Release: v0.4.4 published via GoReleaser (`release.yml`), 4 platform
+  archives + install script, Apple codesigned
 
 ### CLI Commands (Full Suite)
 
@@ -262,6 +262,7 @@ thrum message           Manage messages (get, edit, delete, read)
 # Agent Groups
 thrum group             Manage agent groups (create, add, remove, list, delete)
                         Groups replace broadcast for targeted multi-agent comms
+                        Auto role groups created on registration
 
 # Coordination
 thrum who-has           Check which agents are editing a file
@@ -272,7 +273,7 @@ thrum subscribe         Subscribe to notifications
 thrum subscriptions     List active subscriptions
 thrum unsubscribe       Unsubscribe from notifications
 thrum wait              Wait for notifications (for hooks)
-                        Supports --all (broadcasts), --after (time filter)
+                        Supports --after (time filter); --all removed
 
 # Sync
 thrum sync              Control sync operations
@@ -301,6 +302,25 @@ Agents support human-readable names:
 - Env vars: `THRUM_NAME` (highest priority), `THRUM_ROLE`, `THRUM_MODULE`
 - Multi-agent per worktree: each agent gets own identity file
 - Backward compat: legacy `agent:{role}:{hash}` IDs still work
+- **Agent name cannot equal role** (prevents addressing ambiguity)
+- **Auto role groups**: registering with `--role implementer` auto-creates an
+  "implementer" group
+
+### Routing System (post-v0.4.5)
+
+Key design decisions from the routing fix (merged fda4c22):
+
+- **Name-only routing** — routing is by agent name + groups (no role-based
+  routing)
+- **Recipient validation is a hard error** — message not stored if recipient
+  unknown
+- **`--all` removed from `thrum wait`** — was a no-op footgun; use groups
+  instead
+- **Auto role groups** — created on agent registration, visible and manageable
+- **Reply audience** — includes original sender + uses correct group scope
+  format
+- **Priority removed entirely** — never stored in DB/events; -p/--priority flag
+  and all Priority fields deleted
 
 ---
 
@@ -308,126 +328,201 @@ Agents support human-readable names:
 
 All completed epics are in the squashed initial commit. Key completed work:
 
-| Area | Epics | Summary |
-|------|-------|---------|
-| **Core** | 1-9 | Daemon, CLI, WebSocket bridge, sync protocol |
-| **UI** | 10-14, 21-24 | React SPA, AppShell, LiveFeed, InboxView, Data Terminal, Agent Work Context, Who-Has |
-| **CLI** | A-E | Quickstart, message lifecycle, threads, output polish, coordination |
-| **Embed** | F | React SPA embedded into Go binary (single port) |
-| **E2E Tests** | E2E, E2E-S/S2, E2E-N/N2 | 70 scenarios, Playwright, sharding + naming test suites |
-| **Refactoring** | JSONL Sharding, Agent Naming | Per-agent JSONL, ULID event_id, human-readable names |
-| **MCP** | MCP Server | stdio transport, 5 tools, WebSocket waiter |
-| **Sync** | Sync Worktree, Relocation | Git plumbing, sparse checkout, path redirect |
-| **Security** | G104, Perms, Misc | 120 gosec findings fixed across 3 epics |
-| **Infra** | CI/CD, Release Pipeline, Daemon Hardening | GitHub Actions, GoReleaser, Homebrew cask, flock/PID |
-| **Docs** | Documentation Audit, Website | 16 docs, GitHub Pages site, llms.txt |
-| **Identity** | Identity Resolution, Wait Flags | Auto-select, fail-fast, wait --all/--after |
-| **Context** | Agent Context Management | Per-agent context storage with CLI detection |
-| **Groups** | Agent Groups (simplified) | Flat groups, reply-to convention, inbox clustering |
-| **Runtime** | Runtime Preset Registry | Enhanced quickstart, template engine, context prime |
-| **v0.3.2** | Team Command, Per-File Tracking | thrum team, thrum version, thrum whoami, file_changes context |
-| **Simplification** | Groups + Tailscale | Removed threads (3 commands, 486-line handler), flattened groups, deleted security layer (7 files, 1,074 lines), added pairing codes + token auth |
-| **Config Consolidation** | thrum-6atk | Expanded config.json schema, interactive runtime selection, daemon reads config, thrum config show, documentation |
-| **Bug Epic** | thrum-iisp | 6 bugs fixed and closed (thrum-pwaa, thrum-16lv, thrum-pgoc, thrum-5611, thrum-en2c, thrum-8ws1) |
-| **Daemon Resilience** | thrum-fycc (10/10), thrum-chjm (in progress) | safedb, safecmd, timeouts, lock scope, resilience test suite |
+| Area                     | Epics                                        | Summary                                                                                                                                           |
+| ------------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Core**                 | 1-9                                          | Daemon, CLI, WebSocket bridge, sync protocol                                                                                                      |
+| **UI**                   | 10-14, 21-24                                 | React SPA, AppShell, LiveFeed, InboxView, Data Terminal, Agent Work Context, Who-Has                                                              |
+| **CLI**                  | A-E                                          | Quickstart, message lifecycle, threads, output polish, coordination                                                                               |
+| **Embed**                | F                                            | React SPA embedded into Go binary (single port)                                                                                                   |
+| **E2E Tests**            | E2E, E2E-S/S2, E2E-N/N2                      | 70 scenarios, Playwright, sharding + naming test suites                                                                                           |
+| **Refactoring**          | JSONL Sharding, Agent Naming                 | Per-agent JSONL, ULID event_id, human-readable names                                                                                              |
+| **MCP**                  | MCP Server                                   | stdio transport, 5 tools, WebSocket waiter                                                                                                        |
+| **Sync**                 | Sync Worktree, Relocation                    | Git plumbing, sparse checkout, path redirect                                                                                                      |
+| **Security**             | G104, Perms, Misc                            | 120 gosec findings fixed across 3 epics                                                                                                           |
+| **Infra**                | CI/CD, Release Pipeline, Daemon Hardening    | GitHub Actions, GoReleaser, Homebrew cask, flock/PID                                                                                             |
+| **Docs**                 | Documentation Audit, Website                 | 16 docs, GitHub Pages site, llms.txt                                                                                                              |
+| **Identity**             | Identity Resolution, Wait Flags              | Auto-select, fail-fast, wait --all/--after                                                                                                        |
+| **Context**              | Agent Context Management                     | Per-agent context storage with CLI detection                                                                                                      |
+| **Groups**               | Agent Groups (simplified)                    | Flat groups, reply-to convention, inbox clustering                                                                                                |
+| **Runtime**              | Runtime Preset Registry                      | Enhanced quickstart, template engine, context prime                                                                                               |
+| **v0.3.2**               | Team Command, Per-File Tracking              | thrum team, thrum version, thrum whoami, file_changes context                                                                                     |
+| **Simplification**       | Groups + Tailscale                           | Removed threads (3 commands, 486-line handler), flattened groups, deleted security layer (7 files, 1,074 lines), added pairing codes + token auth |
+| **Config Consolidation** | thrum-6atk                                   | Expanded config.json schema, interactive runtime selection, daemon reads config, thrum config show, documentation                                 |
+| **Bug Epic**             | thrum-iisp                                   | 6 bugs fixed and closed (thrum-pwaa, thrum-16lv, thrum-pgoc, thrum-5611, thrum-en2c, thrum-8ws1)                                                  |
+| **Daemon Resilience**    | thrum-fycc (10/10), thrum-chjm (in progress) | safedb, safecmd, timeouts, lock scope, resilience test suite                                                                                      |
+| **Routing Fix**          | thrum-fsvi (14/14)                           | Name-only routing, hard recipient validation, --all removal, auto role groups, reply audience fix                                                 |
+| **Identity Consistency** | thrum-i0ax (12/12)                           | IdentityFile v3, AgentSummary canonical output, init full setup, quickstart enrichment, daemon whoami branch/intent                               |
 
 ---
 
 ## What's Remaining (Open Issues)
 
-Full backlog: 102 open issues, 56 ready to work. Run `bd ready` for current list.
+Full backlog: Run `bd ready` for current list.
 
 ### Open Epics
 
-| Epic | ID | Priority | Description |
-|------|----|----------|-------------|
-| v0.4.3 Readiness | thrum-chjm | P2 | Resilience test gaps, safedb migration, bug fixes (2/17 deps closed) |
-| Listener Identity Failure | thrum-4ski | P1 | Remove vestigial subscriptions & fix cleanup |
-| Browser Auto-Reg | thrum-z6ik | P1 | Integration test remaining |
-| 20. Repo Cleanup | thrum-jje | P1 | Public release cleanup |
-| 18. Documentation | thrum-6ay | P1 | Custom domain (P3) remains |
-| 17. Release System | thrum-hqs | P1 | Homebrew tap repo + publish remain |
-| 15. Relay Service | thrum-pm5 | P1 | Real-time sync relay server (0/13) |
-| 19. Launch Marketing | thrum-hqm | P2 | Blog, video, README (0/5) |
-| 16. GitHub App | thrum-dbq | P2 | Auto webhook setup (blocked by relay, 0/10) |
+| Epic                      | ID         | Priority | Description                                   |
+| ------------------------- | ---------- | -------- | --------------------------------------------- |
+| v0.4.5 Release            | thrum-z3sl | P1       | All blockers closed — ready to tag and publish |
+| Listener Identity Failure | thrum-4ski | P1       | Remove vestigial subscriptions & fix cleanup  |
+| 19. Launch Marketing      | thrum-hqm  | P2       | Blog, video, README (blocked by docs/release) |
+| Resilience Testing        | thrum-tvq4 | P3       | Remaining design doc coverage (13 children)   |
 
 ### Key Remaining Tasks
 
-| ID | Priority | Title |
-|----|----------|-------|
-| thrum-chjm | P2 | v0.4.3 Readiness epic (15 children remaining) |
-| thrum-a59i | P1 | Enable -race in resilience tests |
-| thrum-4ski | P1 | Listener identity failure epic |
-| thrum-620c | P2 | Cleanup subscriptions on session end |
-| thrum-efjv | P2 | Pass caller_agent_id in subscription RPCs |
+| ID         | Priority | Title                                                   |
+| ---------- | -------- | ------------------------------------------------------- |
+| thrum-z3sl | P1       | v0.4.5 Release epic — version bumps, tag, publish       |
+| thrum-4ski | P1       | Listener identity failure epic                          |
+| thrum-620c | P2       | Cleanup subscriptions on session end                    |
+| thrum-efjv | P2       | Pass caller_agent_id in subscription RPCs               |
+| thrum-tw2d | P3       | Deduplicate GetRepoName/GetWorktreeName git calls       |
+| thrum-f8b8 | P3       | Wire FormatAgentSummaryCompact into team and agent list |
+| thrum-vvce | P3       | Add empty-module test case for AutoDisplay              |
+| thrum-u4zy | P3       | Review Source field omitempty on AgentSummary           |
+| thrum-n542 | P3       | Add v1 identity round-trip write test                   |
 
-### v0.4.3 Readiness
+### v0.4.5 Readiness
 
-**Epic**: thrum-chjm (P2) — 2 deps closed, 15 children open
+**Epic**: thrum-z3sl (P1) — All blockers closed, CI green, release ready
 
-**Completed**:
-- safedb migration COMPLETE — all packages now use context-aware DB
-- Team-fix resilience test harness merged (32 tests, 12 files, `f2d9415`)
-- ExpandMembers deadlock fixed (nested query under SetMaxOpenConns=1)
-- Plugin improvements: `/thrum:load-context`, bundled pre-compact script, identity-scoped backups
-- Release test plan ready at `dev-docs/release-testing/full_test_plan.md`
-- Test worktrees created: test-coordinator, test-implementer
+**Completed** (all closed):
 
-**Remaining work**:
-- 6 resilience test gaps (thrum-a59i, thrum-p2e6, thrum-4gv6, thrum-9r11, thrum-mbeo, thrum-ayxz)
-- 6 bug fixes (thrum-620c, thrum-efjv, thrum-6xjs, thrum-mfiv, thrum-i2fe, thrum-x29q)
-- 3 broken test fixes (thrum-lwls, thrum-xlig, thrum-03ay)
-- Manual release testing using full_test_plan.md
+- thrum-mddo: Priority removed entirely (fields, flag, docs, all references)
+- thrum-0tf1: `thrum wait` redesigned — server-side `created_after` filter, DESC
+  sort, seen-message tracking
+- thrum-ncpx: MCP integration tests fixed (identity setup, group handlers,
+  @everyone)
+- thrum-yn23: Nested groups test plan F5 already correct (closed, no changes
+  needed)
+- thrum-wbdl: `thrum prime` shows context restore directive
+- thrum-htwu: Docs update — 57 files updated across website docs, plugin,
+  templates, toolkit
+- UTC timezone bug fixed in cleanup/contexts.go and wait.go
+- Pre-compact hook filename bug fixed (thrum-g8q2)
+- Full release test plan: 59/59 PASS (Parts A-L, tmux tests with Haiku)
+- CI fully green: format, golangci-lint, markdownlint, go vet, tests, gosec
+- govulncheck non-fatal (Go 1.25 + x/tools SSA upstream crash)
+- gosec exclusions added: G103, G115, G204, G304, G306, G404 (all accepted)
+- .markdownlint.json added, ~150 pre-existing lint errors fixed across 30+ files
 
-**Reference**: See `dev-docs/daemon-resilience/Continuation_Prompt.md` for detailed resilience work context.
+**Remaining work** (next session):
+
+- Version bumps in 7 files (Makefile, plugin.json, marketplace.json, SKILL.md,
+  llms.txt, llms-full.txt, README.md)
+- Tag v0.4.5 and push to trigger GoReleaser
+- Fast-forward worktrees (context, team-fix) to main HEAD
+- Update website-dev from main after tag
+
+**Reference**: See `dev-docs/plans/2026-02-19-routing-fix-design.md` and
+`dev-docs/plans/2026-02-19-routing-fix-plan.md` for routing design context.
 
 ### Active Worktrees
 
-| Worktree | Branch | Path | Status |
-|----------|--------|------|--------|
-| main | `main` | `/Users/leon/dev/opensource/thrum` | Multiple unpushed commits (caaf4f3) |
-| context | `feature/context` | `~/.workspaces/thrum/context` | Behind main (72cb76a) |
-| local-only | `feature/local-only` | `~/.workspaces/thrum/local-only` | Behind main (72cb76a) |
-| team-fix | `feature/team-fix` | `~/.workspaces/thrum/team-fix` | Merged to main (f2d9415) |
-| website-dev | `website-dev` | `~/.workspaces/thrum/website-dev` | Behind main (d1fac12) |
-| test-coordinator | `test/coordinator` | `~/.workspaces/thrum/test-coordinator` | Release testing worktree (e039562) |
-| test-implementer | `test/implementer` | `~/.workspaces/thrum/test-implementer` | Release testing worktree (e039562) |
+| Worktree    | Branch               | Path                               | Status                            |
+| ----------- | -------------------- | ---------------------------------- | --------------------------------- |
+| main        | `main`               | `/Users/leon/dev/opensource/thrum` | HEAD 2105828                      |
+| context     | `feature/context`    | `~/.workspaces/thrum/context`      | 74e0a96 (needs fast-forward)      |
+| local-only  | `feature/local-only` | `~/.workspaces/thrum/local-only`   | d7bd6e5 (behind main)             |
+| team-fix    | `feature/team-fix`   | `~/.workspaces/thrum/team-fix`     | 74e0a96 (needs fast-forward)      |
+| website-dev | `website-dev`        | `~/.workspaces/thrum/website-dev`  | a5dd735 (needs update after tag)  |
 
 ---
 
 ## Recent Work (Last 2 Sessions)
 
-### Session 38 (2026-02-16): v0.4.3 Readiness Work
+### Session 41 (2026-02-20): Identity Consistency, P0 Bugfixes, Release Testing & CI Cleanup
 
 **What was done:**
 
-1. **Merged team-fix resilience test harness** — 32 tests, 12 files, commit `f2d9415` merged to main. Comprehensive test coverage for daemon resilience under load.
+1. **Fixed P0 bugs** — thrum-ncpx (MCP integration tests) and thrum-yn23
+   (nested groups test plan). Fixed identity setup in integration tests:
+   non-empty agent names, Name field in registration, group handlers + @everyone
+   in test daemons, recipient addresses use agent names.
 
-2. **Created v0.4.3 Readiness epic** — thrum-chjm (P2) with 17 children tracking test gaps, bug fixes, safedb migration.
+2. **Added thrum prime context show directive** (thrum-wbdl) — `thrum prime`
+   now shows "Run `thrum context show`" when saved context files exist in
+   `.thrum/context/`.
 
-3. **Completed safedb migration** — Remaining 5 packages (groups, subscriptions, checkpoint, cleanup, event_streaming) migrated to context-aware DB. Commit `3cb481e`.
+3. **Committed v0.4.5 accumulated changes** — wait fix, priority removal,
+   routing updates, doc updates (previously uncommitted from sessions 39-40).
 
-4. **Fixed ExpandMembers deadlock** — Nested query under SetMaxOpenConns(1) caused rows cursor to hold single connection, sub-query blocked forever. Fixed by collecting rows first, closing cursor, then resolving roles.
+4. **Moved docs/plans/ to dev-docs/plans/** — Internal planning docs were
+   tracked in git; removed from tracking and added `docs/plans/` to
+   `.gitignore`.
 
-5. **Plugin improvements**:
-   - Created `/thrum:load-context` command for post-compaction context recovery
-   - Bundled `pre-compact-save-context.sh` in plugin via `${CLAUDE_PLUGIN_ROOT}/scripts/`
-   - Identity-scoped `/tmp` backup files for multi-agent safety
-   - Updated `/thrum:prime` with tip about load-context
+5. **Implemented Init, Identity & Discovery Consistency** (thrum-i0ax, 12
+   tasks) — IdentityFile v3 with branch/intent/session_id, AgentSummary
+   canonical output struct, `thrum init` full setup
+   (prompt/daemon/register/session/intent), quickstart enrichment, set-intent
+   writeback, FormatWhoami removal, all discovery commands use AgentSummary.
 
-6. **Created comprehensive release test plan** — `dev-docs/release-testing/full_test_plan.md` with self-contained test scenarios.
+6. **Code review and fixes** — v3 agent register, Y/n prompt semantics,
+   `cli.DaemonStart` usage, daemon whoami returns branch/intent from work
+   context.
 
-7. **Created test worktrees** — test-coordinator and test-implementer for release testing.
+7. **Created and completed 5 P3 cleanup tasks** from code review (thrum-tw2d,
+   thrum-vvce, thrum-f8b8, thrum-u4zy, thrum-n542).
 
-8. **Beads closed**: thrum-o1a1, thrum-xk2k, thrum-d7po
+8. **Full release test plan** — 59/59 PASS (Parts A-L automated, G-I tmux with
+   Haiku, plugin tested on leondev).
 
-### Session 37 (2026-02-15): Daemon Deadlock & SQLite WAL Fixes
+9. **Fixed pre-compact hook filename bug** (thrum-g8q2) — script parsed wrong
+   JSON field name (`name` vs `agent_id`).
 
-**Summary** — Fixed critical daemon deadlock under load and SQLite WAL accumulation. Root causes identified by agents in falcon-backend during extended runtime. Fixed template issues with identity reuse, retagged v0.4.2, verified end-to-end.
+10. **Docs update for v0.4.5** (thrum-htwu) — 57 files updated across website
+    docs, plugin, templates, toolkit.
 
-**Key fixes:**
-- P0 Bug (thrum-k8i0): Added SQLite busy_timeout, 30s server/client timeouts, 5min idle timeout
-- P1 Bug (thrum-gpee): SetMaxOpenConns(1), synchronous=NORMAL to prevent WAL accumulation
-- Template fixes: Removed hardcoded THRUM_NAME from runtime init templates
+11. **Fixed all pre-existing markdown lint errors** (~150 across 30+ files).
+    Added `.markdownlint.json` config.
+
+12. **Fixed gosec exclusions in Makefile**. Made govulncheck non-fatal (Go 1.25
+    toolchain incompatibility with x/tools SSA).
+
+13. **CI fully green**: format, golangci-lint, markdownlint, go vet, tests,
+    gosec all pass. govulncheck has upstream crash but is non-fatal.
+
+**Key commits**: 2105828 (lint fix), 74e0a96 (docs v0.4.5), 0ca65be
+(pre-compact fix), bf1babe (daemon whoami branch/intent), d7420b5 (code review
+fixes), fcbaa55..85c9610 (identity consistency), 2906373 (MCP test fix),
+c318a5f (prime context show)
+
+**State at end of session**: All tests pass, CI green. v0.4.5 release epic has
+all blockers closed. Ready for version bumps, tagging, and publishing.
+
+---
+
+### Session 40 (2026-02-20): v0.4.5 Release Testing & Bugfix
+
+**What was done:**
+
+1. **Full release test plan (Parts A-L)** — Ran against littleCADev test repo
+   and worktrees. All tmux tests G1-G8, H1-H4 passed. Added E6-E9 (negative
+   tests), J8-J12 (regression tests), Part K (MCP routing parity), Part O
+   (remote VM testing on leondev). Fixed all paths to use littleCADev repo,
+   agent names hyphens→underscores, removed nested group test (F5).
+
+2. **Fixed critical `thrum wait` bug (thrum-0tf1)** — Wait never received
+   messages: unread+page_size:1+ASC ordering stuck on old messages, plus inbox
+   auto-mark-as-read making messages invisible. Redesigned to use server-side
+   `created_after` filter, DESC sort order, seen-message tracking.
+
+3. **Removed message priority entirely (thrum-mddo)** — Removed -p/--priority
+   flag, Priority fields on all structs, isValidPriority, priority_filter, all
+   docs/plugin/llms references. Priority was never stored in DB/events — removal
+   was cleaner than implementing.
+
+4. **Fixed UTC timezone bug** — Timestamps formatted without .UTC() failed
+   SQLite string comparison against UTC-stored values. Fixed in
+   cleanup/contexts.go and wait.go.
+
+5. **Installed Homebrew on leondev VM** — Verified `brew install/uninstall` of
+   thrum works on remote VM. Part O added to test plan for remote VM testing.
+
+6. **Filed 4 P0 bugs under v0.4.5 epic** — thrum-mddo (closed), thrum-0tf1
+   (closed), thrum-ncpx (fixed in session 41), thrum-yn23 (closed in session 41).
+
+**State at end of session**: All unit tests pass, resilience tests pass.
+Integration tests still failing (fixed in session 41).
 
 ---

@@ -76,7 +76,7 @@ Delegate to a **general-purpose subagent** that will:
 
 Pass your narrative summary to the subagent in its prompt. Example:
 
-```
+```text
 Task(
   subagent_type: "general-purpose",
   description: "Update agent context",

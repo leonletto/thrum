@@ -6,7 +6,7 @@ Web and terminal user interfaces for the Thrum agent messaging system.
 
 This is a Turborepo monorepo containing three packages:
 
-```
+```text
 ui/
 ├── packages/
 │   ├── shared-logic/     # Framework-agnostic business logic
@@ -148,7 +148,7 @@ pnpm lint
 
 ### Dependency Graph
 
-```
+```text
 web-app → shared-logic
 tui-app → shared-logic
 ```
@@ -160,7 +160,7 @@ API hooks, and state management.
 
 ### shared-logic Package
 
-```
+```text
 packages/shared-logic/
 ├── src/
 │   ├── api/
@@ -188,7 +188,7 @@ packages/shared-logic/
 
 ### web-app Package
 
-```
+```text
 packages/web-app/
 ├── src/
 │   ├── pages/
@@ -214,7 +214,7 @@ packages/web-app/
 
 The UI is built with a hierarchical component structure:
 
-```
+```text
 AppShell
 ├── Header (fixed)
 │   ├── Branding ("Thrum")

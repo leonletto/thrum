@@ -212,8 +212,8 @@ func TestSequentialSendAndReceive(t *testing.T) {
 	}
 
 	_, output, err := senderMCP.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@receiver_agent",
-		Content:  "Hello from sender",
+		To:      "@receiver_agent",
+		Content: "Hello from sender",
 	})
 	if err != nil {
 		t.Fatalf("send message: %v", err)
@@ -277,8 +277,8 @@ func TestSequentialCheckMessagesMarksRead(t *testing.T) {
 		t.Fatalf("create sender MCP: %v", err)
 	}
 	_, _, err = senderMCP.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@receiver_agent",
-		Content:  "test message",
+		To:      "@receiver_agent",
+		Content: "test message",
 	})
 	if err != nil {
 		t.Fatalf("send message: %v", err)
@@ -380,7 +380,7 @@ func TestSequentialBroadcast(t *testing.T) {
 		t.Fatalf("create agent1 MCP: %v", err)
 	}
 	_, _, err = agent1MCP.handleBroadcast(ctx, nil, BroadcastInput{
-		Content:  "broadcast from agent1",
+		Content: "broadcast from agent1",
 	})
 	if err != nil {
 		t.Fatalf("broadcast: %v", err)
@@ -473,8 +473,8 @@ func TestMCPServerFailsWithoutDaemon(t *testing.T) {
 	// Try to send message (should fail - no daemon)
 	ctx := context.Background()
 	_, _, err = mcpServer.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@someone",
-		Content:  "test",
+		To:      "@someone",
+		Content: "test",
 	})
 
 	if err == nil {
@@ -486,4 +486,3 @@ func TestMCPServerFailsWithoutDaemon(t *testing.T) {
 		t.Error("expected non-empty error message")
 	}
 }
-

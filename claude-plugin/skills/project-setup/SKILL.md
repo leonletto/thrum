@@ -1,15 +1,21 @@
 ---
 name: project-setup
-description: Use when converting a design document into beads epics and tasks for implementation, before any coding begins
+description:
+  Use when converting a design document into beads epics and tasks for
+  implementation, before any coding begins
 ---
 
 # Project Setup
 
-Convert a design document into beads epics and tasks with TDD-quality descriptions, ready for implementation agents.
+Convert a design document into beads epics and tasks with TDD-quality
+descriptions, ready for implementation agents.
 
-**Core principle:** Task descriptions are the source of truth. Each task is a self-contained implementation guide — detailed enough for an agent to work autonomously.
+**Core principle:** Task descriptions are the source of truth. Each task is a
+self-contained implementation guide — detailed enough for an agent to work
+autonomously.
 
-**Announce at start:** "I'm using the project-setup skill to decompose this design into epics and tasks."
+**Announce at start:** "I'm using the project-setup skill to decompose this
+design into epics and tasks."
 
 ## When to Use
 
@@ -29,6 +35,7 @@ digraph when_to_use {
 ```
 
 **Don't use when:**
+
 - No design doc exists yet — use brainstorming skill first
 - Tasks already exist in beads — go straight to implementation
 
@@ -45,9 +52,12 @@ If any are missing, ask the user (prefer multiple choice when possible).
 
 ## Phase 1: Understand the Design
 
-Read the design doc and identify major components, data flow, and interfaces. Use sub-agents to explore the codebase in parallel — scan for existing patterns, check `bd list` / `bd ready` / `bd blocked` for related work.
+Read the design doc and identify major components, data flow, and interfaces.
+Use sub-agents to explore the codebase in parallel — scan for existing patterns,
+check `bd list` / `bd ready` / `bd blocked` for related work.
 
-Ask the user focused questions (prefer multiple choice) about anything the design doc leaves ambiguous — constraints, scope boundaries, patterns to follow.
+Ask the user focused questions (prefer multiple choice) about anything the
+design doc leaves ambiguous — constraints, scope boundaries, patterns to follow.
 
 ## Phase 2: Create Epics & Tasks
 
@@ -60,7 +70,8 @@ Break the design into epics. Each epic should:
 - Have clear boundaries (a single worktree/branch per epic)
 - Map to a logical layer or component from the design spec
 
-**Naming:** Imperative form — "Implement Sync Protocol", "Build Session Manager", "Create Filter Component".
+**Naming:** Imperative form — "Implement Sync Protocol", "Build Session
+Manager", "Create Filter Component".
 
 ### Create Epics
 
@@ -73,7 +84,9 @@ bd dep add <later-epic-id> <earlier-epic-id>
 
 ### Create Tasks
 
-For each epic, create ordered tasks. Sequence so earlier tasks enable later ones (foundations first). When creating many tasks (> 6), delegate to parallel sub-agents — one per epic.
+For each epic, create ordered tasks. Sequence so earlier tasks enable later ones
+(foundations first). When creating many tasks (> 6), delegate to parallel
+sub-agents — one per epic.
 
 ```bash
 bd create --title="Task Title" --type=task --priority=2 \
@@ -84,14 +97,18 @@ bd dep add <task-id> <epic-id>
 bd dep add <later-task-id> <earlier-task-id>
 ```
 
-**Task descriptions** are the source of truth for implementing agents. Each description must include:
+**Task descriptions** are the source of truth for implementing agents. Each
+description must include:
 
 - **Files** — Exact paths to create, modify, and test
 - **Acceptance Criteria** — Checkboxes: tests pass, edge cases handled, etc.
 
-Scale code detail to task type: API tasks need full signatures/types, business logic needs full implementation, integration tasks need the wiring (imports, props, config).
+Scale code detail to task type: API tasks need full signatures/types, business
+logic needs full implementation, integration tasks need the wiring (imports,
+props, config).
 
-**Granularity:** Each task should be completable in one focused session. If a task has more than 5 steps, split it.
+**Granularity:** Each task should be completable in one focused session. If a
+task has more than 5 steps, split it.
 
 ### Set Dependencies
 
@@ -116,28 +133,33 @@ Before finishing, validate:
 
 ## Phase 3: Generate Implementation Prompts
 
-For each epic, generate an implementation prompt by filling in `toolkit/templates/agent-dev-workflow/implementation-agent.md` placeholders:
+For each epic, generate an implementation prompt by filling in
+`toolkit/templates/agent-dev-workflow/implementation-agent.md` placeholders:
 
-| Placeholder            | Source                        |
-| ---------------------- | ----------------------------- |
-| `{{EPIC_ID}}`          | Beads epic ID from above      |
-| `{{WORKTREE_PATH}}`    | Absolute path to the working worktree |
-| `{{BRANCH_NAME}}`      | Git branch for this epic      |
-| `{{DESIGN_DOC}}`       | Path to the design spec       |
-| `{{REFERENCE_CODE}}`   | Relevant reference code paths |
-| `{{QUALITY_COMMANDS}}` | Test/lint commands             |
-| `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., >80%) |
-| `{{AGENT_NAME}}`       | Unique name (e.g., `impl-{feature}`) |
+| Placeholder             | Source                                |
+| ----------------------- | ------------------------------------- |
+| `{{EPIC_ID}}`           | Beads epic ID from above              |
+| `{{WORKTREE_PATH}}`     | Absolute path to the working worktree |
+| `{{BRANCH_NAME}}`       | Git branch for this epic              |
+| `{{DESIGN_DOC}}`        | Path to the design spec               |
+| `{{REFERENCE_CODE}}`    | Relevant reference code paths         |
+| `{{QUALITY_COMMANDS}}`  | Test/lint commands                    |
+| `{{COVERAGE_TARGET}}`   | Coverage threshold (e.g., >80%)       |
+| `{{AGENT_NAME}}`        | Unique name (e.g., `impl-{feature}`)  |
 
 ## Common Mistakes
 
-**Too vague tasks:** "Add validation" is not a step — `if (!text.trim()) return` is. Prefer complete code over pseudocode.
+**Too vague tasks:** "Add validation" is not a step — `if (!text.trim()) return`
+is. Prefer complete code over pseudocode.
 
-**Too large tasks:** If a task has more than 5 steps, split it. Each task = one focused session.
+**Too large tasks:** If a task has more than 5 steps, split it. Each task = one
+focused session.
 
-**Missing dependencies:** Forgetting cross-epic deps leads to agents starting work they can't finish. Always run `bd blocked` to verify.
+**Missing dependencies:** Forgetting cross-epic deps leads to agents starting
+work they can't finish. Always run `bd blocked` to verify.
 
-**Skipping the design doc:** This skill assumes a design doc exists. If you're starting from a rough idea, use the brainstorming skill first.
+**Skipping the design doc:** This skill assumes a design doc exists. If you're
+starting from a rough idea, use the brainstorming skill first.
 
 ## Output Summary
 
@@ -149,5 +171,7 @@ When complete, you should have produced:
 
 ## Handoff
 
-After setup is complete, hand off each epic to an implementation agent using the filled `agent-dev-workflow/implementation-agent.md` prompt. Use **superpowers:using-git-worktrees** to create isolated workspaces before starting implementation.
-
+After setup is complete, hand off each epic to an implementation agent using the
+filled `toolkit/templates/agent-dev-workflow/implementation-agent.md` prompt.
+Use **superpowers:using-git-worktrees** to create isolated workspaces before
+starting implementation.

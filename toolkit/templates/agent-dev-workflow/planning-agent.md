@@ -48,7 +48,7 @@ context clean for decision-making and design writing.
 When Phase 1 requires understanding multiple independent areas, launch
 sub-agents in a single message:
 
-```
+```text
 # All launched in ONE message for parallel execution
 Task(subagent_type="Explore", run_in_background=true,
   prompt="Explore {{PROJECT_ROOT}}. Map packages, interfaces, and patterns
@@ -73,7 +73,7 @@ After all complete, read the output files to inform your design work.
 When creating many tasks (> 6), delegate to parallel sub-agents — one per epic.
 Pass the full task details (titles, descriptions, dependencies) in the prompt:
 
-```
+```text
 Task(subagent_type="general-purpose", model="haiku",
   prompt="Create these beads tasks under epic {{EPIC_1_ID}}:
   1. bd create --title='...' --type=task --priority=2 --description='...'

@@ -1,5 +1,4 @@
-
-# Inbox Query RPC Methods
+## Inbox Query RPC Methods
 
 ## Overview
 

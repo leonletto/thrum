@@ -267,7 +267,7 @@ depend on each other's output.
 
 Give each sub-agent everything it needs to work autonomously:
 
-```
+```text
 # Launched in ONE message for parallel execution
 Task(subagent_type="general-purpose", model="sonnet",
   prompt="Implement a task in {{WORKTREE_PATH}} on branch {{BRANCH_NAME}}.

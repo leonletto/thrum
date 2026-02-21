@@ -197,8 +197,10 @@ Messages are the core communication primitive:
 **Routing rules (v0.4.5+):**
 
 - `@name` routes directly to a named agent
-- `@role` routes via the auto-created role group (all agents with that role receive it); sender gets a warning
-- Unknown recipients are a hard error — double-check agent names with `thrum team`
+- `@role` routes via the auto-created role group (all agents with that role
+  receive it); sender gets a warning
+- Unknown recipients are a hard error — double-check agent names with
+  `thrum team`
 - Agent name must differ from role (registration rejects name==role)
 
 **Message Storage:**
@@ -729,9 +731,11 @@ bd sync
 - **Don't skip registration** - System won't route messages correctly
 - **Don't leave sessions open** - End when done to avoid stale status
 - **Don't use vague intents** - Be specific about current work
-- **Don't use @role to address a single agent** - Use @name for direct messages; @role fans out to all agents with that role
+- **Don't use @role to address a single agent** - Use @name for direct messages;
+  @role fans out to all agents with that role
 - **Don't use unknown recipients** - Hard error; verify names with `thrum team`
-- **Don't use name==role when registering** - Registration rejects it (e.g., `--name coordinator --role coordinator`)
+- **Don't use name==role when registering** - Registration rejects it (e.g.,
+  `--name coordinator --role coordinator`)
 - **Don't delete @everyone group** - It's protected and auto-created
 
 ## Common Patterns
@@ -973,7 +977,7 @@ thrum status
 
 All messages stored in Git:
 
-```
+```text
 .git/thrum-sync/a-sync/
 ├── events.jsonl              # Agent lifecycle events
 └── messages/
@@ -1084,15 +1088,14 @@ thrum session end
 **Version:** 1.4 **Last Updated:** 2026-02-20 **Status:** Production-Ready
 
 **Changes in v1.4 (thrum v0.4.5):** Name-only routing — `@name` routes directly
-to agent; `@role` routes via auto-created role group (with warning). Agent
-name must differ from role (registration rejects name==role). `thrum wait
---all` removed — wait always filters by agent identity. Unknown recipients are
-a hard error. `--priority` flag removed from `thrum send`. `thrum init` does
-full setup; `thrum whoami` shows branch/intent.
+to agent; `@role` routes via auto-created role group (with warning). Agent name
+must differ from role (registration rejects name==role). `thrum wait --all`
+removed — wait always filters by agent identity. Unknown recipients are a hard
+error. `--priority` flag removed from `thrum send`. `thrum init` does full
+setup; `thrum whoami` shows branch/intent.
 
 **Changes in v1.3:** Agent Groups feature added —
 `thrum group create/add/remove/list/info/members`, 6 new MCP tools
 (`create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
-`list_groups`, `get_group`). Built-in `@everyone` group for broadcasts.
-Groups support nesting (groups can contain other groups/roles) with cycle
-detection.
+`list_groups`, `get_group`). Built-in `@everyone` group for broadcasts. Groups
+support nesting (groups can contain other groups/roles) with cycle detection.

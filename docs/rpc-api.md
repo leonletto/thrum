@@ -1,5 +1,4 @@
-
-# Thrum Daemon RPC API
+## Thrum Daemon RPC API
 
 ## Overview
 

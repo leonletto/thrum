@@ -12,14 +12,14 @@ and this project adheres to
 
 - **Name-only routing**: Messages route by agent name and group membership only.
   Role strings are no longer used for direct inbox matching. Role-based
-  addressing (`@implementer`) now works through auto-created role groups that are
-  visible in `thrum group list` and manageable via `thrum group member`.
+  addressing (`@implementer`) now works through auto-created role groups that
+  are visible in `thrum group list` and manageable via `thrum group member`.
 - **Agent name ≠ role**: Registration rejects agents whose name matches their
   role (e.g., `name=implementer role=implementer`). Use distinct names like
   `impl_api` or `impl_db`.
 - **`thrum wait` always filters by agent identity**: The `--all` flag has been
-  removed. Wait now returns only messages addressed to the calling agent
-  (direct mentions, group messages, broadcasts).
+  removed. Wait now returns only messages addressed to the calling agent (direct
+  mentions, group messages, broadcasts).
 - **Recipient validation**: Sending to an unknown agent, role, or group now
   returns a hard error listing the unresolvable addresses. The message is not
   stored — fix the address and resend.
@@ -115,7 +115,7 @@ and this project adheres to
 - `thrum prime` shows a tip to run `thrum setup claude-md --apply` when
   CLAUDE.md lacks a Thrum section
 
-### Changed
+### Changed (Infrastructure)
 
 - Resilience test infrastructure refactored: shared fixture extraction via
   `TestMain` (extracts once, copies per-test), atomic JSON-RPC request IDs to

@@ -1,5 +1,4 @@
-
-# Event Streaming
+## Event Streaming
 
 ## Overview
 
@@ -40,7 +39,7 @@ when the UI is active, or `/` when running without UI.
 
 ### Data Flow
 
-```
+````text
 Event Source (message.send, message.edit)
   |
   v
@@ -52,7 +51,7 @@ Broadcaster
   v         v
 Unix Socket    WebSocket
 Clients        Clients (port 9999, /ws endpoint)
-```
+```go
 
 > **Note:** All WebSocket connections enforce a 10s handshake timeout.
 > Server-side requests have a 10s per-request timeout (v0.4.3).
@@ -92,7 +91,7 @@ expected):
     "timestamp": "2026-02-03T10:00:00Z"
   }
 }
-```
+```text
 
 ### Subscription Filtering
 
@@ -137,7 +136,7 @@ eventSetup := daemon.NewEventStreamingSetupFromState(st, unixClients, wsServer)
 messageHandler := rpc.NewMessageHandlerWithDispatcher(st, eventSetup.Dispatcher)
 
 // Register handlers on both Unix socket and WebSocket registries...
-```
+```go
 
 ### Client Subscription
 
@@ -152,7 +151,7 @@ Clients subscribe via the `subscribe` RPC method:
   },
   "id": 1
 }
-```
+```text
 
 Or subscribe to mentions:
 
@@ -165,7 +164,7 @@ Or subscribe to mentions:
   },
   "id": 1
 }
-```
+```text
 
 Or subscribe to all messages (firehose):
 
@@ -178,7 +177,7 @@ Or subscribe to all messages (firehose):
   },
   "id": 1
 }
-```
+```text
 
 ### Receiving Notifications
 
@@ -195,7 +194,7 @@ ws.onmessage = (event) => {
     console.log("New message:", notification.params.preview);
   }
 };
-```
+```text
 
 ### MCP Server Integration
 
@@ -231,7 +230,7 @@ Run tests:
 go test ./internal/daemon/...
 go test ./internal/subscriptions/...
 go test ./internal/websocket/...
-```
+```text
 
 ## Performance Characteristics
 
@@ -280,3 +279,4 @@ go test ./internal/websocket/...
 - WebSocket Server: `internal/websocket/server.go`
 - WebSocket Client Registry: `internal/websocket/registry.go`
 - Unix Socket Client Registry: `internal/daemon/notify.go`
+````
