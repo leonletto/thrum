@@ -1116,15 +1116,12 @@ Examples:
   thrum whoami --json
   THRUM_NAME=alice thrum whoami`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Load identity from .thrum/identities/ directory
 			identityFile, identityPath, err := config.LoadIdentityWithPath(flagRepo)
 			if err != nil {
-				// Check if .thrum/ directory exists
 				thrumDir := filepath.Join(flagRepo, ".thrum")
 				if _, statErr := os.Stat(thrumDir); os.IsNotExist(statErr) {
 					return fmt.Errorf("thrum not initialized in this repository\n  Run 'thrum init' first")
 				}
-				// Check if identities directory exists
 				identitiesDir := filepath.Join(thrumDir, "identities")
 				if _, statErr := os.Stat(identitiesDir); os.IsNotExist(statErr) {
 					return fmt.Errorf("no agent identities registered\n  Run 'thrum quickstart --role <role> --module <module>' to register")
@@ -1132,32 +1129,25 @@ Examples:
 				return err
 			}
 
+			// Try daemon enrichment (non-fatal)
+			var daemonInfo *cli.WhoamiResult
+			if client, clientErr := getClient(); clientErr == nil {
+				defer func() { _ = client.Close() }()
+				if result, rpcErr := cli.AgentWhoami(client, identityFile.Agent.Name); rpcErr == nil {
+					daemonInfo = result
+				}
+			}
+
+			summary := cli.BuildAgentSummary(identityFile, identityPath, daemonInfo)
+
 			if flagJSON {
-				// JSON output
-				output, err := json.MarshalIndent(map[string]any{
-					"agent_id":      identityFile.Agent.Name,
-					"role":          identityFile.Agent.Role,
-					"module":        identityFile.Agent.Module,
-					"display":       identityFile.Agent.Display,
-					"worktree":      identityFile.Worktree,
-					"identity_file": identityPath,
-					"repo_id":       identityFile.RepoID,
-					"updated_at":    identityFile.UpdatedAt.Format(time.RFC3339),
-				}, "", "  ")
+				output, err := json.MarshalIndent(summary, "", "  ")
 				if err != nil {
 					return fmt.Errorf("marshal JSON output: %w", err)
 				}
 				fmt.Println(string(output))
 			} else {
-				// Human-readable output
-				fmt.Printf("@%s (%s @ %s)\n", identityFile.Agent.Name, identityFile.Agent.Role, identityFile.Agent.Module)
-				if identityFile.Agent.Display != "" {
-					fmt.Printf("Display:  %s\n", identityFile.Agent.Display)
-				}
-				fmt.Printf("Identity: %s\n", identityPath)
-				if identityFile.Worktree != "" {
-					fmt.Printf("Worktree: %s\n", identityFile.Worktree)
-				}
+				fmt.Print(cli.FormatAgentSummary(summary))
 			}
 
 			return nil
@@ -1761,28 +1751,28 @@ Identity is resolved from:
 2. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_NAME)
 3. Identity files in .thrum/identities/ directory`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			agentID, err := resolveLocalAgentID()
+			// Load identity from file
+			identityFile, identityPath, err := config.LoadIdentityWithPath(flagRepo)
 			if err != nil {
 				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
 			}
-			result, err := cli.AgentWhoami(client, agentID)
-			if err != nil {
-				return err
+
+			// Try daemon enrichment
+			var daemonInfo *cli.WhoamiResult
+			if client, clientErr := getClient(); clientErr == nil {
+				defer func() { _ = client.Close() }()
+				if result, rpcErr := cli.AgentWhoami(client, identityFile.Agent.Name); rpcErr == nil {
+					daemonInfo = result
+				}
 			}
 
+			summary := cli.BuildAgentSummary(identityFile, identityPath, daemonInfo)
+
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
+				output, _ := json.MarshalIndent(summary, "", "  ")
 				fmt.Println(string(output))
 			} else {
-				// Human-readable formatted output
-				fmt.Print(cli.FormatWhoami(result))
+				fmt.Print(cli.FormatAgentSummary(summary))
 			}
 
 			return nil
