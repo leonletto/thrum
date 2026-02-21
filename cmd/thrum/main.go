@@ -136,6 +136,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(setupCmd())
 	rootCmd.AddCommand(mcpCmd())
+	rootCmd.AddCommand(rolesCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -3823,13 +3824,9 @@ Examples:
 					}
 				}
 
-				// Create default preamble if it doesn't already exist
-				if err := agentcontext.EnsurePreamble(thrumDir, savedName); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
-				}
-
-				// If --preamble-file provided, compose default + custom preamble
+				// Preamble priority: --preamble-file > role template > default
 				if preambleFile != "" {
+					// --preamble-file takes precedence over everything
 					customContent, err := os.ReadFile(preambleFile) //nolint:gosec // G304 - user-provided flag path
 					if err != nil {
 						return fmt.Errorf("failed to read preamble file %q: %w", preambleFile, err)
@@ -3838,6 +3835,16 @@ Examples:
 					composed = append(composed, customContent...)
 					if err := agentcontext.SavePreamble(thrumDir, savedName, composed); err != nil {
 						return fmt.Errorf("failed to save composed preamble: %w", err)
+					}
+				} else if rendered, renderErr := agentcontext.RenderRoleTemplate(thrumDir, savedName, flagRole); renderErr == nil && rendered != nil {
+					// Role template found - use it as the preamble
+					if err := agentcontext.SavePreamble(thrumDir, savedName, rendered); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to save role template preamble: %v\n", err)
+					}
+				} else {
+					// Fall back to default preamble
+					if err := agentcontext.EnsurePreamble(thrumDir, savedName); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
 					}
 				}
 			}
@@ -4703,6 +4710,118 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	lifecycle.SetLockFile(lockFile)
 
 	return lifecycle.Run(ctx)
+}
+
+func rolesCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "roles",
+		Short: "Manage role-based preamble templates",
+		Long: `Manage role-based preamble templates in .thrum/role_templates/.
+
+Role templates are Go text/template files that automatically generate
+agent preambles during registration. Templates are rendered with agent
+identity data (AgentName, Role, Module, WorktreePath, RepoRoot, CoordinatorName).`,
+	}
+
+	cmd.AddCommand(rolesListCmd())
+	cmd.AddCommand(rolesDeployCmd())
+
+	return cmd
+}
+
+func rolesListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "Show configured templates and matching agents",
+		Long: `List all role templates in .thrum/role_templates/ and show which
+registered agents match each template.
+
+Examples:
+  thrum roles list`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+
+			templates, err := agentcontext.ListRoleTemplates(thrumDir)
+			if err != nil {
+				return fmt.Errorf("list role templates: %w", err)
+			}
+
+			if templates == nil || len(templates) == 0 {
+				fmt.Println("No role templates found in .thrum/role_templates/")
+				fmt.Println("  Create templates manually or use: thrum configure-roles")
+				return nil
+			}
+
+			for name, agents := range templates {
+				if len(agents) == 0 {
+					fmt.Fprintf(os.Stdout, "%s    (0 agents)\n", name)
+				} else {
+					fmt.Fprintf(os.Stdout, "%s    (%d agents: %s)\n", name, len(agents), strings.Join(agents, ", "))
+				}
+			}
+
+			return nil
+		},
+	}
+}
+
+func rolesDeployCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "deploy",
+		Short: "Re-render preambles for registered agents from role templates",
+		Long: `Re-render preambles for all registered agents that have matching
+role templates. Templates in .thrum/role_templates/ are rendered with
+each agent's identity data and written to .thrum/context/{agent}_preamble.md.
+
+This is a full overwrite — templates are the source of truth.
+
+Examples:
+  thrum roles deploy              # Deploy for all agents
+  thrum roles deploy --agent foo  # Deploy for a specific agent
+  thrum roles deploy --dry-run    # Preview what would change`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentFilter, _ := cmd.Flags().GetString("agent")
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+
+			result, err := agentcontext.DeployAll(thrumDir, agentFilter, dryRun)
+			if err != nil {
+				return fmt.Errorf("deploy role templates: %w", err)
+			}
+
+			if dryRun {
+				fmt.Println("Dry run — no files written")
+			}
+
+			totalProcessed := len(result.Updated) + len(result.Skipped)
+			if totalProcessed == 0 {
+				fmt.Println("No agents found")
+				return nil
+			}
+
+			if len(result.Updated) > 0 {
+				verb := "Updated"
+				if dryRun {
+					verb = "Would update"
+				}
+				fmt.Printf("%s %d/%d agents", verb, len(result.Updated), totalProcessed)
+				if len(result.Skipped) > 0 {
+					fmt.Printf(" (no template for: %s)", strings.Join(result.Skipped, ", "))
+				}
+				fmt.Println()
+			} else {
+				fmt.Printf("No matching templates for %d agents\n", totalProcessed)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("agent", "", "Deploy for a specific agent only")
+	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files")
+
+	return cmd
 }
 
 // getWorktreeName extracts the worktree name from the repo path.
