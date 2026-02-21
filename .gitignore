@@ -33,6 +33,7 @@ go.work.sum
 
 # Development artifacts (local only, not for public repo)
 dev-docs/
+docs/plans/
 .agents/
 .beads/
 .claude/
@@ -76,3 +77,8 @@ playwright-report/
 # Thrum runtime files
 .thrum/
 .thrum.*.json
+
+# Thrum data directory (all data lives on a-sync branch via worktree)
+.thrum/
+.thrum.*.json
+scripts/thrum-startup.sh
