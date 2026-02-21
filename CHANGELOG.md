@@ -6,7 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.5] - 2026-02-20
+## [0.4.5] - 2026-02-21
+
+### Added
+
+- **Agent context management**: Per-agent context storage with CLI detection.
+  `thrum context save/show` persists session state across compaction.
+- **`thrum init` full setup**: Single command does prompt, daemon start,
+  register, session creation, and intent setting.
+- **Identity v3 enrichment**: Identity files now carry branch, intent, and
+  session_id. `quickstart` populates these fields automatically.
+- **AgentSummary canonical output model**: Unified JSON/human output for agent
+  status across `whoami`, `status`, and `overview` commands.
+- **safedb package**: Compile-time context enforcement for all SQLite operations
+  with connection limits and WAL sync mode.
+- **safecmd package**: Context-aware git commands with 5s/10s timeouts replacing
+  raw `exec.Command` calls.
+- **Resilience test suite**: 32 tests covering RPC, CLI, concurrency, crash
+  recovery, and multi-daemon scenarios.
+- **`setup claude-md` subcommands**: Generate CLAUDE.md files from Go templates.
+- **Pre-compact hook**: Identity-scoped backups via `${CLAUDE_PLUGIN_ROOT}`
+  script bundled in plugin.
 
 ### Changed
 
@@ -23,6 +43,10 @@ and this project adheres to
 - **Recipient validation**: Sending to an unknown agent, role, or group now
   returns a hard error listing the unresolvable addresses. The message is not
   stored — fix the address and resend.
+- `status` and `overview` use `FormatAgentSummary` for consistent agent output.
+- `team` output shows worktree and host as separate fields.
+- `agent list` shows branch and intent for offline agents in context view.
+- Go 1.26 required (fixes govulncheck panic on json/v2 variadic types).
 
 ### Fixed
 
@@ -39,6 +63,16 @@ and this project adheres to
 - MCP waiter subscribes to `@everyone` group scope so broadcasts trigger
   WebSocket push notifications.
 - `list_agents` shows the agent ID when display name is empty.
+- Daemon deadlock prevention with SQLite and socket timeouts.
+- SQLite WAL accumulation with connection limit and sync mode.
+- Server per-request timeout reduced from 30s to 10s.
+- RPC dial timeout added (5s), RPC call timeout reduced to 10s.
+- WebSocket handshake timeout added (10s) for MCP waiter.
+- Sync notify goroutines capped to 10 with semaphore.
+- Context propagation through pairing wait path.
+- All git commands migrated to safecmd with enforced timeouts.
+- All DB call sites migrated to context-aware safedb.
+- Lock scope reduced in 5 high-risk RPC handlers.
 
 ## [0.4.4] - 2026-02-18
 

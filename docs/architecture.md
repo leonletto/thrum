@@ -1,3 +1,4 @@
+
 ## Thrum Foundation Architecture
 
 This document describes the foundational packages that support the Thrum agent

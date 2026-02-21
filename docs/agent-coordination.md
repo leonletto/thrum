@@ -1,3 +1,4 @@
+
 ## Agent Coordination
 
 Thrum helps you coordinate multiple AI agents across sessions, worktrees, and
