@@ -2335,9 +2335,17 @@ func sessionSetIntentRunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no active session - start one with 'thrum session start'")
 	}
 
-	result, err := cli.SessionSetIntent(client, whoami.SessionID, args[0])
+	newIntent := args[0]
+	result, err := cli.SessionSetIntent(client, whoami.SessionID, newIntent)
 	if err != nil {
 		return err
+	}
+
+	// Write intent back to identity file
+	if idFile, _, loadErr := config.LoadIdentityWithPath(flagRepo); loadErr == nil {
+		thrumDir := filepath.Join(flagRepo, ".thrum")
+		idFile.Intent = newIntent
+		_ = config.SaveIdentityFile(thrumDir, idFile)
 	}
 
 	if flagJSON {
@@ -3712,6 +3720,12 @@ Examples:
 				}
 			}
 
+			// Compute default intent if none provided
+			if intent == "" {
+				repoName := cli.GetRepoName(flagRepo)
+				intent = cli.DefaultIntent(flagRole, repoName)
+			}
+
 			opts := cli.QuickstartOptions{
 				Name:         name,
 				Role:         flagRole,
@@ -3756,16 +3770,24 @@ Examples:
 					_ = os.Remove(legacyFile)
 				}
 				idFile := &config.IdentityFile{
-					Version: 1,
+					Version: 3,
+					RepoID:  cli.GetRepoID(flagRepo),
 					Agent: config.AgentConfig{
 						Kind:    "agent",
 						Name:    savedName,
 						Role:    flagRole,
 						Module:  flagModule,
-						Display: display,
+						Display: cli.AutoDisplay(flagRole, flagModule),
 					},
-					Worktree:  getWorktreeName(flagRepo),
-					UpdatedAt: time.Now(),
+					Worktree: cli.GetWorktreeName(flagRepo),
+					Branch:   cli.GetCurrentBranch(flagRepo),
+					Intent:   intent,
+				}
+				if display != "" {
+					idFile.Agent.Display = display
+				}
+				if result.Session != nil {
+					idFile.SessionID = result.Session.SessionID
 				}
 
 				// Populate context_file with the agent's context file path
