@@ -78,21 +78,30 @@ export const MessageSchema = z.object({
   message_id: z.string(),
   thread_id: z.string().optional(),
   agent_id: z.string().optional(),
-  session_id: z.string().optional(),
   created_at: z.string(),
   updated_at: z.string().optional(),
   deleted_at: z.string().optional(),
   body: MessageBodySchema,
-  scopes: z.array(MessageScopeSchema),
-  refs: z.array(MessageRefSchema),
-  authored_by: z.string().optional(), // Actual author when impersonating
-  disclosed: z.boolean().optional(),   // Whether to show [via user:X] in UI
-  is_read: z.boolean().optional(),     // Whether message has been read (for mark as read)
-  mentions: z.array(z.string()).optional(), // Array of agent roles mentioned in message
-  priority: z.enum(['normal', 'high', 'low']).optional(), // Message priority level
+  is_read: z.boolean().optional(),
+  reply_to: z.string().optional(),
+  // Optional in list responses, guaranteed in detail responses
+  session_id: z.string().optional(),
+  scopes: z.array(MessageScopeSchema).optional(),
+  refs: z.array(MessageRefSchema).optional(),
+  authored_by: z.string().optional(),
+  disclosed: z.boolean().optional(),
+  mentions: z.array(z.string()).optional(),
 });
 
 export type Message = z.infer<typeof MessageSchema>;
+
+export const MessageDetailSchema = MessageSchema.extend({
+  session_id: z.string(),
+  scopes: z.array(MessageScopeSchema),
+  refs: z.array(MessageRefSchema),
+});
+
+export type MessageDetail = z.infer<typeof MessageDetailSchema>;
 
 export const SendMessageRequestSchema = z.object({
   content: z.string(),
@@ -100,10 +109,11 @@ export const SendMessageRequestSchema = z.object({
   scopes: z.array(MessageScopeSchema).optional(),
   refs: z.array(MessageRefSchema).optional(),
   body: MessageBodySchema.optional(),
-  acting_as: z.string().optional(), // Impersonate this agent (users only)
-  disclosed: z.boolean().optional(), // Show [via user:X] in message
-  mentions: z.array(z.string()).optional(), // Array of agent roles mentioned in message
-  priority: z.enum(['normal', 'high', 'low']).optional(), // Message priority level
+  acting_as: z.string().optional(),
+  disclosed: z.boolean().optional(),
+  mentions: z.array(z.string()).optional(),
+  reply_to: z.string().optional(),
+  caller_agent_id: z.string().optional(),
 });
 
 export type SendMessageRequest = z.infer<typeof SendMessageRequestSchema>;
@@ -112,6 +122,8 @@ export const SendMessageResponseSchema = z.object({
   message_id: z.string(),
   thread_id: z.string().optional(),
   created_at: z.string(),
+  resolved_to: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
 });
 
 export type SendMessageResponse = z.infer<typeof SendMessageResponseSchema>;
@@ -119,6 +131,8 @@ export type SendMessageResponse = z.infer<typeof SendMessageResponseSchema>;
 export const MessageListRequestSchema = z.object({
   thread_id: z.string().optional(),
   author_id: z.string().optional(),
+  for_agent: z.string().optional(),
+  unread_for_agent: z.string().optional(),
   scope: MessageScopeSchema.optional(),
   ref: MessageRefSchema.optional(),
   page_size: z.number().optional(),
@@ -133,7 +147,7 @@ export const MessageListResponseSchema = z.object({
   messages: z.array(MessageSchema),
   page: z.number(),
   page_size: z.number(),
-  total_count: z.number(),
+  total: z.number(),
   total_pages: z.number(),
 });
 
@@ -174,7 +188,7 @@ export const ThreadListResponseSchema = z.object({
   threads: z.array(ThreadSchema),
   page: z.number(),
   page_size: z.number(),
-  total_count: z.number(),
+  total: z.number(),
   total_pages: z.number(),
 });
 
