@@ -62,6 +62,12 @@ func BuildAgentSummary(idFile *config.IdentityFile, idPath string, daemonInfo *W
 		if daemonInfo.Display != "" {
 			s.Display = daemonInfo.Display
 		}
+		if daemonInfo.Branch != "" {
+			s.Branch = daemonInfo.Branch
+		}
+		if daemonInfo.Intent != "" {
+			s.Intent = daemonInfo.Intent
+		}
 	}
 
 	return s

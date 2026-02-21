@@ -44,11 +44,14 @@ func TestBuildAgentSummary_DaemonEnrichment(t *testing.T) {
 		Agent:    config.AgentConfig{Name: "coordinator", Role: "coordinator", Module: "main"},
 		Worktree: "thrum",
 		Branch:   "main",
+		Intent:   "File intent",
 	}
 	daemonInfo := &WhoamiResult{
 		AgentID:      "coordinator",
 		SessionID:    "ses_LIVE",
 		SessionStart: "2026-02-19T12:00:00Z",
+		Branch:       "feature/auth",
+		Intent:       "Daemon intent",
 	}
 
 	summary := BuildAgentSummary(idFile, ".thrum/identities/coordinator.json", daemonInfo)
@@ -58,6 +61,13 @@ func TestBuildAgentSummary_DaemonEnrichment(t *testing.T) {
 	}
 	if summary.SessionStart != "2026-02-19T12:00:00Z" {
 		t.Errorf("SessionStart = %q", summary.SessionStart)
+	}
+	// Daemon values should override file values
+	if summary.Branch != "feature/auth" {
+		t.Errorf("Branch = %q, want daemon value %q", summary.Branch, "feature/auth")
+	}
+	if summary.Intent != "Daemon intent" {
+		t.Errorf("Intent = %q, want daemon value %q", summary.Intent, "Daemon intent")
 	}
 }
 

@@ -45,6 +45,8 @@ type WhoamiResult struct {
 	Source       string `json:"source"`
 	SessionID    string `json:"session_id,omitempty"`
 	SessionStart string `json:"session_start,omitempty"`
+	Branch       string `json:"branch,omitempty"`
+	Intent       string `json:"intent,omitempty"`
 }
 
 // ContextInfo contains agent context file metadata for status display.

@@ -76,6 +76,8 @@ type WhoamiResponse struct {
 	Source       string `json:"source"` // "environment", "flags", "identity_file"
 	SessionID    string `json:"session_id,omitempty"`
 	SessionStart string `json:"session_start,omitempty"`
+	Branch       string `json:"branch,omitempty"`
+	Intent       string `json:"intent,omitempty"`
 }
 
 // ListContextRequest represents the request for agent.listContext RPC.
@@ -407,6 +409,18 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("query active session: %w", sessionErr)
 	}
 
+	// Query work context for branch and intent
+	var branch, intent sql.NullString
+	ctxQuery := `SELECT branch, intent
+	             FROM agent_work_contexts
+	             WHERE agent_id = ?
+	             ORDER BY intent_updated_at DESC
+	             LIMIT 1`
+	ctxErr := h.state.DB().QueryRowContext(ctx, ctxQuery, agentID).Scan(&branch, &intent)
+	if ctxErr != nil && ctxErr != sql.ErrNoRows {
+		return nil, fmt.Errorf("query work context: %w", ctxErr)
+	}
+
 	response := &WhoamiResponse{
 		AgentID: agentID,
 		Role:    role,
@@ -418,6 +432,12 @@ func (h *AgentHandler) HandleWhoami(ctx context.Context, params json.RawMessage)
 	if sessionID.Valid {
 		response.SessionID = sessionID.String
 		response.SessionStart = sessionStart.String
+	}
+	if branch.Valid {
+		response.Branch = branch.String
+	}
+	if intent.Valid {
+		response.Intent = intent.String
 	}
 
 	return response, nil
