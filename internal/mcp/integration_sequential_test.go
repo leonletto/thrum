@@ -75,6 +75,19 @@ func newTestEnv(t *testing.T) *testEnv {
 	sessionHandler := rpc.NewSessionHandler(st)
 	server.RegisterHandler("session.start", sessionHandler.HandleStart)
 
+	groupHandler := rpc.NewGroupHandler(st)
+	server.RegisterHandler("group.create", groupHandler.HandleCreate)
+	server.RegisterHandler("group.delete", groupHandler.HandleDelete)
+	server.RegisterHandler("group.member.add", groupHandler.HandleMemberAdd)
+	server.RegisterHandler("group.member.remove", groupHandler.HandleMemberRemove)
+	server.RegisterHandler("group.list", groupHandler.HandleList)
+	server.RegisterHandler("group.info", groupHandler.HandleInfo)
+
+	// Ensure @everyone group exists (as daemon startup would)
+	if err := rpc.EnsureEveryoneGroup(context.Background(), st); err != nil {
+		t.Fatalf("ensure everyone group: %v", err)
+	}
+
 	healthHandler := rpc.NewHealthHandler(time.Now(), "test-1.0.0", repoID)
 	server.RegisterHandler("health", healthHandler.Handle)
 
@@ -185,17 +198,22 @@ func TestSequentialSendAndReceive(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
 
-	// Activate sender and send message
+	// Register both agents first (recipient validation requires receiver to exist)
 	senderAgentID, _ := env.activateAgent("sender", "mcp")
+	env.deactivateAgent()
+	env.activateAgent("receiver", "mcp")
+	env.deactivateAgent()
+
+	// Activate sender and send message
+	env.activateAgent("sender", "mcp")
 	senderMCP, err := NewServer(env.repoPath)
 	if err != nil {
 		t.Fatalf("create sender MCP: %v", err)
 	}
 
 	_, output, err := senderMCP.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@receiver",
+		To:       "@receiver_agent",
 		Content:  "Hello from sender",
-		Priority: "normal",
 	})
 	if err != nil {
 		t.Fatalf("send message: %v", err)
@@ -246,6 +264,12 @@ func TestSequentialCheckMessagesMarksRead(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
 
+	// Register both agents first (recipient validation requires receiver to exist)
+	env.activateAgent("sender", "mcp")
+	env.deactivateAgent()
+	env.activateAgent("receiver", "mcp")
+	env.deactivateAgent()
+
 	// Activate sender and send message
 	env.activateAgent("sender", "mcp")
 	senderMCP, err := NewServer(env.repoPath)
@@ -253,9 +277,8 @@ func TestSequentialCheckMessagesMarksRead(t *testing.T) {
 		t.Fatalf("create sender MCP: %v", err)
 	}
 	_, _, err = senderMCP.handleSendMessage(ctx, nil, SendMessageInput{
-		To:       "@receiver",
+		To:       "@receiver_agent",
 		Content:  "test message",
-		Priority: "normal",
 	})
 	if err != nil {
 		t.Fatalf("send message: %v", err)
@@ -358,7 +381,6 @@ func TestSequentialBroadcast(t *testing.T) {
 	}
 	_, _, err = agent1MCP.handleBroadcast(ctx, nil, BroadcastInput{
 		Content:  "broadcast from agent1",
-		Priority: "normal",
 	})
 	if err != nil {
 		t.Fatalf("broadcast: %v", err)
@@ -453,7 +475,6 @@ func TestMCPServerFailsWithoutDaemon(t *testing.T) {
 	_, _, err = mcpServer.handleSendMessage(ctx, nil, SendMessageInput{
 		To:       "@someone",
 		Content:  "test",
-		Priority: "normal",
 	})
 
 	if err == nil {
