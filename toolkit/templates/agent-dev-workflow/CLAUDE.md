@@ -1,85 +1,82 @@
 # Agent Development Templates
 
+These templates encode a workflow for planning and executing feature work with
+AI agents. The workflow is now driven by a **skill pipeline** — brainstorming,
+writing-plans, and project-setup — with the templates available as
+reference/customization files for each stage.
+
 ## Process Overview
 
-These templates encode a three-phase workflow for planning and executing feature
-work with AI agents. The process uses **beads** for issue tracking and **git
-worktrees** for isolated development.
-
 ```text
-1. PLAN          2. PREPARE          3. IMPLEMENT
-─────────────    ──────────────      ─────────────────────
-Brainstorm       Select/create       Orient from beads
-  ↓              worktree            Pick up first task
-Write spec         ↓                 Implement → test → commit
-  ↓              Setup thrum +       Close task, repeat
-Create epics     beads redirect        ↓
-Create tasks       ↓                 Quality gates
-Set deps         Run quickstart      Merge to main, push
+1. DESIGN           2. PLAN              3. SETUP             4. IMPLEMENT
+─────────────       ──────────────       ──────────────       ─────────────────────
+brainstorming       writing-plans        project-setup        implementation-agent.md
+  ↓                   ↓                    ↓                    ↓
+Design doc          Plan file            Beads epics/tasks    Orient from beads
+(interactive)       (interactive)        Worktree assignments Pick up first task
+                                         Impl prompts         Implement → test → commit
+                                         Create worktrees     Close task, repeat
 ```
 
-### Phase 1: Plan (`planning-agent.md`)
+---
 
-**When:** You have a feature idea (rough or detailed) and need to turn it into
-actionable work.
+## Skill Pipeline
 
-**What it does:**
+All skills are invoked conversationally. The user works with Claude, invoking
+each skill as the pipeline progresses.
 
-1. Explores the codebase and clarifies requirements with the user
-2. Proposes 2-3 architectural approaches with trade-offs
-3. Writes a design spec to `{{DESIGN_DOC_DIR}}`
-4. Decomposes the spec into beads epics with TDD-quality child tasks
-5. Sets dependency relationships between epics and between tasks
-6. Generates implementation prompt files from `implementation-agent.md` template
+### brainstorming
 
-**Key principle:** Beads task descriptions are the source of truth. Each task
-description is a self-contained implementation guide with file paths, test code,
-implementation code, verification commands, and acceptance criteria — detailed
-enough for an implementing agent to work autonomously without additional
-context.
+Interactive design exploration. Claude works with you to understand the problem
+space, explore approaches, and reach a design decision.
 
-### Phase 2: Prepare (`worktree-setup.md`)
+Produces: a design doc at `docs/plans/YYYY-MM-DD-<topic>-design.md`
 
-**When:** An epic is ready to implement and needs an isolated workspace.
+### writing-plans
 
-**What it does:**
+Structures the approved design into phased, ordered implementation steps.
+Produces a plan file that project-setup can consume.
 
-The setup script (`scripts/setup-worktree-thrum.sh`) handles everything in a
-single command:
+Produces: a plan file at `docs/plans/YYYY-MM-DD-<topic>-plan.md`
 
-1. Creates git branch + worktree (or reuses existing branch)
-2. Sets up thrum redirect (shared daemon, messages, identities)
-3. Sets up beads redirect (shared issue database)
-4. Runs `thrum quickstart` to register the agent identity
-5. Auto-creates empty context file (`.thrum/context/{name}.md`)
+### project-setup
 
-```bash
-# Full single-command bootstrap:
-./scripts/setup-worktree-thrum.sh <worktree-path> <branch> \
-  --identity <name> --role <role> --base <base-branch>
+Reads the plan and prepares everything needed for implementation:
 
-# Backwards-compatible modes still work:
-./scripts/setup-worktree-thrum.sh                    # auto-detect all worktrees
-./scripts/setup-worktree-thrum.sh <existing-path>    # redirect-only for existing worktree
-```
+1. Decomposes the plan into beads epics and tasks with a dependency DAG
+2. Checks existing worktrees for reuse before creating new ones
+3. Generates implementation prompts by filling in `implementation-agent.md`
+   with feature-specific values
+4. Creates worktrees and runs the setup script for each
 
-**Key principle:** All worktrees MUST share a single beads database and thrum
-instance via redirect files. Never set up redirects manually — use the script.
+Produces:
 
-The module is auto-derived from the branch name (`feature/auth` → `auth`).
+- Beads epics with dependency relationships
+- Filled implementation prompts at `dev-docs/prompts/{feature}.md`
+- Ready worktrees with thrum and beads redirects configured
 
-### Phase 3: Implement (`implementation-agent.md`)
+### implementation-agent.md
 
-**When:** An epic exists in beads with tasks, and a worktree is ready.
+Not a skill, but the template that project-setup fills in. The resulting filled
+prompt is given to an implementation agent as its session start prompt. See the
+[Implementation Phase](#implementation-phase) section below.
 
-**What it does:**
+---
 
-1. **Orient** — Checks beads status + git state to find the starting point
-   (works identically for fresh starts and resumes)
-2. **Implement** — Works through tasks in dependency order: claim → read → build
-   → test → commit → close
-3. **Verify** — Runs full quality gates after all tasks complete
-4. **Land** — Closes the epic, merges to main, pushes
+## Implementation Phase
+
+Once project-setup has produced a filled prompt and a ready worktree, hand the
+prompt to an implementation agent (a new Claude session in the worktree). The
+agent runs four phases:
+
+1. **Orient** — Reads beads status and git history to determine the starting
+   point. Works identically for fresh starts and resumes after context loss.
+2. **Implement** — Claims the first available task, reads its description,
+   builds, tests, commits, closes the task. Repeats until all tasks are done.
+3. **Verify** — Runs full quality gates after all tasks complete.
+4. **Land** — Closes the epic, merges to main, pushes.
+
+See `implementation-agent.md` for the full prompt and all details.
 
 **Key principle:** The orient phase is always the entry point. After context
 loss (compaction, new session), the agent re-runs orient and picks up exactly
@@ -87,113 +84,20 @@ where it left off. Completed work is never redone.
 
 ---
 
-## MANDATORY: Prompt Generation Rules
+## Reference Templates
 
-**When creating implementation prompts (`dev-docs/prompts/*.md`), you MUST use
-`implementation-agent.md` as the base template.** Do NOT write standalone
-prompts from scratch. The template contains critical workflow infrastructure
-(sub-agent strategy, parallel execution patterns, thrum registration,
-orient/resume handling, verification phases) that must be present in every
-prompt.
+These templates can be used directly for customization or when the skill
+pipeline does not fit your workflow.
 
-**Process:**
-
-1. Copy the full `implementation-agent.md` template
-2. Replace all `{{PLACEHOLDER}}` values with feature-specific values
-3. Add a feature-specific **Context** section with architectural details, task
-   descriptions, file ownership, and reference code paths
-4. The result is a complete prompt that includes BOTH the template workflow AND
-   the feature-specific instructions
-
-**What goes in the Context section (feature-specific):**
-
-- Epic/task IDs and their dependency order
-- Key files and code patterns to follow
-- Architectural decisions and constraints
-- Reference docs and reference code paths
-
-**What stays from the template (do NOT rewrite or omit):**
-
-- Thrum registration and message listener setup
-- Phase 1-4 workflow (Orient → Implement → Verify → Complete)
-- Sub-agent strategy and parallel execution patterns
-- Task execution loop (claim → read → build → test → commit → close)
-- Resume/recovery instructions
-- Blocker handling and communication patterns
+| Template | Status | Purpose |
+|---|---|---|
+| `planning-agent.md` | Reference | Full planning template — superseded by brainstorming + writing-plans + project-setup skills |
+| `worktree-setup.md` | Reference | Worktree creation docs — superseded by project-setup Phase 4 + using-git-worktrees skill |
+| `implementation-agent.md` | Active | Prompt template filled by project-setup skill, given to implementation agents |
 
 ---
 
-## How to Use These Templates
-
-### Filling in Placeholders
-
-All templates use `{{PLACEHOLDER}}` syntax for project-specific values. Replace
-these before giving a template to an agent.
-
-**Planning agent placeholders:**
-
-| Placeholder               | Example                                                   |
-| ------------------------- | --------------------------------------------------------- |
-| `{{FEATURE_DESCRIPTION}}` | "Add real-time sync between agents via WebSocket"         |
-| `{{PROJECT_ROOT}}`        | `/Users/leon/dev/opensource/thrum`                        |
-| `{{DESIGN_DOC_DIR}}`      | `docs/plans/`                                             |
-| `{{REFERENCE_DOCS}}`      | `.ref/beads_rust/`, `dev-docs/2026-02-03-thrum-design.md` |
-| `{{TECH_STACK}}`          | "Go backend, React/TypeScript UI, SQLite, JSONL"          |
-
-**Worktree setup placeholders:**
-
-| Placeholder         | Example                            |
-| ------------------- | ---------------------------------- |
-| `{{PROJECT_ROOT}}`  | `/Users/leon/dev/opensource/thrum` |
-| `{{WORKTREE_BASE}}` | `~/.workspaces/thrum`              |
-| `{{FEATURE_NAME}}`  | `auth`                             |
-
-**Implementation agent placeholders:**
-
-| Placeholder            | Example                                      |
-| ---------------------- | -------------------------------------------- |
-| `{{EPIC_ID}}`          | `thrum-nf7`                                  |
-| `{{WORKTREE_PATH}}`    | `~/.workspaces/thrum/foundation`             |
-| `{{BRANCH_NAME}}`      | `feature/foundation`                         |
-| `{{DESIGN_DOC}}`       | `docs/plans/2026-02-03-foundation-design.md` |
-| `{{REFERENCE_CODE}}`   | `.ref/beads_rust/`                           |
-| `{{QUALITY_COMMANDS}}` | `make test && make lint`                     |
-| `{{COVERAGE_TARGET}}`  | `>80%`                                       |
-
-### Typical Workflow
-
-```bash
-# 1. PLAN — Run in main worktree (or any worktree)
-#    Give the planning-agent.md template to your planning agent
-#    with placeholders filled in. It will:
-#    - Brainstorm and write a spec
-#    - Create beads epics and tasks
-#    - Write an implementation prompt for each agent/worktree
-
-# 2. PREPARE — Single command creates everything:
-#    branch, worktree, thrum redirect, beads redirect, identity,
-#    and empty context file.
-./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/auth \
-  feature/auth \
-  --identity impl-auth \
-  --role implementer
-
-# The script prints a verification summary:
-#   Path:     ~/.workspaces/thrum/auth
-#   Branch:   feature/auth
-#   Thrum:    redirect → /Users/leon/dev/opensource/thrum/.thrum
-#   Beads:    redirect → /Users/leon/dev/opensource/thrum/.beads
-#   Identity: impl-auth (.thrum/identities/impl-auth.json)
-#   Context:  .thrum/context/impl-auth.md (empty, use /update-context)
-
-# 3. IMPLEMENT — Hand off to implementation agent
-#    Give the implementation-agent.md template with placeholders
-#    filled in. It will work through tasks autonomously.
-#    If it runs out of context, restart it with the same prompt —
-#    the orient phase recovers state from beads and git.
-```
-
-### Running Multiple Epics in Parallel
+## Running Multiple Epics in Parallel
 
 If epics are independent (no dependency between them), they can run
 simultaneously in separate worktrees:
@@ -204,7 +108,7 @@ simultaneously in separate worktrees:
    avoid merge conflicts (see the "Parallel Work Rules" section in
    `worktree-setup.md`)
 
-### Resuming After Context Loss
+## Resuming After Context Loss
 
 The implementation template is designed for resume. When an agent hits context
 limits or a session ends:
@@ -225,7 +129,7 @@ Each implementation agent has two layers of context:
 
 | Layer   | File                            | Persistence            | Content                                                                                             | Maintained By           |
 | ------- | ------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------- | ----------------------- |
-| Prompt  | `dev-docs/prompts/{feature}.md` | Given at session start | Feature-specific: epic IDs, owned packages, design doc, architectural constraints, quality commands | Planning agent          |
+| Prompt  | `dev-docs/prompts/{feature}.md` | Given at session start | Feature-specific: epic IDs, owned packages, design doc, architectural constraints, quality commands | project-setup skill     |
 | Context | `.thrum/context/{name}.md`      | Updated each session   | Volatile session state: current task, decisions made, blockers hit                                  | `/update-context` skill |
 
 The **prompt** (implementation template) contains all feature-specific
@@ -240,38 +144,16 @@ the skill.
 
 ## Source of Truth Hierarchy
 
-| What                               | Lives In                                       | Used By                                |
-| ---------------------------------- | ---------------------------------------------- | -------------------------------------- |
-| Design decisions                   | Design spec (markdown in `{{DESIGN_DOC_DIR}}`) | Planning agent, implementation agent   |
-| Task details & acceptance criteria | Beads task descriptions                        | Implementation agent                   |
-| Epic structure & dependencies      | Beads epic + `bd dep` relationships            | All agents                             |
-| Implementation progress            | Beads task status + git commit history         | Implementation agent (orient phase)    |
-| Feature-specific instructions      | Prompt (`dev-docs/prompts/{feature}.md`)       | Implementation agent (session start)   |
-| Session state & decisions          | Context (`.thrum/context/{name}.md`)           | Implementation agent (current session) |
-| Code                               | Git worktree                                   | Implementation agent                   |
+| What                               | Lives In                                   | Used By                                |
+| ---------------------------------- | ------------------------------------------ | -------------------------------------- |
+| Design decisions                   | Design doc (`docs/plans/*-design.md`)      | brainstorming, writing-plans           |
+| Phased implementation steps        | Plan file (`docs/plans/*-plan.md`)         | project-setup skill                    |
+| Task details & acceptance criteria | Beads task descriptions                    | Implementation agent                   |
+| Epic structure & dependencies      | Beads epic + `bd dep` relationships        | All agents                             |
+| Implementation progress            | Beads task status + git commit history     | Implementation agent (orient phase)    |
+| Feature-specific instructions      | Prompt (`dev-docs/prompts/{feature}.md`)   | Implementation agent (session start)   |
+| Session state & decisions          | Context (`.thrum/context/{name}.md`)       | Implementation agent (current session) |
+| Code                               | Git worktree                               | Implementation agent                   |
 
 The templates themselves are guides for how to use these sources — they don't
 duplicate the content.
-
----
-
-## Template Index
-
-| Template                  | Purpose                                  | Phase     |
-| ------------------------- | ---------------------------------------- | --------- |
-| `planning-agent.md`       | Brainstorm, spec, create epics & tasks   | Plan      |
-| `worktree-setup.md`       | Create/select worktree, set up redirects | Prepare   |
-| `implementation-agent.md` | Implement tasks, verify, merge           | Implement |
-
-## Completed Examples
-
-See `dev-docs/prompts/completed/` for real prompts that were used to build this
-project. These pre-date the template system but demonstrate the patterns that
-these templates formalize:
-
-- **Simple backend epic:** `epic-1-foundation.md` — function signatures, Go
-  conventions
-- **Parallel coordination:** `epic-5-sync-protocol.md` — file ownership rules
-  for shared worktree
-- **Detailed UI epic:** `epic-14-data-terminal-design.md` — full CSS/component
-  code inline
