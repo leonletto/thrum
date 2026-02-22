@@ -50,19 +50,13 @@ func TestMessageDeleteByAgent(t *testing.T) {
 
 	t.Run("delete all messages for an agent", func(t *testing.T) {
 		// Send 3 messages from the agent
-		var messageIDs []string
 		for i := 0; i < 3; i++ {
 			sendReq := SendRequest{Content: "Test message to delete by agent"}
 			sendParams, _ := json.Marshal(sendReq)
-			resp, err := handler.HandleSend(context.Background(), sendParams)
+			_, err := handler.HandleSend(context.Background(), sendParams)
 			if err != nil {
 				t.Fatalf("send message %d: %v", i, err)
 			}
-			sendResp, ok := resp.(*SendResponse)
-			if !ok {
-				t.Fatalf("expected *SendResponse, got %T", resp)
-			}
-			messageIDs = append(messageIDs, sendResp.MessageID)
 		}
 
 		// Verify messages exist

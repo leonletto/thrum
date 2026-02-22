@@ -93,6 +93,8 @@ describe('AgentContextPanel', () => {
     render(<AgentContextPanel agentId="agent:test" />);
 
     expect(screen.getByText('No active session')).toBeInTheDocument();
+    expect(screen.getByTestId('open-delete-dialog')).toBeInTheDocument();
+    expect(screen.getByText('Delete Agent')).toBeInTheDocument();
   });
 
   test('renders context data', () => {

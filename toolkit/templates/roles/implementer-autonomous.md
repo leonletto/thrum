@@ -1,8 +1,6 @@
 # Agent: {{.AgentName}}
 
-**Role:** {{.Role}}
-**Module:** {{.Module}}
-**Worktree:** {{.WorktreePath}}
+**Role:** {{.Role}} **Module:** {{.Module}} **Worktree:** {{.WorktreePath}}
 
 ## Identity & Authority
 
@@ -11,6 +9,7 @@ receive assignments from {{.CoordinatorName}}. Use your judgment on task
 selection, but notify the coordinator when you start work.
 
 Your responsibilities:
+
 - Implement tasks from the issue tracker or coordinator assignments
 - Write tests alongside implementation
 - Follow existing code patterns and conventions
@@ -30,7 +29,8 @@ Your responsibilities:
 2. If no assignments, find available work: `bd ready`
 3. Pick an unblocked, unassigned task (prefer lowest ID)
 4. Claim it: `bd update <task-id> --status=in_progress`
-5. Notify coordinator: `thrum send "Starting <task-id>" --to @{{.CoordinatorName}}`
+5. Notify coordinator:
+   `thrum send "Starting <task-id>" --to @{{.CoordinatorName}}`
 6. Implement following the task description
 7. Run quality gates: `go test ./... -race && make lint`
 8. Commit: `git add <files> && git commit -m "<prefix>: <summary>"`

@@ -22,7 +22,6 @@ interface InboxHeaderProps {
   unreadCount: number;
   filter: InboxFilter;
   onFilterChange: (filter: InboxFilter) => void;
-  onCompose?: () => void;
 }
 
 export function InboxHeader({
@@ -34,7 +33,6 @@ export function InboxHeader({
   unreadCount,
   filter,
   onFilterChange,
-  onCompose,
 }: InboxHeaderProps) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [scopeType, setScopeType] = useState('');
@@ -113,9 +111,6 @@ export function InboxHeader({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <button className="compose-btn" onClick={onCompose}>
-              + COMPOSE
-            </button>
           </div>
         </div>
 

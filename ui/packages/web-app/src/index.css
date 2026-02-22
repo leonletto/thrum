@@ -25,6 +25,14 @@
   --muted-foreground: 148 163 184; /* #94a3b8 */
   --muted: 100 116 139; /* #64748b - Subtle text */
 
+  /* Popover/Dropdown */
+  --popover: 15 23 42; /* #0f172a - same as --background-panel-dark */
+  --popover-foreground: 226 232 240; /* #e2e8f0 - same as --foreground */
+
+  /* Accent */
+  --accent: 30 41 59; /* #1e293b - same as --background-panel-light */
+  --accent-foreground: 226 232 240; /* #e2e8f0 */
+
   /* Borders */
   --border: rgba(56, 189, 248, 0.2); /* Cyan at 20% opacity */
   --border-hover: rgba(56, 189, 248, 0.4);
@@ -145,45 +153,6 @@
 @keyframes blink {
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0; }
-}
-
-/* Compose button styling */
-.compose-btn {
-  background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
-  color: #fff;
-  border: 1px solid #38bdf8;
-  padding: 10px 24px;
-  border-radius: 2px;
-  font-weight: 600;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
-  position: relative;
-  overflow: hidden;
-}
-
-.compose-btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-  transition: left 0.5s;
-}
-
-.compose-btn:hover::before {
-  left: 100%;
-}
-
-.compose-btn:hover {
-  box-shadow: 0 0 25px rgba(56, 189, 248, 0.6);
-  border-color: #0ea5e9;
 }
 
 /* Thread item styling */

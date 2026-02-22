@@ -45,8 +45,8 @@ Reads the plan and prepares everything needed for implementation:
 
 1. Decomposes the plan into beads epics and tasks with a dependency DAG
 2. Checks existing worktrees for reuse before creating new ones
-3. Generates implementation prompts by filling in `implementation-agent.md`
-   with feature-specific values
+3. Generates implementation prompts by filling in `implementation-agent.md` with
+   feature-specific values
 4. Creates worktrees and runs the setup script for each
 
 Produces:
@@ -87,13 +87,14 @@ where it left off. Completed work is never redone.
 ## Reference Templates
 
 All templates live in `toolkit/templates/agent-dev-workflow/`. They can be used
-directly for customization or when the skill pipeline does not fit your workflow.
+directly for customization or when the skill pipeline does not fit your
+workflow.
 
-| Template | Status | Purpose |
-|---|---|---|
-| `planning-agent.md` | Reference | Full planning template — superseded by brainstorming + writing-plans + project-setup skills |
-| `worktree-setup.md` | Reference | Worktree creation docs — superseded by project-setup Phase 4 + using-git-worktrees skill |
-| `implementation-agent.md` | Active | Prompt template filled by project-setup skill, given to implementation agents |
+| Template                  | Status    | Purpose                                                                                     |
+| ------------------------- | --------- | ------------------------------------------------------------------------------------------- |
+| `planning-agent.md`       | Reference | Full planning template — superseded by brainstorming + writing-plans + project-setup skills |
+| `worktree-setup.md`       | Reference | Worktree creation docs — superseded by project-setup Phase 4 + using-git-worktrees skill    |
+| `implementation-agent.md` | Active    | Prompt template filled by project-setup skill, given to implementation agents               |
 
 ---
 
@@ -144,16 +145,16 @@ the skill.
 
 ## Source of Truth Hierarchy
 
-| What                               | Lives In                                   | Used By                                |
-| ---------------------------------- | ------------------------------------------ | -------------------------------------- |
-| Design decisions                   | Design doc (`docs/plans/*-design.md`)      | brainstorming, writing-plans           |
-| Phased implementation steps        | Plan file (`docs/plans/*-plan.md`)         | project-setup skill                    |
-| Task details & acceptance criteria | Beads task descriptions                    | Implementation agent                   |
-| Epic structure & dependencies      | Beads epic + `bd dep` relationships        | All agents                             |
-| Implementation progress            | Beads task status + git commit history     | Implementation agent (orient phase)    |
-| Feature-specific instructions      | Prompt (`dev-docs/prompts/{feature}.md`)   | Implementation agent (session start)   |
-| Session state & decisions          | Context (`.thrum/context/{name}.md`)       | Implementation agent (current session) |
-| Code                               | Git worktree                               | Implementation agent                   |
+| What                               | Lives In                                 | Used By                                |
+| ---------------------------------- | ---------------------------------------- | -------------------------------------- |
+| Design decisions                   | Design doc (`docs/plans/*-design.md`)    | brainstorming, writing-plans           |
+| Phased implementation steps        | Plan file (`docs/plans/*-plan.md`)       | project-setup skill                    |
+| Task details & acceptance criteria | Beads task descriptions                  | Implementation agent                   |
+| Epic structure & dependencies      | Beads epic + `bd dep` relationships      | All agents                             |
+| Implementation progress            | Beads task status + git commit history   | Implementation agent (orient phase)    |
+| Feature-specific instructions      | Prompt (`dev-docs/prompts/{feature}.md`) | Implementation agent (session start)   |
+| Session state & decisions          | Context (`.thrum/context/{name}.md`)     | Implementation agent (current session) |
+| Code                               | Git worktree                             | Implementation agent                   |
 
 The templates themselves are guides for how to use these sources — they don't
 duplicate the content.

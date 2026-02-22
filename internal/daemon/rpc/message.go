@@ -1541,7 +1541,7 @@ func (h *MessageHandler) HandleArchive(ctx context.Context, params json.RawMessa
 
 	// Write JSONL archive file
 	archivePath := filepath.Join(archiveDir, req.Identifier+".jsonl")
-	f, err := os.OpenFile(archivePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(archivePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // path built from trusted repo root + validated identifier
 	if err != nil {
 		return nil, fmt.Errorf("open archive file: %w", err)
 	}
@@ -1645,7 +1645,7 @@ func (h *MessageHandler) HandleDeleteByScope(ctx context.Context, params json.Ra
 	if err != nil {
 		return nil, fmt.Errorf("query scoped messages: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var messageIDs []string
 	for rows.Next() {

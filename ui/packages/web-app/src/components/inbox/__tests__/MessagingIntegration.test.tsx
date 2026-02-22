@@ -90,20 +90,10 @@ describe('Messaging Integration Tests', () => {
       expect(screen.getByText('No messages')).toBeInTheDocument();
     });
 
-    it('should render compose button', () => {
+    it('should render compose bar with send button', () => {
       renderWithProvider(<InboxView />);
-      expect(screen.getByText('+ COMPOSE')).toBeInTheDocument();
-    });
-
-    it('should render compose button that is clickable', async () => {
-      const user = userEvent.setup({ delay: null });
-      renderWithProvider(<InboxView />);
-
-      const composeButton = screen.getByText('+ COMPOSE');
-      await user.click(composeButton);
-
-      // Compose button is present and clickable (modal removed in favour of ComposeBar)
-      expect(composeButton).toBeInTheDocument();
+      expect(screen.getByTestId('compose-bar')).toBeInTheDocument();
+      expect(screen.getByText('Send')).toBeInTheDocument();
     });
   });
 

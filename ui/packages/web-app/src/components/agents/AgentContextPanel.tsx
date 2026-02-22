@@ -26,26 +26,33 @@ export function AgentContextPanel({ agentId }: AgentContextPanelProps) {
 
   // Show empty state if no contexts exist for this agent
   if (!data || data.length === 0) {
+    const displayName = agentId.split(':').slice(-1)[0] || agentId;
     return (
       <div className="agent-context-panel panel p-4 mb-4">
         <div className="text-center py-6">
           <p className="text-muted-foreground text-sm">No active session</p>
         </div>
+        <div className="mt-4 pt-4 border-t border-slate-700">
+          <button
+            onClick={() => setDeleteDialogOpen(true)}
+            className="w-full px-4 py-2 bg-red-600/10 hover:bg-red-600/20 text-red-400 rounded border border-red-600/30 transition-colors"
+            data-testid="open-delete-dialog"
+          >
+            Delete Agent
+          </button>
+        </div>
+        <AgentDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          agentName={displayName}
+          agentId={agentId}
+        />
       </div>
     );
   }
 
   // Display the first (most recent) context
-  const context = data[0];
-  if (!context) {
-    return (
-      <div className="agent-context-panel panel p-4 mb-4">
-        <div className="text-center py-6">
-          <p className="text-muted-foreground text-sm">No active session</p>
-        </div>
-      </div>
-    );
-  }
+  const context = data[0]!;
 
   const displayName = context.agent_id.split(':').slice(-1)[0] || context.agent_id;
 
@@ -78,11 +85,11 @@ export function AgentContextPanel({ agentId }: AgentContextPanelProps) {
         </div>
         <div className="context-row">
           <span className="context-label">UNCOMMITTED</span>
-          <span className="context-value">{context.uncommitted_files.length} files</span>
+          <span className="context-value">{context.uncommitted_files?.length ?? 0} files</span>
         </div>
         <div className="context-row">
           <span className="context-label">CHANGED</span>
-          <span className="context-value">{context.changed_files.length} files</span>
+          <span className="context-value">{context.changed_files?.length ?? 0} files</span>
         </div>
         <div className="context-row">
           <span className="context-label">HEARTBEAT</span>

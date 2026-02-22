@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@/test/test-utils';
 import { DashboardPage } from '../DashboardPage';
-import { selectLiveFeed, selectMyInbox, selectAgent, selectGroup, uiStore } from '@thrum/shared-logic';
+import { selectLiveFeed, selectMyInbox, selectAgent, selectGroup, selectSettings, uiStore } from '@thrum/shared-logic';
 import * as sharedLogic from '@thrum/shared-logic';
 import { mockHookReturns } from '@/test/mocks';
 
@@ -15,6 +15,7 @@ vi.mock('@thrum/shared-logic', async () => {
     useGroupList: vi.fn(),
     useSendMessage: vi.fn(),
     useMarkAsRead: vi.fn(),
+    useHealth: vi.fn(),
   };
 });
 
@@ -49,6 +50,11 @@ describe('DashboardPage', () => {
     } as any);
     vi.mocked(sharedLogic.useSendMessage).mockReturnValue(mockHookReturns.useMutation() as any);
     vi.mocked(sharedLogic.useMarkAsRead).mockReturnValue(mockHookReturns.useMutation() as any);
+    vi.mocked(sharedLogic.useHealth).mockReturnValue({
+      data: { status: 'ok', version: '0.4.5', uptime_ms: 60000, repo_id: 'test', sync_state: 'synced' },
+      isLoading: false,
+      error: null,
+    } as any);
   });
 
   it('should render FeedView by default', () => {
@@ -123,5 +129,11 @@ describe('DashboardPage', () => {
     });
     render(<DashboardPage />);
     expect(screen.queryByTestId('group-channel-header')).not.toBeInTheDocument();
+  });
+
+  it('should render SettingsView when selectedView is settings', () => {
+    selectSettings();
+    render(<DashboardPage />);
+    expect(screen.getByText('Daemon Status')).toBeInTheDocument();
   });
 });

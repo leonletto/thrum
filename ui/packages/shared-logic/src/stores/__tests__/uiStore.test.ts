@@ -6,6 +6,7 @@ import {
   selectGroup,
   selectMyInbox,
   selectLiveFeed,
+  selectSettings,
 } from '../uiStore';
 
 describe('uiStore', () => {
@@ -102,5 +103,13 @@ describe('uiStore', () => {
     setSelectedView('group-channel');
     expect(uiStore.state.selectedView).toBe('group-channel');
     expect(uiStore.state.selectedGroupName).toBe('backend');
+  });
+
+  it('should set view to settings with selectSettings', () => {
+    selectAgent('agent:test');
+    selectSettings();
+    expect(uiStore.state.selectedView).toBe('settings');
+    expect(uiStore.state.selectedAgentId).toBe(null);
+    expect(uiStore.state.selectedGroupName).toBe(null);
   });
 });

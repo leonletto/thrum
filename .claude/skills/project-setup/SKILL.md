@@ -1,15 +1,21 @@
 ---
 name: project-setup
-description: Use when converting a plan file (from writing-plans skill) into beads epics, tasks, implementation prompts, and worktrees — before any coding begins
+description:
+  Use when converting a plan file (from writing-plans skill) into beads epics,
+  tasks, implementation prompts, and worktrees — before any coding begins
 ---
 
 # Project Setup
 
-Convert a plan file into beads epics and tasks with TDD-quality descriptions, filled implementation prompts, and ready-to-use worktrees.
+Convert a plan file into beads epics and tasks with TDD-quality descriptions,
+filled implementation prompts, and ready-to-use worktrees.
 
-**Core principle:** Task descriptions are the source of truth. Each task is a self-contained implementation guide — detailed enough for an agent to work autonomously.
+**Core principle:** Task descriptions are the source of truth. Each task is a
+self-contained implementation guide — detailed enough for an agent to work
+autonomously.
 
-**Announce at start:** "I'm using the project-setup skill to decompose this plan into epics and tasks."
+**Announce at start:** "I'm using the project-setup skill to decompose this plan
+into epics and tasks."
 
 ## When to Use
 
@@ -33,13 +39,16 @@ digraph when_to_use {
 ```
 
 **Don't use when:**
+
 - No design doc exists yet — use brainstorming skill first
 - No plan file exists yet — use writing-plans skill first
 - Tasks already exist in beads — go straight to implementation
 
 ## Inputs
 
-Primary input: **plan file path** (output of writing-plans, e.g. `docs/plans/2026-02-21-feature-plan.md`). The plan references the design doc — both are read in Phase 1.
+Primary input: **plan file path** (output of writing-plans, e.g.
+`docs/plans/2026-02-21-feature-plan.md`). The plan references the design doc —
+both are read in Phase 1.
 
 Also needed from CLAUDE.md or conversation context:
 
@@ -52,7 +61,8 @@ If any are missing, ask the user (prefer multiple choice when possible).
 
 ## Phase 1: Understand the Plan
 
-Read the plan file and the design doc it references. Identify major phases, components, data flow, and interfaces.
+Read the plan file and the design doc it references. Identify major phases,
+components, data flow, and interfaces.
 
 Use sub-agents to explore the codebase in parallel:
 
@@ -69,9 +79,11 @@ Task(subagent_type="general-purpose", model="haiku", run_in_background=true,
   Write to output/planning/beads-context.md")
 ```
 
-After agents complete, read the output files. Check `bd list` / `bd ready` / `bd blocked` for related or overlapping work.
+After agents complete, read the output files. Check `bd list` / `bd ready` /
+`bd blocked` for related or overlapping work.
 
-Ask the user focused questions (prefer multiple choice) about anything the plan leaves ambiguous — constraints, scope boundaries, patterns to follow.
+Ask the user focused questions (prefer multiple choice) about anything the plan
+leaves ambiguous — constraints, scope boundaries, patterns to follow.
 
 ## Phase 2: Decompose into Epics & Tasks
 
@@ -84,7 +96,8 @@ Map each plan phase to a beads epic. Each epic should:
 - Have clear boundaries (a single worktree/branch per epic)
 - Map to a logical layer or component from the design spec
 
-**Naming:** Imperative form — "Implement Sync Protocol", "Build Session Manager", "Create Filter Component".
+**Naming:** Imperative form — "Implement Sync Protocol", "Build Session
+Manager", "Create Filter Component".
 
 Present the epic breakdown to the user for approval before creating anything.
 
@@ -103,11 +116,14 @@ bd list --status=in_progress
 Also check the worktree table in the project's root CLAUDE.md.
 
 **Decision criteria:**
+
 - Suggest **reusing** an idle worktree when its branch relates to the epic
 - Suggest **reusing** a worktree that has no in-progress beads tasks
 - Propose a **new worktree** only when no existing one is a reasonable fit
 
-Propose branch names for any new worktrees. Derive paths from the CLAUDE.md convention (e.g. `~/.workspaces/{repo}/{feature}`). Do not ask — infer from context.
+Propose branch names for any new worktrees. Derive paths from the CLAUDE.md
+convention (e.g. `~/.workspaces/{repo}/{feature}`). Do not ask — infer from
+context.
 
 ### Create Epics in Beads
 
@@ -137,7 +153,8 @@ Task(subagent_type="general-purpose", model="haiku",
   ...")
 ```
 
-After sub-agents return IDs, set cross-epic dependencies directly (requires IDs from multiple sub-agents):
+After sub-agents return IDs, set cross-epic dependencies directly (requires IDs
+from multiple sub-agents):
 
 ```bash
 bd dep add <epic-2-id> <epic-1-id>
@@ -203,7 +220,8 @@ git commit -m "feat(module): add specific feature"
 | Testing-only         | N/A                      | Full test code with scenarios and edge cases  |
 | Documentation        | N/A (outline only)       | Verification: doc renders, links work         |
 
-**Granularity:** Each task should be completable in one focused session (30-90 minutes). If a task has more than 5 steps, split it.
+**Granularity:** Each task should be completable in one focused session (30-90
+minutes). If a task has more than 5 steps, split it.
 
 ### Verify Setup
 
@@ -218,7 +236,9 @@ Before proceeding to Phase 3:
 
 ## Phase 3: Generate Implementation Prompts
 
-For each epic/worktree assignment, fill the `toolkit/templates/agent-dev-workflow/implementation-agent.md` template and save to `dev-docs/prompts/{feature}.md`.
+For each epic/worktree assignment, fill the
+`toolkit/templates/agent-dev-workflow/implementation-agent.md` template and save
+to `dev-docs/prompts/{feature}.md`.
 
 **Placeholder table:**
 
@@ -239,10 +259,8 @@ Add a header with quick context before the filled template:
 ```markdown
 # Implementation Prompt: {{FEATURE_NAME}}
 
-> Generated by project-setup on YYYY-MM-DD
-> Plan: {{PLAN_FILE}}
-> Design doc: {{DESIGN_DOC}}
-> Epic: {{EPIC_ID}} (N tasks)
+> Generated by project-setup on YYYY-MM-DD Plan: {{PLAN_FILE}} Design doc:
+> {{DESIGN_DOC}} Epic: {{EPIC_ID}} (N tasks)
 
 ## Quick Context
 
@@ -251,7 +269,7 @@ Add a header with quick context before the filled template:
 ## Worktree Setup
 
 ./scripts/setup-worktree-thrum.sh {{WORKTREE_PATH}} {{BRANCH_NAME}} \
-  --identity {{AGENT_NAME}} --role implementer
+ --identity {{AGENT_NAME}} --role implementer
 
 ## Implementation Agent Template
 
@@ -284,19 +302,28 @@ cat .thrum/redirect    # should point to <project-root>/.thrum
 cat .beads/redirect    # should point to <project-root>/.beads
 ```
 
-If the project root CLAUDE.md has a worktree table, update it with any new entries.
+If the project root CLAUDE.md has a worktree table, update it with any new
+entries.
 
 ## Common Mistakes
 
-**Too vague tasks:** "Add validation" is not a step — `if err := validate(input); err != nil { return fmt.Errorf(...) }` is. Prefer complete code over pseudocode.
+**Too vague tasks:** "Add validation" is not a step —
+`if err := validate(input); err != nil { return fmt.Errorf(...) }` is. Prefer
+complete code over pseudocode.
 
-**Too large tasks:** If a task has more than 5 steps, split it. Each task = one focused session.
+**Too large tasks:** If a task has more than 5 steps, split it. Each task = one
+focused session.
 
-**Missing dependencies:** Forgetting cross-epic deps leads to agents starting work they can't finish. Always run `bd blocked` to verify.
+**Missing dependencies:** Forgetting cross-epic deps leads to agents starting
+work they can't finish. Always run `bd blocked` to verify.
 
-**Skipping worktree reuse check:** Always run `git worktree list` and check `bd list --status=in_progress` before proposing new worktrees. Creating unnecessary worktrees adds overhead and clutter.
+**Skipping worktree reuse check:** Always run `git worktree list` and check
+`bd list --status=in_progress` before proposing new worktrees. Creating
+unnecessary worktrees adds overhead and clutter.
 
-**Skipping the plan file:** This skill reads the plan file (from writing-plans) as primary input. If you only have a design doc, use writing-plans first to produce the plan.
+**Skipping the plan file:** This skill reads the plan file (from writing-plans)
+as primary input. If you only have a design doc, use writing-plans first to
+produce the plan.
 
 ## Output Summary
 
@@ -309,4 +336,7 @@ When complete, you should have produced:
 
 ## Handoff
 
-After setup is complete, each epic is ready for an implementation agent. The filled prompt at `dev-docs/prompts/{feature}.md` is the session start prompt — give it directly to the implementing agent. Use the **using-git-worktrees** skill if additional workspace setup is needed.
+After setup is complete, each epic is ready for an implementation agent. The
+filled prompt at `dev-docs/prompts/{feature}.md` is the session start prompt —
+give it directly to the implementing agent. Use the **using-git-worktrees**
+skill if additional workspace setup is needed.

@@ -4,6 +4,7 @@ import { FeedView } from '../components/feed/FeedView';
 import { InboxView } from '../components/inbox/InboxView';
 import { AgentContextPanel } from '../components/agents/AgentContextPanel';
 import { WhoHasView } from '../components/coordination/WhoHasView';
+import { SettingsView } from '../components/settings/SettingsView';
 import { GroupChannelView } from '../components/groups/GroupChannelView';
 import { uiStore, useRealtimeMessages, useBrowserNotifications, useCurrentUser } from '@thrum/shared-logic';
 
@@ -32,6 +33,7 @@ export function DashboardPage() {
         </div>
       )}
       {selectedView === 'who-has' && <WhoHasView />}
+      {selectedView === 'settings' && <SettingsView />}
       {selectedView === 'group-channel' && selectedGroupName && (
         <GroupChannelView groupName={selectedGroupName} />
       )}
