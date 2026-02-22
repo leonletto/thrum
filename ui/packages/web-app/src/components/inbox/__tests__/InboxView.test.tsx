@@ -13,6 +13,7 @@ vi.mock('@thrum/shared-logic', async () => {
   return {
     ...actual,
     useCurrentUser: vi.fn(),
+    loadStoredUser: vi.fn(),
     useMessageList: vi.fn(),
     useMarkAsRead: vi.fn(),
     useSendMessage: vi.fn(),
@@ -54,6 +55,8 @@ describe('InboxView', () => {
       display_name: 'Test User',
       created_at: '2024-01-01T00:00:00Z',
     });
+
+    vi.mocked(hooks.loadStoredUser).mockReturnValue(null);
 
     vi.mocked(hooks.useMessageList).mockReturnValue({
       data: { messages: [], page: 1, page_size: 50, total: 0, total_pages: 0 },
@@ -331,5 +334,38 @@ describe('InboxView', () => {
   it('shows impersonation text in header when viewing agent inbox', () => {
     renderWithProvider(<InboxView identityId="agent:claude" />);
     expect(screen.getByText(/Sending as agent:claude/)).toBeInTheDocument();
+  });
+
+  // ─── 8. Identity fallback (thrum-wjt0) ────────────────────────────────────
+
+  it('falls back to stored user username when React Query cache is empty', () => {
+    vi.mocked(hooks.useCurrentUser).mockReturnValue(undefined);
+    vi.mocked(hooks.loadStoredUser).mockReturnValue({
+      user_id: 'user:thrum',
+      username: 'thrum',
+      token: 'tok',
+    });
+
+    renderWithProvider(<InboxView />);
+
+    expect(screen.getByRole('heading', { name: 'thrum' })).toBeInTheDocument();
+  });
+
+  it('falls back to "Thrum User" when both React Query cache and localStorage are empty', () => {
+    vi.mocked(hooks.useCurrentUser).mockReturnValue(undefined);
+    vi.mocked(hooks.loadStoredUser).mockReturnValue(null);
+
+    renderWithProvider(<InboxView />);
+
+    expect(screen.getByRole('heading', { name: 'Thrum User' })).toBeInTheDocument();
+  });
+
+  it('does not show "Unknown" as inbox heading when identity cannot be resolved', () => {
+    vi.mocked(hooks.useCurrentUser).mockReturnValue(undefined);
+    vi.mocked(hooks.loadStoredUser).mockReturnValue(null);
+
+    renderWithProvider(<InboxView />);
+
+    expect(screen.queryByRole('heading', { name: 'Unknown' })).not.toBeInTheDocument();
   });
 });

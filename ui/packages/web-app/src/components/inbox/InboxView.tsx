@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import {
   useCurrentUser,
+  loadStoredUser,
   useMessageList,
   type MessageScope,
 } from '@thrum/shared-logic';
@@ -26,8 +27,15 @@ export function InboxView({ identityId }: InboxViewProps) {
     senderName: string;
   } | undefined>(undefined);
 
-  // Determine the identity whose inbox we're viewing
-  const identity = identityId || currentUser?.username || 'Unknown';
+  // Determine the identity whose inbox we're viewing.
+  // Falls back to localStorage-persisted user (available before React Query
+  // cache is populated) and finally to a friendly default instead of "Unknown".
+  const storedUser = loadStoredUser();
+  const identity =
+    identityId ||
+    currentUser?.username ||
+    storedUser?.username ||
+    'Thrum User';
 
   // Determine sending identity based on whose inbox we're viewing
   const sendingAs = useMemo(() => {
