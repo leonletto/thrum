@@ -78,21 +78,30 @@ export const MessageSchema = z.object({
   message_id: z.string(),
   thread_id: z.string().optional(),
   agent_id: z.string().optional(),
-  session_id: z.string().optional(),
   created_at: z.string(),
   updated_at: z.string().optional(),
   deleted_at: z.string().optional(),
   body: MessageBodySchema,
-  scopes: z.array(MessageScopeSchema),
-  refs: z.array(MessageRefSchema),
-  authored_by: z.string().optional(), // Actual author when impersonating
-  disclosed: z.boolean().optional(),   // Whether to show [via user:X] in UI
-  is_read: z.boolean().optional(),     // Whether message has been read (for mark as read)
-  mentions: z.array(z.string()).optional(), // Array of agent roles mentioned in message
-  priority: z.enum(['normal', 'high', 'low']).optional(), // Message priority level
+  is_read: z.boolean().optional(),
+  reply_to: z.string().optional(),
+  // Optional in list responses, guaranteed in detail responses
+  session_id: z.string().optional(),
+  scopes: z.array(MessageScopeSchema).optional(),
+  refs: z.array(MessageRefSchema).optional(),
+  authored_by: z.string().optional(),
+  disclosed: z.boolean().optional(),
+  mentions: z.array(z.string()).optional(),
 });
 
 export type Message = z.infer<typeof MessageSchema>;
+
+export const MessageDetailSchema = MessageSchema.extend({
+  session_id: z.string(),
+  scopes: z.array(MessageScopeSchema),
+  refs: z.array(MessageRefSchema),
+});
+
+export type MessageDetail = z.infer<typeof MessageDetailSchema>;
 
 export const SendMessageRequestSchema = z.object({
   content: z.string(),
@@ -100,10 +109,11 @@ export const SendMessageRequestSchema = z.object({
   scopes: z.array(MessageScopeSchema).optional(),
   refs: z.array(MessageRefSchema).optional(),
   body: MessageBodySchema.optional(),
-  acting_as: z.string().optional(), // Impersonate this agent (users only)
-  disclosed: z.boolean().optional(), // Show [via user:X] in message
-  mentions: z.array(z.string()).optional(), // Array of agent roles mentioned in message
-  priority: z.enum(['normal', 'high', 'low']).optional(), // Message priority level
+  acting_as: z.string().optional(),
+  disclosed: z.boolean().optional(),
+  mentions: z.array(z.string()).optional(),
+  reply_to: z.string().optional(),
+  caller_agent_id: z.string().optional(),
 });
 
 export type SendMessageRequest = z.infer<typeof SendMessageRequestSchema>;
@@ -112,6 +122,8 @@ export const SendMessageResponseSchema = z.object({
   message_id: z.string(),
   thread_id: z.string().optional(),
   created_at: z.string(),
+  resolved_to: z.number().optional(),
+  warnings: z.array(z.string()).optional(),
 });
 
 export type SendMessageResponse = z.infer<typeof SendMessageResponseSchema>;
@@ -119,6 +131,8 @@ export type SendMessageResponse = z.infer<typeof SendMessageResponseSchema>;
 export const MessageListRequestSchema = z.object({
   thread_id: z.string().optional(),
   author_id: z.string().optional(),
+  for_agent: z.string().optional(),
+  unread_for_agent: z.string().optional(),
   scope: MessageScopeSchema.optional(),
   ref: MessageRefSchema.optional(),
   page_size: z.number().optional(),
@@ -133,7 +147,7 @@ export const MessageListResponseSchema = z.object({
   messages: z.array(MessageSchema),
   page: z.number(),
   page_size: z.number(),
-  total_count: z.number(),
+  total: z.number(),
   total_pages: z.number(),
 });
 
@@ -151,41 +165,6 @@ export const MarkAsReadResponseSchema = z.object({
 });
 
 export type MarkAsReadResponse = z.infer<typeof MarkAsReadResponseSchema>;
-
-/**
- * Thread types
- */
-export const ThreadSchema = z.object({
-  thread_id: z.string(),
-  title: z.string().optional(),
-  created_at: z.string(),
-  created_by: z.string().optional(),
-  message_count: z.number().optional(),
-  last_message_at: z.string().optional(),
-  unread_count: z.number().optional(),   // Number of unread messages in thread
-  last_sender: z.string().optional(),    // Identity of last message sender
-  preview: z.string().optional(),        // Preview snippet of last message
-  last_activity: z.string().optional(),  // Timestamp of last activity
-});
-
-export type Thread = z.infer<typeof ThreadSchema>;
-
-export const ThreadListResponseSchema = z.object({
-  threads: z.array(ThreadSchema),
-  page: z.number(),
-  page_size: z.number(),
-  total_count: z.number(),
-  total_pages: z.number(),
-});
-
-export type ThreadListResponse = z.infer<typeof ThreadListResponseSchema>;
-
-export const ThreadGetResponseSchema = ThreadSchema.extend({
-  messages: z.array(MessageSchema),
-  total_messages: z.number(),
-});
-
-export type ThreadGetResponse = z.infer<typeof ThreadGetResponseSchema>;
 
 /**
  * Subscription types
@@ -248,3 +227,61 @@ export const AgentContextListResponseSchema = z.object({
 });
 
 export type AgentContextListResponse = z.infer<typeof AgentContextListResponseSchema>;
+
+/**
+ * Group types
+ */
+export const GroupSchema = z.object({
+  group_id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  member_count: z.number(),
+  created_at: z.string(),
+});
+
+export type Group = z.infer<typeof GroupSchema>;
+
+export const GroupMemberSchema = z.object({
+  member_type: z.enum(['agent', 'role']),
+  member_value: z.string(),
+  added_at: z.string(),
+  added_by: z.string().optional(),
+});
+
+export type GroupMember = z.infer<typeof GroupMemberSchema>;
+
+export const GroupInfoSchema = z.object({
+  group_id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  created_at: z.string(),
+  created_by: z.string().optional(),
+  members: z.array(GroupMemberSchema),
+});
+
+export type GroupInfo = z.infer<typeof GroupInfoSchema>;
+
+export const GroupListResponseSchema = z.object({
+  groups: z.array(GroupSchema),
+});
+
+export type GroupListResponse = z.infer<typeof GroupListResponseSchema>;
+
+/**
+ * Session types
+ */
+export const SessionSchema = z.object({
+  session_id: z.string(),
+  agent_id: z.string(),
+  started_at: z.string(),
+  ended_at: z.string().optional(),
+  active: z.boolean(),
+});
+
+export type Session = z.infer<typeof SessionSchema>;
+
+export const SessionListResponseSchema = z.object({
+  sessions: z.array(SessionSchema),
+});
+
+export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;

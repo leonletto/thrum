@@ -4353,6 +4353,9 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("message.delete", messageHandler.HandleDelete)
 	server.RegisterHandler("message.edit", messageHandler.HandleEdit)
 	server.RegisterHandler("message.markRead", messageHandler.HandleMarkRead)
+	server.RegisterHandler("message.deleteByScope", messageHandler.HandleDeleteByScope)
+	server.RegisterHandler("message.deleteByAgent", messageHandler.HandleDeleteByAgent)
+	server.RegisterHandler("message.archive", messageHandler.HandleArchive)
 
 	// Subscription management
 	subscriptionHandler := rpc.NewSubscriptionHandler(st)
@@ -4550,6 +4553,9 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsRegistry.Register("message.delete", websocket.Handler(messageHandler.HandleDelete))
 	wsRegistry.Register("message.edit", websocket.Handler(messageHandler.HandleEdit))
 	wsRegistry.Register("message.markRead", websocket.Handler(messageHandler.HandleMarkRead))
+	wsRegistry.Register("message.deleteByAgent", websocket.Handler(messageHandler.HandleDeleteByAgent))
+	wsRegistry.Register("message.deleteByScope", websocket.Handler(messageHandler.HandleDeleteByScope))
+	wsRegistry.Register("message.archive", websocket.Handler(messageHandler.HandleArchive))
 	wsRegistry.Register("subscribe", websocket.Handler(subscriptionHandler.HandleSubscribe))
 	wsRegistry.Register("unsubscribe", websocket.Handler(subscriptionHandler.HandleUnsubscribe))
 	wsRegistry.Register("subscriptions.list", websocket.Handler(subscriptionHandler.HandleList))

@@ -28,7 +28,7 @@ function isMentioned(message: Message, currentIdentity: string): boolean {
  */
 function isDirectMessage(message: Message, currentUserId: string): boolean {
   // Check if message has a scope targeting this specific user
-  return message.scopes.some(
+  return (message.scopes ?? []).some(
     (scope) => scope.type === 'user' && scope.value === currentUserId
   );
 }
@@ -86,7 +86,7 @@ export function useBrowserNotifications(
   }, [enabled]);
 
   // Listen for new messages
-  useWebSocketEvent<{ message: Message }>('message.created', (data) => {
+  useWebSocketEvent<{ message: Message }>('notification.message', (data) => {
     if (!enabled || !currentUserId) return;
 
     const message = data.message;

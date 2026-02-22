@@ -778,6 +778,39 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 
 	// Re-lock for DB delete + event write
 	h.state.Lock()
+
+	// Delete orphaned messages for this agent before removing the agent row.
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_edits WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.Name)
+	if err != nil {
+		h.state.Unlock()
+		return nil, fmt.Errorf("delete message edits for agent: %w", err)
+	}
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_reads WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.Name)
+	if err != nil {
+		h.state.Unlock()
+		return nil, fmt.Errorf("delete message reads for agent: %w", err)
+	}
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_refs WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.Name)
+	if err != nil {
+		h.state.Unlock()
+		return nil, fmt.Errorf("delete message refs for agent: %w", err)
+	}
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_scopes WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.Name)
+	if err != nil {
+		h.state.Unlock()
+		return nil, fmt.Errorf("delete message scopes for agent: %w", err)
+	}
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM messages WHERE agent_id = ?", req.Name)
+	if err != nil {
+		h.state.Unlock()
+		return nil, fmt.Errorf("delete messages for agent: %w", err)
+	}
+
 	_, err = h.state.DB().ExecContext(ctx, "DELETE FROM agents WHERE agent_id = ?", req.Name)
 	if err != nil {
 		h.state.Unlock()

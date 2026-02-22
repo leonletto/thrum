@@ -18,19 +18,6 @@ export const mockFactories = {
     ...overrides,
   }),
 
-  thread: (overrides = {}) => ({
-    thread_id: 'thread-test-1',
-    title: 'Test Thread',
-    created_by: 'user:test',
-    created_at: '2024-01-01T10:00:00Z',
-    message_count: 3,
-    last_activity: '2024-01-01T12:00:00Z',
-    unread_count: 0,
-    last_sender: 'agent:test',
-    preview: 'Test message preview',
-    ...overrides,
-  }),
-
   message: (overrides = {}) => ({
     message_id: 'msg-test-1',
     thread_id: 'thread-test-1',
@@ -64,35 +51,6 @@ export const mockHookReturns = {
 
   useAgentListEmpty: () => ({
     data: { agents: [] },
-    isLoading: false,
-    error: null,
-  }),
-
-  useThreadList: (threads = [mockFactories.thread()]) => ({
-    data: { threads },
-    isLoading: false,
-    error: null,
-  }),
-
-  useThreadListEmpty: () => ({
-    data: { threads: [] },
-    isLoading: false,
-    error: null,
-  }),
-
-  useThread: (messages = [mockFactories.message()]) => ({
-    data: {
-      thread_id: 'thread-test-1',
-      title: 'Test Thread',
-      messages,
-      total_messages: messages.length,
-    },
-    isLoading: false,
-    error: null,
-  }),
-
-  useThreadEmpty: () => ({
-    data: undefined,
     isLoading: false,
     error: null,
   }),
