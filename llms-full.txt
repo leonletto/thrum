@@ -622,6 +622,24 @@ All commands accept:
   Usage:    thrum runtime set-default <name>
   Action:   Sets the default runtime preset for the repository.
 
+### thrum roles list
+
+  Usage:    thrum roles list
+  Action:   Lists all role templates in .thrum/role_templates/ and shows which
+            registered agents match each template.
+  Output:   coordinator.md    (2 agents: coord_main, coord_api)
+            implementer.md    (3 agents: impl_auth, impl_payments, impl_ui)
+
+### thrum roles deploy
+
+  Usage:    thrum roles deploy [--agent NAME] [--dry-run]
+  Action:   Re-renders preambles for all registered agents from role templates.
+            Templates in .thrum/role_templates/ are rendered with each agent's
+            identity data and written to .thrum/context/{agent}_preamble.md.
+            Full overwrite — templates are the source of truth.
+  Flags:    --agent NAME    Deploy for a specific agent only
+            --dry-run       Preview changes without writing files
+
 ### thrum config show
 
   Usage:    thrum config show [--json]
