@@ -1826,6 +1826,11 @@ The agent identity is determined from:
 					// Warn but don't fail - registration succeeded
 					fmt.Fprintf(os.Stderr, "Warning: failed to save identity file: %v\n", err)
 				}
+
+				// Apply preamble: role template > default (no --preamble-file for register)
+				if err := applyRolePreamble(thrumDir, savedName, flagRole, ""); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to apply preamble: %v\n", err)
+				}
 			}
 
 			if flagJSON {
@@ -3824,28 +3829,9 @@ Examples:
 					}
 				}
 
-				// Preamble priority: --preamble-file > role template > default
-				if preambleFile != "" {
-					// --preamble-file takes precedence over everything
-					customContent, err := os.ReadFile(preambleFile) //nolint:gosec // G304 - user-provided flag path
-					if err != nil {
-						return fmt.Errorf("failed to read preamble file %q: %w", preambleFile, err)
-					}
-					composed := append(agentcontext.DefaultPreamble(), []byte("\n---\n\n")...)
-					composed = append(composed, customContent...)
-					if err := agentcontext.SavePreamble(thrumDir, savedName, composed); err != nil {
-						return fmt.Errorf("failed to save composed preamble: %w", err)
-					}
-				} else if rendered, renderErr := agentcontext.RenderRoleTemplate(thrumDir, savedName, flagRole); renderErr == nil && rendered != nil {
-					// Role template found - use it as the preamble
-					if err := agentcontext.SavePreamble(thrumDir, savedName, rendered); err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: failed to save role template preamble: %v\n", err)
-					}
-				} else {
-					// Fall back to default preamble
-					if err := agentcontext.EnsurePreamble(thrumDir, savedName); err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
-					}
+				// Apply preamble: --preamble-file > role template > default
+				if err := applyRolePreamble(thrumDir, savedName, flagRole, preambleFile); err != nil {
+					return err
 				}
 			}
 
@@ -4748,7 +4734,7 @@ Examples:
 
 			if len(templates) == 0 {
 				fmt.Println("No role templates found in .thrum/role_templates/")
-				fmt.Println("  Create templates manually or use: thrum configure-roles")
+				fmt.Println("  Create templates manually or use: /thrum:configure-roles")
 				return nil
 			}
 
@@ -4822,6 +4808,41 @@ Examples:
 	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files")
 
 	return cmd
+}
+
+// applyRolePreamble applies the preamble for an agent using the priority:
+// preambleFile > role template > default. Called from both quickstart and agent register.
+func applyRolePreamble(thrumDir, agentName, role, preambleFile string) error {
+	if preambleFile != "" {
+		// --preamble-file takes precedence over everything
+		customContent, err := os.ReadFile(preambleFile) //nolint:gosec // G304 - user-provided flag path
+		if err != nil {
+			return fmt.Errorf("failed to read preamble file %q: %w", preambleFile, err)
+		}
+		composed := append(agentcontext.DefaultPreamble(), []byte("\n---\n\n")...)
+		composed = append(composed, customContent...)
+		if err := agentcontext.SavePreamble(thrumDir, agentName, composed); err != nil {
+			return fmt.Errorf("failed to save composed preamble: %w", err)
+		}
+		return nil
+	}
+
+	rendered, renderErr := agentcontext.RenderRoleTemplate(thrumDir, agentName, role)
+	if renderErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to render role template for %q: %v (using default)\n", role, renderErr)
+	} else if rendered != nil {
+		// Role template found — use it as the preamble
+		if err := agentcontext.SavePreamble(thrumDir, agentName, rendered); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save role template preamble: %v\n", err)
+		}
+		return nil
+	}
+
+	// Fall back to default preamble
+	if err := agentcontext.EnsurePreamble(thrumDir, agentName); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
+	}
+	return nil
 }
 
 // getWorktreeName extracts the worktree name from the repo path.
