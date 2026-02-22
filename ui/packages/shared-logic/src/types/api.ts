@@ -133,6 +133,7 @@ export const MessageListRequestSchema = z.object({
   author_id: z.string().optional(),
   for_agent: z.string().optional(),
   unread_for_agent: z.string().optional(),
+  mention: z.string().optional(),
   scope: MessageScopeSchema.optional(),
   ref: MessageRefSchema.optional(),
   page_size: z.number().optional(),

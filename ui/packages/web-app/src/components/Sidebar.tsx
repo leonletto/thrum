@@ -38,7 +38,9 @@ function GroupSidebarItem({ group, active }: GroupSidebarItemProps) {
       await ensureConnected();
       return wsClient.call<MessageListResponse>('message.list', request);
     },
+    enabled: !!currentUser,
     staleTime: 60000,
+    refetchInterval: 60000,
   });
   const unreadCount = data?.total ?? 0;
 

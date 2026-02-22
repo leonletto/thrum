@@ -73,14 +73,20 @@ vi.mock('@thrum/shared-logic', async () => {
   };
 });
 
+// Per-agent unread counts returned by the mocked useQuery
+const agentUnreadCounts: Record<string, number> = {
+  'agent:claude-daemon': 2,
+  'agent:claude-cli': 0,
+};
+
 // Mock @tanstack/react-query useQuery to intercept unread-count queries
 vi.mock('@tanstack/react-query', async () => {
   const actual = await vi.importActual('@tanstack/react-query');
   return {
     ...actual,
     useQuery: (options: any) => {
-      // Detect group unread queries by their query key shape
       const key = options?.queryKey;
+      // Detect group unread queries by their query key shape
       if (
         Array.isArray(key) &&
         key[0] === 'messages' &&
@@ -89,6 +95,17 @@ vi.mock('@tanstack/react-query', async () => {
       ) {
         const groupName = key[2].scope.value as string;
         const total = unreadCounts[groupName] ?? 0;
+        return { data: { messages: [], page: 1, page_size: 1, total, total_pages: 1 }, isLoading: false };
+      }
+      // Detect agent unread queries by their query key shape
+      if (
+        Array.isArray(key) &&
+        key[0] === 'messages' &&
+        key[1] === 'list' &&
+        key[2]?.for_agent !== undefined
+      ) {
+        const agentId = key[2].for_agent as string;
+        const total = agentUnreadCounts[agentId] ?? 0;
         return { data: { messages: [], page: 1, page_size: 1, total, total_pages: 1 }, isLoading: false };
       }
       // Fall through to actual useQuery for other queries
@@ -219,5 +236,23 @@ describe('Sidebar', () => {
     expect(screen.getByText(/tools/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /who has/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument();
+  });
+
+  test('shows unread badge on agent item when there are unread messages', () => {
+    render(<Sidebar />);
+
+    // 'agent:claude-daemon' has 2 unread messages in the mock
+    const daemonButton = screen.getByRole('button', { name: /claude daemon/i });
+    expect(daemonButton).toBeInTheDocument();
+    expect(daemonButton.textContent).toContain('2');
+  });
+
+  test('does not show unread badge on agent item with zero unread messages', () => {
+    render(<Sidebar />);
+
+    // 'agent:claude-cli' has 0 unread messages in the mock — badge should not appear
+    const cliButton = screen.getByRole('button', { name: /claude cli/i });
+    expect(cliButton).toBeInTheDocument();
+    expect(cliButton.textContent).not.toContain('0');
   });
 });

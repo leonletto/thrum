@@ -4,6 +4,41 @@ import { userEvent } from '@testing-library/user-event';
 import { AgentCard } from '../AgentCard';
 import type { Agent } from '@thrum/shared-logic';
 
+// Mock shared-logic to control useCurrentUser
+vi.mock('@thrum/shared-logic', async () => {
+  const actual = await vi.importActual('@thrum/shared-logic');
+  return {
+    ...actual,
+    useCurrentUser: () => ({ user_id: 'user:test', username: 'test', token: 'tok', status: 'existing' }),
+    ensureConnected: vi.fn().mockResolvedValue(undefined),
+    wsClient: { call: vi.fn() },
+  };
+});
+
+// Mock @tanstack/react-query useQuery to intercept unread-count queries for agents
+vi.mock('@tanstack/react-query', async () => {
+  const actual = await vi.importActual('@tanstack/react-query');
+  return {
+    ...actual,
+    useQuery: (options: any) => {
+      // Detect agent unread queries by their query key shape
+      const key = options?.queryKey;
+      if (
+        Array.isArray(key) &&
+        key[0] === 'messages' &&
+        key[1] === 'list' &&
+        key[2]?.for_agent !== undefined
+      ) {
+        const agentId = key[2].for_agent as string;
+        // Return 5 unread for agent:claude-daemon, 0 for others
+        const total = agentId === 'agent:claude-daemon' ? 5 : 0;
+        return { data: { messages: [], page: 1, page_size: 1, total, total_pages: 1 }, isLoading: false };
+      }
+      return (actual as any).useQuery(options);
+    },
+  };
+});
+
 describe('AgentCard', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -37,11 +72,19 @@ describe('AgentCard', () => {
     expect(screen.getByText('agent:claude-daemon')).toBeInTheDocument();
   });
 
-  test('unread count no longer shown (removed from new Agent type)', () => {
-    const { container } = render(<AgentCard agent={mockAgent} active={false} onClick={() => {}} />);
+  test('shows unread badge when there are unread messages', () => {
+    render(<AgentCard agent={mockAgent} active={false} onClick={() => {}} />);
 
-    const unreadBadge = container.querySelector('.unread-badge');
-    expect(unreadBadge).not.toBeInTheDocument();
+    // agent:claude-daemon has 5 unread messages in the mock
+    expect(screen.getByText('5')).toBeInTheDocument();
+  });
+
+  test('does not show unread badge when unread count is zero', () => {
+    const agentWithNoUnread = { ...mockAgent, agent_id: 'agent:claude-cli', display: 'Claude CLI' };
+    render(<AgentCard agent={agentWithNoUnread} active={false} onClick={() => {}} />);
+
+    // agent:claude-cli has 0 unread messages in the mock
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
   });
 
   test('does not render relative time (removed from UI)', () => {
@@ -49,6 +92,8 @@ describe('AgentCard', () => {
 
     // Time display was removed in the redesign
     expect(screen.queryByText(/ago/i)).not.toBeInTheDocument();
+    // Suppress unused variable warning
+    void container;
   });
 
   test('renders status indicator', () => {

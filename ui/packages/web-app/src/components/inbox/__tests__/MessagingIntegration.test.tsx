@@ -11,7 +11,7 @@ vi.mock('@thrum/shared-logic', async () => {
   return {
     ...actual,
     useCurrentUser: vi.fn(),
-    useMessageList: vi.fn(),
+    useMessageListPaged: vi.fn(),
     useMarkAsRead: vi.fn(),
     useSendMessage: vi.fn(),
     useAgentList: vi.fn(),
@@ -39,10 +39,13 @@ describe('Messaging Integration Tests', () => {
 
     vi.mocked(hooks.useCurrentUser).mockReturnValue(mockCurrentUser);
 
-    vi.mocked(hooks.useMessageList).mockReturnValue({
-      data: { messages: [], page: 1, page_size: 50, total: 0, total_pages: 0 },
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue({
+      messages: [],
+      total: 0,
       isLoading: false,
-      error: null,
+      hasMore: false,
+      loadMore: vi.fn(),
+      isLoadingMore: false,
     } as any);
 
     vi.mocked(hooks.useMarkAsRead).mockReturnValue({

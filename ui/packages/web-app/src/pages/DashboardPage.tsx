@@ -6,10 +6,10 @@ import { AgentContextPanel } from '../components/agents/AgentContextPanel';
 import { WhoHasView } from '../components/coordination/WhoHasView';
 import { SettingsView } from '../components/settings/SettingsView';
 import { GroupChannelView } from '../components/groups/GroupChannelView';
-import { uiStore, useRealtimeMessages, useBrowserNotifications, useCurrentUser } from '@thrum/shared-logic';
+import { uiStore, useRealtimeMessages, useBrowserNotifications, useCurrentUser, setSelectedMessageId } from '@thrum/shared-logic';
 
 export function DashboardPage() {
-  const { selectedView, selectedAgentId, selectedGroupName } = useStore(uiStore);
+  const { selectedView, selectedAgentId, selectedGroupName, selectedMessageId } = useStore(uiStore);
   const currentUser = useCurrentUser();
 
   // Subscribe to real-time WebSocket events for cache invalidation
@@ -21,21 +21,34 @@ export function DashboardPage() {
   return (
     <AppShell>
       {selectedView === 'live-feed' && <FeedView />}
-      {selectedView === 'my-inbox' && <InboxView />}
+      {selectedView === 'my-inbox' && (
+        <InboxView
+          selectedMessageId={selectedMessageId}
+          onClearSelectedMessage={() => setSelectedMessageId(null)}
+        />
+      )}
       {selectedView === 'agent-inbox' && selectedAgentId && (
         <div className="h-full flex flex-col">
           <div className="flex-none px-4 pt-4">
             <AgentContextPanel agentId={selectedAgentId} />
           </div>
           <div className="flex-1 min-h-0">
-            <InboxView identityId={selectedAgentId} />
+            <InboxView
+              identityId={selectedAgentId}
+              selectedMessageId={selectedMessageId}
+              onClearSelectedMessage={() => setSelectedMessageId(null)}
+            />
           </div>
         </div>
       )}
       {selectedView === 'who-has' && <WhoHasView />}
       {selectedView === 'settings' && <SettingsView />}
       {selectedView === 'group-channel' && selectedGroupName && (
-        <GroupChannelView groupName={selectedGroupName} />
+        <GroupChannelView
+          groupName={selectedGroupName}
+          selectedMessageId={selectedMessageId}
+          onClearSelectedMessage={() => setSelectedMessageId(null)}
+        />
       )}
     </AppShell>
   );

@@ -405,3 +405,15 @@ body::after {
 .who-has-row:hover {
   background-color: rgba(56, 189, 248, 0.05);
 }
+
+/* Message deep-link highlight */
+@keyframes message-highlight-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7), 0 0 12px rgba(56, 189, 248, 0.4); background-color: rgba(56, 189, 248, 0.12); }
+  60%  { box-shadow: 0 0 0 6px rgba(56, 189, 248, 0), 0 0 12px rgba(56, 189, 248, 0.2); background-color: rgba(56, 189, 248, 0.06); }
+  100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0), 0 0 0 rgba(56, 189, 248, 0); background-color: transparent; }
+}
+
+.message-highlight {
+  animation: message-highlight-pulse 1.6s ease-out forwards;
+  border-color: rgba(56, 189, 248, 0.5) !important;
+}

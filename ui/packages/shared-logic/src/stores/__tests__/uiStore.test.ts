@@ -7,6 +7,7 @@ import {
   selectMyInbox,
   selectLiveFeed,
   selectSettings,
+  setSelectedMessageId,
 } from '../uiStore';
 
 describe('uiStore', () => {
@@ -16,6 +17,7 @@ describe('uiStore', () => {
       selectedView: 'live-feed',
       selectedAgentId: null,
       selectedGroupName: null,
+      selectedMessageId: null,
     });
   });
 
@@ -24,6 +26,7 @@ describe('uiStore', () => {
     expect(state.selectedView).toBe('live-feed');
     expect(state.selectedAgentId).toBe(null);
     expect(state.selectedGroupName).toBe(null);
+    expect(state.selectedMessageId).toBe(null);
   });
 
   it('should update view with setSelectedView', () => {
@@ -111,5 +114,24 @@ describe('uiStore', () => {
     expect(uiStore.state.selectedView).toBe('settings');
     expect(uiStore.state.selectedAgentId).toBe(null);
     expect(uiStore.state.selectedGroupName).toBe(null);
+  });
+
+  it('should set selectedMessageId with setSelectedMessageId', () => {
+    setSelectedMessageId('msg-abc-123');
+    expect(uiStore.state.selectedMessageId).toBe('msg-abc-123');
+  });
+
+  it('should clear selectedMessageId by passing null', () => {
+    setSelectedMessageId('msg-abc-123');
+    setSelectedMessageId(null);
+    expect(uiStore.state.selectedMessageId).toBe(null);
+  });
+
+  it('should preserve other state when setting selectedMessageId', () => {
+    selectAgent('agent:test');
+    setSelectedMessageId('msg-xyz');
+    expect(uiStore.state.selectedView).toBe('agent-inbox');
+    expect(uiStore.state.selectedAgentId).toBe('agent:test');
+    expect(uiStore.state.selectedMessageId).toBe('msg-xyz');
   });
 });
