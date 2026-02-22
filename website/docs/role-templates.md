@@ -1,3 +1,9 @@
+---
+title: "Role-Based Preamble Templates"
+description:
+  "Auto-generate agent preambles from role templates with scope boundaries,
+  task protocol, communication patterns, and behavioral directives"
+---
 
 ## Role-Based Preamble Templates
 
