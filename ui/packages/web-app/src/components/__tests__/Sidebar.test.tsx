@@ -4,6 +4,13 @@ import { userEvent } from '@testing-library/user-event';
 import { Sidebar } from '../Sidebar';
 import { selectGroup } from '@thrum/shared-logic';
 
+// Per-group unread counts returned by the mocked useMessageList
+const unreadCounts: Record<string, number> = {
+  everyone: 3,
+  backend: 0,
+  reviewers: 7,
+};
+
 // Mock shared-logic hooks and actions
 vi.mock('@thrum/shared-logic', async () => {
   const actual = await vi.importActual('@thrum/shared-logic');
@@ -61,7 +68,32 @@ vi.mock('@thrum/shared-logic', async () => {
       isLoading: false,
       error: null,
     }),
+    useCurrentUser: () => ({ user_id: 'user:test', username: 'test', token: 'tok', status: 'existing' }),
     selectGroup: vi.fn((...args) => (actual as any).selectGroup(...args)),
+  };
+});
+
+// Mock @tanstack/react-query useQuery to intercept unread-count queries
+vi.mock('@tanstack/react-query', async () => {
+  const actual = await vi.importActual('@tanstack/react-query');
+  return {
+    ...actual,
+    useQuery: (options: any) => {
+      // Detect group unread queries by their query key shape
+      const key = options?.queryKey;
+      if (
+        Array.isArray(key) &&
+        key[0] === 'messages' &&
+        key[1] === 'list' &&
+        key[2]?.scope?.type === 'group'
+      ) {
+        const groupName = key[2].scope.value as string;
+        const total = unreadCounts[groupName] ?? 0;
+        return { data: { messages: [], page: 1, page_size: 1, total, total_pages: 1 }, isLoading: false };
+      }
+      // Fall through to actual useQuery for other queries
+      return (actual as any).useQuery(options);
+    },
   };
 });
 
@@ -135,6 +167,35 @@ describe('Sidebar', () => {
     await user.click(everyoneButton);
 
     expect(selectGroup).toHaveBeenCalledWith('everyone');
+  });
+
+  test('shows unread badge on group item when there are unread messages', () => {
+    render(<Sidebar />);
+
+    // 'everyone' has 3 unread messages in the mock
+    const everyoneButton = screen.getByRole('button', { name: /# everyone/i });
+    expect(everyoneButton).toBeInTheDocument();
+    expect(everyoneButton.textContent).toContain('3');
+  });
+
+  test('does not show unread badge on group item with zero unread messages', () => {
+    render(<Sidebar />);
+
+    // 'backend' has 0 unread messages in the mock — badge should not appear
+    const backendButton = screen.getByRole('button', { name: /# backend/i });
+    expect(backendButton).toBeInTheDocument();
+    expect(backendButton.textContent).not.toContain('0');
+  });
+
+  test('shows correct unread counts for multiple groups', () => {
+    render(<Sidebar />);
+
+    // 'everyone' → 3 unread, 'reviewers' → 7 unread
+    const everyoneButton = screen.getByRole('button', { name: /# everyone/i });
+    const reviewersButton = screen.getByRole('button', { name: /# reviewers/i });
+
+    expect(everyoneButton.textContent).toContain('3');
+    expect(reviewersButton.textContent).toContain('7');
   });
 
   test('renders all five sections: Feed, Your Inbox, Groups, Agents, Tools', () => {
