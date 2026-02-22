@@ -32,6 +32,7 @@ export function AgentCard({ agent, active, onClick }: AgentCardProps) {
       return wsClient.call<MessageListResponse>('message.list', request);
     },
     staleTime: 60000,
+    refetchInterval: 60000,
   });
   const unreadCount = data?.total ?? 0;
 
@@ -42,7 +43,7 @@ export function AgentCard({ agent, active, onClick }: AgentCardProps) {
     >
       <div className="agent-name">
         <StatusIndicator status={status} />
-        <span className="truncate">{displayName}</span>
+        <span className="truncate" title={displayName}>{displayName}</span>
         {unreadCount > 0 && (
           <span className="px-2 py-0.5 text-xs rounded-full bg-red-500 text-white font-mono">
             {unreadCount}

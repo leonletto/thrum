@@ -31,5 +31,6 @@ export function useHealth() {
       return wsClient.call<HealthResponse>('health');
     },
     staleTime: 10000, // Consider data fresh for 10 seconds
+    refetchInterval: 10000,
   });
 }
