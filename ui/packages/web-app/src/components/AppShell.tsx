@@ -6,6 +6,7 @@ import { SkipLink } from './SkipLink';
 import { HealthBar } from './status/HealthBar';
 import { SubscriptionPanel } from './subscriptions/SubscriptionPanel';
 import { useAuth } from './AuthProvider';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -14,6 +15,9 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const [subscriptionPanelOpen, setSubscriptionPanelOpen] = useState(false);
   const { user, isLoading } = useAuth();
+
+  // Register global keyboard shortcuts
+  useKeyboardShortcuts();
 
   const userDisplay = isLoading
     ? '...'
