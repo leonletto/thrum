@@ -4,6 +4,7 @@ import {
   useUserIdentify,
   useUserRegister,
   loadStoredUser,
+  ensureConnected,
 } from '@thrum/shared-logic';
 import type { UserRegisterResponse } from '@thrum/shared-logic';
 
@@ -77,9 +78,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Small delay to ensure WebSocket is connected
-    const timer = setTimeout(autoRegister, 500);
-    return () => clearTimeout(timer);
+    // Wait for WebSocket to actually connect before calling RPCs
+    let cancelled = false;
+    (async () => {
+      try {
+        await ensureConnected();
+      } catch {
+        // ensureConnected may throw if connection fails — proceed anyway
+        // so the error is surfaced by the identify/register calls
+      }
+      if (!cancelled) {
+        autoRegister();
+      }
+    })();
+    return () => { cancelled = true; };
   }, [attempted, identify, register, queryClient]);
 
   return (
