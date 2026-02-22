@@ -1,6 +1,7 @@
-import { useAgentContext, useAgentDelete, selectLiveFeed } from '@thrum/shared-logic';
+import { useAgentContext } from '@thrum/shared-logic';
 import { formatRelativeTime } from '../../lib/time';
 import { useState } from 'react';
+import { AgentDeleteDialog } from './AgentDeleteDialog';
 
 interface AgentContextPanelProps {
   agentId: string;
@@ -9,29 +10,7 @@ interface AgentContextPanelProps {
 export function AgentContextPanel({ agentId }: AgentContextPanelProps) {
   const { data, isLoading } = useAgentContext({ agentId });
 
-  const [showConfirm, setShowConfirm] = useState(false);
-  const deleteAgent = useAgentDelete({
-    onSuccess: () => {
-      setShowConfirm(false);
-      selectLiveFeed();
-    },
-    onError: (error) => {
-      console.error('Failed to delete agent:', error);
-      alert(`Failed to delete agent: ${error.message}`);
-    },
-  });
-
-  const handleDelete = () => {
-    setShowConfirm(true);
-  };
-
-  const confirmDelete = () => {
-    deleteAgent.mutate(agentId);
-  };
-
-  const cancelDelete = () => {
-    setShowConfirm(false);
-  };
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -113,38 +92,21 @@ export function AgentContextPanel({ agentId }: AgentContextPanelProps) {
 
       {/* Delete button */}
       <div className="mt-4 pt-4 border-t border-slate-700">
-        {!showConfirm ? (
-          <button
-            onClick={handleDelete}
-            className="w-full px-4 py-2 bg-red-600/10 hover:bg-red-600/20 text-red-400 rounded border border-red-600/30 transition-colors"
-            disabled={deleteAgent.isPending}
-          >
-            Delete Agent
-          </button>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-sm text-yellow-400">
-              Are you sure you want to delete this agent? This action cannot be undone.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={confirmDelete}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-                disabled={deleteAgent.isPending}
-              >
-                {deleteAgent.isPending ? 'Deleting...' : 'Yes, Delete'}
-              </button>
-              <button
-                onClick={cancelDelete}
-                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition-colors"
-                disabled={deleteAgent.isPending}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
+        <button
+          onClick={() => setDeleteDialogOpen(true)}
+          className="w-full px-4 py-2 bg-red-600/10 hover:bg-red-600/20 text-red-400 rounded border border-red-600/30 transition-colors"
+          data-testid="open-delete-dialog"
+        >
+          Delete Agent
+        </button>
       </div>
+
+      <AgentDeleteDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        agentName={displayName}
+        agentId={agentId}
+      />
     </div>
   );
 }
