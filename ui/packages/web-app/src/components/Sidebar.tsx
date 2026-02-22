@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '@tanstack/react-store';
-import { Plus } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Plus, Layers } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { AgentList } from './AgentList';
 import {
@@ -10,8 +11,46 @@ import {
   selectGroup,
   selectWhoHas,
   useGroupList,
+  useCurrentUser,
+  ensureConnected,
+  wsClient,
 } from '@thrum/shared-logic';
+import type { Group, MessageListResponse } from '@thrum/shared-logic';
 import { CreateGroupDialog } from './groups/CreateGroupDialog';
+import { EmptyState } from '@/components/ui/EmptyState';
+
+interface GroupSidebarItemProps {
+  group: Group;
+  active: boolean;
+}
+
+function GroupSidebarItem({ group, active }: GroupSidebarItemProps) {
+  const currentUser = useCurrentUser();
+  const request = {
+    scope: { type: 'group', value: group.name },
+    unread_for_agent: currentUser?.user_id,
+    page_size: 1,
+  };
+  const { data } = useQuery({
+    queryKey: ['messages', 'list', request],
+    queryFn: async () => {
+      await ensureConnected();
+      return wsClient.call<MessageListResponse>('message.list', request);
+    },
+    staleTime: 60000,
+  });
+  const unreadCount = data?.total ?? 0;
+
+  return (
+    <SidebarItem
+      icon={<span>#</span>}
+      label={`# ${group.name}`}
+      active={active}
+      badge={unreadCount}
+      onClick={() => selectGroup(group.name)}
+    />
+  );
+}
 
 export function Sidebar() {
   const { selectedView, selectedGroupName } = useStore(uiStore);
@@ -70,21 +109,23 @@ export function Sidebar() {
         </div>
         {groupsLoading ? (
           <div className="px-3 py-2 text-xs text-muted-foreground">Loading...</div>
+        ) : sortedGroups.length === 0 ? (
+          <EmptyState
+            icon={<Layers className="h-5 w-5" />}
+            title="No groups yet"
+            action={{
+              label: 'Create a group',
+              onClick: () => setCreateGroupOpen(true),
+            }}
+          />
         ) : (
           <div className="space-y-1">
             {sortedGroups.map((group) => (
-              <button
+              <GroupSidebarItem
                 key={group.group_id}
-                onClick={() => selectGroup(group.name)}
-                className={`nav-item w-full flex items-center gap-3${
-                  selectedView === 'group-channel' && selectedGroupName === group.name
-                    ? ' active'
-                    : ''
-                }`}
-              >
-                <div className="nav-icon"></div>
-                <span className="flex-1 text-left"># {group.name}</span>
-              </button>
+                group={group}
+                active={selectedView === 'group-channel' && selectedGroupName === group.name}
+              />
             ))}
           </div>
         )}
