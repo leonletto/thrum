@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Users, X, Bot, Shield, Plus } from 'lucide-react';
+import { Settings, Users, X, Bot, Shield, Plus, Trash2 } from 'lucide-react';
 import {
   useMessageList,
   useGroupInfo,
@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MessageList } from '../inbox/MessageList';
 import { ComposeBar } from '../inbox/ComposeBar';
+import { GroupDeleteDialog } from './GroupDeleteDialog';
 
 interface GroupChannelViewProps {
   groupName: string;
@@ -26,6 +27,7 @@ export function GroupChannelView({ groupName }: GroupChannelViewProps) {
   } | undefined>(undefined);
   const [membersOpen, setMembersOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Add-member form state
   const [addType, setAddType] = useState<'agent' | 'role'>('agent');
@@ -425,9 +427,31 @@ export function GroupChannelView({ groupName }: GroupChannelViewProps) {
                 </div>
               </div>
             )}
+
+            {!isEveryone && (
+              <div className="pt-2 border-t border-cyan-500/10">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDeleteOpen(true)}
+                  className="w-full h-7 text-xs text-red-500 hover:text-red-400 hover:bg-red-900/20 justify-start"
+                  data-testid="delete-group-button"
+                >
+                  <Trash2 className="h-3 w-3 mr-1.5" />
+                  Delete Group
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      <GroupDeleteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        groupName={groupName}
+      />
     </div>
   );
 }
