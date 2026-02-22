@@ -31,6 +31,7 @@ export function AgentCard({ agent, active, onClick }: AgentCardProps) {
       await ensureConnected();
       return wsClient.call<MessageListResponse>('message.list', request);
     },
+    enabled: !!currentUser,
     staleTime: 60000,
     refetchInterval: 60000,
   });
