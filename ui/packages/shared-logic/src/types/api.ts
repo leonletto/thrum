@@ -167,41 +167,6 @@ export const MarkAsReadResponseSchema = z.object({
 export type MarkAsReadResponse = z.infer<typeof MarkAsReadResponseSchema>;
 
 /**
- * Thread types
- */
-export const ThreadSchema = z.object({
-  thread_id: z.string(),
-  title: z.string().optional(),
-  created_at: z.string(),
-  created_by: z.string().optional(),
-  message_count: z.number().optional(),
-  last_message_at: z.string().optional(),
-  unread_count: z.number().optional(),   // Number of unread messages in thread
-  last_sender: z.string().optional(),    // Identity of last message sender
-  preview: z.string().optional(),        // Preview snippet of last message
-  last_activity: z.string().optional(),  // Timestamp of last activity
-});
-
-export type Thread = z.infer<typeof ThreadSchema>;
-
-export const ThreadListResponseSchema = z.object({
-  threads: z.array(ThreadSchema),
-  page: z.number(),
-  page_size: z.number(),
-  total: z.number(),
-  total_pages: z.number(),
-});
-
-export type ThreadListResponse = z.infer<typeof ThreadListResponseSchema>;
-
-export const ThreadGetResponseSchema = ThreadSchema.extend({
-  messages: z.array(MessageSchema),
-  total_messages: z.number(),
-});
-
-export type ThreadGetResponse = z.infer<typeof ThreadGetResponseSchema>;
-
-/**
  * Subscription types
  */
 export const SubscriptionSchema = z.object({

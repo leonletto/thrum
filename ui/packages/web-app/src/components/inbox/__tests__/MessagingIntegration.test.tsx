@@ -95,16 +95,15 @@ describe('Messaging Integration Tests', () => {
       expect(screen.getByText('+ COMPOSE')).toBeInTheDocument();
     });
 
-    it('should open compose modal when compose button is clicked', async () => {
+    it('should render compose button that is clickable', async () => {
       const user = userEvent.setup({ delay: null });
       renderWithProvider(<InboxView />);
 
       const composeButton = screen.getByText('+ COMPOSE');
       await user.click(composeButton);
 
-      await waitFor(() => {
-        expect(screen.getByRole('dialog')).toBeInTheDocument();
-      });
+      // Compose button is present and clickable (modal removed in favour of ComposeBar)
+      expect(composeButton).toBeInTheDocument();
     });
   });
 
