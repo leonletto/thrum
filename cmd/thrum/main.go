@@ -4360,6 +4360,8 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("message.delete", messageHandler.HandleDelete)
 	server.RegisterHandler("message.edit", messageHandler.HandleEdit)
 	server.RegisterHandler("message.markRead", messageHandler.HandleMarkRead)
+	server.RegisterHandler("message.deleteByScope", messageHandler.HandleDeleteByScope)
+	server.RegisterHandler("message.archive", messageHandler.HandleArchive)
 
 	// Subscription management
 	subscriptionHandler := rpc.NewSubscriptionHandler(st)
