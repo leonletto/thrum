@@ -25,6 +25,11 @@ while IFS= read -r src_file; do
   rel="${src_file#"$SRC/"}"
   dst_file="$DST/$rel"
 
+  # Skip docs/plans/ — plans live in dev-docs/plans/, not docs/
+  case "$rel" in
+    plans/*) continue ;;
+  esac
+
   # Ensure destination directory exists
   mkdir -p "$(dirname "$dst_file")"
 

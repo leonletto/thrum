@@ -72,6 +72,9 @@ export function ComposeBar({
           }
           onClearReply?.();
         },
+        onError: (err) => {
+          setWarnings([err instanceof Error ? err.message : 'Failed to send message']);
+        },
       }
     );
   };

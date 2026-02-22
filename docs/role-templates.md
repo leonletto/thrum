@@ -24,6 +24,7 @@ checks for `.thrum/role_templates/implementer.md`. If found, it renders the
 template with the agent's identity data and saves it as the agent's preamble.
 
 **Precedence:**
+
 1. `--preamble-file` flag (highest — explicit user choice)
 2. Role template in `.thrum/role_templates/{role}.md`
 3. Default preamble (fallback)
@@ -32,14 +33,14 @@ template with the agent's identity data and saves it as the agent's preamble.
 
 Templates use Go `text/template` syntax. Available variables:
 
-| Variable              | Source                                     |
-| --------------------- | ------------------------------------------ |
-| `{{.AgentName}}`      | Agent identity (e.g., "impl_auth")         |
-| `{{.Role}}`           | Agent role (e.g., "implementer")           |
-| `{{.Module}}`         | Agent module (e.g., "auth")                |
-| `{{.WorktreePath}}`   | Resolved from identity file                |
-| `{{.RepoRoot}}`       | Parent of .thrum/ directory                |
-| `{{.CoordinatorName}}`| First agent with role=coordinator, or "coordinator" |
+| Variable               | Source                                              |
+| ---------------------- | --------------------------------------------------- |
+| `{{.AgentName}}`       | Agent identity (e.g., "impl_auth")                  |
+| `{{.Role}}`            | Agent role (e.g., "implementer")                    |
+| `{{.Module}}`          | Agent module (e.g., "auth")                         |
+| `{{.WorktreePath}}`    | Resolved from identity file                         |
+| `{{.RepoRoot}}`        | Parent of .thrum/ directory                         |
+| `{{.CoordinatorName}}` | First agent with role=coordinator, or "coordinator" |
 
 ## Template Structure
 
@@ -48,18 +49,24 @@ Every role template follows the same section structure:
 ```markdown
 # Agent: {{.AgentName}}
 
-**Role:** {{.Role}}
-**Module:** {{.Module}}
-**Worktree:** {{.WorktreePath}}
+**Role:** {{.Role}} **Module:** {{.Module}} **Worktree:** {{.WorktreePath}}
 
 ## Identity & Authority
+
 ## Scope Boundaries
+
 ## Task Protocol
+
 ## Communication Protocol
+
 ## Message Listener
+
 ## Task Tracking
+
 ## Efficiency & Context Management
+
 ## Idle Behavior
+
 ## Project-Specific Rules
 ```
 
@@ -67,16 +74,16 @@ Every role template follows the same section structure:
 
 Reference templates in `toolkit/templates/roles/`:
 
-| File                        | Description                                         |
-| --------------------------- | --------------------------------------------------- |
-| `coordinator-strict.md`     | All task assignment flows through coordinator       |
-| `coordinator-autonomous.md` | Coordinator orchestrates, agents can self-assign    |
-| `implementer-strict.md`     | Waits for explicit task from coordinator            |
-| `implementer-autonomous.md` | Can pick up ready tasks from issue tracker          |
-| `planner-strict.md`         | Read-only exploration, writes plans to docs         |
-| `planner-autonomous.md`     | Can create issues and break down epics              |
-| `researcher-strict.md`      | Read-only, responds to research requests            |
-| `researcher-autonomous.md`  | Can proactively research when idle                  |
+| File                        | Description                                      |
+| --------------------------- | ------------------------------------------------ |
+| `coordinator-strict.md`     | All task assignment flows through coordinator    |
+| `coordinator-autonomous.md` | Coordinator orchestrates, agents can self-assign |
+| `implementer-strict.md`     | Waits for explicit task from coordinator         |
+| `implementer-autonomous.md` | Can pick up ready tasks from issue tracker       |
+| `planner-strict.md`         | Read-only exploration, writes plans to docs      |
+| `planner-autonomous.md`     | Can create issues and break down epics           |
+| `researcher-strict.md`      | Read-only, responds to research requests         |
+| `researcher-autonomous.md`  | Can proactively research when idle               |
 
 ## CLI Commands
 
@@ -113,9 +120,9 @@ Deploy is a full overwrite — templates are the source of truth.
 cp toolkit/templates/roles/implementer-autonomous.md .thrum/role_templates/implementer.md
 ```
 
-2. Edit to customize for your project.
+1. Edit to customize for your project.
 
-3. Register agents — templates auto-apply:
+1. Register agents — templates auto-apply:
 
 ```bash
 thrum quickstart --name impl_auth --role implementer --module auth
@@ -125,12 +132,12 @@ thrum quickstart --name impl_auth --role implementer --module auth
 
 Run the configure-roles skill:
 
-```
+```bash
 /thrum:configure-roles
 ```
 
-The skill detects your environment (runtimes, worktrees, beads, MCP servers)
-and generates customized templates interactively.
+The skill detects your environment (runtimes, worktrees, beads, MCP servers) and
+generates customized templates interactively.
 
 ## File Layout
 

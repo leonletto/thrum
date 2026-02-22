@@ -4,7 +4,8 @@ description: >
   Detect environment and generate customized role-based preamble templates for
   your Thrum agents. Creates .thrum/role_templates/ files that auto-apply on
   agent registration.
-allowed-tools: "Bash(thrum:*), Bash(bd:*), Bash(git:worktree*), Read, Write, Glob"
+allowed-tools:
+  "Bash(thrum:*), Bash(bd:*), Bash(git:worktree*), Read, Write, Glob"
 ---
 
 # Configure Roles
@@ -12,7 +13,8 @@ allowed-tools: "Bash(thrum:*), Bash(bd:*), Bash(git:worktree*), Read, Write, Glo
 Generate role-based preamble templates customized to your project environment.
 Templates auto-apply when agents register via `thrum quickstart`.
 
-**Announce:** "Using configure-roles to set up preamble templates for your team."
+**Announce:** "Using configure-roles to set up preamble templates for your
+team."
 
 ## Step 1: Detect Environment
 
@@ -28,12 +30,14 @@ thrum config show 2>/dev/null           # Thrum configuration
 ```
 
 Also check:
+
 - `.claude/settings.json` for MCP servers (context7, auggie-mcp, etc.)
 - `toolkit/templates/roles/` for shipped example templates
 
 ## Step 2: Report Findings
 
 Summarize what you detected:
+
 - Runtimes installed
 - Worktrees and branches in use
 - Whether beads is configured
@@ -58,6 +62,7 @@ Ask these in sequence using AskUserQuestion:
 "What roles does your team need?"
 
 Options based on detected agents, plus common defaults:
+
 - coordinator, implementer (most common)
 - coordinator, implementer, planner
 - coordinator, implementer, researcher
@@ -65,16 +70,16 @@ Options based on detected agents, plus common defaults:
 
 ### 4b: Autonomy Level Per Role
 
-For each role selected, ask:
-"What autonomy level for the {role} role?"
+For each role selected, ask: "What autonomy level for the {role} role?"
 
 - **Strict** — waits for coordinator instruction, limited scope
 - **Autonomous** — can self-assign tasks, broader scope
 
 ### 4c: Scope Rules (optional)
 
-If multiple worktrees detected:
-"Should agents be restricted to their own worktree?"
+If multiple worktrees detected: "Should agents be restricted to their own
+worktree?"
+
 - Yes (strict scope boundaries)
 - No (can read across worktrees)
 
@@ -102,6 +107,7 @@ thrum roles deploy              # Apply to all agents
 ## Re-run Behavior
 
 When `.thrum/role_templates/` already has files:
+
 1. Show existing templates with a summary of each
 2. Ask what to change (add role, modify existing, remove)
 3. Only regenerate requested templates
@@ -109,12 +115,12 @@ When `.thrum/role_templates/` already has files:
 
 ## Environment-Specific Customizations
 
-| Detected                    | Template Customization                                       |
-| --------------------------- | ------------------------------------------------------------ |
-| Claude Code runtime         | Add Task tool + sub-agent guidance to Efficiency section     |
-| Augment runtime             | Add auggie-mcp codebase-retrieval to Efficiency section      |
-| Beads installed             | Add `bd` commands to Task Tracking, disable TodoWrite        |
-| Thrum MCP server            | Add MCP tool references, CLI fallback for sub-agents         |
-| Claude plugin skills        | List installed skills with usage guidance                    |
-| Context7 MCP                | Add library docs guidance to Efficiency section              |
-| Multiple worktrees          | Add worktree scope rules to Scope Boundaries                |
+| Detected             | Template Customization                                   |
+| -------------------- | -------------------------------------------------------- |
+| Claude Code runtime  | Add Task tool + sub-agent guidance to Efficiency section |
+| Augment runtime      | Add auggie-mcp codebase-retrieval to Efficiency section  |
+| Beads installed      | Add `bd` commands to Task Tracking, disable TodoWrite    |
+| Thrum MCP server     | Add MCP tool references, CLI fallback for sub-agents     |
+| Claude plugin skills | List installed skills with usage guidance                |
+| Context7 MCP         | Add library docs guidance to Efficiency section          |
+| Multiple worktrees   | Add worktree scope rules to Scope Boundaries             |

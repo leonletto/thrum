@@ -13,10 +13,9 @@ describe('InboxHeader', () => {
     onFilterChange: vi.fn(),
   };
 
-  it('should render identity and compose button', () => {
+  it('should render identity', () => {
     render(<InboxHeader {...defaultProps} />);
     expect(screen.getByText('test-user')).toBeInTheDocument();
-    expect(screen.getByText('+ COMPOSE')).toBeInTheDocument();
   });
 
   it('should show impersonation warning when isImpersonating is true', () => {
@@ -82,8 +81,8 @@ describe('InboxHeader', () => {
     expect(onFilterChange).toHaveBeenCalledWith('unread');
   });
 
-  it('should render compose button', () => {
+  it('should render scope filter button', () => {
     render(<InboxHeader {...defaultProps} />);
-    expect(screen.getByText('+ COMPOSE')).toBeInTheDocument();
+    expect(screen.getByText('Scope Filter')).toBeInTheDocument();
   });
 });

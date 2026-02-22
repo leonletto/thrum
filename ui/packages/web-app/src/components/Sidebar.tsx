@@ -10,6 +10,7 @@ import {
   selectMyInbox,
   selectGroup,
   selectWhoHas,
+  selectSettings,
   useGroupList,
   useCurrentUser,
   ensureConnected,
@@ -148,8 +149,8 @@ export function Sidebar() {
         <SidebarItem
           icon={<span>⚙</span>}
           label="Settings"
-          active={false}
-          onClick={() => {}}
+          active={selectedView === 'settings'}
+          onClick={selectSettings}
         />
       </nav>
 
