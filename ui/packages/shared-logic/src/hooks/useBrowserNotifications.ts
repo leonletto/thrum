@@ -86,7 +86,7 @@ export function useBrowserNotifications(
   }, [enabled]);
 
   // Listen for new messages
-  useWebSocketEvent<{ message: Message }>('message.created', (data) => {
+  useWebSocketEvent<{ message: Message }>('notification.message', (data) => {
     if (!enabled || !currentUserId) return;
 
     const message = data.message;

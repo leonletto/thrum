@@ -12,10 +12,7 @@ vi.mock('@thrum/shared-logic', async () => {
     useCurrentUser: vi.fn(),
     useMessageList: vi.fn(),
     useAgentList: vi.fn(),
-    useThreadList: vi.fn(),
-    useThread: vi.fn(),
     useSendMessage: vi.fn(),
-    useCreateThread: vi.fn(),
     useMarkAsRead: vi.fn(),
   };
 });
@@ -44,10 +41,7 @@ describe('DashboardPage', () => {
       error: null,
     } as any);
     vi.mocked(sharedLogic.useAgentList).mockReturnValue(mockHookReturns.useAgentList([]) as any);
-    vi.mocked(sharedLogic.useThreadList).mockReturnValue(mockHookReturns.useThreadListEmpty() as any);
-    vi.mocked(sharedLogic.useThread).mockReturnValue(mockHookReturns.useThreadEmpty() as any);
     vi.mocked(sharedLogic.useSendMessage).mockReturnValue(mockHookReturns.useMutation() as any);
-    vi.mocked(sharedLogic.useCreateThread).mockReturnValue(mockHookReturns.useMutation() as any);
     vi.mocked(sharedLogic.useMarkAsRead).mockReturnValue(mockHookReturns.useMutation() as any);
   });
 
