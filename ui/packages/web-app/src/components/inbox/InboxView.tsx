@@ -1,7 +1,13 @@
 import { useMemo, useState } from 'react';
-import { useCurrentUser, type MessageScope } from '@thrum/shared-logic';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { AlertTriangle } from 'lucide-react';
+import {
+  useCurrentUser,
+  useMessageList,
+  type MessageScope,
+} from '@thrum/shared-logic';
 import { InboxHeader, type InboxFilter } from './InboxHeader';
+import { MessageList } from './MessageList';
+import { ComposeBar } from './ComposeBar';
 
 interface InboxViewProps {
   /**
@@ -13,8 +19,12 @@ interface InboxViewProps {
 
 export function InboxView({ identityId }: InboxViewProps) {
   const currentUser = useCurrentUser();
-  const [, setScopeFilter] = useState<MessageScope | null>(null);
   const [filter, setFilter] = useState<InboxFilter>('all');
+  const [scopeFilter, setScopeFilter] = useState<MessageScope | null>(null);
+  const [replyTo, setReplyTo] = useState<{
+    messageId: string;
+    senderName: string;
+  } | undefined>(undefined);
 
   // Determine the identity whose inbox we're viewing
   const identity = identityId || currentUser?.username || 'Unknown';
@@ -34,28 +44,89 @@ export function InboxView({ identityId }: InboxViewProps) {
     ? sendingAs !== currentUser.username
     : false;
 
+  // Build message.list request params
+  const messageListParams = useMemo(() => {
+    const params: {
+      for_agent: string;
+      page_size: number;
+      sort_order: 'desc';
+      unread_for_agent?: string;
+      scope?: MessageScope;
+    } = {
+      for_agent: identity,
+      page_size: 50,
+      sort_order: 'desc',
+    };
+
+    // When "Unread" tab selected, add unread_for_agent filter
+    if (filter === 'unread') {
+      params.unread_for_agent = identity;
+    }
+
+    // Scope filter from InboxHeader
+    if (scopeFilter) {
+      params.scope = scopeFilter;
+    }
+
+    return params;
+  }, [identity, filter, scopeFilter]);
+
+  const { data, isLoading } = useMessageList(messageListParams);
+
+  const messages = data?.messages ?? [];
+
+  // Unread count for badge
+  const unreadCount = messages.filter(m => m.is_read === false).length;
+
+  const handleReply = (messageId: string, senderName: string) => {
+    setReplyTo({ messageId, senderName });
+  };
+
+  const handleClearReply = () => {
+    setReplyTo(undefined);
+  };
+
   return (
     <div className="h-full flex flex-col">
+      {/* Impersonation warning banner */}
+      {isImpersonating && (
+        <div
+          className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-sm"
+          role="alert"
+        >
+          <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span>
+            Viewing as: <strong>{identity}</strong>
+          </span>
+        </div>
+      )}
+
       <InboxHeader
         identity={identity}
         sendingAs={sendingAs}
         isImpersonating={isImpersonating}
-        unreadCount={0}
+        unreadCount={unreadCount}
         filter={filter}
         onFilterChange={setFilter}
         onScopeFilterChange={setScopeFilter}
-        activeScopeFilter={null}
+        activeScopeFilter={scopeFilter}
       />
 
-      <ScrollArea className="flex-1">
-        <div className="flex items-center justify-center h-64">
-          <div className="empty-state">
-            <div className="empty-icon">○</div>
-            <div className="empty-text">NO THREADS</div>
-            <div className="empty-subtext">Start a conversation</div>
-          </div>
-        </div>
-      </ScrollArea>
+      <MessageList
+        messages={messages}
+        isLoading={isLoading}
+        currentUserId={currentUser?.user_id}
+        onReply={handleReply}
+      />
+
+      <div className="border-t p-3">
+        <ComposeBar
+          sendingAs={sendingAs}
+          isImpersonating={isImpersonating}
+          replyTo={replyTo}
+          onClearReply={handleClearReply}
+        />
+      </div>
     </div>
   );
 }
