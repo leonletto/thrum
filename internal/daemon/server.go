@@ -227,12 +227,18 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 			continue
 		}
 
+		// Default nil params to empty JSON object so handlers can always unmarshal.
+		reqParams := req.Params
+		if reqParams == nil {
+			reqParams = json.RawMessage("{}")
+		}
+
 		// Call handler with transport context and per-request timeout.
 		// This prevents a single blocked handler from permanently hanging
 		// the connection goroutine (which cascades into daemon deadlock).
 		reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Second)
 		ctxWithTransport := transport.WithTransport(reqCtx, transport.TransportUnixSocket)
-		result, err := handler(ctxWithTransport, req.Params)
+		result, err := handler(ctxWithTransport, reqParams)
 		reqCancel()
 		if err != nil {
 			resp := jsonRPCResponse{
