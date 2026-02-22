@@ -1,9 +1,11 @@
 import { useState, useMemo } from 'react';
-import { ChevronDown } from 'lucide-react';
-import { useMessageList, useSessionList, useAgentList } from '@thrum/shared-logic';
+import { ChevronDown, Activity } from 'lucide-react';
+import { useMessageList, useSessionList, useAgentList, useCurrentUser, selectAgent, selectGroup, selectMyInbox } from '@thrum/shared-logic';
 import type { Message, MessageScope, Session, Agent } from '@thrum/shared-logic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { formatRelativeTime } from '../../lib/time';
 
 // ─── Unified feed item types ────────────────────────────────────────────────
@@ -21,6 +23,7 @@ interface UnifiedFeedItem {
   to?: string;
   preview?: string;
   messageId?: string;
+  scope?: { type: string; value: string };
   // For sessions
   agentId?: string;
   sessionId?: string;
@@ -33,6 +36,7 @@ interface UnifiedFeedItem {
 
 function transformMessage(message: Message): UnifiedFeedItem {
   const toScope = message.scopes?.find((s: MessageScope) => s.type === 'to');
+  const groupScope = message.scopes?.find((s: MessageScope) => s.type === 'group');
   return {
     id: `msg-${message.message_id}`,
     type: 'message',
@@ -41,6 +45,7 @@ function transformMessage(message: Message): UnifiedFeedItem {
     to: toScope?.value,
     preview: message.body.content || message.body.structured || '',
     messageId: message.message_id,
+    scope: groupScope,
   };
 }
 
@@ -223,6 +228,7 @@ function FilterDropdown({ value, onChange }: FilterDropdownProps) {
 
 export function FeedView() {
   const [filter, setFilter] = useState<FilterOption>('all');
+  const currentUser = useCurrentUser();
 
   const {
     data: messageData,
@@ -302,11 +308,21 @@ export function FeedView() {
 
   const handleItemClick = (item: UnifiedFeedItem) => {
     if (item.type === 'message') {
-      console.log('Navigate to message:', item.messageId);
+      if (item.scope?.type === 'group') {
+        selectGroup(item.scope.value);
+      } else if (item.from && item.from === currentUser?.user_id) {
+        selectMyInbox();
+      } else if (item.from) {
+        selectAgent(item.from);
+      }
     } else if (item.type === 'session_started' || item.type === 'session_ended') {
-      console.log('Navigate to session:', item.sessionId);
+      if (item.agentId) {
+        selectAgent(item.agentId);
+      }
     } else if (item.type === 'agent_registered') {
-      console.log('Navigate to agent:', item.agentId);
+      if (item.agentName) {
+        selectAgent(item.agentName);
+      }
     }
   };
 
@@ -322,12 +338,24 @@ export function FeedView() {
 
       {/* Body */}
       {isLoading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <span className="text-muted-foreground text-sm">Loading feed...</span>
+        <div className="flex-1 p-2 space-y-1" role="region" aria-label="Loading feed" aria-busy="true">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="flex items-start gap-2 px-3 py-2">
+              <Skeleton className="h-4 w-24 shrink-0" />
+              <Skeleton className="h-4 w-4 shrink-0" />
+              <Skeleton className="h-4 w-20 shrink-0" />
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-3 w-10 shrink-0" />
+            </div>
+          ))}
         </div>
       ) : filteredItems.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
-          <span className="text-muted-foreground text-sm">No activity yet</span>
+          <EmptyState
+            icon={<Activity className="h-8 w-8" />}
+            title="No activity yet"
+            description="Agent messages, session events, and registrations will appear here"
+          />
         </div>
       ) : (
         <ScrollArea className="flex-1">
