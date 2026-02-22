@@ -1689,3 +1689,139 @@ func (h *MessageHandler) HandleDeleteByScope(ctx context.Context, params json.Ra
 
 	return &DeleteByScopeResponse{DeletedCount: len(messageIDs)}, nil
 }
+
+// DeleteByAgentRequest represents the request for message.deleteByAgent RPC.
+type DeleteByAgentRequest struct {
+	AgentID string `json:"agent_id"`
+}
+
+// DeleteByAgentResponse represents the response from message.deleteByAgent RPC.
+type DeleteByAgentResponse struct {
+	DeletedCount int `json:"deleted_count"`
+}
+
+// HandleDeleteByAgent handles the message.deleteByAgent RPC method.
+// Hard deletes all messages where agent_id matches the given agent.
+func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.RawMessage) (any, error) {
+	var req DeleteByAgentRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	if req.AgentID == "" {
+		return nil, fmt.Errorf("agent_id is required")
+	}
+
+	h.state.Lock()
+	defer h.state.Unlock()
+
+	// Get count first
+	var count int
+	err := h.state.DB().QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM messages WHERE agent_id = ?", req.AgentID).Scan(&count)
+	if err != nil {
+		return nil, fmt.Errorf("count messages: %w", err)
+	}
+
+	// Hard delete all messages by this agent.
+	// Delete from child tables first to avoid FK constraint issues.
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_edits WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message edits: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_reads WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message reads: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_refs WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message refs: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_scopes WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message scopes: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM messages WHERE agent_id = ?", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete messages: %w", err)
+	}
+
+	return &DeleteByAgentResponse{DeletedCount: count}, nil
+}
+
+// DeleteByAgentRequest represents the request for message.deleteByAgent RPC.
+type DeleteByAgentRequest struct {
+	AgentID string `json:"agent_id"`
+}
+
+// DeleteByAgentResponse represents the response from message.deleteByAgent RPC.
+type DeleteByAgentResponse struct {
+	DeletedCount int `json:"deleted_count"`
+}
+
+// HandleDeleteByAgent handles the message.deleteByAgent RPC method.
+// Hard deletes all messages where agent_id matches the given agent.
+func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.RawMessage) (any, error) {
+	var req DeleteByAgentRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	if req.AgentID == "" {
+		return nil, fmt.Errorf("agent_id is required")
+	}
+
+	h.state.Lock()
+	defer h.state.Unlock()
+
+	// Get count first
+	var count int
+	err := h.state.DB().QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM messages WHERE agent_id = ?", req.AgentID).Scan(&count)
+	if err != nil {
+		return nil, fmt.Errorf("count messages: %w", err)
+	}
+
+	// Hard delete all messages by this agent.
+	// Delete from child tables first to avoid FK constraint issues.
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_edits WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message edits: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_reads WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message reads: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_refs WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message refs: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_scopes WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message scopes: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM messages WHERE agent_id = ?", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete messages: %w", err)
+	}
+
+	return &DeleteByAgentResponse{DeletedCount: count}, nil
+}
