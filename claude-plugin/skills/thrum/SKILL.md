@@ -49,6 +49,15 @@ thrum group list                         List groups
 thrum send "msg" --to @group-name        Message a group
 ```
 
+### Role Templates
+
+```bash
+thrum roles list                         List templates + matching agents
+thrum roles deploy                       Re-render preambles from templates
+thrum roles deploy --agent foo           Deploy for specific agent
+thrum roles deploy --dry-run             Preview without writing
+```
+
 ### Sessions & Context
 
 ```bash

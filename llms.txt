@@ -258,6 +258,14 @@ All commands accept these flags:
   thrum runtime set-default <name>
     Set the default runtime preset.
 
+### Role Templates
+
+  thrum roles list
+    List role templates and matching agents.
+
+  thrum roles deploy [--agent NAME] [--dry-run]
+    Re-render preambles from role templates. Full overwrite.
+
 ### Configuration
 
   thrum config show [--json]
