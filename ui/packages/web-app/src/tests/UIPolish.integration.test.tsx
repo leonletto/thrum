@@ -70,18 +70,10 @@ describe('UI Polish Integration Tests', () => {
     it('applies theme class to document root', async () => {
       const user = userEvent.setup();
 
-      // Mock document.documentElement
-      const mockClassList = {
-        toggle: vi.fn(),
-        add: vi.fn(),
-        remove: vi.fn(),
-      };
-      Object.defineProperty(document, 'documentElement', {
-        writable: true,
-        value: {
-          classList: mockClassList,
-        },
-      });
+      // Spy on the real document.documentElement.classList instead of replacing
+      // the element (replacing it strips DOM methods like getBoundingClientRect
+      // that floating-ui needs for dropdown positioning).
+      const toggleSpy = vi.spyOn(document.documentElement.classList, 'toggle');
 
       render(<ThemeToggle />);
 
@@ -93,8 +85,10 @@ describe('UI Polish Integration Tests', () => {
 
       // Verify dark class was toggled
       await waitFor(() => {
-        expect(mockClassList.toggle).toHaveBeenCalled();
+        expect(toggleSpy).toHaveBeenCalled();
       });
+
+      toggleSpy.mockRestore();
     });
   });
 
