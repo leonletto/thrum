@@ -58,7 +58,7 @@ describe('useGroupList', () => {
 
     expect(wsClient.call).toHaveBeenCalledWith('group.list');
     expect(result.current.data?.groups).toHaveLength(2);
-    expect(result.current.data?.groups[0].name).toBe('everyone');
+    expect(result.current.data?.groups[0]?.name).toBe('everyone');
   });
 
   it('handles errors', async () => {

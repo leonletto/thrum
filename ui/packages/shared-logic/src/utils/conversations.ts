@@ -53,7 +53,7 @@ export function groupByConversation(messages: Message[]): Conversation[] {
     const allMsgs = [rootMessage, ...replies];
     const lastActivity = allMsgs.reduce((latest, m) =>
       m.created_at > latest ? m.created_at : latest,
-      allMsgs[0].created_at
+      rootMessage.created_at
     );
 
     conversations.push({ rootMessage, replies, lastActivity });
