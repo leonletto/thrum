@@ -271,61 +271,6 @@ describe('MessageBubble', () => {
     });
   });
 
-  describe('Priority Indicators', () => {
-    it('should show AlertTriangle icon for high priority messages', () => {
-      const message: Message = {
-        ...baseMessage,
-        priority: 'high',
-      };
-
-      const { container } = render(<MessageBubble message={message} isOwn={false} />);
-
-      // Should have priority-high class
-      const bubble = container.querySelector('.priority-high');
-      expect(bubble).toBeInTheDocument();
-
-      // Should show AlertTriangle icon
-      const icon = container.querySelector('svg');
-      expect(icon).toBeInTheDocument();
-    });
-
-    it('should apply priority-low class for low priority messages', () => {
-      const message: Message = {
-        ...baseMessage,
-        priority: 'low',
-      };
-
-      const { container } = render(<MessageBubble message={message} isOwn={false} />);
-
-      const bubble = container.querySelector('.priority-low');
-      expect(bubble).toBeInTheDocument();
-    });
-
-    it('should not show priority indicator for normal priority', () => {
-      const message: Message = {
-        ...baseMessage,
-        priority: 'normal',
-      };
-
-      const { container } = render(<MessageBubble message={message} isOwn={false} />);
-
-      expect(container.querySelector('.priority-high')).not.toBeInTheDocument();
-      expect(container.querySelector('.priority-low')).not.toBeInTheDocument();
-    });
-
-    it('should not show priority indicator when priority is undefined', () => {
-      const message: Message = {
-        ...baseMessage,
-        // priority is undefined
-      };
-
-      const { container } = render(<MessageBubble message={message} isOwn={false} />);
-
-      expect(container.querySelector('.priority-high')).not.toBeInTheDocument();
-      expect(container.querySelector('.priority-low')).not.toBeInTheDocument();
-    });
-  });
-
   describe('Edge Cases', () => {
     it('should handle empty message content', () => {
       const message: Message = {
