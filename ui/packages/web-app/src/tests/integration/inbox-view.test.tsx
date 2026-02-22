@@ -14,7 +14,7 @@ vi.mock('@thrum/shared-logic', async () => {
     useAgentList: vi.fn(),
     useSendMessage: vi.fn(),
     useMarkAsRead: vi.fn(),
-    useMessageList: vi.fn(),
+    useMessageListPaged: vi.fn(),
     useGroupList: vi.fn(),
   };
 });
@@ -49,10 +49,13 @@ describe('Inbox View Integration', () => {
     ]) as any);
     vi.mocked(sharedLogic.useSendMessage).mockReturnValue(mockHookReturns.useMutation() as any);
     vi.mocked(sharedLogic.useMarkAsRead).mockReturnValue(mockHookReturns.useMutation() as any);
-    vi.mocked(sharedLogic.useMessageList).mockReturnValue({
-      data: { messages: [], page: 1, page_size: 50, total: 0, total_pages: 0 },
+    vi.mocked(sharedLogic.useMessageListPaged).mockReturnValue({
+      messages: [],
+      total: 0,
       isLoading: false,
-      error: null,
+      hasMore: false,
+      loadMore: vi.fn(),
+      isLoadingMore: false,
     } as any);
     vi.mocked(sharedLogic.useGroupList).mockReturnValue({
       data: { groups: [] },

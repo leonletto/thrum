@@ -3,7 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import {
   useCurrentUser,
   loadStoredUser,
-  useMessageList,
+  useMessageListPaged,
   type MessageScope,
 } from '@thrum/shared-logic';
 import { InboxHeader, type InboxFilter } from './InboxHeader';
@@ -52,13 +52,14 @@ export function InboxView({ identityId }: InboxViewProps) {
     ? sendingAs !== currentUser.username
     : false;
 
-  // Build message.list request params
+  // Build message.list request params (without `page` — managed by the hook).
   const messageListParams = useMemo(() => {
     const params: {
       for_agent: string;
       page_size: number;
       sort_order: 'desc';
       unread_for_agent?: string;
+      mention?: string;
       scope?: MessageScope;
     } = {
       for_agent: identity,
@@ -71,6 +72,11 @@ export function InboxView({ identityId }: InboxViewProps) {
       params.unread_for_agent = identity;
     }
 
+    // When "Mentions" tab selected, add mention filter
+    if (filter === 'mentions') {
+      params.mention = identity;
+    }
+
     // Scope filter from InboxHeader
     if (scopeFilter) {
       params.scope = scopeFilter;
@@ -79,9 +85,14 @@ export function InboxView({ identityId }: InboxViewProps) {
     return params;
   }, [identity, filter, scopeFilter]);
 
-  const { data, isLoading } = useMessageList(messageListParams);
-
-  const messages = data?.messages ?? [];
+  const {
+    messages,
+    total,
+    isLoading,
+    hasMore,
+    loadMore,
+    isLoadingMore,
+  } = useMessageListPaged(messageListParams);
 
   // Unread count for badge
   const unreadCount = messages.filter(m => m.is_read === false).length;
@@ -125,8 +136,10 @@ export function InboxView({ identityId }: InboxViewProps) {
         isLoading={isLoading}
         currentUserId={currentUser?.user_id}
         onReply={handleReply}
-        totalCount={data?.total}
-        hasMore={false}
+        totalCount={total}
+        hasMore={hasMore}
+        onLoadMore={loadMore}
+        isLoadingMore={isLoadingMore}
       />
 
       <ComposeBar

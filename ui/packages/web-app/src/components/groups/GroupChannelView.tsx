@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Settings, Users, X, Bot, Shield, Plus, Trash2 } from 'lucide-react';
 import {
-  useMessageList,
+  useMessageListPaged,
   useGroupInfo,
   useCurrentUser,
   useAgentList,
@@ -36,7 +36,14 @@ export function GroupChannelView({ groupName }: GroupChannelViewProps) {
   const [addError, setAddError] = useState<string | null>(null);
 
   const currentUser = useCurrentUser();
-  const { data: messagesData, isLoading: messagesLoading } = useMessageList({
+  const {
+    messages,
+    total: messagesTotal,
+    isLoading: messagesLoading,
+    hasMore: messagesHasMore,
+    loadMore: messagesLoadMore,
+    isLoadingMore: messagesLoadingMore,
+  } = useMessageListPaged({
     scope: { type: 'group', value: groupName },
     page_size: 50,
     sort_order: 'desc',
@@ -47,7 +54,6 @@ export function GroupChannelView({ groupName }: GroupChannelViewProps) {
   const memberAdd = useGroupMemberAdd();
   const memberRemove = useGroupMemberRemove();
 
-  const messages = messagesData?.messages ?? [];
   const memberCount = groupInfo?.members?.length ?? 0;
   const isEveryone = groupName === 'everyone';
 
@@ -146,8 +152,10 @@ export function GroupChannelView({ groupName }: GroupChannelViewProps) {
           isLoading={messagesLoading}
           currentUserId={currentUser?.user_id}
           onReply={handleReply}
-          totalCount={messagesData?.total}
-          hasMore={false}
+          totalCount={messagesTotal}
+          hasMore={messagesHasMore}
+          onLoadMore={messagesLoadMore}
+          isLoadingMore={messagesLoadingMore}
         />
       </div>
 
