@@ -100,7 +100,7 @@ describe('useSessionList', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(wsClient.call).toHaveBeenCalledWith('session.list', { agent_id: 'agent-abc' });
-    expect(result.current.data?.sessions[0].agent_id).toBe('agent-abc');
+    expect(result.current.data?.sessions[0]?.agent_id).toBe('agent-abc');
   });
 
   it('fetches sessions filtered by active_only', async () => {

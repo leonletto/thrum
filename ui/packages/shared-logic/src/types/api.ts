@@ -122,7 +122,7 @@ export const SendMessageResponseSchema = z.object({
   message_id: z.string(),
   thread_id: z.string().optional(),
   created_at: z.string(),
-  resolved_to: z.array(z.string()).optional(),
+  resolved_to: z.number().optional(),
   warnings: z.array(z.string()).optional(),
 });
 
