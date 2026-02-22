@@ -73,12 +73,12 @@ describe('useBrowserNotifications', () => {
     expect(browserNotifications.cleanup).toHaveBeenCalled();
   });
 
-  it('subscribes to message.created events', () => {
+  it('subscribes to notification.message events', () => {
     renderHook(() =>
       useBrowserNotifications('user:alice', 'TestProject', undefined, true)
     );
 
-    expect(wsClient.on).toHaveBeenCalledWith('message.created', expect.any(Function));
+    expect(wsClient.on).toHaveBeenCalledWith('notification.message', expect.any(Function));
   });
 
   it('shows notification for mentions', () => {
@@ -86,7 +86,7 @@ describe('useBrowserNotifications', () => {
     let messageHandler: any;
 
     (wsClient.on as any).mockImplementation((event: string, handler: any) => {
-      if (event === 'message.created') {
+      if (event === 'notification.message') {
         messageHandler = handler;
       }
       return () => {};
@@ -124,7 +124,7 @@ describe('useBrowserNotifications', () => {
     let messageHandler: any;
 
     (wsClient.on as any).mockImplementation((event: string, handler: any) => {
-      if (event === 'message.created') {
+      if (event === 'notification.message') {
         messageHandler = handler;
       }
       return () => {};
@@ -161,7 +161,7 @@ describe('useBrowserNotifications', () => {
     let messageHandler: any;
 
     (wsClient.on as any).mockImplementation((event: string, handler: any) => {
-      if (event === 'message.created') {
+      if (event === 'notification.message') {
         messageHandler = handler;
       }
       return () => {};
@@ -193,7 +193,7 @@ describe('useBrowserNotifications', () => {
     let messageHandler: any;
 
     (wsClient.on as any).mockImplementation((event: string, handler: any) => {
-      if (event === 'message.created') {
+      if (event === 'notification.message') {
         messageHandler = handler;
       }
       return () => {};
@@ -236,7 +236,7 @@ describe('useBrowserNotifications', () => {
     let notifyOnClick: any;
 
     (wsClient.on as any).mockImplementation((event: string, handler: any) => {
-      if (event === 'message.created') {
+      if (event === 'notification.message') {
         messageHandler = handler;
       }
       return () => {};
