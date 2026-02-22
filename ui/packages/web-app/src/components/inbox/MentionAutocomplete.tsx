@@ -1,6 +1,13 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from 'react';
-import { useAgentList } from '@thrum/shared-logic';
+import { useAgentList, useGroupList } from '@thrum/shared-logic';
 import { Textarea } from '@/components/ui/textarea';
+
+interface SuggestionItem {
+  id: string;
+  label: string;
+  sublabel?: string;
+  kind: 'agent' | 'group';
+}
 
 interface MentionAutocompleteProps {
   value: string;
@@ -28,11 +35,27 @@ export function MentionAutocomplete({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { data: agentListData } = useAgentList();
+  const { data: groupListData } = useGroupList();
 
-  // Get filtered agents based on search
-  const filteredAgents = (agentListData?.agents || []).filter((agent) =>
-    agent.role.toLowerCase().includes(mentionSearch.toLowerCase())
-  );
+  // Build merged, filtered suggestion list
+  const filteredSuggestions: SuggestionItem[] = [
+    ...(agentListData?.agents || [])
+      .filter((agent) => agent.role.toLowerCase().includes(mentionSearch.toLowerCase()))
+      .map((agent) => ({
+        id: agent.agent_id,
+        label: agent.role,
+        sublabel: agent.display,
+        kind: 'agent' as const,
+      })),
+    ...(groupListData?.groups || [])
+      .filter((group) => group.name.toLowerCase().includes(mentionSearch.toLowerCase()))
+      .map((group) => ({
+        id: group.group_id,
+        label: group.name,
+        sublabel: group.description,
+        kind: 'group' as const,
+      })),
+  ];
 
   // Extract mentions from content
   const extractMentions = (content: string): string[] => {
@@ -77,12 +100,12 @@ export function MentionAutocomplete({
   };
 
   // Insert mention at cursor position
-  const insertMention = (role: string) => {
+  const insertMention = (name: string) => {
     if (mentionStartPos === -1 || !textareaRef.current) return;
 
     const newValue =
       value.slice(0, mentionStartPos) +
-      `@${role} ` +
+      `@${name} ` +
       value.slice(textareaRef.current.selectionStart || value.length);
 
     const mentions = extractMentions(newValue);
@@ -94,26 +117,26 @@ export function MentionAutocomplete({
     // Focus textarea
     setTimeout(() => {
       textareaRef.current?.focus();
-      const newPos = mentionStartPos + role.length + 2;
+      const newPos = mentionStartPos + name.length + 2;
       textareaRef.current?.setSelectionRange(newPos, newPos);
     }, 0);
   };
 
   // Handle keyboard navigation in dropdown
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showDropdown && filteredAgents.length > 0) {
+    if (showDropdown && filteredSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % filteredAgents.length);
+        setSelectedIndex((prev) => (prev + 1) % filteredSuggestions.length);
         return;
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + filteredAgents.length) % filteredAgents.length);
+        setSelectedIndex((prev) => (prev - 1 + filteredSuggestions.length) % filteredSuggestions.length);
         return;
       } else if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        const agent = filteredAgents[selectedIndex];
-        if (agent) insertMention(agent.role);
+        const suggestion = filteredSuggestions[selectedIndex];
+        if (suggestion) insertMention(suggestion.label);
         return;
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -154,23 +177,30 @@ export function MentionAutocomplete({
         className={className}
       />
 
-      {showDropdown && filteredAgents.length > 0 && (
+      {showDropdown && filteredSuggestions.length > 0 && (
         <div
           ref={dropdownRef}
           className="absolute bottom-full left-0 mb-1 w-full max-w-xs bg-popover border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto"
         >
-          {filteredAgents.map((agent, index) => (
+          {filteredSuggestions.map((suggestion, index) => (
             <button
-              key={agent.agent_id}
+              key={suggestion.id}
               type="button"
               className={`w-full px-3 py-2 text-left hover:bg-accent transition-colors ${
                 index === selectedIndex ? 'bg-accent' : ''
               }`}
-              onClick={() => insertMention(agent.role)}
+              onClick={() => insertMention(suggestion.label)}
             >
-              <div className="font-medium">@{agent.role}</div>
-              {agent.display && (
-                <div className="text-xs text-muted-foreground">{agent.display}</div>
+              <div className="font-medium flex items-center gap-1">
+                {suggestion.kind === 'group' && (
+                  <span className="text-muted-foreground text-xs" aria-label="group">
+                    #
+                  </span>
+                )}
+                @{suggestion.label}
+              </div>
+              {suggestion.sublabel && (
+                <div className="text-xs text-muted-foreground">{suggestion.sublabel}</div>
               )}
             </button>
           ))}
