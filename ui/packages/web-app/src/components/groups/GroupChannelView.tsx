@@ -18,9 +18,13 @@ import { GroupDeleteDialog } from './GroupDeleteDialog';
 
 interface GroupChannelViewProps {
   groupName: string;
+  /** Deep-link: scroll to and highlight this message ID when set. */
+  selectedMessageId?: string | null;
+  /** Called after the highlight animation clears the selection. */
+  onClearSelectedMessage?: () => void;
 }
 
-export function GroupChannelView({ groupName }: GroupChannelViewProps) {
+export function GroupChannelView({ groupName, selectedMessageId, onClearSelectedMessage }: GroupChannelViewProps) {
   const [replyTo, setReplyTo] = useState<{
     messageId: string;
     senderName: string;
@@ -156,6 +160,8 @@ export function GroupChannelView({ groupName }: GroupChannelViewProps) {
           hasMore={messagesHasMore}
           onLoadMore={messagesLoadMore}
           isLoadingMore={messagesLoadingMore}
+          selectedMessageId={selectedMessageId}
+          onClearSelectedMessage={onClearSelectedMessage}
         />
       </div>
 

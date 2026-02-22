@@ -98,6 +98,13 @@ describe('FeedView', () => {
     mockState.sessionsLoading = false;
     mockState.agentsLoading = false;
     mockState.currentUser = undefined;
+    // Reset uiStore to clean state
+    uiStore.setState({
+      selectedView: 'live-feed',
+      selectedAgentId: null,
+      selectedGroupName: null,
+      selectedMessageId: null,
+    });
   });
 
   afterEach(() => {
@@ -406,5 +413,78 @@ describe('FeedView', () => {
 
     expect(uiStore.state.selectedView).toBe('agent-inbox');
     expect(uiStore.state.selectedAgentId).toBe('agent:impl_2:bbb');
+  });
+
+  // ─── Deep-link tests ────────────────────────────────────────────────────────
+
+  test('clicking a message sets selectedMessageId in uiStore', async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+
+    mockState.messages = [
+      makeMockMessage({
+        message_id: 'msg-deeplink',
+        agent_id: 'agent:impl_1:aaa',
+        scopes: [{ type: 'to', value: 'agent:coordinator:ccc' }],
+      }),
+    ];
+
+    render(<FeedView />);
+
+    const msgBtn = screen.getAllByRole('button').find((b) =>
+      b.textContent?.includes('Starting work...')
+    );
+    expect(msgBtn).toBeDefined();
+    await user.click(msgBtn!);
+
+    expect(uiStore.state.selectedMessageId).toBe('msg-deeplink');
+  });
+
+  test('clicking a group-scoped message sets selectedMessageId', async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+
+    mockState.messages = [
+      makeMockMessage({
+        message_id: 'msg-group-deeplink',
+        scopes: [{ type: 'group', value: 'team-channel' }],
+      }),
+    ];
+
+    render(<FeedView />);
+
+    const msgBtn = screen.getAllByRole('button').find((b) =>
+      b.textContent?.includes('Starting work...')
+    );
+    expect(msgBtn).toBeDefined();
+    await user.click(msgBtn!);
+
+    expect(uiStore.state.selectedMessageId).toBe('msg-group-deeplink');
+    expect(uiStore.state.selectedView).toBe('group-channel');
+  });
+
+  test('clicking a session event does not set selectedMessageId', async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+
+    mockState.sessions = [
+      makeMockSession({
+        session_id: 'ses-no-msg',
+        agent_id: 'agent:impl_2:bbb',
+        started_at: '2024-01-01T11:45:00Z',
+        ended_at: undefined,
+        active: true,
+      }),
+    ];
+
+    render(<FeedView />);
+
+    const sessionBtn = screen.getAllByRole('button').find((b) =>
+      b.textContent?.includes('started session')
+    );
+    expect(sessionBtn).toBeDefined();
+    await user.click(sessionBtn!);
+
+    expect(uiStore.state.selectedMessageId).toBe(null);
   });
 });
