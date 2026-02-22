@@ -11,6 +11,11 @@ vi.mock('@thrum/shared-logic', async () => {
   return {
     ...actual,
     useCurrentUser: vi.fn(),
+    useMessageList: vi.fn(),
+    useMarkAsRead: vi.fn(),
+    useSendMessage: vi.fn(),
+    useAgentList: vi.fn(),
+    useGroupList: vi.fn(),
   };
 });
 
@@ -33,6 +38,34 @@ describe('Messaging Integration Tests', () => {
     });
 
     vi.mocked(hooks.useCurrentUser).mockReturnValue(mockCurrentUser);
+
+    vi.mocked(hooks.useMessageList).mockReturnValue({
+      data: { messages: [], page: 1, page_size: 50, total: 0, total_pages: 0 },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    vi.mocked(hooks.useMarkAsRead).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as any);
+
+    vi.mocked(hooks.useSendMessage).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as any);
+
+    vi.mocked(hooks.useAgentList).mockReturnValue({
+      data: { agents: [] },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    vi.mocked(hooks.useGroupList).mockReturnValue({
+      data: { groups: [] },
+      isLoading: false,
+      error: null,
+    } as any);
   });
 
   afterEach(() => {
@@ -53,8 +86,8 @@ describe('Messaging Integration Tests', () => {
 
     it('should show empty state placeholder', () => {
       renderWithProvider(<InboxView />);
-      expect(screen.getByText('NO THREADS')).toBeInTheDocument();
-      expect(screen.getByText('Start a conversation')).toBeInTheDocument();
+      // MessageList empty state
+      expect(screen.getByText('No messages')).toBeInTheDocument();
     });
 
     it('should render compose button', () => {
@@ -83,7 +116,8 @@ describe('Messaging Integration Tests', () => {
 
     it('should show agent identity as heading', () => {
       renderWithProvider(<InboxView identityId="agent:claude-daemon" />);
-      expect(screen.getByText('agent:claude-daemon')).toBeInTheDocument();
+      // Identity appears in the h1 heading (and may also appear in impersonation banner)
+      expect(screen.getByRole('heading', { name: 'agent:claude-daemon' })).toBeInTheDocument();
     });
   });
 });
