@@ -12,6 +12,7 @@ vi.mock('@thrum/shared-logic', async () => {
   return {
     ...actual,
     useMessageList: vi.fn(),
+    useMessageListPaged: vi.fn(),
     useGroupInfo: vi.fn(),
     useCurrentUser: vi.fn(),
     useSendMessage: vi.fn(),
@@ -91,10 +92,20 @@ beforeEach(() => {
     status: 'existing',
   });
 
+  // useMessageList is used by GroupDeleteDialog (which is rendered inside GroupChannelView)
   vi.mocked(hooks.useMessageList).mockReturnValue({
-    data: { messages: [], page: 1, page_size: 50, total: 0, total_pages: 0 },
+    data: { messages: [], page: 1, page_size: 1, total: 0, total_pages: 0 },
     isLoading: false,
     error: null,
+  } as any);
+
+  vi.mocked(hooks.useMessageListPaged).mockReturnValue({
+    messages: [],
+    total: 0,
+    isLoading: false,
+    hasMore: false,
+    loadMore: vi.fn(),
+    isLoadingMore: false,
   } as any);
 
   vi.mocked(hooks.useGroupInfo).mockReturnValue({
@@ -183,11 +194,11 @@ describe('GroupChannelView', () => {
   });
 
   // 3. Fetches messages with correct scope filter
-  it('calls useMessageList with the correct group scope filter', () => {
+  it('calls useMessageListPaged with the correct group scope filter', () => {
     const { Wrapper } = makeWrapper();
     render(<GroupChannelView groupName="backend" />, { wrapper: Wrapper });
 
-    expect(hooks.useMessageList).toHaveBeenCalledWith({
+    expect(hooks.useMessageListPaged).toHaveBeenCalledWith({
       scope: { type: 'group', value: 'backend' },
       page_size: 50,
       sort_order: 'desc',
@@ -198,7 +209,7 @@ describe('GroupChannelView', () => {
     const { Wrapper } = makeWrapper();
     render(<GroupChannelView groupName="devops" />, { wrapper: Wrapper });
 
-    expect(hooks.useMessageList).toHaveBeenCalledWith({
+    expect(hooks.useMessageListPaged).toHaveBeenCalledWith({
       scope: { type: 'group', value: 'devops' },
       page_size: 50,
       sort_order: 'desc',
@@ -358,16 +369,13 @@ describe('GroupChannelView', () => {
       },
     ];
 
-    vi.mocked(hooks.useMessageList).mockReturnValue({
-      data: {
-        messages: mockMessages,
-        page: 1,
-        page_size: 50,
-        total: 1,
-        total_pages: 1,
-      },
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue({
+      messages: mockMessages,
+      total: 1,
       isLoading: false,
-      error: null,
+      hasMore: false,
+      loadMore: vi.fn(),
+      isLoadingMore: false,
     } as any);
 
     const { Wrapper } = makeWrapper();
@@ -376,6 +384,70 @@ describe('GroupChannelView', () => {
     await waitFor(() => {
       expect(screen.getByText('Hello backend team')).toBeInTheDocument();
     });
+  });
+
+  // ─── Pagination ─────────────────────────────────────────────────────────────
+
+  it('renders Load More button when hasMore is true and there are messages', () => {
+    const mockMessages = [
+      {
+        message_id: 'msg-1',
+        created_at: '2026-01-01T10:00:00Z',
+        body: { format: 'text', content: 'First message' },
+        agent_id: 'user:leon',
+      },
+    ];
+
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue({
+      messages: mockMessages,
+      total: 200,
+      isLoading: false,
+      hasMore: true,
+      loadMore: vi.fn(),
+      isLoadingMore: false,
+    } as any);
+
+    const { Wrapper } = makeWrapper();
+    render(<GroupChannelView groupName="backend" />, { wrapper: Wrapper });
+
+    expect(screen.getByRole('button', { name: /load more/i })).toBeInTheDocument();
+  });
+
+  it('calls loadMore when Load More button is clicked', async () => {
+    const user = userEvent.setup();
+    const loadMore = vi.fn();
+    const mockMessages = [
+      {
+        message_id: 'msg-1',
+        created_at: '2026-01-01T10:00:00Z',
+        body: { format: 'text', content: 'First message' },
+        agent_id: 'user:leon',
+      },
+    ];
+
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue({
+      messages: mockMessages,
+      total: 200,
+      isLoading: false,
+      hasMore: true,
+      loadMore,
+      isLoadingMore: false,
+    } as any);
+
+    const { Wrapper } = makeWrapper();
+    render(<GroupChannelView groupName="backend" />, { wrapper: Wrapper });
+
+    await user.click(screen.getByRole('button', { name: /load more/i }));
+
+    expect(loadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not render Load More button when hasMore is false', () => {
+    const { Wrapper } = makeWrapper();
+    render(<GroupChannelView groupName="backend" />, { wrapper: Wrapper });
+
+    // Default mock has hasMore: false
+    expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument();
   });
 
   // Header is always visible

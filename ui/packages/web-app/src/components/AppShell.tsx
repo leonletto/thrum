@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Settings } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { ThemeToggle } from './ThemeToggle';
@@ -6,6 +6,7 @@ import { SkipLink } from './SkipLink';
 import { HealthBar } from './status/HealthBar';
 import { SubscriptionPanel } from './subscriptions/SubscriptionPanel';
 import { useAuth } from './AuthProvider';
+import { useAgentList, useGroupList } from '@thrum/shared-logic';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 interface AppShellProps {
@@ -16,8 +17,36 @@ export function AppShell({ children }: AppShellProps) {
   const [subscriptionPanelOpen, setSubscriptionPanelOpen] = useState(false);
   const { user, isLoading } = useAuth();
 
+  // Fetch groups and agents so keyboard shortcuts can navigate to first items
+  const { data: groupData } = useGroupList();
+  const { data: agentData } = useAgentList();
+
+  const firstGroupName = useMemo(() => {
+    const groups = groupData?.groups ?? [];
+    if (groups.length === 0) return null;
+    // Mirror Sidebar sort: 'everyone' first, then alphabetical
+    const sorted = [...groups].sort((a, b) => {
+      if (a.name === 'everyone') return -1;
+      if (b.name === 'everyone') return 1;
+      return a.name.localeCompare(b.name);
+    });
+    return sorted[0]?.name ?? null;
+  }, [groupData]);
+
+  const firstAgentId = useMemo(() => {
+    const agents = agentData?.agents ?? [];
+    if (agents.length === 0) return null;
+    // Mirror AgentList sort: most recently seen first
+    const sorted = [...agents].sort((a, b) => {
+      const aTime = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
+      const bTime = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
+      return bTime - aTime;
+    });
+    return sorted[0]?.agent_id ?? null;
+  }, [agentData]);
+
   // Register global keyboard shortcuts
-  useKeyboardShortcuts();
+  useKeyboardShortcuts({ firstGroupName, firstAgentId });
 
   const userDisplay = isLoading
     ? '...'

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { ChevronDown, Activity } from 'lucide-react';
-import { useMessageList, useSessionList, useAgentList, useCurrentUser, selectAgent, selectGroup, selectMyInbox } from '@thrum/shared-logic';
+import { useMessageList, useSessionList, useAgentList, useCurrentUser, selectAgent, selectGroup, selectMyInbox, setSelectedMessageId } from '@thrum/shared-logic';
 import type { Message, MessageScope, Session, Agent } from '@thrum/shared-logic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -308,6 +308,9 @@ export function FeedView() {
 
   const handleItemClick = (item: UnifiedFeedItem) => {
     if (item.type === 'message') {
+      if (item.messageId) {
+        setSelectedMessageId(item.messageId);
+      }
       if (item.scope?.type === 'group') {
         selectGroup(item.scope.value);
       } else if (item.from && item.from === currentUser?.user_id) {

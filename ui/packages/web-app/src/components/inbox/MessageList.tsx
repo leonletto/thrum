@@ -23,25 +23,44 @@ interface MessageListProps {
   hasMore?: boolean;
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
+  // Deep-linking: scroll to and highlight this message when set
+  selectedMessageId?: string | null;
+  onClearSelectedMessage?: () => void;
 }
 
 interface ConversationItemProps {
   conversation: ReturnType<typeof groupByConversation>[number];
   currentUserId?: string;
   onReply?: (messageId: string, senderName: string) => void;
+  selectedMessageId?: string | null;
+  highlightRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 function getSenderName(message: Message): string {
   return message.agent_id ?? 'Unknown';
 }
 
-function ConversationItem({ conversation, currentUserId, onReply }: ConversationItemProps) {
+function ConversationItem({ conversation, currentUserId, onReply, selectedMessageId, highlightRef }: ConversationItemProps) {
   const [expanded, setExpanded] = useState(false);
   const { rootMessage, replies } = conversation;
   const hasReplies = replies.length > 0;
 
+  // If a reply is the selected message, auto-expand to reveal it
+  const replyIsSelected = replies.some(r => r.message_id === selectedMessageId);
+  useEffect(() => {
+    if (replyIsSelected) {
+      setExpanded(true);
+    }
+  }, [replyIsSelected]);
+
+  const isRootSelected = rootMessage.message_id === selectedMessageId;
+
   return (
-    <div className="border rounded-lg p-3 space-y-2 bg-background">
+    <div
+      className={`border rounded-lg p-3 space-y-2 bg-background${isRootSelected ? ' message-highlight' : ''}`}
+      ref={isRootSelected ? highlightRef : undefined}
+      data-message-id={rootMessage.message_id}
+    >
       {/* Root message row */}
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
@@ -86,27 +105,35 @@ function ConversationItem({ conversation, currentUserId, onReply }: Conversation
       {/* Replies */}
       {expanded && hasReplies && (
         <div className="pl-4 border-l-2 border-muted space-y-2">
-          {replies.map(reply => (
-            <div key={reply.message_id} className="flex items-start gap-2">
-              <div className="flex-1 min-w-0">
-                <MessageBubble
-                  message={reply}
-                  isOwn={currentUserId !== undefined && reply.agent_id === currentUserId}
-                />
+          {replies.map(reply => {
+            const isReplySelected = reply.message_id === selectedMessageId;
+            return (
+              <div
+                key={reply.message_id}
+                className={`flex items-start gap-2 rounded${isReplySelected ? ' message-highlight' : ''}`}
+                ref={isReplySelected ? highlightRef : undefined}
+                data-message-id={reply.message_id}
+              >
+                <div className="flex-1 min-w-0">
+                  <MessageBubble
+                    message={reply}
+                    isOwn={currentUserId !== undefined && reply.agent_id === currentUserId}
+                  />
+                </div>
+                {onReply && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-xs"
+                    onClick={() => onReply(reply.message_id, getSenderName(reply))}
+                    aria-label={`Reply to ${getSenderName(reply)}`}
+                  >
+                    Reply
+                  </Button>
+                )}
               </div>
-              {onReply && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 text-xs"
-                  onClick={() => onReply(reply.message_id, getSenderName(reply))}
-                  aria-label={`Reply to ${getSenderName(reply)}`}
-                >
-                  Reply
-                </Button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -122,8 +149,13 @@ export function MessageList({
   hasMore,
   onLoadMore,
   isLoadingMore,
+  selectedMessageId,
+  onClearSelectedMessage,
 }: MessageListProps) {
   const markAsRead = useMarkAsRead();
+
+  // Ref pointing to the currently highlighted message element
+  const highlightRef = useRef<HTMLDivElement | null>(null);
 
   // Collect IDs of unread messages, debounce to batch-mark as read
   const unreadIds = messages
@@ -143,6 +175,22 @@ export function MessageList({
     markAsRead.mutate(toMark);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedUnreadIds]);
+
+  // Scroll selected message into view, then clear the selection after the animation
+  useEffect(() => {
+    if (!selectedMessageId) return;
+    const el = highlightRef.current;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    // Clear after highlight animation completes (1.6 s) so re-clicking works
+    const timer = setTimeout(() => {
+      onClearSelectedMessage?.();
+    }, 1800);
+    return () => clearTimeout(timer);
+  // We intentionally only re-run when selectedMessageId changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMessageId]);
 
   if (isLoading) {
     return (
@@ -196,6 +244,8 @@ export function MessageList({
             conversation={convo}
             currentUserId={currentUserId}
             onReply={onReply}
+            selectedMessageId={selectedMessageId}
+            highlightRef={highlightRef}
           />
         ))}
       </div>

@@ -33,6 +33,29 @@ vi.mock('@thrum/shared-logic', async () => {
       isLoading: false,
       error: null,
     }),
+    useCurrentUser: () => ({ user_id: 'user:test', username: 'test', token: 'tok', status: 'existing' }),
+    ensureConnected: vi.fn().mockResolvedValue(undefined),
+    wsClient: { call: vi.fn() },
+  };
+});
+
+// Mock @tanstack/react-query useQuery to intercept agent unread-count queries
+vi.mock('@tanstack/react-query', async () => {
+  const actual = await vi.importActual('@tanstack/react-query');
+  return {
+    ...actual,
+    useQuery: (options: any) => {
+      const key = options?.queryKey;
+      if (
+        Array.isArray(key) &&
+        key[0] === 'messages' &&
+        key[1] === 'list' &&
+        key[2]?.for_agent !== undefined
+      ) {
+        return { data: { messages: [], page: 1, page_size: 1, total: 0, total_pages: 1 }, isLoading: false };
+      }
+      return (actual as any).useQuery(options);
+    },
   };
 });
 

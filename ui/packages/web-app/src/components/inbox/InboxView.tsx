@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import {
   useCurrentUser,
-  useMessageList,
+  loadStoredUser,
+  useMessageListPaged,
   type MessageScope,
 } from '@thrum/shared-logic';
 import { InboxHeader, type InboxFilter } from './InboxHeader';
@@ -15,9 +16,13 @@ interface InboxViewProps {
    * If not provided, shows the current user's inbox.
    */
   identityId?: string;
+  /** Deep-link: scroll to and highlight this message ID when set. */
+  selectedMessageId?: string | null;
+  /** Called after the highlight animation clears the selection. */
+  onClearSelectedMessage?: () => void;
 }
 
-export function InboxView({ identityId }: InboxViewProps) {
+export function InboxView({ identityId, selectedMessageId, onClearSelectedMessage }: InboxViewProps) {
   const currentUser = useCurrentUser();
   const [filter, setFilter] = useState<InboxFilter>('all');
   const [scopeFilter, setScopeFilter] = useState<MessageScope | null>(null);
@@ -26,8 +31,15 @@ export function InboxView({ identityId }: InboxViewProps) {
     senderName: string;
   } | undefined>(undefined);
 
-  // Determine the identity whose inbox we're viewing
-  const identity = identityId || currentUser?.username || 'Unknown';
+  // Determine the identity whose inbox we're viewing.
+  // Falls back to localStorage-persisted user (available before React Query
+  // cache is populated) and finally to a friendly default instead of "Unknown".
+  const storedUser = loadStoredUser();
+  const identity =
+    identityId ||
+    currentUser?.username ||
+    storedUser?.username ||
+    'Thrum User';
 
   // Determine sending identity based on whose inbox we're viewing
   const sendingAs = useMemo(() => {
@@ -44,13 +56,14 @@ export function InboxView({ identityId }: InboxViewProps) {
     ? sendingAs !== currentUser.username
     : false;
 
-  // Build message.list request params
+  // Build message.list request params (without `page` — managed by the hook).
   const messageListParams = useMemo(() => {
     const params: {
       for_agent: string;
       page_size: number;
       sort_order: 'desc';
       unread_for_agent?: string;
+      mention?: string;
       scope?: MessageScope;
     } = {
       for_agent: identity,
@@ -63,6 +76,11 @@ export function InboxView({ identityId }: InboxViewProps) {
       params.unread_for_agent = identity;
     }
 
+    // When "Mentions" tab selected, add mention filter
+    if (filter === 'mentions') {
+      params.mention = identity;
+    }
+
     // Scope filter from InboxHeader
     if (scopeFilter) {
       params.scope = scopeFilter;
@@ -71,9 +89,14 @@ export function InboxView({ identityId }: InboxViewProps) {
     return params;
   }, [identity, filter, scopeFilter]);
 
-  const { data, isLoading } = useMessageList(messageListParams);
-
-  const messages = data?.messages ?? [];
+  const {
+    messages,
+    total,
+    isLoading,
+    hasMore,
+    loadMore,
+    isLoadingMore,
+  } = useMessageListPaged(messageListParams);
 
   // Unread count for badge
   const unreadCount = messages.filter(m => m.is_read === false).length;
@@ -117,8 +140,12 @@ export function InboxView({ identityId }: InboxViewProps) {
         isLoading={isLoading}
         currentUserId={currentUser?.user_id}
         onReply={handleReply}
-        totalCount={data?.total}
-        hasMore={false}
+        totalCount={total}
+        hasMore={hasMore}
+        onLoadMore={loadMore}
+        isLoadingMore={isLoadingMore}
+        selectedMessageId={selectedMessageId}
+        onClearSelectedMessage={onClearSelectedMessage}
       />
 
       <ComposeBar

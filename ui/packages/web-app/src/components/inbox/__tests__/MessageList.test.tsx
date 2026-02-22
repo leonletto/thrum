@@ -352,6 +352,98 @@ describe('MessageList', () => {
     ).not.toBeInTheDocument();
   });
 
+  // Deep-linking tests
+  it('adds message-highlight class to the selected root message', () => {
+    const { container } = renderWithProvider(
+      <MessageList
+        messages={[
+          makeMessage({
+            message_id: 'hl-root',
+            created_at: '2024-01-01T10:00:00Z',
+            body: { format: 'text', content: 'Highlight me' },
+          }),
+        ]}
+        isLoading={false}
+        selectedMessageId="hl-root"
+      />
+    );
+
+    const highlighted = container.querySelector('[data-message-id="hl-root"]');
+    expect(highlighted).not.toBeNull();
+    expect(highlighted?.classList.contains('message-highlight')).toBe(true);
+  });
+
+  it('does not add message-highlight class to non-selected messages', () => {
+    const { container } = renderWithProvider(
+      <MessageList
+        messages={[
+          makeMessage({
+            message_id: 'other-msg',
+            created_at: '2024-01-01T10:00:00Z',
+            body: { format: 'text', content: 'Not highlighted' },
+          }),
+        ]}
+        isLoading={false}
+        selectedMessageId="some-other-id"
+      />
+    );
+
+    const el = container.querySelector('[data-message-id="other-msg"]');
+    expect(el?.classList.contains('message-highlight')).toBe(false);
+  });
+
+  it('calls onClearSelectedMessage after highlight timer', async () => {
+    const onClear = vi.fn();
+
+    renderWithProvider(
+      <MessageList
+        messages={[
+          makeMessage({
+            message_id: 'timer-msg',
+            created_at: '2024-01-01T10:00:00Z',
+            body: { format: 'text', content: 'Timer message' },
+          }),
+        ]}
+        isLoading={false}
+        selectedMessageId="timer-msg"
+        onClearSelectedMessage={onClear}
+      />
+    );
+
+    await waitFor(() => {
+      expect(onClear).toHaveBeenCalledTimes(1);
+    }, { timeout: 2500 });
+  });
+
+  it('auto-expands replies thread when selected message is a reply', async () => {
+    const user = userEvent.setup();
+    const root = makeMessage({
+      message_id: 'rl-root',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Root' },
+    });
+    const reply = makeMessage({
+      message_id: 'rl-reply',
+      created_at: '2024-01-01T10:01:00Z',
+      body: { format: 'text', content: 'Selected reply' },
+      reply_to: 'rl-root',
+    });
+
+    renderWithProvider(
+      <MessageList
+        messages={[root, reply]}
+        isLoading={false}
+        selectedMessageId="rl-reply"
+      />
+    );
+
+    // The reply should be auto-expanded and visible
+    await waitFor(() => {
+      expect(screen.getByText('Selected reply')).toBeInTheDocument();
+    });
+    void user;
+  });
+
   it('calls onLoadMore when Load More button is clicked', async () => {
     const user = userEvent.setup();
     const onLoadMore = vi.fn();
