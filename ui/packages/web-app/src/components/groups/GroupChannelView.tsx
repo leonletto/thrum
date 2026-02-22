@@ -1,12 +1,17 @@
 import { useState } from 'react';
-import { Settings, Users, X, Bot, Shield } from 'lucide-react';
+import { Settings, Users, X, Bot, Shield, Plus } from 'lucide-react';
 import {
   useMessageList,
   useGroupInfo,
   useCurrentUser,
+  useAgentList,
+  useGroupMemberAdd,
+  useGroupMemberRemove,
 } from '@thrum/shared-logic';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { MessageList } from '../inbox/MessageList';
 import { ComposeBar } from '../inbox/ComposeBar';
 
@@ -22,6 +27,12 @@ export function GroupChannelView({ groupName }: GroupChannelViewProps) {
   const [membersOpen, setMembersOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Add-member form state
+  const [addType, setAddType] = useState<'agent' | 'role'>('agent');
+  const [addAgentValue, setAddAgentValue] = useState('');
+  const [addRoleValue, setAddRoleValue] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
+
   const currentUser = useCurrentUser();
   const { data: messagesData, isLoading: messagesLoading } = useMessageList({
     scope: { type: 'group', value: groupName },
@@ -29,6 +40,10 @@ export function GroupChannelView({ groupName }: GroupChannelViewProps) {
     sort_order: 'desc',
   });
   const { data: groupInfo } = useGroupInfo(groupName);
+  const { data: agentData } = useAgentList();
+
+  const memberAdd = useGroupMemberAdd();
+  const memberRemove = useGroupMemberRemove();
 
   const messages = messagesData?.messages ?? [];
   const memberCount = groupInfo?.members?.length ?? 0;
@@ -36,12 +51,44 @@ export function GroupChannelView({ groupName }: GroupChannelViewProps) {
 
   const sendingAs = currentUser?.username ?? 'unknown';
 
+  const agents = agentData?.agents ?? [];
+
   const handleReply = (messageId: string, senderName: string) => {
     setReplyTo({ messageId, senderName });
   };
 
   const handleClearReply = () => {
     setReplyTo(undefined);
+  };
+
+  const handleAddMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    const value = addType === 'agent' ? addAgentValue : addRoleValue.trim();
+    if (!value) {
+      setAddError(addType === 'agent' ? 'Select an agent' : 'Enter a role name');
+      return;
+    }
+    setAddError(null);
+    memberAdd.mutate(
+      { group_name: groupName, member_type: addType, member_value: value },
+      {
+        onSuccess: () => {
+          setAddAgentValue('');
+          setAddRoleValue('');
+        },
+        onError: (err: Error) => {
+          setAddError(err.message ?? 'Failed to add member');
+        },
+      }
+    );
+  };
+
+  const handleRemoveMember = (memberType: 'agent' | 'role', memberValue: string) => {
+    memberRemove.mutate({
+      group_name: groupName,
+      member_type: memberType,
+      member_value: memberValue,
+    });
   };
 
   return (
@@ -181,17 +228,126 @@ export function GroupChannelView({ groupName }: GroupChannelViewProps) {
                         )}
                       </span>
                     </div>
+                    {!isEveryone && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          handleRemoveMember(member.member_type, member.member_value)
+                        }
+                        className="h-5 w-5 p-0 text-cyan-800 hover:text-red-400 hover:bg-red-900/20 shrink-0"
+                        aria-label={`Remove ${member.member_value}`}
+                        data-testid="remove-member-button"
+                        disabled={memberRemove.isPending}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
           </div>
 
+          {/* Add member section */}
           {!isEveryone && (
-            <div className="shrink-0 border-t border-cyan-500/20 px-4 py-2">
-              <p className="text-[10px] text-cyan-800 italic">
-                Group management coming soon
-              </p>
+            <div
+              className="shrink-0 border-t border-cyan-500/20 px-4 py-3 space-y-2"
+              data-testid="add-member-section"
+            >
+              <div className="text-[10px] text-cyan-700 uppercase tracking-wider font-semibold">
+                Add member
+              </div>
+              <form onSubmit={handleAddMember} className="space-y-2">
+                {/* Type selector */}
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddType('agent');
+                      setAddError(null);
+                    }}
+                    className={`flex-1 text-[10px] px-2 py-1 rounded border transition-colors ${
+                      addType === 'agent'
+                        ? 'bg-cyan-900/50 border-cyan-500/50 text-cyan-300'
+                        : 'bg-transparent border-cyan-900/40 text-cyan-700 hover:text-cyan-500'
+                    }`}
+                    data-testid="add-type-agent"
+                  >
+                    Agent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddType('role');
+                      setAddError(null);
+                    }}
+                    className={`flex-1 text-[10px] px-2 py-1 rounded border transition-colors ${
+                      addType === 'role'
+                        ? 'bg-purple-900/50 border-purple-500/50 text-purple-300'
+                        : 'bg-transparent border-cyan-900/40 text-cyan-700 hover:text-cyan-500'
+                    }`}
+                    data-testid="add-type-role"
+                  >
+                    Role
+                  </button>
+                </div>
+
+                {/* Value input */}
+                {addType === 'agent' ? (
+                  <div className="space-y-1">
+                    <Label htmlFor="add-agent-select" className="sr-only">
+                      Select agent
+                    </Label>
+                    <select
+                      id="add-agent-select"
+                      value={addAgentValue}
+                      onChange={(e) => setAddAgentValue(e.target.value)}
+                      className="w-full text-xs bg-[#0a0e1a] border border-cyan-500/20 rounded px-2 py-1 text-cyan-300 focus:outline-none focus:border-cyan-500/50"
+                      data-testid="add-agent-select"
+                    >
+                      <option value="">Select agent…</option>
+                      {agents.map((agent) => (
+                        <option key={agent.agent_id} value={agent.agent_id}>
+                          {agent.display ?? agent.agent_id}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <Label htmlFor="add-role-input" className="sr-only">
+                      Role name
+                    </Label>
+                    <Input
+                      id="add-role-input"
+                      placeholder="Role name…"
+                      value={addRoleValue}
+                      onChange={(e) => setAddRoleValue(e.target.value)}
+                      className="h-7 text-xs bg-[#0a0e1a] border-cyan-500/20 text-cyan-300 placeholder:text-cyan-800"
+                      data-testid="add-role-input"
+                    />
+                  </div>
+                )}
+
+                {addError && (
+                  <p className="text-[10px] text-red-400" data-testid="add-member-error">
+                    {addError}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="w-full h-7 text-xs bg-cyan-900/40 hover:bg-cyan-900/60 border border-cyan-500/30 text-cyan-300"
+                  disabled={memberAdd.isPending}
+                  data-testid="add-member-submit"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  {memberAdd.isPending ? 'Adding…' : 'Add'}
+                </Button>
+              </form>
             </div>
           )}
         </div>

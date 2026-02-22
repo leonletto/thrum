@@ -1,4 +1,4 @@
-import { useAgentContext, useAgentDelete } from '@thrum/shared-logic';
+import { useAgentContext, useAgentDelete, selectLiveFeed } from '@thrum/shared-logic';
 import { formatRelativeTime } from '../../lib/time';
 import { useState } from 'react';
 
@@ -13,7 +13,7 @@ export function AgentContextPanel({ agentId }: AgentContextPanelProps) {
   const deleteAgent = useAgentDelete({
     onSuccess: () => {
       setShowConfirm(false);
-      // TODO: Navigate away or show success message
+      selectLiveFeed();
     },
     onError: (error) => {
       console.error('Failed to delete agent:', error);

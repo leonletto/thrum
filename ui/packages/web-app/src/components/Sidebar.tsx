@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore } from '@tanstack/react-store';
+import { Plus } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { AgentList } from './AgentList';
 import {
@@ -10,10 +11,12 @@ import {
   selectWhoHas,
   useGroupList,
 } from '@thrum/shared-logic';
+import { CreateGroupDialog } from './groups/CreateGroupDialog';
 
 export function Sidebar() {
   const { selectedView, selectedGroupName } = useStore(uiStore);
   const { data: groupData, isLoading: groupsLoading } = useGroupList();
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
 
   const sortedGroups = useMemo(() => {
     const groups = groupData?.groups ?? [];
@@ -51,8 +54,19 @@ export function Sidebar() {
 
         {/* GROUPS section */}
         <div className="my-2 border-t border-cyan-500/20" />
-        <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Groups
+        <div className="flex items-center justify-between px-3 py-1">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Groups
+          </span>
+          <button
+            type="button"
+            onClick={() => setCreateGroupOpen(true)}
+            className="h-4 w-4 flex items-center justify-center text-muted-foreground hover:text-cyan-300 transition-colors rounded"
+            aria-label="Create group"
+            data-testid="create-group-button"
+          >
+            <Plus className="h-3 w-3" />
+          </button>
         </div>
         {groupsLoading ? (
           <div className="px-3 py-2 text-xs text-muted-foreground">Loading...</div>
@@ -97,6 +111,11 @@ export function Sidebar() {
           onClick={() => {}}
         />
       </nav>
+
+      <CreateGroupDialog
+        open={createGroupOpen}
+        onOpenChange={setCreateGroupOpen}
+      />
     </aside>
   );
 }
