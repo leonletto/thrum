@@ -4,10 +4,17 @@ import { LiveFeed } from '../components/feed/LiveFeed';
 import { InboxView } from '../components/inbox/InboxView';
 import { AgentContextPanel } from '../components/agents/AgentContextPanel';
 import { WhoHasView } from '../components/coordination/WhoHasView';
-import { uiStore } from '@thrum/shared-logic';
+import { uiStore, useRealtimeMessages, useBrowserNotifications, useCurrentUser } from '@thrum/shared-logic';
 
 export function DashboardPage() {
   const { selectedView, selectedAgentId } = useStore(uiStore);
+  const currentUser = useCurrentUser();
+
+  // Subscribe to real-time WebSocket events for cache invalidation
+  useRealtimeMessages();
+
+  // Enable browser notifications for mentions and DMs
+  useBrowserNotifications(currentUser?.user_id, 'Thrum');
 
   return (
     <AppShell>
