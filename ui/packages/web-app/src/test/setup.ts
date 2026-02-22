@@ -2,6 +2,36 @@ import { expect, afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import * as matchers from '@testing-library/jest-dom/matchers';
 
+// Mock WebSocket to prevent Node.js/undici + jsdom realm mismatch.
+// Without this, undici's real WebSocket.dispatchEvent throws:
+//   TypeError: The "event" argument must be an instance of Event.
+// because jsdom's Event class is from a different V8 realm than Node's native EventTarget.
+class MockWebSocket extends EventTarget {
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+
+  readyState = MockWebSocket.CONNECTING;
+  url: string;
+
+  constructor(url: string) {
+    super();
+    this.url = url;
+  }
+
+  send(_data: string): void {}
+  close(_code?: number, _reason?: string): void {
+    this.readyState = MockWebSocket.CLOSED;
+  }
+}
+
+Object.defineProperty(global, 'WebSocket', {
+  writable: true,
+  configurable: true,
+  value: MockWebSocket,
+});
+
 expect.extend(matchers);
 
 afterEach(() => {
