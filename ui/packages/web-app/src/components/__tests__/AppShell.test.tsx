@@ -33,6 +33,11 @@ vi.mock('@thrum/shared-logic', async () => {
       isLoading: false,
       error: null,
     }),
+    useGroupList: () => ({
+      data: { groups: [] },
+      isLoading: false,
+      error: null,
+    }),
   };
 });
 
@@ -80,7 +85,7 @@ describe('AppShell', () => {
     );
 
     expect(screen.getByText(/Test User/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument();
+    expect(screen.getByLabelText('Settings')).toBeInTheDocument();
   });
 
   test('renders Sidebar component', () => {

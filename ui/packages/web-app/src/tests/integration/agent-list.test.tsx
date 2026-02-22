@@ -12,6 +12,7 @@ vi.mock('@thrum/shared-logic', async () => {
     ...actual,
     useCurrentUser: vi.fn(),
     useAgentList: vi.fn(),
+    useGroupList: vi.fn(),
     useSendMessage: vi.fn(),
     useMarkAsRead: vi.fn(),
   };
@@ -45,6 +46,11 @@ describe('Agent List Integration', () => {
         last_seen_at: '2024-01-01T11:50:00Z',
       },
     ]) as any);
+    vi.mocked(sharedLogic.useGroupList).mockReturnValue({
+      data: { groups: [] },
+      isLoading: false,
+      error: null,
+    } as any);
     vi.mocked(sharedLogic.useSendMessage).mockReturnValue(mockHookReturns.useMutation() as any);
     vi.mocked(sharedLogic.useMarkAsRead).mockReturnValue(mockHookReturns.useMutation() as any);
   });

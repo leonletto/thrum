@@ -1,13 +1,14 @@
 import { useStore } from '@tanstack/react-store';
 import { AppShell } from '../components/AppShell';
-import { LiveFeed } from '../components/feed/LiveFeed';
+import { FeedView } from '../components/feed/FeedView';
 import { InboxView } from '../components/inbox/InboxView';
 import { AgentContextPanel } from '../components/agents/AgentContextPanel';
 import { WhoHasView } from '../components/coordination/WhoHasView';
+import { GroupChannelView } from '../components/groups/GroupChannelView';
 import { uiStore, useRealtimeMessages, useBrowserNotifications, useCurrentUser } from '@thrum/shared-logic';
 
 export function DashboardPage() {
-  const { selectedView, selectedAgentId } = useStore(uiStore);
+  const { selectedView, selectedAgentId, selectedGroupName } = useStore(uiStore);
   const currentUser = useCurrentUser();
 
   // Subscribe to real-time WebSocket events for cache invalidation
@@ -18,7 +19,7 @@ export function DashboardPage() {
 
   return (
     <AppShell>
-      {selectedView === 'live-feed' && <LiveFeed />}
+      {selectedView === 'live-feed' && <FeedView />}
       {selectedView === 'my-inbox' && <InboxView />}
       {selectedView === 'agent-inbox' && selectedAgentId && (
         <div className="h-full flex flex-col">
@@ -31,6 +32,9 @@ export function DashboardPage() {
         </div>
       )}
       {selectedView === 'who-has' && <WhoHasView />}
+      {selectedView === 'group-channel' && selectedGroupName && (
+        <GroupChannelView groupName={selectedGroupName} />
+      )}
     </AppShell>
   );
 }

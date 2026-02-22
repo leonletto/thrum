@@ -13,6 +13,7 @@ vi.mock('@thrum/shared-logic', async () => {
     useCurrentUser: vi.fn(),
     useMessageList: vi.fn(),
     useAgentList: vi.fn(),
+    useGroupList: vi.fn(),
     useSendMessage: vi.fn(),
     useMarkAsRead: vi.fn(),
   };
@@ -65,6 +66,11 @@ describe('Navigation Integration', () => {
         last_seen_at: '2024-01-01T11:50:00Z',
       },
     ]) as any);
+    vi.mocked(sharedLogic.useGroupList).mockReturnValue({
+      data: { groups: [] },
+      isLoading: false,
+      error: null,
+    } as any);
     vi.mocked(sharedLogic.useSendMessage).mockReturnValue(mockHookReturns.useMutation() as any);
     vi.mocked(sharedLogic.useMarkAsRead).mockReturnValue(mockHookReturns.useMutation() as any);
   });
@@ -80,9 +86,9 @@ describe('Navigation Integration', () => {
     expect(within(sidebar).getAllByText('Live Feed')[0]).toBeInTheDocument();
     expect(within(sidebar).getAllByText('My Inbox')[0]).toBeInTheDocument();
 
-    // Content area - LiveFeed by default
+    // Content area - FeedView by default shows Activity Feed
     expect(
-      screen.getByRole('heading', { name: 'Live Feed' })
+      screen.getByText(/activity feed/i)
     ).toBeInTheDocument();
   });
 
@@ -90,9 +96,9 @@ describe('Navigation Integration', () => {
     const user = userEvent.setup();
     const { container } = render(<DashboardPage />);
 
-    // Verify starting on Live Feed
+    // Verify starting on Activity Feed (FeedView)
     expect(
-      screen.getByRole('heading', { name: 'Live Feed' })
+      screen.getByText(/activity feed/i)
     ).toBeInTheDocument();
 
     // Click My Inbox in sidebar
@@ -108,7 +114,7 @@ describe('Navigation Integration', () => {
       screen.getByRole('heading', { name: 'testuser' })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('heading', { name: 'Live Feed' })
+      screen.queryByText(/activity feed/i)
     ).not.toBeInTheDocument();
   });
 
@@ -134,7 +140,7 @@ describe('Navigation Integration', () => {
     await user.click(feedButton!);
 
     expect(
-      screen.getByRole('heading', { name: 'Live Feed' })
+      screen.getByText(/activity feed/i)
     ).toBeInTheDocument();
   });
 
