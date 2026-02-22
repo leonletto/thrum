@@ -11,12 +11,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { MessageBubble } from './MessageBubble';
 import { MessageListSkeleton } from './MessageSkeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 interface MessageListProps {
   messages: Message[];
   isLoading: boolean;
   currentUserId?: string;
   onReply?: (messageId: string, senderName: string) => void;
+  // Pagination props
+  totalCount?: number;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
 }
 
 interface ConversationItemProps {
@@ -112,6 +118,10 @@ export function MessageList({
   isLoading,
   currentUserId,
   onReply,
+  totalCount,
+  hasMore,
+  onLoadMore,
+  isLoadingMore,
 }: MessageListProps) {
   const markAsRead = useMarkAsRead();
 
@@ -145,18 +155,40 @@ export function MessageList({
   if (messages.length === 0) {
     return (
       <ScrollArea className="flex-1">
-        <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
-          <MessageSquare className="h-8 w-8 opacity-40" />
-          <span className="text-sm">No messages</span>
-        </div>
+        <EmptyState
+          icon={<MessageSquare className="h-8 w-8" />}
+          title="No messages"
+          description="Messages will appear here when you receive them"
+        />
       </ScrollArea>
     );
   }
 
   const conversations = groupByConversation(messages);
+  const showingCount = messages.length;
 
   return (
     <ScrollArea className="flex-1 px-4 py-2">
+      {/* Load More button at the top — older messages load above */}
+      {hasMore && onLoadMore && (
+        <div className="flex flex-col items-center gap-1.5 pb-3">
+          {totalCount !== undefined && (
+            <p className="text-xs text-muted-foreground">
+              Showing {showingCount} of {totalCount} messages
+            </p>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+            aria-label="Load more messages"
+          >
+            {isLoadingMore ? 'Loading...' : 'Load More'}
+          </Button>
+        </div>
+      )}
+
       <div className="space-y-3">
         {conversations.map(convo => (
           <ConversationItem

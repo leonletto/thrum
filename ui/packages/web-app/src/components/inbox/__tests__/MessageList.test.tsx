@@ -290,4 +290,109 @@ describe('MessageList', () => {
 
     expect(screen.queryByRole('button', { name: /reply to/i })).not.toBeInTheDocument();
   });
+
+  // Pagination: Load More button
+  it('shows Load More button when hasMore is true', () => {
+    const root = makeMessage({
+      message_id: 'pag-1',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Paginated message' },
+    });
+    const onLoadMore = vi.fn();
+
+    renderWithProvider(
+      <MessageList
+        messages={[root]}
+        isLoading={false}
+        hasMore={true}
+        onLoadMore={onLoadMore}
+        totalCount={100}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: /load more messages/i })
+    ).toBeInTheDocument();
+  });
+
+  it('does not show Load More button when hasMore is false', () => {
+    const root = makeMessage({
+      message_id: 'pag-2',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Paginated message 2' },
+    });
+
+    renderWithProvider(
+      <MessageList
+        messages={[root]}
+        isLoading={false}
+        hasMore={false}
+        totalCount={1}
+      />
+    );
+
+    expect(
+      screen.queryByRole('button', { name: /load more messages/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not show Load More button when hasMore is not provided', () => {
+    const root = makeMessage({
+      message_id: 'pag-3',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Paginated message 3' },
+    });
+
+    renderWithProvider(
+      <MessageList messages={[root]} isLoading={false} />
+    );
+
+    expect(
+      screen.queryByRole('button', { name: /load more messages/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('calls onLoadMore when Load More button is clicked', async () => {
+    const user = userEvent.setup();
+    const onLoadMore = vi.fn();
+    const root = makeMessage({
+      message_id: 'pag-4',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Paginated message 4' },
+    });
+
+    renderWithProvider(
+      <MessageList
+        messages={[root]}
+        isLoading={false}
+        hasMore={true}
+        onLoadMore={onLoadMore}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /load more messages/i }));
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows message count when totalCount is provided and hasMore is true', () => {
+    const messages = [1, 2].map(i =>
+      makeMessage({
+        message_id: `count-${i}`,
+        created_at: `2024-01-01T10:0${i}:00Z`,
+        body: { format: 'text', content: `Count message ${i}` },
+      })
+    );
+
+    renderWithProvider(
+      <MessageList
+        messages={messages}
+        isLoading={false}
+        hasMore={true}
+        onLoadMore={vi.fn()}
+        totalCount={50}
+      />
+    );
+
+    expect(screen.getByText(/showing 2 of 50 messages/i)).toBeInTheDocument();
+  });
 });
