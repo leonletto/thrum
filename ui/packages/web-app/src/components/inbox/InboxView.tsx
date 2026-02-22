@@ -16,9 +16,13 @@ interface InboxViewProps {
    * If not provided, shows the current user's inbox.
    */
   identityId?: string;
+  /** Deep-link: scroll to and highlight this message ID when set. */
+  selectedMessageId?: string | null;
+  /** Called after the highlight animation clears the selection. */
+  onClearSelectedMessage?: () => void;
 }
 
-export function InboxView({ identityId }: InboxViewProps) {
+export function InboxView({ identityId, selectedMessageId, onClearSelectedMessage }: InboxViewProps) {
   const currentUser = useCurrentUser();
   const [filter, setFilter] = useState<InboxFilter>('all');
   const [scopeFilter, setScopeFilter] = useState<MessageScope | null>(null);
@@ -140,6 +144,8 @@ export function InboxView({ identityId }: InboxViewProps) {
         hasMore={hasMore}
         onLoadMore={loadMore}
         isLoadingMore={isLoadingMore}
+        selectedMessageId={selectedMessageId}
+        onClearSelectedMessage={onClearSelectedMessage}
       />
 
       <ComposeBar

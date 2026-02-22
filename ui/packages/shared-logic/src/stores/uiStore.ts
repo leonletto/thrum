@@ -6,12 +6,14 @@ export interface UIState {
   selectedView: View;
   selectedAgentId: string | null;
   selectedGroupName: string | null;
+  selectedMessageId: string | null;
 }
 
 const initialState: UIState = {
   selectedView: 'live-feed',
   selectedAgentId: null,
   selectedGroupName: null,
+  selectedMessageId: null,
 };
 
 export const uiStore = new Store<UIState>(initialState);
@@ -77,5 +79,12 @@ export const selectSettings = () => {
     selectedView: 'settings',
     selectedAgentId: null,
     selectedGroupName: null,
+  }));
+};
+
+export const setSelectedMessageId = (messageId: string | null) => {
+  uiStore.setState((state: UIState) => ({
+    ...state,
+    selectedMessageId: messageId,
   }));
 };
