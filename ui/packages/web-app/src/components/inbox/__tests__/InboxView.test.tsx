@@ -14,7 +14,7 @@ vi.mock('@thrum/shared-logic', async () => {
     ...actual,
     useCurrentUser: vi.fn(),
     loadStoredUser: vi.fn(),
-    useMessageList: vi.fn(),
+    useMessageListPaged: vi.fn(),
     useMarkAsRead: vi.fn(),
     useSendMessage: vi.fn(),
     useAgentList: vi.fn(),
@@ -31,6 +31,18 @@ function makeMessage(
     body: { format: 'text', content: `Message ${overrides.message_id}` },
     ...overrides,
   };
+}
+
+/** Default paged return value — empty inbox, not loading */
+function makePagedReturn(messages: Message[] = [], isLoading = false) {
+  return {
+    messages,
+    total: messages.length,
+    isLoading,
+    hasMore: false,
+    loadMore: vi.fn(),
+    isLoadingMore: false,
+  } as any;
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -58,11 +70,7 @@ describe('InboxView', () => {
 
     vi.mocked(hooks.loadStoredUser).mockReturnValue(null);
 
-    vi.mocked(hooks.useMessageList).mockReturnValue({
-      data: { messages: [], page: 1, page_size: 50, total: 0, total_pages: 0 },
-      isLoading: false,
-      error: null,
-    } as any);
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue(makePagedReturn());
 
     vi.mocked(hooks.useMarkAsRead).mockReturnValue({
       mutate: vi.fn(),
@@ -96,11 +104,7 @@ describe('InboxView', () => {
   // ─── 1. Loading state ───────────────────────────────────────────────────────
 
   it('renders loading skeleton when isLoading is true', () => {
-    vi.mocked(hooks.useMessageList).mockReturnValue({
-      data: undefined,
-      isLoading: true,
-      error: null,
-    } as any);
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue(makePagedReturn([], true));
 
     const { container } = renderWithProvider(<InboxView />);
 
@@ -119,27 +123,17 @@ describe('InboxView', () => {
       agent_id: 'user:test',
     });
 
-    vi.mocked(hooks.useMessageList).mockReturnValue({
-      data: {
-        messages: [msg1],
-        page: 1,
-        page_size: 50,
-        total: 1,
-        total_pages: 1,
-      },
-      isLoading: false,
-      error: null,
-    } as any);
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue(makePagedReturn([msg1]));
 
     renderWithProvider(<InboxView />);
 
     expect(screen.getByText('Hello from inbox')).toBeInTheDocument();
   });
 
-  it('calls useMessageList with for_agent set to current user identity', () => {
+  it('calls useMessageListPaged with for_agent set to current user identity', () => {
     renderWithProvider(<InboxView />);
 
-    expect(hooks.useMessageList).toHaveBeenCalledWith(
+    expect(hooks.useMessageListPaged).toHaveBeenCalledWith(
       expect.objectContaining({
         for_agent: 'test-user',
         page_size: 50,
@@ -165,10 +159,10 @@ describe('InboxView', () => {
     expect(banner).toHaveTextContent('agent:impl_1');
   });
 
-  it('calls useMessageList with for_agent set to identityId when impersonating', () => {
+  it('calls useMessageListPaged with for_agent set to identityId when impersonating', () => {
     renderWithProvider(<InboxView identityId="agent:impl_1" />);
 
-    expect(hooks.useMessageList).toHaveBeenCalledWith(
+    expect(hooks.useMessageListPaged).toHaveBeenCalledWith(
       expect.objectContaining({
         for_agent: 'agent:impl_1',
         page_size: 50,
@@ -188,7 +182,7 @@ describe('InboxView', () => {
   it('does not include unread_for_agent filter when "All" is selected (default)', () => {
     renderWithProvider(<InboxView />);
 
-    expect(hooks.useMessageList).toHaveBeenCalledWith(
+    expect(hooks.useMessageListPaged).toHaveBeenCalledWith(
       expect.not.objectContaining({ unread_for_agent: expect.anything() })
     );
   });
@@ -200,7 +194,7 @@ describe('InboxView', () => {
     const unreadButton = screen.getByRole('button', { name: /Unread/i });
     await user.click(unreadButton);
 
-    expect(hooks.useMessageList).toHaveBeenCalledWith(
+    expect(hooks.useMessageListPaged).toHaveBeenCalledWith(
       expect.objectContaining({
         for_agent: 'test-user',
         unread_for_agent: 'test-user',
@@ -218,8 +212,76 @@ describe('InboxView', () => {
     await user.click(screen.getByRole('button', { name: 'All' }));
 
     // Last call should not include unread_for_agent
-    const lastCall = vi.mocked(hooks.useMessageList).mock.calls.at(-1)?.[0];
+    const lastCall = vi.mocked(hooks.useMessageListPaged).mock.calls.at(-1)?.[0];
     expect(lastCall).not.toHaveProperty('unread_for_agent');
+  });
+
+  // ─── Mentions filter ────────────────────────────────────────────────────────
+
+  it('renders Mentions filter button', () => {
+    renderWithProvider(<InboxView />);
+    expect(screen.getByRole('button', { name: 'Mentions' })).toBeInTheDocument();
+  });
+
+  it('does not include mention filter when "All" is selected (default)', () => {
+    renderWithProvider(<InboxView />);
+
+    expect(hooks.useMessageListPaged).toHaveBeenCalledWith(
+      expect.not.objectContaining({ mention: expect.anything() })
+    );
+  });
+
+  it('adds mention filter when Mentions tab is clicked', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(<InboxView />);
+
+    await user.click(screen.getByRole('button', { name: 'Mentions' }));
+
+    expect(hooks.useMessageListPaged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        for_agent: 'test-user',
+        mention: 'test-user',
+      })
+    );
+  });
+
+  it('does not include unread_for_agent when Mentions tab is active', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(<InboxView />);
+
+    await user.click(screen.getByRole('button', { name: 'Mentions' }));
+
+    const lastCall = vi.mocked(hooks.useMessageListPaged).mock.calls.at(-1)?.[0];
+    expect(lastCall).not.toHaveProperty('unread_for_agent');
+    expect(lastCall).toHaveProperty('mention', 'test-user');
+  });
+
+  it('removes mention filter when switching from Mentions back to All', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(<InboxView />);
+
+    // Switch to Mentions
+    await user.click(screen.getByRole('button', { name: 'Mentions' }));
+    // Switch back to All
+    await user.click(screen.getByRole('button', { name: 'All' }));
+
+    // Last call should not include mention
+    const lastCall = vi.mocked(hooks.useMessageListPaged).mock.calls.at(-1)?.[0];
+    expect(lastCall).not.toHaveProperty('mention');
+  });
+
+  it('uses identityId as mention filter when viewing another agent inbox in Mentions tab', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(<InboxView identityId="agent:other" />);
+
+    await user.click(screen.getByRole('button', { name: 'Mentions' }));
+
+    expect(hooks.useMessageListPaged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        for_agent: 'agent:other',
+        mention: 'agent:other',
+      })
+    );
   });
 
   // ─── 5. ComposeBar renders at bottom ───────────────────────────────────────
@@ -248,17 +310,7 @@ describe('InboxView', () => {
       agent_id: 'agent:sender',
     });
 
-    vi.mocked(hooks.useMessageList).mockReturnValue({
-      data: {
-        messages: [msg],
-        page: 1,
-        page_size: 50,
-        total: 1,
-        total_pages: 1,
-      },
-      isLoading: false,
-      error: null,
-    } as any);
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue(makePagedReturn([msg]));
 
     renderWithProvider(<InboxView />);
 
@@ -285,17 +337,7 @@ describe('InboxView', () => {
       agent_id: 'agent:sender',
     });
 
-    vi.mocked(hooks.useMessageList).mockReturnValue({
-      data: {
-        messages: [msg],
-        page: 1,
-        page_size: 50,
-        total: 1,
-        total_pages: 1,
-      },
-      isLoading: false,
-      error: null,
-    } as any);
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue(makePagedReturn([msg]));
 
     renderWithProvider(<InboxView />);
 
@@ -367,5 +409,103 @@ describe('InboxView', () => {
     renderWithProvider(<InboxView />);
 
     expect(screen.queryByRole('heading', { name: 'Unknown' })).not.toBeInTheDocument();
+  });
+
+  // ─── 9. Pagination ─────────────────────────────────────────────────────────
+
+  it('does not render Load More button when hasMore is false', () => {
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue(makePagedReturn());
+
+    renderWithProvider(<InboxView />);
+
+    expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument();
+  });
+
+  it('renders Load More button when hasMore is true and there are messages', () => {
+    const msg = makeMessage({
+      message_id: 'msg-p1',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Page 1 message' },
+    });
+
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue({
+      messages: [msg],
+      total: 100,
+      isLoading: false,
+      hasMore: true,
+      loadMore: vi.fn(),
+      isLoadingMore: false,
+    } as any);
+
+    renderWithProvider(<InboxView />);
+
+    expect(screen.getByRole('button', { name: /load more/i })).toBeInTheDocument();
+  });
+
+  it('calls loadMore when Load More button is clicked', async () => {
+    const user = userEvent.setup();
+    const loadMore = vi.fn();
+    const msg = makeMessage({
+      message_id: 'msg-p1',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Page 1 message' },
+    });
+
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue({
+      messages: [msg],
+      total: 100,
+      isLoading: false,
+      hasMore: true,
+      loadMore,
+      isLoadingMore: false,
+    } as any);
+
+    renderWithProvider(<InboxView />);
+
+    await user.click(screen.getByRole('button', { name: /load more/i }));
+
+    expect(loadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows "Loading..." text on Load More button when isLoadingMore is true', () => {
+    const msg = makeMessage({
+      message_id: 'msg-p1',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Page 1 message' },
+    });
+
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue({
+      messages: [msg],
+      total: 100,
+      isLoading: false,
+      hasMore: true,
+      loadMore: vi.fn(),
+      isLoadingMore: true,
+    } as any);
+
+    renderWithProvider(<InboxView />);
+
+    expect(screen.getByRole('button', { name: /load more/i })).toHaveTextContent('Loading...');
+  });
+
+  it('shows message count when total is provided and hasMore is true', () => {
+    const msg = makeMessage({
+      message_id: 'msg-p1',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Page 1 message' },
+    });
+
+    vi.mocked(hooks.useMessageListPaged).mockReturnValue({
+      messages: [msg],
+      total: 42,
+      isLoading: false,
+      hasMore: true,
+      loadMore: vi.fn(),
+      isLoadingMore: false,
+    } as any);
+
+    renderWithProvider(<InboxView />);
+
+    expect(screen.getByText(/Showing 1 of 42 messages/)).toBeInTheDocument();
   });
 });
