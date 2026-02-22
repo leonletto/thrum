@@ -16,14 +16,6 @@ export function useMessageArchive() {
   });
 }
 
-/**
- * Hook to delete all messages for a given agent
- */
-export function useMessageDeleteByAgent() {
-  return useMutation({
-    mutationFn: async (params: { agent_id: string }) => {
-      await ensureConnected();
-      return wsClient.call<{ deleted_count: number }>('message.deleteByAgent', params);
-    },
-  });
-}
+// NOTE: The backend RPC `message.deleteByScope` exists but is currently only used
+// by the CLI/backend directly. No UI hook wraps it yet; add one here when a UI
+// flow requires scoped bulk deletion.
