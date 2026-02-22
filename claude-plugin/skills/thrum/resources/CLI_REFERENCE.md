@@ -111,3 +111,10 @@ thrum mcp serve                                # Start MCP stdio server
 thrum runtime list [--json]
 thrum runtime show <name> [--json]
 ```
+
+## Role Templates
+
+```bash
+thrum roles list                         # List templates + matching agents
+thrum roles deploy [--agent NAME] [--dry-run]  # Re-render preambles from templates
+```
