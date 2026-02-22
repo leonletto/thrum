@@ -117,6 +117,8 @@ export function InboxView({ identityId }: InboxViewProps) {
         isLoading={isLoading}
         currentUserId={currentUser?.user_id}
         onReply={handleReply}
+        totalCount={data?.total}
+        hasMore={false}
       />
 
       <div className="border-t p-3">

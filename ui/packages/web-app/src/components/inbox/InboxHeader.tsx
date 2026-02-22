@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Inbox, AlertTriangle, Filter } from 'lucide-react';
 import type { MessageScope } from '@thrum/shared-logic';
-import { ComposeModal } from './ComposeModal';
 import { ScopeBadge } from '@/components/ui/ScopeBadge';
 import {
   DropdownMenu,
@@ -35,7 +34,6 @@ export function InboxHeader({
   filter,
   onFilterChange,
 }: InboxHeaderProps) {
-  const [composeOpen, setComposeOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [scopeType, setScopeType] = useState('');
   const [scopeValue, setScopeValue] = useState('');
@@ -113,7 +111,7 @@ export function InboxHeader({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <button className="compose-btn" onClick={() => setComposeOpen(true)}>
+            <button className="compose-btn">
               + COMPOSE
             </button>
           </div>
@@ -156,12 +154,6 @@ export function InboxHeader({
         )}
       </div>
 
-      <ComposeModal
-        open={composeOpen}
-        onOpenChange={setComposeOpen}
-        sendingAs={sendingAs}
-        isImpersonating={isImpersonating}
-      />
     </>
   );
 }

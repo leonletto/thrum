@@ -146,6 +146,8 @@ export function GroupChannelView({ groupName }: GroupChannelViewProps) {
           isLoading={messagesLoading}
           currentUserId={currentUser?.user_id}
           onReply={handleReply}
+          totalCount={messagesData?.total}
+          hasMore={false}
         />
       </div>
 
