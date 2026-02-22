@@ -12,6 +12,7 @@ vi.mock('@thrum/shared-logic', async () => {
   return {
     ...actual,
     useAgentList: vi.fn(),
+    useGroupList: vi.fn(),
   };
 });
 
@@ -63,6 +64,23 @@ describe('MentionAutocomplete', () => {
     },
   ];
 
+  const mockGroups = [
+    {
+      group_id: 'group:everyone:GRP001',
+      name: 'everyone',
+      description: 'All members',
+      member_count: 10,
+      created_at: '2024-01-01T00:00:00Z',
+    },
+    {
+      group_id: 'group:backend:GRP002',
+      name: 'backend',
+      description: 'Backend team',
+      member_count: 4,
+      created_at: '2024-01-01T00:00:00Z',
+    },
+  ];
+
   beforeEach(() => {
     queryClient = new QueryClient({
       defaultOptions: {
@@ -73,6 +91,12 @@ describe('MentionAutocomplete', () => {
 
     vi.mocked(hooks.useAgentList).mockReturnValue({
       data: { agents: mockAgents },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    vi.mocked(hooks.useGroupList).mockReturnValue({
+      data: { groups: mockGroups },
       isLoading: false,
       error: null,
     } as any);
@@ -335,6 +359,11 @@ describe('MentionAutocomplete', () => {
         isLoading: false,
         error: null,
       } as any);
+      vi.mocked(hooks.useGroupList).mockReturnValue({
+        data: { groups: [] },
+        isLoading: false,
+        error: null,
+      } as any);
 
       renderWithProvider(
         <StatefulMentionAutocomplete onChangeSpy={mockOnChange} />
@@ -369,6 +398,138 @@ describe('MentionAutocomplete', () => {
       // This is expected behavior - UI would filter based on valid agent list
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenLastCalledWith('Email is user@example.com', ['example']);
+      });
+    });
+  });
+
+  describe('Group Suggestions', () => {
+    it('should show group suggestions alongside agents when @ is typed', async () => {
+      const user = userEvent.setup();
+      renderWithProvider(
+        <StatefulMentionAutocomplete onChangeSpy={mockOnChange} />
+      );
+
+      const textarea = screen.getByRole('textbox');
+      await user.type(textarea, '@');
+
+      await waitFor(() => {
+        expect(screen.getByText('@assistant')).toBeInTheDocument();
+        expect(screen.getByText('@everyone')).toBeInTheDocument();
+        expect(screen.getByText('@backend')).toBeInTheDocument();
+      });
+    });
+
+    it('should display # prefix for group items', async () => {
+      const user = userEvent.setup();
+      renderWithProvider(
+        <StatefulMentionAutocomplete onChangeSpy={mockOnChange} />
+      );
+
+      const textarea = screen.getByRole('textbox');
+      await user.type(textarea, '@every');
+
+      await waitFor(() => {
+        expect(screen.getByText('@everyone')).toBeInTheDocument();
+        expect(screen.getByLabelText('group')).toBeInTheDocument();
+      });
+    });
+
+    it('should filter groups based on search text', async () => {
+      const user = userEvent.setup();
+      renderWithProvider(
+        <StatefulMentionAutocomplete onChangeSpy={mockOnChange} />
+      );
+
+      const textarea = screen.getByRole('textbox');
+      await user.type(textarea, '@back');
+
+      await waitFor(() => {
+        expect(screen.getByText('@backend')).toBeInTheDocument();
+        expect(screen.queryByText('@everyone')).not.toBeInTheDocument();
+        expect(screen.queryByText('@assistant')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should insert group mention when group is clicked', async () => {
+      const user = userEvent.setup();
+      renderWithProvider(
+        <StatefulMentionAutocomplete onChangeSpy={mockOnChange} />
+      );
+
+      const textarea = screen.getByRole('textbox');
+      await user.type(textarea, '@every');
+
+      await waitFor(() => {
+        expect(screen.getByText('@everyone')).toBeInTheDocument();
+      });
+
+      const everyoneOption = screen.getByText('@everyone');
+      await user.click(everyoneOption);
+
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalledWith('@everyone ', ['everyone']);
+      });
+    });
+
+    it('should show group description as sublabel', async () => {
+      const user = userEvent.setup();
+      renderWithProvider(
+        <StatefulMentionAutocomplete onChangeSpy={mockOnChange} />
+      );
+
+      const textarea = screen.getByRole('textbox');
+      await user.type(textarea, '@every');
+
+      await waitFor(() => {
+        expect(screen.getByText('All members')).toBeInTheDocument();
+      });
+    });
+
+    it('should show groups even when agent list is empty', async () => {
+      const user = userEvent.setup();
+      vi.mocked(hooks.useAgentList).mockReturnValue({
+        data: { agents: [] },
+        isLoading: false,
+        error: null,
+      } as any);
+
+      renderWithProvider(
+        <StatefulMentionAutocomplete onChangeSpy={mockOnChange} />
+      );
+
+      const textarea = screen.getByRole('textbox');
+      await user.type(textarea, '@');
+
+      await waitFor(() => {
+        expect(screen.getByText('@everyone')).toBeInTheDocument();
+        expect(screen.getByText('@backend')).toBeInTheDocument();
+      });
+    });
+
+    it('should navigate across both agents and groups with arrow keys', async () => {
+      const user = userEvent.setup();
+      renderWithProvider(
+        <StatefulMentionAutocomplete onChangeSpy={mockOnChange} />
+      );
+
+      const textarea = screen.getByRole('textbox');
+      await user.type(textarea, '@');
+
+      await waitFor(() => {
+        expect(screen.getByText('@assistant')).toBeInTheDocument();
+        expect(screen.getByText('@everyone')).toBeInTheDocument();
+      });
+
+      // Navigate past agents into groups (3 agents + first group = index 3)
+      await user.keyboard('{ArrowDown}');
+      await user.keyboard('{ArrowDown}');
+      await user.keyboard('{ArrowDown}');
+
+      // Press Enter to select the first group (@everyone)
+      await user.keyboard('{Enter}');
+
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalledWith('@everyone ', ['everyone']);
       });
     });
   });
