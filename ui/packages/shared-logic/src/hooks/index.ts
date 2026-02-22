@@ -18,3 +18,4 @@ export * from './useSubscription';
 export * from './useGroup';
 export * from './useSession';
 export * from './useRealtimeMessages';
+export * from './useMessageBulk';
