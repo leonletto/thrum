@@ -2,6 +2,7 @@ import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '../../../test/test-utils';
 import { userEvent } from '@testing-library/user-event';
 import { FeedView } from '../FeedView';
+import { uiStore } from '@thrum/shared-logic';
 
 // ─── Mutable state for mock hooks ────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ const mockState = {
   messagesLoading: false,
   sessionsLoading: false,
   agentsLoading: false,
+  currentUser: undefined as { user_id: string; username: string } | undefined,
 };
 
 function makeMockAgent(overrides: Record<string, unknown> = {}) {
@@ -71,6 +73,7 @@ vi.mock('@thrum/shared-logic', async () => {
       isLoading: mockState.agentsLoading,
       error: null,
     }),
+    useCurrentUser: () => mockState.currentUser,
   };
 });
 
@@ -94,6 +97,7 @@ describe('FeedView', () => {
     mockState.messagesLoading = false;
     mockState.sessionsLoading = false;
     mockState.agentsLoading = false;
+    mockState.currentUser = undefined;
   });
 
   afterEach(() => {
@@ -104,7 +108,7 @@ describe('FeedView', () => {
     mockState.messagesLoading = true;
 
     render(<FeedView />);
-    expect(screen.getByText(/loading feed/i)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /loading feed/i })).toBeInTheDocument();
   });
 
   test('shows messages from message.list', () => {
@@ -303,5 +307,104 @@ describe('FeedView', () => {
       b.textContent?.includes('registered')
     );
     expect(agentRegBtn).toBeDefined();
+  });
+
+  // ─── Navigation tests ───────────────────────────────────────────────────────
+
+  test('clicking a group-scoped message navigates to the group channel', async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+
+    mockState.messages = [
+      makeMockMessage({
+        message_id: 'msg-group',
+        scopes: [{ type: 'group', value: 'team-channel' }],
+      }),
+    ];
+
+    render(<FeedView />);
+
+    const msgBtn = screen.getAllByRole('button').find((b) =>
+      b.textContent?.includes('Starting work...')
+    );
+    expect(msgBtn).toBeDefined();
+    await user.click(msgBtn!);
+
+    expect(uiStore.state.selectedView).toBe('group-channel');
+    expect(uiStore.state.selectedGroupName).toBe('team-channel');
+  });
+
+  test('clicking a non-group message navigates to the sender agent inbox', async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+
+    mockState.messages = [
+      makeMockMessage({
+        message_id: 'msg-direct',
+        agent_id: 'agent:impl_1:aaa',
+        scopes: [{ type: 'to', value: 'agent:coordinator:ccc' }],
+      }),
+    ];
+
+    render(<FeedView />);
+
+    const msgBtn = screen.getAllByRole('button').find((b) =>
+      b.textContent?.includes('Starting work...')
+    );
+    expect(msgBtn).toBeDefined();
+    await user.click(msgBtn!);
+
+    expect(uiStore.state.selectedView).toBe('agent-inbox');
+    expect(uiStore.state.selectedAgentId).toBe('agent:impl_1:aaa');
+  });
+
+  test('clicking a message from current user navigates to my inbox', async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+
+    mockState.currentUser = { user_id: 'agent:impl_1:aaa', username: 'impl_1' };
+    mockState.messages = [
+      makeMockMessage({
+        message_id: 'msg-own',
+        agent_id: 'agent:impl_1:aaa',
+        scopes: [{ type: 'to', value: 'agent:coordinator:ccc' }],
+      }),
+    ];
+
+    render(<FeedView />);
+
+    const msgBtn = screen.getAllByRole('button').find((b) =>
+      b.textContent?.includes('Starting work...')
+    );
+    expect(msgBtn).toBeDefined();
+    await user.click(msgBtn!);
+
+    expect(uiStore.state.selectedView).toBe('my-inbox');
+  });
+
+  test('clicking a session event navigates to the agent inbox', async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+
+    mockState.sessions = [
+      makeMockSession({
+        session_id: 'ses-1',
+        agent_id: 'agent:impl_2:bbb',
+        started_at: '2024-01-01T11:45:00Z',
+        ended_at: undefined,
+        active: true,
+      }),
+    ];
+
+    render(<FeedView />);
+
+    const sessionBtn = screen.getAllByRole('button').find((b) =>
+      b.textContent?.includes('started session')
+    );
+    expect(sessionBtn).toBeDefined();
+    await user.click(sessionBtn!);
+
+    expect(uiStore.state.selectedView).toBe('agent-inbox');
+    expect(uiStore.state.selectedAgentId).toBe('agent:impl_2:bbb');
   });
 });
