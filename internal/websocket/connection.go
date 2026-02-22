@@ -236,9 +236,17 @@ func (c *Connection) processSingleRequest(ctx context.Context, req jsonRPCReques
 		}
 	}
 
+	// Default nil params to empty JSON object so handlers can always unmarshal.
+	// This happens when the client omits the "params" field (e.g. JSON.stringify
+	// drops undefined values), which leaves req.Params as nil after parsing.
+	params := req.Params
+	if params == nil {
+		params = json.RawMessage("{}")
+	}
+
 	// Call handler with WebSocket transport context
 	ctxWithTransport := transport.WithTransport(ctx, transport.TransportWebSocket)
-	result, err := handler(ctxWithTransport, req.Params)
+	result, err := handler(ctxWithTransport, params)
 	if err != nil {
 		return jsonRPCResponse{
 			JSONRPC: "2.0",

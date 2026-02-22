@@ -530,6 +530,66 @@ func TestRequestWithParams(t *testing.T) {
 	}
 }
 
+func TestRequestWithNilParams(t *testing.T) {
+	registry := ws.NewSimpleRegistry()
+	server := ws.NewServer("localhost:9986", registry, nil)
+	ctx := context.Background()
+
+	// Handler that unmarshals params into a struct (like agent.list does).
+	// This previously failed when the client omitted the "params" field,
+	// because json.Unmarshal(nil, &v) returns an error.
+	type listReq struct {
+		Role string `json:"role"`
+	}
+	registry.Register("agent.list", func(ctx context.Context, params json.RawMessage) (any, error) {
+		var req listReq
+		if err := json.Unmarshal(params, &req); err != nil {
+			return nil, err
+		}
+		return map[string]any{"agents": []string{}, "filter": req.Role}, nil
+	})
+
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	time.Sleep(100 * time.Millisecond)
+
+	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:9986/", nil)
+	if err != nil {
+		t.Fatalf("failed to connect to WebSocket: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Send request WITHOUT params field (like JS client does when params is undefined)
+	request := map[string]any{
+		"jsonrpc": "2.0",
+		"method":  "agent.list",
+		"id":      1,
+	}
+	if err := conn.WriteJSON(request); err != nil {
+		t.Fatalf("failed to write request: %v", err)
+	}
+
+	var resp map[string]any
+	if err := conn.ReadJSON(&resp); err != nil {
+		t.Fatalf("failed to read response: %v", err)
+	}
+
+	if resp["error"] != nil {
+		t.Fatalf("expected success but got error: %v", resp["error"])
+	}
+
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected result to be an object, got %T", resp["result"])
+	}
+	if result["filter"] != "" {
+		t.Fatalf("expected empty filter, got %v", result["filter"])
+	}
+}
+
 func TestBatchRequest(t *testing.T) {
 	registry := ws.NewSimpleRegistry()
 	server := ws.NewServer("localhost:9988", registry, nil)

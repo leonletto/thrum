@@ -118,9 +118,9 @@ func (l *Lifecycle) Run(ctx context.Context) error {
 			if l.wsServer != nil {
 				_ = l.wsServer.Stop()
 			}
-			if l.wsPortFile != "" {
-				_ = RemovePortFile(l.wsPortFile)
-			}
+			// Note: ws.port file is intentionally NOT removed on shutdown.
+			// This allows the daemon to reuse the same port on restart,
+			// keeping the URL stable. The new daemon overwrites the file.
 			_ = RemovePIDFile(l.pidFile)
 		}
 	}()
@@ -196,13 +196,9 @@ func (l *Lifecycle) shutdown() error {
 			// Continue with cleanup even if stop fails
 		}
 
-		// Remove WebSocket port file
-		if l.wsPortFile != "" {
-			if err := RemovePortFile(l.wsPortFile); err != nil {
-				fmt.Fprintf(os.Stderr, "Error removing WebSocket port file: %v\n", err)
-				// Continue with cleanup even if removal fails
-			}
-		}
+		// Note: ws.port file is intentionally NOT removed on shutdown.
+		// This allows the daemon to reuse the same port on restart,
+		// keeping the URL stable. The new daemon overwrites the file.
 	}
 
 	// Step 5: Close socket and stop Unix server

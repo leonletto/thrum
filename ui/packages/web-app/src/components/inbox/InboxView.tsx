@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import {
   useCurrentUser,
@@ -86,6 +86,18 @@ export function InboxView({ identityId }: InboxViewProps) {
     setReplyTo(undefined);
   };
 
+  const composeBarRef = useRef<HTMLDivElement>(null);
+
+  const handleCompose = useCallback(() => {
+    const input = composeBarRef.current?.querySelector<HTMLTextAreaElement | HTMLInputElement>(
+      'textarea, input[type="text"]'
+    );
+    if (input) {
+      input.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      input.focus();
+    }
+  }, []);
+
   return (
     <div className="h-full flex flex-col">
       {/* Impersonation warning banner */}
@@ -110,6 +122,7 @@ export function InboxView({ identityId }: InboxViewProps) {
         onFilterChange={setFilter}
         onScopeFilterChange={setScopeFilter}
         activeScopeFilter={scopeFilter}
+        onCompose={handleCompose}
       />
 
       <MessageList
@@ -121,7 +134,7 @@ export function InboxView({ identityId }: InboxViewProps) {
         hasMore={false}
       />
 
-      <div className="border-t p-3">
+      <div className="border-t p-3" ref={composeBarRef}>
         <ComposeBar
           sendingAs={sendingAs}
           isImpersonating={isImpersonating}

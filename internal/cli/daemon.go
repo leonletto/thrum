@@ -14,13 +14,14 @@ import (
 
 // DaemonStatusResult contains daemon status information.
 type DaemonStatusResult struct {
-	Running   bool   `json:"running"`
-	Status    string `json:"status"`
-	PID       int    `json:"pid,omitempty"`
-	RepoPath  string `json:"repo_path,omitempty"`
-	Uptime    string `json:"uptime,omitempty"`
-	Version   string `json:"version,omitempty"`
-	SyncState string `json:"sync_state,omitempty"`
+	Running       bool   `json:"running"`
+	Status        string `json:"status"`
+	PID           int    `json:"pid,omitempty"`
+	RepoPath      string `json:"repo_path,omitempty"`
+	Uptime        string `json:"uptime,omitempty"`
+	Version       string `json:"version,omitempty"`
+	SyncState     string `json:"sync_state,omitempty"`
+	WebSocketPort int    `json:"ws_port,omitempty"`
 }
 
 // DaemonStart starts the daemon in the background.
@@ -90,20 +91,28 @@ func DaemonStart(repoPath string, localOnly bool) error {
 		return fmt.Errorf("failed to release daemon process: %w", err)
 	}
 
-	// Wait for socket to become available (indicates daemon is ready)
+	// Wait for socket and ws.port to become available (indicates daemon is ready)
+	wsPortPath := filepath.Join(thrumDir, "var", "ws.port")
 	timeout := time.After(10 * time.Second)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
+	socketReady := false
 	for {
 		select {
 		case <-timeout:
 			return fmt.Errorf("timeout waiting for daemon to start")
 		case <-ticker.C:
-			// Check if socket exists
-			if _, err := os.Stat(socketPath); err == nil {
-				// Socket exists - daemon is ready
-				return nil
+			if !socketReady {
+				if _, err := os.Stat(socketPath); err == nil {
+					socketReady = true
+				}
+			}
+			if socketReady {
+				// Also wait for ws.port file so the URL is available
+				if _, err := os.Stat(wsPortPath); err == nil {
+					return nil
+				}
 			}
 		}
 	}
@@ -187,6 +196,9 @@ func DaemonStatus(repoPath string) (*DaemonStatusResult, error) {
 
 	// If daemon is running, try to get additional info via RPC
 	if running {
+		// Read WebSocket port
+		result.WebSocketPort = ReadWebSocketPort(repoPath)
+
 		// Check if socket exists
 		if _, err := os.Stat(socketPath); err == nil {
 			// Try to connect and get health info
@@ -241,6 +253,9 @@ func FormatDaemonStatus(result *DaemonStatusResult) string {
 		} else {
 			status += fmt.Sprintf("Sync:     %s\n", result.SyncState)
 		}
+	}
+	if result.WebSocketPort > 0 {
+		status += fmt.Sprintf("UI:       http://localhost:%d\n", result.WebSocketPort)
 	}
 
 	return status

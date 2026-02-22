@@ -464,7 +464,11 @@ Examples:
 					return fmt.Errorf("start daemon: %w", startErr)
 				}
 				if !flagQuiet {
-					fmt.Println("✓ Daemon started")
+					if wsPort := cli.ReadWebSocketPort(flagRepo); wsPort > 0 {
+						fmt.Printf("✓ Daemon started — http://localhost:%d\n", wsPort)
+					} else {
+						fmt.Println("✓ Daemon started")
+					}
 				}
 			} else {
 				_ = client.Close()
@@ -1493,7 +1497,11 @@ func daemonCmd() *cobra.Command {
 			}
 
 			if !flagQuiet {
-				fmt.Println("✓ Daemon started successfully")
+				if wsPort := cli.ReadWebSocketPort(flagRepo); wsPort > 0 {
+					fmt.Printf("✓ Daemon started — http://localhost:%d\n", wsPort)
+				} else {
+					fmt.Println("✓ Daemon started successfully")
+				}
 			}
 
 			return nil
@@ -1552,7 +1560,11 @@ func daemonCmd() *cobra.Command {
 			}
 
 			if !flagQuiet {
-				fmt.Println("✓ Daemon restarted successfully")
+				if wsPort := cli.ReadWebSocketPort(flagRepo); wsPort > 0 {
+					fmt.Printf("✓ Daemon restarted — http://localhost:%d\n", wsPort)
+				} else {
+					fmt.Println("✓ Daemon restarted successfully")
+				}
 			}
 
 			return nil
@@ -4511,17 +4523,30 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		wsPort = thrumCfg.Daemon.WSPort
 	}
 	if wsPort == "" || wsPort == "auto" {
-		// Find a free port
-		listener, listenErr := net.Listen("tcp", "localhost:0")
-		if listenErr != nil {
-			return fmt.Errorf("failed to find free port for WebSocket: %w", listenErr)
+		// Try to reuse the previous port so the URL stays stable across restarts
+		if prevPort := cli.ReadWebSocketPort(absPath); prevPort > 0 {
+			prevPortStr := strconv.Itoa(prevPort)
+			listener, listenErr := net.Listen("tcp", "localhost:"+prevPortStr)
+			if listenErr == nil {
+				// Previous port is available — reuse it
+				_ = listener.Close()
+				wsPort = prevPortStr
+			}
 		}
-		tcpAddr, ok := listener.Addr().(*net.TCPAddr)
-		if !ok {
-			return fmt.Errorf("failed to get TCP address from listener")
+
+		// If no previous port or it's unavailable, find a free one
+		if wsPort == "" || wsPort == "auto" {
+			listener, listenErr := net.Listen("tcp", "localhost:0")
+			if listenErr != nil {
+				return fmt.Errorf("failed to find free port for WebSocket: %w", listenErr)
+			}
+			tcpAddr, ok := listener.Addr().(*net.TCPAddr)
+			if !ok {
+				return fmt.Errorf("failed to get TCP address from listener")
+			}
+			wsPort = strconv.Itoa(tcpAddr.Port)
+			_ = listener.Close()
 		}
-		wsPort = strconv.Itoa(tcpAddr.Port)
-		_ = listener.Close()
 	}
 	wsAddr := "localhost:" + wsPort
 
