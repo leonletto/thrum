@@ -4746,7 +4746,7 @@ Examples:
 				return fmt.Errorf("list role templates: %w", err)
 			}
 
-			if templates == nil || len(templates) == 0 {
+			if len(templates) == 0 {
 				fmt.Println("No role templates found in .thrum/role_templates/")
 				fmt.Println("  Create templates manually or use: thrum configure-roles")
 				return nil
@@ -4754,9 +4754,9 @@ Examples:
 
 			for name, agents := range templates {
 				if len(agents) == 0 {
-					fmt.Fprintf(os.Stdout, "%s    (0 agents)\n", name)
+					fmt.Printf("%s    (0 agents)\n", name)
 				} else {
-					fmt.Fprintf(os.Stdout, "%s    (%d agents: %s)\n", name, len(agents), strings.Join(agents, ", "))
+					fmt.Printf("%s    (%d agents: %s)\n", name, len(agents), strings.Join(agents, ", "))
 				}
 			}
 

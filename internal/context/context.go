@@ -143,10 +143,7 @@ func RenderRoleTemplate(thrumDir, agentName, role string) ([]byte, error) {
 	}
 
 	// Load identity data for template variables
-	data, err := buildTemplateData(thrumDir, agentName, role)
-	if err != nil {
-		return nil, fmt.Errorf("build template data: %w", err)
-	}
+	data := buildTemplateData(thrumDir, agentName, role)
 
 	tmpl, err := template.New(role + ".md").Parse(string(tmplContent))
 	if err != nil {
@@ -239,7 +236,7 @@ func ListRoleTemplates(thrumDir string) (map[string][]string, error) {
 }
 
 // buildTemplateData constructs the template data for a given agent.
-func buildTemplateData(thrumDir, agentName, role string) (*RoleTemplateData, error) {
+func buildTemplateData(thrumDir, agentName, role string) *RoleTemplateData {
 	data := &RoleTemplateData{
 		AgentName: agentName,
 		Role:      role,
@@ -262,7 +259,7 @@ func buildTemplateData(thrumDir, agentName, role string) (*RoleTemplateData, err
 	// Find coordinator name by scanning identities
 	data.CoordinatorName = findCoordinatorName(thrumDir)
 
-	return data, nil
+	return data
 }
 
 // findCoordinatorName scans identities for the first agent with role=coordinator.
