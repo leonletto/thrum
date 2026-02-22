@@ -4361,6 +4361,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("message.edit", messageHandler.HandleEdit)
 	server.RegisterHandler("message.markRead", messageHandler.HandleMarkRead)
 	server.RegisterHandler("message.deleteByScope", messageHandler.HandleDeleteByScope)
+	server.RegisterHandler("message.deleteByAgent", messageHandler.HandleDeleteByAgent)
 	server.RegisterHandler("message.archive", messageHandler.HandleArchive)
 
 	// Subscription management
