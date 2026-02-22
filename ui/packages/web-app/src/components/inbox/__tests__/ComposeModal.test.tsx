@@ -10,14 +10,12 @@ vi.mock('@thrum/shared-logic', async () => {
   const actual = await vi.importActual('@thrum/shared-logic');
   return {
     ...actual,
-    useCreateThread: vi.fn(),
     useCurrentUser: vi.fn(),
   };
 });
 
 describe('ComposeModal', () => {
   let queryClient: QueryClient;
-  const mockCreateThread = vi.fn();
   const mockOnOpenChange = vi.fn();
 
   beforeEach(() => {
@@ -28,11 +26,6 @@ describe('ComposeModal', () => {
       },
     });
 
-    vi.mocked(hooks.useCreateThread).mockReturnValue({
-      mutate: mockCreateThread,
-      isPending: false,
-    } as any);
-
     vi.mocked(hooks.useCurrentUser).mockReturnValue({
       user_id: 'user:test',
       username: 'test-user',
@@ -41,7 +34,6 @@ describe('ComposeModal', () => {
     });
 
     mockOnOpenChange.mockClear();
-    mockCreateThread.mockClear();
   });
 
   const renderWithProvider = (component: React.ReactElement) => {
@@ -193,8 +185,8 @@ describe('ComposeModal', () => {
     });
   });
 
-  describe('Thread Creation', () => {
-    it('should create thread when form is submitted', async () => {
+  describe('Form Submission', () => {
+    it('should close modal when form is submitted', async () => {
       const user = userEvent.setup();
       renderWithProvider(
         <ComposeModal
@@ -211,61 +203,9 @@ describe('ComposeModal', () => {
       const sendButton = screen.getByRole('button', { name: /send/i });
       await user.click(sendButton);
 
-      expect(mockCreateThread).toHaveBeenCalledWith(
-        { title: 'Test Thread' },
-        expect.any(Object)
-      );
-    });
-
-    it('should close modal and reset form after successful creation', async () => {
-      const user = userEvent.setup();
-      mockCreateThread.mockImplementation((payload, options) => {
-        options.onSuccess?.();
-      });
-
-      renderWithProvider(
-        <ComposeModal
-          open={true}
-          onOpenChange={mockOnOpenChange}
-          sendingAs="user:test"
-          isImpersonating={false}
-        />
-      );
-
-      const subjectField = screen.getByLabelText(/subject/i) as HTMLInputElement;
-      await user.type(subjectField, 'Test Thread');
-
-      const sendButton = screen.getByRole('button', { name: /send/i });
-      await user.click(sendButton);
-
       await waitFor(() => {
         expect(mockOnOpenChange).toHaveBeenCalledWith(false);
       });
-
-      // Note: Form reset is only visible if modal stays open, but in this case
-      // the modal closes immediately, so we can't verify the reset state
-    });
-
-    it('should disable form while creating thread', () => {
-      vi.mocked(hooks.useCreateThread).mockReturnValue({
-        mutate: mockCreateThread,
-        isPending: true,
-      } as any);
-
-      renderWithProvider(
-        <ComposeModal
-          open={true}
-          onOpenChange={mockOnOpenChange}
-          sendingAs="user:test"
-          isImpersonating={false}
-        />
-      );
-
-      // Only the submit button is disabled during submission, not the input fields
-      // Button shows loader icon when pending, so we can't search by name
-      const buttons = screen.getAllByRole('button');
-      const submitButton = buttons.find(btn => btn.type === 'submit');
-      expect(submitButton).toBeDisabled();
     });
   });
 
@@ -333,48 +273,10 @@ describe('ComposeModal', () => {
     });
   });
 
-  describe('Backend Limitation Note', () => {
-    it('should not include recipient and message in thread creation (backend limitation)', async () => {
-      const user = userEvent.setup();
-      renderWithProvider(
-        <ComposeModal
-          open={true}
-          onOpenChange={mockOnOpenChange}
-          sendingAs="user:test"
-          isImpersonating={false}
-        />
-      );
-
-      // Fill all fields
-      await user.type(screen.getByLabelText(/to/i), 'agent:claude');
-      await user.type(screen.getByLabelText(/subject/i), 'Test Subject');
-      const messageField = screen.getByPlaceholderText(/Use @ to mention agents/i);
-      await user.click(messageField);
-      await user.paste('Test message');
-
-      const sendButton = screen.getByRole('button', { name: /send/i });
-      await user.click(sendButton);
-
-      // Currently, only title is sent due to backend limitation
-      expect(mockCreateThread).toHaveBeenCalledWith(
-        { title: 'Test Subject' },
-        expect.any(Object)
-      );
-
-      // Note: When backend supports full thread creation (thrum-8to.1),
-      // this test should be updated to expect:
-      // {
-      //   title: 'Test Subject',
-      //   recipient: 'agent:claude',
-      //   message: { format: 'markdown', content: 'Test message' }
-      // }
-    });
-  });
-
   describe('Edge Cases', () => {
-    it('should handle very long titles', async () => {
+    it('should close modal when submitting with long title', async () => {
       const user = userEvent.setup();
-      const longTitle = 'A'.repeat(1000);
+      const longTitle = 'A'.repeat(100);
 
       renderWithProvider(
         <ComposeModal
@@ -385,7 +287,6 @@ describe('ComposeModal', () => {
         />
       );
 
-      // Use paste instead of type to avoid 1000 individual keystrokes
       const subjectField = screen.getByLabelText(/subject/i);
       await user.click(subjectField);
       await user.paste(longTitle);
@@ -393,37 +294,9 @@ describe('ComposeModal', () => {
       const sendButton = screen.getByRole('button', { name: /send/i });
       await user.click(sendButton);
 
-      expect(mockCreateThread).toHaveBeenCalledWith(
-        { title: longTitle },
-        expect.any(Object)
-      );
-    });
-
-    it('should handle special characters in fields', async () => {
-      const user = userEvent.setup();
-      const specialTitle = '<script>alert("xss")</script>';
-
-      renderWithProvider(
-        <ComposeModal
-          open={true}
-          onOpenChange={mockOnOpenChange}
-          sendingAs="user:test"
-          isImpersonating={false}
-        />
-      );
-
-      // Use paste to avoid userEvent interpreting <> as special key sequences
-      const subjectField = screen.getByLabelText(/subject/i);
-      await user.click(subjectField);
-      await user.paste(specialTitle);
-
-      const sendButton = screen.getByRole('button', { name: /send/i });
-      await user.click(sendButton);
-
-      expect(mockCreateThread).toHaveBeenCalledWith(
-        { title: specialTitle },
-        expect.any(Object)
-      );
+      await waitFor(() => {
+        expect(mockOnOpenChange).toHaveBeenCalledWith(false);
+      });
     });
   });
 

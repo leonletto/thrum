@@ -3,7 +3,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { ThreadListSkeleton } from '../components/inbox/ThreadListSkeleton';
 import { AgentListSkeleton } from '../components/agents/AgentListSkeleton';
 import { SkipLink } from '../components/SkipLink';
 
@@ -134,13 +133,6 @@ describe('UI Polish Integration Tests', () => {
   });
 
   describe('Loading Skeletons Integration', () => {
-    it('renders thread list skeleton during loading', () => {
-      const { container } = render(<ThreadListSkeleton />);
-
-      const skeletons = container.querySelectorAll('.animate-pulse');
-      expect(skeletons.length).toBeGreaterThan(0);
-    });
-
     it('renders agent list skeleton during loading', () => {
       const { container } = render(<AgentListSkeleton />);
 
@@ -148,8 +140,8 @@ describe('UI Polish Integration Tests', () => {
       expect(skeletons.length).toBeGreaterThan(0);
     });
 
-    it('skeletons have proper accessibility markup', () => {
-      const { container } = render(<ThreadListSkeleton />);
+    it('agent skeleton has proper accessibility markup', () => {
+      const { container } = render(<AgentListSkeleton />);
 
       // Skeletons should be presentational (not interactive)
       const buttons = container.querySelectorAll('button');
@@ -204,7 +196,7 @@ describe('UI Polish Integration Tests', () => {
       const { rerender } = render(
         <div>
           {/* Show loading skeleton */}
-          {hasError ? <ThreadListSkeleton /> : null}
+          {hasError ? <AgentListSkeleton /> : null}
 
           {/* Error boundary wraps content */}
           <ErrorBoundary>

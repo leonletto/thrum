@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Loader2, Plus, X, ChevronDown } from 'lucide-react';
-import { useCreateThread, useCurrentUser, type MessageScope } from '@thrum/shared-logic';
+import { useCurrentUser, type MessageScope } from '@thrum/shared-logic';
 import {
   Dialog,
   DialogContent,
@@ -46,28 +46,17 @@ export function ComposeModal({
   const [priority, setPriority] = useState<'normal' | 'high' | 'low'>('normal');
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const currentUser = useCurrentUser();
-  const { mutate: createThread, isPending } = useCreateThread();
+  // TODO: Re-implement thread creation in Phase 2
+  const isPending = false;
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-
-    // TODO: Update when backend supports recipient, message, acting_as, disclosed
-    // Currently useCreateThread only accepts { title }
-    createThread(
-      {
-        title,
-      },
-      {
-        onSuccess: () => {
-          onOpenChange(false);
-          // Reset form
-          setRecipient('');
-          setTitle('');
-          setContent('');
-          setMentions([]);
-        },
-      }
-    );
+    // TODO: Implement thread creation in Phase 2
+    onOpenChange(false);
+    setRecipient('');
+    setTitle('');
+    setContent('');
+    setMentions([]);
   };
 
   const handleContentChange = (newContent: string, newMentions: string[]) => {
