@@ -7,14 +7,11 @@ import type { MarkAsReadRequest, MarkAsReadResponse } from '../types/api';
  *
  * Example:
  * ```tsx
- * function ThreadView({ threadId }: { threadId: string }) {
- *   const { data } = useThread(threadId);
+ * function MessageView({ messages }: { messages: Message[] }) {
  *   const markAsRead = useMarkAsRead();
  *
  *   useEffect(() => {
- *     if (!data?.messages) return;
- *
- *     const unreadIds = data.messages
+ *     const unreadIds = messages
  *       .filter(m => !m.is_read)
  *       .map(m => m.message_id);
  *
@@ -25,7 +22,7 @@ import type { MarkAsReadRequest, MarkAsReadResponse } from '../types/api';
  *
  *       return () => clearTimeout(timer);
  *     }
- *   }, [data?.messages, markAsRead]);
+ *   }, [messages, markAsRead]);
  *
  *   return <div>...</div>;
  * }

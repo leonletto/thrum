@@ -9,6 +9,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/types"
 )
 
 // setupGroupTest creates a state with a registered agent and active session.
@@ -376,5 +377,184 @@ func TestGroupDelete_NonExistent(t *testing.T) {
 	_, err := handler.HandleDelete(context.Background(), deleteReq)
 	if err == nil {
 		t.Fatal("expected error for non-existent group")
+	}
+}
+
+// setupGroupTestWithMessages creates state with both a GroupHandler and a MessageHandler.
+func setupGroupTestWithMessages(t *testing.T) (*GroupHandler, *MessageHandler, *state.State, func()) {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("create .thrum dir: %v", err)
+	}
+
+	repoID := "r_GROUP_MSG_TEST"
+	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+
+	t.Setenv("THRUM_ROLE", "tester")
+	t.Setenv("THRUM_MODULE", "test-module")
+
+	agentID := identity.GenerateAgentID(repoID, "tester", "test-module", "")
+	agentHandler := NewAgentHandler(st)
+	registerParams, _ := json.Marshal(RegisterRequest{Role: "tester", Module: "test-module"})
+	if _, err := agentHandler.HandleRegister(context.Background(), registerParams); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+
+	sessionHandler := NewSessionHandler(st)
+	sessionParams, _ := json.Marshal(SessionStartRequest{AgentID: agentID})
+	if _, err := sessionHandler.HandleStart(context.Background(), sessionParams); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	groupHandler := NewGroupHandler(st)
+	msgHandler := NewMessageHandler(st)
+	return groupHandler, msgHandler, st, func() { _ = st.Close() }
+}
+
+func TestGroupDelete_WithDeleteMessages_True(t *testing.T) {
+	groupHandler, msgHandler, st, cleanup := setupGroupTestWithMessages(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a group
+	createReq, _ := json.Marshal(GroupCreateRequest{Name: "engineering"})
+	if _, err := groupHandler.HandleCreate(ctx, createReq); err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+
+	// Send two messages scoped to the group
+	for i := 0; i < 2; i++ {
+		sendParams, _ := json.Marshal(SendRequest{
+			Content: "Engineering message",
+			Scopes: []types.Scope{
+				{Type: "group", Value: "engineering"},
+			},
+		})
+		if _, err := msgHandler.HandleSend(ctx, sendParams); err != nil {
+			t.Fatalf("send message %d: %v", i, err)
+		}
+	}
+
+	// Verify messages are present before delete
+	var countBefore int
+	if err := st.RawDB().QueryRow(
+		"SELECT COUNT(*) FROM message_scopes WHERE scope_type = ? AND scope_value = ?",
+		"group", "engineering",
+	).Scan(&countBefore); err != nil {
+		t.Fatalf("count before: %v", err)
+	}
+	if countBefore != 2 {
+		t.Fatalf("expected 2 scoped messages before delete, got %d", countBefore)
+	}
+
+	// Delete group with delete_messages=true
+	deleteReq, _ := json.Marshal(GroupDeleteRequest{
+		Name:           "engineering",
+		DeleteMessages: true,
+	})
+	resp, err := groupHandler.HandleDelete(ctx, deleteReq)
+	if err != nil {
+		t.Fatalf("HandleDelete: %v", err)
+	}
+	deleteResp, ok := resp.(*GroupDeleteResponse)
+	if !ok {
+		t.Fatalf("expected *GroupDeleteResponse, got %T", resp)
+	}
+	if deleteResp.Name != "engineering" {
+		t.Errorf("expected name 'engineering', got %q", deleteResp.Name)
+	}
+
+	// Verify group is gone
+	var groupCount int
+	if err := st.RawDB().QueryRow(
+		"SELECT COUNT(*) FROM groups WHERE name = ?", "engineering",
+	).Scan(&groupCount); err != nil {
+		t.Fatalf("count groups: %v", err)
+	}
+	if groupCount != 0 {
+		t.Errorf("expected group to be deleted, but found %d rows", groupCount)
+	}
+
+	// Verify messages are gone
+	var msgCount int
+	if err := st.RawDB().QueryRow(
+		"SELECT COUNT(*) FROM message_scopes WHERE scope_type = ? AND scope_value = ?",
+		"group", "engineering",
+	).Scan(&msgCount); err != nil {
+		t.Fatalf("count message_scopes: %v", err)
+	}
+	if msgCount != 0 {
+		t.Errorf("expected 0 message scopes after delete, got %d", msgCount)
+	}
+
+	var msgRowCount int
+	if err := st.RawDB().QueryRow("SELECT COUNT(*) FROM messages WHERE deleted = 0").Scan(&msgRowCount); err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if msgRowCount != 0 {
+		t.Errorf("expected 0 messages after delete_messages=true, got %d", msgRowCount)
+	}
+}
+
+func TestGroupDelete_WithDeleteMessages_False(t *testing.T) {
+	groupHandler, msgHandler, st, cleanup := setupGroupTestWithMessages(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a group
+	createReq, _ := json.Marshal(GroupCreateRequest{Name: "design"})
+	if _, err := groupHandler.HandleCreate(ctx, createReq); err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+
+	// Send a message scoped to the group
+	sendParams, _ := json.Marshal(SendRequest{
+		Content: "Design message",
+		Scopes: []types.Scope{
+			{Type: "group", Value: "design"},
+		},
+	})
+	if _, err := msgHandler.HandleSend(ctx, sendParams); err != nil {
+		t.Fatalf("send message: %v", err)
+	}
+
+	// Delete group WITHOUT delete_messages (default false)
+	deleteReq, _ := json.Marshal(GroupDeleteRequest{
+		Name:           "design",
+		DeleteMessages: false,
+	})
+	if _, err := groupHandler.HandleDelete(ctx, deleteReq); err != nil {
+		t.Fatalf("HandleDelete: %v", err)
+	}
+
+	// Verify group is gone
+	var groupCount int
+	if err := st.RawDB().QueryRow(
+		"SELECT COUNT(*) FROM groups WHERE name = ?", "design",
+	).Scan(&groupCount); err != nil {
+		t.Fatalf("count groups: %v", err)
+	}
+	if groupCount != 0 {
+		t.Errorf("expected group to be deleted, but found %d rows", groupCount)
+	}
+
+	// Verify messages are still present (delete_messages=false)
+	var scopeCount int
+	if err := st.RawDB().QueryRow(
+		"SELECT COUNT(*) FROM message_scopes WHERE scope_type = ? AND scope_value = ?",
+		"group", "design",
+	).Scan(&scopeCount); err != nil {
+		t.Fatalf("count message_scopes: %v", err)
+	}
+	if scopeCount != 1 {
+		t.Errorf("expected 1 message scope to remain (delete_messages=false), got %d", scopeCount)
 	}
 }

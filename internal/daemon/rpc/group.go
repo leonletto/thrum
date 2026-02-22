@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -45,8 +46,9 @@ type GroupCreateResponse struct {
 
 // GroupDeleteRequest is the request for group.delete RPC.
 type GroupDeleteRequest struct {
-	Name          string `json:"name"`
-	CallerAgentID string `json:"caller_agent_id,omitempty"`
+	Name           string `json:"name"`
+	CallerAgentID  string `json:"caller_agent_id,omitempty"`
+	DeleteMessages bool   `json:"delete_messages,omitempty"`
 }
 
 // GroupDeleteResponse is the response from group.delete RPC.
@@ -235,6 +237,50 @@ func (h *GroupHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 
 	h.state.Lock()
 	defer h.state.Unlock()
+
+	// If delete_messages is set, remove all messages scoped to this group.
+	if req.DeleteMessages {
+		rows, err := h.state.DB().QueryContext(ctx,
+			"SELECT message_id FROM message_scopes WHERE scope_type = ? AND scope_value = ?",
+			"group", req.Name)
+		if err != nil {
+			return nil, fmt.Errorf("query scoped messages: %w", err)
+		}
+		var messageIDs []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("scan message id: %w", err)
+			}
+			messageIDs = append(messageIDs, id)
+		}
+		_ = rows.Close()
+
+		if len(messageIDs) > 0 {
+			placeholders := make([]string, len(messageIDs))
+			args := make([]any, len(messageIDs))
+			for i, id := range messageIDs {
+				placeholders[i] = "?"
+				args[i] = id
+			}
+			inClause := strings.Join(placeholders, ",")
+
+			for _, table := range []string{"message_edits", "message_reads", "message_refs", "message_scopes"} {
+				if _, err := h.state.DB().ExecContext(ctx,
+					fmt.Sprintf("DELETE FROM %s WHERE message_id IN (%s)", table, inClause),
+					args...); err != nil {
+					return nil, fmt.Errorf("delete from %s: %w", table, err)
+				}
+			}
+
+			if _, err := h.state.DB().ExecContext(ctx,
+				fmt.Sprintf("DELETE FROM messages WHERE message_id IN (%s)", inClause),
+				args...); err != nil {
+				return nil, fmt.Errorf("delete messages: %w", err)
+			}
+		}
+	}
 
 	if err := h.state.WriteEvent(ctx, event); err != nil {
 		return nil, fmt.Errorf("write group.delete event: %w", err)

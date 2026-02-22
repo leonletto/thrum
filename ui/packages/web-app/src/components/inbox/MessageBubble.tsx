@@ -1,6 +1,6 @@
 import { memo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { MoreVertical, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { MoreVertical, Pencil, Trash2 } from 'lucide-react';
 import type { Message } from '@thrum/shared-logic';
 import { useAgentList, useCurrentUser, useEditMessage, useDeleteMessage } from '@thrum/shared-logic';
 import { Badge } from '@/components/ui/badge';
@@ -116,15 +116,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isOwn }: Mes
           'group max-w-[80%] rounded-lg p-3 relative',
           isOwn
             ? 'ml-auto bg-primary text-primary-foreground'
-            : 'bg-muted text-foreground',
-          message.priority === 'high' && 'priority-high',
-          message.priority === 'low' && 'priority-low'
+            : 'bg-muted text-foreground'
         )}
       >
         <div className="flex items-center gap-2 text-xs opacity-70 mb-1">
-          {message.priority === 'high' && (
-            <AlertTriangle className="h-4 w-4" style={{ color: '#ef4444' }} />
-          )}
           <span className="font-medium">{displayName}</span>
           {showViaTag && (
             <Badge variant="outline" className="text-[10px] h-4">

@@ -1,11 +1,14 @@
 package rpc
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -172,6 +175,34 @@ type MarkReadRequest struct {
 type MarkReadResponse struct {
 	MarkedCount int                 `json:"marked_count"`
 	AlsoReadBy  map[string][]string `json:"also_read_by,omitempty"` // Key: message_id, Value: list of other agent_ids
+}
+
+// ArchiveRequest represents the request for message.archive RPC.
+type ArchiveRequest struct {
+	ArchiveType string `json:"archive_type"` // "agent" or "group"
+	Identifier  string `json:"identifier"`   // agent name or group name
+}
+
+// ArchiveResponse represents the response from message.archive RPC.
+type ArchiveResponse struct {
+	ArchivedCount int    `json:"archived_count"`
+	ArchivePath   string `json:"archive_path"`
+}
+
+// archiveRecord is the structure written per line in the JSONL archive file.
+type archiveRecord struct {
+	MessageID string        `json:"message_id"`
+	AgentID   string        `json:"agent_id"`
+	CreatedAt string        `json:"created_at"`
+	Body      archiveBody   `json:"body"`
+	Scopes    []types.Scope `json:"scopes"`
+	Refs      []types.Ref   `json:"refs"`
+}
+
+// archiveBody holds the body fields for an archived message.
+type archiveBody struct {
+	Format  string `json:"format"`
+	Content string `json:"content"`
 }
 
 // MessageHandler handles message-related RPC methods.
@@ -1353,4 +1384,376 @@ func (h *MessageHandler) emitThreadUpdated(_ context.Context, threadID string) e
 
 	// Dispatch to subscribed sessions
 	return h.dispatcher.DispatchThreadUpdated(context.Background(), info)
+}
+
+// HandleArchive handles the message.archive RPC method.
+// It exports matching messages to a JSONL archive file, then hard-deletes them.
+func (h *MessageHandler) HandleArchive(ctx context.Context, params json.RawMessage) (any, error) {
+	var req ArchiveRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	// Validate archive_type
+	if req.ArchiveType != "agent" && req.ArchiveType != "group" {
+		return nil, fmt.Errorf("invalid archive_type: %q (must be \"agent\" or \"group\")", req.ArchiveType)
+	}
+
+	// Validate identifier
+	if req.Identifier == "" {
+		return nil, fmt.Errorf("identifier is required")
+	}
+
+	// Collect matching message IDs under a read lock
+	h.state.RLock()
+
+	var messageIDs []string
+	var queryErr error
+
+	switch req.ArchiveType {
+	case "agent":
+		rows, err := h.state.DB().QueryContext(ctx,
+			`SELECT message_id FROM messages WHERE agent_id = ?`,
+			req.Identifier)
+		if err != nil {
+			h.state.RUnlock()
+			return nil, fmt.Errorf("query agent messages: %w", err)
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				h.state.RUnlock()
+				return nil, fmt.Errorf("scan message_id: %w", err)
+			}
+			messageIDs = append(messageIDs, id)
+		}
+		queryErr = rows.Err()
+
+	case "group":
+		rows, err := h.state.DB().QueryContext(ctx,
+			`SELECT m.message_id
+			 FROM messages m
+			 JOIN message_scopes ms ON m.message_id = ms.message_id
+			 WHERE ms.scope_type = 'group' AND ms.scope_value = ?`,
+			req.Identifier)
+		if err != nil {
+			h.state.RUnlock()
+			return nil, fmt.Errorf("query group messages: %w", err)
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				h.state.RUnlock()
+				return nil, fmt.Errorf("scan message_id: %w", err)
+			}
+			messageIDs = append(messageIDs, id)
+		}
+		queryErr = rows.Err()
+	}
+
+	if queryErr != nil {
+		h.state.RUnlock()
+		return nil, fmt.Errorf("iterate messages: %w", queryErr)
+	}
+
+	// If no messages match, return early
+	if len(messageIDs) == 0 {
+		h.state.RUnlock()
+		archivePath := filepath.Join(h.state.RepoPath(), ".thrum", "archive", req.Identifier+".jsonl")
+		return &ArchiveResponse{ArchivedCount: 0, ArchivePath: archivePath}, nil
+	}
+
+	// Build full archive records (message body + scopes + refs) under the same read lock
+	records := make([]archiveRecord, 0, len(messageIDs))
+	for _, msgID := range messageIDs {
+		var rec archiveRecord
+		rec.MessageID = msgID
+
+		err := h.state.DB().QueryRowContext(ctx,
+			`SELECT agent_id, created_at, body_format, body_content FROM messages WHERE message_id = ?`,
+			msgID,
+		).Scan(&rec.AgentID, &rec.CreatedAt, &rec.Body.Format, &rec.Body.Content)
+		if err != nil {
+			h.state.RUnlock()
+			return nil, fmt.Errorf("query message %s: %w", msgID, err)
+		}
+
+		// Scopes
+		scopeRows, err := h.state.DB().QueryContext(ctx,
+			`SELECT scope_type, scope_value FROM message_scopes WHERE message_id = ?`, msgID)
+		if err != nil {
+			h.state.RUnlock()
+			return nil, fmt.Errorf("query scopes for %s: %w", msgID, err)
+		}
+		rec.Scopes = []types.Scope{}
+		for scopeRows.Next() {
+			var s types.Scope
+			if err := scopeRows.Scan(&s.Type, &s.Value); err != nil {
+				_ = scopeRows.Close()
+				h.state.RUnlock()
+				return nil, fmt.Errorf("scan scope: %w", err)
+			}
+			rec.Scopes = append(rec.Scopes, s)
+		}
+		if err := scopeRows.Err(); err != nil {
+			_ = scopeRows.Close()
+			h.state.RUnlock()
+			return nil, fmt.Errorf("iterate scopes: %w", err)
+		}
+		_ = scopeRows.Close()
+
+		// Refs
+		refRows, err := h.state.DB().QueryContext(ctx,
+			`SELECT ref_type, ref_value FROM message_refs WHERE message_id = ?`, msgID)
+		if err != nil {
+			h.state.RUnlock()
+			return nil, fmt.Errorf("query refs for %s: %w", msgID, err)
+		}
+		rec.Refs = []types.Ref{}
+		for refRows.Next() {
+			var r types.Ref
+			if err := refRows.Scan(&r.Type, &r.Value); err != nil {
+				_ = refRows.Close()
+				h.state.RUnlock()
+				return nil, fmt.Errorf("scan ref: %w", err)
+			}
+			rec.Refs = append(rec.Refs, r)
+		}
+		if err := refRows.Err(); err != nil {
+			_ = refRows.Close()
+			h.state.RUnlock()
+			return nil, fmt.Errorf("iterate refs: %w", err)
+		}
+		_ = refRows.Close()
+
+		records = append(records, rec)
+	}
+
+	h.state.RUnlock()
+
+	// Create archive directory
+	archiveDir := filepath.Join(h.state.RepoPath(), ".thrum", "archive")
+	if err := os.MkdirAll(archiveDir, 0o750); err != nil {
+		return nil, fmt.Errorf("create archive directory: %w", err)
+	}
+
+	// Write JSONL archive file
+	archivePath := filepath.Join(archiveDir, req.Identifier+".jsonl")
+	f, err := os.OpenFile(archivePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open archive file: %w", err)
+	}
+
+	w := bufio.NewWriter(f)
+	for _, rec := range records {
+		line, err := json.Marshal(rec)
+		if err != nil {
+			_ = f.Close()
+			return nil, fmt.Errorf("marshal archive record: %w", err)
+		}
+		if _, err := w.Write(line); err != nil {
+			_ = f.Close()
+			return nil, fmt.Errorf("write archive line: %w", err)
+		}
+		if err := w.WriteByte('\n'); err != nil {
+			_ = f.Close()
+			return nil, fmt.Errorf("write newline: %w", err)
+		}
+	}
+	if err := w.Flush(); err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("flush archive file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return nil, fmt.Errorf("close archive file: %w", err)
+	}
+
+	// Hard-delete the messages (related tables first, then messages)
+	h.state.Lock()
+	defer h.state.Unlock()
+
+	tx, err := h.state.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+
+	for _, msgID := range messageIDs {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM message_scopes WHERE message_id = ?`, msgID); err != nil {
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("delete scopes for %s: %w", msgID, err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM message_refs WHERE message_id = ?`, msgID); err != nil {
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("delete refs for %s: %w", msgID, err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM message_reads WHERE message_id = ?`, msgID); err != nil {
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("delete reads for %s: %w", msgID, err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM message_edits WHERE message_id = ?`, msgID); err != nil {
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("delete edits for %s: %w", msgID, err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE message_id = ?`, msgID); err != nil {
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("delete message %s: %w", msgID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit delete transaction: %w", err)
+	}
+
+	return &ArchiveResponse{
+		ArchivedCount: len(records),
+		ArchivePath:   archivePath,
+	}, nil
+}
+
+// DeleteByScopeRequest represents the request for message.deleteByScope RPC.
+type DeleteByScopeRequest struct {
+	ScopeType  string `json:"scope_type"`  // e.g., "group"
+	ScopeValue string `json:"scope_value"` // e.g., "backend"
+}
+
+// DeleteByScopeResponse represents the response from message.deleteByScope RPC.
+type DeleteByScopeResponse struct {
+	DeletedCount int `json:"deleted_count"`
+}
+
+// HandleDeleteByScope handles the message.deleteByScope RPC method.
+// Hard deletes all messages that have a matching scope (type+value).
+func (h *MessageHandler) HandleDeleteByScope(ctx context.Context, params json.RawMessage) (any, error) {
+	var req DeleteByScopeRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	if req.ScopeType == "" || req.ScopeValue == "" {
+		return nil, fmt.Errorf("scope_type and scope_value are required")
+	}
+
+	h.state.Lock()
+	defer h.state.Unlock()
+
+	// Find all message_ids that match this scope
+	rows, err := h.state.DB().QueryContext(ctx,
+		"SELECT message_id FROM message_scopes WHERE scope_type = ? AND scope_value = ?",
+		req.ScopeType, req.ScopeValue)
+	if err != nil {
+		return nil, fmt.Errorf("query scoped messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messageIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan message id: %w", err)
+		}
+		messageIDs = append(messageIDs, id)
+	}
+
+	if len(messageIDs) == 0 {
+		return &DeleteByScopeResponse{DeletedCount: 0}, nil
+	}
+
+	// Build placeholders for IN clause
+	placeholders := make([]string, len(messageIDs))
+	args := make([]any, len(messageIDs))
+	for i, id := range messageIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	inClause := strings.Join(placeholders, ",")
+
+	// Delete from related tables first
+	for _, table := range []string{"message_edits", "message_reads", "message_refs", "message_scopes"} {
+		_, err = h.state.DB().ExecContext(ctx,
+			fmt.Sprintf("DELETE FROM %s WHERE message_id IN (%s)", table, inClause),
+			args...)
+		if err != nil {
+			return nil, fmt.Errorf("delete from %s: %w", table, err)
+		}
+	}
+
+	// Delete the messages
+	_, err = h.state.DB().ExecContext(ctx,
+		fmt.Sprintf("DELETE FROM messages WHERE message_id IN (%s)", inClause),
+		args...)
+	if err != nil {
+		return nil, fmt.Errorf("delete messages: %w", err)
+	}
+
+	return &DeleteByScopeResponse{DeletedCount: len(messageIDs)}, nil
+}
+
+// DeleteByAgentRequest represents the request for message.deleteByAgent RPC.
+type DeleteByAgentRequest struct {
+	AgentID string `json:"agent_id"`
+}
+
+// DeleteByAgentResponse represents the response from message.deleteByAgent RPC.
+type DeleteByAgentResponse struct {
+	DeletedCount int `json:"deleted_count"`
+}
+
+// HandleDeleteByAgent handles the message.deleteByAgent RPC method.
+// Hard deletes all messages where agent_id matches the given agent.
+func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.RawMessage) (any, error) {
+	var req DeleteByAgentRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	if req.AgentID == "" {
+		return nil, fmt.Errorf("agent_id is required")
+	}
+
+	h.state.Lock()
+	defer h.state.Unlock()
+
+	// Get count first
+	var count int
+	err := h.state.DB().QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM messages WHERE agent_id = ?", req.AgentID).Scan(&count)
+	if err != nil {
+		return nil, fmt.Errorf("count messages: %w", err)
+	}
+
+	// Hard delete all messages by this agent.
+	// Delete from child tables first to avoid FK constraint issues.
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_edits WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message edits: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_reads WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message reads: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_refs WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message refs: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_scopes WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message scopes: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM messages WHERE agent_id = ?", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete messages: %w", err)
+	}
+
+	return &DeleteByAgentResponse{DeletedCount: count}, nil
 }

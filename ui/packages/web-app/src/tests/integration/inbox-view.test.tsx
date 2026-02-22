@@ -12,11 +12,10 @@ vi.mock('@thrum/shared-logic', async () => {
     ...actual,
     useCurrentUser: vi.fn(),
     useAgentList: vi.fn(),
-    useThreadList: vi.fn(),
-    useThread: vi.fn(),
     useSendMessage: vi.fn(),
-    useCreateThread: vi.fn(),
     useMarkAsRead: vi.fn(),
+    useMessageList: vi.fn(),
+    useGroupList: vi.fn(),
   };
 });
 
@@ -48,11 +47,18 @@ describe('Inbox View Integration', () => {
         last_seen_at: '2024-01-01T11:50:00Z',
       },
     ]) as any);
-    vi.mocked(sharedLogic.useThreadList).mockReturnValue(mockHookReturns.useThreadListEmpty() as any);
-    vi.mocked(sharedLogic.useThread).mockReturnValue(mockHookReturns.useThreadEmpty() as any);
     vi.mocked(sharedLogic.useSendMessage).mockReturnValue(mockHookReturns.useMutation() as any);
-    vi.mocked(sharedLogic.useCreateThread).mockReturnValue(mockHookReturns.useMutation() as any);
     vi.mocked(sharedLogic.useMarkAsRead).mockReturnValue(mockHookReturns.useMutation() as any);
+    vi.mocked(sharedLogic.useMessageList).mockReturnValue({
+      data: { messages: [], page: 1, page_size: 50, total: 0, total_pages: 0 },
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.mocked(sharedLogic.useGroupList).mockReturnValue({
+      data: { groups: [] },
+      isLoading: false,
+      error: null,
+    } as any);
   });
 
   it('should show My Inbox when clicking My Inbox in sidebar', async () => {
@@ -83,9 +89,8 @@ describe('Inbox View Integration', () => {
     );
     await user.click(inboxButton!);
 
-    // ThreadList empty state shows "NO THREADS" and "Start a conversation"
-    expect(screen.getByText('NO THREADS')).toBeInTheDocument();
-    expect(screen.getByText('Start a conversation')).toBeInTheDocument();
+    // MessageList empty state shows "No messages"
+    expect(screen.getByText('No messages')).toBeInTheDocument();
   });
 
   it('should show agent-specific inbox when clicking agent', async () => {
@@ -110,8 +115,8 @@ describe('Inbox View Integration', () => {
     const agentButton = container.querySelector('button.agent-item');
     await user.click(agentButton!);
 
-    // Empty state
-    expect(screen.getByText('NO THREADS')).toBeInTheDocument();
+    // MessageList empty state shows "No messages"
+    expect(screen.getByText('No messages')).toBeInTheDocument();
   });
 
   it('should switch between different agent inboxes', async () => {

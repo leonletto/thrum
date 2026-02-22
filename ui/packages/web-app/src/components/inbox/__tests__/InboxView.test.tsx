@@ -1,24 +1,45 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { InboxView } from '../InboxView';
 import * as hooks from '@thrum/shared-logic';
+import type { Message } from '@thrum/shared-logic';
 
-// Mock the shared-logic hooks
+// ─── Mocks ────────────────────────────────────────────────────────────────────
+
 vi.mock('@thrum/shared-logic', async () => {
   const actual = await vi.importActual('@thrum/shared-logic');
   return {
     ...actual,
-    useThreadList: vi.fn(),
     useCurrentUser: vi.fn(),
+    useMessageList: vi.fn(),
+    useMarkAsRead: vi.fn(),
+    useSendMessage: vi.fn(),
+    useAgentList: vi.fn(),
+    useGroupList: vi.fn(),
   };
 });
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function makeMessage(
+  overrides: Partial<Message> & { message_id: string; created_at: string }
+): Message {
+  return {
+    body: { format: 'text', content: `Message ${overrides.message_id}` },
+    ...overrides,
+  };
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('InboxView', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -34,8 +55,30 @@ describe('InboxView', () => {
       created_at: '2024-01-01T00:00:00Z',
     });
 
-    vi.mocked(hooks.useThreadList).mockReturnValue({
-      data: { threads: [] },
+    vi.mocked(hooks.useMessageList).mockReturnValue({
+      data: { messages: [], page: 1, page_size: 50, total: 0, total_pages: 0 },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    vi.mocked(hooks.useMarkAsRead).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as any);
+
+    vi.mocked(hooks.useSendMessage).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as any);
+
+    vi.mocked(hooks.useAgentList).mockReturnValue({
+      data: { agents: [] },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    vi.mocked(hooks.useGroupList).mockReturnValue({
+      data: { groups: [] },
       isLoading: false,
       error: null,
     } as any);
@@ -47,194 +90,246 @@ describe('InboxView', () => {
     );
   };
 
-  it('should render loading state with skeleton', () => {
-    vi.mocked(hooks.useThreadList).mockReturnValue({
+  // ─── 1. Loading state ───────────────────────────────────────────────────────
+
+  it('renders loading skeleton when isLoading is true', () => {
+    vi.mocked(hooks.useMessageList).mockReturnValue({
       data: undefined,
       isLoading: true,
       error: null,
     } as any);
 
     const { container } = renderWithProvider(<InboxView />);
-    // Loading state shows ThreadListSkeleton which renders skeleton cards
-    const skeletons = container.querySelectorAll('.h-4, .h-3');
+
+    // MessageListSkeleton renders multiple Skeleton elements with animate-pulse
+    const skeletons = container.querySelectorAll('.animate-pulse');
     expect(skeletons.length).toBeGreaterThan(0);
   });
 
-  it('should render filter buttons', () => {
+  // ─── 2. Shows messages from message.list for current user ──────────────────
+
+  it('shows messages from message.list for current user', () => {
+    const msg1 = makeMessage({
+      message_id: 'msg-1',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Hello from inbox' },
+      agent_id: 'user:test',
+    });
+
+    vi.mocked(hooks.useMessageList).mockReturnValue({
+      data: {
+        messages: [msg1],
+        page: 1,
+        page_size: 50,
+        total: 1,
+        total_pages: 1,
+      },
+      isLoading: false,
+      error: null,
+    } as any);
+
     renderWithProvider(<InboxView />);
-    expect(screen.getByText('All')).toBeInTheDocument();
-    expect(screen.getByText('Unread')).toBeInTheDocument();
+
+    expect(screen.getByText('Hello from inbox')).toBeInTheDocument();
   });
 
-  it('should render empty thread list', () => {
+  it('calls useMessageList with for_agent set to current user identity', () => {
     renderWithProvider(<InboxView />);
-    expect(screen.getByText('NO THREADS')).toBeInTheDocument();
-    expect(screen.getByText('Start a conversation')).toBeInTheDocument();
+
+    expect(hooks.useMessageList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        for_agent: 'test-user',
+        page_size: 50,
+        sort_order: 'desc',
+      })
+    );
   });
 
-  it('should render inbox header with user identity', () => {
+  // ─── 3. Impersonation banner ────────────────────────────────────────────────
+
+  it('does not show impersonation banner when viewing own inbox', () => {
+    renderWithProvider(<InboxView />);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows impersonation banner when identityId differs from current user', () => {
+    renderWithProvider(<InboxView identityId="agent:impl_1" />);
+
+    const banner = screen.getByRole('alert');
+    expect(banner).toBeInTheDocument();
+    expect(banner).toHaveTextContent('Viewing as:');
+    expect(banner).toHaveTextContent('agent:impl_1');
+  });
+
+  it('calls useMessageList with for_agent set to identityId when impersonating', () => {
+    renderWithProvider(<InboxView identityId="agent:impl_1" />);
+
+    expect(hooks.useMessageList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        for_agent: 'agent:impl_1',
+        page_size: 50,
+        sort_order: 'desc',
+      })
+    );
+  });
+
+  // ─── 4. Unread toggle filters messages ─────────────────────────────────────
+
+  it('renders All and Unread filter toggle buttons', () => {
+    renderWithProvider(<InboxView />);
+    expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Unread/i })).toBeInTheDocument();
+  });
+
+  it('does not include unread_for_agent filter when "All" is selected (default)', () => {
+    renderWithProvider(<InboxView />);
+
+    expect(hooks.useMessageList).toHaveBeenCalledWith(
+      expect.not.objectContaining({ unread_for_agent: expect.anything() })
+    );
+  });
+
+  it('adds unread_for_agent filter when Unread toggle is clicked', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(<InboxView />);
+
+    const unreadButton = screen.getByRole('button', { name: /Unread/i });
+    await user.click(unreadButton);
+
+    expect(hooks.useMessageList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        for_agent: 'test-user',
+        unread_for_agent: 'test-user',
+      })
+    );
+  });
+
+  it('removes unread_for_agent filter when switching back to All', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(<InboxView />);
+
+    // Switch to Unread
+    await user.click(screen.getByRole('button', { name: /Unread/i }));
+    // Switch back to All
+    await user.click(screen.getByRole('button', { name: 'All' }));
+
+    // Last call should not include unread_for_agent
+    const lastCall = vi.mocked(hooks.useMessageList).mock.calls.at(-1)?.[0];
+    expect(lastCall).not.toHaveProperty('unread_for_agent');
+  });
+
+  // ─── 5. ComposeBar renders at bottom ───────────────────────────────────────
+
+  it('renders ComposeBar at the bottom', () => {
+    renderWithProvider(<InboxView />);
+
+    // ComposeBar renders a data-testid="compose-bar"
+    expect(screen.getByTestId('compose-bar')).toBeInTheDocument();
+  });
+
+  it('renders ComposeBar with Send button', () => {
+    renderWithProvider(<InboxView />);
+
+    expect(screen.getByRole('button', { name: /send/i })).toBeInTheDocument();
+  });
+
+  // ─── 6. Reply flow ──────────────────────────────────────────────────────────
+
+  it('sets replyTo state in ComposeBar when a message reply button is clicked', async () => {
+    const user = userEvent.setup();
+    const msg = makeMessage({
+      message_id: 'msg-reply-test',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Reply target message' },
+      agent_id: 'agent:sender',
+    });
+
+    vi.mocked(hooks.useMessageList).mockReturnValue({
+      data: {
+        messages: [msg],
+        page: 1,
+        page_size: 50,
+        total: 1,
+        total_pages: 1,
+      },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderWithProvider(<InboxView />);
+
+    // Click Reply on the message
+    const replyButton = screen.getByRole('button', {
+      name: /reply to agent:sender/i,
+    });
+    await user.click(replyButton);
+
+    // ComposeBar should now show the reply chip
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Replying to: @agent:sender/i)
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('clears replyTo when clear reply button is clicked in ComposeBar', async () => {
+    const user = userEvent.setup();
+    const msg = makeMessage({
+      message_id: 'msg-clear-test',
+      created_at: '2024-01-01T10:00:00Z',
+      body: { format: 'text', content: 'Clear reply test message' },
+      agent_id: 'agent:sender',
+    });
+
+    vi.mocked(hooks.useMessageList).mockReturnValue({
+      data: {
+        messages: [msg],
+        page: 1,
+        page_size: 50,
+        total: 1,
+        total_pages: 1,
+      },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderWithProvider(<InboxView />);
+
+    // Click Reply to enter reply mode
+    await user.click(
+      screen.getByRole('button', { name: /reply to agent:sender/i })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Replying to: @agent:sender/i)).toBeInTheDocument();
+    });
+
+    // Clear the reply
+    await user.click(screen.getByRole('button', { name: /clear reply/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/Replying to: @agent:sender/i)
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  // ─── 7. Header ─────────────────────────────────────────────────────────────
+
+  it('renders inbox header with current user identity when no identityId given', () => {
     renderWithProvider(<InboxView />);
     expect(screen.getByText('test-user')).toBeInTheDocument();
-    expect(screen.getByText('+ COMPOSE')).toBeInTheDocument();
   });
 
-  it('should render inbox header with agent identity', () => {
+  it('renders inbox header with agent identity when identityId is provided', () => {
     renderWithProvider(<InboxView identityId="agent:claude" />);
-    expect(screen.getByText('agent:claude')).toBeInTheDocument();
+    // Identity appears in the h1 heading (and may also appear in impersonation banner)
+    expect(screen.getByRole('heading', { name: 'agent:claude' })).toBeInTheDocument();
   });
 
-  it('should show impersonation warning when viewing agent inbox', () => {
+  it('shows impersonation text in header when viewing agent inbox', () => {
     renderWithProvider(<InboxView identityId="agent:claude" />);
     expect(screen.getByText(/Sending as agent:claude/)).toBeInTheDocument();
-  });
-
-  it('should render thread list when threads are available', () => {
-    vi.mocked(hooks.useThreadList).mockReturnValue({
-      data: {
-        threads: [
-          {
-            thread_id: 'thread-1',
-            title: 'Test Thread',
-            created_by: 'user:test',
-            created_at: '2024-01-01T00:00:00Z',
-            message_count: 5,
-            last_activity: '2024-01-01T12:00:00Z',
-            unread_count: 0,
-            preview: null,
-          },
-        ],
-      },
-      isLoading: false,
-      error: null,
-    } as any);
-
-    renderWithProvider(<InboxView />);
-    expect(screen.getByText('Test Thread')).toBeInTheDocument();
-    expect(screen.getByText(/5 messages/i)).toBeInTheDocument();
-  });
-
-  it('should display unread count badge when there are unread messages', () => {
-    vi.mocked(hooks.useThreadList).mockReturnValue({
-      data: {
-        threads: [
-          {
-            thread_id: 'thread-1',
-            title: 'Test Thread 1',
-            created_by: 'user:test',
-            created_at: '2024-01-01T00:00:00Z',
-            message_count: 5,
-            last_activity: '2024-01-01T12:00:00Z',
-            unread_count: 3,
-            preview: null,
-          },
-          {
-            thread_id: 'thread-2',
-            title: 'Test Thread 2',
-            created_by: 'user:test',
-            created_at: '2024-01-01T00:00:00Z',
-            message_count: 2,
-            last_activity: '2024-01-01T12:00:00Z',
-            unread_count: 2,
-            preview: null,
-          },
-        ],
-      },
-      isLoading: false,
-      error: null,
-    } as any);
-
-    renderWithProvider(<InboxView />);
-    // Total unread count should be 3 + 2 = 5
-    expect(screen.getByText('5')).toBeInTheDocument();
-  });
-
-  it('should filter to show only unread threads when unread filter is active', async () => {
-    const user = userEvent.setup();
-    vi.mocked(hooks.useThreadList).mockReturnValue({
-      data: {
-        threads: [
-          {
-            thread_id: 'thread-1',
-            title: 'Unread Thread',
-            created_by: 'user:test',
-            created_at: '2024-01-01T00:00:00Z',
-            message_count: 5,
-            last_activity: '2024-01-01T12:00:00Z',
-            unread_count: 3,
-            preview: null,
-          },
-          {
-            thread_id: 'thread-2',
-            title: 'Read Thread',
-            created_by: 'user:test',
-            created_at: '2024-01-01T00:00:00Z',
-            message_count: 2,
-            last_activity: '2024-01-01T12:00:00Z',
-            unread_count: 0,
-            preview: null,
-          },
-        ],
-      },
-      isLoading: false,
-      error: null,
-    } as any);
-
-    renderWithProvider(<InboxView />);
-
-    // Initially both threads should be visible
-    expect(screen.getByText('Unread Thread')).toBeInTheDocument();
-    expect(screen.getByText('Read Thread')).toBeInTheDocument();
-
-    // Click unread filter
-    await user.click(screen.getByText('Unread'));
-
-    // Only unread thread should be visible
-    expect(screen.getByText('Unread Thread')).toBeInTheDocument();
-    expect(screen.queryByText('Read Thread')).not.toBeInTheDocument();
-  });
-
-  it('should show all threads when switching back to all filter', async () => {
-    const user = userEvent.setup();
-    vi.mocked(hooks.useThreadList).mockReturnValue({
-      data: {
-        threads: [
-          {
-            thread_id: 'thread-1',
-            title: 'Unread Thread',
-            created_by: 'user:test',
-            created_at: '2024-01-01T00:00:00Z',
-            message_count: 5,
-            last_activity: '2024-01-01T12:00:00Z',
-            unread_count: 3,
-            preview: null,
-          },
-          {
-            thread_id: 'thread-2',
-            title: 'Read Thread',
-            created_by: 'user:test',
-            created_at: '2024-01-01T00:00:00Z',
-            message_count: 2,
-            last_activity: '2024-01-01T12:00:00Z',
-            unread_count: 0,
-            preview: null,
-          },
-        ],
-      },
-      isLoading: false,
-      error: null,
-    } as any);
-
-    renderWithProvider(<InboxView />);
-
-    // Click unread filter
-    await user.click(screen.getByText('Unread'));
-    expect(screen.queryByText('Read Thread')).not.toBeInTheDocument();
-
-    // Click all filter
-    await user.click(screen.getByText('All'));
-
-    // Both threads should be visible again
-    expect(screen.getByText('Unread Thread')).toBeInTheDocument();
-    expect(screen.getByText('Read Thread')).toBeInTheDocument();
   });
 });

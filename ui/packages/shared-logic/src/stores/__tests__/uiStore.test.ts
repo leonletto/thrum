@@ -3,6 +3,7 @@ import {
   uiStore,
   setSelectedView,
   selectAgent,
+  selectGroup,
   selectMyInbox,
   selectLiveFeed,
 } from '../uiStore';
@@ -13,6 +14,7 @@ describe('uiStore', () => {
     uiStore.setState({
       selectedView: 'live-feed',
       selectedAgentId: null,
+      selectedGroupName: null,
     });
   });
 
@@ -20,6 +22,7 @@ describe('uiStore', () => {
     const state = uiStore.state;
     expect(state.selectedView).toBe('live-feed');
     expect(state.selectedAgentId).toBe(null);
+    expect(state.selectedGroupName).toBe(null);
   });
 
   it('should update view with setSelectedView', () => {
@@ -67,12 +70,37 @@ describe('uiStore', () => {
   });
 
   it('should preserve selectedAgentId when navigating to agent-inbox', () => {
-    // Set up initial state with an agent selected
     selectAgent('agent:test');
 
-    // Navigate to agent-inbox explicitly (should preserve agent)
     setSelectedView('agent-inbox');
     expect(uiStore.state.selectedView).toBe('agent-inbox');
     expect(uiStore.state.selectedAgentId).toBe('agent:test');
+  });
+
+  it('should set group and view with selectGroup', () => {
+    selectGroup('backend');
+    expect(uiStore.state.selectedView).toBe('group-channel');
+    expect(uiStore.state.selectedGroupName).toBe('backend');
+    expect(uiStore.state.selectedAgentId).toBe(null);
+  });
+
+  it('should clear group when selecting agent', () => {
+    selectGroup('backend');
+    selectAgent('agent:test');
+    expect(uiStore.state.selectedGroupName).toBe(null);
+    expect(uiStore.state.selectedAgentId).toBe('agent:test');
+  });
+
+  it('should clear group when navigating away from group-channel', () => {
+    selectGroup('backend');
+    setSelectedView('live-feed');
+    expect(uiStore.state.selectedGroupName).toBe(null);
+  });
+
+  it('should preserve selectedGroupName when navigating to group-channel', () => {
+    selectGroup('backend');
+    setSelectedView('group-channel');
+    expect(uiStore.state.selectedView).toBe('group-channel');
+    expect(uiStore.state.selectedGroupName).toBe('backend');
   });
 });
