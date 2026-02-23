@@ -329,6 +329,43 @@ func (h *GroupHandler) HandleMemberAdd(ctx context.Context, params json.RawMessa
 		return nil, fmt.Errorf("query group: %w", err)
 	}
 
+	// Validate that the member exists before adding
+	h.state.RLock()
+	switch req.MemberType {
+	case "agent":
+		var exists bool
+		err = h.state.DB().QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM agents WHERE agent_id = ?)`,
+			req.MemberValue,
+		).Scan(&exists)
+		h.state.RUnlock()
+		if err != nil {
+			return nil, fmt.Errorf("validate agent %q: %w", req.MemberValue, err)
+		}
+		if !exists {
+			return nil, fmt.Errorf("agent %q not found — agent must be registered before being added to a group", req.MemberValue)
+		}
+	case "role":
+		if req.MemberValue != "*" {
+			var count int
+			err = h.state.DB().QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM agents WHERE role = ?`,
+				req.MemberValue,
+			).Scan(&count)
+			h.state.RUnlock()
+			if err != nil {
+				return nil, fmt.Errorf("validate role %q: %w", req.MemberValue, err)
+			}
+			if count == 0 {
+				return nil, fmt.Errorf("role %q not found — no registered agents with this role", req.MemberValue)
+			}
+		} else {
+			h.state.RUnlock()
+		}
+	default:
+		h.state.RUnlock()
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	addedBy := req.CallerAgentID
 	if addedBy == "" {

@@ -5,7 +5,7 @@ set -e
 
 # Configuration (override via env vars or args)
 # When AGENT_NAME is empty, quickstart reuses the existing identity file
-AGENT_NAME="${THRUM_NAME:-${1:-}}"
+AGENT_NAME="${THRUM_NAME:-${1:-{{.AgentName}}}}"
 AGENT_ROLE="${THRUM_ROLE:-${2:-{{.AgentRole}}}}"
 AGENT_MODULE="${THRUM_MODULE:-${3:-{{.AgentModule}}}}"
 AGENT_INTENT="${THRUM_INTENT:-General agent work}"

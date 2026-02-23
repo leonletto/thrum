@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -130,9 +131,21 @@ func TestGroupDelete_ProtectedEveryone(t *testing.T) {
 	}
 }
 
+// registerTestAgent registers an agent with the given name in the test state.
+func registerTestAgent(t *testing.T, st *state.State, name string) {
+	t.Helper()
+	agentHandler := NewAgentHandler(st)
+	params, _ := json.Marshal(RegisterRequest{Name: name, Role: name + "_role", Module: name + "_mod", Force: true})
+	if _, err := agentHandler.HandleRegister(context.Background(), params); err != nil {
+		t.Fatalf("register agent %q: %v", name, err)
+	}
+}
+
 func TestGroupMemberAdd(t *testing.T) {
-	handler, _, cleanup := setupGroupTest(t)
+	handler, st, cleanup := setupGroupTest(t)
 	defer cleanup()
+
+	registerTestAgent(t, st, "alice")
 
 	// Create group first
 	createReq, _ := json.Marshal(GroupCreateRequest{Name: "reviewers"})
@@ -198,9 +211,57 @@ func TestGroupMemberAdd_ProtectedEveryone(t *testing.T) {
 	}
 }
 
-func TestGroupMemberRemove(t *testing.T) {
+func TestGroupMemberAdd_NonExistentAgent(t *testing.T) {
 	handler, _, cleanup := setupGroupTest(t)
 	defer cleanup()
+
+	createReq, _ := json.Marshal(GroupCreateRequest{Name: "reviewers"})
+	if _, err := handler.HandleCreate(context.Background(), createReq); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	addReq, _ := json.Marshal(GroupMemberAddRequest{
+		Group:       "reviewers",
+		MemberType:  "agent",
+		MemberValue: "nonexistent",
+	})
+	_, err := handler.HandleMemberAdd(context.Background(), addReq)
+	if err == nil {
+		t.Fatal("expected error when adding non-existent agent to group")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' in error, got: %v", err)
+	}
+}
+
+func TestGroupMemberAdd_NonExistentRole(t *testing.T) {
+	handler, _, cleanup := setupGroupTest(t)
+	defer cleanup()
+
+	createReq, _ := json.Marshal(GroupCreateRequest{Name: "reviewers"})
+	if _, err := handler.HandleCreate(context.Background(), createReq); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	addReq, _ := json.Marshal(GroupMemberAddRequest{
+		Group:       "reviewers",
+		MemberType:  "role",
+		MemberValue: "nonexistent_role",
+	})
+	_, err := handler.HandleMemberAdd(context.Background(), addReq)
+	if err == nil {
+		t.Fatal("expected error when adding non-existent role to group")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' in error, got: %v", err)
+	}
+}
+
+func TestGroupMemberRemove(t *testing.T) {
+	handler, st, cleanup := setupGroupTest(t)
+	defer cleanup()
+
+	registerTestAgent(t, st, "alice")
 
 	// Create group and add member
 	createReq, _ := json.Marshal(GroupCreateRequest{Name: "reviewers"})
@@ -259,8 +320,10 @@ func TestGroupList(t *testing.T) {
 }
 
 func TestGroupInfo(t *testing.T) {
-	handler, _, cleanup := setupGroupTest(t)
+	handler, st, cleanup := setupGroupTest(t)
 	defer cleanup()
+
+	registerTestAgent(t, st, "alice")
 
 	createReq, _ := json.Marshal(GroupCreateRequest{Name: "reviewers", Description: "Code reviewers"})
 	if _, err := handler.HandleCreate(context.Background(), createReq); err != nil {
@@ -295,8 +358,10 @@ func TestGroupInfo(t *testing.T) {
 }
 
 func TestGroupMembers_WithExpand(t *testing.T) {
-	handler, _, cleanup := setupGroupTest(t)
+	handler, st, cleanup := setupGroupTest(t)
 	defer cleanup()
+
+	registerTestAgent(t, st, "alice")
 
 	createReq, _ := json.Marshal(GroupCreateRequest{Name: "reviewers"})
 	if _, err := handler.HandleCreate(context.Background(), createReq); err != nil {

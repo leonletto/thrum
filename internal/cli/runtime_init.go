@@ -137,7 +137,7 @@ func RuntimeInit(opts RuntimeInitOptions) (*RuntimeInitResult, error) {
 		MCPCommand:  "thrum",
 	}
 
-	// AgentName left empty intentionally — quickstart will reuse existing identity.
+	// AgentName may be set from --name flag; embedded into startup.sh.tmpl for identity persistence.
 	if data.AgentRole == "" {
 		data.AgentRole = "implementer"
 	}
