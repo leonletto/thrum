@@ -40,7 +40,7 @@ export function AgentCard({ agent, active, onClick }: AgentCardProps) {
   return (
     <button
       onClick={onClick}
-      className={cn('agent-item w-full text-left', active && 'ring-2 ring-cyan-500')}
+      className={cn('agent-item w-full text-left', active && 'ring-2 ring-[var(--accent-color)]')}
     >
       <div className="agent-name">
         <StatusIndicator status={status} />

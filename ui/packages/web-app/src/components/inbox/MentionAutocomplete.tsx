@@ -180,7 +180,7 @@ export function MentionAutocomplete({
       {showDropdown && filteredSuggestions.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute bottom-full left-0 mb-1 w-full max-w-xs bg-popover border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto"
+          className="absolute bottom-full left-0 mb-1 w-full max-w-xs bg-[var(--panel-bg-start)] border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto"
         >
           {filteredSuggestions.map((suggestion, index) => (
             <button

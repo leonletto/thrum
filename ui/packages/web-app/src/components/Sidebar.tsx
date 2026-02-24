@@ -83,7 +83,7 @@ export function Sidebar() {
         />
 
         {/* YOUR INBOX section */}
-        <div className="my-2 border-t border-cyan-500/20" />
+        <div className="my-2 border-t border-[var(--accent-border)]" />
         <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Your Inbox
         </div>
@@ -95,7 +95,7 @@ export function Sidebar() {
         />
 
         {/* GROUPS section */}
-        <div className="my-2 border-t border-cyan-500/20" />
+        <div className="my-2 border-t border-[var(--accent-border)]" />
         <div className="flex items-center justify-between px-3 py-1">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Groups
@@ -103,7 +103,7 @@ export function Sidebar() {
           <button
             type="button"
             onClick={() => setCreateGroupOpen(true)}
-            className="h-4 w-4 flex items-center justify-center text-muted-foreground hover:text-cyan-300 transition-colors rounded"
+            className="h-4 w-4 flex items-center justify-center text-muted-foreground hover:text-[var(--accent-color)] transition-colors rounded"
             aria-label="Create group"
             data-testid="create-group-button"
           >
@@ -134,11 +134,11 @@ export function Sidebar() {
         )}
 
         {/* AGENTS section */}
-        <div className="my-2 border-t border-cyan-500/20" />
+        <div className="my-2 border-t border-[var(--accent-border)]" />
         <AgentList />
 
         {/* TOOLS section */}
-        <div className="my-2 border-t border-cyan-500/20" />
+        <div className="my-2 border-t border-[var(--accent-border)]" />
         <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Tools
         </div>

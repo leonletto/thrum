@@ -224,8 +224,8 @@ export const MessageBubble = memo(function MessageBubble({ message, isOwn }: Mes
                           const isCurrentUser = currentUserRoles.includes(role);
 
                           const highlightColor = isCurrentUser
-                            ? 'rgba(56, 189, 248, 0.3)'
-                            : 'rgba(56, 189, 248, 0.15)';
+                            ? 'var(--mention-highlight-self)'
+                            : 'var(--mention-highlight)';
 
                           parts.push(
                             <span

@@ -17,9 +17,9 @@ export function ScopeBadge({ scope, onClick, onRemove, className }: ScopeBadgePr
     <span
       className={cn(
         'inline-flex items-center gap-1 font-mono text-[10px] uppercase',
-        'border border-cyan-500/20 bg-transparent rounded-sm px-1.5 py-0.5',
+        'border border-[var(--accent-border)] bg-transparent rounded-sm px-1.5 py-0.5',
         'transition-colors',
-        isClickable && 'cursor-pointer hover:border-cyan-500/40 hover:bg-cyan-500/10',
+        isClickable && 'cursor-pointer hover:border-[var(--accent-border-hover)] hover:bg-[var(--accent-subtle-bg)]',
         className
       )}
       onClick={onClick}
@@ -36,7 +36,7 @@ export function ScopeBadge({ scope, onClick, onRemove, className }: ScopeBadgePr
             e.stopPropagation();
             onRemove();
           }}
-          className="hover:text-cyan-400 transition-colors"
+          className="hover:text-[var(--accent-color)] transition-colors"
           aria-label={`Remove ${scope.type}:${scope.value} filter`}
         >
           <X className="h-2.5 w-2.5" />

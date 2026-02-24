@@ -98,7 +98,7 @@ export function ComposeBar({
 
   return (
     <div
-      className="border-t border-cyan-500/20 bg-[#0a0e1a] font-mono"
+      className="border-t border-[var(--accent-border)] bg-[#0a0e1a] font-mono"
       data-testid="compose-bar"
     >
       {warnings.length > 0 && (
@@ -115,15 +115,15 @@ export function ComposeBar({
       )}
 
       {replyTo && (
-        <div className="flex items-center gap-2 px-3 py-1 bg-cyan-900/20 border-b border-cyan-500/20">
-          <span className="text-xs text-cyan-400">
+        <div className="flex items-center gap-2 px-3 py-1 bg-[var(--accent-subtle-bg)] border-b border-[var(--accent-border)]">
+          <span className="text-xs text-[var(--accent-color)]">
             Replying to: @{replyTo.senderName}
           </span>
           <button
             type="button"
             aria-label="Clear reply"
             onClick={onClearReply}
-            className="text-cyan-600 hover:text-cyan-300 transition-colors"
+            className="text-[var(--text-muted)] hover:text-[var(--accent-color)] transition-colors"
           >
             <X className="h-3 w-3" />
           </button>
@@ -134,19 +134,19 @@ export function ComposeBar({
         <div className="flex items-center gap-2">
           {!groupScope && (
             <div className="relative flex items-center gap-1 min-w-0 flex-1">
-              <span className="text-xs text-cyan-600 shrink-0">To:</span>
-              <div className="flex flex-wrap gap-1 flex-1 min-w-0 text-xs text-cyan-300">
+              <span className="text-xs text-[var(--text-muted)] shrink-0">To:</span>
+              <div className="flex flex-wrap gap-1 flex-1 min-w-0 text-xs text-[var(--text-secondary)]">
                 {selectedRecipients.length > 0 ? (
                   selectedRecipients.map((r) => (
                     <span
                       key={r}
-                      className="bg-cyan-900/40 border border-cyan-500/30 rounded px-1"
+                      className="bg-[var(--accent-subtle-bg-hover)] border border-[var(--accent-border)] rounded px-1"
                     >
                       @{r}
                     </span>
                   ))
                 ) : (
-                  <span className="text-cyan-700 italic">none selected</span>
+                  <span className="text-[var(--text-faint)] italic">none selected</span>
                 )}
               </div>
               <Button
@@ -155,7 +155,7 @@ export function ComposeBar({
                 size="sm"
                 aria-label="Select recipients"
                 onClick={() => setShowRecipientDropdown((v) => !v)}
-                className="shrink-0 h-6 px-2 text-xs text-cyan-500 hover:text-cyan-300 hover:bg-cyan-900/30"
+                className="shrink-0 h-6 px-2 text-xs text-[var(--accent-color)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle-bg)]"
               >
                 <Users className="h-3 w-3 mr-1" />
                 Select
@@ -163,12 +163,12 @@ export function ComposeBar({
 
               {showRecipientDropdown && (
                 <div
-                  className="absolute bottom-full left-0 mb-1 w-64 bg-[#0d1120] border border-cyan-500/30 rounded shadow-lg z-10"
+                  className="absolute bottom-full left-0 mb-1 w-64 bg-[var(--panel-bg-start)] border border-[var(--accent-border)] rounded shadow-lg z-10"
                   data-testid="recipient-dropdown"
                 >
                   {agents.length > 0 && (
                     <div>
-                      <div className="px-3 py-1 text-xs text-cyan-600 uppercase tracking-wider border-b border-cyan-500/10">
+                      <div className="px-3 py-1 text-xs text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--accent-border)]">
                         Agents
                       </div>
                       {agents.map((agent) => {
@@ -177,7 +177,7 @@ export function ComposeBar({
                         return (
                           <label
                             key={agent.agent_id}
-                            className="flex items-center gap-2 px-3 py-1.5 hover:bg-cyan-900/20 cursor-pointer"
+                            className="flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--accent-subtle-bg)] cursor-pointer"
                           >
                             <Checkbox
                               checked={selectedRecipients.includes(id)}
@@ -185,7 +185,7 @@ export function ComposeBar({
                               aria-label={`Select ${id}`}
                             />
                             <StatusIndicator status={status} />
-                            <span className="text-xs text-cyan-300 truncate">
+                            <span className="text-xs text-[var(--text-secondary)] truncate">
                               {id}
                             </span>
                           </label>
@@ -196,13 +196,13 @@ export function ComposeBar({
 
                   {groups.length > 0 && (
                     <div>
-                      <div className="px-3 py-1 text-xs text-cyan-600 uppercase tracking-wider border-b border-cyan-500/10">
+                      <div className="px-3 py-1 text-xs text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--accent-border)]">
                         Groups
                       </div>
                       {groups.map((group) => (
                         <label
                           key={group.group_id}
-                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-cyan-900/20 cursor-pointer"
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--accent-subtle-bg)] cursor-pointer"
                         >
                           <Checkbox
                             checked={selectedRecipients.includes(group.name)}
@@ -211,7 +211,7 @@ export function ComposeBar({
                             }
                             aria-label={`Select ${group.name}`}
                           />
-                          <span className="text-xs text-cyan-300 truncate">
+                          <span className="text-xs text-[var(--text-secondary)] truncate">
                             @{group.name}
                           </span>
                         </label>
@@ -219,7 +219,7 @@ export function ComposeBar({
                     </div>
                   )}
 
-                  <div className="border-t border-cyan-500/10 px-3 py-2 flex justify-end">
+                  <div className="border-t border-[var(--accent-border)] px-3 py-2 flex justify-end">
                     <Button
                       type="button"
                       size="sm"

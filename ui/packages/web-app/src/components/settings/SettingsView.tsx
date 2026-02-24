@@ -38,7 +38,7 @@ export function SettingsView() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-4 border-b border-cyan-500/20">
+      <div className="p-4 border-b border-[var(--accent-border)]">
         <div className="flex items-center gap-3">
           <span>⚙</span>
           <h1 className="font-semibold">Settings</h1>
@@ -48,7 +48,7 @@ export function SettingsView() {
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Daemon Status */}
         <section className="panel p-4">
-          <h2 className="text-sm font-semibold text-cyan-400 uppercase tracking-wider mb-4">
+          <h2 className="text-sm font-semibold text-[var(--accent-color)] uppercase tracking-wider mb-4">
             Daemon Status
           </h2>
           {isLoading ? (
@@ -70,21 +70,21 @@ export function SettingsView() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Version</span>
-                <span className="text-cyan-400">{health.version}</span>
+                <span className="text-[var(--accent-color)]">{health.version}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Uptime</span>
-                <span className="text-cyan-400">
+                <span className="text-[var(--accent-color)]">
                   {Math.floor((health.uptime_ms || 0) / 60000)}m
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Repo ID</span>
-                <span className="text-cyan-400 text-xs break-all">{health.repo_id}</span>
+                <span className="text-[var(--accent-color)] text-xs break-all">{health.repo_id}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Sync State</span>
-                <span className="text-cyan-400">{health.sync_state}</span>
+                <span className="text-[var(--accent-color)]">{health.sync_state}</span>
               </div>
             </div>
           ) : null}
@@ -92,7 +92,7 @@ export function SettingsView() {
 
         {/* Notifications */}
         <section className="panel p-4">
-          <h2 className="text-sm font-semibold text-cyan-400 uppercase tracking-wider mb-4">
+          <h2 className="text-sm font-semibold text-[var(--accent-color)] uppercase tracking-wider mb-4">
             Notifications
           </h2>
           <div className="space-y-3 font-mono text-sm">
@@ -103,7 +103,7 @@ export function SettingsView() {
             {permission !== 'granted' && permission !== 'denied' && (
               <button
                 onClick={() => requestPermission()}
-                className="mt-2 w-full text-left px-3 py-2 text-xs border border-cyan-500/30 text-cyan-400 hover:border-cyan-500/60 hover:bg-cyan-500/10 transition-colors rounded"
+                className="mt-2 w-full text-left px-3 py-2 text-xs border border-[var(--accent-border)] text-[var(--accent-color)] hover:border-[var(--accent-border-hover)] hover:bg-[var(--accent-subtle-bg)] transition-colors rounded"
                 aria-label="Enable browser notifications"
               >
                 Enable browser notifications
@@ -120,7 +120,7 @@ export function SettingsView() {
 
         {/* Theme */}
         <section className="panel p-4">
-          <h2 className="text-sm font-semibold text-cyan-400 uppercase tracking-wider mb-4">
+          <h2 className="text-sm font-semibold text-[var(--accent-color)] uppercase tracking-wider mb-4">
             Theme
           </h2>
           <div className="flex gap-2" role="group" aria-label="Theme selection">
@@ -132,8 +132,8 @@ export function SettingsView() {
                 className={[
                   'flex-1 px-3 py-2 text-xs font-mono border transition-colors rounded capitalize',
                   theme === option
-                    ? 'border-cyan-500 text-cyan-400 bg-cyan-500/10'
-                    : 'border-cyan-500/30 text-muted-foreground hover:border-cyan-500/60 hover:text-cyan-400 hover:bg-cyan-500/5',
+                    ? 'border-[var(--accent-color)]text-[var(--accent-color)] bg-[var(--accent-subtle-bg)]'
+                    : 'border-[var(--accent-border)] text-muted-foreground hover:border-[var(--accent-border-hover)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle-bg)]',
                 ].join(' ')}
               >
                 {option}
@@ -144,12 +144,12 @@ export function SettingsView() {
 
         {/* Keyboard Shortcuts */}
         <section className="panel p-4">
-          <h2 className="text-sm font-semibold text-cyan-400 uppercase tracking-wider mb-4">
+          <h2 className="text-sm font-semibold text-[var(--accent-color)] uppercase tracking-wider mb-4">
             Keyboard Shortcuts
           </h2>
           <table className="w-full text-sm" aria-label="Keyboard shortcuts reference">
             <thead>
-              <tr className="text-left border-b border-cyan-500/10">
+              <tr className="text-left border-b border-[var(--accent-border)]">
                 <th className="pb-2 font-normal text-muted-foreground text-xs uppercase tracking-wider w-1/3">
                   Keys
                 </th>
@@ -158,14 +158,14 @@ export function SettingsView() {
                 </th>
               </tr>
             </thead>
-            <tbody className="font-mono divide-y divide-cyan-500/5">
+            <tbody className="font-mono divide-y divide-[var(--accent-border)]">
               {KEYBOARD_SHORTCUTS.map((shortcut) => (
                 <tr key={shortcut.description} className="group">
                   <td className="py-2 pr-4">
                     <span className="inline-flex gap-1 flex-wrap">
                       {shortcut.keys.map((key, i) => (
                         <span key={i}>
-                          <kbd className="inline-block px-1.5 py-0.5 text-xs border border-cyan-500/30 text-cyan-400 bg-cyan-500/5 rounded">
+                          <kbd className="inline-block px-1.5 py-0.5 text-xs border border-[var(--accent-border)] text-[var(--accent-color)] bg-[var(--accent-subtle-bg)] rounded">
                             {key}
                           </kbd>
                           {i < shortcut.keys.length - 1 && (

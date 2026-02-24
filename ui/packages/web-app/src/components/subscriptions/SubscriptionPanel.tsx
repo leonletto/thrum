@@ -118,11 +118,11 @@ export function SubscriptionPanel({ open, onOpenChange }: SubscriptionPanelProps
               {subscriptions.map((sub) => (
                 <div
                   key={sub.subscription_id}
-                  className="flex items-center justify-between px-3 py-2 rounded-md border border-cyan-500/20 hover:bg-cyan-500/5 transition-colors"
+                  className="flex items-center justify-between px-3 py-2 rounded-md border border-[var(--accent-border)] hover:bg-[var(--accent-subtle-bg)] transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono uppercase tracking-wider text-cyan-400">
+                      <span className="text-xs font-mono uppercase tracking-wider text-[var(--accent-color)]">
                         {sub.filter_type}
                       </span>
                       <span className="text-sm font-mono truncate">

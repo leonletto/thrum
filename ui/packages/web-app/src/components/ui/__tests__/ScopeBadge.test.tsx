@@ -26,7 +26,7 @@ describe('ScopeBadge', () => {
 
     it('should render with cyan border and transparent background', () => {
       const { container } = render(<ScopeBadge scope={mockScope} />);
-      const badge = container.querySelector('.border-cyan-500\\/20');
+      const badge = container.querySelector('.border-\\[var\\(--accent-border\\)\\]');
       expect(badge).toBeInTheDocument();
       expect(badge).toHaveClass('bg-transparent');
     });
@@ -54,7 +54,7 @@ describe('ScopeBadge', () => {
       const { container } = render(<ScopeBadge scope={mockScope} onClick={() => {}} />);
       const badge = container.querySelector('.cursor-pointer');
       expect(badge).toBeInTheDocument();
-      expect(badge).toHaveClass('hover:border-cyan-500/40');
+      expect(badge).toHaveClass('hover:border-[var(--accent-border-hover)]');
     });
   });
 
