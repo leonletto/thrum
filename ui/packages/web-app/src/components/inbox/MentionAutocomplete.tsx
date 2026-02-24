@@ -37,25 +37,29 @@ export function MentionAutocomplete({
   const { data: agentListData } = useAgentList();
   const { data: groupListData } = useGroupList();
 
-  // Build merged, filtered suggestion list
-  const filteredSuggestions: SuggestionItem[] = [
-    ...(agentListData?.agents || [])
-      .filter((agent) => agent.role.toLowerCase().includes(mentionSearch.toLowerCase()))
-      .map((agent) => ({
-        id: agent.agent_id,
-        label: agent.role,
-        sublabel: agent.display,
-        kind: 'agent' as const,
-      })),
-    ...(groupListData?.groups || [])
-      .filter((group) => group.name.toLowerCase().includes(mentionSearch.toLowerCase()))
-      .map((group) => ({
-        id: group.group_id,
-        label: group.name,
-        sublabel: group.description,
-        kind: 'group' as const,
-      })),
-  ];
+  // Build merged, filtered suggestion list (agents first, then groups)
+  const search = mentionSearch.toLowerCase();
+  const agentSuggestions: SuggestionItem[] = (agentListData?.agents || [])
+    .filter((agent) =>
+      agent.role.toLowerCase().includes(search) ||
+      agent.agent_id.toLowerCase().includes(search) ||
+      (agent.display && agent.display.toLowerCase().includes(search))
+    )
+    .map((agent) => ({
+      id: agent.agent_id,
+      label: agent.display || agent.agent_id.replace(/^(agent|user):/, ''),
+      sublabel: agent.role,
+      kind: 'agent' as const,
+    }));
+  const groupSuggestions: SuggestionItem[] = (groupListData?.groups || [])
+    .filter((group) => group.name.toLowerCase().includes(search))
+    .map((group) => ({
+      id: group.group_id,
+      label: group.name,
+      sublabel: group.description,
+      kind: 'group' as const,
+    }));
+  const filteredSuggestions: SuggestionItem[] = [...agentSuggestions, ...groupSuggestions];
 
   // Extract mentions from content
   const extractMentions = (content: string): string[] => {
