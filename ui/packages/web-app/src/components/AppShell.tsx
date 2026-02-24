@@ -55,7 +55,7 @@ export function AppShell({ children }: AppShellProps) {
       : 'not connected';
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0a0e1a]">
+    <div className="flex h-screen overflow-hidden bg-[var(--panel-bg-start)]">
       <SkipLink />
       <header className="panel header fixed top-0 left-0 right-0 h-14 z-10 flex items-center justify-between px-6">
         <div className="header-title">Thrum</div>

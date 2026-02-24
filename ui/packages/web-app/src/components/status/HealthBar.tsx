@@ -31,7 +31,7 @@ export function HealthBar() {
 
   return (
     <footer
-      className="fixed bottom-0 left-0 right-0 h-8 bg-[#0a0e1a] border-t border-[var(--accent-border)] flex items-center px-4 gap-4 text-[11px] font-mono z-20"
+      className="fixed bottom-0 left-0 right-0 h-8 bg-[var(--panel-bg-start)] border-t border-[var(--accent-border)] flex items-center px-4 gap-4 text-[11px] font-mono z-20"
       aria-label="System health status"
     >
       <div className="flex items-center gap-2">

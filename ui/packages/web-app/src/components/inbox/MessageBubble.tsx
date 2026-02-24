@@ -232,7 +232,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isOwn }: Mes
                               key={`mention-${match.index}`}
                               style={{
                                 backgroundColor: highlightColor,
-                                color: 'rgb(56, 189, 248)',
+                                color: 'var(--accent-color)',
                                 padding: '0 2px',
                                 borderRadius: '2px',
                               }}
