@@ -42,6 +42,7 @@ export function useMessageList(request?: MessageListRequest) {
       return wsClient.call<MessageListResponse>('message.list', request);
     },
     staleTime: 1000, // Consider data fresh for 1 second
+    refetchInterval: 5000,
   });
 }
 

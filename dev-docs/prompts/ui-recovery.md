@@ -68,7 +68,7 @@ Visual verification via playwright-cli:
 
 ```bash
 ./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/ui-recovery feature/ui-recovery \
-  --identity impl_ui_recovery --role implementer
+  --identity impl-ui-recovery --role implementer
 ```
 
 ---
@@ -90,7 +90,7 @@ tasks in order, runs quality gates, and pushes completed work.
 - `REFERENCE_CODE` — dev-docs/failure-recovery/session4.txt, session5.txt, session6.txt (contain exact diffs)
 - `QUALITY_COMMANDS` — `cd /Users/leon/dev/opensource/thrum/ui && pnpm test -- -- --run && pnpm build && cd /Users/leon/dev/opensource/thrum && go build ./cmd/thrum/`
 - `COVERAGE_TARGET` — >80%
-- `AGENT_NAME` — impl_ui_recovery
+- `AGENT_NAME` — impl-ui-recovery
 
 ---
 
@@ -162,7 +162,7 @@ section.
 
 ```bash
 cd ~/.workspaces/thrum/ui-recovery
-thrum quickstart --name impl_ui_recovery --role implementer --module feature/ui-recovery --intent "Implementing thrum-7fg, thrum-kh3, thrum-76v"
+thrum quickstart --name impl-ui-recovery --role implementer --module feature/ui-recovery --intent "Implementing thrum-7fg, thrum-kh3, thrum-76v"
 thrum inbox --unread
 thrum send "Starting work on UI recovery epics (thrum-7fg, thrum-kh3, thrum-76v)" --to @coordinator
 ```
@@ -428,7 +428,7 @@ thrum send "Completed UI recovery (thrum-7fg, thrum-kh3, thrum-76v). All tasks d
 ```bash
 # 1. Re-register with Thrum (MANDATORY)
 cd ~/.workspaces/thrum/ui-recovery
-thrum quickstart --name impl_ui_recovery --role implementer --module feature/ui-recovery --intent "Resuming UI recovery"
+thrum quickstart --name impl-ui-recovery --role implementer --module feature/ui-recovery --intent "Resuming UI recovery"
 thrum inbox --unread
 
 # 2. Orient from beads and git
