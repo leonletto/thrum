@@ -50,7 +50,7 @@
   </header>
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
-<h1>Beads and Thrum</h1>
+<h2>Beads and Thrum</h2>
 <h2>The Context Loss Problem</h2>
 <p>AI agents lose context. When a conversation becomes too long, the context window<br>compacts and early messages disappear. When a session ends, the agent forgets<br>what it was working on. When an agent teammate sends a message, that message<br>vanishes if the receiving agent isn&#39;t actively listening.</p>
 <p>In single-agent workflows, this is annoying. In multi-agent workflows, it&#39;s<br>catastrophic. Agents duplicate work, miss dependencies, and lose coordination.<br>The traditional solution — stuffing everything into the prompt — doesn&#39;t scale<br>beyond trivial tasks.</p>
@@ -102,7 +102,7 @@
 <p>Beads answers: <strong>What should I work on?</strong> Thrum answers: <strong>What did others tell<br>me?</strong></p>
 <h2>A Combined Workflow</h2>
 <p>Here&#39;s how an agent uses both tools together across multiple sessions.</p>
-<p><strong>Session 1: Starting work</strong></p>
+<h3>Session 1: Starting work</h3>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Check for assigned work</span>
 $ bd ready --assigned-to @implementer_ui
 - thrum-a1b2: Implement search UI component
@@ -117,7 +117,7 @@ $ bd update thrum-a1b2 --status in_progress
 
 <span class="hljs-comment"># Acknowledge and ask question</span>
 $ thrum send <span class="hljs-string">&quot;Starting on search UI. Should it support dark mode?&quot;</span> --to @planner</code></pre>
-<p><strong>Session 2: After context window compaction</strong></p>
+<h3>Session 2: After context window compaction</h3>
 <p>The agent&#39;s context has been compacted. Early messages are gone. But the state<br>persists in Git.</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Recover task context</span>
 $ bd show thrum-a1b2
@@ -132,13 +132,13 @@ From: @planner
 Message: <span class="hljs-string">&quot;Yes, dark mode required. See design tokens in styles/theme.css&quot;</span>
 
 <span class="hljs-comment"># Continue work with full context recovered</span></code></pre>
-<p><strong>Session 3: Finishing up</strong></p>
+<h3>Session 3: Finishing up</h3>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Mark task complete</span>
 $ bd close thrum-a1b2 --comment <span class="hljs-string">&quot;Implemented with dark mode support&quot;</span>
 
 <span class="hljs-comment"># Notify coordinator</span>
 $ thrum send <span class="hljs-string">&quot;Search UI complete (thrum-a1b2). Ready for integration.&quot;</span> --to @planner</code></pre>
-<p><strong>Session 4: New agent picks up follow-up work</strong></p>
+<h3>Session 4: New agent picks up follow-up work</h3>
 <p>A different agent needs to build on this work.</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Discover what&#x27;s ready to work on</span>
 $ bd ready

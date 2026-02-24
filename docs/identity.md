@@ -1,4 +1,3 @@
-
 ## Agent Identity & Registration
 
 ## Overview

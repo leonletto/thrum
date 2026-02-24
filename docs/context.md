@@ -1,4 +1,3 @@
-
 ## Agent Context Management
 
 ## Overview

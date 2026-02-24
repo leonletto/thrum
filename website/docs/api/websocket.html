@@ -50,7 +50,7 @@
   </header>
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
-<h1>WebSocket API</h1>
+<h2>WebSocket API</h2>
 <p>The Thrum WebSocket API provides real-time, bidirectional communication between<br>clients and the Thrum daemon using JSON-RPC 2.0 over WebSocket.</p>
 <h2>Connection</h2>
 <p><strong>Endpoint</strong>: <code>ws://localhost:9999/ws</code> (when UI is embedded) <strong>Fallback</strong>:<br><code>ws://localhost:9999/</code> (when UI is not available) <strong>Port</strong>: Default 9999,<br>configurable via <code>THRUM_WS_PORT</code> environment variable <strong>Protocol</strong>: JSON-RPC 2.0<br>over WebSocket frames <strong>Encoding</strong>: JSON (text frames) <strong>Library</strong>:<br>gorilla/websocket</p>

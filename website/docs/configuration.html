@@ -50,7 +50,7 @@
   </header>
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
-<h1>Configuration</h1>
+<h2>Configuration</h2>
 <p>Thrum uses <code>.thrum/config.json</code> as the single source of truth for user<br>preferences. Everything works with sensible defaults — you only need to edit<br>config.json when you want to change something.</p>
 <h2>Config File</h2>
 <p>Located at <code>.thrum/config.json</code> in your repository:</p>
@@ -60,117 +60,116 @@
     <span class="hljs-attr">&quot;sync_interval&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">60</span><span class="hljs-punctuation">,</span>
     <span class="hljs-attr">&quot;ws_port&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auto&quot;</span>
   <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
-<p>This file is created during <code>thrum init</code> and can be edited at any time.</p>
-<h2>Schema Reference</h2>
-<h3><code>daemon.local_only</code></h3>
-<p>Disable remote git sync (local-only mode).</p>
-<ul>
-<li><strong>Type:</strong> boolean</li>
-<li><strong>Default:</strong> <code>true</code></li>
-<li><strong>Override:</strong> <code>THRUM_LOCAL=false</code> environment variable</li>
-</ul>
-<h3><code>daemon.sync_interval</code></h3>
-<p>Seconds between git sync operations.</p>
-<ul>
-<li><strong>Type:</strong> integer (seconds)</li>
-<li><strong>Default:</strong> <code>60</code></li>
-<li><strong>Override:</strong> <code>THRUM_SYNC_INTERVAL</code> environment variable</li>
-</ul>
-<h3><code>daemon.ws_port</code></h3>
-<p>WebSocket server port.</p>
-<ul>
-<li><strong>Type:</strong> string</li>
-<li><strong>Default:</strong> <code>&quot;auto&quot;</code> (find free port dynamically)</li>
-<li><strong>Values:</strong> <code>&quot;auto&quot;</code> or a specific port number like <code>&quot;9999&quot;</code></li>
-<li><strong>Override:</strong> <code>THRUM_WS_PORT</code> environment variable</li>
-</ul>
-<h2>Priority Chain</h2>
-<p>When the same setting can come from multiple sources, this order applies:</p>
-<pre><code>CLI flag  &gt;  Environment variable  &gt;  config.json  &gt;  Default</code></pre>
-<p>Environment variables are intended for CI/automation overrides, not primary<br>configuration. For day-to-day use, edit <code>config.json</code>.</p>
-<h3>Environment Variable Reference</h3>
-<table>
-<thead>
-<tr>
-<th>Variable</th>
-<th>Overrides</th>
-<th>Example</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>THRUM_LOCAL</code></td>
-<td><code>daemon.local_only</code></td>
-<td><code>THRUM_LOCAL=false</code></td>
-</tr>
-<tr>
-<td><code>THRUM_SYNC_INTERVAL</code></td>
-<td><code>daemon.sync_interval</code></td>
-<td><code>THRUM_SYNC_INTERVAL=120</code></td>
-</tr>
-<tr>
-<td><code>THRUM_WS_PORT</code></td>
-<td><code>daemon.ws_port</code></td>
-<td><code>THRUM_WS_PORT=9999</code></td>
-</tr>
-<tr>
-<td><code>THRUM_NAME</code></td>
-<td>Agent identity selection</td>
-<td><code>THRUM_NAME=alice</code></td>
-</tr>
-<tr>
-<td><code>THRUM_ROLE</code></td>
-<td>Agent role</td>
-<td><code>THRUM_ROLE=planner</code></td>
-</tr>
-<tr>
-<td><code>THRUM_MODULE</code></td>
-<td>Agent module</td>
-<td><code>THRUM_MODULE=backend</code></td>
-</tr>
-</tbody></table>
-<h2>Runtime Templates</h2>
-<p>During <code>thrum init</code>, Thrum can generate configuration files for various AI<br>coding runtimes:</p>
-<ul>
-<li><strong>Claude Code</strong> - CLAUDE.md and .claude/agents/</li>
-<li><strong>Augment</strong> - .augment/ directory</li>
-<li><strong>Cursor</strong> - .cursorrules</li>
-<li><strong>Codex</strong> - codex.yaml</li>
-<li><strong>Gemini</strong> - .gemini/</li>
-<li><strong>CLI-only</strong> - No runtime configuration files</li>
-</ul>
-<p>Use <code>thrum init --runtime &lt;name&gt;</code> to specify which runtime template to generate.<br>Runtime templates are created during initialization and are not tracked in<br><code>config.json</code>.</p>
-<h2>Viewing Configuration</h2>
-<p>Use <code>thrum config show</code> to see the effective configuration and where each value<br>comes from:</p>
-<pre><code>Thrum Configuration
-  Config file: .thrum/config.json
+<span class="hljs-punctuation">}</span>
+```text
+
+This file is created during `thrum init` and can be edited at any time.
+
+## Schema Reference
+
+### `daemon.local_only`
+
+Disable remote git sync (local-only mode).
+
+- **Type<span class="hljs-punctuation">:</span>** boolean
+- **Default<span class="hljs-punctuation">:</span>** `<span class="hljs-literal"><span class="hljs-keyword">true</span></span>`
+- **Override<span class="hljs-punctuation">:</span>** `THRUM_LOCAL=<span class="hljs-literal"><span class="hljs-keyword">false</span></span>` environment variable
+
+### `daemon.sync_interval`
+
+Seconds between git sync operations.
+
+- **Type<span class="hljs-punctuation">:</span>** integer (seconds)
+- **Default<span class="hljs-punctuation">:</span>** `<span class="hljs-number">60</span>`
+- **Override<span class="hljs-punctuation">:</span>** `THRUM_SYNC_INTERVAL` environment variable
+
+### `daemon.ws_port`
+
+WebSocket server port.
+
+- **Type<span class="hljs-punctuation">:</span>** string
+- **Default<span class="hljs-punctuation">:</span>** `<span class="hljs-string">&quot;auto&quot;</span>` (find free port dynamically)
+- **Values<span class="hljs-punctuation">:</span>** `<span class="hljs-string">&quot;auto&quot;</span>` or a specific port number like `<span class="hljs-string">&quot;9999&quot;</span>`
+- **Override<span class="hljs-punctuation">:</span>** `THRUM_WS_PORT` environment variable
+
+## Priority Chain
+
+When the same setting can come from multiple sources<span class="hljs-punctuation">,</span> this order applies<span class="hljs-punctuation">:</span>
+
+```text
+CLI flag  &gt;  Environment variable  &gt;  config.json  &gt;  Default
+```text
+
+Environment variables are intended for CI/automation overrides<span class="hljs-punctuation">,</span> not primary
+configuration. For day-to-day use<span class="hljs-punctuation">,</span> edit `config.json`.
+
+### Environment Variable Reference
+
+| Variable              | Overrides                | Example                   |
+| --------------------- | ------------------------ | ------------------------- |
+| `THRUM_LOCAL`         | `daemon.local_only`      | `THRUM_LOCAL=<span class="hljs-literal"><span class="hljs-keyword">false</span></span>`       |
+| `THRUM_SYNC_INTERVAL` | `daemon.sync_interval`   | `THRUM_SYNC_INTERVAL=<span class="hljs-number">120</span>` |
+| `THRUM_WS_PORT`       | `daemon.ws_port`         | `THRUM_WS_PORT=<span class="hljs-number">9999</span>`      |
+| `THRUM_NAME`          | Agent identity selection | `THRUM_NAME=alice`        |
+| `THRUM_ROLE`          | Agent role               | `THRUM_ROLE=planner`      |
+| `THRUM_MODULE`        | Agent module             | `THRUM_MODULE=backend`    |
+
+## Runtime Templates
+
+During `thrum init`<span class="hljs-punctuation">,</span> Thrum can generate configuration files for various AI
+coding runtimes<span class="hljs-punctuation">:</span>
+
+- **Claude Code** - CLAUDE.md and .claude/agents/
+- **Augment** - .augment/ directory
+- **Cursor** - .cursorrules
+- **Codex** - codex.yaml
+- **Gemini** - .gemini/
+- **CLI-only** - No runtime configuration files
+
+Use `thrum init --runtime &lt;name&gt;` to specify which runtime template to generate.
+Runtime templates are created during initialization and are not tracked in
+`config.json`.
+
+## Viewing Configuration
+
+Use `thrum config show` to see the effective configuration and where each value
+comes from<span class="hljs-punctuation">:</span>
+
+```text
+Thrum Configuration
+  Config file<span class="hljs-punctuation">:</span> .thrum/config.json
 
 Runtime
-  Primary:     claude (from config.json)
-  Detected:    claude, augment
+  Primary<span class="hljs-punctuation">:</span>     claude (from config.json)
+  Detected<span class="hljs-punctuation">:</span>    claude<span class="hljs-punctuation">,</span> augment
 
 Daemon
-  Local-only:    true (config.json)
-  Sync interval: 60s (default)
-  WS port:       9999 (active)
-  Status:        running (PID 7718)
-  Socket:        .thrum/var/thrum.sock
+  Local-only<span class="hljs-punctuation">:</span>    <span class="hljs-literal"><span class="hljs-keyword">true</span></span> (config.json)
+  Sync interval<span class="hljs-punctuation">:</span> <span class="hljs-number">60</span>s (default)
+  WS port<span class="hljs-punctuation">:</span>       <span class="hljs-number">9999</span> (active)
+  Status<span class="hljs-punctuation">:</span>        running (PID <span class="hljs-number">7718</span>)
+  Socket<span class="hljs-punctuation">:</span>        .thrum/var/thrum.sock
 
 Identity
-  Agent:       claude_planner
-  Role:        planner
-  Module:      coordination
+  Agent<span class="hljs-punctuation">:</span>       claude_planner
+  Role<span class="hljs-punctuation">:</span>        planner
+  Module<span class="hljs-punctuation">:</span>      coordination
 
 Overrides (environment)
-  THRUM_NAME=claude_planner</code></pre>
-<p>Use <code>thrum config show --json</code> for machine-readable output.</p>
-<h2>What&#39;s NOT in config.json</h2>
-<p>These remain separate for good reasons:</p>
-<ul>
-<li><strong>Identity files</strong> (<code>.thrum/identities/*.json</code>) — per-agent config, one file<br>per registered agent</li>
-<li><strong>Context files</strong> (<code>.thrum/context/*.md</code>) — volatile session state</li>
-<li><strong>Runtime templates</strong> — generated config files for your AI runtime (CLAUDE.md,<br>.cursorrules, etc.)</li>
-</ul>
+  THRUM_NAME=claude_planner
+```text
+
+Use `thrum config show --json` for machine-readable output.
+
+## What&#x27;s NOT in config.json
+
+These remain separate for good reasons<span class="hljs-punctuation">:</span>
+
+- **Identity files** (`.thrum/identities<span class="hljs-comment">/*.json`) — per-agent config, one file
+  per registered agent
+- **Context files** (`.thrum/context/*.md`) — volatile session state
+- **Runtime templates** — generated config files for your AI runtime (CLAUDE.md,
+  .cursorrules, etc.)</span></code></pre>
 
     </div>
     <p style="margin-top:2rem"><a href="../docs.html#configuration.html">&larr; View in documentation</a></p>

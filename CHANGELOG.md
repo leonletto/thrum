@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-02-23
+
+### Big Update to the UI
+
+The web dashboard has been rebuilt from scratch as a Slack-style 3-panel
+interface. Full documentation:
+**[Web UI Guide](https://leonletto.github.io/thrum/docs.html#web-ui.html)**
+
+### Added
+
+- **Web UI overhaul** — Slack-style interface with sidebar navigation, Live
+  Feed, My Inbox, Group Channels, Agent Inbox, Who Has?, and Settings views
+- **Live Feed** with real-time activity stream and three filter modes (All,
+  Messages Only, Errors)
+- **Group Channels** with member management, create/delete dialogs, and
+  channel-scoped messaging
+- **Agent Inbox** with context panel showing intent, branch, session info, and
+  impersonation view
+- **Who Has?** file coordination tool — search which agent is editing a file
+- **Settings view** with daemon health, theme toggle (Dark/Light/System),
+  keyboard shortcuts, and notification preferences
+- **Keyboard shortcuts** — `1`–`5` for views, `Cmd+K` for search, `Esc` to
+  dismiss
+- **ComposeBar** with `@mention` autocomplete for agents and groups
+- **Unread badges** on sidebar groups and agent entries
+- **Message deep-linking** from Live Feed to inbox conversations
+- **Pagination** in InboxView and GroupChannelView
+- **Agent delete dialog** with archive option and type-to-confirm
+- **Group delete dialog** with archive option
+- **Role-based preamble templates** — auto-applied on agent registration via
+  `.thrum/role_templates/`
+- **Project setup skill** — converts plan files into beads epics, tasks, and
+  worktrees
+- **Web UI documentation page** with 7 annotated screenshots
+
+### Added (RPC)
+
+- `message.deleteByAgent` — clean up messages when removing an agent
+- `message.deleteByScope` — scoped message deletion
+- `message.archive` — export-then-delete for message cleanup
+- `group.delete` with `delete_messages` parameter
+
+### Changed
+
+- Dashboard rebuilt as single-page app with hash-based routing
+- Sidebar restructured: Live Feed → My Inbox → Groups → Agents → Tools
+- Message list uses conversation grouping instead of flat chronological display
+
+### Fixed
+
+- Auth guards on all protected views
+- Polling interval consistency across components
+- Pagination race conditions in inbox and channel views
+- Agent name tooltips for truncated names
+- Dead code and unused hooks removed
+- Identity fallback for "Unknown" inbox heading
+- Port file cleanup on daemon shutdown
+- Group member validation on add
+- Startup identity persistence
+
 ## [0.4.5] - 2026-02-21
 
 ### Added

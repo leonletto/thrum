@@ -50,7 +50,7 @@
   </header>
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
-<h1>Thrum Quickstart Guide</h1>
+<h2>Thrum Quickstart Guide</h2>
 <p>Get up and running with Thrum in 5 minutes.</p>
 <h2>What is Thrum?</h2>
 <p>Thrum is a Git-backed messaging system that helps you coordinate AI agents<br>across sessions, worktrees, and machines using Git as the sync layer.</p>
@@ -60,8 +60,8 @@
 </blockquote>
 <h2>Fast Path</h2>
 <p>If you want to skip the manual setup, use the quickstart command:</p>
-<pre><code>$ thrum quickstart --name myagent --role implementer --module auth
-$ thrum quickstart --name planner1 --role planner --module api --intent &quot;Designing REST endpoints&quot;</code></pre>
+<pre><code class="language-bash hljs">thrum quickstart --name myagent --role implementer --module auth
+thrum quickstart --name planner1 --role planner --module api --intent <span class="hljs-string">&quot;Designing REST endpoints&quot;</span></code></pre>
 <p>This registers your agent with a human-readable name (re-registering<br>automatically on conflict), starts a session, and optionally sets your work<br>intent in one step. The sections below walk through each step individually.</p>
 <p>Quickstart also auto-creates an empty context file for session state<br>persistence. See <a href="context.html">Agent Context Management</a> for details.</p>
 <h2>Prerequisites</h2>
@@ -270,7 +270,7 @@ thrum send <span class="hljs-string">&quot;Experimenting with auth approaches&qu
 ./scripts/setup-worktree-beads.sh ~/.workspaces/thrum/my-feature</code></pre>
 <h4>What the scripts create</h4>
 <p>Each script creates a redirect file pointing to the main repository:</p>
-<pre><code># In the worktree:
+<pre><code class="language-text hljs"># In the worktree:
 .thrum/redirect    → /path/to/main/repo/.thrum
 .beads/redirect    → /path/to/main/repo/.beads</code></pre>
 <p>This ensures all worktrees share the same daemon, message store, and issue<br>tracker. The scripts are idempotent — run them as many times as you need.</p>

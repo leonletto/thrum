@@ -389,5 +389,29 @@
       "jsonl"
     ],
     "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "role-templates.html",
+    "title": "Role-Based Preamble Templates",
+    "description": "Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives",
+    "category": "uncategorized",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "web-ui.html",
+    "title": "Web UI",
+    "description": "Browser-based dashboard for monitoring agents, reading messages, and managing groups — served from the daemon on a single port",
+    "category": "webui",
+    "order": 1,
+    "tags": [
+      "web-ui",
+      "dashboard",
+      "browser",
+      "live-feed",
+      "inbox"
+    ],
+    "lastUpdated": "2026-02-23"
   }
 ]

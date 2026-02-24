@@ -50,7 +50,7 @@
   </header>
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
-<h1>Tailscale Sync Security</h1>
+<h2>Tailscale Sync Security</h2>
 <blockquote>
 <p>See also: <a href="tailscale-sync.html">Tailscale Sync</a> for setup, architecture, and CLI<br>commands.</p>
 </blockquote>
@@ -85,53 +85,74 @@
       <span class="hljs-attr">&quot;dst&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;tag:thrum-daemon:9100&quot;</span><span class="hljs-punctuation">]</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">]</span>
-<span class="hljs-punctuation">}</span></code></pre>
-<h4>Headscale ACLs</h4>
-<pre><code class="language-yaml hljs"><span class="hljs-attr">groups:</span>
-  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">thrum-daemons</span>
-    <span class="hljs-attr">members:</span> [<span class="hljs-string">&quot;user1&quot;</span>, <span class="hljs-string">&quot;user2&quot;</span>]
+<span class="hljs-punctuation">}</span>
+```text
 
-<span class="hljs-attr">acls:</span>
-  <span class="hljs-bullet">-</span> <span class="hljs-attr">action:</span> <span class="hljs-string">accept</span>
-    <span class="hljs-attr">src:</span> [<span class="hljs-string">&quot;group:thrum-daemons&quot;</span>]
-    <span class="hljs-attr">dst:</span> [<span class="hljs-string">&quot;group:thrum-daemons:9100&quot;</span>]</code></pre>
-<h2>Layer 2: Pairing Code</h2>
-<p>Trust between two machines is established through a human-mediated pairing flow.</p>
-<h3>How It Works</h3>
-<ol>
-<li>Machine A generates a random 4-digit code and displays it to the user</li>
-<li>The user communicates the code to Machine B&#39;s operator (verbally, chat, etc.)</li>
-<li>Machine B sends the code to Machine A over Tailscale</li>
-<li>Machine A verifies the code and establishes the peer relationship</li>
-</ol>
-<h3>Security Properties</h3>
-<ul>
-<li><strong>Human-in-the-loop</strong>: A person must deliberately share the code, preventing<br>automated or accidental pairing</li>
-<li><strong>Time-limited</strong>: Pairing sessions expire after 5 minutes</li>
-<li><strong>Attempt-limited</strong>: Only 3 attempts per session before lockout</li>
-<li><strong>One-time use</strong>: Each code can only be used once</li>
-</ul>
-<h3>Threat Model</h3>
-<p>The pairing code provides protection against:</p>
-<ul>
-<li><strong>Unauthorized peers</strong> -- Only someone with the code can pair</li>
-<li><strong>Replay attacks</strong> -- Codes expire and are single-use</li>
-<li><strong>Brute force</strong> -- 3-attempt limit makes guessing impractical within the<br>5-minute window</li>
-</ul>
-<p>The code does NOT protect against an attacker who can both observe the code<br>being shared AND intercept the Tailscale connection. In practice, Tailscale&#39;s<br>network security makes this extremely unlikely.</p>
-<h2>Layer 3: Token Authentication</h2>
-<p>After pairing, a 32-byte hex token (256 bits of entropy) is shared between the<br>two peers. Every sync request includes this token.</p>
-<h3>Token Lifecycle</h3>
-<ol>
-<li><strong>Generation</strong>: A random 32-byte token is generated during pairing</li>
-<li><strong>Distribution</strong>: The token is sent to the joining peer in the pairing<br>response</li>
-<li><strong>Storage</strong>: Both peers store the token in their <code>peers.json</code> file</li>
-<li><strong>Validation</strong>: Every sync request is validated against the token before<br>processing</li>
-</ol>
-<h3>Validation Flow</h3>
-<pre><code>Incoming sync request
+#### Headscale ACLs
+
+```yaml
+groups<span class="hljs-punctuation">:</span>
+  - name<span class="hljs-punctuation">:</span> thrum-daemons
+    members<span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;user1&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;user2&quot;</span><span class="hljs-punctuation">]</span>
+
+acls<span class="hljs-punctuation">:</span>
+  - action<span class="hljs-punctuation">:</span> accept
+    src<span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;group:thrum-daemons&quot;</span><span class="hljs-punctuation">]</span>
+    dst<span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;group:thrum-daemons:9100&quot;</span><span class="hljs-punctuation">]</span>
+```text
+
+## Layer <span class="hljs-number">2</span><span class="hljs-punctuation">:</span> Pairing Code
+
+Trust between two machines is established through a human-mediated pairing flow.
+
+### How It Works
+
+<span class="hljs-number">1.</span> Machine A generates a random <span class="hljs-number">4</span>-digit code and displays it to the user
+<span class="hljs-number">2.</span> The user communicates the code to Machine B&#x27;s operator (verbally<span class="hljs-punctuation">,</span> chat<span class="hljs-punctuation">,</span> etc.)
+<span class="hljs-number">3.</span> Machine B sends the code to Machine A over Tailscale
+<span class="hljs-number">4.</span> Machine A verifies the code and establishes the peer relationship
+
+### Security Properties
+
+- **Human-in-the-loop**<span class="hljs-punctuation">:</span> A person must deliberately share the code<span class="hljs-punctuation">,</span> preventing
+  automated or accidental pairing
+- **Time-limited**<span class="hljs-punctuation">:</span> Pairing sessions expire after <span class="hljs-number">5</span> minutes
+- **Attempt-limited**<span class="hljs-punctuation">:</span> Only <span class="hljs-number">3</span> attempts per session before lockout
+- **One-time use**<span class="hljs-punctuation">:</span> Each code can only be used once
+
+### Threat Model
+
+The pairing code provides protection against<span class="hljs-punctuation">:</span>
+
+- **Unauthorized peers** -- Only someone with the code can pair
+- **Replay attacks** -- Codes expire and are single-use
+- **Brute force** -- <span class="hljs-number">3</span>-attempt limit makes guessing impractical within the
+  <span class="hljs-number">5</span>-minute window
+
+The code does NOT protect against an attacker who can both observe the code
+being shared AND intercept the Tailscale connection. In practice<span class="hljs-punctuation">,</span> Tailscale&#x27;s
+network security makes this extremely unlikely.
+
+## Layer <span class="hljs-number">3</span><span class="hljs-punctuation">:</span> Token Authentication
+
+After pairing<span class="hljs-punctuation">,</span> a <span class="hljs-number">32</span>-byte hex token (<span class="hljs-number">256</span> bits of entropy) is shared between the
+two peers. Every sync request includes this token.
+
+### Token Lifecycle
+
+<span class="hljs-number">1.</span> **Generation**<span class="hljs-punctuation">:</span> A random <span class="hljs-number">32</span>-byte token is generated during pairing
+<span class="hljs-number">2.</span> **Distribution**<span class="hljs-punctuation">:</span> The token is sent to the joining peer in the pairing
+   response
+<span class="hljs-number">3.</span> **Storage**<span class="hljs-punctuation">:</span> Both peers store the token in their `peers.json` file
+<span class="hljs-number">4.</span> **Validation**<span class="hljs-punctuation">:</span> Every sync request is validated against the token before
+   processing
+
+### Validation Flow
+
+```text
+Incoming sync request
    │
-   ├─ Is method &quot;pair.request&quot;?  ──► Yes: Skip auth (pairing flow)
+   ├─ Is method <span class="hljs-string">&quot;pair.request&quot;</span>?  ──► Yes<span class="hljs-punctuation">:</span> Skip auth (pairing flow)
    │
    ├─ Extract token from params
    │
@@ -139,102 +160,77 @@
    │   ├─ Not found  ──► Reject (unauthorized)
    │   └─ Found      ──► Allow + update last_sync
    │
-   └─ Dispatch to handler</code></pre>
-<h3>Security Properties</h3>
-<ul>
-<li><strong>256 bits of entropy</strong> -- Computationally infeasible to guess</li>
-<li><strong>Per-peer tokens</strong> -- Each peer relationship has its own token</li>
-<li><strong>Central validation</strong> -- All RPCs are authenticated in the sync server before<br>handler dispatch</li>
-<li><strong>Exempt only pair.request</strong> -- The pairing RPC is the only unauthenticated<br>method (protected by the pairing code instead)</li>
-</ul>
-<h2>Configuration</h2>
-<p>No security-specific configuration is needed. The security model is built into<br>the pairing and sync flow.</p>
-<table>
-<thead>
-<tr>
-<th>Aspect</th>
-<th>Configuration</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Encryption</td>
-<td>Automatic (Tailscale)</td>
-</tr>
-<tr>
-<td>Pairing timeout</td>
-<td>5 minutes (hardcoded)</td>
-</tr>
-<tr>
-<td>Pairing attempts</td>
-<td>3 per session (hardcoded)</td>
-</tr>
-<tr>
-<td>Token length</td>
-<td>32 bytes / 256 bits (hardcoded)</td>
-</tr>
-<tr>
-<td>Network ACLs</td>
-<td>Configure in Tailscale admin console</td>
-</tr>
-</tbody></table>
-<h2>Comparison with Previous Model</h2>
-<table>
-<thead>
-<tr>
-<th>Previous (Removed)</th>
-<th>Current (Simplified)</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Ed25519 event signing</td>
-<td>Not needed -- Tailscale provides transport integrity</td>
-</tr>
-<tr>
-<td>3-stage validation pipeline</td>
-<td>Not needed -- token auth is sufficient</td>
-</tr>
-<tr>
-<td>WhoIs authorization</td>
-<td>Not needed -- pairing code + Tailscale ACLs</td>
-</tr>
-<tr>
-<td>Per-peer rate limiting</td>
-<td>Not needed -- Tailscale rate limits at network level</td>
-</tr>
-<tr>
-<td>Quarantine system</td>
-<td>Not needed -- invalid tokens are simply rejected</td>
-</tr>
-<tr>
-<td>TOFU key pinning</td>
-<td>Replaced by explicit human-mediated pairing</td>
-</tr>
-<tr>
-<td>~1,074 lines of security code</td>
-<td>~40 lines of token validation</td>
-</tr>
-</tbody></table>
-<h2>Troubleshooting</h2>
-<h3>Peer rejected with &quot;unauthorized&quot;</h3>
-<p>The peer&#39;s token doesn&#39;t match. This can happen if:</p>
-<ol>
-<li>The peer was removed and re-paired (old token is invalid)</li>
-<li>The <code>peers.json</code> file was manually edited or corrupted</li>
-<li>The peer registry was reset on one side</li>
-</ol>
-<p><strong>Fix</strong>: Remove the peer on both machines and re-pair:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># On both machines:</span>
+   └─ Dispatch to handler
+```text
+
+### Security Properties
+
+- **<span class="hljs-number">256</span> bits of entropy** -- Computationally infeasible to guess
+- **Per-peer tokens** -- Each peer relationship has its own token
+- **Central validation** -- All RPCs are authenticated in the sync server before
+  handler dispatch
+- **Exempt only pair.request** -- The pairing RPC is the only unauthenticated
+  method (protected by the pairing code instead)
+
+## Configuration
+
+No security-specific configuration is needed. The security model is built into
+the pairing and sync flow.
+
+| Aspect           | Configuration                        |
+| ---------------- | ------------------------------------ |
+| Encryption       | Automatic (Tailscale)                |
+| Pairing timeout  | <span class="hljs-number">5</span> minutes (hardcoded)                |
+| Pairing attempts | <span class="hljs-number">3</span> per session (hardcoded)            |
+| Token length     | <span class="hljs-number">32</span> bytes / <span class="hljs-number">256</span> bits (hardcoded)      |
+| Network ACLs     | Configure in Tailscale admin console |
+
+## Comparison with Previous Model
+
+| Previous (Removed)            | Current (Simplified)                                 |
+| ----------------------------- | ---------------------------------------------------- |
+| Ed25519 event signing         | Not needed -- Tailscale provides transport integrity |
+| <span class="hljs-number">3</span>-stage validation pipeline   | Not needed -- token auth is sufficient               |
+| WhoIs authorization           | Not needed -- pairing code + Tailscale ACLs          |
+| Per-peer rate limiting        | Not needed -- Tailscale rate limits at network level |
+| Quarantine system             | Not needed -- invalid tokens are simply rejected     |
+| TOFU key pinning              | Replaced by explicit human-mediated pairing          |
+| ~<span class="hljs-number">1</span><span class="hljs-punctuation">,</span><span class="hljs-number">074</span> lines of security code | ~<span class="hljs-number">40</span> lines of token validation                        |
+
+## Troubleshooting
+
+### Peer rejected with <span class="hljs-string">&quot;unauthorized&quot;</span>
+
+The peer&#x27;s token doesn&#x27;t match. This can happen if<span class="hljs-punctuation">:</span>
+
+<span class="hljs-number">1.</span> The peer was removed and re-paired (old token is invalid)
+<span class="hljs-number">2.</span> The `peers.json` file was manually edited or corrupted
+<span class="hljs-number">3.</span> The peer registry was reset on one side
+
+**Fix**<span class="hljs-punctuation">:</span> Remove the peer on both machines and re-pair<span class="hljs-punctuation">:</span>
+
+```bash
+# On both machines<span class="hljs-punctuation">:</span>
 thrum peer remove &lt;name&gt;
 
-<span class="hljs-comment"># Then pair again:</span>
-<span class="hljs-comment"># Machine A: thrum peer add</span>
-<span class="hljs-comment"># Machine B: thrum peer join &lt;address&gt;</span></code></pre>
-<h3>Pairing fails with &quot;no active pairing session&quot;</h3>
-<p>The pairing session on Machine A expired or was never started.</p>
-<p><strong>Fix</strong>: Run <code>thrum peer add</code> on Machine A first, then <code>thrum peer join</code> on<br>Machine B within 5 minutes.</p>
-<h3>Pairing fails with &quot;too many failed attempts&quot;</h3>
-<p>Three incorrect codes were entered.</p>
-<p><strong>Fix</strong>: Run <code>thrum peer add</code> again on Machine A to start a fresh session with a<br>new code.</p>
+# Then pair again<span class="hljs-punctuation">:</span>
+# Machine A<span class="hljs-punctuation">:</span> thrum peer add
+# Machine B<span class="hljs-punctuation">:</span> thrum peer join &lt;address&gt;
+```text
+
+### Pairing fails with <span class="hljs-string">&quot;no active pairing session&quot;</span>
+
+The pairing session on Machine A expired or was never started.
+
+**Fix**<span class="hljs-punctuation">:</span> Run `thrum peer add` on Machine A first<span class="hljs-punctuation">,</span> then `thrum peer join` on
+Machine B within <span class="hljs-number">5</span> minutes.
+
+### Pairing fails with <span class="hljs-string">&quot;too many failed attempts&quot;</span>
+
+Three incorrect codes were entered.
+
+**Fix**<span class="hljs-punctuation">:</span> Run `thrum peer add` again on Machine A to start a fresh session with a
+new code.</code></pre>
 
     </div>
     <p style="margin-top:2rem"><a href="../docs.html#tailscale-security.html">&larr; View in documentation</a></p>
