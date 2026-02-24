@@ -43,7 +43,7 @@ describe('MentionAutocomplete', () => {
       kind: 'agent' as const,
       role: 'assistant',
       module: 'core',
-      display: 'Assistant Bot',
+      display: 'assistant_main',
       registered_at: '2024-01-01T00:00:00Z',
     },
     {
@@ -51,7 +51,7 @@ describe('MentionAutocomplete', () => {
       kind: 'agent' as const,
       role: 'researcher',
       module: 'research',
-      display: 'Research Agent',
+      display: 'researcher_main',
       registered_at: '2024-01-01T00:00:00Z',
     },
     {
@@ -59,7 +59,7 @@ describe('MentionAutocomplete', () => {
       kind: 'agent' as const,
       role: 'tester',
       module: 'qa',
-      display: 'Testing Agent',
+      display: 'tester_main',
       registered_at: '2024-01-01T00:00:00Z',
     },
   ];
@@ -140,7 +140,7 @@ describe('MentionAutocomplete', () => {
       await user.type(textarea, '@');
 
       await waitFor(() => {
-        expect(screen.getByText('@assistant')).toBeInTheDocument();
+        expect(screen.getByText('@assistant_main')).toBeInTheDocument();
       });
     });
 
@@ -154,9 +154,9 @@ describe('MentionAutocomplete', () => {
       await user.type(textarea, '@res');
 
       await waitFor(() => {
-        expect(screen.getByText('@researcher')).toBeInTheDocument();
-        expect(screen.queryByText('@assistant')).not.toBeInTheDocument();
-        expect(screen.queryByText('@tester')).not.toBeInTheDocument();
+        expect(screen.getByText('@researcher_main')).toBeInTheDocument();
+        expect(screen.queryByText('@assistant_main')).not.toBeInTheDocument();
+        expect(screen.queryByText('@tester_main')).not.toBeInTheDocument();
       });
     });
 
@@ -170,14 +170,14 @@ describe('MentionAutocomplete', () => {
       await user.type(textarea, '@ass');
 
       await waitFor(() => {
-        expect(screen.getByText('@assistant')).toBeInTheDocument();
+        expect(screen.getByText('@assistant_main')).toBeInTheDocument();
       });
 
-      const assistantOption = screen.getByText('@assistant');
+      const assistantOption = screen.getByText('@assistant_main');
       await user.click(assistantOption);
 
       await waitFor(() => {
-        expect(mockOnChange).toHaveBeenCalledWith('@assistant ', ['assistant']);
+        expect(mockOnChange).toHaveBeenCalledWith('@assistant_main ', ['assistant_main']);
       });
     });
 
@@ -190,7 +190,7 @@ describe('MentionAutocomplete', () => {
       const textarea = screen.getByRole('textbox');
       await user.type(textarea, 'hello world');
 
-      expect(screen.queryByText('@assistant')).not.toBeInTheDocument();
+      expect(screen.queryByText('@assistant_main')).not.toBeInTheDocument();
     });
 
     it('should hide dropdown when @ is preceded by non-whitespace', async () => {
@@ -202,7 +202,7 @@ describe('MentionAutocomplete', () => {
       const textarea = screen.getByRole('textbox');
       await user.type(textarea, 'email@');
 
-      expect(screen.queryByText('@assistant')).not.toBeInTheDocument();
+      expect(screen.queryByText('@assistant_main')).not.toBeInTheDocument();
     });
 
     it('should show dropdown when @ is at start of line', async () => {
@@ -215,7 +215,7 @@ describe('MentionAutocomplete', () => {
       await user.type(textarea, '@');
 
       await waitFor(() => {
-        expect(screen.getByText('@assistant')).toBeInTheDocument();
+        expect(screen.getByText('@assistant_main')).toBeInTheDocument();
       });
     });
 
@@ -229,7 +229,7 @@ describe('MentionAutocomplete', () => {
       await user.type(textarea, 'Hello @');
 
       await waitFor(() => {
-        expect(screen.getByText('@assistant')).toBeInTheDocument();
+        expect(screen.getByText('@assistant_main')).toBeInTheDocument();
       });
     });
   });
@@ -245,17 +245,17 @@ describe('MentionAutocomplete', () => {
       await user.type(textarea, '@');
 
       await waitFor(() => {
-        expect(screen.getByText('@assistant')).toBeInTheDocument();
+        expect(screen.getByText('@assistant_main')).toBeInTheDocument();
       });
 
       // Arrow down should highlight next item
       await user.keyboard('{ArrowDown}');
-      const researcherButton = screen.getByText('@researcher').closest('button');
+      const researcherButton = screen.getByText('@researcher_main').closest('button');
       expect(researcherButton).toHaveClass('bg-accent');
 
       // Arrow up should go back
       await user.keyboard('{ArrowUp}');
-      const assistantButton = screen.getByText('@assistant').closest('button');
+      const assistantButton = screen.getByText('@assistant_main').closest('button');
       expect(assistantButton).toHaveClass('bg-accent');
     });
 
@@ -269,13 +269,13 @@ describe('MentionAutocomplete', () => {
       await user.type(textarea, '@');
 
       await waitFor(() => {
-        expect(screen.getByText('@assistant')).toBeInTheDocument();
+        expect(screen.getByText('@assistant_main')).toBeInTheDocument();
       });
 
       await user.keyboard('{Enter}');
 
       await waitFor(() => {
-        expect(mockOnChange).toHaveBeenCalledWith('@assistant ', ['assistant']);
+        expect(mockOnChange).toHaveBeenCalledWith('@assistant_main ', ['assistant_main']);
       });
     });
 
@@ -289,13 +289,13 @@ describe('MentionAutocomplete', () => {
       await user.type(textarea, '@');
 
       await waitFor(() => {
-        expect(screen.getByText('@assistant')).toBeInTheDocument();
+        expect(screen.getByText('@assistant_main')).toBeInTheDocument();
       });
 
       await user.keyboard('{Escape}');
 
       await waitFor(() => {
-        expect(screen.queryByText('@assistant')).not.toBeInTheDocument();
+        expect(screen.queryByText('@assistant_main')).not.toBeInTheDocument();
       });
     });
   });
@@ -308,12 +308,12 @@ describe('MentionAutocomplete', () => {
       );
 
       const textarea = screen.getByRole('textbox');
-      await user.type(textarea, 'Hello @assistant and @researcher');
+      await user.type(textarea, 'Hello @assistant_main and @researcher_main');
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenLastCalledWith(
-          'Hello @assistant and @researcher',
-          ['assistant', 'researcher']
+          'Hello @assistant_main and @researcher_main',
+          ['assistant_main', 'researcher_main']
         );
       });
     });
@@ -325,12 +325,12 @@ describe('MentionAutocomplete', () => {
       );
 
       const textarea = screen.getByRole('textbox');
-      await user.type(textarea, 'Hey @assistant, can you ask @researcher about @tester?');
+      await user.type(textarea, 'Hey @assistant_main, can you ask @researcher_main about @tester_main?');
 
       await waitFor(() => {
         expect(mockOnChange).toHaveBeenLastCalledWith(
-          'Hey @assistant, can you ask @researcher about @tester?',
-          ['assistant', 'researcher', 'tester']
+          'Hey @assistant_main, can you ask @researcher_main about @tester_main?',
+          ['assistant_main', 'researcher_main', 'tester_main']
         );
       });
     });
@@ -343,10 +343,10 @@ describe('MentionAutocomplete', () => {
 
       const textarea = screen.getByRole('textbox');
       // Type full mention without selecting from dropdown
-      await user.type(textarea, '@assistant hello');
+      await user.type(textarea, '@assistant_main hello');
 
       await waitFor(() => {
-        expect(mockOnChange).toHaveBeenLastCalledWith('@assistant hello', ['assistant']);
+        expect(mockOnChange).toHaveBeenLastCalledWith('@assistant_main hello', ['assistant_main']);
       });
     });
   });
@@ -413,7 +413,7 @@ describe('MentionAutocomplete', () => {
       await user.type(textarea, '@');
 
       await waitFor(() => {
-        expect(screen.getByText('@assistant')).toBeInTheDocument();
+        expect(screen.getByText('@assistant_main')).toBeInTheDocument();
         expect(screen.getByText('@everyone')).toBeInTheDocument();
         expect(screen.getByText('@backend')).toBeInTheDocument();
       });
@@ -446,7 +446,7 @@ describe('MentionAutocomplete', () => {
       await waitFor(() => {
         expect(screen.getByText('@backend')).toBeInTheDocument();
         expect(screen.queryByText('@everyone')).not.toBeInTheDocument();
-        expect(screen.queryByText('@assistant')).not.toBeInTheDocument();
+        expect(screen.queryByText('@assistant_main')).not.toBeInTheDocument();
       });
     });
 
@@ -516,7 +516,7 @@ describe('MentionAutocomplete', () => {
       await user.type(textarea, '@');
 
       await waitFor(() => {
-        expect(screen.getByText('@assistant')).toBeInTheDocument();
+        expect(screen.getByText('@assistant_main')).toBeInTheDocument();
         expect(screen.getByText('@everyone')).toBeInTheDocument();
       });
 
