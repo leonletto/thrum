@@ -147,7 +147,7 @@ describe('ComposeBar', () => {
 
       expect(screen.getByText('To:')).toBeInTheDocument();
       expect(
-        screen.getByRole('button', { name: /select recipients/i })
+        screen.getByRole('button', { name: /add recipients/i })
       ).toBeInTheDocument();
     });
 
@@ -162,7 +162,7 @@ describe('ComposeBar', () => {
 
       expect(screen.queryByText('To:')).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('button', { name: /select recipients/i })
+        screen.queryByRole('button', { name: /add recipients/i })
       ).not.toBeInTheDocument();
     });
   });
@@ -373,7 +373,7 @@ describe('ComposeBar', () => {
       );
 
       const selectButton = screen.getByRole('button', {
-        name: /select recipients/i,
+        name: /add recipients/i,
       });
       await user.click(selectButton);
 
@@ -387,7 +387,7 @@ describe('ComposeBar', () => {
       );
 
       const selectButton = screen.getByRole('button', {
-        name: /select recipients/i,
+        name: /add recipients/i,
       });
       await user.click(selectButton);
 
@@ -402,7 +402,7 @@ describe('ComposeBar', () => {
       );
 
       const selectButton = screen.getByRole('button', {
-        name: /select recipients/i,
+        name: /add recipients/i,
       });
       await user.click(selectButton);
 
@@ -417,7 +417,7 @@ describe('ComposeBar', () => {
       );
 
       const selectButton = screen.getByRole('button', {
-        name: /select recipients/i,
+        name: /add recipients/i,
       });
       await user.click(selectButton);
 

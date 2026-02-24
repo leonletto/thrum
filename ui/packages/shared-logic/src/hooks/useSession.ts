@@ -15,5 +15,6 @@ export function useSessionList(options?: UseSessionListOptions) {
       return wsClient.call<SessionListResponse>('session.list', options as Record<string, unknown> | undefined);
     },
     staleTime: 30000,
+    refetchInterval: 30000,
   });
 }

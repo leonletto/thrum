@@ -6,17 +6,13 @@ import { AgentContextPanel } from '../components/agents/AgentContextPanel';
 import { WhoHasView } from '../components/coordination/WhoHasView';
 import { SettingsView } from '../components/settings/SettingsView';
 import { GroupChannelView } from '../components/groups/GroupChannelView';
-import { uiStore, useRealtimeMessages, useBrowserNotifications, useCurrentUser, setSelectedMessageId } from '@thrum/shared-logic';
+import { uiStore, useRealtimeMessages, setSelectedMessageId } from '@thrum/shared-logic';
 
 export function DashboardPage() {
   const { selectedView, selectedAgentId, selectedGroupName, selectedMessageId } = useStore(uiStore);
-  const currentUser = useCurrentUser();
 
   // Subscribe to real-time WebSocket events for cache invalidation
   useRealtimeMessages();
-
-  // Enable browser notifications for mentions and DMs
-  useBrowserNotifications(currentUser?.user_id, 'Thrum');
 
   return (
     <AppShell>

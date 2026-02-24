@@ -224,15 +224,15 @@ export const MessageBubble = memo(function MessageBubble({ message, isOwn }: Mes
                           const isCurrentUser = currentUserRoles.includes(role);
 
                           const highlightColor = isCurrentUser
-                            ? 'rgba(56, 189, 248, 0.3)'
-                            : 'rgba(56, 189, 248, 0.15)';
+                            ? 'var(--mention-highlight-self)'
+                            : 'var(--mention-highlight)';
 
                           parts.push(
                             <span
                               key={`mention-${match.index}`}
                               style={{
                                 backgroundColor: highlightColor,
-                                color: 'rgb(56, 189, 248)',
+                                color: 'var(--accent-color)',
                                 padding: '0 2px',
                                 borderRadius: '2px',
                               }}
