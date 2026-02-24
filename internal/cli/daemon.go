@@ -224,11 +224,20 @@ func DaemonStatus(repoPath string) (*DaemonStatusResult, error) {
 // DaemonRestart restarts the daemon (stop + start).
 // When localOnly is true, the restarted daemon runs in local-only mode.
 func DaemonRestart(repoPath string, localOnly bool) error {
+	// Read the previous WebSocket port before stopping (DaemonStop deletes ws.port)
+	prevPort := ReadWebSocketPort(repoPath)
+
 	// Try to stop daemon (ignore error if not running)
 	_ = DaemonStop(repoPath)
 
 	// Wait a bit for cleanup
 	time.Sleep(500 * time.Millisecond)
+
+	// Preserve the previous WebSocket port so the UI reconnects to the same URL
+	if prevPort > 0 {
+		os.Setenv("THRUM_WS_PORT", fmt.Sprintf("%d", prevPort)) //nolint:errcheck
+		defer os.Unsetenv("THRUM_WS_PORT")                      //nolint:errcheck
+	}
 
 	// Start daemon
 	return DaemonStart(repoPath, localOnly)

@@ -9,14 +9,67 @@ export interface UIState {
   selectedMessageId: string | null;
 }
 
+export const validViews: View[] = [
+  'live-feed',
+  'my-inbox',
+  'agent-inbox',
+  'group-channel',
+  'who-has',
+  'settings',
+];
+
+export function stateFromHash(): Partial<UIState> {
+  if (typeof window === 'undefined') return {};
+  const hash = window.location.hash.slice(1); // strip leading '#'
+  if (!hash) return {};
+  const params = new URLSearchParams(hash);
+  const result: Partial<UIState> = {};
+  const view = params.get('view');
+  if (view && (validViews as string[]).includes(view)) {
+    result.selectedView = view as View;
+  }
+  const agent = params.get('agent');
+  if (agent) {
+    result.selectedAgentId = agent;
+  }
+  const group = params.get('group');
+  if (group) {
+    result.selectedGroupName = group;
+  }
+  return result;
+}
+
+function applyStateToHash(state: UIState): void {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams();
+  if (state.selectedView) {
+    params.set('view', state.selectedView);
+  }
+  if (state.selectedAgentId !== null) {
+    params.set('agent', state.selectedAgentId);
+  }
+  if (state.selectedGroupName !== null) {
+    params.set('group', state.selectedGroupName);
+  }
+  window.history.replaceState(null, '', '#' + params.toString());
+}
+
+export function stateToHash(state: UIState): void {
+  applyStateToHash(state);
+}
+
 const initialState: UIState = {
   selectedView: 'live-feed',
   selectedAgentId: null,
   selectedGroupName: null,
   selectedMessageId: null,
+  ...stateFromHash(),
 };
 
 export const uiStore = new Store<UIState>(initialState);
+
+uiStore.subscribe(({ currentVal }) => applyStateToHash(currentVal));
+stateToHash(initialState);
 
 // Actions
 export const setSelectedView = (view: View) => {
