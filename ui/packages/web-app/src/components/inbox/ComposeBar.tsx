@@ -40,7 +40,7 @@ export function ComposeBar({
   const { data: agentListData } = useAgentList();
   const { data: groupListData } = useGroupList();
 
-  const allMentions = Array.from(new Set([...selectedRecipients, ...mentions]));
+  const allRecipients = Array.from(new Set([...selectedRecipients, ...mentions]));
 
   const handleContentChange = (newContent: string, newMentions: string[]) => {
     setContent(newContent);
@@ -56,7 +56,7 @@ export function ComposeBar({
     sendMessage(
       {
         content,
-        ...(allMentions.length > 0 && { mentions: allMentions }),
+        ...(allRecipients.length > 0 && { mentions: allRecipients }),
         ...(groupScope && { scopes: [{ type: 'group', value: groupScope }] }),
         ...(replyTo?.messageId && { reply_to: replyTo.messageId }),
         ...(isImpersonating && { acting_as: sendingAs }),
@@ -100,12 +100,9 @@ export function ComposeBar({
   const agents = agentListData?.agents || [];
   const groups = groupListData?.groups || [];
 
-  // Union of explicit recipients and @mentions from textarea
-  const allChips = Array.from(new Set([...selectedRecipients, ...mentions]));
-
   return (
     <div
-      className="border-t border-[var(--accent-border)] bg-[#0a0e1a] font-mono"
+      className="border-t border-[var(--accent-border)] bg-[var(--panel-bg-start)] font-mono"
       data-testid="compose-bar"
     >
       {warnings.length > 0 && (
@@ -145,8 +142,8 @@ export function ComposeBar({
 
             {/* Chips: union of selectedRecipients and @mentions */}
             <div className="flex flex-wrap gap-1 flex-1 min-w-0 text-xs text-[var(--text-secondary)]">
-              {allChips.length > 0 ? (
-                allChips.map((chip) => (
+              {allRecipients.length > 0 ? (
+                allRecipients.map((chip) => (
                   <span
                     key={chip}
                     className="flex items-center gap-0.5 bg-[var(--accent-subtle-bg-hover)] border border-[var(--accent-border)] rounded px-1"

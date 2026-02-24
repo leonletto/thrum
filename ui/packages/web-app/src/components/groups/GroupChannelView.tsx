@@ -107,7 +107,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
     <div className="h-full flex flex-col relative font-mono">
       {/* Header */}
       <div
-        className="flex items-center gap-3 px-4 py-2 border-b border-[var(--accent-border)] bg-[#0a0e1a] shrink-0"
+        className="flex items-center gap-3 px-4 py-2 border-b border-[var(--accent-border)] bg-[var(--panel-bg-start)] shrink-0"
         data-testid="group-channel-header"
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -322,7 +322,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
                       id="add-agent-select"
                       value={addAgentValue}
                       onChange={(e) => setAddAgentValue(e.target.value)}
-                      className="w-full text-xs bg-[#0a0e1a] border border-[var(--accent-border)] rounded px-2 py-1 text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent-border-hover)]"
+                      className="w-full text-xs bg-[var(--panel-bg-start)] border border-[var(--accent-border)] rounded px-2 py-1 text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent-border-hover)]"
                       data-testid="add-agent-select"
                     >
                       <option value="">Select agent…</option>
@@ -343,7 +343,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
                       placeholder="Role name…"
                       value={addRoleValue}
                       onChange={(e) => setAddRoleValue(e.target.value)}
-                      className="h-7 text-xs bg-[#0a0e1a] border-[var(--accent-border)] text-[var(--text-secondary)] placeholder:text-[var(--text-faint)]"
+                      className="h-7 text-xs bg-[var(--panel-bg-start)] border-[var(--accent-border)] text-[var(--text-secondary)] placeholder:text-[var(--text-faint)]"
                       data-testid="add-role-input"
                     />
                   </div>
