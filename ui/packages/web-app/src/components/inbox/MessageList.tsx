@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MessageSquare } from 'lucide-react';
 import type { Message } from '@thrum/shared-logic';
 import {
@@ -192,6 +192,23 @@ export function MessageList({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMessageId]);
 
+  // Auto-scroll: sentinel ref placed at the bottom of the message list
+  const scrollEndRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
+
+  // Scroll to bottom on initial render
+  useLayoutEffect(() => {
+    scrollEndRef.current?.scrollIntoView();
+  }, []);
+
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (messages.length > prevMessageCountRef.current) {
+      scrollEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages.length]);
+
   if (isLoading) {
     return (
       <ScrollArea className="flex-1 px-4 py-2">
@@ -212,7 +229,7 @@ export function MessageList({
     );
   }
 
-  const conversations = groupByConversation(messages);
+  const conversations = groupByConversation(messages).slice().reverse();
   const showingCount = messages.length;
 
   return (
@@ -249,6 +266,7 @@ export function MessageList({
           />
         ))}
       </div>
+      <div ref={scrollEndRef} />
     </ScrollArea>
   );
 }
