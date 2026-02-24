@@ -50,7 +50,7 @@
   </header>
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
-<h1>Agent Configurations</h1>
+<h2>Agent Configurations</h2>
 <blockquote>
 <p><strong>Recommended:</strong> Install the <a href="claude-code-plugin.html">Thrum plugin</a> instead of<br>manual agent definitions. The plugin provides 10 slash commands, automatic<br>context hooks, and 8 resource docs — all in a single install.</p>
 </blockquote>
@@ -87,7 +87,7 @@
 <li><strong>Session protocol</strong> with CLI reference and resource links</li>
 </ul>
 <p>Install the plugin in Claude Code:</p>
-<pre><code>/install-plugin beads</code></pre>
+<pre><code class="language-text hljs">/install-plugin beads</code></pre>
 <p>Or visit the <a href="https://github.com/steveyegge/beads">Beads project</a> for details.</p>
 <h3>message-listener</h3>
 <p>Lightweight background listener that watches for incoming Thrum messages so you<br>don&#39;t have to manually check your inbox. Runs on Haiku for cost efficiency<br>(~$0.00003/cycle). Uses <code>thrum wait</code> for efficient blocking instead of polling<br>loops — returns immediately when messages arrive, covers ~90 minutes across 6<br>cycles.</p>
@@ -99,7 +99,7 @@
 </ul>
 <p><strong>Key capabilities:</strong></p>
 <ul>
-<li>Blocking wait via <code>thrum wait --timeout 15m</code> (6 cycles max, filters by agent identity)</li>
+<li>Blocking wait via <code>thrum wait --timeout 15m</code> (6 cycles max, filters by agent<br>identity)</li>
 <li>Immediate return on message arrival</li>
 <li>Time-based filtering with <code>--after</code> flag (skips old messages)</li>
 <li>CLI-only (no MCP tools — sub-agents can&#39;t access MCP)</li>

@@ -50,7 +50,7 @@
   </header>
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
-<h1>Event Streaming</h1>
+<h2>Event Streaming</h2>
 <h2>Overview</h2>
 <p>Event streaming enables real-time push notifications to connected WebSocket and<br>Unix socket clients. When significant events occur (new messages), the daemon<br>automatically pushes notifications to subscribed clients.</p>
 <p>The WebSocket server and embedded SPA are served on the same port (default 9999,<br>configurable via <code>THRUM_WS_PORT</code>). WebSocket connections use the <code>/ws</code> endpoint<br>when the UI is active, or <code>/</code> when running without UI.</p>
@@ -86,7 +86,7 @@
 </li>
 </ol>
 <h3>Data Flow</h3>
-<pre><code>Event Source (message.send, message.edit)
+<pre><code class="language-text hljs">Event Source (message.send, message.edit)
   |
   v
 Subscription Dispatcher
@@ -96,184 +96,235 @@ Broadcaster
   |         |
   v         v
 Unix Socket    WebSocket
-Clients        Clients (port 9999, /ws endpoint)</code></pre>
-<blockquote>
-<p><strong>Note:</strong> All WebSocket connections enforce a 10s handshake timeout.<br>Server-side requests have a 10s per-request timeout (v0.4.3).</p>
-</blockquote>
-<h2>Implementation Details</h2>
-<h3>Supported Notifications</h3>
-<p>Currently implemented:</p>
-<ul>
-<li><strong><code>notification.message</code></strong> - Pushed when a new message is created or edited,<br>matching a subscription</li>
-</ul>
-<h3>Notification Format</h3>
-<p>Notifications use JSON-RPC 2.0 notification format (no <code>id</code> field, no response<br>expected):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;notification.message&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_...&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;author&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span>
-    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;First 100 characters of content...&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum-ukr&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;matched_subscription&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;match_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope&quot;</span>
-    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
-<h3>Subscription Filtering</h3>
-<p>The dispatcher automatically filters events based on subscriptions:</p>
-<ul>
-<li><strong>Scope subscriptions</strong>: Only notify if message has matching scope</li>
-<li><strong>Mention subscriptions</strong>: Only notify if message mentions the agent&#39;s role or<br>name (supports both <code>@reviewer</code> and <code>@furiosa</code>)</li>
-<li><strong>All subscriptions</strong>: Notify for every message</li>
-<li><strong>No subscription</strong>: No notifications (client must poll inbox)</li>
-</ul>
-<h3>Client Buffer Management</h3>
-<p>Both Unix socket and WebSocket connections use buffered I/O:</p>
-<ul>
-<li><strong>WebSocket</strong>: 256-message buffered channel per connection (<code>sendCh</code> in<br><code>internal/websocket/connection.go</code>)</li>
-<li><strong>Unix socket</strong>: Direct write to <code>net.Conn</code> with newline framing</li>
-<li><strong>Slow client handling</strong>: If WebSocket buffer is full, the send fails and the<br>client is auto-unregistered</li>
-</ul>
-<h2>Usage</h2>
-<h3>Daemon Initialization</h3>
-<p>When starting the daemon, create the event streaming infrastructure:</p>
-<pre><code class="language-go hljs"><span class="hljs-comment">// Create daemon state</span>
+Clients        Clients (port 9999, /ws endpoint)
+```go
+
+&gt; **Note:** All WebSocket connections enforce a 10s handshake timeout.
+&gt; Server-side requests have a 10s per-request timeout (v0.4.3).
+
+## Implementation Details
+
+### Supported Notifications
+
+Currently implemented:
+
+- **`notification.message`** - Pushed when a new message is created or edited,
+  matching a subscription
+
+### Notification Format
+
+Notifications use JSON-RPC 2.0 notification format (no `id` field, no response
+expected):
+
+```json
+{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;method&quot;: &quot;notification.message&quot;,
+  &quot;params&quot;: {
+    &quot;message_id&quot;: &quot;msg_...&quot;,
+    &quot;author&quot;: {
+      &quot;agent_id&quot;: &quot;furiosa&quot;,
+      &quot;name&quot;: &quot;furiosa&quot;,
+      &quot;role&quot;: &quot;implementer&quot;,
+      &quot;module&quot;: &quot;&quot;
+    },
+    &quot;preview&quot;: &quot;First 100 characters of content...&quot;,
+    &quot;scopes&quot;: [{ &quot;type&quot;: &quot;task&quot;, &quot;value&quot;: &quot;thrum-ukr&quot; }],
+    &quot;matched_subscription&quot;: {
+      &quot;subscription_id&quot;: 1,
+      &quot;match_type&quot;: &quot;scope&quot;
+    },
+    &quot;timestamp&quot;: &quot;2026-02-03T10:00:00Z&quot;
+  }
+}
+```text
+
+### Subscription Filtering
+
+The dispatcher automatically filters events based on subscriptions:
+
+- **Scope subscriptions**: Only notify if message has matching scope
+- **Mention subscriptions**: Only notify if message mentions the agent&#x27;s role or
+  name (supports both `@reviewer` and `@furiosa`)
+- **All subscriptions**: Notify for every message
+- **No subscription**: No notifications (client must poll inbox)
+
+### Client Buffer Management
+
+Both Unix socket and WebSocket connections use buffered I/O:
+
+- **WebSocket**: 256-message buffered channel per connection (`sendCh` in
+  `internal/websocket/connection.go`)
+- **Unix socket**: Direct write to `net.Conn` with newline framing
+- **Slow client handling**: If WebSocket buffer is full, the send fails and the
+  client is auto-unregistered
+
+## Usage
+
+### Daemon Initialization
+
+When starting the daemon, create the event streaming infrastructure:
+
+```go
+// Create daemon state
 st, _ := state.NewState(thrumDir, syncDir, repoID)
 
-<span class="hljs-comment">// Create client registries</span>
+// Create client registries
 unixClients := daemon.NewClientRegistry()
 
-<span class="hljs-comment">// Create WebSocket server with handler registry and optional UI filesystem</span>
+// Create WebSocket server with handler registry and optional UI filesystem
 wsServer := websocket.NewServer(wsAddr, wsRegistry, uiFS)
 
-<span class="hljs-comment">// Set up event streaming (wires Broadcaster + Dispatcher)</span>
+// Set up event streaming (wires Broadcaster + Dispatcher)
 eventSetup := daemon.NewEventStreamingSetupFromState(st, unixClients, wsServer)
 
-<span class="hljs-comment">// Create message handler with the dispatcher for push notifications</span>
+// Create message handler with the dispatcher for push notifications
 messageHandler := rpc.NewMessageHandlerWithDispatcher(st, eventSetup.Dispatcher)
 
-<span class="hljs-comment">// Register handlers on both Unix socket and WebSocket registries...</span></code></pre>
-<h3>Client Subscription</h3>
-<p>Clients subscribe via the <code>subscribe</code> RPC method:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;subscribe&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;scope&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum-ukr&quot;</span> <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
-<p>Or subscribe to mentions:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;subscribe&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;mention_role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
-<p>Or subscribe to all messages (firehose):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;subscribe&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;all&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
-<h3>Receiving Notifications</h3>
-<p>WebSocket clients receive notifications as JSON-RPC notifications (no response<br>required):</p>
-<pre><code class="language-javascript hljs"><span class="hljs-comment">// WebSocket client example</span>
-<span class="hljs-keyword">const</span> ws = <span class="hljs-keyword">new</span> <span class="hljs-title class_">WebSocket</span>(<span class="hljs-string">&quot;ws://localhost:9999/ws&quot;</span>);
+// Register handlers on both Unix socket and WebSocket registries...
+```go
 
-ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
-  <span class="hljs-keyword">const</span> notification = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
-  <span class="hljs-keyword">if</span> (notification.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;notification.message&quot;</span>) {
-    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">&quot;New message:&quot;</span>, notification.<span class="hljs-property">params</span>.<span class="hljs-property">preview</span>);
+### Client Subscription
+
+Clients subscribe via the `subscribe` RPC method:
+
+```json
+{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;method&quot;: &quot;subscribe&quot;,
+  &quot;params&quot;: {
+    &quot;scope&quot;: { &quot;type&quot;: &quot;task&quot;, &quot;value&quot;: &quot;thrum-ukr&quot; }
+  },
+  &quot;id&quot;: 1
+}
+```text
+
+Or subscribe to mentions:
+
+```json
+{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;method&quot;: &quot;subscribe&quot;,
+  &quot;params&quot;: {
+    &quot;mention_role&quot;: &quot;reviewer&quot;
+  },
+  &quot;id&quot;: 1
+}
+```text
+
+Or subscribe to all messages (firehose):
+
+```json
+{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;method&quot;: &quot;subscribe&quot;,
+  &quot;params&quot;: {
+    &quot;all&quot;: true
+  },
+  &quot;id&quot;: 1
+}
+```text
+
+### Receiving Notifications
+
+WebSocket clients receive notifications as JSON-RPC notifications (no response
+required):
+
+```javascript
+// WebSocket client example
+const ws = new WebSocket(&quot;ws://localhost:9999/ws&quot;);
+
+ws.onmessage = (event) =&gt; {
+  const notification = JSON.parse(event.data);
+  if (notification.method === &quot;notification.message&quot;) {
+    console.log(&quot;New message:&quot;, notification.params.preview);
   }
-};</code></pre>
-<h3>MCP Server Integration</h3>
-<p>The MCP server (<code>thrum mcp serve</code>) uses WebSocket notifications for its<br><code>wait_for_message</code> tool. It connects to the daemon&#39;s WebSocket endpoint and<br>subscribes to notifications, enabling blocking message waits for agent<br>sub-agents (like the message-listener pattern).</p>
-<h2>Testing</h2>
-<p>Comprehensive test coverage includes:</p>
-<ol>
-<li><p><strong>Unit Tests</strong> (<code>internal/daemon/broadcaster_test.go</code>)</p>
-<ul>
-<li>Broadcaster notification routing (WebSocket path)</li>
-<li>Client not connected handling</li>
-<li>Notification format conversion</li>
-</ul>
-</li>
-<li><p><strong>Integration Tests</strong> (<code>internal/daemon/event_streaming_test.go</code>)</p>
-<ul>
-<li>End-to-end message notification flow with subscriptions</li>
-<li>Subscription filtering (scope matching vs. non-matching)</li>
-<li>Event streaming setup wiring</li>
-<li>Mock notification receiver pattern</li>
-</ul>
-</li>
-<li><p><strong>Dispatcher Tests</strong> (<code>internal/subscriptions/dispatcher_test.go</code>)</p>
-<ul>
-<li>Scope, mention, and &quot;all&quot; subscription matching</li>
-<li>Name-based mention matching (@furiosa)</li>
-<li>Multiple subscriptions per message</li>
-<li>No subscriptions scenario</li>
-</ul>
-</li>
-</ol>
-<p>Run tests:</p>
-<pre><code class="language-bash hljs">go <span class="hljs-built_in">test</span> ./internal/daemon/...
-go <span class="hljs-built_in">test</span> ./internal/subscriptions/...
-go <span class="hljs-built_in">test</span> ./internal/websocket/...</code></pre>
-<h2>Performance Characteristics</h2>
-<ul>
-<li><strong>Latency</strong>: Sub-millisecond notification dispatch (synchronous in<br>message.send path)</li>
-<li><strong>Throughput</strong>: Limited by subscription query (loads all subscriptions per<br>message)</li>
-<li><strong>Memory</strong>: O(clients) for WebSocket send buffers (256 messages each),<br>O(subscriptions) for filtering</li>
-<li><strong>Concurrency</strong>: Thread-safe Broadcaster, client registries, and dispatcher</li>
-</ul>
-<h2>Troubleshooting</h2>
-<h3>Notifications Not Received</h3>
-<ol>
-<li>Check subscription exists: <code>thrum subscriptions</code> CLI or <code>subscriptions.list</code><br>RPC</li>
-<li>Verify client is connected: Check WebSocket client registry via daemon logs</li>
-<li>Confirm event matches subscription: Check scope/mention filters match message<br>scopes/refs</li>
-<li>Look for slow client disconnections: WebSocket buffer full (256-message<br>limit)</li>
-<li>Verify WebSocket endpoint: Use <code>ws://localhost:9999/ws</code> (not<br><code>ws://localhost:9999/</code>)</li>
-</ol>
-<h3>High Memory Usage</h3>
-<ul>
-<li>Too many buffered messages: Check for slow WebSocket consumers</li>
-<li>Too many subscriptions: Review per-session subscription counts</li>
-</ul>
-<h3>Notification Lag</h3>
-<ul>
-<li>Subscription query is synchronous in message.send path</li>
-<li>Check SQLite database performance</li>
-<li>Monitor WebSocket connection health</li>
-</ul>
-<h2>References</h2>
-<ul>
-<li>Subscription Details: <code>docs/subscriptions.md</code></li>
-<li>WebSocket API: <code>docs/api/websocket.md</code></li>
-<li>Daemon Architecture: <code>docs/daemon.md</code></li>
-<li>RPC API: <code>docs/rpc-api.md</code></li>
-<li>Broadcaster: <code>internal/daemon/broadcaster.go</code></li>
-<li>Dispatcher: <code>internal/subscriptions/dispatcher.go</code></li>
-<li>Event Streaming Setup: <code>internal/daemon/event_streaming.go</code></li>
-<li>WebSocket Server: <code>internal/websocket/server.go</code></li>
-<li>WebSocket Client Registry: <code>internal/websocket/registry.go</code></li>
-<li>Unix Socket Client Registry: <code>internal/daemon/notify.go</code></li>
-</ul>
+};
+```text
+
+### MCP Server Integration
+
+The MCP server (`thrum mcp serve`) uses WebSocket notifications for its
+`wait_for_message` tool. It connects to the daemon&#x27;s WebSocket endpoint and
+subscribes to notifications, enabling blocking message waits for agent
+sub-agents (like the message-listener pattern).
+
+## Testing
+
+Comprehensive test coverage includes:
+
+1. **Unit Tests** (`internal/daemon/broadcaster_test.go`)
+   - Broadcaster notification routing (WebSocket path)
+   - Client not connected handling
+   - Notification format conversion
+
+2. **Integration Tests** (`internal/daemon/event_streaming_test.go`)
+   - End-to-end message notification flow with subscriptions
+   - Subscription filtering (scope matching vs. non-matching)
+   - Event streaming setup wiring
+   - Mock notification receiver pattern
+
+3. **Dispatcher Tests** (`internal/subscriptions/dispatcher_test.go`)
+   - Scope, mention, and &quot;all&quot; subscription matching
+   - Name-based mention matching (@furiosa)
+   - Multiple subscriptions per message
+   - No subscriptions scenario
+
+Run tests:
+
+```bash
+go test ./internal/daemon/...
+go test ./internal/subscriptions/...
+go test ./internal/websocket/...
+```text
+
+## Performance Characteristics
+
+- **Latency**: Sub-millisecond notification dispatch (synchronous in
+  message.send path)
+- **Throughput**: Limited by subscription query (loads all subscriptions per
+  message)
+- **Memory**: O(clients) for WebSocket send buffers (256 messages each),
+  O(subscriptions) for filtering
+- **Concurrency**: Thread-safe Broadcaster, client registries, and dispatcher
+
+## Troubleshooting
+
+### Notifications Not Received
+
+1. Check subscription exists: `thrum subscriptions` CLI or `subscriptions.list`
+   RPC
+2. Verify client is connected: Check WebSocket client registry via daemon logs
+3. Confirm event matches subscription: Check scope/mention filters match message
+   scopes/refs
+4. Look for slow client disconnections: WebSocket buffer full (256-message
+   limit)
+5. Verify WebSocket endpoint: Use `ws://localhost:9999/ws` (not
+   `ws://localhost:9999/`)
+
+### High Memory Usage
+
+- Too many buffered messages: Check for slow WebSocket consumers
+- Too many subscriptions: Review per-session subscription counts
+
+### Notification Lag
+
+- Subscription query is synchronous in message.send path
+- Check SQLite database performance
+- Monitor WebSocket connection health
+
+## References
+
+- Subscription Details: `docs/subscriptions.md`
+- WebSocket API: `docs/api/websocket.md`
+- Daemon Architecture: `docs/daemon.md`
+- RPC API: `docs/rpc-api.md`
+- Broadcaster: `internal/daemon/broadcaster.go`
+- Dispatcher: `internal/subscriptions/dispatcher.go`
+- Event Streaming Setup: `internal/daemon/event_streaming.go`
+- WebSocket Server: `internal/websocket/server.go`
+- WebSocket Client Registry: `internal/websocket/registry.go`
+- Unix Socket Client Registry: `internal/daemon/notify.go`</code></pre>
 
     </div>
     <p style="margin-top:2rem"><a href="../docs.html#event-streaming.html">&larr; View in documentation</a></p>

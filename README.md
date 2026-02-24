@@ -85,9 +85,9 @@ don't need to clone this repo into your project.
 - **Multi-Worktree** — Each git worktree gets its own agent identity via
   `.thrum/redirect`
 
-**v0.4.5 highlights:** Name-only routing with auto role groups, agent context
-management, `thrum init` full setup, safedb/safecmd hardening packages, 32-test
-resilience suite, identity v3 enrichment, Go 1.26 compatibility.
+**v0.5.0 highlights:** Slack-style web UI with live feed, inbox, group channels,
+agent context panels, keyboard shortcuts, and file coordination — plus
+role-based preamble templates and project setup pipeline.
 
 ## Installation
 

@@ -20,6 +20,7 @@
   var CATEGORY_ORDER = [
     'overview',
     'quickstart',
+    'webui',
     'cli',
     'messaging',
     'identity',
@@ -34,6 +35,7 @@
   var CATEGORY_LABELS = {
     overview: 'Overview',
     quickstart: 'Getting Started',
+    webui: 'Web UI',
     cli: 'CLI',
     messaging: 'Messaging',
     identity: 'Identity',

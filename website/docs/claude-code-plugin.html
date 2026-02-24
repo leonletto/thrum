@@ -50,7 +50,7 @@
   </header>
   <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
     <div class="docs-content-inner">
-<h1>Claude Code Plugin</h1>
+<h2>Claude Code Plugin</h2>
 <blockquote>
 <p>See also: <a href="quickstart.html">Quickstart Guide</a> for basic Thrum setup,<br><a href="agent-configs.html">Agent Configurations</a> for manual agent definitions,<br><a href="mcp-server.html">MCP Server</a> for the native MCP transport,<br><a href="multi-agent.html">Multi-Agent Support</a> for coordination patterns.</p>
 </blockquote>
@@ -74,222 +74,232 @@ git <span class="hljs-built_in">clone</span> https://github.com/leonletto/thrum.
 
 <span class="hljs-comment"># Initialize in your repository (v0.4.5+: init does full setup)</span>
 <span class="hljs-built_in">cd</span> /path/to/your/repo
-thrum init</code></pre>
-<p><code>thrum init</code> (v0.4.5+) handles the full setup: prompts for runtime detection,<br>generates CLAUDE.md coordination instructions, starts the daemon, registers your<br>agent, and starts a session. For manual control, you can still run individual<br>steps:</p>
-<pre><code class="language-bash hljs">thrum setup claude-md --apply    <span class="hljs-comment"># Generate CLAUDE.md coordination instructions</span>
-thrum daemon start               <span class="hljs-comment"># Start the daemon separately</span></code></pre>
-<p>Verify the daemon is running:</p>
-<pre><code class="language-bash hljs">thrum daemon status</code></pre>
-<h2>Installation</h2>
-<h3>From GitHub (self-hosted marketplace)</h3>
-<p>The plugin is distributed as a self-hosted marketplace. First add the<br>marketplace, then install the plugin:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Add the Thrum marketplace</span>
+thrum init
+```text
+
+`thrum init` (v0.4.5+) handles the full setup: prompts <span class="hljs-keyword">for</span> runtime detection,
+generates CLAUDE.md coordination instructions, starts the daemon, registers your
+agent, and starts a session. For manual control, you can still run individual
+steps:
+
+```bash
+thrum setup claude-md --apply    <span class="hljs-comment"># Generate CLAUDE.md coordination instructions</span>
+thrum daemon start               <span class="hljs-comment"># Start the daemon separately</span>
+```text
+
+Verify the daemon is running:
+
+```bash
+thrum daemon status
+```text
+
+<span class="hljs-comment">## Installation</span>
+
+<span class="hljs-comment">### From GitHub (self-hosted marketplace)</span>
+
+The plugin is distributed as a self-hosted marketplace. First add the
+marketplace, <span class="hljs-keyword">then</span> install the plugin:
+
+```bash
+<span class="hljs-comment"># Add the Thrum marketplace</span>
 claude plugin marketplace add https://github.com/leonletto/thrum
 
 <span class="hljs-comment"># Install the plugin</span>
-claude plugin install thrum</code></pre>
-<h3>From local clone</h3>
-<p>If you&#39;ve cloned the Thrum repository locally:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Add as a local marketplace</span>
+claude plugin install thrum
+```text
+
+<span class="hljs-comment">### From local clone</span>
+
+If you<span class="hljs-string">&#x27;ve cloned the Thrum repository locally:
+
+```bash
+# Add as a local marketplace
 claude plugin marketplace add /path/to/thrum
 
-<span class="hljs-comment"># Install the plugin</span>
-claude plugin install thrum</code></pre>
-<h3>Verify installation</h3>
-<p>Start a new Claude Code session. The SessionStart hook should automatically run<br><code>thrum prime</code> and inject context. You&#39;ll see your agent identity, team roster,<br>and unread messages in the session preamble.</p>
-<h2>Slash Commands</h2>
-<p>All commands live under the <code>/thrum:</code> namespace.</p>
-<table>
-<thead>
-<tr>
-<th>Command</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>/thrum:quickstart</code></td>
-<td>Register agent and start session (interactive or with flags)</td>
-</tr>
-<tr>
-<td><code>/thrum:send</code></td>
-<td>Send direct, group, or broadcast messages</td>
-</tr>
-<tr>
-<td><code>/thrum:inbox</code></td>
-<td>Check message inbox (all or unread only)</td>
-</tr>
-<tr>
-<td><code>/thrum:reply</code></td>
-<td>Reply to a message (inherits original audience)</td>
-</tr>
-<tr>
-<td><code>/thrum:wait</code></td>
-<td>Block until a message arrives (background listener use)</td>
-</tr>
-<tr>
-<td><code>/thrum:team</code></td>
-<td>Show active team members with roles and intents</td>
-</tr>
-<tr>
-<td><code>/thrum:group</code></td>
-<td>Create, manage, and message agent groups</td>
-</tr>
-<tr>
-<td><code>/thrum:overview</code></td>
-<td>Combined status + team + inbox view</td>
-</tr>
-<tr>
-<td><code>/thrum:prime</code></td>
-<td>Load full session context (identity, team, inbox, git)</td>
-</tr>
-<tr>
-<td><code>/thrum:update-context</code></td>
-<td>Guided workflow to save session narrative + state</td>
-</tr>
-</tbody></table>
-<h3>Common workflows</h3>
-<p><strong>Start a session:</strong></p>
-<pre><code>/thrum:quickstart</code></pre>
-<p>Prompts for role, module, and intent — or pass flags directly:</p>
-<pre><code class="language-bash hljs">thrum quickstart --role implementer --module auth --intent <span class="hljs-string">&quot;Building login flow&quot;</span></code></pre>
-<p><strong>Send a message:</strong></p>
-<pre><code>/thrum:send</code></pre>
-<p>Guided prompt for recipient and message. Direct usage:</p>
-<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Starting auth work&quot;</span> --to @coordinator
+# Install the plugin
+claude plugin install thrum
+```text
+
+### Verify installation
+
+Start a new Claude Code session. The SessionStart hook should automatically run
+`thrum prime` and inject context. You&#x27;</span>ll see your agent identity, team roster,
+and unread messages <span class="hljs-keyword">in</span> the session preamble.
+
+<span class="hljs-comment">## Slash Commands</span>
+
+All commands live under the `/thrum:` namespace.
+
+| Command                 | Purpose                                                      |
+| ----------------------- | ------------------------------------------------------------ |
+| `/thrum:quickstart`     | Register agent and start session (interactive or with flags) |
+| `/thrum:send`           | Send direct, group, or broadcast messages                    |
+| `/thrum:inbox`          | Check message inbox (all or unread only)                     |
+| `/thrum:reply`          | Reply to a message (inherits original audience)              |
+| `/thrum:<span class="hljs-built_in">wait</span>`           | Block <span class="hljs-keyword">until</span> a message arrives (background listener use)      |
+| `/thrum:team`           | Show active team members with roles and intents              |
+| `/thrum:group`          | Create, manage, and message agent <span class="hljs-built_in">groups</span>                     |
+| `/thrum:overview`       | Combined status + team + inbox view                          |
+| `/thrum:prime`          | Load full session context (identity, team, inbox, git)       |
+| `/thrum:update-context` | Guided workflow to save session narrative + state            |
+
+<span class="hljs-comment">### Common workflows</span>
+
+**Start a session:**
+
+```text
+/thrum:quickstart
+```text
+
+Prompts <span class="hljs-keyword">for</span> role, module, and intent — or pass flags directly:
+
+```bash
+thrum quickstart --role implementer --module auth --intent <span class="hljs-string">&quot;Building login flow&quot;</span>
+```text
+
+**Send a message:**
+
+```text
+/thrum:send
+```text
+
+Guided prompt <span class="hljs-keyword">for</span> recipient and message. Direct usage:
+
+```bash
+thrum send <span class="hljs-string">&quot;Starting auth work&quot;</span> --to @coordinator
 thrum send <span class="hljs-string">&quot;Need review&quot;</span> --to @reviewers
-thrum send <span class="hljs-string">&quot;Heads up: breaking change&quot;</span> --to @everyone</code></pre>
-<p><strong>Check inbox and reply:</strong></p>
-<pre><code>/thrum:inbox
-/thrum:reply</code></pre>
-<h2>Hooks</h2>
-<p>The plugin configures two hooks that run automatically:</p>
-<h3>SessionStart</h3>
-<p>Runs <code>thrum prime</code> when a Claude Code session begins. Injects:</p>
-<ul>
-<li>Agent identity (name, role, module)</li>
-<li>Active team members and their intents</li>
-<li>Unread messages</li>
-<li>Git branch and status</li>
-<li>Daemon health</li>
-</ul>
-<p>If Thrum isn&#39;t initialized, shows a friendly setup message instead of failing.</p>
-<h3>PreCompact</h3>
-<p>Runs <code>thrum prime</code> before context compaction. This ensures agent identity and<br>session state survive compaction — the agent can continue working without losing<br>track of who it is or what messages are pending.</p>
-<h2>Resource Docs</h2>
-<p>The plugin includes 8 resource documents that Claude loads on demand for deeper<br>guidance:</p>
-<table>
-<thead>
-<tr>
-<th>Resource</th>
-<th>When it&#39;s used</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>MESSAGING.md</code></td>
-<td>Message lifecycle, addressing patterns</td>
-</tr>
-<tr>
-<td><code>GROUPS.md</code></td>
-<td>Creating groups, adding members, group messaging</td>
-</tr>
-<tr>
-<td><code>IDENTITY.md</code></td>
-<td>Agent naming, registration, multi-worktree identity</td>
-</tr>
-<tr>
-<td><code>WORKTREES.md</code></td>
-<td>Cross-worktree coordination, shared daemon, file tracking</td>
-</tr>
-<tr>
-<td><code>LISTENER_PATTERN.md</code></td>
-<td>Background message listener sub-agent template</td>
-</tr>
-<tr>
-<td><code>BOUNDARIES.md</code></td>
-<td>When to use Thrum vs TaskList/SendMessage</td>
-</tr>
-<tr>
-<td><code>ANTI_PATTERNS.md</code></td>
-<td>12 common mistakes and how to avoid them</td>
-</tr>
-<tr>
-<td><code>CLI_REFERENCE.md</code></td>
-<td>Complete command syntax for all <code>thrum</code> commands</td>
-</tr>
-</tbody></table>
-<h2>MCP Server Integration</h2>
-<p>For native tool-call integration (no shell-outs), configure the Thrum MCP server<br>in your project&#39;s <code>.claude/settings.json</code>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;mcpServers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;thrum&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;stdio&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;command&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;args&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;mcp&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;serve&quot;</span><span class="hljs-punctuation">]</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
-<p>This provides 11 MCP tools: 5 for core messaging (<code>send_message</code>,<br><code>check_messages</code>, <code>wait_for_message</code>, <code>list_agents</code>, <code>broadcast_message</code>) and 6<br>for group management (<code>create_group</code>, <code>delete_group</code>, <code>add_group_member</code>,<br><code>remove_group_member</code>, <code>list_groups</code>, <code>get_group</code>). See<br><a href="mcp-server.html">MCP Server</a> for the full API.</p>
-<p><strong>Plugin vs MCP:</strong> The plugin&#39;s slash commands use the CLI (<code>Bash(thrum:*)</code>).<br>The MCP server provides native tool calls. Both work — the plugin is simpler to<br>set up, the MCP server is more efficient for high-frequency messaging. You can<br>use both together.</p>
-<h2>Background Listener</h2>
-<p>When <code>thrum prime</code> runs in a Claude Code session and detects an active identity,<br>it outputs a ready-to-use listener spawn instruction with the correct repo path.<br>Copy and run it to start background message monitoring:</p>
-<pre><code>Task(
-  subagent_type=&quot;message-listener&quot;,
-  model=&quot;haiku&quot;,
-  run_in_background=true,
-  prompt=&quot;Listen for Thrum messages.
-    WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 15m --after -30s --json&quot;
-)</code></pre>
-<p>The listener runs 6 cycles of 15 minutes each (~90 min coverage), blocks on<br><code>thrum wait</code> (no polling), returns when messages arrive, and costs<br>~$0.00003/cycle on Haiku. Re-arm after processing each batch. See the<br><code>LISTENER_PATTERN.md</code> resource for the full template.</p>
-<h2>Plugin vs Manual Agent Definitions</h2>
-<table>
-<thead>
-<tr>
-<th>Feature</th>
-<th>Plugin</th>
-<th>Manual (toolkit/agents/)</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Installation</td>
-<td><code>claude plugin marketplace add</code> + <code>install</code></td>
-<td>Copy <code>.md</code> files to <code>.claude/agents/</code></td>
-</tr>
-<tr>
-<td>Updates</td>
-<td>Re-install from source</td>
-<td>Manual file replacement</td>
-</tr>
-<tr>
-<td>Slash commands</td>
-<td>10 commands included</td>
-<td>None</td>
-</tr>
-<tr>
-<td>Hooks</td>
-<td>SessionStart + PreCompact</td>
-<td>Manual hook configuration</td>
-</tr>
-<tr>
-<td>Resource docs</td>
-<td>8 progressive disclosure docs</td>
-<td>Single monolithic agent file</td>
-</tr>
-<tr>
-<td>Maintenance</td>
-<td>Versioned (v0.4.5)</td>
-<td>Ad-hoc</td>
-</tr>
-</tbody></table>
-<p>The manual agent definitions (<code>thrum-agent.md</code>, <code>message-listener.md</code>) still<br>work and are available in <code>toolkit/agents/</code> for environments that don&#39;t support<br>plugins.</p>
-<h2>Troubleshooting</h2>
-<p><strong>&quot;Thrum not initialized&quot; on session start</strong></p>
-<p>Run <code>thrum init &amp;&amp; thrum daemon start</code> in your repository root.</p>
-<p><strong>No context injected after plugin install</strong></p>
-<p>Verify the plugin is loaded: check that <code>/thrum:prime</code> is available as a slash<br>command. If not, reinstall the plugin.</p>
-<p><strong>Messages not arriving</strong></p>
-<p>Check daemon status with <code>thrum daemon status</code>. The daemon must be running for<br>messaging to work. Start it with <code>thrum daemon start</code>.</p>
-<p><strong>Identity conflicts in multi-worktree setups</strong></p>
-<p>Set <code>THRUM_NAME</code> environment variable to give each worktree a unique agent name.<br>See <a href="identity.html">Identity System</a> for details.</p>
+thrum send <span class="hljs-string">&quot;Heads up: breaking change&quot;</span> --to @everyone
+```text
+
+**Check inbox and reply:**
+
+```text
+/thrum:inbox
+/thrum:reply
+```go
+
+<span class="hljs-comment">## Hooks</span>
+
+The plugin configures two hooks that run automatically:
+
+<span class="hljs-comment">### SessionStart</span>
+
+Runs `thrum prime` when a Claude Code session begins. Injects:
+
+- Agent identity (name, role, module)
+- Active team members and their intents
+- Unread messages
+- Git branch and status
+- Daemon health
+
+If Thrum isn<span class="hljs-string">&#x27;t initialized, shows a friendly setup message instead of failing.
+
+### PreCompact
+
+Runs `thrum prime` before context compaction. This ensures agent identity and
+session state survive compaction — the agent can continue working without losing
+track of who it is or what messages are pending.
+
+## Resource Docs
+
+The plugin includes 8 resource documents that Claude loads on demand for deeper
+guidance:
+
+| Resource              | When it&#x27;</span>s used                                            |
+| --------------------- | --------------------------------------------------------- |
+| `MESSAGING.md`        | Message lifecycle, addressing patterns                    |
+| `GROUPS.md`           | Creating <span class="hljs-built_in">groups</span>, adding members, group messaging          |
+| `IDENTITY.md`         | Agent naming, registration, multi-worktree identity       |
+| `WORKTREES.md`        | Cross-worktree coordination, shared daemon, file tracking |
+| `LISTENER_PATTERN.md` | Background message listener sub-agent template            |
+| `BOUNDARIES.md`       | When to use Thrum vs TaskList/SendMessage                 |
+| `ANTI_PATTERNS.md`    | 12 common mistakes and how to avoid them                  |
+| `CLI_REFERENCE.md`    | Complete <span class="hljs-built_in">command</span> syntax <span class="hljs-keyword">for</span> all `thrum` commands          |
+
+<span class="hljs-comment">## MCP Server Integration</span>
+
+For native tool-call integration (no shell-outs), configure the Thrum MCP server
+<span class="hljs-keyword">in</span> your project<span class="hljs-string">&#x27;s `.claude/settings.json`:
+
+```json
+{
+  &quot;mcpServers&quot;: {
+    &quot;thrum&quot;: {
+      &quot;type&quot;: &quot;stdio&quot;,
+      &quot;command&quot;: &quot;thrum&quot;,
+      &quot;args&quot;: [&quot;mcp&quot;, &quot;serve&quot;]
+    }
+  }
+}
+```text
+
+This provides 11 MCP tools: 5 for core messaging (`send_message`,
+`check_messages`, `wait_for_message`, `list_agents`, `broadcast_message`) and 6
+for group management (`create_group`, `delete_group`, `add_group_member`,
+`remove_group_member`, `list_groups`, `get_group`). See
+[MCP Server](mcp-server.md) for the full API.
+
+**Plugin vs MCP:** The plugin&#x27;</span>s slash commands use the CLI (`Bash(thrum:*)`).
+The MCP server provides native tool calls. Both work — the plugin is simpler to
+<span class="hljs-built_in">set</span> up, the MCP server is more efficient <span class="hljs-keyword">for</span> high-frequency messaging. You can
+use both together.
+
+<span class="hljs-comment">## Background Listener</span>
+
+When `thrum prime` runs <span class="hljs-keyword">in</span> a Claude Code session and detects an active identity,
+it outputs a ready-to-use listener spawn instruction with the correct repo path.
+Copy and run it to start background message monitoring:
+
+```text
+Task(
+  subagent_type=<span class="hljs-string">&quot;message-listener&quot;</span>,
+  model=<span class="hljs-string">&quot;haiku&quot;</span>,
+  run_in_background=<span class="hljs-literal">true</span>,
+  prompt=<span class="hljs-string">&quot;Listen for Thrum messages.
+    WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 15m --after -30s --json&quot;</span>
+)
+```text
+
+The listener runs 6 cycles of 15 minutes each (~90 min coverage), blocks on
+`thrum <span class="hljs-built_in">wait</span>` (no polling), returns when messages arrive, and costs
+~<span class="hljs-variable">$0</span>.00003/cycle on Haiku. Re-arm after processing each batch. See the
+`LISTENER_PATTERN.md` resource <span class="hljs-keyword">for</span> the full template.
+
+<span class="hljs-comment">## Plugin vs Manual Agent Definitions</span>
+
+| Feature        | Plugin                                      | Manual (toolkit/agents/)              |
+| -------------- | ------------------------------------------- | ------------------------------------- |
+| Installation   | `claude plugin marketplace add` + `install` | Copy `.md` files to `.claude/agents/` |
+| Updates        | Re-install from <span class="hljs-built_in">source</span>                      | Manual file replacement               |
+| Slash commands | 10 commands included                        | None                                  |
+| Hooks          | SessionStart + PreCompact                   | Manual hook configuration             |
+| Resource docs  | 8 progressive disclosure docs               | Single monolithic agent file          |
+| Maintenance    | Versioned (v0.4.5)                          | Ad-hoc                                |
+
+The manual agent definitions (`thrum-agent.md`, `message-listener.md`) still
+work and are available <span class="hljs-keyword">in</span> `toolkit/agents/` <span class="hljs-keyword">for</span> environments that don<span class="hljs-string">&#x27;t support
+plugins.
+
+## Troubleshooting
+
+**&quot;Thrum not initialized&quot; on session start**
+
+Run `thrum init &amp;&amp; thrum daemon start` in your repository root.
+
+**No context injected after plugin install**
+
+Verify the plugin is loaded: check that `/thrum:prime` is available as a slash
+command. If not, reinstall the plugin.
+
+**Messages not arriving**
+
+Check daemon status with `thrum daemon status`. The daemon must be running for
+messaging to work. Start it with `thrum daemon start`.
+
+**Identity conflicts in multi-worktree setups**
+
+Set `THRUM_NAME` environment variable to give each worktree a unique agent name.
+See [Identity System](identity.md) for details.</span></code></pre>
 
     </div>
     <p style="margin-top:2rem"><a href="../docs.html#claude-code-plugin.html">&larr; View in documentation</a></p>

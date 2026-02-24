@@ -1,4 +1,3 @@
-
 ## Role-Based Preamble Templates
 
 ## Overview

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Role-Based Preamble Templates — Thrum</title>
+  <meta name="description" content="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Role-Based Preamble Templates — Thrum">
+  <meta property="og:description" content="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/role-templates.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Role-Based Preamble Templates — Thrum">
+  <meta name="twitter:description" content="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">
+  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#role-templates.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h2>Role-Based Preamble Templates</h2>
+<h2>Overview</h2>
+<p>Role templates automatically generate agent preambles during registration.<br>Instead of every agent getting the same default preamble, each role gets a<br>customized set of behavioral directives — scope boundaries, task protocol,<br>communication patterns, idle behavior, and efficiency rules.</p>
+<p><strong>Three layers:</strong></p>
+<ol>
+<li><strong>Shipped examples</strong> in <code>toolkit/templates/roles/</code> — reference material with<br>strict and autonomous variants for each role</li>
+<li><strong>Active templates</strong> in <code>.thrum/role_templates/</code> — per-project templates that<br>auto-apply on agent registration</li>
+<li><strong>Claude skill</strong> (<code>thrum:configure-roles</code>) — interactive environment-aware<br>template generation</li>
+</ol>
+<h2>How It Works</h2>
+<p>When an agent registers via <code>thrum quickstart --role implementer</code>, the system<br>checks for <code>.thrum/role_templates/implementer.md</code>. If found, it renders the<br>template with the agent&#39;s identity data and saves it as the agent&#39;s preamble.</p>
+<p><strong>Precedence:</strong></p>
+<ol>
+<li><code>--preamble-file</code> flag (highest — explicit user choice)</li>
+<li>Role template in <code>.thrum/role_templates/{role}.md</code></li>
+<li>Default preamble (fallback)</li>
+</ol>
+<h2>Template Variables</h2>
+<p>Templates use Go <code>text/template</code> syntax. Available variables:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>{{.AgentName}}</code></td>
+<td>Agent identity (e.g., &quot;impl_auth&quot;)</td>
+</tr>
+<tr>
+<td><code>{{.Role}}</code></td>
+<td>Agent role (e.g., &quot;implementer&quot;)</td>
+</tr>
+<tr>
+<td><code>{{.Module}}</code></td>
+<td>Agent module (e.g., &quot;auth&quot;)</td>
+</tr>
+<tr>
+<td><code>{{.WorktreePath}}</code></td>
+<td>Resolved from identity file</td>
+</tr>
+<tr>
+<td><code>{{.RepoRoot}}</code></td>
+<td>Parent of .thrum/ directory</td>
+</tr>
+<tr>
+<td><code>{{.CoordinatorName}}</code></td>
+<td>First agent with role=coordinator, or &quot;coordinator&quot;</td>
+</tr>
+</tbody></table>
+<h2>Template Structure</h2>
+<p>Every role template follows the same section structure:</p>
+<pre><code class="language-markdown hljs"><span class="hljs-section"># Agent: {{.AgentName}}</span>
+
+<span class="hljs-strong">**Role:**</span> {{.Role}} <span class="hljs-strong">**Module:**</span> {{.Module}} <span class="hljs-strong">**Worktree:**</span> {{.WorktreePath}}
+
+<span class="hljs-section">## Identity &amp; Authority</span>
+
+<span class="hljs-section">## Scope Boundaries</span>
+
+<span class="hljs-section">## Task Protocol</span>
+
+<span class="hljs-section">## Communication Protocol</span>
+
+<span class="hljs-section">## Message Listener</span>
+
+<span class="hljs-section">## Task Tracking</span>
+
+<span class="hljs-section">## Efficiency &amp; Context Management</span>
+
+<span class="hljs-section">## Idle Behavior</span>
+
+<span class="hljs-section">## Project-Specific Rules</span></code></pre>
+<h2>Shipped Examples</h2>
+<p>Reference templates in <code>toolkit/templates/roles/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>coordinator-strict.md</code></td>
+<td>All task assignment flows through coordinator</td>
+</tr>
+<tr>
+<td><code>coordinator-autonomous.md</code></td>
+<td>Coordinator orchestrates, agents can self-assign</td>
+</tr>
+<tr>
+<td><code>implementer-strict.md</code></td>
+<td>Waits for explicit task from coordinator</td>
+</tr>
+<tr>
+<td><code>implementer-autonomous.md</code></td>
+<td>Can pick up ready tasks from issue tracker</td>
+</tr>
+<tr>
+<td><code>planner-strict.md</code></td>
+<td>Read-only exploration, writes plans to docs</td>
+</tr>
+<tr>
+<td><code>planner-autonomous.md</code></td>
+<td>Can create issues and break down epics</td>
+</tr>
+<tr>
+<td><code>researcher-strict.md</code></td>
+<td>Read-only, responds to research requests</td>
+</tr>
+<tr>
+<td><code>researcher-autonomous.md</code></td>
+<td>Can proactively research when idle</td>
+</tr>
+</tbody></table>
+<h2>CLI Commands</h2>
+<h3>thrum roles list</h3>
+<p>List configured templates and matching agents:</p>
+<pre><code class="language-bash hljs">thrum roles list
+<span class="hljs-comment"># coordinator.md    (2 agents: coord_main, coord_api)</span>
+<span class="hljs-comment"># implementer.md    (3 agents: impl_auth, impl_payments, impl_ui)</span>
+<span class="hljs-comment"># planner.md        (0 agents)</span></code></pre>
+<h3>thrum roles deploy</h3>
+<p>Re-render preambles for registered agents from role templates:</p>
+<pre><code class="language-bash hljs">thrum roles deploy              <span class="hljs-comment"># Deploy for all agents</span>
+thrum roles deploy --agent foo  <span class="hljs-comment"># Deploy for a specific agent</span>
+thrum roles deploy --dry-run    <span class="hljs-comment"># Preview what would change</span></code></pre>
+<p>Deploy is a full overwrite — templates are the source of truth.</p>
+<h2>Setting Up</h2>
+<h3>Manual setup</h3>
+<ol>
+<li>Copy a shipped example to <code>.thrum/role_templates/</code>:</li>
+</ol>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">cp</span> toolkit/templates/roles/implementer-autonomous.md .thrum/role_templates/implementer.md</code></pre>
+<ol>
+<li><p>Edit to customize for your project.</p>
+</li>
+<li><p>Register agents — templates auto-apply:</p>
+</li>
+</ol>
+<pre><code class="language-bash hljs">thrum quickstart --name impl_auth --role implementer --module auth</code></pre>
+<h3>Interactive setup (Claude Code)</h3>
+<p>Run the configure-roles skill:</p>
+<pre><code class="language-bash hljs">/thrum:configure-roles</code></pre>
+<p>The skill detects your environment (runtimes, worktrees, beads, MCP servers) and<br>generates customized templates interactively.</p>
+<h2>File Layout</h2>
+<pre><code class="language-text hljs">.thrum/
+├── role_templates/           # Active templates (per-project)
+│   ├── coordinator.md
+│   ├── implementer.md
+│   └── planner.md
+├── context/
+│   ├── impl_auth_preamble.md # Rendered output (per-agent)
+│   └── coord_main_preamble.md
+└── identities/
+    ├── impl_auth.json
+    └── coord_main.json</code></pre>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#role-templates.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#role-templates.html');
+    }
+  </script>
+</body>
+</html>

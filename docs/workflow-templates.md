@@ -1,4 +1,3 @@
-
 ## Workflow Templates
 
 Thrum ships ready-to-use templates that guide AI agents through planning,
