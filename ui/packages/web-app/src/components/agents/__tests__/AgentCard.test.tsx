@@ -109,7 +109,7 @@ describe('AgentCard', () => {
     render(<AgentCard agent={mockAgent} active={true} onClick={() => {}} />);
 
     const button = screen.getByRole('button');
-    expect(button).toHaveClass('ring-2', 'ring-cyan-500');
+    expect(button).toHaveClass('ring-2', 'ring-[var(--accent-color)]');
   });
 
   test('calls onClick when clicked', async () => {

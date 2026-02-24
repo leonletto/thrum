@@ -168,7 +168,7 @@ describe('HealthBar', () => {
     const footer = container.querySelector('footer');
     expect(footer).toHaveClass('bg-[#0a0e1a]');
     expect(footer).toHaveClass('border-t');
-    expect(footer).toHaveClass('border-cyan-500/10');
+    expect(footer).toHaveClass('border-[var(--accent-border)]');
     expect(footer).toHaveClass('font-mono');
     expect(footer).toHaveClass('text-[11px]');
   });

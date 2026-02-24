@@ -36,11 +36,54 @@
   /* Borders */
   --border: rgba(56, 189, 248, 0.2); /* Cyan at 20% opacity */
   --border-hover: rgba(56, 189, 248, 0.4);
+
+  /* Semantic accent tokens (light mode) */
+  --accent-color: #0891b2;
+  --accent-hover: #0e7490;
+  --accent-border: rgba(8, 145, 178, 0.2);
+  --accent-border-hover: rgba(8, 145, 178, 0.4);
+  --accent-subtle-bg: rgba(8, 145, 178, 0.08);
+  --accent-subtle-bg-hover: rgba(8, 145, 178, 0.15);
+  --accent-glow-soft: transparent;
+  --accent-glow-hover: transparent;
+
+  /* Mention highlights (light mode) */
+  --mention-highlight: rgba(8, 145, 178, 0.1);
+  --mention-highlight-self: rgba(8, 145, 178, 0.2);
+
+  /* Text hierarchy (light mode) */
+  --text-secondary: #0e7490;
+  --text-muted: #155e75;
+  --text-faint: #164e63;
+
+  /* Panel backgrounds (light mode) */
+  --panel-bg-start: #ffffff;
+  --panel-bg-end: #f8fafc;
 }
 
 .dark {
-  /* Dark mode is the primary mode - same values */
-  /* Light mode can be added later if needed */
+  /* Semantic accent tokens (dark mode) */
+  --accent-color: #38bdf8;
+  --accent-hover: #0ea5e9;
+  --accent-border: rgba(56, 189, 248, 0.2);
+  --accent-border-hover: rgba(56, 189, 248, 0.4);
+  --accent-subtle-bg: rgba(56, 189, 248, 0.08);
+  --accent-subtle-bg-hover: rgba(56, 189, 248, 0.15);
+  --accent-glow-soft: rgba(56, 189, 248, 0.3);
+  --accent-glow-hover: rgba(56, 189, 248, 0.6);
+
+  /* Mention highlights (dark mode) */
+  --mention-highlight: rgba(56, 189, 248, 0.15);
+  --mention-highlight-self: rgba(56, 189, 248, 0.3);
+
+  /* Text hierarchy (dark mode) */
+  --text-secondary: #7dd3fc;
+  --text-muted: #38bdf8;
+  --text-faint: #22d3ee;
+
+  /* Panel backgrounds (dark mode) */
+  --panel-bg-start: #0f172a;
+  --panel-bg-end: #1e293b;
 }
 
 /* Panel styling for Data Terminal aesthetic */

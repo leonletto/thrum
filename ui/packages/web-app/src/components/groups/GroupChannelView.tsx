@@ -107,16 +107,16 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
     <div className="h-full flex flex-col relative font-mono">
       {/* Header */}
       <div
-        className="flex items-center gap-3 px-4 py-2 border-b border-cyan-500/20 bg-[#0a0e1a] shrink-0"
+        className="flex items-center gap-3 px-4 py-2 border-b border-[var(--accent-border)] bg-[#0a0e1a] shrink-0"
         data-testid="group-channel-header"
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="text-cyan-300 font-semibold text-sm truncate">
+          <span className="text-[var(--text-secondary)] font-semibold text-sm truncate">
             #{groupName}
           </span>
           <Badge
             variant="secondary"
-            className="shrink-0 text-xs bg-cyan-900/40 border border-cyan-500/30 text-cyan-400"
+            className="shrink-0 text-xs bg-[var(--accent-subtle-bg-hover)] border border-[var(--accent-border)] text-[var(--accent-color)]"
             data-testid="member-count-badge"
           >
             {memberCount} {memberCount === 1 ? 'member' : 'members'}
@@ -129,7 +129,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
             variant="ghost"
             size="sm"
             onClick={() => setMembersOpen(true)}
-            className="h-7 px-2 text-xs text-cyan-500 hover:text-cyan-300 hover:bg-cyan-900/30"
+            className="h-7 px-2 text-xs text-[var(--accent-color)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle-bg)]"
             aria-label="View members"
           >
             <Users className="h-3.5 w-3.5 mr-1" />
@@ -141,7 +141,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
             variant="ghost"
             size="sm"
             onClick={() => setSettingsOpen(true)}
-            className="h-7 px-2 text-cyan-500 hover:text-cyan-300 hover:bg-cyan-900/30"
+            className="h-7 px-2 text-[var(--accent-color)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle-bg)]"
             aria-label="Group settings"
           >
             <Settings className="h-3.5 w-3.5" />
@@ -179,20 +179,20 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
       {/* Members slide-out panel */}
       {membersOpen && (
         <div
-          className="absolute inset-y-0 right-0 w-72 bg-[#0d1120] border-l border-cyan-500/20 flex flex-col z-20 shadow-xl"
+          className="absolute inset-y-0 right-0 w-72 bg-[var(--panel-bg-start)] border-l border-[var(--accent-border)] flex flex-col z-20 shadow-xl"
           data-testid="members-panel"
           role="dialog"
           aria-label="Group members"
         >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-500/20 shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--accent-border)] shrink-0">
             <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-cyan-400" />
-              <span className="text-sm font-semibold text-cyan-300">
+              <Users className="h-4 w-4 text-[var(--accent-color)]" />
+              <span className="text-sm font-semibold text-[var(--text-secondary)]">
                 Members
               </span>
               <Badge
                 variant="secondary"
-                className="text-xs bg-cyan-900/40 border border-cyan-500/30 text-cyan-400"
+                className="text-xs bg-[var(--accent-subtle-bg-hover)] border border-[var(--accent-border)] text-[var(--accent-color)]"
               >
                 {memberCount}
               </Badge>
@@ -202,7 +202,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
               variant="ghost"
               size="sm"
               onClick={() => setMembersOpen(false)}
-              className="h-6 w-6 p-0 text-cyan-600 hover:text-cyan-300 hover:bg-cyan-900/30"
+              className="h-6 w-6 p-0 text-[var(--text-muted)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle-bg)]"
               aria-label="Close members panel"
             >
               <X className="h-3.5 w-3.5" />
@@ -211,15 +211,15 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
 
           <div className="flex-1 overflow-y-auto">
             {!groupInfo ? (
-              <div className="px-4 py-3 text-xs text-cyan-700 italic">
+              <div className="px-4 py-3 text-xs text-[var(--text-faint)] italic">
                 Loading members…
               </div>
             ) : groupInfo.members.length === 0 ? (
-              <div className="px-4 py-3 text-xs text-cyan-700 italic">
+              <div className="px-4 py-3 text-xs text-[var(--text-faint)] italic">
                 No members
               </div>
             ) : (
-              <ul className="divide-y divide-cyan-500/10">
+              <ul className="divide-y divide-[var(--accent-border)]">
                 {groupInfo.members.map((member, idx) => (
                   <li
                     key={`${member.member_type}:${member.member_value}:${idx}`}
@@ -227,18 +227,18 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
                     data-testid="member-item"
                   >
                     {member.member_type === 'agent' ? (
-                      <Bot className="h-3.5 w-3.5 text-cyan-500 shrink-0 mt-0.5" />
+                      <Bot className="h-3.5 w-3.5 text-[var(--accent-color)] shrink-0 mt-0.5" />
                     ) : (
                       <Shield className="h-3.5 w-3.5 text-purple-400 shrink-0 mt-0.5" />
                     )}
                     <div className="flex flex-col min-w-0 flex-1">
-                      <span className="text-xs text-cyan-300 truncate">
+                      <span className="text-xs text-[var(--text-secondary)] truncate">
                         {member.member_value}
                       </span>
-                      <span className="text-[10px] text-cyan-700 capitalize">
+                      <span className="text-[10px] text-[var(--text-faint)] capitalize">
                         {member.member_type}
                       </span>
-                      <span className="text-[10px] text-cyan-800">
+                      <span className="text-[10px] text-[var(--text-faint)]">
                         Added:{' '}
                         {new Date(member.added_at).toLocaleDateString(
                           undefined,
@@ -254,7 +254,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
                         onClick={() =>
                           handleRemoveMember(member.member_type, member.member_value)
                         }
-                        className="h-5 w-5 p-0 text-cyan-800 hover:text-red-400 hover:bg-red-900/20 shrink-0"
+                        className="h-5 w-5 p-0 text-[var(--text-faint)] hover:text-red-400 hover:bg-red-900/20 shrink-0"
                         aria-label={`Remove ${member.member_value}`}
                         data-testid="remove-member-button"
                         disabled={memberRemove.isPending}
@@ -271,10 +271,10 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
           {/* Add member section */}
           {!isEveryone && (
             <div
-              className="shrink-0 border-t border-cyan-500/20 px-4 py-3 space-y-2"
+              className="shrink-0 border-t border-[var(--accent-border)] px-4 py-3 space-y-2"
               data-testid="add-member-section"
             >
-              <div className="text-[10px] text-cyan-700 uppercase tracking-wider font-semibold">
+              <div className="text-[10px] text-[var(--text-faint)] uppercase tracking-wider font-semibold">
                 Add member
               </div>
               <form onSubmit={handleAddMember} className="space-y-2">
@@ -288,8 +288,8 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
                     }}
                     className={`flex-1 text-[10px] px-2 py-1 rounded border transition-colors ${
                       addType === 'agent'
-                        ? 'bg-cyan-900/50 border-cyan-500/50 text-cyan-300'
-                        : 'bg-transparent border-cyan-900/40 text-cyan-700 hover:text-cyan-500'
+                        ? 'bg-[var(--accent-subtle-bg-hover)] border-[var(--accent-border-hover)] text-[var(--text-secondary)]'
+                        : 'bg-transparent border-[var(--accent-border)] text-[var(--text-faint)] hover:text-[var(--accent-color)]'
                     }`}
                     data-testid="add-type-agent"
                   >
@@ -304,7 +304,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
                     className={`flex-1 text-[10px] px-2 py-1 rounded border transition-colors ${
                       addType === 'role'
                         ? 'bg-purple-900/50 border-purple-500/50 text-purple-300'
-                        : 'bg-transparent border-cyan-900/40 text-cyan-700 hover:text-cyan-500'
+                        : 'bg-transparent border-[var(--accent-border)] text-[var(--text-faint)] hover:text-[var(--accent-color)]'
                     }`}
                     data-testid="add-type-role"
                   >
@@ -322,7 +322,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
                       id="add-agent-select"
                       value={addAgentValue}
                       onChange={(e) => setAddAgentValue(e.target.value)}
-                      className="w-full text-xs bg-[#0a0e1a] border border-cyan-500/20 rounded px-2 py-1 text-cyan-300 focus:outline-none focus:border-cyan-500/50"
+                      className="w-full text-xs bg-[#0a0e1a] border border-[var(--accent-border)] rounded px-2 py-1 text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent-border-hover)]"
                       data-testid="add-agent-select"
                     >
                       <option value="">Select agent…</option>
@@ -343,7 +343,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
                       placeholder="Role name…"
                       value={addRoleValue}
                       onChange={(e) => setAddRoleValue(e.target.value)}
-                      className="h-7 text-xs bg-[#0a0e1a] border-cyan-500/20 text-cyan-300 placeholder:text-cyan-800"
+                      className="h-7 text-xs bg-[#0a0e1a] border-[var(--accent-border)] text-[var(--text-secondary)] placeholder:text-[var(--text-faint)]"
                       data-testid="add-role-input"
                     />
                   </div>
@@ -358,7 +358,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
                 <Button
                   type="submit"
                   size="sm"
-                  className="w-full h-7 text-xs bg-cyan-900/40 hover:bg-cyan-900/60 border border-cyan-500/30 text-cyan-300"
+                  className="w-full h-7 text-xs bg-[var(--accent-subtle-bg-hover)] hover:bg-[var(--accent-subtle-bg-hover)] border border-[var(--accent-border)] text-[var(--text-secondary)]"
                   disabled={memberAdd.isPending}
                   data-testid="add-member-submit"
                 >
@@ -374,15 +374,15 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
       {/* Settings panel placeholder */}
       {settingsOpen && (
         <div
-          className="absolute inset-y-0 right-0 w-72 bg-[#0d1120] border-l border-cyan-500/20 flex flex-col z-20 shadow-xl"
+          className="absolute inset-y-0 right-0 w-72 bg-[var(--panel-bg-start)] border-l border-[var(--accent-border)] flex flex-col z-20 shadow-xl"
           data-testid="settings-panel"
           role="dialog"
           aria-label="Group settings"
         >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-500/20 shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--accent-border)] shrink-0">
             <div className="flex items-center gap-2">
-              <Settings className="h-4 w-4 text-cyan-400" />
-              <span className="text-sm font-semibold text-cyan-300">
+              <Settings className="h-4 w-4 text-[var(--accent-color)]" />
+              <span className="text-sm font-semibold text-[var(--text-secondary)]">
                 Settings
               </span>
             </div>
@@ -391,7 +391,7 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
               variant="ghost"
               size="sm"
               onClick={() => setSettingsOpen(false)}
-              className="h-6 w-6 p-0 text-cyan-600 hover:text-cyan-300 hover:bg-cyan-900/30"
+              className="h-6 w-6 p-0 text-[var(--text-muted)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle-bg)]"
               aria-label="Close settings panel"
             >
               <X className="h-3.5 w-3.5" />
@@ -400,20 +400,20 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
 
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             <div>
-              <div className="text-[10px] text-cyan-700 uppercase tracking-wider mb-1">
+              <div className="text-[10px] text-[var(--text-faint)] uppercase tracking-wider mb-1">
                 Group
               </div>
-              <div className="text-sm text-cyan-300 font-mono">
+              <div className="text-sm text-[var(--text-secondary)] font-mono">
                 #{groupName}
               </div>
             </div>
 
             {groupInfo?.description && (
               <div>
-                <div className="text-[10px] text-cyan-700 uppercase tracking-wider mb-1">
+                <div className="text-[10px] text-[var(--text-faint)] uppercase tracking-wider mb-1">
                   Description
                 </div>
-                <div className="text-xs text-cyan-400">
+                <div className="text-xs text-[var(--accent-color)]">
                   {groupInfo.description}
                 </div>
               </div>
@@ -421,10 +421,10 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
 
             {groupInfo?.created_at && (
               <div>
-                <div className="text-[10px] text-cyan-700 uppercase tracking-wider mb-1">
+                <div className="text-[10px] text-[var(--text-faint)] uppercase tracking-wider mb-1">
                   Created
                 </div>
-                <div className="text-xs text-cyan-400">
+                <div className="text-xs text-[var(--accent-color)]">
                   {new Date(groupInfo.created_at).toLocaleDateString(
                     undefined,
                     { month: 'long', day: 'numeric', year: 'numeric' }
@@ -435,17 +435,17 @@ export function GroupChannelView({ groupName, selectedMessageId, onClearSelected
 
             {groupInfo?.created_by && (
               <div>
-                <div className="text-[10px] text-cyan-700 uppercase tracking-wider mb-1">
+                <div className="text-[10px] text-[var(--text-faint)] uppercase tracking-wider mb-1">
                   Created by
                 </div>
-                <div className="text-xs text-cyan-400">
+                <div className="text-xs text-[var(--accent-color)]">
                   {groupInfo.created_by}
                 </div>
               </div>
             )}
 
             {!isEveryone && (
-              <div className="pt-2 border-t border-cyan-500/10">
+              <div className="pt-2 border-t border-[var(--accent-border)]">
                 <Button
                   type="button"
                   variant="ghost"
