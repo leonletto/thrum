@@ -18,6 +18,8 @@
   --success: 16 185 129; /* #10b981 - Green for active agents */
   --destructive: 239 68 68; /* #ef4444 - Red for alerts */
   --destructive-dark: 220 38 38; /* #dc2626 */
+  --status-online: #10b981;
+  --status-offline: #64748b;
 
   /* Text Hierarchy */
   --foreground: 226 232 240; /* #e2e8f0 - Primary text */
@@ -84,6 +86,9 @@
   /* Panel backgrounds (dark mode) */
   --panel-bg-start: #0f172a;
   --panel-bg-end: #1e293b;
+
+  --status-online: #22c55e;
+  --status-offline: #6b7280;
 }
 
 /* Panel styling for Data Terminal aesthetic */

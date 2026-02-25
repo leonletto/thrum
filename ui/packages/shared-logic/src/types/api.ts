@@ -5,7 +5,7 @@ import { z } from 'zod';
  */
 export const AgentSchema = z.object({
   agent_id: z.string(),
-  kind: z.literal('agent'),
+  kind: z.enum(['agent', 'user']),
   role: z.string(),
   module: z.string(),
   display: z.string().optional(),

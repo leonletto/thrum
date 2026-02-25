@@ -39,10 +39,10 @@ export function AgentContextPanel({ agentId }: AgentContextPanelProps) {
         className="agent-context-panel flex items-center gap-2 px-4 h-10 border-b border-[var(--accent-border)] bg-[var(--panel-bg-start)] animate-pulse"
         data-testid="agent-context-loading"
       >
-        <div className="h-2 w-2 rounded-full bg-slate-600/50 shrink-0" />
-        <div className="h-3 bg-slate-700/50 rounded w-24" />
-        <div className="h-4 bg-slate-700/50 rounded w-16" />
-        <div className="h-3 bg-slate-700/50 rounded flex-1" />
+        <div className="h-2 w-2 rounded-full bg-muted shrink-0" />
+        <div className="h-3 bg-muted rounded w-24" />
+        <div className="h-4 bg-muted rounded w-16" />
+        <div className="h-3 bg-muted rounded flex-1" />
       </div>
     );
   }
@@ -117,7 +117,7 @@ export function AgentContextPanel({ agentId }: AgentContextPanelProps) {
                   setDetailsOpen(false);
                   setDeleteDialogOpen(true);
                 }}
-                className="w-full h-7 text-xs text-red-500 hover:text-red-400 hover:bg-red-900/20 justify-start"
+                className="w-full h-7 text-xs text-[rgb(var(--destructive))] hover:text-[rgb(var(--destructive-dark))] hover:bg-[rgb(var(--destructive))]/10 justify-start"
                 data-testid="open-delete-dialog"
               >
                 <Trash2 className="h-3 w-3 mr-1.5" />
@@ -268,7 +268,7 @@ export function AgentContextPanel({ agentId }: AgentContextPanelProps) {
                 setDetailsOpen(false);
                 setDeleteDialogOpen(true);
               }}
-              className="w-full h-7 text-xs text-red-500 hover:text-red-400 hover:bg-red-900/20 justify-start"
+              className="w-full h-7 text-xs text-[rgb(var(--destructive))] hover:text-[rgb(var(--destructive-dark))] hover:bg-[rgb(var(--destructive))]/10 justify-start"
               data-testid="open-delete-dialog"
             >
               <Trash2 className="h-3 w-3 mr-1.5" />
