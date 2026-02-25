@@ -2,7 +2,10 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -73,17 +76,12 @@ func TestWait_MessageReceived(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	client, err := NewClient(socketPath)
-	if err != nil {
-		t.Fatalf("Failed to create client: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
 	opts := WaitOptions{
 		Timeout: 5 * time.Second,
+		Quiet:   true,
 	}
 
-	message, err := Wait(client, opts)
+	message, err := Wait(socketPath, opts)
 	if err != nil {
 		t.Fatalf("Wait failed: %v", err)
 	}
@@ -135,17 +133,12 @@ func TestWait_Timeout(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	client, err := NewClient(socketPath)
-	if err != nil {
-		t.Fatalf("Failed to create client: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
 	opts := WaitOptions{
 		Timeout: 1 * time.Second,
+		Quiet:   true,
 	}
 
-	message, err := Wait(client, opts)
+	message, err := Wait(socketPath, opts)
 	if err == nil {
 		t.Fatal("Expected timeout error")
 	}
@@ -211,19 +204,14 @@ func TestWait_WithFilters(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	client, err := NewClient(socketPath)
-	if err != nil {
-		t.Fatalf("Failed to create client: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
 	opts := WaitOptions{
 		Timeout: 5 * time.Second,
 		Scope:   "module:auth",
 		Mention: "@reviewer",
+		Quiet:   true,
 	}
 
-	_, err = Wait(client, opts)
+	_, err := Wait(socketPath, opts)
 	if err != nil {
 		t.Fatalf("Wait failed: %v", err)
 	}
@@ -294,19 +282,14 @@ func TestWait_AgentFiltered(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	client, err := NewClient(socketPath)
-	if err != nil {
-		t.Fatalf("Failed to create client: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
 	opts := WaitOptions{
 		Timeout:      5 * time.Second,
 		ForAgent:     "test_agent",
 		ForAgentRole: "tester",
+		Quiet:        true,
 	}
 
-	message, err := Wait(client, opts)
+	message, err := Wait(socketPath, opts)
 	if err != nil {
 		t.Fatalf("Wait failed: %v", err)
 	}
@@ -390,18 +373,13 @@ func TestWait_WithAfterFilter(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	client, err := NewClient(socketPath)
-	if err != nil {
-		t.Fatalf("Failed to create client: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
 	opts := WaitOptions{
 		Timeout: 5 * time.Second,
 		After:   afterTime,
+		Quiet:   true,
 	}
 
-	message, err := Wait(client, opts)
+	message, err := Wait(socketPath, opts)
 	if err != nil {
 		t.Fatalf("Wait failed: %v", err)
 	}
@@ -492,17 +470,12 @@ func TestWait_SeenMessagesSkipped(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	client, err := NewClient(socketPath)
-	if err != nil {
-		t.Fatalf("Failed to create client: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
 	opts := WaitOptions{
 		Timeout: 5 * time.Second,
+		Quiet:   true,
 	}
 
-	message, err := Wait(client, opts)
+	message, err := Wait(socketPath, opts)
 	if err != nil {
 		t.Fatalf("Wait failed: %v", err)
 	}
@@ -510,5 +483,87 @@ func TestWait_SeenMessagesSkipped(t *testing.T) {
 	// First call returns msg_existing — wait returns it immediately
 	if message.MessageID != "msg_existing" {
 		t.Errorf("Expected message_id 'msg_existing', got %s", message.MessageID)
+	}
+}
+
+func TestWait_ReconnectAfterDaemonRestart(t *testing.T) {
+	// Use a short socket path to avoid macOS Unix socket length limits
+	socketPath := filepath.Join(os.TempDir(), fmt.Sprintf("thrum-test-%d.sock", time.Now().UnixNano()%100000))
+	_ = os.Remove(socketPath)
+	t.Cleanup(func() { _ = os.Remove(socketPath) })
+
+	messageHandler := func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		for {
+			var request map[string]any
+			if err := decoder.Decode(&request); err != nil {
+				return
+			}
+
+			response := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      request["id"],
+				"result": map[string]any{
+					"messages": []map[string]any{
+						{
+							"message_id": "msg_post_restart",
+							"agent_id":   "agent:restarted:XYZ",
+							"body": map[string]any{
+								"format":  "markdown",
+								"content": "After daemon restart",
+							},
+							"created_at": time.Now().Format(time.RFC3339Nano),
+						},
+					},
+					"total":       1,
+					"unread":      1,
+					"page":        1,
+					"page_size":   10,
+					"total_pages": 1,
+				},
+			}
+
+			if err := encoder.Encode(response); err != nil {
+				return
+			}
+		}
+	}
+
+	// Start the daemon after a 1-second delay (simulating restart)
+	go func() {
+		time.Sleep(1 * time.Second)
+
+		listener, err := net.Listen("unix", socketPath)
+		if err != nil {
+			t.Logf("Failed to create listener: %v", err)
+			return
+		}
+		t.Cleanup(func() { _ = listener.Close() })
+
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go messageHandler(conn)
+		}
+	}()
+
+	opts := WaitOptions{
+		Timeout: 10 * time.Second,
+		Quiet:   true,
+	}
+
+	message, err := Wait(socketPath, opts)
+	if err != nil {
+		t.Fatalf("Wait failed (should have reconnected): %v", err)
+	}
+
+	if message.MessageID != "msg_post_restart" {
+		t.Errorf("Expected message_id 'msg_post_restart', got %s", message.MessageID)
 	}
 }
