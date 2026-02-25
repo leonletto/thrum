@@ -39,27 +39,27 @@ describe('MentionAutocomplete', () => {
 
   const mockAgents = [
     {
-      agent_id: 'agent:assistant:ABC123',
+      agent_id: 'assistant_main',
       kind: 'agent' as const,
       role: 'assistant',
       module: 'core',
-      display: 'assistant_main',
+      display: 'Assistant (core)',
       registered_at: '2024-01-01T00:00:00Z',
     },
     {
-      agent_id: 'agent:researcher:XYZ789',
+      agent_id: 'researcher_main',
       kind: 'agent' as const,
       role: 'researcher',
       module: 'research',
-      display: 'researcher_main',
+      display: 'Researcher (research)',
       registered_at: '2024-01-01T00:00:00Z',
     },
     {
-      agent_id: 'agent:tester:TEST456',
+      agent_id: 'tester_main',
       kind: 'agent' as const,
       role: 'tester',
       module: 'qa',
-      display: 'tester_main',
+      display: 'Tester (qa)',
       registered_at: '2024-01-01T00:00:00Z',
     },
   ];
