@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/leonletto/thrum/internal/paths"
 )
 
 // HealthResult contains daemon health information.
@@ -239,9 +241,14 @@ func FormatStatus(result *StatusResult) string {
 }
 
 // ReadWebSocketPort reads the WebSocket port from the port file.
+// Follows .thrum/redirect so worktrees find the port file in the main repo.
 // Returns 0 if the file doesn't exist or contains invalid data.
 func ReadWebSocketPort(repoPath string) int {
-	portPath := filepath.Join(repoPath, ".thrum", "var", "ws.port")
+	thrumDir, err := paths.ResolveThrumDir(repoPath)
+	if err != nil {
+		return 0
+	}
+	portPath := filepath.Join(thrumDir, "var", "ws.port")
 	content, err := os.ReadFile(portPath) //nolint:gosec // G304 - path derived from repo root
 	if err != nil {
 		return 0
