@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Role Config"
+  short_description: "Generate and deploy role templates"
+  default_prompt: "Inspect this repo and create or update Thrum role templates for the team, then show deployment steps."

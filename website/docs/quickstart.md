@@ -24,6 +24,10 @@ across sessions, worktrees, and machines using Git as the sync layer.
 >
 > **Using Claude Code?** Install the [Thrum plugin](claude-code-plugin.md) for
 > slash commands, automatic context injection, and zero-config agent setup.
+>
+> **Using Codex?** Install the [Codex Plugin](codex-plugin.md) skill bundle for
+> split Thrum workflows (`thrum-core`, `thrum-ops`, `thrum-role-config`, and
+> `project-setup`).
 
 ## Fast Path
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Core"
+  short_description: "Coordinate agents with Thrum messaging"
+  default_prompt: "Coordinate this work across agents using Thrum. Prime context, route messages to the right audience, and keep thread continuity."

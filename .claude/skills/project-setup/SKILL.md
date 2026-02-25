@@ -47,7 +47,7 @@ digraph when_to_use {
 ## Inputs
 
 Primary input: **plan file path** (output of writing-plans, e.g.
-`docs/plans/2026-02-21-feature-plan.md`). The plan references the design doc —
+`dev-docs/plans/2026-02-21-feature-plan.md`). The plan references the design doc —
 both are read in Phase 1.
 
 Also needed from CLAUDE.md or conversation context:

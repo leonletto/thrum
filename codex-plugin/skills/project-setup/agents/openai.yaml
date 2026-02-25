@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Setup"
+  short_description: "Turn design docs into beads epics and tasks"
+  default_prompt: "Decompose this design into beads epics/tasks with dependencies and implementation-ready task descriptions."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Ops"
+  short_description: "Run Thrum session and command workflows"
+  default_prompt: "Operate Thrum for this task: quickstart the session, triage inbox, execute required coordination commands, and report outcomes."
