@@ -13,6 +13,7 @@ last_updated: "2026-02-13"
 ## Claude Code Plugin
 
 > See also: [Quickstart Guide](quickstart.md) for basic Thrum setup,
+> [Codex Plugin](codex-plugin.md) for Codex skill-based integration,
 > [Agent Configurations](agent-configs.md) for manual agent definitions,
 > [MCP Server](mcp-server.md) for the native MCP transport,
 > [Multi-Agent Support](multi-agent.md) for coordination patterns.
