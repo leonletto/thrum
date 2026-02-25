@@ -10,9 +10,7 @@ export function AgentList() {
 
   // Filter out user-type agents (kind='user') — UI-registered users should not
   // appear in the sidebar agent list alongside real AI agents.
-  const agents = (data?.agents || []).filter(
-    (a) => (a as { kind?: string }).kind !== 'user'
-  );
+  const agents = (data?.agents || []).filter((a) => a.kind !== 'user');
 
   // Sort by last_seen_at (most recent first)
   const sortedAgents = useMemo(() => {
