@@ -191,7 +191,7 @@ export function ComposeBar({
                       Agents
                     </div>
                     {agents.map((agent) => {
-                      const id = agent.display || agent.agent_id;
+                      const id = agent.agent_id.replace(/^(agent|user):/, '');
                       const status = getAgentStatus(agent.last_seen_at);
                       return (
                         <label

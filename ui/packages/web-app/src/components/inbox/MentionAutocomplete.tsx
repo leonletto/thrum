@@ -47,7 +47,7 @@ export function MentionAutocomplete({
     )
     .map((agent) => ({
       id: agent.agent_id,
-      label: agent.display || agent.agent_id.replace(/^(agent|user):/, ''),
+      label: agent.agent_id.replace(/^(agent|user):/, ''),
       sublabel: agent.role,
       kind: 'agent' as const,
     }));
@@ -63,7 +63,7 @@ export function MentionAutocomplete({
 
   // Extract mentions from content
   const extractMentions = (content: string): string[] => {
-    const mentionPattern = /@(\w+)/g;
+    const mentionPattern = /@([\w-]+)/g;
     const mentions: string[] = [];
     let match;
     while ((match = mentionPattern.exec(content)) !== null) {
