@@ -1112,11 +1112,21 @@ func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string)
 // for the for-agent inbox filter. Returns nil if no filtering should be applied.
 // Only the agent's own name/ID is used for direct mention matching; role-based
 // fan-out is handled via the group membership subquery in buildForAgentClause.
+//
+// For user identities, mention refs are stored with the "user:" prefix
+// (e.g., "user:leon-letto") but the UI sends the plain username (e.g.,
+// "leon-letto"). We include both forms so the mention subquery matches either.
 func buildForAgentValues(forAgent, _ string) []string {
-	if forAgent != "" {
-		return []string{forAgent}
+	if forAgent == "" {
+		return nil
 	}
-	return nil
+	values := []string{forAgent}
+	// If forAgent doesn't already have a "user:" prefix, also check the
+	// prefixed form so UI user inboxes match mention refs correctly.
+	if !strings.HasPrefix(forAgent, "user:") {
+		values = append(values, "user:"+forAgent)
+	}
+	return values
 }
 
 // resolveAgentAndSession returns the current agent ID and session ID.
