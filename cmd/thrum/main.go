@@ -1426,19 +1426,19 @@ Exit codes:
 				CallerAgentID: agentID,
 				ForAgent:      agentID,
 				ForAgentRole:  agentRole,
+				Quiet:         flagQuiet || flagJSON,
 			}
 
 			if flagVerbose && !afterTime.IsZero() {
 				fmt.Fprintf(os.Stderr, "Listening for messages after %s\n", afterTime.Format(time.RFC3339))
 			}
 
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
+			socketPath := os.Getenv("THRUM_SOCKET")
+			if socketPath == "" {
+				socketPath = cli.DefaultSocketPath(flagRepo)
 			}
-			defer func() { _ = client.Close() }()
 
-			message, err := cli.Wait(client, opts)
+			message, err := cli.Wait(socketPath, opts)
 			if err != nil {
 				if err.Error() == "timeout waiting for message" {
 					if !flagQuiet {

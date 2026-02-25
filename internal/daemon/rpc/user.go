@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -228,10 +228,16 @@ func sanitizeUsername(name string) string {
 }
 
 // gitConfigValue runs git config to get a value from the repo's git config.
+// Uses exec.Command directly (not safecmd.Git) because safecmd injects
+// -c user.name=Thrum overrides that mask the real git config values.
 func gitConfigValue(ctx context.Context, repoPath, key string) (string, error) {
-	out, err := safecmd.Git(ctx, repoPath, "config", "--get", key)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "config", "--get", key)
+	cmd.Dir = repoPath
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("git config --get %s in %s: %w", key, repoPath, err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
