@@ -961,12 +961,21 @@ func TestNewMessageHandlerWithDispatcher(t *testing.T) {
 	}
 }
 
-// TestBuildForAgentValues_NameOnly verifies that buildForAgentValues returns only
-// the agent name/ID, not the role, after the name-only routing change.
+// TestBuildForAgentValues_NameOnly verifies that buildForAgentValues returns the
+// agent name/ID plus the user:-prefixed form for inbox mention matching.
 func TestBuildForAgentValues_NameOnly(t *testing.T) {
 	values := buildForAgentValues("impl_api", "implementer")
-	if len(values) != 1 || values[0] != "impl_api" {
-		t.Errorf("expected [impl_api], got %v", values)
+	if len(values) != 2 || values[0] != "impl_api" || values[1] != "user:impl_api" {
+		t.Errorf("expected [impl_api user:impl_api], got %v", values)
+	}
+}
+
+// TestBuildForAgentValues_UserPrefixed verifies that a user:-prefixed forAgent
+// does not get double-prefixed.
+func TestBuildForAgentValues_UserPrefixed(t *testing.T) {
+	values := buildForAgentValues("user:leon-letto", "")
+	if len(values) != 1 || values[0] != "user:leon-letto" {
+		t.Errorf("expected [user:leon-letto], got %v", values)
 	}
 }
 
