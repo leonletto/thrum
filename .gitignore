@@ -70,6 +70,7 @@ playwright-report/
 
 # Screenshots (Playwright testing artifacts)
 *.png
+!website/img/**/*.png
 
 # Playwright cli artifacts
 .playwright-cli
