@@ -40,7 +40,7 @@ disclosure resource docs. It replaces the manual agent definition approach
 Before installing the plugin, you need Thrum installed and initialized:
 
 ````bash
-# Install thrum (Go 1.23+)
+# Install thrum (Go 1.26+)
 go install github.com/leonletto/thrum@latest
 
 # Or build from source

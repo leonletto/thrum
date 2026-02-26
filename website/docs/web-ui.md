@@ -60,7 +60,8 @@ across the top:
 
 Each message shows the sender, timestamp, and a **Reply** button. The
 **ComposeBar** at the bottom lets you write new messages with `@mention`
-autocomplete — type `@` to see available agents and groups.
+autocomplete — type `@` to see available agents and groups. The ComposeBar
+expands as you type and collapses after sending, keeping the reading area clean.
 
 ![Personal inbox with ComposeBar and reply threading](img/docs/ui-inbox.png)
 
@@ -77,20 +78,23 @@ Unread badges on group names tell you where new activity is.
 
 ![#test-team group channel with message history and members panel](img/docs/ui-group-channel.png)
 
-## Agent Inbox
+## Agent View
 
-Click any agent name in the **Agents** sidebar section to open their inbox. This
-shows two things:
+Click any agent name in the **Agents** sidebar section to open their view. The
+agent view uses a compact thin header at the top showing the agent name, role,
+module, and online status. A gear icon in the header opens a slide-out settings
+panel with agent details and actions.
 
-1. **Context panel** — the agent's current intent, branch, session info, and a
-   "Viewing as" indicator showing you're looking at their perspective
-2. **Message history** — messages that agent has received, with reply buttons
+The main area shows the agent's message history with reply buttons. The gear
+slide-out provides:
+
+- **Context info** — current intent, branch, session uptime
+- **Delete Agent** — removes stale agents from the registry
 
 This is useful for understanding what an agent is working on and what
-instructions it has received. The **Delete Agent** button removes stale agents
-from the registry.
+instructions it has received.
 
-![Agent context panel showing intent, branch, and message history](img/docs/ui-agent-inbox.png)
+![Agent view with thin header and gear slide-out for settings](img/docs/ui-agent-inbox.png)
 
 ## Who Has?
 
