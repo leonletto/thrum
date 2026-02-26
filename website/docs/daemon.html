@@ -91,432 +91,430 @@
   │   └── messages.db        (SQLite projection)
   ├── identities/            (per-worktree agent identity files)
   │   └── {agent_name}.json
-  └── redirect               (feature worktrees only)
-<span class="hljs-string">``</span><span class="hljs-string">`go
-
-## Components
-
-### 1. Unix Socket Server
-
-**Location:** `</span>internal/daemon/server.<span class="hljs-keyword">go</span><span class="hljs-string">`
-
-The socket server implements JSON-RPC 2.0 protocol for client-daemon
-communication.
-
-**Key features:**
-
-- Listens on `</span>.thrum/<span class="hljs-keyword">var</span>/thrum.sock<span class="hljs-string">`
-- Accepts multiple concurrent connections
-- Dispatches requests to registered handlers
-- Handles JSON-RPC 2.0 protocol correctly
-- Sets socket permissions to 0600 (owner-only)
-- Detects and removes stale sockets from dead daemons
-
-**JSON-RPC 2.0 format:**
-
-`</span><span class="hljs-string">``</span>json
-<span class="hljs-comment">// Request</span>
-{
-  <span class="hljs-string">&quot;jsonrpc&quot;</span>: <span class="hljs-string">&quot;2.0&quot;</span>,
-  <span class="hljs-string">&quot;method&quot;</span>: <span class="hljs-string">&quot;health&quot;</span>,
-  <span class="hljs-string">&quot;params&quot;</span>: {},
-  <span class="hljs-string">&quot;id&quot;</span>: <span class="hljs-number">1</span>
-}
+  └── redirect               (feature worktrees only)</code></pre>
+<h2>Components</h2>
+<h3>1. Unix Socket Server</h3>
+<p><strong>Location:</strong> <code>internal/daemon/server.go</code></p>
+<p>The socket server implements JSON-RPC 2.0 protocol for client-daemon<br>communication.</p>
+<p><strong>Key features:</strong></p>
+<ul>
+<li>Listens on <code>.thrum/var/thrum.sock</code></li>
+<li>Accepts multiple concurrent connections</li>
+<li>Dispatches requests to registered handlers</li>
+<li>Handles JSON-RPC 2.0 protocol correctly</li>
+<li>Sets socket permissions to 0600 (owner-only)</li>
+<li>Detects and removes stale sockets from dead daemons</li>
+</ul>
+<p><strong>JSON-RPC 2.0 format:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-comment">// Request</span>
+<span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;health&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span>
 
 <span class="hljs-comment">// Response (success)</span>
-{
-  <span class="hljs-string">&quot;jsonrpc&quot;</span>: <span class="hljs-string">&quot;2.0&quot;</span>,
-  <span class="hljs-string">&quot;result&quot;</span>: {<span class="hljs-string">&quot;status&quot;</span>: <span class="hljs-string">&quot;ok&quot;</span>},
-  <span class="hljs-string">&quot;id&quot;</span>: <span class="hljs-number">1</span>
-}
+<span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ok&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span>
 
 <span class="hljs-comment">// Response (error)</span>
-{
-  <span class="hljs-string">&quot;jsonrpc&quot;</span>: <span class="hljs-string">&quot;2.0&quot;</span>,
-  <span class="hljs-string">&quot;error&quot;</span>: {
-    <span class="hljs-string">&quot;code&quot;</span>: <span class="hljs-number">-32601</span>,
-    <span class="hljs-string">&quot;message&quot;</span>: <span class="hljs-string">&quot;Method not found&quot;</span>
-  },
-  <span class="hljs-string">&quot;id&quot;</span>: <span class="hljs-number">1</span>
-}
-<span class="hljs-string">``</span><span class="hljs-string">`go
-
-### 2. PID File Management
-
-**Location:** `</span>internal/daemon/pidfile.<span class="hljs-keyword">go</span><span class="hljs-string">`
-
-Manages process ID file with JSON metadata for daemon lifecycle.
-
-**JSON PID format:**
-
-`</span><span class="hljs-string">``</span>json
-{
-  <span class="hljs-string">&quot;pid&quot;</span>: <span class="hljs-number">12345</span>,
-  <span class="hljs-string">&quot;repo_path&quot;</span>: <span class="hljs-string">&quot;/Users/leon/dev/myproject&quot;</span>,
-  <span class="hljs-string">&quot;started_at&quot;</span>: <span class="hljs-string">&quot;2026-02-08T12:00:00Z&quot;</span>,
-  <span class="hljs-string">&quot;socket_path&quot;</span>: <span class="hljs-string">&quot;/Users/leon/dev/myproject/.thrum/var/thrum.sock&quot;</span>
-}
-<span class="hljs-string">``</span><span class="hljs-string">`go
-
-**Functions:**
-
-- `</span>WritePIDFileJSON(path, info)<span class="hljs-string">` - Write JSON PID with metadata
-- `</span>ReadPIDFileJSON(path)<span class="hljs-string">` - Read JSON PID (falls back to plain integer format
-  for backward compatibility)
-- `</span>CheckPIDFileJSON(path)<span class="hljs-string">` - Check if process is running and return PID info
-- `</span>ValidatePIDRepo(info, repoPath)<span class="hljs-string">` - Verify PID belongs to the same repository
-- `</span>RemovePIDFile(path)<span class="hljs-string">` - Clean up PID file
-
-**PID file location:** `</span>.thrum/<span class="hljs-keyword">var</span>/thrum.pid<span class="hljs-string">`
-
-**Features:**
-
-- JSON format with repository affinity (repo path, socket path, start time)
-- Backward-compatible reader supports plain integer format
-- Pre-startup duplicate detection prevents multiple daemons per repo
-- Automatic cleanup on shutdown
-
-### 3. File Locking (flock)
-
-**Location:** `</span>internal/daemon/flock.<span class="hljs-keyword">go</span><span class="hljs-string">`, `</span>internal/daemon/flock_unix.<span class="hljs-keyword">go</span><span class="hljs-string">`,
-`</span>internal/daemon/flock_other.<span class="hljs-keyword">go</span><span class="hljs-string">`
-
-Provides SIGKILL-resilient daemon process detection using OS-level file locking.
-
-**How it works:**
-
-- Uses `</span>syscall.Flock()<span class="hljs-string">` with `</span>LOCK_EX|LOCK_NB<span class="hljs-string">` for exclusive non-blocking lock
-- Lock is held on `</span>.thrum/<span class="hljs-keyword">var</span>/thrum.lock<span class="hljs-string">` for the daemon&#x27;s entire lifetime
-- The OS automatically releases the lock when the process dies, even on SIGKILL
-- Non-unix platforms have no-op stubs (lock detection falls back to PID file
-  only)
-
-**Key functions:**
-
-- `</span>AcquireLock(path)<span class="hljs-string">` - Try to acquire exclusive lock, returns error if held
-- `</span>FileLock.Release()<span class="hljs-string">` - Release lock and remove lock file (idempotent,
-  nil-safe)
-- `</span>IsLocked(path)<span class="hljs-string">` - Check if lock is currently held (unix only)
-
-### 4. Lifecycle Management
-
-**Location:** `</span>internal/daemon/lifecycle.<span class="hljs-keyword">go</span><span class="hljs-string">`
-
-Manages daemon startup, signal handling, and graceful shutdown with
-defense-in-depth cleanup.
-
-**Startup sequence (`</span>Lifecycle.Run()<span class="hljs-string">`):**
-
-1. Acquire file lock (flock) for SIGKILL resilience
-2. Pre-startup validation: check for existing daemon (repo affinity)
-3. Write JSON PID file with metadata
-4. Register defer safety net (catches panics, early returns)
-5. Start Unix socket server
-6. Start WebSocket server (if configured), write port file
-7. Start signal handler goroutine
-8. Wait for shutdown signal
-
-**Signal handling:**
-
-- `</span>SIGTERM<span class="hljs-string">` - Graceful shutdown
-- `</span>SIGINT<span class="hljs-string">` - Graceful shutdown
-- `</span>SIGHUP<span class="hljs-string">` - Reserved for config reload (future)
-
-**Shutdown sequence:**
-
-1. Stop WebSocket server, remove port file
-2. Stop Unix socket server (waits up to 5s for in-flight requests), remove
-   socket
-3. Remove PID file
-4. Release file lock
-
-**Defer cleanup safety net:**
-
-- A `</span><span class="hljs-keyword">defer</span><span class="hljs-string">` block in `</span>Run()<span class="hljs-string">` catches any exit path (panic, early return,
-  unexpected error)
-- Uses `</span>atomic.Bool<span class="hljs-string">` to prevent double cleanup with the normal shutdown path
-- All cleanup operations are idempotent (safe to run twice)
-
-### 5. RPC Handlers
-
-**Location:** `</span>internal/daemon/rpc/<span class="hljs-string">`
-
-RPC method handlers implement daemon functionality. All handlers are registered
-on both the Unix socket and WebSocket servers unless noted.
-
-**Registered handlers:**
-
-| Category         | Methods                                                                                                     | Notes                                              |
-| ---------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| **Health**       | `</span>health<span class="hljs-string">`                                                                                                    |                                                    |
-| **Agent**        | `</span>agent.register<span class="hljs-string">`, `</span>agent.list<span class="hljs-string">`, `</span>agent.whoami<span class="hljs-string">`, `</span>agent.listContext<span class="hljs-string">`, `</span>agent.<span class="hljs-built_in">delete</span><span class="hljs-string">`, `</span>agent.cleanup<span class="hljs-string">`        | `</span><span class="hljs-built_in">delete</span><span class="hljs-string">` and `</span>cleanup<span class="hljs-string">` are Unix socket only        |
-| **Session**      | `</span>session.start<span class="hljs-string">`, `</span>session.end<span class="hljs-string">`, `</span>session.list<span class="hljs-string">`, `</span>session.heartbeat<span class="hljs-string">`, `</span>session.setIntent<span class="hljs-string">`, `</span>session.setTask<span class="hljs-string">` |                                                    |
-| **Message**      | `</span>message.send<span class="hljs-string">`, `</span>message.get<span class="hljs-string">`, `</span>message.list<span class="hljs-string">`, `</span>message.edit<span class="hljs-string">`, `</span>message.<span class="hljs-built_in">delete</span><span class="hljs-string">`, `</span>message.markRead<span class="hljs-string">`         |                                                    |
-| **Subscription** | `</span>subscribe<span class="hljs-string">`, `</span>unsubscribe<span class="hljs-string">`, `</span>subscriptions.list<span class="hljs-string">`                                                            | Subscriptions auto-cleanup on session end (v0.4.3) |
-| **Sync**         | `</span>sync.force<span class="hljs-string">`, `</span>sync.status<span class="hljs-string">`                                                                                 | Both Unix socket and WebSocket                     |
-| **User**         | `</span>user.register<span class="hljs-string">`, `</span>user.identify<span class="hljs-string">`                                                                            | `</span>user.register<span class="hljs-string">` restricted to WebSocket transport  |
-
-See [RPC API Reference](rpc-api.md) for full documentation.
-
-**Health check response:**
-
-`</span><span class="hljs-string">``</span>json
-{
-  <span class="hljs-string">&quot;status&quot;</span>: <span class="hljs-string">&quot;ok&quot;</span>,
-  <span class="hljs-string">&quot;uptime_ms&quot;</span>: <span class="hljs-number">12345</span>,
-  <span class="hljs-string">&quot;version&quot;</span>: <span class="hljs-string">&quot;1.0.0&quot;</span>,
-  <span class="hljs-string">&quot;repo_id&quot;</span>: <span class="hljs-string">&quot;abc123&quot;</span>,
-  <span class="hljs-string">&quot;sync_state&quot;</span>: <span class="hljs-string">&quot;synced&quot;</span>
-}
-<span class="hljs-string">``</span><span class="hljs-string">`text
-
-### 6. WebSocket Server and Embedded SPA
-
-**Location:** `</span>internal/websocket/<span class="hljs-string">`, `</span>internal/web/<span class="hljs-string">`
-
-The WebSocket server provides real-time communication and serves the embedded
-web UI on a single port.
-
-**Key features:**
-
-- Full JSON-RPC 2.0 support (same protocol as Unix socket)
-- Real-time push notifications via subscriptions
-- Client registry for tracking connections by session_id
-- Default port: 9999 (configurable via `</span>THRUM_WS_PORT<span class="hljs-string">`)
-- Embedded React SPA served from the same port
-
-**Route layout (with UI):**
-
-- `</span>/ws<span class="hljs-string">` - WebSocket upgrade handler
-- `</span>/assets/<span class="hljs-string">` - Static file server (with immutable cache headers)
-- `</span>/<span class="hljs-string">` - SPA fallback (serves `</span>index.html<span class="hljs-string">` for all other paths)
-
-**Route layout (without UI):**
-
-- `</span>/<span class="hljs-string">` - WebSocket handler (backward compatible)
-
-**Embedded SPA (`</span>internal/web/embed.<span class="hljs-keyword">go</span><span class="hljs-string">`):**
-
-- Uses `</span><span class="hljs-comment">//go:embed all:dist` to bundle the React UI into the Go binary</span>
-- Build pipeline: <span class="hljs-string">`pnpm build`</span> -&gt; <span class="hljs-built_in">copy</span> to <span class="hljs-string">`internal/web/dist/`</span> -&gt; <span class="hljs-string">`go build`</span>
-- Dev mode: set <span class="hljs-string">`THRUM_UI_DEV=./ui/packages/web-app/dist`</span> to serve from disk
-
-**Browser auto-registration:**
-
-- <span class="hljs-string">`user.identify`</span> RPC extracts git config <span class="hljs-string">`user.name`</span> and <span class="hljs-string">`user.email`</span> <span class="hljs-keyword">for</span> the
-  repo
-- <span class="hljs-string">`user.register`</span> RPC (WebSocket-only) registers browser users with
-  <span class="hljs-string">`kind=&quot;user&quot;`</span>
-- Idempotent: returns existing user info <span class="hljs-keyword">if</span> already registered
-
-**Components:**
-
-- <span class="hljs-string">`server.go`</span> - HTTP server with mux routing, WebSocket upgrade, SPA handler
-- <span class="hljs-string">`connection.go`</span> - Per-connection read/write loops
-- <span class="hljs-string">`handler.go`</span> - Handler registry <span class="hljs-keyword">interface</span>
-- <span class="hljs-string">`client_registry.go`</span> - Tracks connected clients by session_id
-
-### <span class="hljs-number">7.</span> Sync Loop Integration
-
-**Location:** <span class="hljs-string">`internal/sync/loop.go`</span>, <span class="hljs-string">`internal/daemon/rpc/sync_rpc.go`</span>
-
-The sync loop runs as a goroutine within the daemon, periodically synchronizing
-JSONL data via Git.
-
-**Key features:**
-
-- Default interval: <span class="hljs-number">60</span> seconds (configurable via <span class="hljs-string">`--sync-interval`</span> flag)
-- Sync worktree at <span class="hljs-string">`.git/thrum-sync/a-sync/`</span> (uses <span class="hljs-string">`git-common-dir`</span> <span class="hljs-keyword">for</span> nested
-  worktree support)
-- File lock (<span class="hljs-string">`sync.lock`</span>) prevents concurrent sync operations
-- Manual sync via <span class="hljs-string">`sync.force`</span> RPC method
-
-**Sync cycle:**
-
-<span class="hljs-number">1.</span> Acquire sync lock (<span class="hljs-string">`.thrum/var/sync.lock`</span>)
-<span class="hljs-number">2.</span> Fetch remote (<span class="hljs-string">`git fetch`</span> in sync worktree)
-<span class="hljs-number">3.</span> Merge all JSONL files (<span class="hljs-string">`events.jsonl`</span> + <span class="hljs-string">`messages/*.jsonl`</span>) with dedup
-<span class="hljs-number">4.</span> Apply <span class="hljs-built_in">new</span> events to SQLite projection
-<span class="hljs-number">5.</span> Push merged changes back to remote
-<span class="hljs-number">6.</span> Release lock
-
-**RPC methods:**
-
-- <span class="hljs-string">`sync.force`</span> - Trigger manual sync (non-blocking), returns current status
-- <span class="hljs-string">`sync.status`</span> - Return current sync state (<span class="hljs-string">`stopped`</span>, <span class="hljs-string">`idle`</span>, <span class="hljs-string">`synced`</span>,
-  <span class="hljs-string">`error`</span>)
-
-### <span class="hljs-number">8.</span> Agent Work Context (Live Git State)
-
-**Location:** <span class="hljs-string">`internal/gitctx/`</span>, <span class="hljs-string">`internal/daemon/cleanup/`</span>
-
-Tracks what each agent is working on in <span class="hljs-built_in">real</span>-time by extracting Git state on
-heartbeat.
-
-**<span class="hljs-string">`internal/gitctx/`</span> <span class="hljs-keyword">package</span>:**
-
-Extracts git-derived work context from a worktree path:
-
-- <span class="hljs-string">`WorkContext`</span> <span class="hljs-keyword">struct</span>: branch, worktree path, unmerged commits, uncommitted
-  files, changed files, extraction timestamp
-- <span class="hljs-string">`CommitSummary`</span> <span class="hljs-keyword">struct</span>: SHA, message (first line), list of changed files
-- <span class="hljs-string">`ExtractWorkContext(worktreePath)`</span> - Runs git commands to gather state (~<span class="hljs-number">80</span>ms)
-  - <span class="hljs-string">`git branch --show-current`</span> - Current branch
-  - <span class="hljs-string">`git log --oneline base..HEAD`</span> - Unmerged commits vs origin/main or
-    origin/master
-  - <span class="hljs-string">`git diff --name-only base...HEAD`</span> - Changed files vs base branch
-  - <span class="hljs-string">`git status --porcelain`</span> - Uncommitted/staged files
-
-**RPC methods:**
-
-- <span class="hljs-string">`session.heartbeat`</span> - Extracts and stores git context automatically
-- <span class="hljs-string">`session.setIntent`</span> - Agent sets work intent (free text)
-- <span class="hljs-string">`session.setTask`</span> - Agent sets current task description
-- <span class="hljs-string">`agent.listContext`</span> - Query all agent work contexts (filterable by agent_id)
-
-**Cleanup logic (<span class="hljs-string">`internal/daemon/cleanup/`</span>):**
-
-- <span class="hljs-string">`CleanupStaleContexts(db, now)`</span> - Removes stale work contexts from SQLite
-  - Rule <span class="hljs-number">1</span>: Contexts &gt; <span class="hljs-number">24</span>h old with no unmerged commits
-  - Rule <span class="hljs-number">2</span>: Contexts from sessions ended &gt; <span class="hljs-number">7</span> days ago
-  - Rule <span class="hljs-number">3</span>: Contexts where git data was never collected
-- <span class="hljs-string">`FilterStaleContexts(contexts, now)`</span> - In-memory filter (same rules, <span class="hljs-keyword">for</span> sync)
-- Runs at daemon startup and before sync
-
-## Local-Only Mode
-
-When your repository is public, the daemon<span class="hljs-string">&#x27;s sync loop pushes the `a-sync`
-branch to `origin`, which would expose private agent messages. Local-only mode
-disables all remote git operations while keeping everything else working.
-
-### Enable local-only mode
-
-```bash
-# Via CLI flag
-thrum daemon start --local
-
-# Via environment variable
-THRUM_LOCAL=1 thrum daemon start
-```text
-
-The setting persists in `.thrum/config.json`:
-
-```json
-{ &quot;local_only&quot;: true }
-```text
-
-**Priority order:** CLI flag &gt; environment variable &gt; config file &gt; default
-(`true` via `thrum init`).
-
-### What changes in local-only mode
-
-| Component                 | Normal mode | Local-only mode |
-| ------------------------- | ----------- | --------------- |
-| Messaging                 | Works       | Works           |
-| Sessions                  | Works       | Works           |
-| SQLite projection         | Works       | Works           |
-| WebSocket / MCP           | Works       | Works           |
-| `git push origin a-sync`  | Every 60s   | **Skipped**     |
-| `git fetch origin a-sync` | Every 60s   | **Skipped**     |
-| Remote branch setup       | Automatic   | **Skipped**     |
-
-### Check if local-only mode is active
-
-```bash
-thrum sync status
-# Shows &quot;Mode: local-only&quot; or &quot;Mode: normal&quot;
-
-thrum sync force
-# Shows &quot;local-only (remote sync disabled)&quot; when active
-```go
-
-### 9. State Management
-
-**Location:** `internal/daemon/state/`
-
-The `State` struct manages the daemon&#x27;</span>s persistent state: JSONL event logs and
-SQLite projection.
-
-**Constructor:** <span class="hljs-string">`NewState(thrumDir, syncDir, repoID)`</span> splits paths:
-
-- <span class="hljs-string">`thrumDir`</span> (<span class="hljs-string">`/path/to/.thrum/`</span>) - Runtime files: <span class="hljs-string">`var/messages.db`</span>,
-  <span class="hljs-string">`var/thrum.sock`</span>, etc.
-- <span class="hljs-string">`syncDir`</span> (<span class="hljs-string">`/path/to/.git/thrum-sync/a-sync/`</span>) - JSONL data: <span class="hljs-string">`events.jsonl`</span>,
-  <span class="hljs-string">`messages/*.jsonl`</span>
-
-**Event routing (per-agent JSONL sharding):**
-
-- <span class="hljs-string">`message.*`</span> events -&gt; <span class="hljs-string">`messages/{agent_name}.jsonl`</span> (per-agent file, keyed by
-  message author)
-- All other events -&gt; <span class="hljs-string">`events.jsonl`</span> (agent lifecycle, threads, sessions)
-- <span class="hljs-string">`WriteEvent()`</span> auto-generates <span class="hljs-string">`event_id`</span> (ULID) and <span class="hljs-string">`v`</span> (version) fields
-
-**On initialization:**
-
-<span class="hljs-number">1.</span> Opens/migrates SQLite database
-<span class="hljs-number">2.</span> Runs JSONL sharding migration (monolithic <span class="hljs-string">`messages.jsonl`</span> -&gt; per-agent
-   files) <span class="hljs-keyword">if</span> needed
-<span class="hljs-number">3.</span> Backfills <span class="hljs-string">`event_id`</span> <span class="hljs-keyword">for</span> events that lack it
-<span class="hljs-number">4.</span> Creates writers <span class="hljs-keyword">for</span> <span class="hljs-string">`events.jsonl`</span> and lazy-creates per-agent message writers
-
-**Exported methods:**
-
-- <span class="hljs-string">`WriteEvent(event)`</span> - Write to JSONL + apply to SQLite projection
-- <span class="hljs-string">`DB()`</span> - Returns SQLite connection <span class="hljs-keyword">for</span> queries
-- <span class="hljs-string">`RepoID()`</span>, <span class="hljs-string">`RepoPath()`</span>, <span class="hljs-string">`SyncDir()`</span> - Path accessors
-- <span class="hljs-string">`Lock()/Unlock()`</span>, <span class="hljs-string">`RLock()/RUnlock()`</span> - Read/write mutex <span class="hljs-keyword">for</span> agent/session
-  operations
-- <span class="hljs-string">`Projector()`</span> - Returns the projection engine
-- <span class="hljs-string">`Close()`</span> - Closes all JSONL writers and SQLite connection
-
-### <span class="hljs-number">10.</span> Timeout Enforcement (v0<span class="hljs-number">.4</span><span class="hljs-number">.3</span>)
-
-All I/O paths enforce timeouts to prevent indefinite hangs:
-
-| Path                | Timeout        | Implementation      |
-| ------------------- | -------------- | ------------------- |
-| CLI dial            | <span class="hljs-number">5</span>s             | net.DialTimeout     |
-| RPC call            | <span class="hljs-number">10</span>s            | context.WithTimeout |
-| Server per-request  | <span class="hljs-number">10</span>s            | http.TimeoutHandler |
-| WebSocket handshake | <span class="hljs-number">10</span>s            | websocket.Upgrader  |
-| Git commands        | <span class="hljs-number">5</span>s/<span class="hljs-number">10</span>s         | safecmd wrapper     |
-| SQLite queries      | context-scoped | safedb wrapper      |
-
-The <span class="hljs-string">`safedb`</span> and <span class="hljs-string">`safecmd`</span> packages wrap all database and command operations
-with context-aware timeouts. All DB operations <span class="hljs-keyword">go</span> through <span class="hljs-string">`safedb`</span> wrappers and
-all command executions <span class="hljs-keyword">go</span> through <span class="hljs-string">`safecmd`</span> wrappers <span class="hljs-keyword">for</span> context-aware timeout
-enforcement.
-
-Lock scope has been reduced in v0<span class="hljs-number">.4</span><span class="hljs-number">.3</span> — no mutex is held during I/O, git, or
-WebSocket dispatch operations.
-
-### <span class="hljs-number">11.</span> Client Library
-
-**Location:** <span class="hljs-string">`internal/daemon/client.go`</span>
-
-Client library <span class="hljs-keyword">for</span> connecting to the daemon.
-
-**Key functions:**
-
-- <span class="hljs-string">`NewClient(socketPath)`</span> - Connect to daemon
-- <span class="hljs-string">`Call(method, params)`</span> - Make RPC call
-- <span class="hljs-string">`EnsureDaemon(repoPath)`</span> - Auto-start daemon <span class="hljs-keyword">if</span> needed
-
-**Auto-start logic:**
-
-<span class="hljs-number">1.</span> Try to connect to existing daemon
-<span class="hljs-number">2.</span> If not running, start daemon in background
-<span class="hljs-number">3.</span> Wait <span class="hljs-keyword">for</span> socket to become available (<span class="hljs-number">10</span>s timeout)
-<span class="hljs-number">4.</span> Return connected client
-
-## Daemon Lifecycle
-
-For setup instructions, see [Quickstart Guide](quickstart.md).
-
-### Daemon States
-
-<span class="hljs-string">``</span><span class="hljs-string">`text
- NOT RUNNING
+<span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;error&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;code&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">-32601</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Method not found&quot;</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h3>2. PID File Management</h3>
+<p><strong>Location:</strong> <code>internal/daemon/pidfile.go</code></p>
+<p>Manages process ID file with JSON metadata for daemon lifecycle.</p>
+<p><strong>JSON PID format:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;pid&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">12345</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;repo_path&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;/Users/leon/dev/myproject&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;started_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-08T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;socket_path&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;/Users/leon/dev/myproject/.thrum/var/thrum.sock&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Functions:</strong></p>
+<ul>
+<li><code>WritePIDFileJSON(path, info)</code> - Write JSON PID with metadata</li>
+<li><code>ReadPIDFileJSON(path)</code> - Read JSON PID (falls back to plain integer format<br>for backward compatibility)</li>
+<li><code>CheckPIDFileJSON(path)</code> - Check if process is running and return PID info</li>
+<li><code>ValidatePIDRepo(info, repoPath)</code> - Verify PID belongs to the same repository</li>
+<li><code>RemovePIDFile(path)</code> - Clean up PID file</li>
+</ul>
+<p><strong>PID file location:</strong> <code>.thrum/var/thrum.pid</code></p>
+<p><strong>Features:</strong></p>
+<ul>
+<li>JSON format with repository affinity (repo path, socket path, start time)</li>
+<li>Backward-compatible reader supports plain integer format</li>
+<li>Pre-startup duplicate detection prevents multiple daemons per repo</li>
+<li>Automatic cleanup on shutdown</li>
+</ul>
+<h3>3. File Locking (flock)</h3>
+<p><strong>Location:</strong> <code>internal/daemon/flock.go</code>, <code>internal/daemon/flock_unix.go</code>,<br><code>internal/daemon/flock_other.go</code></p>
+<p>Provides SIGKILL-resilient daemon process detection using OS-level file locking.</p>
+<p><strong>How it works:</strong></p>
+<ul>
+<li>Uses <code>syscall.Flock()</code> with <code>LOCK_EX|LOCK_NB</code> for exclusive non-blocking lock</li>
+<li>Lock is held on <code>.thrum/var/thrum.lock</code> for the daemon&#39;s entire lifetime</li>
+<li>The OS automatically releases the lock when the process dies, even on SIGKILL</li>
+<li>Non-unix platforms have no-op stubs (lock detection falls back to PID file<br>only)</li>
+</ul>
+<p><strong>Key functions:</strong></p>
+<ul>
+<li><code>AcquireLock(path)</code> - Try to acquire exclusive lock, returns error if held</li>
+<li><code>FileLock.Release()</code> - Release lock and remove lock file (idempotent,<br>nil-safe)</li>
+<li><code>IsLocked(path)</code> - Check if lock is currently held (unix only)</li>
+</ul>
+<h3>4. Lifecycle Management</h3>
+<p><strong>Location:</strong> <code>internal/daemon/lifecycle.go</code></p>
+<p>Manages daemon startup, signal handling, and graceful shutdown with<br>defense-in-depth cleanup.</p>
+<p><strong>Startup sequence (<code>Lifecycle.Run()</code>):</strong></p>
+<ol>
+<li>Acquire file lock (flock) for SIGKILL resilience</li>
+<li>Pre-startup validation: check for existing daemon (repo affinity)</li>
+<li>Write JSON PID file with metadata</li>
+<li>Register defer safety net (catches panics, early returns)</li>
+<li>Start Unix socket server</li>
+<li>Start WebSocket server (if configured), write port file</li>
+<li>Start signal handler goroutine</li>
+<li>Wait for shutdown signal</li>
+</ol>
+<p><strong>Signal handling:</strong></p>
+<ul>
+<li><code>SIGTERM</code> - Graceful shutdown</li>
+<li><code>SIGINT</code> - Graceful shutdown</li>
+<li><code>SIGHUP</code> - Reserved for config reload (future)</li>
+</ul>
+<p><strong>Shutdown sequence:</strong></p>
+<ol>
+<li>Stop WebSocket server, remove port file</li>
+<li>Stop Unix socket server (waits up to 5s for in-flight requests), remove<br>socket</li>
+<li>Remove PID file</li>
+<li>Release file lock</li>
+</ol>
+<p><strong>Defer cleanup safety net:</strong></p>
+<ul>
+<li>A <code>defer</code> block in <code>Run()</code> catches any exit path (panic, early return,<br>unexpected error)</li>
+<li>Uses <code>atomic.Bool</code> to prevent double cleanup with the normal shutdown path</li>
+<li>All cleanup operations are idempotent (safe to run twice)</li>
+</ul>
+<h3>5. RPC Handlers</h3>
+<p><strong>Location:</strong> <code>internal/daemon/rpc/</code></p>
+<p>RPC method handlers implement daemon functionality. All handlers are registered<br>on both the Unix socket and WebSocket servers unless noted.</p>
+<p><strong>Registered handlers:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Methods</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Health</strong></td>
+<td><code>health</code></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Agent</strong></td>
+<td><code>agent.register</code>, <code>agent.list</code>, <code>agent.whoami</code>, <code>agent.listContext</code>, <code>agent.delete</code>, <code>agent.cleanup</code></td>
+<td><code>delete</code> and <code>cleanup</code> are Unix socket only</td>
+</tr>
+<tr>
+<td><strong>Session</strong></td>
+<td><code>session.start</code>, <code>session.end</code>, <code>session.list</code>, <code>session.heartbeat</code>, <code>session.setIntent</code>, <code>session.setTask</code></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Message</strong></td>
+<td><code>message.send</code>, <code>message.get</code>, <code>message.list</code>, <code>message.edit</code>, <code>message.delete</code>, <code>message.markRead</code></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Subscription</strong></td>
+<td><code>subscribe</code>, <code>unsubscribe</code>, <code>subscriptions.list</code></td>
+<td>Subscriptions auto-cleanup on session end (v0.4.3)</td>
+</tr>
+<tr>
+<td><strong>Sync</strong></td>
+<td><code>sync.force</code>, <code>sync.status</code></td>
+<td>Both Unix socket and WebSocket</td>
+</tr>
+<tr>
+<td><strong>User</strong></td>
+<td><code>user.register</code>, <code>user.identify</code></td>
+<td><code>user.register</code> restricted to WebSocket transport</td>
+</tr>
+</tbody></table>
+<p>See <a href="rpc-api.html">RPC API Reference</a> for full documentation.</p>
+<p><strong>Health check response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ok&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;uptime_ms&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">12345</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1.0.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;repo_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;abc123&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;sync_state&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;synced&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h3>6. WebSocket Server and Embedded SPA</h3>
+<p><strong>Location:</strong> <code>internal/websocket/</code>, <code>internal/web/</code></p>
+<p>The WebSocket server provides real-time communication and serves the embedded<br>web UI on a single port.</p>
+<p><strong>Key features:</strong></p>
+<ul>
+<li>Full JSON-RPC 2.0 support (same protocol as Unix socket)</li>
+<li>Real-time push notifications via subscriptions</li>
+<li>Client registry for tracking connections by session_id</li>
+<li>Default port: 9999 (configurable via <code>THRUM_WS_PORT</code>)</li>
+<li>Embedded React SPA served from the same port</li>
+</ul>
+<p><strong>Route layout (with UI):</strong></p>
+<ul>
+<li><code>/ws</code> - WebSocket upgrade handler</li>
+<li><code>/assets/</code> - Static file server (with immutable cache headers)</li>
+<li><code>/</code> - SPA fallback (serves <code>index.html</code> for all other paths)</li>
+</ul>
+<p><strong>Route layout (without UI):</strong></p>
+<ul>
+<li><code>/</code> - WebSocket handler (backward compatible)</li>
+</ul>
+<p><strong>Embedded SPA (<code>internal/web/embed.go</code>):</strong></p>
+<ul>
+<li>Uses <code>//go:embed all:dist</code> to bundle the React UI into the Go binary</li>
+<li>Build pipeline: <code>pnpm build</code> -&gt; copy to <code>internal/web/dist/</code> -&gt; <code>go build</code></li>
+<li>Dev mode: set <code>THRUM_UI_DEV=./ui/packages/web-app/dist</code> to serve from disk</li>
+</ul>
+<p><strong>Browser auto-registration:</strong></p>
+<ul>
+<li><code>user.identify</code> RPC extracts git config <code>user.name</code> and <code>user.email</code> for the<br>repo</li>
+<li><code>user.register</code> RPC (WebSocket-only) registers browser users with<br><code>kind=&quot;user&quot;</code></li>
+<li>Idempotent: returns existing user info if already registered</li>
+</ul>
+<p><strong>Components:</strong></p>
+<ul>
+<li><code>server.go</code> - HTTP server with mux routing, WebSocket upgrade, SPA handler</li>
+<li><code>connection.go</code> - Per-connection read/write loops</li>
+<li><code>handler.go</code> - Handler registry interface</li>
+<li><code>client_registry.go</code> - Tracks connected clients by session_id</li>
+</ul>
+<h3>7. Sync Loop Integration</h3>
+<p><strong>Location:</strong> <code>internal/sync/loop.go</code>, <code>internal/daemon/rpc/sync_rpc.go</code></p>
+<p>The sync loop runs as a goroutine within the daemon, periodically synchronizing<br>JSONL data via Git.</p>
+<p><strong>Key features:</strong></p>
+<ul>
+<li>Default interval: 60 seconds (configurable via <code>--sync-interval</code> flag)</li>
+<li>Sync worktree at <code>.git/thrum-sync/a-sync/</code> (uses <code>git-common-dir</code> for nested<br>worktree support)</li>
+<li>File lock (<code>sync.lock</code>) prevents concurrent sync operations</li>
+<li>Manual sync via <code>sync.force</code> RPC method</li>
+</ul>
+<p><strong>Sync cycle:</strong></p>
+<ol>
+<li>Acquire sync lock (<code>.thrum/var/sync.lock</code>)</li>
+<li>Fetch remote (<code>git fetch</code> in sync worktree)</li>
+<li>Merge all JSONL files (<code>events.jsonl</code> + <code>messages/*.jsonl</code>) with dedup</li>
+<li>Apply new events to SQLite projection</li>
+<li>Push merged changes back to remote</li>
+<li>Release lock</li>
+</ol>
+<p><strong>RPC methods:</strong></p>
+<ul>
+<li><code>sync.force</code> - Trigger manual sync (non-blocking), returns current status</li>
+<li><code>sync.status</code> - Return current sync state (<code>stopped</code>, <code>idle</code>, <code>synced</code>,<br><code>error</code>)</li>
+</ul>
+<h3>8. Agent Work Context (Live Git State)</h3>
+<p><strong>Location:</strong> <code>internal/gitctx/</code>, <code>internal/daemon/cleanup/</code></p>
+<p>Tracks what each agent is working on in real-time by extracting Git state on<br>heartbeat.</p>
+<p><strong><code>internal/gitctx/</code> package:</strong></p>
+<p>Extracts git-derived work context from a worktree path:</p>
+<ul>
+<li><code>WorkContext</code> struct: branch, worktree path, unmerged commits, uncommitted<br>files, changed files, extraction timestamp</li>
+<li><code>CommitSummary</code> struct: SHA, message (first line), list of changed files</li>
+<li><code>ExtractWorkContext(worktreePath)</code> - Runs git commands to gather state (~80ms)<ul>
+<li><code>git branch --show-current</code> - Current branch</li>
+<li><code>git log --oneline base..HEAD</code> - Unmerged commits vs origin/main or<br>origin/master</li>
+<li><code>git diff --name-only base...HEAD</code> - Changed files vs base branch</li>
+<li><code>git status --porcelain</code> - Uncommitted/staged files</li>
+</ul>
+</li>
+</ul>
+<p><strong>RPC methods:</strong></p>
+<ul>
+<li><code>session.heartbeat</code> - Extracts and stores git context automatically</li>
+<li><code>session.setIntent</code> - Agent sets work intent (free text)</li>
+<li><code>session.setTask</code> - Agent sets current task description</li>
+<li><code>agent.listContext</code> - Query all agent work contexts (filterable by agent_id)</li>
+</ul>
+<p><strong>Cleanup logic (<code>internal/daemon/cleanup/</code>):</strong></p>
+<ul>
+<li><code>CleanupStaleContexts(db, now)</code> - Removes stale work contexts from SQLite<ul>
+<li>Rule 1: Contexts &gt; 24h old with no unmerged commits</li>
+<li>Rule 2: Contexts from sessions ended &gt; 7 days ago</li>
+<li>Rule 3: Contexts where git data was never collected</li>
+</ul>
+</li>
+<li><code>FilterStaleContexts(contexts, now)</code> - In-memory filter (same rules, for sync)</li>
+<li>Runs at daemon startup and before sync</li>
+</ul>
+<h2>Local-Only Mode</h2>
+<p>When your repository is public, the daemon&#39;s sync loop pushes the <code>a-sync</code><br>branch to <code>origin</code>, which would expose private agent messages. Local-only mode<br>disables all remote git operations while keeping everything else working.</p>
+<h3>Enable local-only mode</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Via CLI flag</span>
+thrum daemon start --<span class="hljs-built_in">local</span>
+
+<span class="hljs-comment"># Via environment variable</span>
+THRUM_LOCAL=1 thrum daemon start</code></pre>
+<p>The setting persists in <code>.thrum/config.json</code>:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;local_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Priority order:</strong> CLI flag &gt; environment variable &gt; config file &gt; default<br>(<code>true</code> via <code>thrum init</code>).</p>
+<h3>What changes in local-only mode</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Normal mode</th>
+<th>Local-only mode</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Messaging</td>
+<td>Works</td>
+<td>Works</td>
+</tr>
+<tr>
+<td>Sessions</td>
+<td>Works</td>
+<td>Works</td>
+</tr>
+<tr>
+<td>SQLite projection</td>
+<td>Works</td>
+<td>Works</td>
+</tr>
+<tr>
+<td>WebSocket / MCP</td>
+<td>Works</td>
+<td>Works</td>
+</tr>
+<tr>
+<td><code>git push origin a-sync</code></td>
+<td>Every 60s</td>
+<td><strong>Skipped</strong></td>
+</tr>
+<tr>
+<td><code>git fetch origin a-sync</code></td>
+<td>Every 60s</td>
+<td><strong>Skipped</strong></td>
+</tr>
+<tr>
+<td>Remote branch setup</td>
+<td>Automatic</td>
+<td><strong>Skipped</strong></td>
+</tr>
+</tbody></table>
+<h3>Check if local-only mode is active</h3>
+<pre><code class="language-bash hljs">thrum <span class="hljs-built_in">sync</span> status
+<span class="hljs-comment"># Shows &quot;Mode: local-only&quot; or &quot;Mode: normal&quot;</span>
+
+thrum <span class="hljs-built_in">sync</span> force
+<span class="hljs-comment"># Shows &quot;local-only (remote sync disabled)&quot; when active</span></code></pre>
+<h3>9. State Management</h3>
+<p><strong>Location:</strong> <code>internal/daemon/state/</code></p>
+<p>The <code>State</code> struct manages the daemon&#39;s persistent state: JSONL event logs and<br>SQLite projection.</p>
+<p><strong>Constructor:</strong> <code>NewState(thrumDir, syncDir, repoID)</code> splits paths:</p>
+<ul>
+<li><code>thrumDir</code> (<code>/path/to/.thrum/</code>) - Runtime files: <code>var/messages.db</code>,<br><code>var/thrum.sock</code>, etc.</li>
+<li><code>syncDir</code> (<code>/path/to/.git/thrum-sync/a-sync/</code>) - JSONL data: <code>events.jsonl</code>,<br><code>messages/*.jsonl</code></li>
+</ul>
+<p><strong>Event routing (per-agent JSONL sharding):</strong></p>
+<ul>
+<li><code>message.*</code> events -&gt; <code>messages/{agent_name}.jsonl</code> (per-agent file, keyed by<br>message author)</li>
+<li>All other events -&gt; <code>events.jsonl</code> (agent lifecycle, threads, sessions)</li>
+<li><code>WriteEvent()</code> auto-generates <code>event_id</code> (ULID) and <code>v</code> (version) fields</li>
+</ul>
+<p><strong>On initialization:</strong></p>
+<ol>
+<li>Opens/migrates SQLite database</li>
+<li>Runs JSONL sharding migration (monolithic <code>messages.jsonl</code> -&gt; per-agent<br>files) if needed</li>
+<li>Backfills <code>event_id</code> for events that lack it</li>
+<li>Creates writers for <code>events.jsonl</code> and lazy-creates per-agent message writers</li>
+</ol>
+<p><strong>Exported methods:</strong></p>
+<ul>
+<li><code>WriteEvent(event)</code> - Write to JSONL + apply to SQLite projection</li>
+<li><code>DB()</code> - Returns SQLite connection for queries</li>
+<li><code>RepoID()</code>, <code>RepoPath()</code>, <code>SyncDir()</code> - Path accessors</li>
+<li><code>Lock()/Unlock()</code>, <code>RLock()/RUnlock()</code> - Read/write mutex for agent/session<br>operations</li>
+<li><code>Projector()</code> - Returns the projection engine</li>
+<li><code>Close()</code> - Closes all JSONL writers and SQLite connection</li>
+</ul>
+<h3>10. Timeout Enforcement (v0.4.3)</h3>
+<p>All I/O paths enforce timeouts to prevent indefinite hangs:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Timeout</th>
+<th>Implementation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CLI dial</td>
+<td>5s</td>
+<td>net.DialTimeout</td>
+</tr>
+<tr>
+<td>RPC call</td>
+<td>10s</td>
+<td>context.WithTimeout</td>
+</tr>
+<tr>
+<td>Server per-request</td>
+<td>10s</td>
+<td>http.TimeoutHandler</td>
+</tr>
+<tr>
+<td>WebSocket handshake</td>
+<td>10s</td>
+<td>websocket.Upgrader</td>
+</tr>
+<tr>
+<td>Git commands</td>
+<td>5s/10s</td>
+<td>safecmd wrapper</td>
+</tr>
+<tr>
+<td>SQLite queries</td>
+<td>context-scoped</td>
+<td>safedb wrapper</td>
+</tr>
+</tbody></table>
+<p>The <code>safedb</code> and <code>safecmd</code> packages wrap all database and command operations<br>with context-aware timeouts. All DB operations go through <code>safedb</code> wrappers and<br>all command executions go through <code>safecmd</code> wrappers for context-aware timeout<br>enforcement.</p>
+<p>Lock scope has been reduced in v0.4.3 — no mutex is held during I/O, git, or<br>WebSocket dispatch operations.</p>
+<h3>11. Client Library</h3>
+<p><strong>Location:</strong> <code>internal/daemon/client.go</code></p>
+<p>Client library for connecting to the daemon.</p>
+<p><strong>Key functions:</strong></p>
+<ul>
+<li><code>NewClient(socketPath)</code> - Connect to daemon</li>
+<li><code>Call(method, params)</code> - Make RPC call</li>
+<li><code>EnsureDaemon(repoPath)</code> - Auto-start daemon if needed</li>
+</ul>
+<p><strong>Auto-start logic:</strong></p>
+<ol>
+<li>Try to connect to existing daemon</li>
+<li>If not running, start daemon in background</li>
+<li>Wait for socket to become available (10s timeout)</li>
+<li>Return connected client</li>
+</ol>
+<h2>Daemon Lifecycle</h2>
+<p>For setup instructions, see <a href="quickstart.html">Quickstart Guide</a>.</p>
+<h3>Daemon States</h3>
+<pre><code class="language-text hljs"> NOT RUNNING
      │
      ▼
  STARTING ────────┐
@@ -528,186 +526,213 @@ For setup instructions, see [Quickstart Guide](quickstart.md).
  SHUTTING DOWN
      │
      ▼
- STOPPED
-`</span><span class="hljs-string">``</span>text
-
-### Checking Status
-
-<span class="hljs-string">``</span><span class="hljs-string">`bash
-# Check if daemon is running (shows repo path from JSON PID)
+ STOPPED</code></pre>
+<h3>Checking Status</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Check if daemon is running (shows repo path from JSON PID)</span>
 thrum daemon status
 
-# Health check via RPC
-thrum daemon health
-`</span><span class="hljs-string">``</span>text
-
-### Stopping the Daemon
-
-<span class="hljs-string">``</span><span class="hljs-string">`bash
-# Graceful stop
+<span class="hljs-comment"># Health check via RPC</span>
+thrum daemon health</code></pre>
+<h3>Stopping the Daemon</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Graceful stop</span>
 thrum daemon stop
 
-# Force stop (if graceful fails)
-kill &lt;pid&gt;
-# flock auto-released by OS; PID file cleaned up on next start
-`</span><span class="hljs-string">``</span>text
-
-## Directory Structure
-
-<span class="hljs-string">``</span><span class="hljs-string">`go
-.git/thrum-sync/a-sync/          # Sync worktree on a-sync orphan branch
+<span class="hljs-comment"># Force stop (if graceful fails)</span>
+<span class="hljs-built_in">kill</span> &lt;pid&gt;
+<span class="hljs-comment"># flock auto-released by OS; PID file cleaned up on next start</span></code></pre>
+<h2>Directory Structure</h2>
+<pre><code class="language-go hljs">.git/thrum-sync/a-sync/          # Sync worktree on a-sync orphan branch
 ├── events.jsonl                # Agent lifecycle events (source of truth)
 └── messages/                   # Per-agent message logs (source of truth)
     └── {agent_name}.jsonl
 
 .thrum/                         # Gitignored entirely
-├── var/                        # Runtime files
-│   ├── thrum.sock              # Unix socket for CLI/RPC
+├── <span class="hljs-keyword">var</span>/                        # Runtime files
+│   ├── thrum.sock              # Unix socket <span class="hljs-keyword">for</span> CLI/RPC
 │   ├── thrum.pid               # JSON PID file (PID, RepoPath, StartedAt, SocketPath)
-│   ├── thrum.lock              # flock file for SIGKILL resilience
+│   ├── thrum.lock              # flock file <span class="hljs-keyword">for</span> SIGKILL resilience
 │   ├── ws.port                 # WebSocket port number
 │   ├── sync.lock               # Sync loop file lock
 │   └── messages.db             # SQLite projection (query cache)
 ├── identities/                 # Per-worktree agent identity files
 │   └── {agent_name}.json
-└── redirect                    # (feature worktrees only) points to main .thrum/
-`</span><span class="hljs-string">``</span><span class="hljs-keyword">go</span>
+└── redirect                    # (feature worktrees only) points to main .thrum/</code></pre>
+<p><strong>Key files:</strong></p>
+<ul>
+<li><code>.git/thrum-sync/a-sync/events.jsonl</code> and <code>messages/*.jsonl</code>: Append-only<br>JSONL event logs on the <code>a-sync</code> branch, synced via the worktree. Per-agent<br>sharding means each agent&#39;s messages go to a separate JSONL file.</li>
+<li><code>var/messages.db</code>: SQLite database rebuilt from JSONL, stores all queryable<br>state including <code>agent_work_contexts</code> table</li>
+<li><code>var/thrum.pid</code>: JSON format with PID, repo path, start time, and socket path.<br>Enables repo-affinity checks to prevent conflicts.</li>
+<li><code>var/thrum.lock</code>: Held via <code>flock()</code> for the daemon&#39;s lifetime. OS releases on<br>process death (even SIGKILL).</li>
+<li><code>var/ws.port</code>: Contains the WebSocket port for UI clients to discover</li>
+<li><code>redirect</code>: Present only in feature worktrees; points to the main worktree&#39;s<br><code>.thrum/</code> so all worktrees share one daemon</li>
+</ul>
+<h2>Development</h2>
+<h3>Running Tests</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># All daemon tests</span>
+go <span class="hljs-built_in">test</span> ./internal/daemon/...
 
-**Key files:**
+<span class="hljs-comment"># With coverage</span>
+go <span class="hljs-built_in">test</span> -cover ./internal/daemon/...
 
-- <span class="hljs-string">`.git/thrum-sync/a-sync/events.jsonl`</span> and <span class="hljs-string">`messages/*.jsonl`</span>: Append-only
-  JSONL event logs on the <span class="hljs-string">`a-sync`</span> branch, synced via the worktree. Per-agent
-  sharding means each agent<span class="hljs-string">&#x27;s messages go to a separate JSONL file.
-- `var/messages.db`: SQLite database rebuilt from JSONL, stores all queryable
-  state including `agent_work_contexts` table
-- `var/thrum.pid`: JSON format with PID, repo path, start time, and socket path.
-  Enables repo-affinity checks to prevent conflicts.
-- `var/thrum.lock`: Held via `flock()` for the daemon&#x27;</span>s lifetime. OS releases on
-  process death (even SIGKILL).
-- <span class="hljs-string">`var/ws.port`</span>: Contains the WebSocket port <span class="hljs-keyword">for</span> UI clients to discover
-- <span class="hljs-string">`redirect`</span>: Present only in feature worktrees; points to the main worktree<span class="hljs-string">&#x27;s
-  `.thrum/` so all worktrees share one daemon
-
-## Development
-
-### Running Tests
-
-```bash
-# All daemon tests
-go test ./internal/daemon/...
-
-# With coverage
-go test -cover ./internal/daemon/...
-
-# With race detector
-go test -race ./internal/daemon/...
-```go
-
-### Adding New RPC Methods
-
-1. Create handler in `internal/daemon/rpc/`
-2. Implement `Handle(ctx, params)` method
-3. Register in daemon startup (`cmd/thrum/main.go`)
-4. Add tests in corresponding `_test.go` file
-
-Example:
-
-```go
-// internal/daemon/rpc/mymethod.go
-type MyMethodHandler struct {
-    // dependencies
+<span class="hljs-comment"># With race detector</span>
+go <span class="hljs-built_in">test</span> -race ./internal/daemon/...</code></pre>
+<h3>Adding New RPC Methods</h3>
+<ol>
+<li>Create handler in <code>internal/daemon/rpc/</code></li>
+<li>Implement <code>Handle(ctx, params)</code> method</li>
+<li>Register in daemon startup (<code>cmd/thrum/main.go</code>)</li>
+<li>Add tests in corresponding <code>_test.go</code> file</li>
+</ol>
+<p>Example:</p>
+<pre><code class="language-go hljs"><span class="hljs-comment">// internal/daemon/rpc/mymethod.go</span>
+<span class="hljs-keyword">type</span> MyMethodHandler <span class="hljs-keyword">struct</span> {
+    <span class="hljs-comment">// dependencies</span>
 }
 
-func (h *MyMethodHandler) Handle(ctx context.Context, params json.RawMessage) (any, error) {
-    // implementation
-    return response, nil
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(h *MyMethodHandler)</span></span> Handle(ctx context.Context, params json.RawMessage) (any, <span class="hljs-type">error</span>) {
+    <span class="hljs-comment">// implementation</span>
+    <span class="hljs-keyword">return</span> response, <span class="hljs-literal">nil</span>
 }
 
-// Register in daemon (cmd/thrum/main.go)
-server.RegisterHandler(&quot;mymethod&quot;, myMethodHandler.Handle)
-```text
+<span class="hljs-comment">// Register in daemon (cmd/thrum/main.go)</span>
+server.RegisterHandler(<span class="hljs-string">&quot;mymethod&quot;</span>, myMethodHandler.Handle)</code></pre>
+<h2>Troubleshooting</h2>
+<h3>Daemon won&#39;t start</h3>
+<p>Check:</p>
+<ol>
+<li>Is <code>.thrum/var/</code> directory writable?</li>
+<li>Is socket path too long? (Unix sockets have 104-char limit)</li>
+<li>Is another daemon already running?</li>
+</ol>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Check JSON PID file</span>
+<span class="hljs-built_in">cat</span> .thrum/var/thrum.pid
 
-## Troubleshooting
+<span class="hljs-comment"># Check if flock is held</span>
+<span class="hljs-comment"># (if daemon died via SIGKILL, flock is released but PID file may remain)</span>
 
-### Daemon won&#x27;</span>t start
-
-Check:
-
-<span class="hljs-number">1.</span> Is <span class="hljs-string">`.thrum/var/`</span> directory writable?
-<span class="hljs-number">2.</span> Is socket path too long? (Unix sockets have <span class="hljs-number">104</span>-char limit)
-<span class="hljs-number">3.</span> Is another daemon already running?
-
-<span class="hljs-string">``</span><span class="hljs-string">`bash
-# Check JSON PID file
-cat .thrum/var/thrum.pid
-
-# Check if flock is held
-# (if daemon died via SIGKILL, flock is released but PID file may remain)
-
-# Check if process is running
+<span class="hljs-comment"># Check if process is running</span>
 ps aux | grep thrum
 
-# Remove stale PID file (only if process is definitely not running)
-rm .thrum/var/thrum.pid
-`</span><span class="hljs-string">``</span><span class="hljs-keyword">go</span>
+<span class="hljs-comment"># Remove stale PID file (only if process is definitely not running)</span>
+<span class="hljs-built_in">rm</span> .thrum/var/thrum.pid</code></pre>
+<h3>Socket connection errors</h3>
+<p>Check:</p>
+<ol>
+<li>Is daemon running?</li>
+<li>Socket permissions correct (should be 0600)</li>
+<li>Socket file exists?</li>
+</ol>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Check socket</span>
+<span class="hljs-built_in">ls</span> -l .thrum/var/thrum.sock
 
-### Socket connection errors
+<span class="hljs-comment"># Test connection</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">&#x27;{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;health&quot;,&quot;id&quot;:1}&#x27;</span> | nc -U .thrum/var/thrum.sock</code></pre>
+<h3>Graceful shutdown hangs</h3>
+<p>The daemon waits up to 5 seconds for in-flight requests to complete. If shutdown<br>hangs longer:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Send SIGKILL (flock auto-released by OS)</span>
+<span class="hljs-built_in">kill</span> -9 &lt;pid&gt;
 
-Check:
-
-<span class="hljs-number">1.</span> Is daemon running?
-<span class="hljs-number">2.</span> Socket permissions correct (should be <span class="hljs-number">0600</span>)
-<span class="hljs-number">3.</span> Socket file exists?
-
-<span class="hljs-string">``</span><span class="hljs-string">`bash
-# Check socket
-ls -l .thrum/var/thrum.sock
-
-# Test connection
-echo &#x27;{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;health&quot;,&quot;id&quot;:1}&#x27; | nc -U .thrum/var/thrum.sock
-`</span><span class="hljs-string">``</span>text
-
-### Graceful shutdown hangs
-
-The daemon waits up to <span class="hljs-number">5</span> seconds <span class="hljs-keyword">for</span> in-flight requests to complete. If shutdown
-hangs longer:
-
-<span class="hljs-string">``</span><span class="hljs-string">`bash
-# Send SIGKILL (flock auto-released by OS)
-kill -9 &lt;pid&gt;
-
-# Stale files are cleaned up automatically on next daemon start
-# Manual cleanup if needed:
-rm .thrum/var/thrum.sock
-rm .thrum/var/thrum.pid
-`</span><span class="hljs-string">``</span>text
-
-## Implemented Features
-
-| Epic            | Feature                                                     | Status   |
-| --------------- | ----------------------------------------------------------- | -------- |
-| Epic <span class="hljs-number">2</span>          | Daemon core (Unix socket, JSON-RPC)                         | Complete |
-| Epic <span class="hljs-number">3</span>          | Agent &amp; session management                                  | Complete |
-| Epic <span class="hljs-number">4</span>          | Message send/receive                                        | Complete |
-| Epic <span class="hljs-number">5</span>          | Git sync protocol                                           | Complete |
-| Epic <span class="hljs-number">6</span>          | Subscription &amp; notifications                                | Complete |
-| Epic <span class="hljs-number">8</span>          | WebSocket server                                            | Complete |
-| Epic F          | Embedded SPA (single port)                                  | Complete |
-| Epic <span class="hljs-number">21</span>         | Agent Work Context (live git state)                         | Complete |
-| DLH             | Daemon Lifecycle Hardening (flock, JSON PID, <span class="hljs-keyword">defer</span> cleanup) | Complete |
-| MCP             | MCP Server (<span class="hljs-string">`thrum mcp serve`</span>)                              | Complete |
-| JSONL Sharding  | Per-agent JSONL files, event_id, naming, cleanup            | Complete |
-| Sync WT         | Sync worktree at <span class="hljs-string">`.git/thrum-sync/a-sync/`</span>                  | Complete |
-| Agent Naming    | Human-readable agent names (<span class="hljs-string">`--name`</span>, <span class="hljs-string">`THRUM_NAME`</span>)         | Complete |
-| Agent Cleanup   | <span class="hljs-string">`agent.delete`</span>, <span class="hljs-string">`agent.cleanup`</span> (orphan detection)          | Complete |
-| Browser Auth    | Browser auto-registration via git config                    | Complete |
-| Local-Only Mode | Disable remote sync <span class="hljs-keyword">for</span> public repos                        | Complete |
-
-## References
-
-- Design document: <span class="hljs-string">`dev-docs/2026-02-03-thrum-design.md`</span>
-- RPC API reference: <span class="hljs-string">`docs/rpc-api.md`</span>
-- Development guide: <span class="hljs-string">`docs/development.md`</span></code></pre>
+<span class="hljs-comment"># Stale files are cleaned up automatically on next daemon start</span>
+<span class="hljs-comment"># Manual cleanup if needed:</span>
+<span class="hljs-built_in">rm</span> .thrum/var/thrum.sock
+<span class="hljs-built_in">rm</span> .thrum/var/thrum.pid</code></pre>
+<h2>Implemented Features</h2>
+<table>
+<thead>
+<tr>
+<th>Epic</th>
+<th>Feature</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Epic 2</td>
+<td>Daemon core (Unix socket, JSON-RPC)</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Epic 3</td>
+<td>Agent &amp; session management</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Epic 4</td>
+<td>Message send/receive</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Epic 5</td>
+<td>Git sync protocol</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Epic 6</td>
+<td>Subscription &amp; notifications</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Epic 8</td>
+<td>WebSocket server</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Epic F</td>
+<td>Embedded SPA (single port)</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Epic 21</td>
+<td>Agent Work Context (live git state)</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>DLH</td>
+<td>Daemon Lifecycle Hardening (flock, JSON PID, defer cleanup)</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>MCP</td>
+<td>MCP Server (<code>thrum mcp serve</code>)</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>JSONL Sharding</td>
+<td>Per-agent JSONL files, event_id, naming, cleanup</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Sync WT</td>
+<td>Sync worktree at <code>.git/thrum-sync/a-sync/</code></td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Agent Naming</td>
+<td>Human-readable agent names (<code>--name</code>, <code>THRUM_NAME</code>)</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Agent Cleanup</td>
+<td><code>agent.delete</code>, <code>agent.cleanup</code> (orphan detection)</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Browser Auth</td>
+<td>Browser auto-registration via git config</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Local-Only Mode</td>
+<td>Disable remote sync for public repos</td>
+<td>Complete</td>
+</tr>
+</tbody></table>
+<h2>References</h2>
+<ul>
+<li>Design document: <code>dev-docs/2026-02-03-thrum-design.md</code></li>
+<li>RPC API reference: <code>docs/rpc-api.md</code></li>
+<li>Development guide: <code>docs/development.md</code></li>
+</ul>
+<pre><code></code></pre>
 
     </div>
     <p style="margin-top:2rem"><a href="../docs.html#daemon.html">&larr; View in documentation</a></p>

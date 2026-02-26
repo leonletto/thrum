@@ -20,7 +20,7 @@ Templates live in `toolkit/templates/` in the Thrum repository.
 
 ## The three-phase workflow
 
-````text
+```text
 1. PLAN              2. PREPARE            3. IMPLEMENT
 ─────────────        ──────────────        ─────────────────────
 Brainstorm           Select/create         Orient from beads
@@ -28,7 +28,7 @@ Write spec           worktree              Implement tasks
 Create epics         Setup thrum +         Test → commit → close
 Create tasks         beads redirect        Quality gates
 Set deps             Run quickstart        Merge to main
-```text
+```
 
 **Plan** — Explore codebase, propose approaches, write design spec, decompose
 into beads epics with detailed task descriptions.
@@ -47,7 +47,7 @@ Copy the templates into your project documentation:
 
 ```bash
 cp toolkit/templates/*.md your-project/docs/templates/
-```text
+```
 
 Or reference them directly from the Thrum repo when starting a new agent
 session.
@@ -65,7 +65,7 @@ these before giving a template to an agent.
 {{DESIGN_DOC_DIR}}      → docs/plans/
 {{REFERENCE_DOCS}}      → .ref/example_project/, dev-docs/architecture.md
 {{TECH_STACK}}          → Go backend, React/TypeScript UI, SQLite, JSONL
-```text
+```
 
 ### Worktree setup placeholders
 
@@ -73,7 +73,7 @@ these before giving a template to an agent.
 {{PROJECT_ROOT}}  → /home/user/projects/myproject
 {{WORKTREE_BASE}} → ~/.workspaces/myproject
 {{FEATURE_NAME}}  → auth
-```text
+```
 
 ### Implementation agent placeholders
 
@@ -86,7 +86,7 @@ these before giving a template to an agent.
 {{QUALITY_COMMANDS}} → make test && make lint
 {{COVERAGE_TARGET}}  → >80%
 {{AGENT_NAME}}       → impl-auth
-```text
+```
 
 ### Example: Fill in for a real project
 
@@ -102,7 +102,7 @@ implementation template:
 {{QUALITY_COMMANDS}} → go test ./... && golangci-lint run
 {{COVERAGE_TARGET}}  → >85%
 {{AGENT_NAME}}       → impl-auth-jwt
-```text
+```
 
 Save the filled-in template as a file or paste it directly into your agent's
 prompt.
@@ -139,7 +139,7 @@ single command:
 ./scripts/setup-worktree-thrum.sh ~/.workspaces/myproject/auth feature/auth \
   --identity impl-auth \
   --role implementer
-```text
+```
 
 This creates the worktree, sets up thrum and beads redirects, and registers the
 agent identity. The `thrum quickstart` command (used internally) auto-creates a
@@ -173,4 +173,4 @@ picks up from the first incomplete task. Completed work is never redone.
   beads for task tracking and Thrum for coordination
 - [Quick Start](quickstart.md) — Set up Thrum and run your first multi-agent
   workflow
-````
+```

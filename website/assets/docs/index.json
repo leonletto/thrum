@@ -251,6 +251,21 @@
     "lastUpdated": "2026-02-10"
   },
   {
+    "path": "codex-plugin.html",
+    "title": "Codex Plugin",
+    "description": "Install and use Thrum's Codex skill bundle — split skills for coordination, operations, role template generation, and project setup",
+    "category": "guides",
+    "order": 4,
+    "tags": [
+      "codex",
+      "skills",
+      "thrum",
+      "installation",
+      "agent-coordination"
+    ],
+    "lastUpdated": "2026-02-24"
+  },
+  {
     "path": "claude-agent-integration.html",
     "title": "Claude Code Agent Integration",
     "description": "Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup",

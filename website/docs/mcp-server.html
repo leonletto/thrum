@@ -80,621 +80,973 @@
   |     +-- Identity: .thrum/identities/{name}.json
   |
   +-- background sub-agent: message-listener (Haiku)
-        +-- calls wait_for_message(timeout=300) -&gt; blocks until message or timeout
-```text
-
-### Package Structure
-
-```text
-internal/mcp/
+        +-- calls wait_for_message(timeout=300) -&gt; blocks until message or timeout</code></pre>
+<h3>Package Structure</h3>
+<pre><code class="language-text hljs">internal/mcp/
   server.go    -- NewServer(), tool registration, Run(), InitWaiter()
   tools.go     -- send_message, check_messages, list_agents, broadcast_message handlers
   waiter.go    -- WebSocket client, notification routing, wait_for_message handler
   types.go     -- MCP-specific input/output structs
 
-cmd/thrum/mcp.go  -- thrum mcp serve cobra command
-```go
-
-### Startup Sequence
-
-1. Resolve repo path (respects `--repo` flag, defaults to `.`)
-2. If `--agent-id` is provided, set `THRUM_NAME` env var before config load
-3. Verify daemon is running (connect to Unix socket, call `health` RPC)
-4. Load agent identity from `.thrum/identities/{name}.json` via
-   `config.LoadWithPath`
-5. Resolve daemon socket path (follows `.thrum/redirect` in feature worktrees)
-6. Generate composite agent ID via
-   `identity.GenerateAgentID(repoID, role, module, name)`
-7. Create MCP server with the official Go SDK
-   (`github.com/modelcontextprotocol/go-sdk/mcp`)
-8. Register all 11 tool handlers (5 core messaging + 6 group management)
-9. Initialize WebSocket waiter (best-effort -- reads port from
-   `.thrum/var/ws.port`)
-   - Connect to `ws://localhost:{port}/ws`
-   - Send `user.identify` to get git username
-   - Send `user.register` with the username
-   - Send `subscribe` with `mention_role` for this agent&#x27;s role
-   - Start background `readLoop` goroutine for incoming notifications
-10. Start MCP stdio server (blocks until client disconnects or context
-    cancelled)
-
-### Shutdown
-
-When Claude Code terminates the process (closes stdin) or a signal is received
-(SIGINT/SIGTERM):
-
-- Context is cancelled
-- Waiter closes WebSocket connection (daemon auto-unregisters)
-- Waiter&#x27;s `readLoop` exits, unblocking any active `wait_for_message` call
-- Unix socket connections are closed (per-call, so nothing to clean up)
-- Process exits
-
-### Key Design Decisions
-
-- **Per-call `cli.Client` creation**: `cli.Client` is not concurrent-safe. Each
-  tool handler creates a fresh Unix socket connection. This is cheap (local
-  socket) and avoids concurrency issues.
-- **Atomic WebSocket request IDs**: The waiter uses `atomic.Int64` for
-  incrementing JSON-RPC request IDs, ensuring uniqueness across concurrent
-  calls.
-- **Single-waiter enforcement**: Only one `wait_for_message` can be active at a
-  time per server instance. A second call returns an error. Enforced with a
-  mutex.
-- **Best-effort WebSocket**: If the WebSocket connection fails at startup, the
-  MCP server still operates -- only `wait_for_message` returns errors. The other
-  10 tools work via Unix socket RPC.
-
-## Usage
-
-### Command
-
-```bash
-thrum mcp serve [--agent-id NAME]
-```go
-
-**Prerequisites:**
-
-- Thrum daemon must be running (`thrum daemon start`)
-- Agent must be registered
-  (`thrum quickstart --name NAME --role ROLE --module MODULE`)
-
-**Flags:**
-
-| Flag         | Default              | Description                                                  |
-| ------------ | -------------------- | ------------------------------------------------------------ |
-| `--agent-id` | (from identity file) | Override agent name; selects `.thrum/identities/{name}.json` |
-| `--repo`     | `.`                  | Repository path                                              |
-
-### Claude Code Configuration
-
-Add to `.claude/settings.json` (project or user level):
-
-```json
-{
-  &quot;mcpServers&quot;: {
-    &quot;thrum&quot;: {
-      &quot;type&quot;: &quot;stdio&quot;,
-      &quot;command&quot;: &quot;thrum&quot;,
-      &quot;args&quot;: [&quot;mcp&quot;, &quot;serve&quot;]
-    }
-  }
-}
-```go
-
-Once configured, Claude Code starts `thrum mcp serve` as a child process and
-exposes its tools as `mcp__thrum__&lt;tool_name&gt;`.
-
-## API Reference
-
-### send_message
-
-Send a message to another agent, role, or group.
-
-**Input:**
-
-| Parameter  | Type   | Required | Description                                                                  |
-| ---------- | ------ | -------- | ---------------------------------------------------------------------------- |
-| `to`       | string | yes      | Recipient: `@role`, agent name, `@groupname`, or composite `agent:role:hash` |
-| `content`  | string | yes      | Message text (markdown)                                                      |
-| `reply_to` | string | no       | Message ID to reply to (creates a reply chain)                               |
-| `metadata` | object | no       | Key-value metadata (passed as structured data)                               |
-
-**Output:**
-
-| Field         | Type   | Description                                               |
-| ------------- | ------ | --------------------------------------------------------- |
-| `status`      | string | `delivered`                                               |
-| `message_id`  | string | ID of the sent message                                    |
-| `resolved_to` | string | How the recipient was resolved (`name`, `role`, `group`)  |
-| `warnings`    | array  | Any routing warnings (e.g., `@name` matched a role group) |
-
-**Addressing:** The `to` field is parsed to extract a mention role:
-
-- `@ops` becomes mention for role `ops`
-- `agent:ops:abc123` extracts role `ops`
-- `ops` is used as-is
-
-**Daemon RPC:** `message.send`
-
-### check_messages
-
-Poll for unread messages mentioning this agent. Messages are automatically
-marked as read after retrieval.
-
-**Input:**
-
-| Parameter | Type    | Required | Description                         |
-| --------- | ------- | -------- | ----------------------------------- |
-| `limit`   | integer | no       | Max messages to return (default 50) |
-
-Agent identity is resolved at server startup; the client does not pass an agent
-ID.
-
-**Output:**
-
-| Field       | Type    | Description                                          |
-| ----------- | ------- | ---------------------------------------------------- |
-| `status`    | string  | `messages` or `empty`                                |
-| `messages`  | array   | List of `MessageInfo` objects                        |
-| `remaining` | integer | Count of remaining unread messages (clamped to &gt;= 0) |
-
-**MessageInfo:**
-
-| Field        | Type   | Description        |
-| ------------ | ------ | ------------------ |
-| `message_id` | string | Message identifier |
-| `from`       | string | Sender agent ID    |
-| `content`    | string | Message content    |
-| `timestamp`  | string | Creation timestamp |
-
-**Behavior:**
-
-1. Lists unread messages mentioning this agent&#x27;s role via `message.list` RPC
-2. Marks all returned messages as read via `message.markRead` RPC (best-effort)
-3. Returns consumed messages (they will not appear on the next `check_messages`
-   call)
-
-**Daemon RPC:** `message.list` + `message.markRead`
-
-### wait_for_message
-
-Block until a message arrives or timeout expires. Designed for background
-listener sub-agents running on Haiku.
-
-**Input:**
-
-| Parameter | Type    | Required | Description                                |
-| --------- | ------- | -------- | ------------------------------------------ |
-| `timeout` | integer | no       | Max seconds to wait (default 300, max 600) |
-
-**Output:**
-
-| Field            | Type        | Description                            |
-| ---------------- | ----------- | -------------------------------------- |
-| `status`         | string      | `message_received` or `timeout`        |
-| `message`        | MessageInfo | The received message (null on timeout) |
-| `waited_seconds` | integer     | How long the wait lasted               |
-
-**Behavior:**
-
-1. Check the internal notification queue (messages that arrived while no waiter
-   was active)
-2. If a queued message exists, pop it and return immediately
-3. If queue is empty, block on a channel with the specified timeout
-4. When a WebSocket `notification.message` arrives, the `readLoop` pushes it to
-   the queue and closes the waiter channel
-5. Fetch the full message via `message.get` RPC
-6. Mark as read via `message.markRead` RPC (best-effort)
-7. Return the message
-
-**Concurrency:** Only one `wait_for_message` can be active at a time. A second
-concurrent call returns an error.
-
-**Requires:** WebSocket waiter initialized at startup. If the waiter failed to
-connect, this tool returns an error.
-
-**Daemon RPC:** WebSocket notifications + `message.get` + `message.markRead`
-
-### list_agents
-
-List all registered agents and their status.
-
-**Input:**
-
-| Parameter         | Type    | Required | Description                                                      |
-| ----------------- | ------- | -------- | ---------------------------------------------------------------- |
-| `include_offline` | boolean | no       | Include inactive agents (default `true`; uses pointer semantics) |
-
-**Output:**
-
-| Field    | Type    | Description                 |
-| -------- | ------- | --------------------------- |
-| `agents` | array   | List of `AgentInfo` objects |
-| `count`  | integer | Number of agents returned   |
-
-**AgentInfo:**
-
-| Field          | Type   | Description              |
-| -------------- | ------ | ------------------------ |
-| `name`         | string | Agent display name       |
-| `role`         | string | Agent role               |
-| `module`       | string | Agent module             |
-| `status`       | string | `active` or `offline`    |
-| `last_seen_at` | string | Last heartbeat timestamp |
-
-**Status derivation:** Based on `last_seen_at` relative to current time:
-
-- Less than 2 minutes ago: `active`
-- 2+ minutes ago or missing: `offline`
-
-**Daemon RPC:** `agent.list`
-
-### broadcast_message
-
-Send a message to all agents via the `@everyone` group, with optional filtering.
-The sender is automatically excluded. This is a convenience wrapper around
-sending to `@everyone`.
-
-**Input:**
-
-| Parameter | Type   | Required | Description                |
-| --------- | ------ | -------- | -------------------------- |
-| `content` | string | yes      | Message text to broadcast  |
-| `filter`  | object | no       | Optional recipient filters |
-
-**BroadcastFilter:**
-
-| Field     | Type   | Description                                                  |
-| --------- | ------ | ------------------------------------------------------------ |
-| `status`  | string | `all` (default) or `active` (only agents seen in last 2 min) |
-| `exclude` | array  | Agent names or roles to exclude                              |
-
-**Output:**
-
-| Field         | Type    | Description                                           |
-| ------------- | ------- | ----------------------------------------------------- |
-| `status`      | string  | `sent`, `partial` (some failures), or `no_recipients` |
-| `sent_to`     | array   | Roles of agents that received the message             |
-| `failed_to`   | array   | Roles of agents where send failed                     |
-| `total_sent`  | integer | Count of successful sends                             |
-| `message_ids` | array   | IDs of sent messages                                  |
-
-**Behavior:**
-
-1. Fetch agent list via `agent.list` RPC
-2. Filter out self (by agent ID, not role -- so other agents with the same role
-   still receive the message)
-3. Apply exclude filter (matches against both role and display name)
-4. Apply status filter (if `active`, skip agents with `offline` status)
-5. Send individual messages to each remaining agent via `message.send` RPC
-
-**Daemon RPC:** `agent.list` + `message.send` (one per recipient)
-
-### create_group
-
-Create a named group for targeted messaging.
-
-**Input:**
-
-| Parameter     | Type   | Required | Description                      |
-| ------------- | ------ | -------- | -------------------------------- |
-| `name`        | string | yes      | Group name (e.g., `reviewers`)   |
-| `description` | string | no       | Human-readable group description |
-
-**Output:**
-
-| Field    | Type   | Description               |
-| -------- | ------ | ------------------------- |
-| `status` | string | `created`                 |
-| `name`   | string | Name of the created group |
-
-**Daemon RPC:** `group.create`
-
-### delete_group
-
-Delete a group by name. The `@everyone` group is protected and cannot be
-deleted.
-
-**Input:**
-
-| Parameter | Type   | Required | Description          |
-| --------- | ------ | -------- | -------------------- |
-| `name`    | string | yes      | Group name to delete |
-
-**Output:**
-
-| Field    | Type   | Description               |
-| -------- | ------ | ------------------------- |
-| `status` | string | `deleted`                 |
-| `name`   | string | Name of the deleted group |
-
-**Daemon RPC:** `group.delete`
-
-### add_group_member
-
-Add a member (agent or role) to a group.
-
-**Input:**
-
-| Parameter      | Type   | Required | Description                 |
-| -------------- | ------ | -------- | --------------------------- |
-| `group`        | string | yes      | Group name to add member to |
-| `member_type`  | string | yes      | `agent` or `role`           |
-| `member_value` | string | yes      | Agent name or role name     |
-
-**Output:**
-
-| Field          | Type   | Description           |
-| -------------- | ------ | --------------------- |
-| `status`       | string | `added`               |
-| `group`        | string | Group name            |
-| `member_type`  | string | Type of member added  |
-| `member_value` | string | Value of member added |
-
-**Daemon RPC:** `group.member.add`
-
-### remove_group_member
-
-Remove a member from a group.
-
-**Input:**
-
-| Parameter      | Type   | Required | Description                      |
-| -------------- | ------ | -------- | -------------------------------- |
-| `group`        | string | yes      | Group name to remove member from |
-| `member_type`  | string | yes      | `agent` or `role`                |
-| `member_value` | string | yes      | Agent name or role name          |
-
-**Output:**
-
-| Field          | Type   | Description             |
-| -------------- | ------ | ----------------------- |
-| `status`       | string | `removed`               |
-| `group`        | string | Group name              |
-| `member_type`  | string | Type of member removed  |
-| `member_value` | string | Value of member removed |
-
-**Daemon RPC:** `group.member.remove`
-
-### list_groups
-
-List all groups in the system.
-
-**Input:**
-
-| Parameter | Type | Required | Description                 |
-| --------- | ---- | -------- | --------------------------- |
-| _(none)_  |      |          | Empty object or omit params |
-
-**Output:**
-
-| Field                   | Type    | Description                      |
-| ----------------------- | ------- | -------------------------------- |
-| `groups`                | array   | List of `GroupInfo` objects      |
-| `groups[].name`         | string  | Group name                       |
-| `groups[].description`  | string  | Group description (may be empty) |
-| `groups[].created_at`   | string  | ISO 8601 creation timestamp      |
-| `groups[].created_by`   | string  | Agent ID of creator              |
-| `groups[].member_count` | integer | Number of direct members         |
-
-**Daemon RPC:** `group.list`
-
-### get_group
-
-Get detailed information about a specific group. Supports expansion to resolve
-roles to individual agent IDs.
-
-**Input:**
-
-| Parameter | Type    | Required | Description                |
-| --------- | ------- | -------- | -------------------------- |
-| `name`    | string  | yes      | Group name                 |
-| `expand`  | boolean | no       | Resolve roles to agent IDs |
-
-**Output:**
-
-| Field                   | Type    | Description                                |
-| ----------------------- | ------- | ------------------------------------------ |
-| `name`                  | string  | Group name                                 |
-| `description`           | string  | Group description (may be empty)           |
-| `created_at`            | string  | ISO 8601 creation timestamp                |
-| `created_by`            | string  | Agent ID of creator                        |
-| `members`               | array   | List of member objects                     |
-| `members[].type`        | string  | `agent` or `role`                          |
-| `members[].id`          | string  | Agent name or role name                    |
-| `expanded_agents`       | array   | (Only if `expand=true`) List of agent IDs  |
-| `expanded_agents_count` | integer | (Only if `expand=true`) Count of agent IDs |
-
-**Daemon RPC:** `group.info` (without expand) or `group.members` (with expand)
-
-## Identity Resolution
-
-The MCP server resolves agent identity once at startup. The client never passes
-agent IDs in tool calls.
-
-**Resolution order:**
-
-1. `--agent-id` flag on `thrum mcp serve` (sets `THRUM_NAME` env var)
-2. `THRUM_NAME` environment variable
-3. Auto-select single identity file in `.thrum/identities/`
-4. Error if no identity found or multiple identities exist without
-   disambiguation
-
-**Identity file:** `.thrum/identities/{name}.json` contains name, role, module,
-and repo ID. The server generates a composite agent ID (`agent:{role}:{hash}`)
-using `identity.GenerateAgentID()`, consistent with daemon RPC handlers.
-
-**Multi-agent worktrees:** When multiple agents operate in the same worktree,
-each must have a distinct identity file. Use `THRUM_NAME` env var or
-`--agent-id` flag to select.
-
-## WebSocket Waiter
-
-The `Waiter` struct (`internal/mcp/waiter.go`) manages the WebSocket connection
-for real-time message notifications.
-
-### Connection Setup
-
-On initialization, the waiter:
-
-1. Connects to the daemon WebSocket at `ws://localhost:{port}/ws`
-2. Sends `user.identify` to get the git username
-3. Sends `user.register` with that username
-4. Sends `subscribe` with `mention_role` set to the agent&#x27;s role
-5. Starts a background `readLoop` goroutine
-
-### Notification Flow
-
-```text
-Daemon WebSocket -&gt; readLoop -&gt; queue ([]MessageNotification) -&gt; waiterCh -&gt; WaitForMessage
-```text
-
-The `readLoop` goroutine:
-
-- Reads WebSocket messages continuously
-- Filters for `notification.message` method
-- Parses the notification into a `MessageNotification` (message_id, preview,
-  agent_id, timestamp)
-- Appends to the internal queue (max 1000 items; drops oldest on overflow)
-- Closes the `waiterCh` channel to wake any blocked `WaitForMessage` call
-
-On connection loss, `readLoop` closes `waiterCh` (if set) before exiting, which
-unblocks any active waiter with a timeout-like response rather than hanging
-forever.
-
-### JSON-RPC over WebSocket
-
-The waiter uses JSON-RPC 2.0 for setup RPCs. Request IDs are atomically
-incremented (`atomic.Int64`). During `wsRPC` calls, incoming notifications are
-skipped (they have no `id` field and a non-empty `method` field).
-
-## Integration
-
-### Message-Listener Sub-Agent
-
-The recommended pattern for receiving messages in Claude Code is a background
-Haiku sub-agent that blocks on `wait_for_message`. This is defined in
-`.claude/agents/message-listener.md`.
-
-**How it works:**
-
-1. The main agent spawns the message-listener as a background `Task` sub-agent
-2. The listener calls `check_messages` to drain any backlog
-3. If messages are found, it returns them immediately
-4. If none, it calls `wait_for_message(timeout=300)` and blocks
-5. When a message arrives or timeout occurs, the listener returns to the main
-   agent
-6. The main agent processes the result and re-arms the listener
-
-**Return format:**
-
-When messages are received:
-
-```text
-MESSAGES_RECEIVED
+cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
+<h3>Startup Sequence</h3>
+<ol>
+<li>Resolve repo path (respects <code>--repo</code> flag, defaults to <code>.</code>)</li>
+<li>If <code>--agent-id</code> is provided, set <code>THRUM_NAME</code> env var before config load</li>
+<li>Verify daemon is running (connect to Unix socket, call <code>health</code> RPC)</li>
+<li>Load agent identity from <code>.thrum/identities/{name}.json</code> via<br><code>config.LoadWithPath</code></li>
+<li>Resolve daemon socket path (follows <code>.thrum/redirect</code> in feature worktrees)</li>
+<li>Generate composite agent ID via<br><code>identity.GenerateAgentID(repoID, role, module, name)</code></li>
+<li>Create MCP server with the official Go SDK<br>(<code>github.com/modelcontextprotocol/go-sdk/mcp</code>)</li>
+<li>Register all 11 tool handlers (5 core messaging + 6 group management)</li>
+<li>Initialize WebSocket waiter (best-effort -- reads port from<br><code>.thrum/var/ws.port</code>)<ul>
+<li>Connect to <code>ws://localhost:{port}/ws</code></li>
+<li>Send <code>user.identify</code> to get git username</li>
+<li>Send <code>user.register</code> with the username</li>
+<li>Send <code>subscribe</code> with <code>mention_role</code> for this agent&#39;s role</li>
+<li>Start background <code>readLoop</code> goroutine for incoming notifications</li>
+</ul>
+</li>
+<li>Start MCP stdio server (blocks until client disconnects or context<br>cancelled)</li>
+</ol>
+<h3>Shutdown</h3>
+<p>When Claude Code terminates the process (closes stdin) or a signal is received<br>(SIGINT/SIGTERM):</p>
+<ul>
+<li>Context is cancelled</li>
+<li>Waiter closes WebSocket connection (daemon auto-unregisters)</li>
+<li>Waiter&#39;s <code>readLoop</code> exits, unblocking any active <code>wait_for_message</code> call</li>
+<li>Unix socket connections are closed (per-call, so nothing to clean up)</li>
+<li>Process exits</li>
+</ul>
+<h3>Key Design Decisions</h3>
+<ul>
+<li><strong>Per-call <code>cli.Client</code> creation</strong>: <code>cli.Client</code> is not concurrent-safe. Each<br>tool handler creates a fresh Unix socket connection. This is cheap (local<br>socket) and avoids concurrency issues.</li>
+<li><strong>Atomic WebSocket request IDs</strong>: The waiter uses <code>atomic.Int64</code> for<br>incrementing JSON-RPC request IDs, ensuring uniqueness across concurrent<br>calls.</li>
+<li><strong>Single-waiter enforcement</strong>: Only one <code>wait_for_message</code> can be active at a<br>time per server instance. A second call returns an error. Enforced with a<br>mutex.</li>
+<li><strong>Best-effort WebSocket</strong>: If the WebSocket connection fails at startup, the<br>MCP server still operates -- only <code>wait_for_message</code> returns errors. The other<br>10 tools work via Unix socket RPC.</li>
+</ul>
+<h2>Usage</h2>
+<h3>Command</h3>
+<pre><code class="language-bash hljs">thrum mcp serve [--agent-id NAME]</code></pre>
+<p><strong>Prerequisites:</strong></p>
+<ul>
+<li>Thrum daemon must be running (<code>thrum daemon start</code>)</li>
+<li>Agent must be registered<br>(<code>thrum quickstart --name NAME --role ROLE --module MODULE</code>)</li>
+</ul>
+<p><strong>Flags:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--agent-id</code></td>
+<td>(from identity file)</td>
+<td>Override agent name; selects <code>.thrum/identities/{name}.json</code></td>
+</tr>
+<tr>
+<td><code>--repo</code></td>
+<td><code>.</code></td>
+<td>Repository path</td>
+</tr>
+</tbody></table>
+<h3>Claude Code Configuration</h3>
+<p>Add to <code>.claude/settings.json</code> (project or user level):</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;mcpServers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;thrum&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;stdio&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;command&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;args&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;mcp&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;serve&quot;</span><span class="hljs-punctuation">]</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p>Once configured, Claude Code starts <code>thrum mcp serve</code> as a child process and<br>exposes its tools as <code>mcp__thrum__&lt;tool_name&gt;</code>.</p>
+<h2>API Reference</h2>
+<h3>send_message</h3>
+<p>Send a message to another agent, role, or group.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>to</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Recipient: <code>@role</code>, agent name, <code>@groupname</code>, or composite <code>agent:role:hash</code></td>
+</tr>
+<tr>
+<td><code>content</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Message text (markdown)</td>
+</tr>
+<tr>
+<td><code>reply_to</code></td>
+<td>string</td>
+<td>no</td>
+<td>Message ID to reply to (creates a reply chain)</td>
+</tr>
+<tr>
+<td><code>metadata</code></td>
+<td>object</td>
+<td>no</td>
+<td>Key-value metadata (passed as structured data)</td>
+</tr>
+</tbody></table>
+<p><strong>Output:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>delivered</code></td>
+</tr>
+<tr>
+<td><code>message_id</code></td>
+<td>string</td>
+<td>ID of the sent message</td>
+</tr>
+<tr>
+<td><code>resolved_to</code></td>
+<td>string</td>
+<td>How the recipient was resolved (<code>name</code>, <code>role</code>, <code>group</code>)</td>
+</tr>
+<tr>
+<td><code>warnings</code></td>
+<td>array</td>
+<td>Any routing warnings (e.g., <code>@name</code> matched a role group)</td>
+</tr>
+</tbody></table>
+<p><strong>Addressing:</strong> The <code>to</code> field is parsed to extract a mention role:</p>
+<ul>
+<li><code>@ops</code> becomes mention for role <code>ops</code></li>
+<li><code>agent:ops:abc123</code> extracts role <code>ops</code></li>
+<li><code>ops</code> is used as-is</li>
+</ul>
+<p><strong>Daemon RPC:</strong> <code>message.send</code></p>
+<h3>check_messages</h3>
+<p>Poll for unread messages mentioning this agent. Messages are automatically<br>marked as read after retrieval.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>limit</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Max messages to return (default 50)</td>
+</tr>
+</tbody></table>
+<p>Agent identity is resolved at server startup; the client does not pass an agent<br>ID.</p>
+<p><strong>Output:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>messages</code> or <code>empty</code></td>
+</tr>
+<tr>
+<td><code>messages</code></td>
+<td>array</td>
+<td>List of <code>MessageInfo</code> objects</td>
+</tr>
+<tr>
+<td><code>remaining</code></td>
+<td>integer</td>
+<td>Count of remaining unread messages (clamped to &gt;= 0)</td>
+</tr>
+</tbody></table>
+<p><strong>MessageInfo:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>message_id</code></td>
+<td>string</td>
+<td>Message identifier</td>
+</tr>
+<tr>
+<td><code>from</code></td>
+<td>string</td>
+<td>Sender agent ID</td>
+</tr>
+<tr>
+<td><code>content</code></td>
+<td>string</td>
+<td>Message content</td>
+</tr>
+<tr>
+<td><code>timestamp</code></td>
+<td>string</td>
+<td>Creation timestamp</td>
+</tr>
+</tbody></table>
+<p><strong>Behavior:</strong></p>
+<ol>
+<li>Lists unread messages mentioning this agent&#39;s role via <code>message.list</code> RPC</li>
+<li>Marks all returned messages as read via <code>message.markRead</code> RPC (best-effort)</li>
+<li>Returns consumed messages (they will not appear on the next <code>check_messages</code><br>call)</li>
+</ol>
+<p><strong>Daemon RPC:</strong> <code>message.list</code> + <code>message.markRead</code></p>
+<h3>wait_for_message</h3>
+<p>Block until a message arrives or timeout expires. Designed for background<br>listener sub-agents running on Haiku.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>timeout</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Max seconds to wait (default 300, max 600)</td>
+</tr>
+</tbody></table>
+<p><strong>Output:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>message_received</code> or <code>timeout</code></td>
+</tr>
+<tr>
+<td><code>message</code></td>
+<td>MessageInfo</td>
+<td>The received message (null on timeout)</td>
+</tr>
+<tr>
+<td><code>waited_seconds</code></td>
+<td>integer</td>
+<td>How long the wait lasted</td>
+</tr>
+</tbody></table>
+<p><strong>Behavior:</strong></p>
+<ol>
+<li>Check the internal notification queue (messages that arrived while no waiter<br>was active)</li>
+<li>If a queued message exists, pop it and return immediately</li>
+<li>If queue is empty, block on a channel with the specified timeout</li>
+<li>When a WebSocket <code>notification.message</code> arrives, the <code>readLoop</code> pushes it to<br>the queue and closes the waiter channel</li>
+<li>Fetch the full message via <code>message.get</code> RPC</li>
+<li>Mark as read via <code>message.markRead</code> RPC (best-effort)</li>
+<li>Return the message</li>
+</ol>
+<p><strong>Concurrency:</strong> Only one <code>wait_for_message</code> can be active at a time. A second<br>concurrent call returns an error.</p>
+<p><strong>Requires:</strong> WebSocket waiter initialized at startup. If the waiter failed to<br>connect, this tool returns an error.</p>
+<p><strong>Daemon RPC:</strong> WebSocket notifications + <code>message.get</code> + <code>message.markRead</code></p>
+<h3>list_agents</h3>
+<p>List all registered agents and their status.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>include_offline</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Include inactive agents (default <code>true</code>; uses pointer semantics)</td>
+</tr>
+</tbody></table>
+<p><strong>Output:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agents</code></td>
+<td>array</td>
+<td>List of <code>AgentInfo</code> objects</td>
+</tr>
+<tr>
+<td><code>count</code></td>
+<td>integer</td>
+<td>Number of agents returned</td>
+</tr>
+</tbody></table>
+<p><strong>AgentInfo:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Agent display name</td>
+</tr>
+<tr>
+<td><code>role</code></td>
+<td>string</td>
+<td>Agent role</td>
+</tr>
+<tr>
+<td><code>module</code></td>
+<td>string</td>
+<td>Agent module</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>active</code> or <code>offline</code></td>
+</tr>
+<tr>
+<td><code>last_seen_at</code></td>
+<td>string</td>
+<td>Last heartbeat timestamp</td>
+</tr>
+</tbody></table>
+<p><strong>Status derivation:</strong> Based on <code>last_seen_at</code> relative to current time:</p>
+<ul>
+<li>Less than 2 minutes ago: <code>active</code></li>
+<li>2+ minutes ago or missing: <code>offline</code></li>
+</ul>
+<p><strong>Daemon RPC:</strong> <code>agent.list</code></p>
+<h3>broadcast_message</h3>
+<p>Send a message to all agents via the <code>@everyone</code> group, with optional filtering.<br>The sender is automatically excluded. This is a convenience wrapper around<br>sending to <code>@everyone</code>.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>content</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Message text to broadcast</td>
+</tr>
+<tr>
+<td><code>filter</code></td>
+<td>object</td>
+<td>no</td>
+<td>Optional recipient filters</td>
+</tr>
+</tbody></table>
+<p><strong>BroadcastFilter:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>all</code> (default) or <code>active</code> (only agents seen in last 2 min)</td>
+</tr>
+<tr>
+<td><code>exclude</code></td>
+<td>array</td>
+<td>Agent names or roles to exclude</td>
+</tr>
+</tbody></table>
+<p><strong>Output:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>sent</code>, <code>partial</code> (some failures), or <code>no_recipients</code></td>
+</tr>
+<tr>
+<td><code>sent_to</code></td>
+<td>array</td>
+<td>Roles of agents that received the message</td>
+</tr>
+<tr>
+<td><code>failed_to</code></td>
+<td>array</td>
+<td>Roles of agents where send failed</td>
+</tr>
+<tr>
+<td><code>total_sent</code></td>
+<td>integer</td>
+<td>Count of successful sends</td>
+</tr>
+<tr>
+<td><code>message_ids</code></td>
+<td>array</td>
+<td>IDs of sent messages</td>
+</tr>
+</tbody></table>
+<p><strong>Behavior:</strong></p>
+<ol>
+<li>Fetch agent list via <code>agent.list</code> RPC</li>
+<li>Filter out self (by agent ID, not role -- so other agents with the same role<br>still receive the message)</li>
+<li>Apply exclude filter (matches against both role and display name)</li>
+<li>Apply status filter (if <code>active</code>, skip agents with <code>offline</code> status)</li>
+<li>Send individual messages to each remaining agent via <code>message.send</code> RPC</li>
+</ol>
+<p><strong>Daemon RPC:</strong> <code>agent.list</code> + <code>message.send</code> (one per recipient)</p>
+<h3>create_group</h3>
+<p>Create a named group for targeted messaging.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Group name (e.g., <code>reviewers</code>)</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>string</td>
+<td>no</td>
+<td>Human-readable group description</td>
+</tr>
+</tbody></table>
+<p><strong>Output:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>created</code></td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Name of the created group</td>
+</tr>
+</tbody></table>
+<p><strong>Daemon RPC:</strong> <code>group.create</code></p>
+<h3>delete_group</h3>
+<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be<br>deleted.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Group name to delete</td>
+</tr>
+</tbody></table>
+<p><strong>Output:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>deleted</code></td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Name of the deleted group</td>
+</tr>
+</tbody></table>
+<p><strong>Daemon RPC:</strong> <code>group.delete</code></p>
+<h3>add_group_member</h3>
+<p>Add a member (agent or role) to a group.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>group</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Group name to add member to</td>
+</tr>
+<tr>
+<td><code>member_type</code></td>
+<td>string</td>
+<td>yes</td>
+<td><code>agent</code> or <code>role</code></td>
+</tr>
+<tr>
+<td><code>member_value</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Agent name or role name</td>
+</tr>
+</tbody></table>
+<p><strong>Output:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>added</code></td>
+</tr>
+<tr>
+<td><code>group</code></td>
+<td>string</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>member_type</code></td>
+<td>string</td>
+<td>Type of member added</td>
+</tr>
+<tr>
+<td><code>member_value</code></td>
+<td>string</td>
+<td>Value of member added</td>
+</tr>
+</tbody></table>
+<p><strong>Daemon RPC:</strong> <code>group.member.add</code></p>
+<h3>remove_group_member</h3>
+<p>Remove a member from a group.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>group</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Group name to remove member from</td>
+</tr>
+<tr>
+<td><code>member_type</code></td>
+<td>string</td>
+<td>yes</td>
+<td><code>agent</code> or <code>role</code></td>
+</tr>
+<tr>
+<td><code>member_value</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Agent name or role name</td>
+</tr>
+</tbody></table>
+<p><strong>Output:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>removed</code></td>
+</tr>
+<tr>
+<td><code>group</code></td>
+<td>string</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>member_type</code></td>
+<td>string</td>
+<td>Type of member removed</td>
+</tr>
+<tr>
+<td><code>member_value</code></td>
+<td>string</td>
+<td>Value of member removed</td>
+</tr>
+</tbody></table>
+<p><strong>Daemon RPC:</strong> <code>group.member.remove</code></p>
+<h3>list_groups</h3>
+<p>List all groups in the system.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><em>(none)</em></td>
+<td></td>
+<td></td>
+<td>Empty object or omit params</td>
+</tr>
+</tbody></table>
+<p><strong>Output:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>groups</code></td>
+<td>array</td>
+<td>List of <code>GroupInfo</code> objects</td>
+</tr>
+<tr>
+<td><code>groups[].name</code></td>
+<td>string</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>groups[].description</code></td>
+<td>string</td>
+<td>Group description (may be empty)</td>
+</tr>
+<tr>
+<td><code>groups[].created_at</code></td>
+<td>string</td>
+<td>ISO 8601 creation timestamp</td>
+</tr>
+<tr>
+<td><code>groups[].created_by</code></td>
+<td>string</td>
+<td>Agent ID of creator</td>
+</tr>
+<tr>
+<td><code>groups[].member_count</code></td>
+<td>integer</td>
+<td>Number of direct members</td>
+</tr>
+</tbody></table>
+<p><strong>Daemon RPC:</strong> <code>group.list</code></p>
+<h3>get_group</h3>
+<p>Get detailed information about a specific group. Supports expansion to resolve<br>roles to individual agent IDs.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>expand</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Resolve roles to agent IDs</td>
+</tr>
+</tbody></table>
+<p><strong>Output:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Group name</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>string</td>
+<td>Group description (may be empty)</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>string</td>
+<td>ISO 8601 creation timestamp</td>
+</tr>
+<tr>
+<td><code>created_by</code></td>
+<td>string</td>
+<td>Agent ID of creator</td>
+</tr>
+<tr>
+<td><code>members</code></td>
+<td>array</td>
+<td>List of member objects</td>
+</tr>
+<tr>
+<td><code>members[].type</code></td>
+<td>string</td>
+<td><code>agent</code> or <code>role</code></td>
+</tr>
+<tr>
+<td><code>members[].id</code></td>
+<td>string</td>
+<td>Agent name or role name</td>
+</tr>
+<tr>
+<td><code>expanded_agents</code></td>
+<td>array</td>
+<td>(Only if <code>expand=true</code>) List of agent IDs</td>
+</tr>
+<tr>
+<td><code>expanded_agents_count</code></td>
+<td>integer</td>
+<td>(Only if <code>expand=true</code>) Count of agent IDs</td>
+</tr>
+</tbody></table>
+<p><strong>Daemon RPC:</strong> <code>group.info</code> (without expand) or <code>group.members</code> (with expand)</p>
+<h2>Identity Resolution</h2>
+<p>The MCP server resolves agent identity once at startup. The client never passes<br>agent IDs in tool calls.</p>
+<p><strong>Resolution order:</strong></p>
+<ol>
+<li><code>--agent-id</code> flag on <code>thrum mcp serve</code> (sets <code>THRUM_NAME</code> env var)</li>
+<li><code>THRUM_NAME</code> environment variable</li>
+<li>Auto-select single identity file in <code>.thrum/identities/</code></li>
+<li>Error if no identity found or multiple identities exist without<br>disambiguation</li>
+</ol>
+<p><strong>Identity file:</strong> <code>.thrum/identities/{name}.json</code> contains name, role, module,<br>and repo ID. The server generates a composite agent ID (<code>agent:{role}:{hash}</code>)<br>using <code>identity.GenerateAgentID()</code>, consistent with daemon RPC handlers.</p>
+<p><strong>Multi-agent worktrees:</strong> When multiple agents operate in the same worktree,<br>each must have a distinct identity file. Use <code>THRUM_NAME</code> env var or<br><code>--agent-id</code> flag to select.</p>
+<h2>WebSocket Waiter</h2>
+<p>The <code>Waiter</code> struct (<code>internal/mcp/waiter.go</code>) manages the WebSocket connection<br>for real-time message notifications.</p>
+<h3>Connection Setup</h3>
+<p>On initialization, the waiter:</p>
+<ol>
+<li>Connects to the daemon WebSocket at <code>ws://localhost:{port}/ws</code></li>
+<li>Sends <code>user.identify</code> to get the git username</li>
+<li>Sends <code>user.register</code> with that username</li>
+<li>Sends <code>subscribe</code> with <code>mention_role</code> set to the agent&#39;s role</li>
+<li>Starts a background <code>readLoop</code> goroutine</li>
+</ol>
+<h3>Notification Flow</h3>
+<pre><code class="language-text hljs">Daemon WebSocket -&gt; readLoop -&gt; queue ([]MessageNotification) -&gt; waiterCh -&gt; WaitForMessage</code></pre>
+<p>The <code>readLoop</code> goroutine:</p>
+<ul>
+<li>Reads WebSocket messages continuously</li>
+<li>Filters for <code>notification.message</code> method</li>
+<li>Parses the notification into a <code>MessageNotification</code> (message_id, preview,<br>agent_id, timestamp)</li>
+<li>Appends to the internal queue (max 1000 items; drops oldest on overflow)</li>
+<li>Closes the <code>waiterCh</code> channel to wake any blocked <code>WaitForMessage</code> call</li>
+</ul>
+<p>On connection loss, <code>readLoop</code> closes <code>waiterCh</code> (if set) before exiting, which<br>unblocks any active waiter with a timeout-like response rather than hanging<br>forever.</p>
+<h3>JSON-RPC over WebSocket</h3>
+<p>The waiter uses JSON-RPC 2.0 for setup RPCs. Request IDs are atomically<br>incremented (<code>atomic.Int64</code>). During <code>wsRPC</code> calls, incoming notifications are<br>skipped (they have no <code>id</code> field and a non-empty <code>method</code> field).</p>
+<h2>Integration</h2>
+<h3>Message-Listener Sub-Agent</h3>
+<p>The recommended pattern for receiving messages in Claude Code is a background<br>Haiku sub-agent that blocks on <code>wait_for_message</code>. This is defined in<br><code>.claude/agents/message-listener.md</code>.</p>
+<p><strong>How it works:</strong></p>
+<ol>
+<li>The main agent spawns the message-listener as a background <code>Task</code> sub-agent</li>
+<li>The listener calls <code>check_messages</code> to drain any backlog</li>
+<li>If messages are found, it returns them immediately</li>
+<li>If none, it calls <code>wait_for_message(timeout=300)</code> and blocks</li>
+<li>When a message arrives or timeout occurs, the listener returns to the main<br>agent</li>
+<li>The main agent processes the result and re-arms the listener</li>
+</ol>
+<p><strong>Return format:</strong></p>
+<p>When messages are received:</p>
+<pre><code class="language-text hljs">MESSAGES_RECEIVED
 FROM: [sender]
 CONTENT: [message content]
-TIMESTAMP: [timestamp]
-```text
-
-When timeout occurs:
-
-```text
-NO_MESSAGES_TIMEOUT
-```text
-
-**Cost:** Approximately $0.00003 per cycle (Haiku-class model).
-
-### Context Management
-
-- Compact after 10+ message cycles to prevent context overflow
-- After 5 consecutive timeouts with no pending work, send status to the
-  coordinator and stop the listener
-
-### CLAUDE.md Protocol
-
-The project `CLAUDE.md` includes instructions for agents to use MCP tools:
-
-**Core messaging:**
-
-```text
-mcp__thrum__send_message(to=&quot;@reviewer&quot;, content=&quot;...&quot;)
+TIMESTAMP: [timestamp]</code></pre>
+<p>When timeout occurs:</p>
+<pre><code class="language-text hljs">NO_MESSAGES_TIMEOUT</code></pre>
+<p><strong>Cost:</strong> Approximately $0.00003 per cycle (Haiku-class model).</p>
+<h3>Context Management</h3>
+<ul>
+<li>Compact after 10+ message cycles to prevent context overflow</li>
+<li>After 5 consecutive timeouts with no pending work, send status to the<br>coordinator and stop the listener</li>
+</ul>
+<h3>CLAUDE.md Protocol</h3>
+<p>The project <code>CLAUDE.md</code> includes instructions for agents to use MCP tools:</p>
+<p><strong>Core messaging:</strong></p>
+<pre><code class="language-text hljs">mcp__thrum__send_message(to=&quot;@reviewer&quot;, content=&quot;...&quot;)
 mcp__thrum__check_messages()
 mcp__thrum__list_agents()
 mcp__thrum__send_message(to=&quot;@everyone&quot;, content=&quot;...&quot;)  # preferred over broadcast_message
-mcp__thrum__wait_for_message(timeout=300)
-```text
-
-**Group management:**
-
-```text
-mcp__thrum__create_group(name=&quot;backend&quot;, description=&quot;Backend team&quot;)
+mcp__thrum__wait_for_message(timeout=300)</code></pre>
+<p><strong>Group management:</strong></p>
+<pre><code class="language-text hljs">mcp__thrum__create_group(name=&quot;backend&quot;, description=&quot;Backend team&quot;)
 mcp__thrum__add_group_member(group=&quot;backend&quot;, member_type=&quot;role&quot;, member_value=&quot;implementer&quot;)
 mcp__thrum__list_groups()
 mcp__thrum__get_group(name=&quot;backend&quot;, expand=true)
 mcp__thrum__remove_group_member(group=&quot;backend&quot;, member_type=&quot;agent&quot;, member_value=&quot;alice&quot;)
-mcp__thrum__delete_group(name=&quot;backend&quot;)
-```text
+mcp__thrum__delete_group(name=&quot;backend&quot;)</code></pre>
+<h2>Development</h2>
+<h3>Source Files</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>internal/mcp/server.go</code></td>
+<td>Server struct, NewServer(), Run(), InitWaiter(), tool registration</td>
+</tr>
+<tr>
+<td><code>internal/mcp/tools.go</code></td>
+<td>Tool handlers, address parsing, status derivation</td>
+</tr>
+<tr>
+<td><code>internal/mcp/waiter.go</code></td>
+<td>WebSocket connection, readLoop, WaitForMessage, notification queue</td>
+</tr>
+<tr>
+<td><code>internal/mcp/types.go</code></td>
+<td>Input/output structs for all 11 tools</td>
+</tr>
+<tr>
+<td><code>cmd/thrum/mcp.go</code></td>
+<td>Cobra command, daemon health check, waiter init, signal handling</td>
+</tr>
+<tr>
+<td><code>.claude/agents/message-listener.md</code></td>
+<td>Haiku sub-agent definition</td>
+</tr>
+</tbody></table>
+<h3>Testing</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Unit + sequential integration tests (no daemon needed)</span>
+go <span class="hljs-built_in">test</span> ./internal/mcp/...
 
-## Development
-
-### Source Files
-
-| File                                 | Purpose                                                            |
-| ------------------------------------ | ------------------------------------------------------------------ |
-| `internal/mcp/server.go`             | Server struct, NewServer(), Run(), InitWaiter(), tool registration |
-| `internal/mcp/tools.go`              | Tool handlers, address parsing, status derivation                  |
-| `internal/mcp/waiter.go`             | WebSocket connection, readLoop, WaitForMessage, notification queue |
-| `internal/mcp/types.go`              | Input/output structs for all 11 tools                              |
-| `cmd/thrum/mcp.go`                   | Cobra command, daemon health check, waiter init, signal handling   |
-| `.claude/agents/message-listener.md` | Haiku sub-agent definition                                         |
-
-### Testing
-
-```bash
-# Unit + sequential integration tests (no daemon needed)
-go test ./internal/mcp/...
-
-# With verbose output
-go test -v ./internal/mcp/...
-```text
-
-Test coverage includes:
-
-- Tool handler input validation
-- Message queue push/pop semantics
-- Waiter timeout and cancellation logic
-- Identity resolution
-- 18 tests passing (unit + sequential integration)
-
-WebSocket integration tests (requiring a running daemon WebSocket) are currently
-deferred.
-
-### Debugging
-
-The MCP server logs warnings to stderr. Check for:
-
-- `Warning: WebSocket waiter not available` -- daemon WebSocket port not found
-  or connection failed; `wait_for_message` will not work but other tools
-  function normally
-- `agent name not configured` / `agent role not configured` -- agent identity
-  not registered; run `thrum quickstart` first
-- `Thrum daemon is not running` -- start the daemon with `thrum daemon start`
-
-### Dependencies
-
-- **Runtime:** Thrum daemon (`thrum daemon start`)
-- **Go SDK:** `github.com/modelcontextprotocol/go-sdk/mcp` (official MCP Go SDK)
-- **WebSocket:** `github.com/gorilla/websocket`
-- **Identity:** Agent registered with `.thrum/identities/{name}.json`
-
-## References
-
-- Design document: `docs/plans/2026-02-06-mcp-server-design.md`
-- Daemon architecture: `docs/daemon.md`
-- RPC API reference: `docs/rpc-api.md`
-- Identity system: `docs/identity.md`
-- Agent reference: `llms.txt`</code></pre>
+<span class="hljs-comment"># With verbose output</span>
+go <span class="hljs-built_in">test</span> -v ./internal/mcp/...</code></pre>
+<p>Test coverage includes:</p>
+<ul>
+<li>Tool handler input validation</li>
+<li>Message queue push/pop semantics</li>
+<li>Waiter timeout and cancellation logic</li>
+<li>Identity resolution</li>
+<li>18 tests passing (unit + sequential integration)</li>
+</ul>
+<p>WebSocket integration tests (requiring a running daemon WebSocket) are currently<br>deferred.</p>
+<h3>Debugging</h3>
+<p>The MCP server logs warnings to stderr. Check for:</p>
+<ul>
+<li><code>Warning: WebSocket waiter not available</code> -- daemon WebSocket port not found<br>or connection failed; <code>wait_for_message</code> will not work but other tools<br>function normally</li>
+<li><code>agent name not configured</code> / <code>agent role not configured</code> -- agent identity<br>not registered; run <code>thrum quickstart</code> first</li>
+<li><code>Thrum daemon is not running</code> -- start the daemon with <code>thrum daemon start</code></li>
+</ul>
+<h3>Dependencies</h3>
+<ul>
+<li><strong>Runtime:</strong> Thrum daemon (<code>thrum daemon start</code>)</li>
+<li><strong>Go SDK:</strong> <code>github.com/modelcontextprotocol/go-sdk/mcp</code> (official MCP Go SDK)</li>
+<li><strong>WebSocket:</strong> <code>github.com/gorilla/websocket</code></li>
+<li><strong>Identity:</strong> Agent registered with <code>.thrum/identities/{name}.json</code></li>
+</ul>
+<h2>References</h2>
+<ul>
+<li>Design document: <code>docs/plans/2026-02-06-mcp-server-design.md</code></li>
+<li>Daemon architecture: <code>docs/daemon.md</code></li>
+<li>RPC API reference: <code>docs/rpc-api.md</code></li>
+<li>Identity system: <code>docs/identity.md</code></li>
+<li>Agent reference: <code>llms.txt</code></li>
+</ul>
+<pre><code></code></pre>
 
     </div>
     <p style="margin-top:2rem"><a href="../docs.html#mcp-server.html">&larr; View in documentation</a></p>

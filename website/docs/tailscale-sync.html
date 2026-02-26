@@ -72,67 +72,39 @@
 <h2>Getting Started</h2>
 <h3>1. Enable Tailscale Sync</h3>
 <p>Set the environment variable to enable Tailscale integration:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">export</span> THRUM_TS_ENABLED=<span class="hljs-literal">true</span>
-```text
-
-<span class="hljs-comment">### 2. Start the Daemon</span>
-
-```bash
-thrum daemon start
-```text
-
-When Tailscale <span class="hljs-built_in">sync</span> is enabled, the daemon:
-
-- Starts a tsnet listener on port 9100 (configurable)
-- Registers <span class="hljs-built_in">sync</span> RPC handlers (`sync.pull`, `sync.notify`, `sync.peer_info`,
-  `pair.request`)
-- Waits <span class="hljs-keyword">for</span> peer pairing via CLI
-
-<span class="hljs-comment">### 3. Pair Two Machines</span>
-
-Pairing requires action on both machines simultaneously:
-
-**On Machine A** (the one you want to share with):
-
-```bash
-thrum peer add
-<span class="hljs-comment"># Output: Waiting for connection... Pairing code: 7392</span>
-```text
-
-**On Machine B** (the one joining):
-
-```bash
-thrum peer <span class="hljs-built_in">join</span> my-laptop:9100
+<pre><code class="language-bash hljs"><span class="hljs-built_in">export</span> THRUM_TS_ENABLED=<span class="hljs-literal">true</span></code></pre>
+<h3>2. Start the Daemon</h3>
+<pre><code class="language-bash hljs">thrum daemon start</code></pre>
+<p>When Tailscale sync is enabled, the daemon:</p>
+<ul>
+<li>Starts a tsnet listener on port 9100 (configurable)</li>
+<li>Registers sync RPC handlers (<code>sync.pull</code>, <code>sync.notify</code>, <code>sync.peer_info</code>,<br><code>pair.request</code>)</li>
+<li>Waits for peer pairing via CLI</li>
+</ul>
+<h3>3. Pair Two Machines</h3>
+<p>Pairing requires action on both machines simultaneously:</p>
+<p><strong>On Machine A</strong> (the one you want to share with):</p>
+<pre><code class="language-bash hljs">thrum peer add
+<span class="hljs-comment"># Output: Waiting for connection... Pairing code: 7392</span></code></pre>
+<p><strong>On Machine B</strong> (the one joining):</p>
+<pre><code class="language-bash hljs">thrum peer <span class="hljs-built_in">join</span> my-laptop:9100
 <span class="hljs-comment"># Prompts: Enter pairing code:</span>
 <span class="hljs-comment"># You type: 7392</span>
-<span class="hljs-comment"># Output: Paired with &quot;my-laptop&quot;. Syncing started.</span>
-```text
-
-Machine A will also show success:
-
-```text
-Paired with <span class="hljs-string">&quot;office-server&quot;</span> (100.64.2.10:9100). Syncing started.
-```text
-
-Both machines now <span class="hljs-built_in">sync</span> events automatically.
-
-<span class="hljs-comment">### 4. Verify Sync</span>
-
-```bash
-<span class="hljs-comment"># List paired peers</span>
+<span class="hljs-comment"># Output: Paired with &quot;my-laptop&quot;. Syncing started.</span></code></pre>
+<p>Machine A will also show success:</p>
+<pre><code class="language-text hljs">Paired with &quot;office-server&quot; (100.64.2.10:9100). Syncing started.</code></pre>
+<p>Both machines now sync events automatically.</p>
+<h3>4. Verify Sync</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># List paired peers</span>
 thrum peer list
 
 <span class="hljs-comment"># Detailed sync status</span>
 thrum peer status
 
 <span class="hljs-comment"># Check health endpoint</span>
-thrum status
-```text
-
-<span class="hljs-comment">## Architecture</span>
-
-```text
-Machine A                           Machine B
+thrum status</code></pre>
+<h2>Architecture</h2>
+<pre><code class="language-text hljs">Machine A                           Machine B
 ┌─────────────────────┐             ┌─────────────────────┐
 │  Thrum Daemon       │             │  Thrum Daemon       │
 │  ├─ Event Log       │             │  ├─ Event Log       │
@@ -144,96 +116,90 @@ Machine A                           Machine B
     ┌────┴────┐                          ┌────┴────┐
     │ Agents  │                          │ Agents  │
     │ CLI/MCP │                          │ CLI/MCP │
-    └─────────┘                          └─────────┘
-```text
-
-<span class="hljs-comment">### Component Overview</span>
-
-| Component           | Purpose                                                                  |
-| ------------------- | ------------------------------------------------------------------------ |
-| **Event Log**       | Sequenced event store with origin tracking and dedup                     |
-| **tsnet Listener**  | Tailscale-native TCP listener (no port forwarding needed)                |
-| **Sync Manager**    | Orchestrates pull <span class="hljs-built_in">sync</span>, push notifications, and the scheduler            |
-| **Sync Client**     | Pulls events from peers <span class="hljs-keyword">in</span> batches with checkpointing                    |
-| **Sync Server**     | Exposes `<span class="hljs-built_in">sync</span>.*` and `pair.*` RPC methods to peers (token-authenticated) |
-| **Peer Registry**   | Thread-safe registry of paired peers with JSON persistence               |
-| **Pairing Manager** | Handles the 4-digit code pairing flow                                    |
-| **Sync Scheduler**  | Periodic fallback <span class="hljs-built_in">sync</span> (5-minute interval, skips recently synced peers)  |
-
-<span class="hljs-comment">## Sync Protocol</span>
-
-<span class="hljs-comment">### Event Log Foundation</span>
-
-Every event written to the daemon includes:
-
-- **`origin_daemon`** -- Unique daemon ID identifying the <span class="hljs-built_in">source</span> machine
-- **`sequence`** -- Monotonically increasing per-daemon sequence number
-
-Events are stored <span class="hljs-keyword">in</span> a SQLite `events` table with sequence-based pagination,
-enabling efficient delta <span class="hljs-built_in">sync</span>.
-
-<span class="hljs-comment">### Pull Sync</span>
-
-The primary <span class="hljs-built_in">sync</span> mechanism. Daemon A asks Daemon B: <span class="hljs-string">&quot;Give me all events after
-sequence N.&quot;</span>
-
-```text
-Daemon A                              Daemon B
+    └─────────┘                          └─────────┘</code></pre>
+<h3>Component Overview</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Event Log</strong></td>
+<td>Sequenced event store with origin tracking and dedup</td>
+</tr>
+<tr>
+<td><strong>tsnet Listener</strong></td>
+<td>Tailscale-native TCP listener (no port forwarding needed)</td>
+</tr>
+<tr>
+<td><strong>Sync Manager</strong></td>
+<td>Orchestrates pull sync, push notifications, and the scheduler</td>
+</tr>
+<tr>
+<td><strong>Sync Client</strong></td>
+<td>Pulls events from peers in batches with checkpointing</td>
+</tr>
+<tr>
+<td><strong>Sync Server</strong></td>
+<td>Exposes <code>sync.*</code> and <code>pair.*</code> RPC methods to peers (token-authenticated)</td>
+</tr>
+<tr>
+<td><strong>Peer Registry</strong></td>
+<td>Thread-safe registry of paired peers with JSON persistence</td>
+</tr>
+<tr>
+<td><strong>Pairing Manager</strong></td>
+<td>Handles the 4-digit code pairing flow</td>
+</tr>
+<tr>
+<td><strong>Sync Scheduler</strong></td>
+<td>Periodic fallback sync (5-minute interval, skips recently synced peers)</td>
+</tr>
+</tbody></table>
+<h2>Sync Protocol</h2>
+<h3>Event Log Foundation</h3>
+<p>Every event written to the daemon includes:</p>
+<ul>
+<li><strong><code>origin_daemon</code></strong> -- Unique daemon ID identifying the source machine</li>
+<li><strong><code>sequence</code></strong> -- Monotonically increasing per-daemon sequence number</li>
+</ul>
+<p>Events are stored in a SQLite <code>events</code> table with sequence-based pagination,<br>enabling efficient delta sync.</p>
+<h3>Pull Sync</h3>
+<p>The primary sync mechanism. Daemon A asks Daemon B: &quot;Give me all events after<br>sequence N.&quot;</p>
+<pre><code class="language-text hljs">Daemon A                              Daemon B
    │                                      │
    │ sync.pull(after_seq=42, token=...)   │
    ├─────────────────────────────────────►│
    │                                      │
    │  {events: [...], next_seq: 1042,     │
-   │   more_available: <span class="hljs-literal">true</span>}              │
+   │   more_available: true}              │
    │◄─────────────────────────────────────┤
    │                                      │
    │ sync.pull(after_seq=1042, token=...) │
    ├─────────────────────────────────────►│
    │                                      │
    │  {events: [...], next_seq: 1500,     │
-   │   more_available: <span class="hljs-literal">false</span>}             │
-   │◄─────────────────────────────────────┤
-```text
-
-Batched pull with the `<span class="hljs-built_in">limit</span>+1` trick to determine `more_available`. Checkpoints
-are persisted per-peer so <span class="hljs-built_in">sync</span> resumes from <span class="hljs-built_in">where</span> it left off. All requests
-include the peer<span class="hljs-string">&#x27;s auth token.
-
-### Push Notifications
-
-When a daemon writes a new event, it broadcasts a `sync.notify` to all known
-peers:
-
-```text
-Daemon A writes event
+   │   more_available: false}             │
+   │◄─────────────────────────────────────┤</code></pre>
+<p>Batched pull with the <code>limit+1</code> trick to determine <code>more_available</code>. Checkpoints<br>are persisted per-peer so sync resumes from where it left off. All requests<br>include the peer&#39;s auth token.</p>
+<h3>Push Notifications</h3>
+<p>When a daemon writes a new event, it broadcasts a <code>sync.notify</code> to all known<br>peers:</p>
+<pre><code class="language-text hljs">Daemon A writes event
    │
    ├──► sync.notify(daemon_id, latest_seq, token) ──► Daemon B
    ├──► sync.notify(daemon_id, latest_seq, token) ──► Daemon C
    │
-   Daemons B and C pull new events from A
-```text
-
-Push notifications are fire-and-forget -- failures are logged but do not block
-the writer.
-
-### Periodic Sync Scheduler
-
-A fallback mechanism that runs every 5 minutes. It pulls from all known peers
-that were not synced recently (within the last 2 minutes). This ensures
-convergence even if push notifications are lost.
-
-### Deduplication
-
-Events are deduplicated by `event_id` (ULID-based, globally unique). The
-`HasEvent()` function provides O(1) dedup via the SQLite primary key index.
-Duplicate events from overlapping syncs are silently skipped.
-
-## Pairing Flow
-
-Pairing establishes mutual trust between two machines with a human in the loop.
-
-```text
-Machine A (thrum peer add)           Machine B (thrum peer join)
+   Daemons B and C pull new events from A</code></pre>
+<p>Push notifications are fire-and-forget -- failures are logged but do not block<br>the writer.</p>
+<h3>Periodic Sync Scheduler</h3>
+<p>A fallback mechanism that runs every 5 minutes. It pulls from all known peers<br>that were not synced recently (within the last 2 minutes). This ensures<br>convergence even if push notifications are lost.</p>
+<h3>Deduplication</h3>
+<p>Events are deduplicated by <code>event_id</code> (ULID-based, globally unique). The<br><code>HasEvent()</code> function provides O(1) dedup via the SQLite primary key index.<br>Duplicate events from overlapping syncs are silently skipped.</p>
+<h2>Pairing Flow</h2>
+<p>Pairing establishes mutual trust between two machines with a human in the loop.</p>
+<pre><code class="language-text hljs">Machine A (thrum peer add)           Machine B (thrum peer join)
    │                                      │
    │  1. Generate 4-digit code + token    │
    │  2. Display code to user             │
@@ -250,35 +216,58 @@ Machine A (thrum peer add)           Machine B (thrum peer join)
    ├─────────────────────────────────────►│ 6. Store peer A + token
    │                                      │
    │  Both peers now authenticate with    │
-   │  the shared token on every request   │
-```text
-
-- The pairing code is a random 4-digit number (3 attempts allowed)
-- The token is a random 32-byte hex string
-- Pairing sessions expire after 5 minutes
-- Both peers store each other&#x27;</span>s info <span class="hljs-keyword">in</span> `peers.json`
-
-<span class="hljs-comment">## Configuration</span>
-
-<span class="hljs-comment">### Environment Variables</span>
-
-| Variable               | Default            | Description                           |
-| ---------------------- | ------------------ | ------------------------------------- |
-| `THRUM_TS_ENABLED`     | `<span class="hljs-literal">false</span>`            | Enable Tailscale <span class="hljs-built_in">sync</span>                 |
-| `THRUM_TS_HOSTNAME`    | (auto)             | Hostname <span class="hljs-keyword">for</span> the tsnet listener       |
-| `THRUM_TS_PORT`        | `9100`             | Port <span class="hljs-keyword">for</span> the <span class="hljs-built_in">sync</span> RPC listener        |
-| `THRUM_TS_AUTH_KEY`    | (none)             | Tailscale auth key <span class="hljs-keyword">for</span> headless setup |
-| `THRUM_TS_CONTROL_URL` | (default)          | Custom control server URL             |
-| `THRUM_TS_STATE_DIR`   | `.thrum/var/tsnet` | tsnet state directory                 |
-
-<span class="hljs-comment">## CLI Commands</span>
-
-<span class="hljs-comment">### `thrum peer`</span>
-
-Manage <span class="hljs-built_in">sync</span> peers:
-
-```bash
-<span class="hljs-comment"># Start pairing on this machine (displays 4-digit code)</span>
+   │  the shared token on every request   │</code></pre>
+<ul>
+<li>The pairing code is a random 4-digit number (3 attempts allowed)</li>
+<li>The token is a random 32-byte hex string</li>
+<li>Pairing sessions expire after 5 minutes</li>
+<li>Both peers store each other&#39;s info in <code>peers.json</code></li>
+</ul>
+<h2>Configuration</h2>
+<h3>Environment Variables</h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>THRUM_TS_ENABLED</code></td>
+<td><code>false</code></td>
+<td>Enable Tailscale sync</td>
+</tr>
+<tr>
+<td><code>THRUM_TS_HOSTNAME</code></td>
+<td>(auto)</td>
+<td>Hostname for the tsnet listener</td>
+</tr>
+<tr>
+<td><code>THRUM_TS_PORT</code></td>
+<td><code>9100</code></td>
+<td>Port for the sync RPC listener</td>
+</tr>
+<tr>
+<td><code>THRUM_TS_AUTH_KEY</code></td>
+<td>(none)</td>
+<td>Tailscale auth key for headless setup</td>
+</tr>
+<tr>
+<td><code>THRUM_TS_CONTROL_URL</code></td>
+<td>(default)</td>
+<td>Custom control server URL</td>
+</tr>
+<tr>
+<td><code>THRUM_TS_STATE_DIR</code></td>
+<td><code>.thrum/var/tsnet</code></td>
+<td>tsnet state directory</td>
+</tr>
+</tbody></table>
+<h2>CLI Commands</h2>
+<h3><code>thrum peer</code></h3>
+<p>Manage sync peers:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Start pairing on this machine (displays 4-digit code)</span>
 thrum peer add
 
 <span class="hljs-comment"># Join a remote peer (prompts for pairing code)</span>
@@ -291,143 +280,106 @@ thrum peer list
 thrum peer remove &lt;name&gt;
 
 <span class="hljs-comment"># Detailed sync status for all peers</span>
-thrum peer status
-```text
-
-<span class="hljs-comment">### `thrum status`</span>
-
-When Tailscale <span class="hljs-built_in">sync</span> is enabled, `thrum status` includes <span class="hljs-built_in">sync</span> information:
-
-```text
-Tailscale Sync: enabled
+thrum peer status</code></pre>
+<h3><code>thrum status</code></h3>
+<p>When Tailscale sync is enabled, <code>thrum status</code> includes sync information:</p>
+<pre><code class="language-text hljs">Tailscale Sync: enabled
   Peers: 2 connected
-  Last <span class="hljs-built_in">sync</span>: 30s ago
-  Hostname: my-laptop
-```go
-
-<span class="hljs-comment">## Security Model</span>
-
-Tailscale <span class="hljs-built_in">sync</span> uses a simple three-layer security model:
-
-<span class="hljs-comment">### 1. Tailscale Encryption (Network Layer)</span>
-
-All traffic between daemons flows over Tailscale<span class="hljs-string">&#x27;s WireGuard tunnels. This
-provides end-to-end encryption and identity verification at the network level.
-No data travels over the public internet unencrypted.
-
-### 2. Pairing Code (Trust Establishment)
-
-A human-mediated 4-digit code establishes initial trust between two machines.
-The pairing code must be shared out-of-band (verbally, chat, etc.), ensuring
-both sides consent to the peering relationship.
-
-- 4-digit random code (10,000 possibilities)
-- 3 attempts allowed before the session is locked
-- 5-minute timeout on pairing sessions
-
-### 3. Token Authentication (Ongoing Auth)
-
-After pairing, each request includes a 32-byte hex token. The receiving daemon
-validates the token against its peer registry before processing any sync
-request. The `pair.request` method is the only RPC exempt from token
-authentication (it&#x27;</span>s how new peers establish their tokens).
-
-- Token validation is centralized <span class="hljs-keyword">in</span> the <span class="hljs-built_in">sync</span> server
-- Invalid or missing tokens are rejected immediately
-- Peer<span class="hljs-string">&#x27;s `last_sync` is updated on each successful authenticated request
-
-## Peer Management
-
-### Peer Registry
-
-The peer registry is stored as JSON at `.thrum/var/peers.json` and persists
-across daemon restarts. It tracks:
-
-- Daemon ID and name
-- Network address (Tailscale IP + port)
-- Auth token
-- Paired-at timestamp and last sync time
-
-## Monitoring
-
-### Health Endpoint
-
-The daemon&#x27;</span>s `health` RPC method includes Tailscale <span class="hljs-built_in">sync</span> status when enabled:
-
-```json
-{
-  <span class="hljs-string">&quot;tailscale_sync&quot;</span>: {
-    <span class="hljs-string">&quot;enabled&quot;</span>: <span class="hljs-literal">true</span>,
-    <span class="hljs-string">&quot;hostname&quot;</span>: <span class="hljs-string">&quot;my-laptop&quot;</span>,
-    <span class="hljs-string">&quot;peer_count&quot;</span>: 2,
-    <span class="hljs-string">&quot;peers&quot;</span>: [
-      {
-        <span class="hljs-string">&quot;daemon_id&quot;</span>: <span class="hljs-string">&quot;d_abc123&quot;</span>,
-        <span class="hljs-string">&quot;name&quot;</span>: <span class="hljs-string">&quot;office-server&quot;</span>,
-        <span class="hljs-string">&quot;last_sync&quot;</span>: <span class="hljs-string">&quot;30s ago&quot;</span>
-      }
-    ]
-  }
-}
-```text
-
-<span class="hljs-comment">### Logs</span>
-
-Tailscale <span class="hljs-built_in">sync</span> logs are prefixed <span class="hljs-keyword">for</span> easy filtering:
-
-```text
-[pairing] Session started, code=7392, <span class="hljs-built_in">timeout</span>=5m0s
+  Last sync: 30s ago
+  Hostname: my-laptop</code></pre>
+<h2>Security Model</h2>
+<p>Tailscale sync uses a simple three-layer security model:</p>
+<h3>1. Tailscale Encryption (Network Layer)</h3>
+<p>All traffic between daemons flows over Tailscale&#39;s WireGuard tunnels. This<br>provides end-to-end encryption and identity verification at the network level.<br>No data travels over the public internet unencrypted.</p>
+<h3>2. Pairing Code (Trust Establishment)</h3>
+<p>A human-mediated 4-digit code establishes initial trust between two machines.<br>The pairing code must be shared out-of-band (verbally, chat, etc.), ensuring<br>both sides consent to the peering relationship.</p>
+<ul>
+<li>4-digit random code (10,000 possibilities)</li>
+<li>3 attempts allowed before the session is locked</li>
+<li>5-minute timeout on pairing sessions</li>
+</ul>
+<h3>3. Token Authentication (Ongoing Auth)</h3>
+<p>After pairing, each request includes a 32-byte hex token. The receiving daemon<br>validates the token against its peer registry before processing any sync<br>request. The <code>pair.request</code> method is the only RPC exempt from token<br>authentication (it&#39;s how new peers establish their tokens).</p>
+<ul>
+<li>Token validation is centralized in the sync server</li>
+<li>Invalid or missing tokens are rejected immediately</li>
+<li>Peer&#39;s <code>last_sync</code> is updated on each successful authenticated request</li>
+</ul>
+<h2>Peer Management</h2>
+<h3>Peer Registry</h3>
+<p>The peer registry is stored as JSON at <code>.thrum/var/peers.json</code> and persists<br>across daemon restarts. It tracks:</p>
+<ul>
+<li>Daemon ID and name</li>
+<li>Network address (Tailscale IP + port)</li>
+<li>Auth token</li>
+<li>Paired-at timestamp and last sync time</li>
+</ul>
+<h2>Monitoring</h2>
+<h3>Health Endpoint</h3>
+<p>The daemon&#39;s <code>health</code> RPC method includes Tailscale sync status when enabled:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;tailscale_sync&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;hostname&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;my-laptop&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;peer_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;peers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+      <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;daemon_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;d_abc123&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;office-server&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;last_sync&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;30s ago&quot;</span>
+      <span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">]</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<h3>Logs</h3>
+<p>Tailscale sync logs are prefixed for easy filtering:</p>
+<pre><code class="language-text hljs">[pairing] Session started, code=7392, timeout=5m0s
 [pairing] Paired with office-server (d_abc123) at 100.64.2.10:9100
 sync.notify: synced from d_abc123 — applied=5 skipped=0
-periodic_sync: starting with interval=5m0s, recent_threshold=2m0s
-```text
-
-<span class="hljs-comment">## Troubleshooting</span>
-
-<span class="hljs-comment">### Cannot reach peer</span>
-
-1. Verify both machines are on the same Tailscale network
-2. Check that both daemons are running (`thrum daemon start`)
-3. Verify the address format is `hostname:port` (default port: 9100)
-4. Test connectivity: `tailscale ping &lt;hostname&gt;`
-
-<span class="hljs-comment">### Pairing code rejected</span>
-
-- Ensure you<span class="hljs-string">&#x27;re entering the code displayed on the other machine
-- Codes expire after 5 minutes -- run `thrum peer add` again if expired
-- After 3 failed attempts, the session locks -- restart with `thrum peer add`
-
-### Sync not working after pairing
-
-1. Check `thrum peer status` for connection details
-2. Verify both daemons have Tailscale enabled (`THRUM_TS_ENABLED=true`)
-3. Check daemon logs for sync errors
-
-## Best Practices
-
-### Network Setup
-
-- **Use auth keys** (`THRUM_TS_AUTH_KEY`) for headless CI/CD runners
-- **Keep the default port** (9100) unless you have a conflict
-- **Use Tailscale ACLs** to restrict which machines can communicate
-
-### Performance
-
-- **Push notifications** handle most sync latency -- events typically propagate
-  within seconds
-- **Periodic sync** (5 min) acts as a safety net, not the primary mechanism
-- **Batch size** of 1000 events per pull keeps memory bounded during large syncs
-- **Checkpointing** ensures no redundant transfers after restarts
-
-## See Also
-
-- [Tailscale Security](tailscale-security.md) -- Security model documentation
-- [Multi-Agent Support](multi-agent.md) -- Groups, runtime presets, and team
-  coordination
-- [Agent Coordination](agent-coordination.md) -- Workflow patterns and Beads
-  integration
-- [Sync Protocol](sync.md) -- Git-based synchronization details
-- [CLI Reference](cli.md) -- Complete command documentation</span></code></pre>
+periodic_sync: starting with interval=5m0s, recent_threshold=2m0s</code></pre>
+<h2>Troubleshooting</h2>
+<h3>Cannot reach peer</h3>
+<ol>
+<li>Verify both machines are on the same Tailscale network</li>
+<li>Check that both daemons are running (<code>thrum daemon start</code>)</li>
+<li>Verify the address format is <code>hostname:port</code> (default port: 9100)</li>
+<li>Test connectivity: <code>tailscale ping &lt;hostname&gt;</code></li>
+</ol>
+<h3>Pairing code rejected</h3>
+<ul>
+<li>Ensure you&#39;re entering the code displayed on the other machine</li>
+<li>Codes expire after 5 minutes -- run <code>thrum peer add</code> again if expired</li>
+<li>After 3 failed attempts, the session locks -- restart with <code>thrum peer add</code></li>
+</ul>
+<h3>Sync not working after pairing</h3>
+<ol>
+<li>Check <code>thrum peer status</code> for connection details</li>
+<li>Verify both daemons have Tailscale enabled (<code>THRUM_TS_ENABLED=true</code>)</li>
+<li>Check daemon logs for sync errors</li>
+</ol>
+<h2>Best Practices</h2>
+<h3>Network Setup</h3>
+<ul>
+<li><strong>Use auth keys</strong> (<code>THRUM_TS_AUTH_KEY</code>) for headless CI/CD runners</li>
+<li><strong>Keep the default port</strong> (9100) unless you have a conflict</li>
+<li><strong>Use Tailscale ACLs</strong> to restrict which machines can communicate</li>
+</ul>
+<h3>Performance</h3>
+<ul>
+<li><strong>Push notifications</strong> handle most sync latency -- events typically propagate<br>within seconds</li>
+<li><strong>Periodic sync</strong> (5 min) acts as a safety net, not the primary mechanism</li>
+<li><strong>Batch size</strong> of 1000 events per pull keeps memory bounded during large syncs</li>
+<li><strong>Checkpointing</strong> ensures no redundant transfers after restarts</li>
+</ul>
+<h2>See Also</h2>
+<ul>
+<li><a href="tailscale-security.html">Tailscale Security</a> -- Security model documentation</li>
+<li><a href="multi-agent.html">Multi-Agent Support</a> -- Groups, runtime presets, and team<br>coordination</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> -- Workflow patterns and Beads<br>integration</li>
+<li><a href="sync.html">Sync Protocol</a> -- Git-based synchronization details</li>
+<li><a href="cli.html">CLI Reference</a> -- Complete command documentation</li>
+</ul>
+<pre><code></code></pre>
 
     </div>
     <p style="margin-top:2rem"><a href="../docs.html#tailscale-sync.html">&larr; View in documentation</a></p>
