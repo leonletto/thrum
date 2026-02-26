@@ -55,12 +55,20 @@ one individually. Groups can contain specific agents or all agents with a role.
 | `thrum group info NAME`           | Show group details                              |
 | `thrum group members NAME`        | List members (`--expand` resolves to agent IDs) |
 
-### Built-in @everyone Group
+### Auto-Created Groups
 
-Every Thrum daemon automatically creates the `@everyone` group on startup. It
-includes all registered agents via a `role:*` wildcard, so new agents are
-automatically reachable through it. The `@everyone` group cannot be deleted or
-modified.
+Thrum automatically creates two types of system groups:
+
+- **`@everyone`** — Created on daemon startup. Includes all registered agents via
+  a `role:*` wildcard. New agents are automatically reachable through it. Cannot
+  be deleted or modified.
+- **Role groups** — Created automatically when an agent registers with a new role
+  (e.g., registering with `--role reviewer` creates a `@reviewer` group containing
+  all agents with that role). Role groups have IDs like `grp_role_reviewer` and
+  are managed by the system.
+
+This means `@reviewer` always routes to all agents with the `reviewer` role,
+even without manually creating or managing a group.
 
 ````bash
 # Send to all agents

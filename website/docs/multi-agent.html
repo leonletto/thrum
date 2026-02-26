@@ -102,8 +102,19 @@
 <td>List members (<code>--expand</code> resolves to agent IDs)</td>
 </tr>
 </tbody></table>
-<h3>Built-in @everyone Group</h3>
-<p>Every Thrum daemon automatically creates the <code>@everyone</code> group on startup. It<br>includes all registered agents via a <code>role:*</code> wildcard, so new agents are<br>automatically reachable through it. The <code>@everyone</code> group cannot be deleted or<br>modified.</p>
+<h3>Auto-Created Groups</h3>
+<p>Thrum automatically creates two types of system groups:</p>
+<ul>
+<li><strong><code>@everyone</code></strong> — Created on daemon startup. Includes all registered agents via
+a <code>role:*</code> wildcard. New agents are automatically reachable through it. Cannot
+be deleted or modified.</li>
+<li><strong>Role groups</strong> — Created automatically when an agent registers with a new role
+(e.g., registering with <code>--role reviewer</code> creates a <code>@reviewer</code> group containing
+all agents with that role). Role groups have IDs like <code>grp_role_reviewer</code> and
+are managed by the system.</li>
+</ul>
+<p>This means <code>@reviewer</code> always routes to all agents with the <code>reviewer</code> role,
+even without manually creating or managing a group.</p>
 <pre><code class="language-bash hljs"><span class="hljs-comment"># Send to all agents</span>
 thrum send <span class="hljs-string">&quot;Deploy complete, all clear&quot;</span> --to @everyone
 ```text

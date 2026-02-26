@@ -578,6 +578,15 @@ thrum mcp serve --agent-id furiosa
 The MCP server requires a named agent (the `name` field must be set in the
 identity file).
 
+### Git Username (user.identify)
+
+The Web UI and MCP server use `user.identify` to read the git username from
+`git config user.name`. This username is used to auto-register a browser agent
+in the Web UI (via `user.register`) and to associate the WebSocket session with
+a human identity. The git username is read at connection time — no separate
+configuration is needed beyond having a valid `git config user.name` set in your
+environment.
+
 ## ID Generation Functions
 
 All ID generation is in `internal/identity/identity.go`. Thrum uses

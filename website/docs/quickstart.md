@@ -48,7 +48,7 @@ persistence. See [Agent Context Management](context.md) for details.
 ## Prerequisites
 
 - Git repository
-- Go 1.21 or later (for building)
+- Go 1.26 or later (for building)
 - Unix-like system (macOS, Linux)
 
 ## Installation

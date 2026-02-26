@@ -15,8 +15,8 @@ This guide explains how to set up and work with the Thrum codebase.
 
 ## Prerequisites
 
-- **Go 1.25+**: [Install Go](https://go.dev/dl/)
-- **Node.js 18+** and **pnpm**: Required for building the UI monorepo
+- **Go 1.26+**: [Install Go](https://go.dev/dl/)
+- **Node.js 22+** and **pnpm 10+**: Required for building the UI monorepo
 - **Make**: Build automation
 - **Playwright**: E2E testing (`npx playwright install chromium`)
 - **golangci-lint**: Code linting (auto-installed by `make lint`)

@@ -83,8 +83,8 @@ All commands accept these flags:
     List messages in your inbox. Auto-filters to messages addressed to you + broadcasts.
     Use --all to disable auto-filtering and show everything.
 
-  thrum wait [--timeout DURATION] [--scope type:value] [--mention @role] [--all] [--after OFFSET]
-    Block until a matching message arrives. Use --all for broadcasts + directed.
+  thrum wait [--timeout DURATION] [--scope type:value] [--mention @role] [--after OFFSET]
+    Block until a matching message arrives.
     --after accepts relative time: -30s, -5m, +60s. Exit 0=received, 1=timeout, 2=error.
 
 ### Message Management
