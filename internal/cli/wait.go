@@ -25,7 +25,7 @@ type WaitOptions struct {
 const reconnectTimeout = 60 * time.Second
 
 // Wait blocks until a matching message arrives or timeout occurs.
-// socketPath is the Unix socket path to connect to the daemon.
+// SocketPath is the Unix socket path to connect to the daemon.
 // The connection is automatically re-established if the daemon restarts.
 func Wait(socketPath string, opts WaitOptions) (*Message, error) {
 	// Parse scope if provided
