@@ -29,7 +29,7 @@ avoids interfering with the developer's code work.
 
 ## Architecture
 
-````text
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │          Sync Loop (60s) in .git/thrum-sync/a-sync/          │
 ├──────────────────────────────────────────────────────────────┤
@@ -44,7 +44,7 @@ avoids interfering with the developer's code work.
 │  8. Release Lock                                             │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
-```text
+```
 
 ## Worktree Model
 
@@ -58,7 +58,7 @@ repository and checked out on the `a-sync` orphan branch. It contains:
 ├── events.jsonl              Append-only agent lifecycle events
 └── messages/
     └── {agent_name}.jsonl    Per-agent message logs
-```text
+```
 
 This worktree is:
 
@@ -80,7 +80,7 @@ files:
 /events.jsonl
 /messages/
 /messages.jsonl    # old monolithic format, kept for migration support
-```text
+```
 
 This is configured automatically during `CreateSyncWorktree()` and reduces disk
 usage by excluding any non-Thrum files that may appear on the branch.
@@ -92,7 +92,7 @@ The sync worktree path is resolved via `git rev-parse --git-common-dir`:
 ```go
 // SyncWorktreePath returns: <git-common-dir>/thrum-sync/a-sync
 func SyncWorktreePath(repoPath string) (string, error)
-```text
+```
 
 Using `git-common-dir` ensures correct resolution for both regular repos and
 nested git worktrees. For a regular repo, `git-common-dir` returns `.git`, so
@@ -147,7 +147,7 @@ same daemon and message store.
 ├── redirect              → "/path/to/main/repo/.thrum" (absolute path)
 └── identities/           ← Per-worktree agent identities (NOT redirected)
     └── furiosa.json
-```text
+```
 
 **Resolution rules** (`internal/paths/`):
 
@@ -189,7 +189,7 @@ if localEvent.ID == remoteEvent.ID {
     // Same event_id = same content (immutability guarantee)
     duplicates++
 }
-```text
+```
 
 The `event_id` (ULID) provides both uniqueness and lexicographic time-ordering.
 This avoids collisions between different event types that share the same entity
@@ -218,7 +218,7 @@ files in a single command, piped through `tar`:
 gitCmd := exec.Command("git", "archive", "origin/a-sync", "--", "messages/", "events.jsonl")
 tarCmd := exec.Command("tar", "-xf", "-", "-C", tmpDir)
 tarCmd.Stdin, _ = gitCmd.StdoutPipe()
-```text
+```
 
 This is significantly faster than issuing per-file `git show` calls. If
 `git archive` fails (e.g., no remote tracking branch), the merger falls back to
@@ -232,7 +232,7 @@ Each sync creates a single commit in the worktree:
 
 ```yaml
 sync: 2024-01-15T10:30:00Z
-```text
+```
 
 ### Push Rejection Handling
 
@@ -253,7 +253,7 @@ for attempt := 1; attempt <= 3; attempt++ {
     fetch()
     merge()
 }
-```text
+```
 
 ## Sync Triggers
 
@@ -295,7 +295,7 @@ local-only mode to disable all remote sync:
 
 ```bash
 thrum daemon start --local
-```go
+```
 
 In local-only mode, the sync loop still runs but skips remote operations
 (`git fetch` and `git push` to/from the remote). Local JSONL files and the
@@ -351,7 +351,7 @@ the projector:
 for _, event := range parsedEvents {
     projector.Apply(event)
 }
-```text
+```
 
 The `Apply()` method dispatches on event type:
 
@@ -374,7 +374,7 @@ The projector can rebuild the entire SQLite database from scratch:
 ```go
 projector := projection.NewProjector(db)
 projector.Rebuild(syncDir) // reads events.jsonl + messages/*.jsonl
-```text
+```
 
 Rebuild reads all JSONL files, sorts events globally by `(timestamp, event_id)`
 for deterministic ordering, and applies them in sequence. ULIDs in `event_id`
@@ -392,7 +392,7 @@ on `main`:
 ├── messages/             # tracked on main
 ├── schema_version        # tracked on main
 └── var/                  # gitignored
-```text
+```
 
 Use `thrum migrate` to upgrade to the worktree layout. This command:
 
@@ -414,7 +414,7 @@ Use `thrum migrate` to upgrade to the worktree layout. This command:
   "sync_state": "synced",
   "local_only": false
 }
-```text
+```
 
 > **Note:** `thrum init` sets `local_only: true` by default. The example above
 > shows a repo where remote sync has been explicitly enabled.
@@ -442,7 +442,7 @@ Force an immediate sync (non-blocking).
   "last_sync_at": "2024-01-15T10:30:00Z",
   "sync_state": "synced"
 }
-```text
+```
 
 #### `sync.status`
 
@@ -459,7 +459,7 @@ Get current sync status.
   "last_error": "",
   "sync_state": "synced"
 }
-```text
+```
 
 ## Error Handling
 
@@ -531,7 +531,7 @@ Can be configured when starting the daemon:
 
 ```go
 loop := sync.NewSyncLoop(syncer, projector, repoPath, syncDir, thrumDir, 60*time.Second)
-```text
+```
 
 Parameters:
 
@@ -548,7 +548,7 @@ Trigger an immediate sync via RPC or CLI:
 
 ```bash
 thrum sync force
-```text
+```
 
 ## Troubleshooting
 
@@ -567,7 +567,7 @@ If the sync worktree is missing or detached:
 
 ```bash
 thrum init --force
-```text
+```
 
 This recreates the worktree and re-links it to the `a-sync` branch.
 
@@ -585,7 +585,7 @@ If sync is permanently stuck:
 
 ```bash
 rm .thrum/var/sync.lock
-```text
+```
 
 Then restart the daemon.
 
@@ -596,11 +596,11 @@ If your repo still has `.thrum/events.jsonl` or `.thrum/messages/` tracked on
 
 ```bash
 thrum migrate
-```text
+```
 
 ## See Also
 
 - [Daemon Architecture](daemon.md)
 - [System Overview](overview.md)
 - [RPC API Reference](rpc-api.md)
-````
+```

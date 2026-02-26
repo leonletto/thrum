@@ -84,670 +84,514 @@
 │   ├── furiosa_preamble.md         # Agent preamble (stable)
 │   ├── maximus.md
 │   ├── maximus_preamble.md
-│   └── coordinator_1B9K33T6RK.md   # Hash-based agent ID
-```text
+│   └── coordinator_1B9K33T6RK.md   # Hash-based agent ID</code></pre>
+<p>Context files are local by default. Use <code>thrum context sync</code> to manually share<br>across worktrees via the a-sync branch.</p>
+<h2>Preamble</h2>
+<p>Each agent can have a preamble - a stable, user-editable header stored at<br><code>.thrum/context/{agent}_preamble.md</code>. The preamble is automatically prepended<br>when showing context, providing a persistent reference that survives context<br>saves.</p>
+<p><strong>Default preamble:</strong> When you run <code>thrum quickstart</code>, a default preamble is<br>created automatically with thrum quick-reference commands.</p>
+<p><strong>User-editable:</strong> The preamble is just a markdown file. You can edit it<br>directly or replace it with <code>thrum context preamble --file custom.md</code>.</p>
+<p><strong>Key properties:</strong></p>
+<ul>
+<li>Not touched by <code>thrum context save</code> - the preamble persists across saves</li>
+<li>Auto-created on first quickstart with default thrum quick-reference</li>
+<li>Not removed by <code>thrum context clear</code> - clear only removes session context</li>
+<li>Removed on agent delete - cleaned up alongside context</li>
+</ul>
+<p><strong>Default content:</strong></p>
+<pre><code class="language-markdown hljs"><span class="hljs-section">## Thrum Quick Reference</span>
 
-Context files are local by default. Use `thrum context sync` to manually share
-across worktrees via the a-sync branch.
-
-## Preamble
-
-Each agent can have a preamble - a stable, user-editable header stored at
-`.thrum/context/{agent}_preamble.md`. The preamble is automatically prepended
-when showing context, providing a persistent reference that survives context
-saves.
-
-**Default preamble:** When you run `thrum quickstart`, a default preamble is
-created automatically with thrum quick-reference commands.
-
-**User-editable:** The preamble is just a markdown file. You can edit it
-directly or replace it with `thrum context preamble --file custom.md`.
-
-**Key properties:**
-
-- Not touched by `thrum context save` - the preamble persists across saves
-- Auto-created on first quickstart with default thrum quick-reference
-- Not removed by `thrum context clear` - clear only removes session context
-- Removed on agent delete - cleaned up alongside context
-
-**Default content:**
-
-```markdown
-## Thrum Quick Reference
-
-**Check messages:** `thrum inbox --unread` **Send message:**
-`thrum send &quot;message&quot; --to @role` **Reply:** `thrum reply &lt;MSG_ID&gt; &quot;response&quot;`
-**Status:** `thrum status` **Who&#x27;s online:** `thrum agent list --context` **Save
-context:** `thrum context save` **Wait for messages:**
-`thrum wait --after -30s --timeout 5m`
-```text
-
-**Customization examples:**
-
-You can edit the preamble to add project conventions, role-specific
-instructions, team rosters, or boot sequences:
-
-```bash
-# Edit the preamble directly
+<span class="hljs-strong">**Check messages:**</span> <span class="hljs-code">`thrum inbox --unread`</span> <span class="hljs-strong">**Send message:**</span>
+<span class="hljs-code">`thrum send &quot;message&quot; --to @role`</span> <span class="hljs-strong">**Reply:**</span> <span class="hljs-code">`thrum reply &lt;MSG_ID&gt; &quot;response&quot;`</span>
+<span class="hljs-strong">**Status:**</span> <span class="hljs-code">`thrum status`</span> <span class="hljs-strong">**Who&#x27;s online:**</span> <span class="hljs-code">`thrum agent list --context`</span> <span class="hljs-strong">**Save
+context:**</span> <span class="hljs-code">`thrum context save`</span> <span class="hljs-strong">**Wait for messages:**</span>
+<span class="hljs-code">`thrum wait --after -30s --timeout 5m`</span></code></pre>
+<p><strong>Customization examples:</strong></p>
+<p>You can edit the preamble to add project conventions, role-specific<br>instructions, team rosters, or boot sequences:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Edit the preamble directly</span>
 vim .thrum/context/furiosa_preamble.md
 
-# Or replace it from a file
-cat &gt; my-preamble.md &lt;&lt;&#x27;EOF&#x27;
-## Project Conventions
+<span class="hljs-comment"># Or replace it from a file</span>
+<span class="hljs-built_in">cat</span> &gt; my-preamble.md &lt;&lt;<span class="hljs-string">&#x27;EOF&#x27;</span>
+<span class="hljs-comment">## Project Conventions</span>
 
 **Architecture:** Hexagonal (ports/adapters)
-**Testing:** Always run `make test` before committing
+**Testing:** Always run `make <span class="hljs-built_in">test</span>` before committing
 **Commits:** Follow Conventional Commits (feat:, fix:, docs:)
 
-## Thrum Quick Reference
+<span class="hljs-comment">## Thrum Quick Reference</span>
 ... (default commands) ...
 EOF
 
-thrum context preamble --file my-preamble.md
-```text
-
-## CLI Commands
-
-### thrum context save
-
-Save context content from a file or stdin.
-
-```bash
-thrum context save [flags]
-```text
-
-| Flag      | Description                                        | Default |
-| --------- | -------------------------------------------------- | ------- |
-| `--file`  | Path to markdown file to save as context           |         |
-| `--agent` | Override agent name (defaults to current identity) |         |
-
-**Examples:**
-
-```bash
-# Save from a file
+thrum context preamble --file my-preamble.md</code></pre>
+<h2>CLI Commands</h2>
+<h3>thrum context save</h3>
+<p>Save context content from a file or stdin.</p>
+<pre><code class="language-bash hljs">thrum context save [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--file</code></td>
+<td>Path to markdown file to save as context</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--agent</code></td>
+<td>Override agent name (defaults to current identity)</td>
+<td></td>
+</tr>
+</tbody></table>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Save from a file</span>
 thrum context save --file notes.md
 
-# Save from stdin
-echo &quot;Working on auth module&quot; | thrum context save
+<span class="hljs-comment"># Save from stdin</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;Working on auth module&quot;</span> | thrum context save
 
-# Save for a different agent
-thrum context save --agent coordinator --file notes.md
-```text
-
----
-
-### thrum context show
-
-Display the saved context for the current agent.
-
-```bash
-thrum context show [flags]
-```text
-
-| Flag            | Description                                        | Default |
-| --------------- | -------------------------------------------------- | ------- |
-| `--agent`       | Override agent name (defaults to current identity) |         |
-| `--raw`         | No header, file boundary markers for piping        | `false` |
-| `--no-preamble` | Exclude preamble from output                       | `false` |
-
-**Examples:**
-
-```bash
-# Show preamble + context (default)
+<span class="hljs-comment"># Save for a different agent</span>
+thrum context save --agent coordinator --file notes.md</code></pre>
+<hr>
+<h3>thrum context show</h3>
+<p>Display the saved context for the current agent.</p>
+<pre><code class="language-bash hljs">thrum context show [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--agent</code></td>
+<td>Override agent name (defaults to current identity)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--raw</code></td>
+<td>No header, file boundary markers for piping</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--no-preamble</code></td>
+<td>Exclude preamble from output</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Show preamble + context (default)</span>
 thrum context show
 
-# Show context for a different agent
+<span class="hljs-comment"># Show context for a different agent</span>
 thrum context show --agent furiosa
 
-# Raw output with file boundary markers
+<span class="hljs-comment"># Raw output with file boundary markers</span>
 thrum context show --raw
 
-# Context only, no preamble
-thrum context show --no-preamble
-```text
-
-**Output modes:**
-
-Default (preamble + context with header):
-
-```text
-# Context for furiosa (1234 bytes, updated 2026-02-11T10:00:00Z)
+<span class="hljs-comment"># Context only, no preamble</span>
+thrum context show --no-preamble</code></pre>
+<p><strong>Output modes:</strong></p>
+<p>Default (preamble + context with header):</p>
+<pre><code class="language-text hljs"># Context for furiosa (1234 bytes, updated 2026-02-11T10:00:00Z)
 
 ## Thrum Quick Reference
 ...
 
 # Current Work
-- Implementing JWT token refresh
-```text
-
-Raw (`--raw`, shows file boundaries):
-
-```text
-&lt;!-- preamble: .thrum/context/furiosa_preamble.md --&gt;
+- Implementing JWT token refresh</code></pre>
+<p>Raw (<code>--raw</code>, shows file boundaries):</p>
+<pre><code class="language-text hljs">&lt;!-- preamble: .thrum/context/furiosa_preamble.md --&gt;
 ## Thrum Quick Reference
 ...
 &lt;!-- end preamble --&gt;
 
 # Current Work
-- Implementing JWT token refresh
-```text
-
----
-
-### thrum context clear
-
-Remove the context file for the current agent.
-
-```bash
-thrum context clear [flags]
-```text
-
-| Flag      | Description                                        | Default |
-| --------- | -------------------------------------------------- | ------- |
-| `--agent` | Override agent name (defaults to current identity) |         |
-
-**Examples:**
-
-```bash
-# Clear context for current agent
+- Implementing JWT token refresh</code></pre>
+<hr>
+<h3>thrum context clear</h3>
+<p>Remove the context file for the current agent.</p>
+<pre><code class="language-bash hljs">thrum context clear [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--agent</code></td>
+<td>Override agent name (defaults to current identity)</td>
+<td></td>
+</tr>
+</tbody></table>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Clear context for current agent</span>
 thrum context clear
 
-# Clear context for a different agent
-thrum context clear --agent furiosa
-```text
+<span class="hljs-comment"># Clear context for a different agent</span>
+thrum context clear --agent furiosa</code></pre>
+<p>Note: Idempotent - running clear when no context exists is a no-op.</p>
+<hr>
+<h3>thrum context sync</h3>
+<p>Copy the context file to the a-sync branch for sharing across worktrees and<br>machines.</p>
+<pre><code class="language-bash hljs">thrum context <span class="hljs-built_in">sync</span> [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--agent</code></td>
+<td>Override agent name (defaults to current identity)</td>
+<td></td>
+</tr>
+</tbody></table>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Sync context for current agent</span>
+thrum context <span class="hljs-built_in">sync</span>
 
-Note: Idempotent - running clear when no context exists is a no-op.
-
----
-
-### thrum context sync
-
-Copy the context file to the a-sync branch for sharing across worktrees and
-machines.
-
-```bash
-thrum context sync [flags]
-```text
-
-| Flag      | Description                                        | Default |
-| --------- | -------------------------------------------------- | ------- |
-| `--agent` | Override agent name (defaults to current identity) |         |
-
-**Examples:**
-
-```bash
-# Sync context for current agent
-thrum context sync
-
-# Sync context for a different agent
-thrum context sync --agent furiosa
-```text
-
-**What it does:**
-
-1. Copies `.thrum/context/{agent}.md` to the sync worktree at
-   `.git/thrum-sync/a-sync/context/{agent}.md`
-2. Commits the change with message `&quot;context: update {agent}&quot;`
-3. Pushes to the remote a-sync branch
-
-**Notes:**
-
-- No-op when no remote is configured (local-only mode)
-- Respects the `--local` daemon flag
-- Manual only - context is never synced automatically
-
----
-
-### thrum context preamble
-
-Show or manage the preamble for the current agent.
-
-```bash
-thrum context preamble [flags]
-```text
-
-| Flag      | Description                                        | Default |
-| --------- | -------------------------------------------------- | ------- |
-| `--agent` | Override agent name (defaults to current identity) |         |
-| `--init`  | Create or reset to default preamble                |         |
-| `--file`  | Set preamble from file                             |         |
-
-**Examples:**
-
-```bash
-# Show current preamble
+<span class="hljs-comment"># Sync context for a different agent</span>
+thrum context <span class="hljs-built_in">sync</span> --agent furiosa</code></pre>
+<p><strong>What it does:</strong></p>
+<ol>
+<li>Copies <code>.thrum/context/{agent}.md</code> to the sync worktree at<br><code>.git/thrum-sync/a-sync/context/{agent}.md</code></li>
+<li>Commits the change with message <code>&quot;context: update {agent}&quot;</code></li>
+<li>Pushes to the remote a-sync branch</li>
+</ol>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>No-op when no remote is configured (local-only mode)</li>
+<li>Respects the <code>--local</code> daemon flag</li>
+<li>Manual only - context is never synced automatically</li>
+</ul>
+<hr>
+<h3>thrum context preamble</h3>
+<p>Show or manage the preamble for the current agent.</p>
+<pre><code class="language-bash hljs">thrum context preamble [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--agent</code></td>
+<td>Override agent name (defaults to current identity)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--init</code></td>
+<td>Create or reset to default preamble</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--file</code></td>
+<td>Set preamble from file</td>
+<td></td>
+</tr>
+</tbody></table>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Show current preamble</span>
 thrum context preamble
 
-# Create/reset to default preamble
+<span class="hljs-comment"># Create/reset to default preamble</span>
 thrum context preamble --init
 
-# Set preamble from a custom file
+<span class="hljs-comment"># Set preamble from a custom file</span>
 thrum context preamble --file my-preamble.md
 
-# Show preamble for a different agent
-thrum context preamble --agent furiosa
-```text
-
----
-
-### thrum context prime
-
-Collect all context needed for agent session initialization or recovery. This is
-a comprehensive context collection command that gathers identity, session info,
-agent list, unread messages, git context, and daemon health into a single
-output.
-
-```bash
-thrum context prime [flags]
-```text
-
-| Flag     | Description                          | Default |
-| -------- | ------------------------------------ | ------- |
-| `--json` | Structured JSON output for scripting | `false` |
-
-**Examples:**
-
-```bash
-# Human-readable summary
+<span class="hljs-comment"># Show preamble for a different agent</span>
+thrum context preamble --agent furiosa</code></pre>
+<hr>
+<h3>thrum context prime</h3>
+<p>Collect all context needed for agent session initialization or recovery. This is<br>a comprehensive context collection command that gathers identity, session info,<br>agent list, unread messages, git context, and daemon health into a single<br>output.</p>
+<pre><code class="language-bash hljs">thrum context prime [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--json</code></td>
+<td>Structured JSON output for scripting</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Human-readable summary</span>
 thrum context prime
 
-# Structured JSON output
-thrum context prime --json
-```text
-
-**What it includes:**
-
-- Agent identity (name, role, module)
-- Active session information
-- List of registered agents and their status
-- Unread messages count
-- Git context (branch, commits, files)
-- Daemon health status
-
-**Use cases:**
-
-- Session initialization - quickly orient a new session
-- Session recovery - restore context after crash or compaction
-- Debugging - gather all relevant state in one command
-- Agent onboarding - provide comprehensive context to new agents
-
-**Note:** This command is an alias for `thrum prime`. The PreCompact hook
-automatically saves context before compaction to `.thrum/context/{name}.md` and
-`/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md`, but the
-agent-initiated `/update-context` skill captures richer context including
-decisions and rationale.
-
----
-
-### thrum context update
-
-The `/update-context` skill is now integrated with the Thrum MCP server. Use the
-MCP server for guided context updates:
-
-```bash
-thrum mcp serve
-```text
-
-**In Claude Code:**
-
-Configure the MCP server in `.claude/settings.json` and use the
-`wait_for_message` and `send_message` tools for context coordination.
-
----
-
-## The /update-context Skill
-
-The `/update-context` skill is now integrated into the Thrum MCP server. The MCP
-server provides message-based context coordination through the `send_message`
-and `wait_for_message` tools.
-
-**Usage:**
-
-Configure the MCP server in `.claude/settings.json` and agents can coordinate
-context updates via messages.
-
-**Workflow:**
-
-1. Agent sends context via `send_message`
-2. Other agents receive via `wait_for_message` or `check_messages`
-3. Skill formats your input as markdown and saves it via
-   `thrum context save --file /tmp/context.md`
-
-**Example:**
-
-```yaml
-User: /update-context
-Agent: What context should I preserve for the next session?
-User: We&#x27;re refactoring the auth module. Decided to use JWT with
-      refresh tokens. Need to add rate limiting tests.
-Agent: [Saves formatted context]
-      ✓ Context saved (248 bytes)
-```text
-
-The skill reduces the friction of updating context and ensures consistent
-formatting.
-
----
-
-## Use Cases and Patterns
-
-### Single-Agent Session Continuity
-
-```bash
-# At the end of a work session
-echo &quot;# Next Steps
+<span class="hljs-comment"># Structured JSON output</span>
+thrum context prime --json</code></pre>
+<p><strong>What it includes:</strong></p>
+<ul>
+<li>Agent identity (name, role, module)</li>
+<li>Active session information</li>
+<li>List of registered agents and their status</li>
+<li>Unread messages count</li>
+<li>Git context (branch, commits, files)</li>
+<li>Daemon health status</li>
+</ul>
+<p><strong>Use cases:</strong></p>
+<ul>
+<li>Session initialization - quickly orient a new session</li>
+<li>Session recovery - restore context after crash or compaction</li>
+<li>Debugging - gather all relevant state in one command</li>
+<li>Agent onboarding - provide comprehensive context to new agents</li>
+</ul>
+<p><strong>Note:</strong> This command is an alias for <code>thrum prime</code>. The PreCompact hook<br>automatically saves context before compaction to <code>.thrum/context/{name}.md</code> and<br><code>/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md</code>, but the<br>agent-initiated <code>/update-context</code> skill captures richer context including<br>decisions and rationale.</p>
+<hr>
+<h3>thrum context update</h3>
+<p>The <code>/update-context</code> skill is now integrated with the Thrum MCP server. Use the<br>MCP server for guided context updates:</p>
+<pre><code class="language-bash hljs">thrum mcp serve</code></pre>
+<p><strong>In Claude Code:</strong></p>
+<p>Configure the MCP server in <code>.claude/settings.json</code> and use the<br><code>wait_for_message</code> and <code>send_message</code> tools for context coordination.</p>
+<hr>
+<h2>The /update-context Skill</h2>
+<p>The <code>/update-context</code> skill is now integrated into the Thrum MCP server. The MCP<br>server provides message-based context coordination through the <code>send_message</code><br>and <code>wait_for_message</code> tools.</p>
+<p><strong>Usage:</strong></p>
+<p>Configure the MCP server in <code>.claude/settings.json</code> and agents can coordinate<br>context updates via messages.</p>
+<p><strong>Workflow:</strong></p>
+<ol>
+<li>Agent sends context via <code>send_message</code></li>
+<li>Other agents receive via <code>wait_for_message</code> or <code>check_messages</code></li>
+<li>Skill formats your input as markdown and saves it via<br><code>thrum context save --file /tmp/context.md</code></li>
+</ol>
+<p><strong>Example:</strong></p>
+<pre><code class="language-yaml hljs"><span class="hljs-attr">User:</span> <span class="hljs-string">/update-context</span>
+<span class="hljs-attr">Agent:</span> <span class="hljs-string">What</span> <span class="hljs-string">context</span> <span class="hljs-string">should</span> <span class="hljs-string">I</span> <span class="hljs-string">preserve</span> <span class="hljs-string">for</span> <span class="hljs-string">the</span> <span class="hljs-string">next</span> <span class="hljs-string">session?</span>
+<span class="hljs-attr">User:</span> <span class="hljs-string">We&#x27;re</span> <span class="hljs-string">refactoring</span> <span class="hljs-string">the</span> <span class="hljs-string">auth</span> <span class="hljs-string">module.</span> <span class="hljs-string">Decided</span> <span class="hljs-string">to</span> <span class="hljs-string">use</span> <span class="hljs-string">JWT</span> <span class="hljs-string">with</span>
+      <span class="hljs-string">refresh</span> <span class="hljs-string">tokens.</span> <span class="hljs-string">Need</span> <span class="hljs-string">to</span> <span class="hljs-string">add</span> <span class="hljs-string">rate</span> <span class="hljs-string">limiting</span> <span class="hljs-string">tests.</span>
+<span class="hljs-attr">Agent:</span> [<span class="hljs-string">Saves</span> <span class="hljs-string">formatted</span> <span class="hljs-string">context</span>]
+      <span class="hljs-string">✓</span> <span class="hljs-string">Context</span> <span class="hljs-string">saved</span> <span class="hljs-string">(248</span> <span class="hljs-string">bytes)</span></code></pre>
+<p>The skill reduces the friction of updating context and ensures consistent<br>formatting.</p>
+<hr>
+<h2>Use Cases and Patterns</h2>
+<h3>Single-Agent Session Continuity</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># At the end of a work session</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;# Next Steps
 - Finish JWT implementation
 - Add rate limiting tests
-- Review security considerations&quot; | thrum context save
+- Review security considerations&quot;</span> | thrum context save
 
-# Next session
-thrum context show
-```text
-
-### Multi-Agent Handoff
-
-```bash
-# Agent A saves context before handing off
+<span class="hljs-comment"># Next session</span>
+thrum context show</code></pre>
+<h3>Multi-Agent Handoff</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Agent A saves context before handing off</span>
 thrum context save --file handoff-notes.md
-thrum context sync  # Share across worktrees
+thrum context <span class="hljs-built_in">sync</span>  <span class="hljs-comment"># Share across worktrees</span>
 
-# Agent B (in another worktree) pulls and reads
+<span class="hljs-comment"># Agent B (in another worktree) pulls and reads</span>
 git fetch origin
-thrum context show --agent furiosa
-```text
-
-### Context Updates at Decision Points
-
-Save context when you make a significant decision, discover something important,
-or reach a natural breakpoint:
-
-```bash
-# After architectural decision
-echo &quot;# Decision: Using JWT with refresh tokens
+thrum context show --agent furiosa</code></pre>
+<h3>Context Updates at Decision Points</h3>
+<p>Save context when you make a significant decision, discover something important,<br>or reach a natural breakpoint:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># After architectural decision</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;# Decision: Using JWT with refresh tokens
 - Token expiry: 15 min (access), 7 days (refresh)
 - Storage: Redis for refresh tokens
-- Rate limit: 100 req/min per IP&quot; | thrum context save
-```text
-
-### Integration with thrum status
-
-The `thrum status` command shows context file size and age when context exists:
-
-```bash
-$ thrum status
+- Rate limit: 100 req/min per IP&quot;</span> | thrum context save</code></pre>
+<h3>Integration with thrum status</h3>
+<p>The <code>thrum status</code> command shows context file size and age when context exists:</p>
+<pre><code class="language-bash hljs">$ thrum status
 Agent:    furiosa (@implementer)
 Module:   auth
 Session:  ses_01HXF2A9... (active 2h15m)
 Intent:   Implementing JWT refresh
-Context:  1.2 KB (updated 5m ago)    # ← Context indicator
-Inbox:    3 unread (12 total)
-```text
+Context:  1.2 KB (updated 5m ago)    <span class="hljs-comment"># ← Context indicator</span>
+Inbox:    3 unread (12 total)</code></pre>
+<hr>
+<h2>RPC API</h2>
+<p>Context operations are available via the daemon&#39;s RPC API:</p>
+<h3>context.save</h3>
+<p><strong>Request:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;context.save&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;base64-encoded-content&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Context saved for furiosa (248 bytes)&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<hr>
+<h3>context.show</h3>
+<p><strong>Request:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;context.show&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;include_preamble&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p>The <code>include_preamble</code> field is optional and defaults to <code>true</code> when omitted.</p>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;preamble&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;base64-encoded-preamble&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;base64-encoded-content&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;has_context&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;has_preamble&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;preamble_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">256</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1234</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-11T10:00:00Z&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<hr>
+<h3>context.preamble.show</h3>
+<p><strong>Request:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;context.preamble.show&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;base64-encoded-preamble&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;has_preamble&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<hr>
+<h3>context.preamble.save</h3>
+<p><strong>Request:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;context.preamble.save&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;base64-encoded-content&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Preamble saved for furiosa (256 bytes)&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<hr>
+<h3>context.clear</h3>
+<p><strong>Request:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;context.clear&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;agent_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Context cleared for furiosa&quot;</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+<hr>
+<h2>Implementation Notes</h2>
+<h3>Locking Strategy</h3>
+<p>Context RPC handlers follow the daemon&#39;s standard locking patterns:</p>
+<ul>
+<li><code>context.save</code> and <code>context.clear</code> acquire a write lock (<code>Lock()</code>)</li>
+<li><code>context.show</code> acquires a read lock (<code>RLock()</code>)</li>
+</ul>
+<p>This ensures thread-safe access when multiple clients interact with context<br>files.</p>
+<h3>File Format</h3>
+<p>Context files are plain markdown (<code>.md</code>). No special format or structure is<br>enforced - agents are free to use any markdown convention that suits their<br>workflow.</p>
+<p><strong>Common patterns:</strong></p>
+<ul>
+<li>Heading-based sections (<code># Next Steps</code>, <code># Decisions</code>, <code># Questions</code>)</li>
+<li>Bulleted lists for TODOs</li>
+<li>Code blocks for snippets or commands</li>
+<li>Fenced blocks for structured data (JSON, YAML)</li>
+</ul>
+<h3>Sync Workflow (Manual Only)</h3>
+<p>Context sync is manual-only to avoid noise and respect agent autonomy:</p>
+<ul>
+<li>The daemon never auto-syncs context files</li>
+<li>Agents must explicitly run <code>thrum context sync</code> to share</li>
+<li>Sync respects local-only mode (no-op when <code>--local</code> is set on the daemon)</li>
+</ul>
+<p><strong>Rationale:</strong> Context is volatile and session-specific. Auto-syncing would<br>create unnecessary churn. Manual sync gives agents control over when and what to<br>share.</p>
+<hr>
+<h2>Best Practices</h2>
+<h3>Keep Context Concise</h3>
+<p>Context files should be high-signal summaries, not exhaustive logs. Prefer<br>bullet points over paragraphs.</p>
+<p><strong>Good:</strong></p>
+<pre><code class="language-markdown hljs"><span class="hljs-section"># Next Steps</span>
 
----
-
-## RPC API
-
-Context operations are available via the daemon&#x27;s RPC API:
-
-### context.save
-
-**Request:**
-
-```json
-{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;method&quot;: &quot;context.save&quot;,
-  &quot;params&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;content&quot;: &quot;base64-encoded-content&quot;
-  }
-}
-```text
-
-**Response:**
-
-```json
-{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;result&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;message&quot;: &quot;Context saved for furiosa (248 bytes)&quot;
-  }
-}
-```text
-
----
-
-### context.show
-
-**Request:**
-
-```json
-{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;method&quot;: &quot;context.show&quot;,
-  &quot;params&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;include_preamble&quot;: true
-  }
-}
-```text
-
-The `include_preamble` field is optional and defaults to `true` when omitted.
-
-**Response:**
-
-```json
-{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;result&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;preamble&quot;: &quot;base64-encoded-preamble&quot;,
-    &quot;content&quot;: &quot;base64-encoded-content&quot;,
-    &quot;has_context&quot;: true,
-    &quot;has_preamble&quot;: true,
-    &quot;preamble_size&quot;: 256,
-    &quot;size&quot;: 1234,
-    &quot;updated_at&quot;: &quot;2026-02-11T10:00:00Z&quot;
-  }
-}
-```text
-
----
-
-### context.preamble.show
-
-**Request:**
-
-```json
-{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;method&quot;: &quot;context.preamble.show&quot;,
-  &quot;params&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;
-  }
-}
-```text
-
-**Response:**
-
-```json
-{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;result&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;content&quot;: &quot;base64-encoded-preamble&quot;,
-    &quot;has_preamble&quot;: true
-  }
-}
-```text
-
----
-
-### context.preamble.save
-
-**Request:**
-
-```json
-{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;method&quot;: &quot;context.preamble.save&quot;,
-  &quot;params&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;content&quot;: &quot;base64-encoded-content&quot;
-  }
-}
-```text
-
-**Response:**
-
-```json
-{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;result&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;message&quot;: &quot;Preamble saved for furiosa (256 bytes)&quot;
-  }
-}
-```text
-
----
-
-### context.clear
-
-**Request:**
-
-```json
-{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;method&quot;: &quot;context.clear&quot;,
-  &quot;params&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;
-  }
-}
-```text
-
-**Response:**
-
-```json
-{
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;id&quot;: 1,
-  &quot;result&quot;: {
-    &quot;agent_name&quot;: &quot;furiosa&quot;,
-    &quot;message&quot;: &quot;Context cleared for furiosa&quot;
-  }
-}
-```text
-
----
-
-## Implementation Notes
-
-### Locking Strategy
-
-Context RPC handlers follow the daemon&#x27;s standard locking patterns:
-
-- `context.save` and `context.clear` acquire a write lock (`Lock()`)
-- `context.show` acquires a read lock (`RLock()`)
-
-This ensures thread-safe access when multiple clients interact with context
-files.
-
-### File Format
-
-Context files are plain markdown (`.md`). No special format or structure is
-enforced - agents are free to use any markdown convention that suits their
-workflow.
-
-**Common patterns:**
-
-- Heading-based sections (`# Next Steps`, `# Decisions`, `# Questions`)
-- Bulleted lists for TODOs
-- Code blocks for snippets or commands
-- Fenced blocks for structured data (JSON, YAML)
-
-### Sync Workflow (Manual Only)
-
-Context sync is manual-only to avoid noise and respect agent autonomy:
-
-- The daemon never auto-syncs context files
-- Agents must explicitly run `thrum context sync` to share
-- Sync respects local-only mode (no-op when `--local` is set on the daemon)
-
-**Rationale:** Context is volatile and session-specific. Auto-syncing would
-create unnecessary churn. Manual sync gives agents control over when and what to
-share.
-
----
-
-## Best Practices
-
-### Keep Context Concise
-
-Context files should be high-signal summaries, not exhaustive logs. Prefer
-bullet points over paragraphs.
-
-**Good:**
-
-```markdown
-# Next Steps
-
-- Finish JWT implementation (see src/auth/jwt.go)
-- Add rate limiting (decided on 100 req/min per IP)
-- Review security: check token expiry edge cases
-```text
-
-**Bad:**
-
-```markdown
-# What I Did Today
+<span class="hljs-bullet">-</span> Finish JWT implementation (see src/auth/jwt.go)
+<span class="hljs-bullet">-</span> Add rate limiting (decided on 100 req/min per IP)
+<span class="hljs-bullet">-</span> Review security: check token expiry edge cases</code></pre>
+<p><strong>Bad:</strong></p>
+<pre><code class="language-markdown hljs"><span class="hljs-section"># What I Did Today</span>
 
 I started by looking at the auth module and then I realized that we need JWT so
 I implemented a basic version but it&#x27;s not complete yet and I still need to add
 rate limiting which I discussed with the team and we decided on 100 requests per
-minute...
-```text
-
-### Update Context at Decision Points
-
-Save context when you make a significant decision, discover something important,
-or reach a natural breakpoint.
-
-**When to update:**
-
-- After choosing between architectural alternatives
-- When discovering a bug or anti-pattern
-- Before switching to a different task
-- At the end of a work session
-
-### Use the /update-context Skill
-
-The skill provides a consistent, low-friction workflow for updating context.
-Install it and use it regularly.
-
-### Sync Selectively
-
-Only sync context that is useful to other agents or future sessions on different
-machines. Local notes and WIP context can stay local.
-
----
-
-## See Also
-
-- [Identity System](identity.md) - Agent identity and registration
-- [CLI Reference](cli.md) - All CLI commands
-- [RPC API Reference](rpc-api.md) - Complete RPC method documentation
-- [Agent Coordination](agent-coordination.md) - Multi-agent workflows</code></pre>
+minute...</code></pre>
+<h3>Update Context at Decision Points</h3>
+<p>Save context when you make a significant decision, discover something important,<br>or reach a natural breakpoint.</p>
+<p><strong>When to update:</strong></p>
+<ul>
+<li>After choosing between architectural alternatives</li>
+<li>When discovering a bug or anti-pattern</li>
+<li>Before switching to a different task</li>
+<li>At the end of a work session</li>
+</ul>
+<h3>Use the /update-context Skill</h3>
+<p>The skill provides a consistent, low-friction workflow for updating context.<br>Install it and use it regularly.</p>
+<h3>Sync Selectively</h3>
+<p>Only sync context that is useful to other agents or future sessions on different<br>machines. Local notes and WIP context can stay local.</p>
+<hr>
+<h2>See Also</h2>
+<ul>
+<li><a href="identity.html">Identity System</a> - Agent identity and registration</li>
+<li><a href="cli.html">CLI Reference</a> - All CLI commands</li>
+<li><a href="rpc-api.html">RPC API Reference</a> - Complete RPC method documentation</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> - Multi-agent workflows</li>
+</ul>
+<pre><code></code></pre>
 
     </div>
     <p style="margin-top:2rem"><a href="../docs.html#context.html">&larr; View in documentation</a></p>

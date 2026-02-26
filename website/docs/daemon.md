@@ -24,7 +24,7 @@ the central coordinator for all Thrum clients (CLI, Web UI, and MCP server).
 
 ## Architecture
 
-````go
+```go
 ┌─────────────┐  ┌──────────────┐  ┌──────────────┐
 │   CLI       │  │   Web UI     │  │  MCP Server  │
 │  (client)   │  │  (browser)   │  │ (thrum mcp)  │
@@ -60,7 +60,7 @@ the central coordinator for all Thrum clients (CLI, Web UI, and MCP server).
   ├── identities/            (per-worktree agent identity files)
   │   └── {agent_name}.json
   └── redirect               (feature worktrees only)
-```go
+```
 
 ## Components
 
@@ -107,7 +107,7 @@ communication.
   },
   "id": 1
 }
-```go
+```
 
 ### 2. PID File Management
 
@@ -124,7 +124,7 @@ Manages process ID file with JSON metadata for daemon lifecycle.
   "started_at": "2026-02-08T12:00:00Z",
   "socket_path": "/Users/leon/dev/myproject/.thrum/var/thrum.sock"
 }
-```go
+```
 
 **Functions:**
 
@@ -236,7 +236,7 @@ See [RPC API Reference](rpc-api.md) for full documentation.
   "repo_id": "abc123",
   "sync_state": "synced"
 }
-```text
+```
 
 ### 6. WebSocket Server and Embedded SPA
 
@@ -365,13 +365,13 @@ thrum daemon start --local
 
 # Via environment variable
 THRUM_LOCAL=1 thrum daemon start
-```text
+```
 
 The setting persists in `.thrum/config.json`:
 
 ```json
 { "local_only": true }
-```text
+```
 
 **Priority order:** CLI flag > environment variable > config file > default
 (`true` via `thrum init`).
@@ -396,7 +396,7 @@ thrum sync status
 
 thrum sync force
 # Shows "local-only (remote sync disabled)" when active
-```go
+```
 
 ### 9. State Management
 
@@ -497,7 +497,7 @@ For setup instructions, see [Quickstart Guide](quickstart.md).
      │
      ▼
  STOPPED
-```text
+```
 
 ### Checking Status
 
@@ -507,7 +507,7 @@ thrum daemon status
 
 # Health check via RPC
 thrum daemon health
-```text
+```
 
 ### Stopping the Daemon
 
@@ -518,7 +518,7 @@ thrum daemon stop
 # Force stop (if graceful fails)
 kill <pid>
 # flock auto-released by OS; PID file cleaned up on next start
-```text
+```
 
 ## Directory Structure
 
@@ -539,7 +539,7 @@ kill <pid>
 ├── identities/                 # Per-worktree agent identity files
 │   └── {agent_name}.json
 └── redirect                    # (feature worktrees only) points to main .thrum/
-```go
+```
 
 **Key files:**
 
@@ -569,7 +569,7 @@ go test -cover ./internal/daemon/...
 
 # With race detector
 go test -race ./internal/daemon/...
-```go
+```
 
 ### Adding New RPC Methods
 
@@ -593,7 +593,7 @@ func (h *MyMethodHandler) Handle(ctx context.Context, params json.RawMessage) (a
 
 // Register in daemon (cmd/thrum/main.go)
 server.RegisterHandler("mymethod", myMethodHandler.Handle)
-```text
+```
 
 ## Troubleshooting
 
@@ -617,7 +617,7 @@ ps aux | grep thrum
 
 # Remove stale PID file (only if process is definitely not running)
 rm .thrum/var/thrum.pid
-```go
+```
 
 ### Socket connection errors
 
@@ -633,7 +633,7 @@ ls -l .thrum/var/thrum.sock
 
 # Test connection
 echo '{"jsonrpc":"2.0","method":"health","id":1}' | nc -U .thrum/var/thrum.sock
-```text
+```
 
 ### Graceful shutdown hangs
 
@@ -648,7 +648,7 @@ kill -9 <pid>
 # Manual cleanup if needed:
 rm .thrum/var/thrum.sock
 rm .thrum/var/thrum.pid
-```text
+```
 
 ## Implemented Features
 
@@ -676,4 +676,4 @@ rm .thrum/var/thrum.pid
 - Design document: `dev-docs/2026-02-03-thrum-design.md`
 - RPC API reference: `docs/rpc-api.md`
 - Development guide: `docs/development.md`
-````
+```

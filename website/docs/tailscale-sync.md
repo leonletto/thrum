@@ -45,15 +45,15 @@ events, and session updates propagate automatically.
 
 Set the environment variable to enable Tailscale integration:
 
-````bash
+```bash
 export THRUM_TS_ENABLED=true
-```text
+```
 
 ### 2. Start the Daemon
 
 ```bash
 thrum daemon start
-```text
+```
 
 When Tailscale sync is enabled, the daemon:
 
@@ -71,7 +71,7 @@ Pairing requires action on both machines simultaneously:
 ```bash
 thrum peer add
 # Output: Waiting for connection... Pairing code: 7392
-```text
+```
 
 **On Machine B** (the one joining):
 
@@ -80,13 +80,13 @@ thrum peer join my-laptop:9100
 # Prompts: Enter pairing code:
 # You type: 7392
 # Output: Paired with "my-laptop". Syncing started.
-```text
+```
 
 Machine A will also show success:
 
 ```text
 Paired with "office-server" (100.64.2.10:9100). Syncing started.
-```text
+```
 
 Both machines now sync events automatically.
 
@@ -101,7 +101,7 @@ thrum peer status
 
 # Check health endpoint
 thrum status
-```text
+```
 
 ## Architecture
 
@@ -119,7 +119,7 @@ Machine A                           Machine B
     │ Agents  │                          │ Agents  │
     │ CLI/MCP │                          │ CLI/MCP │
     └─────────┘                          └─────────┘
-```text
+```
 
 ### Component Overview
 
@@ -167,7 +167,7 @@ Daemon A                              Daemon B
    │  {events: [...], next_seq: 1500,     │
    │   more_available: false}             │
    │◄─────────────────────────────────────┤
-```text
+```
 
 Batched pull with the `limit+1` trick to determine `more_available`. Checkpoints
 are persisted per-peer so sync resumes from where it left off. All requests
@@ -185,7 +185,7 @@ Daemon A writes event
    ├──► sync.notify(daemon_id, latest_seq, token) ──► Daemon C
    │
    Daemons B and C pull new events from A
-```text
+```
 
 Push notifications are fire-and-forget -- failures are logged but do not block
 the writer.
@@ -225,7 +225,7 @@ Machine A (thrum peer add)           Machine B (thrum peer join)
    │                                      │
    │  Both peers now authenticate with    │
    │  the shared token on every request   │
-```text
+```
 
 - The pairing code is a random 4-digit number (3 attempts allowed)
 - The token is a random 32-byte hex string
@@ -266,7 +266,7 @@ thrum peer remove <name>
 
 # Detailed sync status for all peers
 thrum peer status
-```text
+```
 
 ### `thrum status`
 
@@ -277,7 +277,7 @@ Tailscale Sync: enabled
   Peers: 2 connected
   Last sync: 30s ago
   Hostname: my-laptop
-```go
+```
 
 ## Security Model
 
@@ -343,7 +343,7 @@ The daemon's `health` RPC method includes Tailscale sync status when enabled:
     ]
   }
 }
-```text
+```
 
 ### Logs
 
@@ -354,7 +354,7 @@ Tailscale sync logs are prefixed for easy filtering:
 [pairing] Paired with office-server (d_abc123) at 100.64.2.10:9100
 sync.notify: synced from d_abc123 — applied=5 skipped=0
 periodic_sync: starting with interval=5m0s, recent_threshold=2m0s
-```text
+```
 
 ## Troubleshooting
 
@@ -402,4 +402,4 @@ periodic_sync: starting with interval=5m0s, recent_threshold=2m0s
   integration
 - [Sync Protocol](sync.md) -- Git-based synchronization details
 - [CLI Reference](cli.md) -- Complete command documentation
-````
+```

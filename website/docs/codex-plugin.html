@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Codex Plugin — Thrum</title>
+  <meta name="description" content="Install and use Thrum's Codex skill bundle — split skills for coordination, operations, role template generation, and project setup">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Codex Plugin — Thrum">
+  <meta property="og:description" content="Install and use Thrum's Codex skill bundle — split skills for coordination, operations, role template generation, and project setup">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/codex-plugin.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Codex Plugin — Thrum">
+  <meta name="twitter:description" content="Install and use Thrum's Codex skill bundle — split skills for coordination, operations, role template generation, and project setup">
+  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#codex-plugin.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h2>Codex Plugin</h2>
+<blockquote>
+<p>See also: <a href="quickstart.html">Quickstart Guide</a> for base Thrum setup,<br><a href="claude-code-plugin.html">Claude Code Plugin</a> for Claude-specific plugin flows,<br><a href="agent-coordination.html">Agent Coordination</a> for coordination patterns,<br><a href="role-templates.html">Role Templates</a> for role preamble details.</p>
+</blockquote>
+<h2>Overview</h2>
+<p>Codex does not currently use the Claude-style plugin marketplace model.<br>Instead, Thrum integration is packaged as a <strong>Codex skill bundle</strong> in<br><code>codex-plugin/skills</code>.</p>
+<p>The bundle is split into focused skills:</p>
+<ul>
+<li><code>thrum-core</code> — durable messaging, groups, identity, worktree boundaries</li>
+<li><code>thrum-ops</code> — quickstart/inbox/wait/context/daemon/sync operational flows</li>
+<li><code>thrum-role-config</code> — generate or update <code>.thrum/role_templates</code></li>
+<li><code>project-setup</code> — turn design docs into Beads epics/tasks before coding</li>
+</ul>
+<h2>Prerequisites</h2>
+<ul>
+<li>Thrum installed and available on <code>PATH</code></li>
+<li>Thrum initialized in the repo (<code>thrum init</code>)</li>
+<li>Codex installed with local skills directory (<code>~/.codex/skills</code>)</li>
+</ul>
+<p>If you have not initialized Thrum yet:</p>
+<pre><code class="language-bash hljs">thrum init
+thrum daemon start
+thrum quickstart --name myagent --role implementer --module auth</code></pre>
+<h2>Installation</h2>
+<p>From the Thrum repository root:</p>
+<pre><code class="language-bash hljs">./codex-plugin/scripts/install-skills.sh</code></pre>
+<p>This installs the bundled skills into <code>~/.codex/skills</code> (or<br><code>$CODEX_HOME/skills</code> if <code>CODEX_HOME</code> is set).</p>
+<h3>Verify installed skills</h3>
+<pre><code class="language-bash hljs">find <span class="hljs-string">&quot;<span class="hljs-variable">${CODEX_HOME:-<span class="hljs-variable">$HOME</span>/.codex}</span>/skills&quot;</span> -maxdepth 1 -<span class="hljs-built_in">type</span> d -name <span class="hljs-string">&quot;thrum-*&quot;</span> -o -name <span class="hljs-string">&quot;project-setup&quot;</span></code></pre>
+<h3>Restart Codex</h3>
+<p>Restart Codex after installation so the new skills are loaded.</p>
+<h2>Updating Skills During Development</h2>
+<p>After editing files under <code>codex-plugin/skills/</code>, sync updates into your local<br>Codex installation:</p>
+<pre><code class="language-bash hljs">./codex-plugin/scripts/sync-skills.sh</code></pre>
+<p><code>sync-skills.sh</code> replaces installed copies with your local versions.</p>
+<h2>Usage Patterns</h2>
+<h3>Multi-agent coordination</h3>
+<p>Ask Codex to coordinate work across agents using Thrum. The <code>thrum-core</code> skill<br>handles audience routing (<code>@agent</code>, <code>@group</code>, <code>@everyone</code>) and durable<br>message/reply workflows.</p>
+<h3>Session operations and triage</h3>
+<p>When you need to bootstrap sessions, triage unread messages, or verify daemon<br>health, <code>thrum-ops</code> provides operational workflows and command references.</p>
+<h3>Role template generation</h3>
+<p>When team structure changes, use <code>thrum-role-config</code> to detect environment<br>context and regenerate <code>.thrum/role_templates/&lt;role&gt;.md</code> with clear autonomy and<br>scope boundaries.</p>
+<h2>Manual Installation (Optional)</h2>
+<p>If you prefer manual copy instead of scripts:</p>
+<pre><code class="language-bash hljs"><span class="hljs-built_in">mkdir</span> -p <span class="hljs-string">&quot;<span class="hljs-variable">${CODEX_HOME:-<span class="hljs-variable">$HOME</span>/.codex}</span>/skills&quot;</span>
+<span class="hljs-built_in">cp</span> -R codex-plugin/skills/thrum-core <span class="hljs-string">&quot;<span class="hljs-variable">${CODEX_HOME:-<span class="hljs-variable">$HOME</span>/.codex}</span>/skills/&quot;</span>
+<span class="hljs-built_in">cp</span> -R codex-plugin/skills/thrum-ops <span class="hljs-string">&quot;<span class="hljs-variable">${CODEX_HOME:-<span class="hljs-variable">$HOME</span>/.codex}</span>/skills/&quot;</span>
+<span class="hljs-built_in">cp</span> -R codex-plugin/skills/thrum-role-config <span class="hljs-string">&quot;<span class="hljs-variable">${CODEX_HOME:-<span class="hljs-variable">$HOME</span>/.codex}</span>/skills/&quot;</span>
+<span class="hljs-built_in">cp</span> -R codex-plugin/skills/project-setup <span class="hljs-string">&quot;<span class="hljs-variable">${CODEX_HOME:-<span class="hljs-variable">$HOME</span>/.codex}</span>/skills/&quot;</span></code></pre>
+<h2>Troubleshooting</h2>
+<p><strong>Skills do not appear in Codex</strong></p>
+<ul>
+<li>Confirm install destination: <code>echo &quot;${CODEX_HOME:-$HOME/.codex}/skills&quot;</code></li>
+<li>Re-run <code>./codex-plugin/scripts/install-skills.sh --force</code></li>
+<li>Restart Codex</li>
+</ul>
+<p><strong>Skill updates are not reflected</strong></p>
+<ul>
+<li>Run <code>./codex-plugin/scripts/sync-skills.sh</code></li>
+<li>Restart Codex after sync</li>
+</ul>
+<p><strong>Thrum commands fail inside skill workflows</strong></p>
+<ul>
+<li>Check daemon status: <code>thrum daemon status</code></li>
+<li>Verify identity/session: <code>thrum whoami &amp;&amp; thrum session start</code></li>
+<li>Confirm repo initialization: <code>thrum status</code></li>
+</ul>
+<h2>Codex Bundle vs Claude Plugin</h2>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Codex Skill Bundle (<code>codex-plugin/</code>)</th>
+<th>Claude Code Plugin (<code>claude plugin</code>)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Packaging</td>
+<td>Local skill folders</td>
+<td>Marketplace plugin</td>
+</tr>
+<tr>
+<td>Installation</td>
+<td><code>install-skills.sh</code></td>
+<td><code>claude plugin install thrum</code></td>
+</tr>
+<tr>
+<td>Updates</td>
+<td><code>sync-skills.sh</code></td>
+<td>Reinstall/update plugin</td>
+</tr>
+<tr>
+<td>Command UX</td>
+<td>Skill-guided CLI workflows</td>
+<td>Slash commands (<code>/thrum:*</code>)</td>
+</tr>
+<tr>
+<td>Role customization</td>
+<td><code>thrum-role-config</code> skill</td>
+<td>Configure-roles plugin skill</td>
+</tr>
+<tr>
+<td>Project decomposition</td>
+<td><code>project-setup</code> skill</td>
+<td>project-setup plugin skill</td>
+</tr>
+</tbody></table>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#codex-plugin.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#codex-plugin.html');
+    }
+  </script>
+</body>
+</html>

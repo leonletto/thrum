@@ -29,7 +29,7 @@ on:
 
 ## Package Structure
 
-````text
+```text
 internal/
 ├── config/      # Configuration loading, identity files, agent naming
 ├── identity/    # ID generation (repo, agent, session, message, event)
@@ -39,7 +39,7 @@ internal/
 ├── paths/       # Path resolution, redirect, sync worktree path
 ├── gitctx/      # Git-derived work context extraction
 └── types/       # Shared event types
-```go
+```
 
 ## Configuration (`internal/config`)
 
@@ -73,7 +73,7 @@ Identity files are stored at `.thrum/identities/{agent_name}.json`
   "confirmed_by": "human:leon",
   "updated_at": "2026-02-03T18:02:10.000Z"
 }
-```go
+```
 
 ### Agent Naming
 
@@ -103,7 +103,7 @@ type AgentConfig struct {
     Module  string // Module/component responsibility
     Display string // Display name
 }
-```text
+```
 
 ### Loading
 
@@ -113,7 +113,7 @@ cfg, err := config.Load(flagRole, flagModule)
 
 // Load from specific repo path
 cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)
-```text
+```
 
 ## Identity (`internal/identity`)
 
@@ -170,7 +170,7 @@ file:
 
 ```text
 .thrum/redirect    -> /path/to/main/worktree/.thrum
-```text
+```
 
 **Resolution rules:**
 
@@ -191,7 +191,7 @@ The sync worktree lives at `.git/thrum-sync/a-sync/`:
 ```go
 syncDir, err := paths.SyncWorktreePath(repoPath)
 // Returns: /path/to/repo/.git/thrum-sync/a-sync
-```go
+```
 
 Uses `git rev-parse --git-common-dir` to find the correct `.git/` directory,
 which handles nested worktrees correctly (where `.git` is a file pointing to the
@@ -222,7 +222,7 @@ type CommitSummary struct {
     Message string   `json:"message"` // First line only
     Files   []string `json:"files"`
 }
-```text
+```
 
 **`ExtractWorkContext(worktreePath)`:**
 
@@ -252,7 +252,7 @@ ch := reader.Stream(ctx)
 for msg := range ch {
     // Process message
 }
-```text
+```
 
 ### Safety Features
 
@@ -271,7 +271,7 @@ events.jsonl              # Agent lifecycle, sessions, threads
 messages/
   furiosa.jsonl           # Messages authored by agent "furiosa"
   coordinator_1B9K.jsonl  # Messages authored by unnamed agent
-```text
+```
 
 Event routing is handled by `internal/daemon/state/` which directs `message.*`
 events to per-agent files and all other events to `events.jsonl`.
@@ -295,7 +295,7 @@ agent_work_contexts # Live git state per session
 groups              # Named collections for targeted messaging
 group_members       # Group membership (agents and roles)
 schema_version      # Migration tracking
-```text
+```
 
 ### Schema Version
 
@@ -318,7 +318,7 @@ schema.InitDB(db)  // Create tables and indexes
 
 // Or use migration (checks version first, runs incremental migrations)
 schema.Migrate(db)
-```text
+```
 
 ### JSONL Migrations
 
@@ -330,7 +330,7 @@ schema.MigrateJSONLSharding(syncDir)
 
 // Backfill event_id (ULID) for events that lack it
 schema.BackfillEventID(syncDir)
-```text
+```
 
 ### Features
 
@@ -356,7 +356,7 @@ projector.Rebuild(syncDir)
 
 // Or apply a single event
 projector.Apply(eventJSON)
-```go
+```
 
 ### Multi-File Rebuild
 
@@ -473,4 +473,4 @@ dispatch operations.
 - Sharding design: `dev-docs/2026-02-06-jsonl-sharding-and-agent-naming.md`
 - Daemon architecture: `docs/daemon.md`
 - Sync protocol: `docs/sync.md`
-````
+```

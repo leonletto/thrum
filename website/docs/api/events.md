@@ -15,7 +15,7 @@ Thrum daemon over WebSocket connections.
 
 Events are sent as JSON-RPC 2.0 notifications (without an `id` field):
 
-````json
+```json
 {
   "jsonrpc": "2.0",
   "method": "event.type",
@@ -23,7 +23,7 @@ Events are sent as JSON-RPC 2.0 notifications (without an `id` field):
     // event-specific payload
   }
 }
-```go
+```
 
 **Key characteristics**:
 
@@ -64,7 +64,7 @@ All persisted events share a common base structure:
   "event_id": "01HQXYZ...",
   "v": 1
 }
-```text
+```
 
 | Field       | Type   | Description                                    |
 | ----------- | ------ | ---------------------------------------------- |
@@ -83,7 +83,7 @@ Events are persisted as sharded JSONL files in the sync worktree at
 ├── events.jsonl              Agent lifecycle events
 └── messages/
     └── {agent_name}.jsonl    Per-agent message events
-```go
+```
 
 **Storage assignment**:
 
@@ -144,7 +144,7 @@ Emitted when a new message is created in the system.
   "authored_by": "",
   "disclosed": false
 }
-```text
+```
 
 **Fields**:
 
@@ -177,7 +177,7 @@ ws.onmessage = (event) => {
     );
   }
 };
-```go
+```
 
 #### message.edit
 
@@ -206,7 +206,7 @@ Emitted when a message is edited.
     "structured": "{\"updated\":true}"
   }
 }
-```text
+```
 
 **Fields**:
 
@@ -235,7 +235,7 @@ ws.onmessage = (event) => {
     updateMessageInUI(edit.message_id, edit.body.content);
   }
 };
-```go
+```
 
 #### message.delete
 
@@ -260,7 +260,7 @@ Emitted when a message is soft-deleted.
   "message_id": "msg_xyz789",
   "reason": "spam"
 }
-```text
+```
 
 **Fields**:
 
@@ -285,7 +285,7 @@ ws.onmessage = (event) => {
     removeMessageFromUI(deletion.message_id);
   }
 };
-```go
+```
 
 ### Thread Events
 
@@ -312,7 +312,7 @@ Emitted when a new thread is created.
   "title": "Discussion about feature X",
   "created_by": "furiosa"
 }
-```go
+```
 
 **Fields**:
 
@@ -349,7 +349,7 @@ event is a WebSocket notification only and is **not persisted** to JSONL.
   "last_sender": "furiosa",
   "preview": "Latest message text..."
 }
-```go
+```
 
 **Fields**:
 
@@ -389,7 +389,7 @@ Emitted when an agent registers with the daemon.
   "worktree": "main",
   "display": "Auth Implementer"
 }
-```go
+```
 
 **Fields**:
 
@@ -436,7 +436,7 @@ Emitted when an agent is deleted or cleaned up.
   "reason": "manual deletion",
   "method": "manual"
 }
-```go
+```
 
 **Fields**:
 
@@ -484,7 +484,7 @@ Emitted when an agent's work context changes (git state, intent, task).
     }
   ]
 }
-```go
+```
 
 **Fields**:
 
@@ -528,7 +528,7 @@ Emitted when a session starts.
   "session_id": "s_abc123",
   "agent_id": "furiosa"
 }
-```go
+```
 
 **Fields**:
 
@@ -570,7 +570,7 @@ Emitted when a session ends.
   "session_id": "s_abc123",
   "reason": "normal"
 }
-```go
+```
 
 **Fields**:
 
@@ -609,7 +609,7 @@ Only receive events for messages that match the subscribed scope.
   },
   "id": 1
 }
-```go
+```
 
 **Matching logic**:
 
@@ -632,7 +632,7 @@ Only receive events for messages that mention a specific role.
   },
   "id": 1
 }
-```go
+```
 
 **Matching logic**:
 
@@ -654,7 +654,7 @@ Receive all events (use with caution, high volume).
   },
   "id": 1
 }
-```go
+```
 
 **Use cases**:
 
@@ -811,7 +811,7 @@ ws.onmessage = (event) => {
     handleRPCResponse(msg);
   }
 };
-```go
+```
 
 ### Go
 
@@ -863,10 +863,10 @@ func handleMessage(data []byte) error {
     // RPC response (has ID)
     return handleRPCResponse(&msg)
 }
-```text
+```
 
 ## See Also
 
 - [WebSocket API](./websocket.md) - Main API documentation
 - [Authentication Guide](./authentication.md) - User and agent authentication
-````
+```
