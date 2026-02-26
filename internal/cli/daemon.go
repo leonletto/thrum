@@ -235,8 +235,8 @@ func DaemonRestart(repoPath string, localOnly bool) error {
 
 	// Preserve the previous WebSocket port so the UI reconnects to the same URL
 	if prevPort > 0 {
-		os.Setenv("THRUM_WS_PORT", fmt.Sprintf("%d", prevPort)) //nolint:errcheck
-		defer os.Unsetenv("THRUM_WS_PORT")                      //nolint:errcheck
+		os.Setenv("THRUM_WS_PORT", fmt.Sprintf("%d", prevPort)) //nolint:errcheck,gosec
+		defer os.Unsetenv("THRUM_WS_PORT")                      //nolint:errcheck,gosec
 	}
 
 	// Start daemon
