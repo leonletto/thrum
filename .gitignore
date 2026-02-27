@@ -83,3 +83,7 @@ playwright-report/
 .thrum/
 .thrum.*.json
 scripts/thrum-startup.sh
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db

@@ -30,14 +30,14 @@ each skill as the pipeline progresses.
 Interactive design exploration. Claude works with you to understand the problem
 space, explore approaches, and reach a design decision.
 
-Produces: a design doc at `docs/plans/YYYY-MM-DD-<topic>-design.md`
+Produces: a design doc at `dev-docs/plans/YYYY-MM-DD-<topic>-design.md`
 
 ### writing-plans
 
 Structures the approved design into phased, ordered implementation steps.
 Produces a plan file that project-setup can consume.
 
-Produces: a plan file at `docs/plans/YYYY-MM-DD-<topic>-plan.md`
+Produces: a plan file at `dev-docs/plans/YYYY-MM-DD-<topic>-plan.md`
 
 ### project-setup
 
@@ -147,8 +147,8 @@ the skill.
 
 | What                               | Lives In                                 | Used By                                |
 | ---------------------------------- | ---------------------------------------- | -------------------------------------- |
-| Design decisions                   | Design doc (`docs/plans/*-design.md`)    | brainstorming, writing-plans           |
-| Phased implementation steps        | Plan file (`docs/plans/*-plan.md`)       | project-setup skill                    |
+| Design decisions                   | Design doc (`dev-docs/plans/*-design.md`)    | brainstorming, writing-plans           |
+| Phased implementation steps        | Plan file (`dev-docs/plans/*-plan.md`)       | project-setup skill                    |
 | Task details & acceptance criteria | Beads task descriptions                  | Implementation agent                   |
 | Epic structure & dependencies      | Beads epic + `bd dep` relationships      | All agents                             |
 | Implementation progress            | Beads task status + git commit history   | Implementation agent (orient phase)    |
