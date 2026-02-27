@@ -1,3 +1,4 @@
+
 ## Agent Identity & Registration
 
 ## Overview
@@ -16,9 +17,9 @@ Agents can have one of two ID formats:
 
 **Named agents** (recommended):
 
-````text
-furiosa
 ```text
+furiosa
+```
 
 When a `--name` flag or `THRUM_NAME` env var is provided, the name **is** the
 agent ID. The name becomes the canonical identifier for display, messaging
@@ -28,14 +29,14 @@ agent ID. The name becomes the canonical identifier for display, messaging
 
 ```text
 coordinator_1B9K33T6RK
-```text
+```
 
 When no name is provided, the agent ID is generated deterministically:
 
 ```text
 hash = crockford_base32(sha256(repo_id + "|" + role + "|" + module))[:10]
 agent_id = role + "_" + hash
-```text
+```
 
 This means:
 
@@ -49,7 +50,7 @@ This means:
 
 ```text
 agent:implementer:9F2K3M1Q8Z
-```go
+```
 
 The `agent:{role}:{hash}` format is still recognized for backward compatibility
 but is no longer generated. Legacy IDs are converted internally via
@@ -136,7 +137,7 @@ Thrum resolves agent identity using a priority chain:
 5. Identity file auto-selection (.thrum/identities/ directory)
    ↓
 6. Error if required fields missing                [Lowest priority]
-```text
+```
 
 ### Environment Variables
 
@@ -145,7 +146,7 @@ export THRUM_NAME=furiosa          # Select identity file (highest priority)
 export THRUM_ROLE=implementer      # Override role
 export THRUM_MODULE=auth           # Override module
 export THRUM_DISPLAY="Auth Agent"  # Override display name
-```text
+```
 
 `THRUM_NAME` environment variable takes highest priority in identity resolution,
 overriding the `--agent-id` flag and identity file auto-selection. It is the
@@ -172,7 +173,7 @@ Use environment variables when:
 ```bash
 thrum agent register --name=furiosa --role=implementer --module=auth
 thrum quickstart --name furiosa --role implementer --module auth --intent "Working on auth"
-```text
+```
 
 CLI flags (`--role`, `--module`) override environment variables and identity
 file settings. The `--name` flag is available on `quickstart` and
@@ -192,7 +193,7 @@ after the agent:
 ├── furiosa.json           # Named agent
 ├── nux.json               # Named agent
 └── coordinator_1B9K33T6RK.json  # Unnamed agent (hash-based)
-```text
+```
 
 **Identity file format** (version 2):
 
@@ -211,7 +212,7 @@ after the agent:
   "confirmed_by": "human:leon",
   "updated_at": "2026-02-03T18:02:10.000Z"
 }
-```text
+```
 
 **Auto-selection rules** for identity files:
 
@@ -287,7 +288,7 @@ Use the `re_register` flag when:
   "module": "auth",
   "re_register": true
 }
-```text
+```
 
 Response:
 
@@ -296,7 +297,7 @@ Response:
   "agent_id": "furiosa",
   "status": "updated"
 }
-```text
+```
 
 ### Quickstart (Recommended)
 
@@ -305,7 +306,7 @@ setting into one step:
 
 ```bash
 thrum quickstart --name furiosa --role implementer --module auth --intent "Working on auth"
-```text
+```
 
 This chains: `agent.register` -> `session.start` -> `session.setIntent` (if
 intent provided). If a conflict occurs, it automatically retries with
@@ -333,7 +334,7 @@ When conflict is detected:
     "last_seen_at": "2026-02-03T12:00:00Z"
   }
 }
-```text
+```
 
 ### Conflict Resolution Options
 
@@ -343,7 +344,7 @@ The simplest solution -- pick a different area:
 
 ```bash
 thrum quickstart --name nux --role implementer --module auth_testing
-```text
+```
 
 #### 2. Use `--force` Flag
 
@@ -356,7 +357,7 @@ Override the existing agent (you take ownership):
   "module": "auth",
   "force": true
 }
-```text
+```
 
 **Warning:** This is destructive. The previous agent's database entry is deleted
 and replaced. Only use when:
@@ -391,7 +392,7 @@ work on the same module.
 
 ```bash
 thrum agent delete furiosa
-```text
+```
 
 This removes:
 
@@ -408,7 +409,7 @@ thrum agent cleanup --dry-run
 
 # Delete all orphans without prompting
 thrum agent cleanup --force
-```text
+```
 
 The cleanup command detects orphaned agents by checking:
 
@@ -440,7 +441,7 @@ thrum quickstart --name furiosa --role implementer --module auth
 # Sync worktree - sync implementer
 cd ~/.workspaces/myapp/sync
 thrum quickstart --name nux --role implementer --module sync
-```text
+```
 
 Each worktree gets its own `.thrum/identities/` directory (or uses
 `.thrum/redirect` to share a common `.thrum/` directory).
@@ -454,14 +455,14 @@ file:
 .thrum/identities/
 ├── furiosa.json     # agent working on implementation
 ├── reviewer.json    # agent reviewing code
-```text
+```
 
 Use `THRUM_NAME` to select which identity to use:
 
 ```bash
 THRUM_NAME=furiosa thrum send "Implementation complete"
 THRUM_NAME=reviewer thrum send "LGTM, approved"
-```text
+```
 
 ### Gitignore Identity Files
 
@@ -485,14 +486,14 @@ thrum quickstart --name furiosa --role implementer --module auth --intent "Start
 thrum agent register --name=furiosa --role=implementer --module=auth
 thrum session start
 thrum send "Starting work on auth module"
-```text
+```
 
 ### Check Current Identity
 
 ```bash
 # See who you are and if you have an active session
 thrum agent whoami
-```text
+```
 
 Response:
 
@@ -506,7 +507,7 @@ Response:
   "session_id": "ses_01HXE8Z7R9K3Q6M2W8F4VY",
   "session_start": "2026-02-03T10:00:00Z"
 }
-```text
+```
 
 ### List All Agents
 
@@ -519,7 +520,7 @@ thrum agent list --role=implementer
 
 # Filter by module
 thrum agent list --module=auth
-```go
+```
 
 ### MCP Server Identity
 
@@ -533,10 +534,19 @@ THRUM_NAME=furiosa thrum mcp serve
 
 # Or use --agent-id flag
 thrum mcp serve --agent-id furiosa
-```text
+```
 
 The MCP server requires a named agent (the `name` field must be set in the
 identity file).
+
+### Git Username (user.identify)
+
+The Web UI and MCP server use `user.identify` to read the git username from
+`git config user.name`. This username is used to auto-register a browser agent
+in the Web UI (via `user.register`) and to associate the WebSocket session with
+a human identity. The git username is read at connection time — no separate
+configuration is needed beyond having a valid `git config user.name` set in your
+environment.
 
 ## ID Generation Functions
 
@@ -593,7 +603,7 @@ suffixes and converts to lowercase HTTPS format.
 
 ```bash
 thrum quickstart --name myagent --role your_role --module your_module
-```text
+```
 
 ### "Multiple identity files found" Error
 
@@ -605,7 +615,7 @@ you are:
 
 ```bash
 export THRUM_NAME=furiosa
-```text
+```
 
 ### Registration Conflict
 
@@ -646,7 +656,7 @@ thrum agent whoami
 # - "environment" = env vars
 # - "flags" = CLI flags
 # - "identity_file" = .thrum/identities/{name}.json
-```text
+```
 
 ## References
 
@@ -660,4 +670,4 @@ thrum agent whoami
 - Agent RPC: `internal/daemon/rpc/agent.go` - Registration, deletion, cleanup
   handlers
 - MCP Server: `internal/mcp/server.go` - MCP identity loading
-````
+```

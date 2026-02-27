@@ -289,6 +289,53 @@
   display: none;
 }
 
+/* ── Collapsible sub-categories ─────────────────────────────────────────── */
+
+.sidebar-subcategory {
+  padding: 0;
+  margin-left: var(--space-md);
+}
+
+.sidebar-subcategory-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+  padding: var(--space-sm) var(--space-md) var(--space-sm) var(--space-lg);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-subtle);
+  transition: color var(--transition-fast);
+}
+
+.sidebar-subcategory-label:hover {
+  color: var(--text-muted);
+}
+
+.sidebar-chevron {
+  display: inline-block;
+  font-size: 8px;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-category.collapsed > .sidebar-category-content {
+  display: none;
+}
+
+.sidebar-subcategory:not(.collapsed) > .sidebar-subcategory-label .sidebar-chevron {
+  transform: rotate(90deg);
+}
+
+.sidebar-sublink {
+  padding-left: calc(var(--space-lg) + var(--space-sm));
+  font-size: 12px;
+}
+
 /* ============================================================================
    CONTENT
    ========================================================================= */
@@ -478,6 +525,10 @@ html[data-theme="light"] .sidebar-link.active {
   color: #0891b2;
   border-left-color: #0891b2;
   background: rgba(8, 145, 178, 0.06);
+}
+
+html[data-theme="light"] .sidebar-subcategory-label:hover {
+  color: var(--text-secondary);
 }
 
 html[data-theme="light"] .docs-content-inner h2 {

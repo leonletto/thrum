@@ -148,7 +148,7 @@ async function processMarkdownFile(filePath, docsDir, outputDir) {
     title: frontmatter.title || path.basename(filePath, '.md'),
     description: frontmatter.description || '',
     category: frontmatter.category || 'uncategorized',
-    order: frontmatter.order || 999,
+    order: frontmatter.order != null ? frontmatter.order : 999,
     tags: frontmatter.tags || [],
     lastUpdated: frontmatter.last_updated || '',
     content: markdown,

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playwright CLI Setup Guide — Thrum</title>
+  <meta name="description" content="Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Playwright CLI Setup Guide — Thrum">
+  <meta property="og:description" content="Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/guides/playwright-cli-setup.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Playwright CLI Setup Guide — Thrum">
+  <meta name="twitter:description" content="Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing">
+  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/playwright-cli-setup.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h2>Playwright CLI Setup Guide</h2>
+<p>Playwright CLI is a Claude Code skill that lets agents automate browser<br>interactions — navigate pages, take screenshots, fill forms, and extract<br>content. It&#39;s useful for capturing visual context, verifying web UI changes, and<br>testing browser-based features during agent workflows.</p>
+<h3>Why Use It</h3>
+<p>AI agents work with code, but sometimes they need to see or interact with what<br>the code produces. Common use cases with Thrum:</p>
+<ul>
+<li><strong>Capture context</strong> — Screenshot a web UI before and after changes, saving<br>visual evidence of what was modified</li>
+<li><strong>Verify changes</strong> — After an agent implements a UI fix, it can open the page<br>and confirm the rendering is correct</li>
+<li><strong>Extract data</strong> — Pull text, network responses, or DOM state from a running<br>web application</li>
+<li><strong>Fill forms and test flows</strong> — Drive a browser through user flows to validate<br>end-to-end behavior</li>
+</ul>
+<h3>Installation</h3>
+<p>Playwright CLI runs as a Claude Code skill. There are two ways to set it up:</p>
+<h4>Option 1: Playwright MCP Plugin (Recommended)</h4>
+<p>The official Playwright MCP plugin from Microsoft provides browser tools<br>directly to Claude Code:</p>
+<ol>
+<li><p>Install the plugin in Claude Code:</p>
+<pre><code>claude plugin add playwright</code></pre>
+</li>
+<li><p>The plugin automatically registers MCP tools like <code>browser_navigate</code>,<br><code>browser_click</code>, <code>browser_snapshot</code>, and <code>browser_take_screenshot</code>.</p>
+</li>
+<li><p>No additional configuration needed — the plugin runs<br><code>npx @playwright/mcp@latest</code> as the MCP server.</p>
+</li>
+</ol>
+<h4>Option 2: Playwright CLI Skill</h4>
+<p>If you have the <code>playwright-cli</code> binary installed, you can use it via a Claude<br>Code skill:</p>
+<ol>
+<li><p>Install the skill:</p>
+<pre><code class="language-bash hljs">playwright-cli install --skills</code></pre>
+</li>
+<li><p>Allow the skill in your project&#39;s <code>.claude/settings.local.json</code>:</p>
+<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;permissions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;allow&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;Skill(playwright-cli)&quot;</span><span class="hljs-punctuation">]</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+</li>
+<li><p>The skill gives agents access to <code>Bash(playwright-cli:*)</code> commands.</p>
+</li>
+</ol>
+<h3>Core Commands</h3>
+<p>Whether using the MCP plugin or the CLI skill, the capabilities are similar:</p>
+<h4>Navigation</h4>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Open a URL</span>
+playwright-cli open https://localhost:3000
+
+<span class="hljs-comment"># Navigate to a page</span>
+playwright-cli goto https://localhost:3000/dashboard
+
+<span class="hljs-comment"># Go back</span>
+playwright-cli back</code></pre>
+<h4>Screenshots</h4>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Screenshot the current viewport</span>
+playwright-cli screenshot
+
+<span class="hljs-comment"># Screenshot a specific element</span>
+playwright-cli screenshot --selector <span class="hljs-string">&quot;.dashboard-header&quot;</span>
+
+<span class="hljs-comment"># Full-page screenshot</span>
+playwright-cli screenshot --full-page
+
+<span class="hljs-comment"># Save to a specific file</span>
+playwright-cli screenshot --output dashboard.png</code></pre>
+<h4>Page Inspection</h4>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Get an accessibility snapshot (structured page content)</span>
+playwright-cli snapshot
+
+<span class="hljs-comment"># Evaluate JavaScript on the page</span>
+playwright-cli <span class="hljs-built_in">eval</span> <span class="hljs-string">&quot;document.title&quot;</span>
+playwright-cli <span class="hljs-built_in">eval</span> <span class="hljs-string">&quot;document.querySelectorAll(&#x27;.task-card&#x27;).length&quot;</span></code></pre>
+<h4>Interaction</h4>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Click an element (by reference from snapshot)</span>
+playwright-cli click e3
+
+<span class="hljs-comment"># Fill a text field</span>
+playwright-cli fill e5 <span class="hljs-string">&quot;search query&quot;</span>
+
+<span class="hljs-comment"># Type text (triggers key handlers)</span>
+playwright-cli <span class="hljs-built_in">type</span> <span class="hljs-string">&quot;hello world&quot;</span>
+
+<span class="hljs-comment"># Press a key</span>
+playwright-cli press Enter</code></pre>
+<h4>DevTools</h4>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># View console messages</span>
+playwright-cli console
+
+<span class="hljs-comment"># View network requests</span>
+playwright-cli network
+
+<span class="hljs-comment"># Start/stop tracing</span>
+playwright-cli tracing-start
+playwright-cli tracing-stop --output trace.zip</code></pre>
+<h3>Usage with Thrum Agents</h3>
+<p>A common pattern for agents working on web UI tasks:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># 1. Agent claims a UI task</span>
+bd update &lt;<span class="hljs-built_in">id</span>&gt; --status=in_progress
+thrum send <span class="hljs-string">&quot;Starting UI task &lt;id&gt;&quot;</span> --to @coordinator
+
+<span class="hljs-comment"># 2. Open the app and capture the &quot;before&quot; state</span>
+playwright-cli open http://localhost:65018
+playwright-cli screenshot --output before.png
+
+<span class="hljs-comment"># 3. Make code changes...</span>
+
+<span class="hljs-comment"># 4. Reload and capture the &quot;after&quot; state</span>
+playwright-cli goto http://localhost:65018
+playwright-cli screenshot --output after.png
+
+<span class="hljs-comment"># 5. Verify the change visually</span>
+playwright-cli snapshot    <span class="hljs-comment"># check accessibility tree</span>
+
+<span class="hljs-comment"># 6. Close and report</span>
+playwright-cli close
+bd close &lt;<span class="hljs-built_in">id</span>&gt;
+thrum send <span class="hljs-string">&quot;Completed &lt;id&gt; — UI verified with screenshots&quot;</span> --to @coordinator</code></pre>
+<h3>Multiple Browser Sessions</h3>
+<p>Use named sessions to manage multiple browser windows:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Open two sessions</span>
+playwright-cli -s=app open http://localhost:3000
+playwright-cli -s=docs open http://localhost:8080
+
+<span class="hljs-comment"># Interact with a specific session</span>
+playwright-cli -s=app screenshot
+playwright-cli -s=docs click e5
+
+<span class="hljs-comment"># Close a specific session</span>
+playwright-cli -s=app close</code></pre>
+<h3>Tips</h3>
+<ul>
+<li><strong>Use <code>snapshot</code> over <code>screenshot</code></strong> when you need to interact with elements.<br>Snapshots return an accessibility tree with element references (<code>e1</code>, <code>e2</code>,<br>etc.) that you can use with <code>click</code>, <code>fill</code>, and other commands.</li>
+<li><strong>Screenshots are for context</strong> — save them when you need visual evidence of<br>a state change, but use snapshots for programmatic page interaction.</li>
+<li><strong>Named sessions</strong> are useful when testing multi-page flows or comparing two<br>different views side by side.</li>
+<li><strong>The MCP plugin and CLI skill coexist</strong> — you can have both installed<br>simultaneously. The MCP plugin provides <code>mcp__playwright__*</code> tools, while the<br>skill uses <code>Bash(playwright-cli:*)</code>.</li>
+</ul>
+<h3>Further Reading</h3>
+<ul>
+<li><a href="https://github.com/microsoft/playwright-mcp">Playwright MCP</a> — Official<br>Microsoft Playwright MCP server</li>
+<li><a href="../web-ui.html">Web UI Documentation</a> — Thrum&#39;s built-in web UI</li>
+<li><a href="recommended-tools.html">Recommended Tools</a> — Overview of all recommended tools</li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#guides/playwright-cli-setup.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#guides/playwright-cli-setup.html');
+    }
+  </script>
+</body>
+</html>

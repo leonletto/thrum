@@ -1,3 +1,4 @@
+
 ## Agent Coordination
 
 Thrum helps you coordinate multiple AI agents across sessions, worktrees, and
@@ -16,7 +17,7 @@ Thrum supports two integration methods for agent coordination:
 Native tool integration with async message notifications. Best for Claude Code
 agents.
 
-````json
+```json
 {
   "mcpServers": {
     "thrum": {
@@ -26,7 +27,7 @@ agents.
     }
   }
 }
-```text
+```
 
 MCP tools: `send_message`, `check_messages`, `wait_for_message`, `list_agents`,
 `broadcast_message`.
@@ -39,7 +40,7 @@ Shell commands for basic messaging. Works everywhere.
 thrum send "Starting work on task X" --to @coordinator
 thrum inbox --unread
 thrum reply <msg-id> "Here's my update"
-```text
+```
 
 ## Common Workflows
 
@@ -62,7 +63,7 @@ thrum send "Please implement build script (task thrum-235d.3). \
 
 # Check for updates
 thrum inbox
-```text
+```
 
 **Implementer:**
 
@@ -80,7 +81,7 @@ thrum reply <msg-id> "Claimed task. Starting implementation."
 # Send completion update
 thrum send "Build script complete. Tests passing. Ready for review." \
   --to @planner
-```text
+```
 
 ### Peer Collaboration
 
@@ -96,7 +97,7 @@ thrum who-has src/auth/login.ts
 
 # Agent B: Coordinate via message
 thrum send "Need to edit login.ts for validation. ETA?" --to @agent_a
-```text
+```
 
 ### Code Review
 
@@ -111,7 +112,7 @@ thrum send "Build script complete (commit abc123). Please review:
 - Error handling
 
 Tests passing. Beads task: thrum-235d.3" --to @reviewer
-```text
+```
 
 **Reviewer:**
 
@@ -125,7 +126,7 @@ thrum reply <msg-id> "Reviewed. Found 2 issues:
 2. Search index doesn't handle compound terms
 
 See beads: thrum-abc (bug filed). Otherwise looks good."
-```text
+```
 
 ### Multi-Worktree Coordination
 
@@ -140,7 +141,7 @@ thrum quickstart --name main_agent --role coordinator --module main \
   --intent "Main branch coordination"
 
 thrum send "Feature branch ready for integration testing" --to @feature_agent
-```text
+```
 
 **Agent in feature worktree:**
 
@@ -153,7 +154,7 @@ thrum quickstart --name feature_agent --role implementer --module feature \
 
 # Check inbox (sees messages from main_agent)
 thrum inbox
-```text
+```
 
 ## Message-Listener Pattern
 
@@ -178,18 +179,16 @@ When messages are received:
 
 ```text
 MESSAGES_RECEIVED
----
 FROM: [sender]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]
----
-```text
+```
 
 When timeout occurs with no messages:
 
 ```text
 NO_MESSAGES_TIMEOUT
-```go
+```
 
 ### Context Management
 
@@ -246,7 +245,7 @@ thrum send "Completed bd-123. Ready for review." \
 # 10. Sync both
 bd sync
 thrum sync force
-```text
+```
 
 ### Mapping Convention
 
@@ -304,7 +303,7 @@ thrum send "Completed <id>. Tests passing. Ready for review." \
 
 # 11. End session
 thrum session end
-```text
+```
 
 ## Best Practices
 
@@ -344,7 +343,7 @@ thrum daemon status
 
 # Check inbox manually
 thrum inbox
-```text
+```
 
 **Solutions:**
 
@@ -363,7 +362,7 @@ thrum sync status
 
 # Check git remote
 git remote -v
-```text
+```
 
 **Solutions:**
 
@@ -378,7 +377,7 @@ git remote -v
 
 ```bash
 thrum agent list
-```text
+```
 
 **Solutions:**
 
@@ -400,7 +399,7 @@ thrum agent list --context
 # Check Beads for task state
 bd ready
 bd list --status=in_progress
-```text
+```
 
 ## See Also
 
@@ -414,4 +413,4 @@ bd list --status=in_progress
 - [Messaging System](messaging.md) -- message structure and scopes
 - [Quickstart Guide](quickstart.md) -- getting started in 5 minutes
 - [Identity System](identity.md) -- agent names and registration
-````
+```

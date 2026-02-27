@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beads UI Setup Guide — Thrum</title>
+  <meta name="description" content="Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Beads UI Setup Guide — Thrum">
+  <meta property="og:description" content="Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/guides/beads-ui-setup.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Beads UI Setup Guide — Thrum">
+  <meta name="twitter:description" content="Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support">
+  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/beads-ui-setup.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h2>Beads UI Setup Guide</h2>
+<p><a href="https://github.com/mantoni/beads-ui">Beads UI</a> is a local web interface for<br>the Beads issue tracker. It gives developers a real-time browser view of what<br>agents are working on — without polling, refreshing, or switching to the<br>terminal.</p>
+<h3>Why Use It</h3>
+<p>When agents coordinate via Thrum and track tasks with Beads, the developer<br>needs visibility. Running <code>bd list</code> in a terminal works, but Beads UI provides:</p>
+<ul>
+<li><strong>Live updates</strong> — Issues move across the board as agents claim and close<br>them, with no manual refresh needed</li>
+<li><strong>Board view</strong> — Kanban columns (Blocked / Ready / In Progress / Closed) with<br>drag-and-drop</li>
+<li><strong>Epics view</strong> — Expand epics to see child task progress at a glance</li>
+<li><strong>Issue detail</strong> — Edit titles, descriptions, priorities, dependencies, and<br>comments directly in the browser</li>
+</ul>
+<p>The UI watches the Beads SQLite database for changes and pushes updates over<br>WebSocket. When an agent runs <code>bd close &lt;id&gt;</code>, the card moves to Done in<br>your browser instantly.</p>
+<h3>Installation</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Install globally from npm</span>
+npm install beads-ui -g
+
+<span class="hljs-comment"># Verify</span>
+bdui --<span class="hljs-built_in">help</span></code></pre>
+<p>Requires <strong>Node.js 22 or later</strong>.</p>
+<h3>Quick Start</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Navigate to your project (where .beads/ exists)</span>
+<span class="hljs-built_in">cd</span> your-project
+
+<span class="hljs-comment"># Start the UI and open the browser</span>
+bdui start --open</code></pre>
+<p>The UI is now running at <code>http://localhost:3000</code>. It auto-detects the nearest<br><code>.beads/*.db</code> file by walking up from the current directory.</p>
+<h3>Views</h3>
+<h4>Issues View</h4>
+<p>A filterable, searchable list of all issues. Each row shows the title, status,<br>priority, type, and dependency counts. Click any issue to open the full detail<br>view for inline editing.</p>
+<h4>Epics View</h4>
+<p>Shows all epics with progress indicators. Expand a row to see its child tasks<br>and their statuses. Useful for tracking high-level project progress.</p>
+<h4>Board View</h4>
+<p>Kanban-style columns:</p>
+<table>
+<thead>
+<tr>
+<th>Blocked</th>
+<th>Ready</th>
+<th>In Progress</th>
+<th>Closed</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tasks waiting on dependencies</td>
+<td>Tasks with no blockers</td>
+<td>Claimed by an agent</td>
+<td>Done</td>
+</tr>
+</tbody></table>
+<p>Drag cards between columns to change status. Each column shows a badge with its<br>card count.</p>
+<h3>Configuration</h3>
+<h4>CLI Options</h4>
+<pre><code class="language-bash hljs">bdui start              <span class="hljs-comment"># Start on default port 3000</span>
+bdui start --open       <span class="hljs-comment"># Start and open browser</span>
+bdui start --port 3001  <span class="hljs-comment"># Use a specific port</span>
+bdui stop               <span class="hljs-comment"># Stop the server</span>
+bdui restart             <span class="hljs-comment"># Restart the server</span>
+bdui list               <span class="hljs-comment"># List all running instances</span></code></pre>
+<h4>Environment Variables</h4>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>BD_BIN</code></td>
+<td><code>bd</code></td>
+<td>Path to the Beads CLI binary</td>
+</tr>
+<tr>
+<td><code>PORT</code></td>
+<td><code>3000</code></td>
+<td>Listen port</td>
+</tr>
+<tr>
+<td><code>HOST</code></td>
+<td><code>127.0.0.1</code></td>
+<td>Bind address</td>
+</tr>
+</tbody></table>
+<h3>Multi-Project Support</h3>
+<p>Run multiple instances simultaneously — one per project:</p>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Project A</span>
+<span class="hljs-built_in">cd</span> ~/projects/thrum
+bdui start --new-instance --open    <span class="hljs-comment"># auto-selects port 3001</span>
+
+<span class="hljs-comment"># Project B</span>
+<span class="hljs-built_in">cd</span> ~/projects/other-project
+bdui start --new-instance --open    <span class="hljs-comment"># auto-selects port 3002</span>
+
+<span class="hljs-comment"># See all running instances</span>
+bdui list</code></pre>
+<p>Each instance watches its own project&#39;s Beads database independently.</p>
+<h3>Typical Developer Workflow</h3>
+<ol>
+<li>Start Beads UI in your project: <code>bdui start --open</code></li>
+<li>Start your Thrum agents (coordinator, implementers, etc.)</li>
+<li>Watch the board as agents discover tasks via <code>bd ready</code>, claim them with<br><code>bd update --status=in_progress</code>, and close them with <code>bd close</code></li>
+<li>Use the issue detail view to add comments, adjust priorities, or edit<br>descriptions while agents work</li>
+<li>Check the epics view for high-level progress across the project</li>
+</ol>
+<p>The board updates live — no need to refresh. When an agent sends a Thrum message<br>saying &quot;Completed task X&quot;, you&#39;ll see the card move to the Closed column at the<br>same time.</p>
+<h3>Debug Logging</h3>
+<pre><code class="language-bash hljs"><span class="hljs-comment"># Server-side debug output</span>
+DEBUG=beads-ui:* bdui start
+
+<span class="hljs-comment"># Browser-side (in DevTools console)</span>
+localStorage.debug = <span class="hljs-string">&#x27;beads-ui:*&#x27;</span></code></pre>
+<h3>Further Reading</h3>
+<ul>
+<li><a href="beads-setup.html">Beads Setup</a> — Install and configure Beads itself</li>
+<li><a href="https://github.com/mantoni/beads-ui">Beads UI GitHub</a> — Full source and<br>changelog</li>
+<li><a href="recommended-tools.html">Recommended Tools</a> — Overview of all recommended tools</li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#guides/beads-ui-setup.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#guides/beads-ui-setup.html');
+    }
+  </script>
+</body>
+</html>

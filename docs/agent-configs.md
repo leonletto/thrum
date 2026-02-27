@@ -1,3 +1,4 @@
+
 ## Agent Configurations
 
 > **Recommended:** Install the [Thrum plugin](claude-code-plugin.md) instead of
@@ -126,6 +127,8 @@ For the agent file format, see
 
 - [Claude Code Plugin](claude-code-plugin.md) — Recommended: plugin with slash
   commands and hooks
+- [Codex Plugin](codex-plugin.md) — Codex skill bundle for Thrum coordination
+  and operations
 - [Quickstart](quickstart.md) — Get started with Thrum in 5 minutes
 - [Agent Coordination](agent-coordination.md) — Multi-agent messaging patterns
 - [Workflow Templates](../toolkit/templates/) — Complete planning and
