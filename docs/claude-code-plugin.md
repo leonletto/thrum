@@ -1,6 +1,8 @@
+
 ## Claude Code Plugin
 
 > See also: [Quickstart Guide](quickstart.md) for basic Thrum setup,
+> [Codex Plugin](codex-plugin.md) for Codex skill-based integration,
 > [Agent Configurations](agent-configs.md) for manual agent definitions,
 > [MCP Server](mcp-server.md) for the native MCP transport,
 > [Multi-Agent Support](multi-agent.md) for coordination patterns.
@@ -26,8 +28,8 @@ disclosure resource docs. It replaces the manual agent definition approach
 
 Before installing the plugin, you need Thrum installed and initialized:
 
-````bash
-# Install thrum (Go 1.23+)
+```bash
+# Install thrum (Go 1.26+)
 go install github.com/leonletto/thrum@latest
 
 # Or build from source
@@ -37,7 +39,7 @@ cd thrum && make install
 # Initialize in your repository (v0.4.5+: init does full setup)
 cd /path/to/your/repo
 thrum init
-```text
+```
 
 `thrum init` (v0.4.5+) handles the full setup: prompts for runtime detection,
 generates CLAUDE.md coordination instructions, starts the daemon, registers your
@@ -47,13 +49,13 @@ steps:
 ```bash
 thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
 thrum daemon start               # Start the daemon separately
-```text
+```
 
 Verify the daemon is running:
 
 ```bash
 thrum daemon status
-```text
+```
 
 ## Installation
 
@@ -68,7 +70,7 @@ claude plugin marketplace add https://github.com/leonletto/thrum
 
 # Install the plugin
 claude plugin install thrum
-```text
+```
 
 ### From local clone
 
@@ -80,7 +82,7 @@ claude plugin marketplace add /path/to/thrum
 
 # Install the plugin
 claude plugin install thrum
-```text
+```
 
 ### Verify installation
 
@@ -111,19 +113,19 @@ All commands live under the `/thrum:` namespace.
 
 ```text
 /thrum:quickstart
-```text
+```
 
 Prompts for role, module, and intent — or pass flags directly:
 
 ```bash
 thrum quickstart --role implementer --module auth --intent "Building login flow"
-```text
+```
 
 **Send a message:**
 
 ```text
 /thrum:send
-```text
+```
 
 Guided prompt for recipient and message. Direct usage:
 
@@ -131,14 +133,14 @@ Guided prompt for recipient and message. Direct usage:
 thrum send "Starting auth work" --to @coordinator
 thrum send "Need review" --to @reviewers
 thrum send "Heads up: breaking change" --to @everyone
-```text
+```
 
 **Check inbox and reply:**
 
 ```text
 /thrum:inbox
 /thrum:reply
-```go
+```
 
 ## Hooks
 
@@ -193,7 +195,7 @@ in your project's `.claude/settings.json`:
     }
   }
 }
-```text
+```
 
 This provides 11 MCP tools: 5 for core messaging (`send_message`,
 `check_messages`, `wait_for_message`, `list_agents`, `broadcast_message`) and 6
@@ -220,7 +222,7 @@ Task(
   prompt="Listen for Thrum messages.
     WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -30s --json"
 )
-```text
+```
 
 The listener runs 6 cycles of 15 minutes each (~90 min coverage), blocks on
 `thrum wait` (no polling), returns when messages arrive, and costs
@@ -262,4 +264,4 @@ messaging to work. Start it with `thrum daemon start`.
 
 Set `THRUM_NAME` environment variable to give each worktree a unique agent name.
 See [Identity System](identity.md) for details.
-````
+```

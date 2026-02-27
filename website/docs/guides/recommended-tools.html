@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recommended Tools — Thrum</title>
+  <meta name="description" content="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Recommended Tools — Thrum">
+  <meta property="og:description" content="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">
+  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/guides/recommended-tools.html">
+  <meta property="og:site_name" content="Thrum">
+  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Recommended Tools — Thrum">
+  <meta name="twitter:description" content="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">
+  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
+  <!-- Canonical: SPA is the primary URL -->
+  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/recommended-tools.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/docs.css">
+  <script>
+    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <nav class="header-nav">
+        <a href="../index.html" class="logo">
+          <span class="logo-glyph">&gt;_</span>
+          <span class="logo-text">thrum</span>
+        </a>
+        <div class="nav-links">
+          <a href="../index.html" class="nav-link">Home</a>
+          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
+          <a href="../about.html" class="nav-link">About</a>
+          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
+    <div class="docs-content-inner">
+<h2>Recommended Tools</h2>
+<p>A curated list of tools and integrations that complement Thrum for AI agent<br>coordination. Each tool addresses a specific gap in the agent workflow — task<br>tracking, visual oversight, or browser automation.</p>
+<h3>Task Tracking</h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it does</th>
+<th>Install</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="beads-setup.html">Beads</a></td>
+<td>Git-backed issue tracker with dependencies</td>
+<td><code>go install</code> / <code>brew</code></td>
+</tr>
+<tr>
+<td><a href="beads-ui-setup.html">Beads UI</a></td>
+<td>Live web dashboard for Beads issues and boards</td>
+<td><code>npm i beads-ui -g</code></td>
+</tr>
+</tbody></table>
+<p><strong>Beads</strong> is the task-tracking counterpart to Thrum&#39;s messaging. Where Thrum<br>answers &quot;what did my teammates tell me?&quot;, Beads answers &quot;what should I work on?&quot;<br>Both persist to Git, require no external services, and survive session<br>boundaries.</p>
+<p><strong>Beads UI</strong> gives developers a browser-based view of what agents are working on<br>— a Kanban board, epics view, and issue list that update in real time as agents<br>claim and close tasks.</p>
+<h3>Browser Automation</h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it does</th>
+<th>Install</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="playwright-cli-setup.html">Playwright CLI</a></td>
+<td>Browser automation for Claude Code agents</td>
+<td>Claude Code skill</td>
+</tr>
+</tbody></table>
+<p><strong>Playwright CLI</strong> lets agents interact with web pages during their workflow —<br>capture screenshots for context, fill forms, extract data, or verify that a web<br>UI renders correctly. It runs as a Claude Code skill using the <code>playwright-cli</code><br>command.</p>
+<h3>How These Tools Work Together</h3>
+<p>A typical multi-agent workflow using all three:</p>
+<ol>
+<li><strong>Beads</strong> tracks the work — epics, tasks, dependencies, and priorities</li>
+<li><strong>Thrum</strong> coordinates the agents — messaging, presence, and session context</li>
+<li><strong>Beads UI</strong> gives the developer a live dashboard of agent progress</li>
+<li><strong>Playwright CLI</strong> lets agents capture browser context or verify web UI changes</li>
+</ol>
+<pre><code>Developer                 Agents                    Tools
+    │                        │                        │
+    ├─ Opens beads-ui ──────►│                        │
+    │  (sees board view)     │                        │
+    │                        ├─ bd ready ────────────►│ Beads
+    │                        ├─ bd update --status ──►│
+    │                        ├─ thrum send ──────────►│ Thrum
+    │                        ├─ playwright-cli ──────►│ Playwright
+    │                        │  screenshot            │
+    │                        ├─ bd close ────────────►│ Beads
+    │◄─ Live board update ───┤                        │
+    │  (task moves to Done)  │                        │</code></pre>
+<h3>Further Reading</h3>
+<ul>
+<li><a href="../beads-and-thrum.html">Beads and Thrum</a> — How persistent task tracking and<br>messaging solve context loss together</li>
+<li><a href="../multi-agent.html">Multi-Agent Coordination</a> — Patterns for multi-agent<br>workflows</li>
+<li><a href="../claude-code-plugin.html">Claude Code Plugin</a> — Thrum&#39;s Claude Code plugin<br>reference</li>
+</ul>
+
+    </div>
+    <p style="margin-top:2rem"><a href="../docs.html#guides/recommended-tools.html">&larr; View in documentation</a></p>
+  </main>
+  <script>
+    // Redirect browsers to the SPA for full navigation experience.
+    // Crawlers (which don't execute JS) will index the static content above.
+    if (window.location.search.indexOf('nospa') === -1) {
+      window.location.replace('../docs.html#guides/recommended-tools.html');
+    }
+  </script>
+</body>
+</html>

@@ -4,6 +4,7 @@
  *
  * Loads index.json, builds sidebar navigation grouped by category,
  * fetches doc HTML on click, and uses hash-based routing.
+ * Supports collapsible sub-categories nested under parent categories.
  *
  * Security note: Doc HTML is fetched from same-origin assets/docs/ directory
  * (build output from our own build script). No user-supplied content.
@@ -15,8 +16,9 @@
 
   var DOCS_BASE = 'assets/docs/';
   var INDEX_URL = DOCS_BASE + 'index.json';
+  var STORAGE_KEY = 'thrum-docs-collapsed';
 
-  // Display order and labels for categories
+  // Display order and labels for top-level categories
   var CATEGORY_ORDER = [
     'overview',
     'quickstart',
@@ -35,6 +37,7 @@
   var CATEGORY_LABELS = {
     overview: 'Overview',
     quickstart: 'Getting Started',
+    tools: 'Recommended Tools',
     webui: 'Web UI',
     cli: 'CLI',
     messaging: 'Messaging',
@@ -45,6 +48,12 @@
     mcp: 'MCP Server',
     sync: 'Sync',
     development: 'Development'
+  };
+
+  // Sub-categories nested under a parent. Rendered indented and collapsible.
+  // Key = parent category, value = array of child categories in display order.
+  var CATEGORY_CHILDREN = {
+    quickstart: ['tools']
   };
 
   var sidebarNav = document.getElementById('sidebar-nav');
@@ -60,6 +69,60 @@
     loadDoc: function (path) { loadDoc(path); },
     getIndex: function () { return docsIndex; }
   };
+
+  // ── Collapse State ─────────────────────────────────────────────────────
+
+  function getCollapsedState() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveCollapsedState(state) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      // Ignore storage errors
+    }
+  }
+
+  function toggleCategory(cat) {
+    var state = getCollapsedState();
+    state[cat] = !state[cat];
+    saveCollapsedState(state);
+    applyCategoryState(cat, state[cat]);
+  }
+
+  function applyCategoryState(cat, collapsed) {
+    var catDiv = sidebarNav.querySelector('[data-category="' + cat + '"]');
+    if (!catDiv) return;
+    if (collapsed) {
+      catDiv.classList.add('collapsed');
+    } else {
+      catDiv.classList.remove('collapsed');
+    }
+  }
+
+  function expandCategoryChain(cat) {
+    // Expand the given category and its parent (if it's a sub-category)
+    var state = getCollapsedState();
+    state[cat] = false;
+    applyCategoryState(cat, false);
+
+    // Check if this category is a child — expand its parent too
+    CATEGORY_ORDER.forEach(function (parentCat) {
+      var children = CATEGORY_CHILDREN[parentCat];
+      if (children && children.indexOf(cat) !== -1) {
+        state[parentCat] = false;
+        applyCategoryState(parentCat, false);
+      }
+    });
+
+    saveCollapsedState(state);
+  }
 
   // ── Bootstrap ──────────────────────────────────────────────────────────
 
@@ -77,11 +140,77 @@
 
   // ── Sidebar ────────────────────────────────────────────────────────────
 
+  // Build a set of all child categories for quick lookup
+  var childCategories = {};
+  Object.keys(CATEGORY_CHILDREN).forEach(function (parent) {
+    CATEGORY_CHILDREN[parent].forEach(function (child) {
+      childCategories[child] = parent;
+    });
+  });
+
+  function buildCategoryBlock(cat, groups, isSubCategory) {
+    if (!groups[cat]) return null;
+    var label = CATEGORY_LABELS[cat] || cat;
+
+    var catDiv = document.createElement('div');
+    catDiv.className = isSubCategory ? 'sidebar-category sidebar-subcategory' : 'sidebar-category';
+    catDiv.setAttribute('data-category', cat);
+
+    var catLabel = document.createElement('span');
+    catLabel.className = isSubCategory
+      ? 'sidebar-category-label sidebar-subcategory-label collapsible'
+      : 'sidebar-category-label';
+    catDiv.appendChild(catLabel);
+
+    if (isSubCategory) {
+      // Add chevron for collapsible sub-categories
+      var chevron = document.createElement('span');
+      chevron.className = 'sidebar-chevron';
+      chevron.textContent = '\u25B8'; // ▸
+      catLabel.appendChild(chevron);
+
+      var labelText = document.createElement('span');
+      labelText.textContent = label;
+      catLabel.appendChild(labelText);
+    } else {
+      catLabel.textContent = label;
+    }
+
+    // Container for the collapsible content (links + child sub-categories)
+    var contentWrap = document.createElement('div');
+    contentWrap.className = 'sidebar-category-content';
+
+    groups[cat].forEach(function (doc) {
+      var link = document.createElement('a');
+      link.className = isSubCategory ? 'sidebar-link sidebar-sublink' : 'sidebar-link';
+      link.href = '#' + doc.path;
+      link.setAttribute('data-path', doc.path);
+      link.setAttribute('data-category', cat);
+      link.title = doc.description || '';
+      link.textContent = doc.title;
+      contentWrap.appendChild(link);
+    });
+
+    catDiv.appendChild(contentWrap);
+
+    // Render child sub-categories inside this category
+    var children = CATEGORY_CHILDREN[cat];
+    if (children) {
+      children.forEach(function (childCat) {
+        var childBlock = buildCategoryBlock(childCat, groups, true);
+        if (childBlock) {
+          contentWrap.appendChild(childBlock);
+        }
+      });
+    }
+
+    return catDiv;
+  }
+
   function buildSidebar(docs) {
     // Group by category
     var groups = {};
     docs.forEach(function (doc) {
-      // Skip uncategorized/plan docs from sidebar
       if (doc.category === 'uncategorized') return;
       if (!groups[doc.category]) groups[doc.category] = [];
       groups[doc.category].push(doc);
@@ -96,36 +225,41 @@
     var fragment = document.createDocumentFragment();
 
     CATEGORY_ORDER.forEach(function (cat) {
-      if (!groups[cat]) return;
-      var label = CATEGORY_LABELS[cat] || cat;
-
-      var catDiv = document.createElement('div');
-      catDiv.className = 'sidebar-category';
-      catDiv.setAttribute('data-category', cat);
-
-      var catLabel = document.createElement('span');
-      catLabel.className = 'sidebar-category-label';
-      catLabel.textContent = label;
-      catDiv.appendChild(catLabel);
-
-      groups[cat].forEach(function (doc) {
-        var link = document.createElement('a');
-        link.className = 'sidebar-link';
-        link.href = '#' + doc.path;
-        link.setAttribute('data-path', doc.path);
-        link.title = doc.description || '';
-        link.textContent = doc.title;
-        catDiv.appendChild(link);
-      });
-
-      fragment.appendChild(catDiv);
+      // Skip categories that are rendered as children of another
+      if (childCategories[cat]) return;
+      var block = buildCategoryBlock(cat, groups, false);
+      if (block) fragment.appendChild(block);
     });
 
     sidebarNav.textContent = '';
     sidebarNav.appendChild(fragment);
 
+    // Apply saved collapse state — sub-categories default to collapsed
+    var state = getCollapsedState();
+    Object.keys(childCategories).forEach(function (childCat) {
+      if (!(childCat in state)) {
+        state[childCat] = true; // Default: sub-categories start collapsed
+      }
+    });
+    saveCollapsedState(state);
+
+    Object.keys(state).forEach(function (cat) {
+      applyCategoryState(cat, state[cat]);
+    });
+
     // Attach click handlers
     sidebarNav.addEventListener('click', function (e) {
+      // Handle collapsible label clicks
+      var label = e.target.closest('.collapsible');
+      if (label) {
+        var catDiv = label.closest('.sidebar-category');
+        if (catDiv) {
+          toggleCategory(catDiv.getAttribute('data-category'));
+        }
+        return;
+      }
+
+      // Handle doc link clicks
       var link = e.target.closest('.sidebar-link');
       if (!link) return;
       e.preventDefault();
@@ -169,10 +303,15 @@
       history.pushState(null, '', '#' + path);
     }
 
-    // Update active sidebar link
+    // Update active sidebar link and auto-expand its category
     var links = sidebarNav.querySelectorAll('.sidebar-link');
     links.forEach(function (link) {
-      link.classList.toggle('active', link.getAttribute('data-path') === path);
+      var isActive = link.getAttribute('data-path') === path;
+      link.classList.toggle('active', isActive);
+      if (isActive) {
+        var cat = link.getAttribute('data-category');
+        if (cat) expandCategoryChain(cat);
+      }
     });
 
     // Update page title

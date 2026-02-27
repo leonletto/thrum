@@ -1,3 +1,4 @@
+
 ## Agent Context Management
 
 ## Overview
@@ -41,7 +42,7 @@ needs to survive session boundaries.
 
 **Location:**
 
-````text
+```text
 .thrum/
 ├── context/
 │   ├── furiosa.md                  # Agent context (volatile)
@@ -49,7 +50,7 @@ needs to survive session boundaries.
 │   ├── maximus.md
 │   ├── maximus_preamble.md
 │   └── coordinator_1B9K33T6RK.md   # Hash-based agent ID
-```text
+```
 
 Context files are local by default. Use `thrum context sync` to manually share
 across worktrees via the a-sync branch.
@@ -84,7 +85,7 @@ directly or replace it with `thrum context preamble --file custom.md`.
 **Status:** `thrum status` **Who's online:** `thrum agent list --context` **Save
 context:** `thrum context save` **Wait for messages:**
 `thrum wait --after -30s --timeout 5m`
-```text
+```
 
 **Customization examples:**
 
@@ -108,7 +109,7 @@ cat > my-preamble.md <<'EOF'
 EOF
 
 thrum context preamble --file my-preamble.md
-```text
+```
 
 ## CLI Commands
 
@@ -118,7 +119,7 @@ Save context content from a file or stdin.
 
 ```bash
 thrum context save [flags]
-```text
+```
 
 | Flag      | Description                                        | Default |
 | --------- | -------------------------------------------------- | ------- |
@@ -136,9 +137,8 @@ echo "Working on auth module" | thrum context save
 
 # Save for a different agent
 thrum context save --agent coordinator --file notes.md
-```text
+```
 
----
 
 ### thrum context show
 
@@ -146,7 +146,7 @@ Display the saved context for the current agent.
 
 ```bash
 thrum context show [flags]
-```text
+```
 
 | Flag            | Description                                        | Default |
 | --------------- | -------------------------------------------------- | ------- |
@@ -168,7 +168,7 @@ thrum context show --raw
 
 # Context only, no preamble
 thrum context show --no-preamble
-```text
+```
 
 **Output modes:**
 
@@ -182,7 +182,7 @@ Default (preamble + context with header):
 
 # Current Work
 - Implementing JWT token refresh
-```text
+```
 
 Raw (`--raw`, shows file boundaries):
 
@@ -194,9 +194,8 @@ Raw (`--raw`, shows file boundaries):
 
 # Current Work
 - Implementing JWT token refresh
-```text
+```
 
----
 
 ### thrum context clear
 
@@ -204,7 +203,7 @@ Remove the context file for the current agent.
 
 ```bash
 thrum context clear [flags]
-```text
+```
 
 | Flag      | Description                                        | Default |
 | --------- | -------------------------------------------------- | ------- |
@@ -218,11 +217,10 @@ thrum context clear
 
 # Clear context for a different agent
 thrum context clear --agent furiosa
-```text
+```
 
 Note: Idempotent - running clear when no context exists is a no-op.
 
----
 
 ### thrum context sync
 
@@ -231,7 +229,7 @@ machines.
 
 ```bash
 thrum context sync [flags]
-```text
+```
 
 | Flag      | Description                                        | Default |
 | --------- | -------------------------------------------------- | ------- |
@@ -245,7 +243,7 @@ thrum context sync
 
 # Sync context for a different agent
 thrum context sync --agent furiosa
-```text
+```
 
 **What it does:**
 
@@ -260,7 +258,6 @@ thrum context sync --agent furiosa
 - Respects the `--local` daemon flag
 - Manual only - context is never synced automatically
 
----
 
 ### thrum context preamble
 
@@ -268,7 +265,7 @@ Show or manage the preamble for the current agent.
 
 ```bash
 thrum context preamble [flags]
-```text
+```
 
 | Flag      | Description                                        | Default |
 | --------- | -------------------------------------------------- | ------- |
@@ -290,9 +287,8 @@ thrum context preamble --file my-preamble.md
 
 # Show preamble for a different agent
 thrum context preamble --agent furiosa
-```text
+```
 
----
 
 ### thrum context prime
 
@@ -303,7 +299,7 @@ output.
 
 ```bash
 thrum context prime [flags]
-```text
+```
 
 | Flag     | Description                          | Default |
 | -------- | ------------------------------------ | ------- |
@@ -317,7 +313,7 @@ thrum context prime
 
 # Structured JSON output
 thrum context prime --json
-```text
+```
 
 **What it includes:**
 
@@ -341,7 +337,6 @@ automatically saves context before compaction to `.thrum/context/{name}.md` and
 agent-initiated `/update-context` skill captures richer context including
 decisions and rationale.
 
----
 
 ### thrum context update
 
@@ -350,14 +345,13 @@ MCP server for guided context updates:
 
 ```bash
 thrum mcp serve
-```text
+```
 
 **In Claude Code:**
 
 Configure the MCP server in `.claude/settings.json` and use the
 `wait_for_message` and `send_message` tools for context coordination.
 
----
 
 ## The /update-context Skill
 
@@ -386,12 +380,11 @@ User: We're refactoring the auth module. Decided to use JWT with
       refresh tokens. Need to add rate limiting tests.
 Agent: [Saves formatted context]
       ✓ Context saved (248 bytes)
-```text
+```
 
 The skill reduces the friction of updating context and ensures consistent
 formatting.
 
----
 
 ## Use Cases and Patterns
 
@@ -406,7 +399,7 @@ echo "# Next Steps
 
 # Next session
 thrum context show
-```text
+```
 
 ### Multi-Agent Handoff
 
@@ -418,7 +411,7 @@ thrum context sync  # Share across worktrees
 # Agent B (in another worktree) pulls and reads
 git fetch origin
 thrum context show --agent furiosa
-```text
+```
 
 ### Context Updates at Decision Points
 
@@ -431,7 +424,7 @@ echo "# Decision: Using JWT with refresh tokens
 - Token expiry: 15 min (access), 7 days (refresh)
 - Storage: Redis for refresh tokens
 - Rate limit: 100 req/min per IP" | thrum context save
-```text
+```
 
 ### Integration with thrum status
 
@@ -445,9 +438,8 @@ Session:  ses_01HXF2A9... (active 2h15m)
 Intent:   Implementing JWT refresh
 Context:  1.2 KB (updated 5m ago)    # ← Context indicator
 Inbox:    3 unread (12 total)
-```text
+```
 
----
 
 ## RPC API
 
@@ -467,7 +459,7 @@ Context operations are available via the daemon's RPC API:
     "content": "base64-encoded-content"
   }
 }
-```text
+```
 
 **Response:**
 
@@ -480,9 +472,8 @@ Context operations are available via the daemon's RPC API:
     "message": "Context saved for furiosa (248 bytes)"
   }
 }
-```text
+```
 
----
 
 ### context.show
 
@@ -498,7 +489,7 @@ Context operations are available via the daemon's RPC API:
     "include_preamble": true
   }
 }
-```text
+```
 
 The `include_preamble` field is optional and defaults to `true` when omitted.
 
@@ -519,9 +510,8 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
     "updated_at": "2026-02-11T10:00:00Z"
   }
 }
-```text
+```
 
----
 
 ### context.preamble.show
 
@@ -536,7 +526,7 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
     "agent_name": "furiosa"
   }
 }
-```text
+```
 
 **Response:**
 
@@ -550,9 +540,8 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
     "has_preamble": true
   }
 }
-```text
+```
 
----
 
 ### context.preamble.save
 
@@ -568,7 +557,7 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
     "content": "base64-encoded-content"
   }
 }
-```text
+```
 
 **Response:**
 
@@ -581,9 +570,8 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
     "message": "Preamble saved for furiosa (256 bytes)"
   }
 }
-```text
+```
 
----
 
 ### context.clear
 
@@ -598,7 +586,7 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
     "agent_name": "furiosa"
   }
 }
-```text
+```
 
 **Response:**
 
@@ -611,9 +599,8 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
     "message": "Context cleared for furiosa"
   }
 }
-```text
+```
 
----
 
 ## Implementation Notes
 
@@ -652,7 +639,6 @@ Context sync is manual-only to avoid noise and respect agent autonomy:
 create unnecessary churn. Manual sync gives agents control over when and what to
 share.
 
----
 
 ## Best Practices
 
@@ -669,7 +655,7 @@ bullet points over paragraphs.
 - Finish JWT implementation (see src/auth/jwt.go)
 - Add rate limiting (decided on 100 req/min per IP)
 - Review security: check token expiry edge cases
-```text
+```
 
 **Bad:**
 
@@ -680,7 +666,7 @@ I started by looking at the auth module and then I realized that we need JWT so
 I implemented a basic version but it's not complete yet and I still need to add
 rate limiting which I discussed with the team and we decided on 100 requests per
 minute...
-```text
+```
 
 ### Update Context at Decision Points
 
@@ -704,7 +690,6 @@ Install it and use it regularly.
 Only sync context that is useful to other agents or future sessions on different
 machines. Local notes and WIP context can stay local.
 
----
 
 ## See Also
 
@@ -712,4 +697,4 @@ machines. Local notes and WIP context can stay local.
 - [CLI Reference](cli.md) - All CLI commands
 - [RPC API Reference](rpc-api.md) - Complete RPC method documentation
 - [Agent Coordination](agent-coordination.md) - Multi-agent workflows
-````
+```

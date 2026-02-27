@@ -347,7 +347,7 @@
     "title": "Philosophy",
     "description": "Why Thrum exists — a Git-backed messaging system designed for human-centric AI agent coordination, not another orchestration engine",
     "category": "overview",
-    "order": 999,
+    "order": 0,
     "tags": [
       "philosophy",
       "vision",
@@ -404,6 +404,70 @@
       "jsonl"
     ],
     "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "guides/recommended-tools.html",
+    "title": "Recommended Tools",
+    "description": "Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows",
+    "category": "tools",
+    "order": 0,
+    "tags": [
+      "tools",
+      "beads",
+      "beads-ui",
+      "playwright",
+      "ecosystem",
+      "integrations"
+    ],
+    "lastUpdated": "2026-02-27"
+  },
+  {
+    "path": "guides/beads-setup.html",
+    "title": "Beads Setup Guide",
+    "description": "Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration",
+    "category": "tools",
+    "order": 1,
+    "tags": [
+      "beads",
+      "setup",
+      "task-tracking",
+      "dependencies",
+      "agents",
+      "guide"
+    ],
+    "lastUpdated": "2026-02-27"
+  },
+  {
+    "path": "guides/beads-ui-setup.html",
+    "title": "Beads UI Setup Guide",
+    "description": "Set up Beads UI for a live web dashboard of your agent task board — installation, usage, and multi-project support",
+    "category": "tools",
+    "order": 2,
+    "tags": [
+      "beads-ui",
+      "setup",
+      "dashboard",
+      "kanban",
+      "web-ui",
+      "guide"
+    ],
+    "lastUpdated": "2026-02-27"
+  },
+  {
+    "path": "guides/playwright-cli-setup.html",
+    "title": "Playwright CLI Setup Guide",
+    "description": "Set up Playwright CLI for browser automation in Claude Code agent workflows — screenshots, page context, form filling, and web testing",
+    "category": "tools",
+    "order": 3,
+    "tags": [
+      "playwright",
+      "browser",
+      "automation",
+      "screenshots",
+      "claude-code",
+      "guide"
+    ],
+    "lastUpdated": "2026-02-27"
   },
   {
     "path": "role-templates.html",

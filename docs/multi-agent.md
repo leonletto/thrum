@@ -1,3 +1,4 @@
+
 ## Multi-Agent Support
 
 > See also: [Why Thrum Exists](philosophy.md) for the philosophy behind
@@ -43,17 +44,25 @@ one individually. Groups can contain specific agents or all agents with a role.
 | `thrum group info NAME`           | Show group details                              |
 | `thrum group members NAME`        | List members (`--expand` resolves to agent IDs) |
 
-### Built-in @everyone Group
+### Auto-Created Groups
 
-Every Thrum daemon automatically creates the `@everyone` group on startup. It
-includes all registered agents via a `role:*` wildcard, so new agents are
-automatically reachable through it. The `@everyone` group cannot be deleted or
-modified.
+Thrum automatically creates two types of system groups:
 
-````bash
+- **`@everyone`** — Created on daemon startup. Includes all registered agents via
+  a `role:*` wildcard. New agents are automatically reachable through it. Cannot
+  be deleted or modified.
+- **Role groups** — Created automatically when an agent registers with a new role
+  (e.g., registering with `--role reviewer` creates a `@reviewer` group containing
+  all agents with that role). Role groups have IDs like `grp_role_reviewer` and
+  are managed by the system.
+
+This means `@reviewer` always routes to all agents with the `reviewer` role,
+even without manually creating or managing a group.
+
+```bash
 # Send to all agents
 thrum send "Deploy complete, all clear" --to @everyone
-```text
+```
 
 All three forms are equivalent:
 
@@ -61,7 +70,7 @@ All three forms are equivalent:
 thrum send "Deploy complete" --broadcast
 thrum send "Deploy complete" --to @everyone
 thrum send "Deploy complete" --everyone
-```text
+```
 
 ### Creating and Managing Groups
 
@@ -84,7 +93,7 @@ thrum group list
 
 # Show group details
 thrum group info reviewers
-```text
+```
 
 ### Member Types
 
@@ -105,7 +114,7 @@ thrum send "PR #42 ready for review" --to @reviewers
 
 # Send to all developers
 thrum send "Code freeze starts now" --to @all-devs
-```text
+```
 
 The daemon resolves group membership at **read time** using a SQL query. This
 means agents added to a group after a message was sent still receive it.
@@ -116,7 +125,7 @@ Use `--expand` to see which individual agents a group resolves to:
 
 ```bash
 thrum group members reviewers --expand --json
-```go
+```
 
 Output:
 
@@ -128,7 +137,7 @@ Output:
   ],
   "expanded": ["alice", "bob", "carol"]
 }
-```text
+```
 
 ### MCP Group Tools
 
@@ -150,9 +159,8 @@ Example MCP usage:
 mcp__thrum__create_group(name="backend", description="Backend team")
 mcp__thrum__add_group_member(group="backend", member_type="role", member_value="implementer")
 mcp__thrum__send_message(to="@backend", content="API changes merged")
-```text
+```
 
----
 
 ## Runtime Presets
 
@@ -182,7 +190,7 @@ thrum runtime show claude
 
 # Set a default runtime for this machine
 thrum runtime set-default claude
-```text
+```
 
 ### Auto-Detection
 
@@ -228,7 +236,7 @@ thrum init --runtime cursor
 # Quickstart with runtime detection
 thrum quickstart --name furiosa --role implementer --module auth \
   --runtime claude --intent "JWT auth"
-```text
+```
 
 ### Dry-Run Mode
 
@@ -238,7 +246,7 @@ daemon or writing files:
 ```bash
 thrum quickstart --runtime cursor --dry-run
 # Shows .cursorrules content and MCP config that would be created
-```text
+```
 
 ### Custom Runtimes
 
@@ -260,11 +268,10 @@ Add custom runtime presets via `~/.config/thrum/runtimes.json` (XDG-aware):
     }
   }
 }
-```text
+```
 
 Custom runtimes appear alongside built-in presets in `thrum runtime list`.
 
----
 
 ## Context Prime
 
@@ -280,7 +287,7 @@ thrum context prime
 
 # Structured JSON for LLM consumption
 thrum context prime --json
-```text
+```
 
 ### What It Gathers
 
@@ -319,7 +326,7 @@ Saved Context:
   # Next Steps
   - Finish JWT implementation
   - Add rate limiting tests
-```text
+```
 
 ### Graceful Degradation
 
@@ -343,7 +350,6 @@ This makes it safe to run at any point, even before the daemon is started.
   the project state
 - **Debugging** -- quickly see what the agent knows and what it's working on
 
----
 
 ## Multi-Worktree Coordination
 
@@ -369,7 +375,7 @@ and message store.
 │  ├── .thrum/redirect → /path/to/repo/.thrum/                 │
 │  └── Uses same daemon, same messages                          │
 └──────────────────────────────────────────────────────────────┘
-```text
+```
 
 - **One daemon per repository** -- not per worktree
 - Feature worktrees use `.thrum/redirect` to point to the main `.thrum/`
@@ -388,7 +394,7 @@ thrum setup --main-repo /path/to/repo
 
 # Or use the setup script
 scripts/setup-worktree-thrum.sh ~/.workspaces/repo/auth
-```text
+```
 
 ### Running Multiple Agents
 
@@ -408,7 +414,7 @@ thrum quickstart --name furiosa --role implementer --module auth
 cd ~/.workspaces/repo/sync
 export THRUM_NAME=nux
 thrum quickstart --name nux --role implementer --module sync
-```text
+```
 
 All three agents share the same daemon and can message each other:
 
@@ -418,7 +424,7 @@ thrum send "Auth module complete, tests passing" --to @coordinator
 
 # coordinator sends to the whole team
 thrum send "Both features ready, starting integration" --to @everyone
-```text
+```
 
 ### Multiple Agents in the Same Worktree
 
@@ -429,16 +435,15 @@ file in `.thrum/identities/`:
 .thrum/identities/
 ├── furiosa.json     # implementation agent
 ├── reviewer.json    # review agent
-```text
+```
 
 Use `THRUM_NAME` to select which identity to use:
 
 ```bash
 THRUM_NAME=furiosa thrum send "Implementation complete"
 THRUM_NAME=reviewer thrum send "LGTM, approved"
-```text
+```
 
----
 
 ## Coordination Tools
 
@@ -452,7 +457,7 @@ thrum who-has auth.go
 
 thrum who-has internal/cli/agent.go
 # Output: No agent is currently editing internal/cli/agent.go
-```text
+```
 
 This queries agent work contexts (tracked via `thrum agent list --context`) to
 prevent two agents from editing the same file simultaneously.
@@ -470,7 +475,7 @@ thrum ping @reviewer
 thrum ping @furiosa
 # Output:
 #   furiosa: offline (last seen 3h ago)
-```text
+```
 
 Agents are considered `active` if seen within the last 2 minutes, `offline`
 otherwise.
@@ -493,7 +498,7 @@ thrum wait --after -30s --timeout 5m --json
 
 # Wait for mentions of your role
 thrum wait --mention @reviewer --timeout 5m
-```text
+```
 
 | Flag        | Format                       | Description                     |
 | ----------- | ---------------------------- | ------------------------------- |
@@ -508,7 +513,6 @@ thrum wait --mention @reviewer --timeout 5m
 - `1` -- timeout (no messages)
 - `2` -- error
 
----
 
 ## Complete Workflows
 
@@ -529,7 +533,7 @@ thrum inbox --mentions
 
 # 4. Reviewer responds
 thrum reply msg_01HXE... "Reviewed. LGTM with minor comments on error handling."
-```text
+```
 
 ### Workflow 2: Cross-Platform Agent Setup
 
@@ -547,7 +551,7 @@ thrum quickstart --name cursor_agent --role reviewer --module auth \
 # Generates .cursorrules with thrum instructions
 
 # Both agents share the same daemon and can message each other
-```text
+```
 
 ### Workflow 3: Session Recovery After Compaction
 
@@ -561,7 +565,7 @@ thrum inbox --unread
 
 # Resume work based on recovered context
 thrum agent set-intent "Resuming JWT implementation after compaction"
-```text
+```
 
 ### Workflow 4: Multi-Worktree Team Coordination
 
@@ -591,9 +595,8 @@ cd ~/.workspaces/repo/auth
 export THRUM_NAME=furiosa
 thrum inbox --unread
 thrum send "Auth complete, 15 tests passing" --to @coordinator
-```text
+```
 
----
 
 ## Best Practices
 
@@ -638,4 +641,4 @@ thrum send "Auth complete, 15 tests passing" --to @coordinator
 - [MCP Server](mcp-server.md) -- MCP tools for AI agent integration
 - [Context Management](context.md) -- Per-agent context storage and preambles
 - [CLI Reference](cli.md) -- Complete command documentation
-````
+```

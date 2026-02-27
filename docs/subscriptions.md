@@ -1,3 +1,4 @@
+
 ## Subscriptions & Notifications
 
 ## Quick Reference
@@ -36,7 +37,7 @@ When a new message matches a subscription, the daemon:
 
 ### Components
 
-````text
+```text
 +-------------------------------------------------------------+
 |                      Message Flow                            |
 +-------------------------------------------------------------+
@@ -69,7 +70,7 @@ When a new message matches a subscription, the daemon:
        |         |
        v         v
     Connected clients receive notification.message
-```text
+```
 
 ### Database Schema
 
@@ -90,7 +91,7 @@ CREATE TABLE subscriptions (
 CREATE INDEX idx_subscriptions_scope ON subscriptions(scope_type, scope_value);
 CREATE INDEX idx_subscriptions_mention ON subscriptions(mention_role);
 CREATE INDEX idx_subscriptions_session ON subscriptions(session_id);
-```go
+```
 
 **Note:** The subscriptions table does not have a foreign key constraint on
 `session_id`. Subscription cleanup on session end is handled at the application
@@ -121,7 +122,7 @@ func (s *Service) subscriptionExists(...) (bool, error) {
         query = "WHERE session_id = ? AND scope_type IS NULL AND ..."
     }
 }
-```go
+```
 
 ## Subscription Lifecycle
 
@@ -156,7 +157,7 @@ func (s *Service) subscriptionExists(...) (bool, error) {
   },
   "id": 1
 }
-```text
+```
 
 ### Removing Subscriptions
 
@@ -182,7 +183,7 @@ func (s *Service) subscriptionExists(...) (bool, error) {
   "result": {"removed": true},
   "id": 2
 }
-```text
+```
 
 ### Listing Subscriptions
 
@@ -219,7 +220,7 @@ func (s *Service) subscriptionExists(...) (bool, error) {
   },
   "id": 1
 }
-```go
+```
 
 ## Message Dispatch
 
@@ -279,7 +280,7 @@ func matchSubscription(msg *MessageInfo, scopeType, scopeValue, mentionRole, age
 
     return "" // No match
 }
-```go
+```
 
 ### Notification Building
 
@@ -305,7 +306,7 @@ For each match, the dispatcher builds a notification payload:
     "timestamp": "2026-02-03T10:00:00Z"
   }
 }
-```go
+```
 
 **Author parsing:**
 
@@ -351,7 +352,7 @@ type ConnectedClient struct {
     sessionID string
     conn      net.Conn
 }
-```go
+```
 
 **Operations:**
 
@@ -368,7 +369,7 @@ type ClientRegistry struct {
     mu      sync.RWMutex
     clients map[string]*Connection
 }
-```text
+```
 
 **Operations:**
 
@@ -406,7 +407,7 @@ When the dispatcher finds matches, it calls `Broadcaster.Notify()` for each:
     /* NotifyParams */
   }
 }
-```text
+```
 
 **Note:** No `id` field - notifications are one-way, no response expected.
 
@@ -453,7 +454,7 @@ When the dispatcher finds matches, it calls `Broadcaster.Notify()` for each:
 tmpDir := t.TempDir()
 db, err := schema.OpenDB(filepath.Join(tmpDir, "test.db"))
 defer db.Close()
-```go
+```
 
 **Unix socket connection tests** use `net.Pipe()`:
 
@@ -469,7 +470,7 @@ go func() {
     // Process buffer
 }()
 registry.Notify("ses_001", notification)
-```text
+```
 
 ## Performance Considerations
 
@@ -577,4 +578,4 @@ When a notification can't be sent (client disconnected):
 - Broadcaster: `internal/daemon/broadcaster.go`
 - Unix Socket Client Registry: `internal/daemon/notify.go`
 - WebSocket Client Registry: `internal/websocket/registry.go`
-````
+```

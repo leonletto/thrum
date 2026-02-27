@@ -1,3 +1,4 @@
+
 ## MCP Server
 
 > **See also:** [Daemon Architecture](daemon.md) for the underlying daemon the
@@ -21,7 +22,7 @@ instantly when a message arrives.
 
 ## Architecture
 
-````text
+```text
 Claude Code (Opus/Sonnet)
   |
   +-- long-lived child: thrum mcp serve (stdio JSON-RPC)
@@ -44,7 +45,7 @@ Claude Code (Opus/Sonnet)
   |
   +-- background sub-agent: message-listener (Haiku)
         +-- calls wait_for_message(timeout=300) -> blocks until message or timeout
-```text
+```
 
 ### Package Structure
 
@@ -56,7 +57,7 @@ internal/mcp/
   types.go     -- MCP-specific input/output structs
 
 cmd/thrum/mcp.go  -- thrum mcp serve cobra command
-```go
+```
 
 ### Startup Sequence
 
@@ -113,7 +114,7 @@ When Claude Code terminates the process (closes stdin) or a signal is received
 
 ```bash
 thrum mcp serve [--agent-id NAME]
-```go
+```
 
 **Prerequisites:**
 
@@ -142,7 +143,7 @@ Add to `.claude/settings.json` (project or user level):
     }
   }
 }
-```go
+```
 
 Once configured, Claude Code starts `thrum mcp serve` as a child process and
 exposes its tools as `mcp__thrum__<tool_name>`.
@@ -510,7 +511,7 @@ On initialization, the waiter:
 
 ```text
 Daemon WebSocket -> readLoop -> queue ([]MessageNotification) -> waiterCh -> WaitForMessage
-```text
+```
 
 The `readLoop` goroutine:
 
@@ -558,13 +559,13 @@ MESSAGES_RECEIVED
 FROM: [sender]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]
-```text
+```
 
 When timeout occurs:
 
 ```text
 NO_MESSAGES_TIMEOUT
-```text
+```
 
 **Cost:** Approximately $0.00003 per cycle (Haiku-class model).
 
@@ -586,7 +587,7 @@ mcp__thrum__check_messages()
 mcp__thrum__list_agents()
 mcp__thrum__send_message(to="@everyone", content="...")  # preferred over broadcast_message
 mcp__thrum__wait_for_message(timeout=300)
-```text
+```
 
 **Group management:**
 
@@ -597,7 +598,7 @@ mcp__thrum__list_groups()
 mcp__thrum__get_group(name="backend", expand=true)
 mcp__thrum__remove_group_member(group="backend", member_type="agent", member_value="alice")
 mcp__thrum__delete_group(name="backend")
-```text
+```
 
 ## Development
 
@@ -620,7 +621,7 @@ go test ./internal/mcp/...
 
 # With verbose output
 go test -v ./internal/mcp/...
-```text
+```
 
 Test coverage includes:
 
@@ -658,4 +659,4 @@ The MCP server logs warnings to stderr. Check for:
 - RPC API reference: `docs/rpc-api.md`
 - Identity system: `docs/identity.md`
 - Agent reference: `llms.txt`
-````
+```

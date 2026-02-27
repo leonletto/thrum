@@ -1,3 +1,4 @@
+
 ## Thrum Quickstart Guide
 
 Get up and running with Thrum in 5 minutes.
@@ -13,6 +14,10 @@ across sessions, worktrees, and machines using Git as the sync layer.
 >
 > **Using Claude Code?** Install the [Thrum plugin](claude-code-plugin.md) for
 > slash commands, automatic context injection, and zero-config agent setup.
+>
+> **Using Codex?** Install the [Codex Plugin](codex-plugin.md) skill bundle for
+> split Thrum workflows (`thrum-core`, `thrum-ops`, `thrum-role-config`, and
+> `project-setup`).
 
 ## Fast Path
 
@@ -33,7 +38,7 @@ persistence. See [Agent Context Management](context.md) for details.
 ## Prerequisites
 
 - Git repository
-- Go 1.21 or later (for building)
+- Go 1.26 or later (for building)
 - Unix-like system (macOS, Linux)
 
 ## Installation
