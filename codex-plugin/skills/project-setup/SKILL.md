@@ -44,7 +44,7 @@ digraph when_to_use {
 
 Gather these from the user or conversation context before proceeding:
 
-- **Design doc path** — e.g. `docs/plans/2026-02-20-feature-design.md`
+- **Design doc path** — e.g. `dev-docs/plans/2026-02-20-feature-design.md`
 - **Project root** — absolute path to the project
 - **Tech stack** — languages, frameworks, tools in use
 - **Quality commands** — test/lint commands (e.g. `npx vitest run`)

@@ -9,7 +9,7 @@ a design spec, then decompose it into beads epics and detailed tasks.
 
 - `{{FEATURE_DESCRIPTION}}` — What the user wants to build (can be rough)
 - `{{PROJECT_ROOT}}` — Absolute path to the project root
-- `{{DESIGN_DOC_DIR}}` — Where design docs live (e.g., `docs/plans/`)
+- `{{DESIGN_DOC_DIR}}` — Where design docs live (e.g., `dev-docs/plans/`)
 - `{{REFERENCE_DOCS}}` — Existing specs, designs, or reference code to consider
 - `{{TECH_STACK}}` — Languages, frameworks, and tools in use
 
