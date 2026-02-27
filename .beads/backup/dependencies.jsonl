@@ -21,6 +21,11 @@
 {"created_at":"2026-02-24T16:22:07Z","created_by":"Leon Letto","depends_on_id":"thrum-7fg","issue_id":"thrum-7fg.4","type":"parent-child"}
 {"created_at":"2026-02-24T16:22:21Z","created_by":"Leon Letto","depends_on_id":"thrum-7fg.2","issue_id":"thrum-7fg.4","type":"blocks"}
 {"created_at":"2026-02-24T16:22:21Z","created_by":"Leon Letto","depends_on_id":"thrum-7fg.3","issue_id":"thrum-7fg.4","type":"blocks"}
+{"created_at":"2026-02-27T13:49:27Z","created_by":"Leon Letto","depends_on_id":"thrum-7iv","issue_id":"thrum-7iv.1","type":"parent-child"}
+{"created_at":"2026-02-27T13:49:28Z","created_by":"Leon Letto","depends_on_id":"thrum-7iv","issue_id":"thrum-7iv.2","type":"parent-child"}
+{"created_at":"2026-02-27T13:49:32Z","created_by":"Leon Letto","depends_on_id":"thrum-7iv.1","issue_id":"thrum-7iv.2","type":"blocks"}
+{"created_at":"2026-02-27T13:49:28Z","created_by":"Leon Letto","depends_on_id":"thrum-7iv","issue_id":"thrum-7iv.3","type":"parent-child"}
+{"created_at":"2026-02-27T13:49:32Z","created_by":"Leon Letto","depends_on_id":"thrum-7iv.1","issue_id":"thrum-7iv.3","type":"blocks"}
 {"created_at":"2026-02-27T13:18:55Z","created_by":"Leon Letto","depends_on_id":"thrum-lru","issue_id":"thrum-85u","type":"blocks"}
 {"created_at":"2026-02-27T13:18:05Z","created_by":"Leon Letto","depends_on_id":"thrum-n0u","issue_id":"thrum-85u","type":"blocks"}
 {"created_at":"2026-02-24T16:20:04Z","created_by":"Leon Letto","depends_on_id":"thrum-7fg","issue_id":"thrum-9b7","type":"blocks"}
