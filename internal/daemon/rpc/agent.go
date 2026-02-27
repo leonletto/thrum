@@ -175,6 +175,13 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		return nil, errors.New("module is required")
 	}
 
+	// Validate agent name if provided (unnamed agents get hash-based IDs)
+	if req.Name != "" {
+		if err := identity.ValidateAgentName(req.Name); err != nil {
+			return nil, fmt.Errorf("invalid agent name: %w", err)
+		}
+	}
+
 	// Generate agent ID
 	repoID := h.state.RepoID()
 	agentID := identity.GenerateAgentID(repoID, req.Role, req.Module, req.Name)

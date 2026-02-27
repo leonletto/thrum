@@ -20,8 +20,8 @@ var (
 	// Use Crockford's base32 alphabet (no padding, case-insensitive).
 	crockfordBase32 = base32.NewEncoding("0123456789ABCDEFGHJKMNPQRSTVWXYZ").WithPadding(base32.NoPadding)
 
-	// AgentNameRegex defines valid agent names: lowercase alphanumeric + underscores.
-	agentNameRegex = regexp.MustCompile(`^[a-z0-9_]+$`)
+	// AgentNameRegex defines valid agent names: lowercase alphanumeric, underscores, and hyphens.
+	agentNameRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
 	// ReservedNames are names that cannot be used for agents.
 	reservedNames = map[string]bool{
@@ -203,8 +203,8 @@ func ULIDTimestamp(s string) (time.Time, error) {
 // Names must be safe for: file paths, @mention targets, JSONL field values, git tracking.
 //
 // Rules:
-//   - Allowed characters: lowercase letters (a-z), digits (0-9), underscores (_)
-//   - Rejected: hyphens, dots, spaces, path separators, uppercase, special characters
+//   - Allowed characters: lowercase letters (a-z), digits (0-9), underscores (_), hyphens (-)
+//   - Rejected: dots, spaces, path separators, uppercase, special characters
 //   - Reserved names: daemon, system, thrum, all, broadcast
 //   - Cannot be empty
 //
@@ -221,10 +221,38 @@ func ValidateAgentName(name string) error {
 
 	// Check character set
 	if !agentNameRegex.MatchString(name) {
-		return fmt.Errorf("agent name '%s' contains invalid characters; only lowercase letters (a-z), digits (0-9), and underscores (_) are allowed", name)
+		return fmt.Errorf("agent name '%s' contains invalid characters; only lowercase letters (a-z), digits (0-9), underscores (_), and hyphens (-) are allowed", name)
 	}
 
 	return nil
+}
+
+// SanitizeAgentName converts a raw string (e.g., branch name) into a valid agent name component.
+// It lowercases, replaces invalid characters with underscores, collapses consecutive underscores,
+// and strips leading/trailing underscores.
+func SanitizeAgentName(s string) string {
+	s = strings.ToLower(s)
+
+	// Replace any character not in [a-z0-9_-] with underscore
+	var b strings.Builder
+	for _, c := range s {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-' {
+			b.WriteRune(c)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	s = b.String()
+
+	// Collapse consecutive underscores
+	for strings.Contains(s, "__") {
+		s = strings.ReplaceAll(s, "__", "_")
+	}
+
+	// Strip leading/trailing underscores
+	s = strings.Trim(s, "_")
+
+	return s
 }
 
 // ParseAgentID parses an agent ID and extracts the role and hash components.

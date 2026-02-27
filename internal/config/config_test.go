@@ -311,11 +311,6 @@ func TestLoad_ThrumNameEnvVar_InvalidName(t *testing.T) {
 			errorSubstr: "invalid characters",
 		},
 		{
-			name:        "hyphen",
-			thrumName:   "my-agent",
-			errorSubstr: "invalid characters",
-		},
-		{
 			name:        "reserved name",
 			thrumName:   "daemon",
 			errorSubstr: "reserved",
