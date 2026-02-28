@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go install deploy-remote clean fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks
+.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go install deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks
 
 # Tool versions - pinned for supply chain security
 GOLANGCI_LINT_VERSION := v1.64.5
@@ -129,6 +129,22 @@ endif
 	scp $(INSTALL_DIR)/$(BINARY_NAME) $(REMOTE):~/.local/bin/$(BINARY_NAME)
 	ssh $(REMOTE) "xattr -cr ~/.local/bin/$(BINARY_NAME) && codesign -s - -f ~/.local/bin/$(BINARY_NAME)"
 	@echo "Deployed and signed $(BINARY_NAME) on $(REMOTE)"
+
+## E2E test cleanup — stops daemon and removes /tmp/thrum-e2e-release/
+clean-e2e:
+	@echo "Stopping E2E daemon..."
+	@if [ -d /tmp/thrum-e2e-release/coordinator ]; then \
+		bin/thrum --repo /tmp/thrum-e2e-release/coordinator daemon stop 2>/dev/null || true; \
+	fi
+	@echo "Removing /tmp/thrum-e2e-release/..."
+	@rm -rf /tmp/thrum-e2e-release
+	@rm -f node_modules/.e2e-test-repo node_modules/.e2e-implementer-repo \
+		node_modules/.e2e-bare-remote node_modules/.e2e-ws-port
+	@echo "E2E cleanup complete."
+
+## Run E2E tests (builds first, creates test environment)
+test-e2e:
+	npx playwright test
 
 # Clean build artifacts
 clean:
