@@ -16,14 +16,32 @@ import * as http from 'node:http';
 
 const ROOT = path.resolve(__dirname, '../..');
 const BIN = path.join(ROOT, 'bin', 'thrum');
+const WS_PORT_FILE = path.join(ROOT, 'node_modules', '.e2e-ws-port');
 
-/** Create an isolated temp repo with thrum initialized. */
+/** Read the global daemon port written by global-setup. */
+function getGlobalDaemonPort(): number {
+  if (fs.existsSync(WS_PORT_FILE)) {
+    const content = fs.readFileSync(WS_PORT_FILE, 'utf-8').trim();
+    const port = parseInt(content, 10);
+    if (!isNaN(port)) return port;
+  }
+  return 9999; // fallback
+}
+
+/** Create an isolated temp repo with thrum initialized but daemon stopped. */
 function createTestRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'thrum-daemon-'));
   execFileSync('git', ['init'], { cwd: dir, stdio: 'pipe' });
   execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir, stdio: 'pipe' });
   execFileSync('git', ['config', 'user.name', 'Test User'], { cwd: dir, stdio: 'pipe' });
-  execFileSync(BIN, ['init'], { cwd: dir, encoding: 'utf-8', timeout: 10_000 });
+  fs.writeFileSync(path.join(dir, 'README.md'), '# Daemon Test Repo\n');
+  execFileSync('git', ['add', '.'], { cwd: dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'Initial commit'], { cwd: dir, stdio: 'pipe' });
+  // thrum init auto-starts a daemon; stop it so daemon tests control lifecycle
+  execFileSync(BIN, ['init'], { cwd: dir, encoding: 'utf-8', timeout: 30_000 });
+  try {
+    execFileSync(BIN, ['daemon', 'stop'], { cwd: dir, encoding: 'utf-8', timeout: 10_000 });
+  } catch { /* may not be running */ }
   return dir;
 }
 
@@ -216,11 +234,10 @@ test.describe('Daemon Management', () => {
   test('SC-47: Daemon serves WebSocket', async () => {
     // This test uses the globally running daemon (from global-setup)
     // since we need a known port to connect to.
-    // Note: Node.js http.get fires 'upgrade' event (not the response callback)
-    // when the server responds with 101 Switching Protocols.
+    const port = getGlobalDaemonPort();
     const result = await new Promise<{ statusCode: number; headers: http.IncomingHttpHeaders }>((resolve, reject) => {
       const req = http.get(
-        'http://localhost:9999/ws',
+        `http://localhost:${port}/ws`,
         {
           headers: {
             'Upgrade': 'websocket',

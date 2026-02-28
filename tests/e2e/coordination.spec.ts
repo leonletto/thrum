@@ -6,66 +6,37 @@
  * from global-setup.
  */
 import { test, expect } from '@playwright/test';
-import { thrum, thrumJson } from './helpers/thrum-cli.js';
+import { thrum, getTestRoot } from './helpers/thrum-cli.js';
+import { execFileSync } from 'node:child_process';
 import { registerAgent } from './helpers/fixtures.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-
-const ROOT = path.resolve(__dirname, '../..');
 
 test.describe('Coordination', () => {
   test.describe.configure({ mode: 'serial' });
 
   test('SC-30: Check who has a file', async () => {
-    // Arrange: modify a tracked file so there are uncommitted changes
-    const testFile = path.join(ROOT, 'internal', 'cli', 'daemon.go');
+    const testRoot = getTestRoot();
 
-    // Check if the file exists — if not, find any Go file to modify
-    let targetFile: string;
-    let targetArg: string;
-    if (fs.existsSync(testFile)) {
-      targetFile = testFile;
-      targetArg = 'internal/cli/daemon.go';
-    } else {
-      // Find any Go file to temporarily modify
-      const goFiles: string[] = [];
-      const scanDir = (dir: string, depth: number) => {
-        if (depth > 3) return;
-        try {
-          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            const full = path.join(dir, entry.name);
-            if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
-              scanDir(full, depth + 1);
-            } else if (entry.isFile() && entry.name.endsWith('.go')) {
-              goFiles.push(full);
-            }
-          }
-        } catch { /* permission errors, etc. */ }
-      };
-      scanDir(ROOT, 0);
-
-      if (goFiles.length === 0) {
-        test.skip(true, 'No Go files found to test who-has');
-        return;
-      }
-      targetFile = goFiles[0];
-      targetArg = path.relative(ROOT, targetFile);
-    }
-
-    // Save original content, add a comment, test, then restore
-    const original = fs.readFileSync(targetFile, 'utf-8');
+    // Create a dummy file, commit it, then modify to create uncommitted changes
+    const testFile = path.join(testRoot, 'test-file.go');
+    fs.writeFileSync(testFile, '// test file for who-has\n');
     try {
-      fs.writeFileSync(targetFile, original + '\n// e2e-test-marker\n');
+      execFileSync('git', ['add', 'test-file.go'], { cwd: testRoot, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add test file'], { cwd: testRoot, stdio: 'pipe' });
+      fs.writeFileSync(testFile, '// test file for who-has\n// modified\n');
 
       // Act: run who-has
-      const output = thrum(['who-has', targetArg]);
+      const output = thrum(['who-has', 'test-file.go']);
 
       // Assert: shows the file and some context about who has it
       expect(output).not.toBe('');
-      // The output should reference the file or the current branch/agent
     } finally {
-      // Restore original file
-      fs.writeFileSync(targetFile, original);
+      // Undo the commit and remove the file to leave test repo clean
+      try {
+        execFileSync('git', ['reset', 'HEAD~1', '--hard'], { cwd: testRoot, stdio: 'pipe' });
+        fs.rmSync(testFile, { force: true });
+      } catch { /* best effort */ }
     }
   });
 

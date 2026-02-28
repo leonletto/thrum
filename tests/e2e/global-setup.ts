@@ -1,23 +1,22 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import * as os from 'node:os';
 import path from 'node:path';
 
-const ROOT = path.resolve(__dirname, '../..');
-const BIN = path.join(ROOT, 'bin', 'thrum');
+/** Source repo root — used for building and locating the binary. */
+const SOURCE_ROOT = path.resolve(__dirname, '../..');
+const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
 
 /**
- * Default test agent identity. Must match the constants in helpers/thrum-cli.ts.
- * The daemon is started with THRUM_ROLE and THRUM_MODULE as env vars so that
- * identity resolution always has a fallback when multiple identity files exist
- * in .thrum/identities/.
+ * Marker files written to node_modules/ so other files can find the test repo.
  */
+export const TEST_REPO_FILE = path.join(SOURCE_ROOT, 'node_modules', '.e2e-test-repo');
+export const WS_PORT_FILE = path.join(SOURCE_ROOT, 'node_modules', '.e2e-ws-port');
+export const DAEMON_OWNER_MARKER = path.join(SOURCE_ROOT, 'node_modules', '.e2e-daemon-owner');
+
 const TEST_AGENT_ROLE = 'tester';
 const TEST_AGENT_MODULE = 'e2e';
 
-/**
- * Environment for daemon and CLI processes.
- * THRUM_ROLE / THRUM_MODULE provide fallback identity resolution.
- */
 function daemonEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -29,18 +28,18 @@ function daemonEnv(): NodeJS.ProcessEnv {
 function run(cmd: string, args: string[], label: string): void {
   console.log(`[global-setup] ${label}...`);
   execFileSync(cmd, args, {
-    cwd: ROOT,
+    cwd: SOURCE_ROOT,
     stdio: 'inherit',
-    timeout: 300_000, // 5 min for builds
+    timeout: 300_000,
   });
 }
 
-async function waitForDaemon(maxAttempts = 30, intervalMs = 1000): Promise<void> {
+async function waitForDaemon(cwd: string, maxAttempts = 30, intervalMs = 1000): Promise<void> {
   console.log('[global-setup] Waiting for daemon to be ready...');
   for (let i = 0; i < maxAttempts; i++) {
     try {
       const output = execFileSync(BIN, ['daemon', 'status'], {
-        cwd: ROOT,
+        cwd,
         encoding: 'utf-8',
         timeout: 5_000,
       });
@@ -56,59 +55,83 @@ async function waitForDaemon(maxAttempts = 30, intervalMs = 1000): Promise<void>
   throw new Error('Daemon did not become ready within timeout');
 }
 
-export default async function globalSetup(): Promise<void> {
-  // Step 1: Build UI (copies dist to internal/web/dist/)
-  run('make', ['build-ui'], 'Building UI');
+function getDaemonPort(cwd: string): number {
+  const output = execFileSync(BIN, ['daemon', 'status', '--json'], {
+    cwd,
+    encoding: 'utf-8',
+    timeout: 5_000,
+  });
+  const status = JSON.parse(output);
+  if (!status.ws_port) {
+    throw new Error(`Daemon status missing ws_port: ${output}`);
+  }
+  return status.ws_port;
+}
 
-  // Step 2: Build Go binary with embedded UI
+/**
+ * Create an isolated temp git repo for E2E tests.
+ * `thrum init` automatically starts a daemon and registers a default agent.
+ * Returns the absolute path to the temp directory.
+ */
+function createTestRepo(): string {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'thrum-e2e-'));
+  console.log(`[global-setup] Created test repo at ${dir}`);
+
+  // Initialize git repo with a commit (required for thrum init)
+  execFileSync('git', ['init'], { cwd: dir, stdio: 'pipe' });
+  execFileSync('git', ['config', 'user.email', 'e2e@test.com'], { cwd: dir, stdio: 'pipe' });
+  execFileSync('git', ['config', 'user.name', 'E2E Test'], { cwd: dir, stdio: 'pipe' });
+
+  // Create a dummy file and initial commit
+  writeFileSync(path.join(dir, 'README.md'), '# E2E Test Repo\n');
+  execFileSync('git', ['add', '.'], { cwd: dir, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-m', 'Initial commit'], { cwd: dir, stdio: 'pipe' });
+
+  // Initialize thrum — this also starts a daemon and registers the test agent
+  execFileSync(BIN, [
+    'init',
+    '--agent-role', 'tester',
+    '--agent-module', 'e2e',
+    '--agent-name', 'e2e_tester',
+  ], {
+    cwd: dir,
+    encoding: 'utf-8',
+    timeout: 30_000,
+    env: daemonEnv(),
+  });
+
+  return dir;
+}
+
+export default async function globalSetup(): Promise<void> {
+  // Step 1: Build UI and Go binary in source repo
+  run('make', ['build-ui'], 'Building UI');
   run('make', ['build-go'], 'Building Go binary');
 
   if (!existsSync(BIN)) {
     throw new Error(`Binary not found at ${BIN}`);
   }
 
-  // Step 3: Start daemon with identity env vars for fallback resolution
-  console.log('[global-setup] Starting daemon...');
-  execFileSync(BIN, ['daemon', 'start'], {
-    cwd: ROOT,
-    stdio: 'inherit',
-    timeout: 15_000,
-    env: daemonEnv(),
-  });
+  // Step 2: Create isolated test repo (thrum init starts daemon automatically)
+  const testRepo = createTestRepo();
+  writeFileSync(TEST_REPO_FILE, testRepo);
+  writeFileSync(DAEMON_OWNER_MARKER, 'owned');
 
-  // If anything after daemon start fails, stop the daemon so port 9999
-  // doesn't stay bound and block the next test run.
   try {
-    // Step 4: Wait for daemon to be ready
-    await waitForDaemon();
+    // Step 3: Wait for daemon to be ready
+    await waitForDaemon(testRepo);
 
-    // Step 5: Register a test agent for CLI operations
-    console.log('[global-setup] Registering test agent...');
-    try {
-      execFileSync(BIN, [
-        'quickstart',
-        '--role', TEST_AGENT_ROLE,
-        '--module', TEST_AGENT_MODULE,
-        '--display', 'E2E Test Agent',
-        '--intent', 'Running Playwright E2E tests',
-      ], {
-        cwd: ROOT,
-        encoding: 'utf-8',
-        timeout: 10_000,
-        env: daemonEnv(),
-      });
-    } catch (err: any) {
-      const stderr = err.stderr?.toString() || err.message || '';
-      if (stderr.toLowerCase().includes('already') || stderr.toLowerCase().includes('exists')) {
-        console.log('[global-setup] Agent already registered, continuing.');
-      } else {
-        throw new Error(`Agent registration failed unexpectedly: ${stderr}`);
-      }
-    }
+    // Step 4: Read the daemon's WebSocket port and write for playwright.config.ts
+    const wsPort = getDaemonPort(testRepo);
+    writeFileSync(WS_PORT_FILE, String(wsPort));
+    console.log(`[global-setup] Daemon WebSocket port: ${wsPort}`);
+
+    // Note: thrum init already registered an agent (e2e_tester with role=tester,
+    // module=e2e) and started a session. No additional quickstart needed.
   } catch (err) {
     console.error('[global-setup] Setup failed after daemon start, stopping daemon...');
     try {
-      execFileSync(BIN, ['daemon', 'stop'], { cwd: ROOT, timeout: 5_000 });
+      execFileSync(BIN, ['daemon', 'stop'], { cwd: testRepo, timeout: 5_000 });
     } catch { /* best effort cleanup */ }
     throw err;
   }

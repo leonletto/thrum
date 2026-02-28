@@ -6,14 +6,14 @@
  * as git remotes to simulate multi-repo scenarios.
  */
 import { test, expect } from '@playwright/test';
-import { thrum } from './helpers/thrum-cli.js';
+import { thrum, getTestRoot } from './helpers/thrum-cli.js';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-const ROOT = path.resolve(__dirname, '../..');
-const BIN = path.join(ROOT, 'bin', 'thrum');
+const SOURCE_ROOT = path.resolve(__dirname, '../..');
+const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
 
 /** Create a bare git repo to use as a remote. */
 function createBareRemote(): string {

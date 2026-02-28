@@ -1,8 +1,13 @@
 import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-const ROOT = path.resolve(__dirname, '../../..');
-const BIN = path.join(ROOT, 'bin', 'thrum');
+/** Source repo root — for locating the built binary. */
+const SOURCE_ROOT = path.resolve(__dirname, '../../..');
+const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
+
+/** File written by global-setup with the isolated test repo path. */
+const TEST_REPO_FILE = path.join(SOURCE_ROOT, 'node_modules', '.e2e-test-repo');
 
 /**
  * Default test agent identity used by the global-setup daemon.
@@ -11,6 +16,17 @@ const BIN = path.join(ROOT, 'bin', 'thrum');
  */
 export const TEST_AGENT_ROLE = 'tester';
 export const TEST_AGENT_MODULE = 'e2e';
+
+/**
+ * Get the test repo root. Reads from the marker file written by global-setup.
+ * Falls back to SOURCE_ROOT if not available (e.g., running individual tests).
+ */
+export function getTestRoot(): string {
+  if (existsSync(TEST_REPO_FILE)) {
+    return readFileSync(TEST_REPO_FILE, 'utf-8').trim();
+  }
+  return SOURCE_ROOT;
+}
 
 /**
  * Environment variables passed to all thrum CLI invocations.
@@ -28,7 +44,7 @@ function thrumEnv(): NodeJS.ProcessEnv {
 
 /**
  * Execute a thrum CLI command safely (no shell injection).
- * Returns trimmed stdout.
+ * Returns trimmed stdout. Commands run in the isolated test repo.
  *
  * @param args - CLI arguments
  * @param timeout - command timeout in ms (default 10s)
@@ -37,7 +53,7 @@ function thrumEnv(): NodeJS.ProcessEnv {
 export function thrum(args: string[], timeout = 10_000, env?: NodeJS.ProcessEnv): string {
   try {
     return execFileSync(BIN, args, {
-      cwd: ROOT,
+      cwd: getTestRoot(),
       encoding: 'utf-8',
       timeout,
       env: env ?? thrumEnv(),

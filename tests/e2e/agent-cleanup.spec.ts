@@ -2,10 +2,10 @@ import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { thrum } from './helpers/thrum-cli.js';
+import { thrum, getTestRoot } from './helpers/thrum-cli.js';
 
-const ROOT = path.resolve(__dirname, '../..');
-const BIN = path.join(ROOT, 'bin', 'thrum');
+const SOURCE_ROOT = path.resolve(__dirname, '../..');
+const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
 
 /**
  * Helper to run thrum commands that may fail, returning { stdout, stderr, exitCode }.
@@ -16,7 +16,7 @@ function thrumRaw(
 ): { stdout: string; stderr: string; exitCode: number } {
   try {
     const stdout = execFileSync(BIN, args, {
-      cwd: ROOT,
+      cwd: getTestRoot(),
       encoding: 'utf-8',
       timeout: 10_000,
       env: env ?? {
@@ -39,10 +39,11 @@ function thrumRaw(
  * Resolve the sync worktree path for reading events.jsonl.
  */
 function getSyncDir(): string {
-  const output = execFileSync('git', ['-C', ROOT, 'rev-parse', '--git-common-dir'], {
+  const testRoot = getTestRoot();
+  const output = execFileSync('git', ['-C', testRoot, 'rev-parse', '--git-common-dir'], {
     encoding: 'utf-8',
   }).trim();
-  const gitCommonDir = path.isAbsolute(output) ? output : path.join(ROOT, output);
+  const gitCommonDir = path.isAbsolute(output) ? output : path.join(testRoot, output);
   return path.join(gitCommonDir, 'thrum-sync', 'a-sync');
 }
 
@@ -84,7 +85,7 @@ test.describe('Agent Cleanup Tests', () => {
     expect(deleteResult.exitCode).toBe(0);
 
     // Verify identity file removed
-    const identityPath = path.join(ROOT, '.thrum', 'identities', `${agentName}.json`);
+    const identityPath = path.join(getTestRoot(), '.thrum', 'identities', `${agentName}.json`);
     expect(fs.existsSync(identityPath)).toBe(false);
 
     // Verify message file removed
