@@ -11,13 +11,21 @@ tasks in order, runs quality gates, and pushes completed work.
 - `{{EPIC_ID}}` — The beads epic ID to implement
 - `{{WORKTREE_PATH}}` — Absolute path to the working worktree
 - `{{BRANCH_NAME}}` — Git branch for this work (e.g., `feature/auth`)
-- `{{DESIGN_DOC}}` — Path to the design spec (if applicable)
+- `{{DESIGN_DOC}}` — **Absolute path** to the design spec (if applicable)
 - `{{REFERENCE_CODE}}` — Paths to reference implementations (if any)
 - `{{QUALITY_COMMANDS}}` — Commands for test/lint (e.g.,
   `make test && make lint`)
 - `{{COVERAGE_TARGET}}` — Minimum coverage threshold (e.g., >80%)
 - `{{AGENT_NAME}}` — Unique name for this agent (e.g., `impl-daemon`,
   `impl-cli`)
+- `{{PLAN_FILE}}` — **Absolute path** to the implementation plan file
+- `{{PROJECT_ROOT}}` — Absolute path to the project root
+
+**Why absolute paths?** Design docs, plan files, and prompts typically live in
+gitignored directories (`dev-docs/`, `docs/plans/`). Worktrees only share
+committed files, so agents in worktrees cannot resolve relative paths to these
+files. All `{{DESIGN_DOC}}`, `{{PLAN_FILE}}`, and prompt references must be
+absolute paths (e.g., `/Users/you/project/dev-docs/plans/file.md`).
 
 ---
 
@@ -200,6 +208,8 @@ bd show {{TASK_ID}}
 The task description is the **source of truth** for what to build. It contains
 file paths, signatures, code examples, and acceptance criteria. Follow it
 precisely.
+
+Also read the full implementation code from the plan file: `{{PLAN_FILE}}`
 
 #### 3. Implement the Task
 
