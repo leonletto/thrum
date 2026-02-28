@@ -56,11 +56,15 @@ test.describe('Groups', () => {
     expect(inbox.toLowerCase()).toContain('group message');
   });
 
-  test('F5: Nested groups not supported', async () => {
+  test('F5: Adding non-agent to group fails', async () => {
     thrum(['group', 'create', 'meta-group']);
-    thrum(['group', 'add', 'meta-group', 'test-team']);
-
-    const list = thrum(['group', 'list']);
-    expect(list.toLowerCase()).toContain('meta-group');
+    // Adding a non-existent agent name should fail (no nested groups)
+    let error = '';
+    try {
+      thrum(['group', 'add', 'meta-group', 'test-team']);
+    } catch (err: any) {
+      error = err.message || '';
+    }
+    expect(error.toLowerCase()).toContain('not found');
   });
 });

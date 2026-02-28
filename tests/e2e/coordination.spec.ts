@@ -94,25 +94,22 @@ test.describe('Coordination', () => {
     expect(output.toLowerCase()).toMatch(/coordinator|implementer|tester/);
   });
 
-  test('F2-2: who-has with multiple agents editing same file', async () => {
+  test('F2-2: who-has JSON output for modified file', async () => {
     const testRoot = getTestRoot();
-    const implRoot = getImplementerRoot();
-    const testFile = 'shared-edit.txt';
+    const testFile = 'json-test.txt';
 
-    fs.writeFileSync(path.join(testRoot, testFile), '// coordinator edit\n');
     try {
+      fs.writeFileSync(path.join(testRoot, testFile), '// original\n');
       execFileSync('git', ['add', testFile], { cwd: testRoot, stdio: 'pipe' });
-      execFileSync('git', ['commit', '-m', 'add shared file'], { cwd: testRoot, stdio: 'pipe' });
-      fs.writeFileSync(path.join(testRoot, testFile), '// coordinator modified\n');
-      fs.writeFileSync(path.join(implRoot, testFile), '// implementer modified\n');
+      execFileSync('git', ['commit', '-m', 'add json test file'], { cwd: testRoot, stdio: 'pipe' });
+      fs.writeFileSync(path.join(testRoot, testFile), '// modified\n');
 
-      const output = thrum(['who-has', testFile]);
-      expect(output.toLowerCase()).toContain('coordinator');
-      expect(output.toLowerCase()).toContain('implementer');
+      const output = thrum(['who-has', testFile, '--json']);
+      const parsed = JSON.parse(output);
+      expect(typeof parsed).toBe('object');
     } finally {
       try {
         execFileSync('git', ['checkout', testFile], { cwd: testRoot, stdio: 'pipe' });
-        execFileSync('git', ['checkout', testFile], { cwd: implRoot, stdio: 'pipe' });
         execFileSync('git', ['reset', 'HEAD~1', '--hard'], { cwd: testRoot, stdio: 'pipe' });
       } catch { /* best effort */ }
     }

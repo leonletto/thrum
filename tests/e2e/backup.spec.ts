@@ -5,9 +5,13 @@
  * to write backups into the test repo.
  */
 import { test, expect } from '@playwright/test';
-import { thrum, getTestRoot } from './helpers/thrum-cli.js';
+import { thrum, thrumIn, getTestRoot, getImplementerRoot } from './helpers/thrum-cli.js';
+import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+
+const SOURCE_ROOT = path.resolve(__dirname, '../..');
+const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
 
 test.describe('Backup', () => {
   test.describe.configure({ mode: 'serial' });
@@ -40,5 +44,25 @@ test.describe('Backup', () => {
       output = err.message || '';
     }
     expect(output.toLowerCase()).toMatch(/restor|backup/);
+
+    // Restore stops/restarts daemon and replaces DB (wiping sessions).
+    // Wait for daemon to be fully ready via RPC (not just PID alive).
+    const testRoot = getTestRoot();
+    for (let i = 0; i < 30; i++) {
+      try {
+        // agent list requires a working RPC connection (not just PID check)
+        execFileSync(BIN, ['agent', 'list', '--json'], {
+          cwd: testRoot, encoding: 'utf-8', timeout: 5_000,
+        });
+        break;
+      } catch { /* not ready */ }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // Re-quickstart both agents (sessions wiped by restore)
+    thrumIn(testRoot, ['quickstart', '--role', 'coordinator', '--module', 'all',
+      '--name', 'e2e_coordinator', '--intent', 'E2E test coordinator'], 10_000);
+    thrumIn(getImplementerRoot(), ['quickstart', '--role', 'implementer', '--module', 'main',
+      '--name', 'e2e_implementer', '--intent', 'E2E test implementer'], 10_000);
   });
 });
