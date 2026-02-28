@@ -141,6 +141,36 @@ func TestAgentRegister(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "invalid_agent_name_uppercase",
+			request: RegisterRequest{
+				Name:   "MyAgent",
+				Role:   "implementer",
+				Module: "auth",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid_agent_name_special_chars",
+			request: RegisterRequest{
+				Name:   "my/agent.name",
+				Role:   "implementer",
+				Module: "auth",
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid_agent_name_with_hyphens",
+			request: RegisterRequest{
+				Name:    "my-agent",
+				Role:    "implementer",
+				Module:  "auth",
+				Display: "Hyphenated Agent",
+			},
+			wantStatus:   "registered",
+			wantConflict: false,
+			wantErr:      false,
+		},
 	}
 
 	for _, tt := range tests {

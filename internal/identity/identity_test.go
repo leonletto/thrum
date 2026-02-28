@@ -278,6 +278,10 @@ func TestValidateAgentName_Valid(t *testing.T) {
 		"_",
 		"_underscore_start",
 		"123_numbers_first",
+		"my-agent",
+		"feature-backup-restore",
+		"impl-team-fix",
+		"a-b-c",
 	}
 
 	for _, name := range validNames {
@@ -309,11 +313,6 @@ func TestValidateAgentName_Invalid(t *testing.T) {
 		{
 			name:        "all uppercase",
 			agentName:   "AGENT",
-			errorSubstr: "invalid characters",
-		},
-		{
-			name:        "hyphen",
-			agentName:   "my-agent",
 			errorSubstr: "invalid characters",
 		},
 		{
@@ -390,6 +389,41 @@ func TestValidateAgentName_Reserved(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "reserved") {
 				t.Errorf("ValidateAgentName(%q) error should mention 'reserved', got: %v", name, err)
+			}
+		})
+	}
+}
+
+func TestSanitizeAgentName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"citationsBranch", "citationsbranch"},
+		{"feature/backup-restore", "feature_backup-restore"},
+		{"my.branch.name", "my_branch_name"},
+		{"Feature/MyBranch", "feature_mybranch"},
+		{"ALLCAPS", "allcaps"},
+		{"dots.and/slashes", "dots_and_slashes"},
+		{"already_valid", "already_valid"},
+		{"with spaces", "with_spaces"},
+		{"__leading_trailing__", "leading_trailing"},
+		{"multi///slashes", "multi_slashes"},
+		{"hyphen-ok", "hyphen-ok"},
+		{"MixedCase-With-Hyphens", "mixedcase-with-hyphens"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := identity.SanitizeAgentName(tt.input)
+			if got != tt.want {
+				t.Errorf("SanitizeAgentName(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+			// Result should always pass validation (if non-empty)
+			if got != "" {
+				if err := identity.ValidateAgentName(got); err != nil {
+					t.Errorf("SanitizeAgentName(%q) result %q fails validation: %v", tt.input, got, err)
+				}
 			}
 		})
 	}
