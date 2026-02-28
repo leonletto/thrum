@@ -69,8 +69,21 @@ $THRUM_STATUS
 CTXEOF
 )
 
-# Save to thrum context
-echo "$CONTEXT" | thrum context save 2>/dev/null || true
+# Save to thrum context — APPEND to existing context, don't overwrite.
+# First load existing context, strip any previous pre-compact snapshot, then append.
+EXISTING=$(thrum context show --raw --no-preamble 2>/dev/null || true)
+if [ -n "$EXISTING" ]; then
+  # Remove any previous "## Pre-Compact State Snapshot" section (and everything after it)
+  TRIMMED=$(echo "$EXISTING" | sed '/^## Pre-Compact State Snapshot$/,$d')
+  if [ -n "$(echo "$TRIMMED" | tr -d '[:space:]')" ]; then
+    MERGED=$(printf '%s\n\n%s' "$TRIMMED" "$CONTEXT")
+  else
+    MERGED="$CONTEXT"
+  fi
+else
+  MERGED="$CONTEXT"
+fi
+echo "$MERGED" | thrum context save 2>/dev/null || true
 
 # Also write to /tmp as backup (in case thrum context save fails)
 # Include agent identity + epoch in filename for multi-agent disambiguation
