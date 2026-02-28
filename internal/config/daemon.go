@@ -159,3 +159,25 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 
 	return os.WriteFile(configPath, data, 0600)
 }
+
+// AddPlugin adds a plugin to the config, replacing any existing plugin with the same name.
+func (cfg *ThrumConfig) AddPlugin(p PluginConfig) {
+	for i, existing := range cfg.Backup.Plugins {
+		if existing.Name == p.Name {
+			cfg.Backup.Plugins[i] = p
+			return
+		}
+	}
+	cfg.Backup.Plugins = append(cfg.Backup.Plugins, p)
+}
+
+// RemovePlugin removes a plugin by name. Returns true if found and removed.
+func (cfg *ThrumConfig) RemovePlugin(name string) bool {
+	for i, p := range cfg.Backup.Plugins {
+		if p.Name == name {
+			cfg.Backup.Plugins = append(cfg.Backup.Plugins[:i], cfg.Backup.Plugins[i+1:]...)
+			return true
+		}
+	}
+	return false
+}

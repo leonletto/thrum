@@ -4925,6 +4925,8 @@ func backupCmd() *cobra.Command {
 	restoreCmd.Flags().BoolVar(&flagYes, "yes", false, "Skip confirmation prompt")
 	cmd.AddCommand(restoreCmd)
 
+	cmd.AddCommand(pluginCmd())
+
 	return cmd
 }
 
@@ -4965,6 +4967,7 @@ func runBackupCreate(dirOverride string) error {
 		DBPath:       dbPath,
 		ThrumVersion: Version,
 		Retention:    &cfg.Backup.Retention,
+		Plugins:      cfg.Backup.Plugins,
 	})
 	if err != nil {
 		return fmt.Errorf("backup failed: %w", err)
@@ -4979,6 +4982,9 @@ func runBackupCreate(dirOverride string) error {
 		fmt.Printf("  Message files: %d\n", result.SyncResult.MessageFiles)
 		fmt.Printf("  Local tables: %d\n", len(result.LocalResult.Tables))
 		fmt.Printf("  Config files: %d\n", result.Manifest.Counts.ConfigFiles)
+		if pluginSummary := backup.FormatPluginResults(result.PluginResults); pluginSummary != "" {
+			fmt.Printf("  Plugins:\n%s", pluginSummary)
+		}
 	}
 
 	return nil
@@ -5145,6 +5151,150 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 		fmt.Println("Restart the daemon to rebuild SQLite from restored JSONL.")
 	}
 
+	return nil
+}
+
+func pluginCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "plugin",
+		Short: "Manage backup plugins",
+	}
+
+	// plugin add
+	var addName, addCommand, addPreset string
+	var addIncludes []string
+	addCmd := &cobra.Command{
+		Use:   "add",
+		Short: "Add a backup plugin",
+		Long:  "Add a plugin by name/command/include or use --preset for built-in plugins.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginAdd(addName, addCommand, addIncludes, addPreset)
+		},
+	}
+	addCmd.Flags().StringVar(&addName, "name", "", "Plugin name")
+	addCmd.Flags().StringVar(&addCommand, "command", "", "Command to run before collecting files")
+	addCmd.Flags().StringSliceVar(&addIncludes, "include", nil, "File patterns to collect (glob)")
+	addCmd.Flags().StringVar(&addPreset, "preset", "", "Use built-in preset (beads, beads-rust)")
+	cmd.AddCommand(addCmd)
+
+	// plugin list
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List configured plugins",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginList()
+		},
+	})
+
+	// plugin remove
+	var removeName string
+	removeCmd := &cobra.Command{
+		Use:   "remove",
+		Short: "Remove a backup plugin",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginRemove(removeName)
+		},
+	}
+	removeCmd.Flags().StringVar(&removeName, "name", "", "Plugin name to remove")
+	_ = removeCmd.MarkFlagRequired("name")
+	cmd.AddCommand(removeCmd)
+
+	return cmd
+}
+
+func runPluginAdd(name, command string, includes []string, preset string) error {
+	if preset != "" {
+		p, ok := backup.PluginPresets[preset]
+		if !ok {
+			return fmt.Errorf("unknown preset %q (available: beads, beads-rust)", preset)
+		}
+		name = p.Name
+		command = p.Command
+		includes = p.Include
+	}
+
+	if name == "" {
+		return fmt.Errorf("--name or --preset is required")
+	}
+
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	cfg.AddPlugin(config.PluginConfig{
+		Name:    name,
+		Command: command,
+		Include: includes,
+	})
+
+	if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+
+	fmt.Printf("Plugin %q added.\n", name)
+	return nil
+}
+
+func runPluginList() error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	if len(cfg.Backup.Plugins) == 0 {
+		fmt.Println("No plugins configured.")
+		return nil
+	}
+
+	if flagJSON {
+		data, _ := json.MarshalIndent(cfg.Backup.Plugins, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		for _, p := range cfg.Backup.Plugins {
+			fmt.Printf("  %s\n", p.Name)
+			if p.Command != "" {
+				fmt.Printf("    command: %s\n", p.Command)
+			}
+			if len(p.Include) > 0 {
+				fmt.Printf("    include: %v\n", p.Include)
+			}
+		}
+	}
+
+	return nil
+}
+
+func runPluginRemove(name string) error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	if !cfg.RemovePlugin(name) {
+		return fmt.Errorf("plugin %q not found", name)
+	}
+
+	if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+
+	fmt.Printf("Plugin %q removed.\n", name)
 	return nil
 }
 
