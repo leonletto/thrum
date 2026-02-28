@@ -13,12 +13,12 @@
  * session before subscribing or sending.
  */
 import { test, expect } from '@playwright/test';
-import { thrum, TEST_AGENT_ROLE, TEST_AGENT_MODULE } from './helpers/thrum-cli.js';
+import { thrum, getTestRoot, TEST_AGENT_ROLE, TEST_AGENT_MODULE } from './helpers/thrum-cli.js';
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
 
-const ROOT = path.resolve(__dirname, '../..');
-const BIN = path.join(ROOT, 'bin', 'thrum');
+const SOURCE_ROOT = path.resolve(__dirname, '../..');
+const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
 
 /**
  * Ensure the default test agent has an active session.
@@ -42,7 +42,7 @@ function thrumWaitBackground(
 ): Promise<{ stdout: string; exitCode: number }> {
   return new Promise((resolve) => {
     const child = spawn(BIN, ['wait', ...args], {
-      cwd: ROOT,
+      cwd: getTestRoot(),
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,

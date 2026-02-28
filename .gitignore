@@ -36,6 +36,7 @@ dev-docs/
 docs/plans/
 .agents/
 .beads/
+.beads_backup/
 .claude/
 CLAUDE.md
 AGENTS.md

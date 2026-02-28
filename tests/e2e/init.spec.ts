@@ -14,9 +14,13 @@ function createTempDir(): string {
 }
 
 /**
- * Helper to clean up a directory recursively.
+ * Stop daemon and clean up a directory recursively.
  */
 function cleanupDir(dir: string): void {
+  // Stop daemon that thrum init may have auto-started
+  try {
+    execFileSync(BIN, ['daemon', 'stop'], { cwd: dir, timeout: 5_000, stdio: 'pipe' });
+  } catch { /* may not be running */ }
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -24,10 +28,15 @@ function cleanupDir(dir: string): void {
 
 test.describe('Initialization Tests', () => {
   test('SC-01: Initialize thrum in a fresh repo', async () => {
-    // Arrange: create temp directory and initialize git
+    // Arrange: create temp directory and initialize git with a commit
     const tmpDir = createTempDir();
     try {
       execFileSync('git', ['init'], { cwd: tmpDir });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir, stdio: 'pipe' });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir, stdio: 'pipe' });
+      fs.writeFileSync(path.join(tmpDir, 'README.md'), '# test\n');
+      execFileSync('git', ['add', '.'], { cwd: tmpDir, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'init'], { cwd: tmpDir, stdio: 'pipe' });
 
       // Act: initialize thrum
       const output = execFileSync(BIN, ['init'], {
@@ -57,7 +66,12 @@ test.describe('Initialization Tests', () => {
     const tmpDir = createTempDir();
     try {
       execFileSync('git', ['init'], { cwd: tmpDir });
-      execFileSync(BIN, ['init'], { cwd: tmpDir });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir, stdio: 'pipe' });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir, stdio: 'pipe' });
+      fs.writeFileSync(path.join(tmpDir, 'README.md'), '# test\n');
+      execFileSync('git', ['add', '.'], { cwd: tmpDir, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'init'], { cwd: tmpDir, stdio: 'pipe' });
+      execFileSync(BIN, ['init'], { cwd: tmpDir, timeout: 30_000 });
 
       // NOTE: The scenario expects idempotent behavior (no error),
       // but the current implementation requires --force flag.
