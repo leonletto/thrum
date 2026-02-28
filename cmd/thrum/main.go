@@ -4908,6 +4908,23 @@ func backupCmd() *cobra.Command {
 		},
 	})
 
+	var flagYes bool
+	restoreCmd := &cobra.Command{
+		Use:   "restore [archive.zip]",
+		Short: "Restore from backup",
+		Long:  "Restore thrum data from the latest backup or a specific archive zip.",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var archivePath string
+			if len(args) > 0 {
+				archivePath = args[0]
+			}
+			return runBackupRestore(flagDir, archivePath, flagYes)
+		},
+	}
+	restoreCmd.Flags().BoolVar(&flagYes, "yes", false, "Skip confirmation prompt")
+	cmd.AddCommand(restoreCmd)
+
 	return cmd
 }
 
@@ -5052,6 +5069,80 @@ func runBackupConfig() error {
 		if cfg.Backup.PostBackup != "" {
 			fmt.Printf("Post-backup: %s\n", cfg.Backup.PostBackup)
 		}
+	}
+
+	return nil
+}
+
+func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	backupDir := dirOverride
+	if backupDir == "" {
+		backupDir = cfg.Backup.Dir
+	}
+	if backupDir == "" {
+		backupDir = filepath.Join(thrumDir, "backup")
+	}
+
+	repoName := cli.GetRepoName(flagRepo)
+
+	if !skipConfirm {
+		fmt.Printf("This will restore thrum data from backup.\n")
+		fmt.Printf("  Backup dir: %s\n", backupDir)
+		fmt.Printf("  Repo: %s\n", repoName)
+		if archivePath != "" {
+			fmt.Printf("  Archive: %s\n", archivePath)
+		} else {
+			fmt.Printf("  Source: current/\n")
+		}
+		fmt.Printf("A safety backup will be created first.\n")
+		fmt.Printf("Continue? [y/N] ")
+
+		var answer string
+		_, _ = fmt.Scanln(&answer)
+		if answer != "y" && answer != "Y" && answer != "yes" {
+			fmt.Println("Restore cancelled.")
+			return nil
+		}
+	}
+
+	syncDir, err := paths.SyncWorktreePath(flagRepo)
+	if err != nil {
+		syncDir = ""
+	}
+
+	dbPath := filepath.Join(thrumDir, "var", "messages.db")
+
+	result, err := backup.RunRestore(backup.RestoreOptions{
+		BackupDir:   backupDir,
+		RepoName:    repoName,
+		ArchivePath: archivePath,
+		SyncDir:     syncDir,
+		ThrumDir:    thrumDir,
+		DBPath:      dbPath,
+	})
+	if err != nil {
+		return fmt.Errorf("restore failed: %w", err)
+	}
+
+	if flagJSON {
+		data, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		if result.SafetyBackup != "" {
+			fmt.Printf("Safety backup: %s\n", result.SafetyBackup)
+		}
+		fmt.Printf("Restored from: %s\n", result.Source)
+		fmt.Println("Restart the daemon to rebuild SQLite from restored JSONL.")
 	}
 
 	return nil
