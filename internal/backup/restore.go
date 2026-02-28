@@ -359,11 +359,18 @@ func extractZip(zipPath, destDir string) error {
 			return err
 		}
 
-		const maxExtractedBytes = 2 << 30 // 2 GiB per file
-		if _, err := io.Copy(outFile, io.LimitReader(rc, maxExtractedBytes)); err != nil {
+		const maxExtractedBytes = 2 << 30 // 2 GiB per file (zip bomb protection)
+		lr := io.LimitReader(rc, maxExtractedBytes+1)
+		n, err := io.Copy(outFile, lr)
+		if err != nil {
 			_ = outFile.Close()
 			_ = rc.Close()
 			return err
+		}
+		if n > maxExtractedBytes {
+			_ = outFile.Close()
+			_ = rc.Close()
+			return fmt.Errorf("file %q exceeds maximum extracted size of %d bytes", f.Name, maxExtractedBytes)
 		}
 
 		_ = outFile.Close()
