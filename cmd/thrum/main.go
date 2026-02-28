@@ -372,7 +372,7 @@ Examples:
 					if mod == "" {
 						mod = "main"
 					}
-					defaultName = agentRoleResolved + "_" + mod
+					defaultName = agentRoleResolved + "_" + identity.SanitizeAgentName(mod)
 				}
 				fmt.Printf("  Name [%s]: ", defaultName)
 				input, _ = reader.ReadString('\n')
@@ -411,7 +411,7 @@ Examples:
 					if module == "" {
 						module = "main"
 					}
-					agentNameResolved = agentRoleResolved + "_" + module
+					agentNameResolved = agentRoleResolved + "_" + identity.SanitizeAgentName(module)
 				}
 				if agentModuleResolved == "" {
 					agentModuleResolved = "main"
