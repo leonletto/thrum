@@ -56,6 +56,12 @@
 {"created_at":"2026-02-27T13:18:57Z","created_by":"Leon Letto","depends_on_id":"thrum-z41","issue_id":"thrum-qd9","type":"blocks"}
 {"created_at":"2026-02-28T11:04:57Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.1","type":"parent-child"}
 {"created_at":"2026-02-28T11:04:59Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.10","type":"parent-child"}
+{"created_at":"2026-02-28T11:20:07Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.11","type":"parent-child"}
+{"created_at":"2026-02-28T11:20:30Z","created_by":"Leon Letto","depends_on_id":"thrum-qel.11","issue_id":"thrum-qel.11.1","type":"parent-child"}
+{"created_at":"2026-02-28T11:20:30Z","created_by":"Leon Letto","depends_on_id":"thrum-qel.11","issue_id":"thrum-qel.11.2","type":"parent-child"}
+{"created_at":"2026-02-28T11:20:30Z","created_by":"Leon Letto","depends_on_id":"thrum-qel.11","issue_id":"thrum-qel.11.3","type":"parent-child"}
+{"created_at":"2026-02-28T11:20:30Z","created_by":"Leon Letto","depends_on_id":"thrum-qel.11","issue_id":"thrum-qel.11.4","type":"parent-child"}
+{"created_at":"2026-02-28T11:20:30Z","created_by":"Leon Letto","depends_on_id":"thrum-qel.11","issue_id":"thrum-qel.11.5","type":"parent-child"}
 {"created_at":"2026-02-28T11:04:57Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.2","type":"parent-child"}
 {"created_at":"2026-02-28T11:04:57Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.3","type":"parent-child"}
 {"created_at":"2026-02-28T11:04:57Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.4","type":"parent-child"}
