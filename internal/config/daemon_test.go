@@ -225,6 +225,139 @@ func TestSaveThrumConfig_OmitsEmptyRuntime(t *testing.T) {
 	}
 }
 
+func TestLoadThrumConfig_BackupDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Backup.Dir != "" {
+		t.Errorf("expected empty backup dir, got %q", cfg.Backup.Dir)
+	}
+	if cfg.Backup.Retention.RetentionDaily() != config.DefaultRetentionDaily {
+		t.Errorf("expected Daily=%d, got %d", config.DefaultRetentionDaily, cfg.Backup.Retention.RetentionDaily())
+	}
+	if cfg.Backup.Retention.RetentionWeekly() != config.DefaultRetentionWeekly {
+		t.Errorf("expected Weekly=%d, got %d", config.DefaultRetentionWeekly, cfg.Backup.Retention.RetentionWeekly())
+	}
+	if cfg.Backup.Retention.RetentionMonthly() != config.DefaultRetentionMonthly {
+		t.Errorf("expected Monthly=%d, got %d", config.DefaultRetentionMonthly, cfg.Backup.Retention.RetentionMonthly())
+	}
+	if len(cfg.Backup.Plugins) != 0 {
+		t.Errorf("expected no plugins, got %d", len(cfg.Backup.Plugins))
+	}
+}
+
+func TestLoadThrumConfig_BackupFromJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	data := `{
+		"backup": {
+			"dir": "/tmp/backups",
+			"retention": {"daily": 3, "weekly": 2, "monthly": 6},
+			"plugins": [
+				{"name": "beads", "command": "bd backup --force", "include": [".beads/backup/*"]}
+			],
+			"post_backup": "echo done"
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Backup.Dir != "/tmp/backups" {
+		t.Errorf("expected dir=/tmp/backups, got %q", cfg.Backup.Dir)
+	}
+	if cfg.Backup.Retention.RetentionDaily() != 3 {
+		t.Errorf("expected Daily=3, got %d", cfg.Backup.Retention.RetentionDaily())
+	}
+	if cfg.Backup.Retention.RetentionWeekly() != 2 {
+		t.Errorf("expected Weekly=2, got %d", cfg.Backup.Retention.RetentionWeekly())
+	}
+	if cfg.Backup.Retention.RetentionMonthly() != 6 {
+		t.Errorf("expected Monthly=6, got %d", cfg.Backup.Retention.RetentionMonthly())
+	}
+	if len(cfg.Backup.Plugins) != 1 {
+		t.Fatalf("expected 1 plugin, got %d", len(cfg.Backup.Plugins))
+	}
+	p := cfg.Backup.Plugins[0]
+	if p.Name != "beads" || p.Command != "bd backup --force" {
+		t.Errorf("unexpected plugin: %+v", p)
+	}
+	if len(p.Include) != 1 || p.Include[0] != ".beads/backup/*" {
+		t.Errorf("unexpected plugin include: %v", p.Include)
+	}
+	if cfg.Backup.PostBackup != "echo done" {
+		t.Errorf("expected post_backup='echo done', got %q", cfg.Backup.PostBackup)
+	}
+}
+
+func TestSaveThrumConfig_BackupSection(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.ThrumConfig{
+		Daemon: config.DaemonConfig{LocalOnly: true},
+		Backup: config.BackupConfig{
+			Dir: "/custom/backup",
+			Retention: config.RetentionConfig{
+				Daily:   config.IntPtr(3),
+				Weekly:  config.IntPtr(2),
+				Monthly: config.IntPtr(12),
+			},
+			Plugins: []config.PluginConfig{
+				{Name: "beads", Command: "bd backup", Include: []string{".beads/*"}},
+			},
+			PostBackup: "sync.sh",
+		},
+	}
+
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	loaded, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to load saved config: %v", err)
+	}
+	if loaded.Backup.Dir != "/custom/backup" {
+		t.Errorf("expected backup dir=/custom/backup, got %q", loaded.Backup.Dir)
+	}
+	if loaded.Backup.Retention.RetentionDaily() != 3 {
+		t.Errorf("expected Daily=3, got %d", loaded.Backup.Retention.RetentionDaily())
+	}
+	if len(loaded.Backup.Plugins) != 1 {
+		t.Errorf("expected 1 plugin, got %d", len(loaded.Backup.Plugins))
+	}
+	if loaded.Backup.PostBackup != "sync.sh" {
+		t.Errorf("expected post_backup=sync.sh, got %q", loaded.Backup.PostBackup)
+	}
+}
+
+func TestSaveThrumConfig_OmitsDefaultBackup(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.ThrumConfig{Daemon: config.DaemonConfig{LocalOnly: true}}
+
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Read raw file — should not have a "backup" key when all defaults
+	data, err := os.ReadFile(filepath.Join(tmpDir, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := raw["backup"]; exists {
+		t.Error("expected backup key to be omitted when all defaults")
+	}
+}
+
 func TestSaveThrumConfig_PreservesUnknownKeys(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")

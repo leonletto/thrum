@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/leonletto/thrum/internal/backup"
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
@@ -132,6 +133,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(groupCmd())
 	rootCmd.AddCommand(runtimeGroupCmd())
 	rootCmd.AddCommand(syncCmd())
+	rootCmd.AddCommand(backupCmd())
 	rootCmd.AddCommand(peerCmd())
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(setupCmd())
@@ -4873,6 +4875,487 @@ func applyRolePreamble(thrumDir, agentName, role, preambleFile string) error {
 	if err := agentcontext.EnsurePreamble(thrumDir, agentName); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
 	}
+	return nil
+}
+
+func backupCmd() *cobra.Command {
+	var flagDir string
+
+	cmd := &cobra.Command{
+		Use:   "backup",
+		Short: "Backup thrum data",
+		Long:  "Snapshot all thrum data (events, messages, config, identities) to a backup directory.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runBackupCreate(flagDir)
+		},
+	}
+
+	cmd.PersistentFlags().StringVar(&flagDir, "dir", "", "Override backup directory")
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "status",
+		Short: "Show last backup info",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runBackupStatus(flagDir)
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "config",
+		Short: "Show effective backup config",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runBackupConfig()
+		},
+	})
+
+	var flagYes bool
+	restoreCmd := &cobra.Command{
+		Use:   "restore [archive.zip]",
+		Short: "Restore from backup",
+		Long:  "Restore thrum data from the latest backup or a specific archive zip.",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var archivePath string
+			if len(args) > 0 {
+				archivePath = args[0]
+			}
+			return runBackupRestore(flagDir, archivePath, flagYes)
+		},
+	}
+	restoreCmd.Flags().BoolVar(&flagYes, "yes", false, "Skip confirmation prompt")
+	cmd.AddCommand(restoreCmd)
+
+	cmd.AddCommand(pluginCmd())
+
+	return cmd
+}
+
+func runBackupCreate(dirOverride string) error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	// Resolve backup dir: CLI flag > config > default
+	backupDir := dirOverride
+	if backupDir == "" {
+		backupDir = cfg.Backup.Dir
+	}
+	if backupDir == "" {
+		backupDir = filepath.Join(thrumDir, "backup")
+	}
+
+	// Resolve sync worktree
+	syncDir, err := paths.SyncWorktreePath(flagRepo)
+	if err != nil {
+		syncDir = "" // non-fatal: sync dir may not exist yet
+	}
+
+	dbPath := filepath.Join(thrumDir, "var", "messages.db")
+	repoName := cli.GetRepoName(flagRepo)
+
+	result, err := backup.RunBackup(backup.BackupOptions{
+		BackupDir:    backupDir,
+		RepoName:     repoName,
+		SyncDir:      syncDir,
+		ThrumDir:     thrumDir,
+		DBPath:       dbPath,
+		ThrumVersion: Version,
+		Retention:    &cfg.Backup.Retention,
+		Plugins:      cfg.Backup.Plugins,
+		PostBackup:   cfg.Backup.PostBackup,
+		RepoPath:     flagRepo,
+	})
+	if err != nil {
+		return fmt.Errorf("backup failed: %w", err)
+	}
+
+	if flagJSON {
+		data, _ := json.MarshalIndent(result.Manifest, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		fmt.Printf("Backup complete: %s\n", result.CurrentDir)
+		fmt.Printf("  Events: %d lines\n", result.SyncResult.EventLines)
+		fmt.Printf("  Message files: %d\n", result.SyncResult.MessageFiles)
+		fmt.Printf("  Local tables: %d\n", len(result.LocalResult.Tables))
+		fmt.Printf("  Config files: %d\n", result.Manifest.Counts.ConfigFiles)
+		if pluginSummary := backup.FormatPluginResults(result.PluginResults); pluginSummary != "" {
+			fmt.Printf("  Plugins:\n%s", pluginSummary)
+		}
+		if result.PostHookResult != nil {
+			if result.PostHookResult.Error != "" {
+				fmt.Printf("  Post-backup hook: FAILED (%s)\n", result.PostHookResult.Error)
+			} else {
+				fmt.Printf("  Post-backup hook: ok\n")
+			}
+		}
+	}
+
+	return nil
+}
+
+func runBackupStatus(dirOverride string) error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	backupDir := dirOverride
+	if backupDir == "" {
+		backupDir = cfg.Backup.Dir
+	}
+	if backupDir == "" {
+		backupDir = filepath.Join(thrumDir, "backup")
+	}
+
+	repoName := cli.GetRepoName(flagRepo)
+	currentDir := filepath.Join(backupDir, repoName, "current")
+
+	manifest, err := backup.ReadManifest(currentDir)
+	if err != nil {
+		return fmt.Errorf("no backup found (looked in %s): %w", currentDir, err)
+	}
+
+	if flagJSON {
+		data, _ := json.MarshalIndent(manifest, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		fmt.Printf("Last backup: %s\n", manifest.Timestamp.Local().Format("2006-01-02 15:04:05"))
+		fmt.Printf("  Thrum version: %s\n", manifest.ThrumVersion)
+		fmt.Printf("  Repo: %s\n", manifest.RepoName)
+		fmt.Printf("  Events: %d\n", manifest.Counts.Events)
+		fmt.Printf("  Message files: %d\n", manifest.Counts.MessageFiles)
+		fmt.Printf("  Local tables: %d\n", manifest.Counts.LocalTables)
+		fmt.Printf("  Config files: %d\n", manifest.Counts.ConfigFiles)
+		if len(manifest.Counts.Plugins) > 0 {
+			fmt.Printf("  Plugins: %v\n", manifest.Counts.Plugins)
+		}
+		fmt.Printf("  Location: %s\n", currentDir)
+
+		// Show archive rotation stats
+		archivesDir := filepath.Join(backupDir, repoName, "archives")
+		if entries, err := os.ReadDir(archivesDir); err == nil {
+			var archiveCount int
+			var totalSize int64
+			var oldest, newest time.Time
+			for _, e := range entries {
+				if e.IsDir() || strings.HasPrefix(e.Name(), "pre-restore-") {
+					continue
+				}
+				archiveCount++
+				if info, err := e.Info(); err == nil {
+					totalSize += info.Size()
+				}
+				// Parse timestamp from filename (2006-01-02T150405.zip)
+				name := strings.TrimSuffix(e.Name(), ".zip")
+				if ts, err := time.Parse("2006-01-02T150405", name); err == nil {
+					if oldest.IsZero() || ts.Before(oldest) {
+						oldest = ts
+					}
+					if newest.IsZero() || ts.After(newest) {
+						newest = ts
+					}
+				}
+			}
+			if archiveCount > 0 {
+				fmt.Printf("Archives: %d (%.1f MB)\n", archiveCount, float64(totalSize)/(1024*1024))
+				if !oldest.IsZero() {
+					fmt.Printf("  Oldest: %s\n", oldest.Local().Format("2006-01-02 15:04:05"))
+					fmt.Printf("  Newest: %s\n", newest.Local().Format("2006-01-02 15:04:05"))
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func runBackupConfig() error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	effectiveDir := cfg.Backup.Dir
+	if effectiveDir == "" {
+		effectiveDir = filepath.Join(thrumDir, "backup") + " (default)"
+	}
+
+	if flagJSON {
+		data, _ := json.MarshalIndent(cfg.Backup, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		fmt.Printf("Backup directory: %s\n", effectiveDir)
+		fmt.Printf("Retention:\n")
+		fmt.Printf("  Daily: %d\n", cfg.Backup.Retention.RetentionDaily())
+		fmt.Printf("  Weekly: %d\n", cfg.Backup.Retention.RetentionWeekly())
+		monthly := fmt.Sprintf("%d", cfg.Backup.Retention.RetentionMonthly())
+		if cfg.Backup.Retention.RetentionMonthly() == -1 {
+			monthly = "forever"
+		}
+		fmt.Printf("  Monthly: %s\n", monthly)
+		if len(cfg.Backup.Plugins) > 0 {
+			fmt.Printf("Plugins:\n")
+			for _, p := range cfg.Backup.Plugins {
+				fmt.Printf("  %s: %s\n", p.Name, p.Command)
+			}
+		}
+		if cfg.Backup.PostBackup != "" {
+			fmt.Printf("Post-backup: %s\n", cfg.Backup.PostBackup)
+		}
+	}
+
+	return nil
+}
+
+func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	backupDir := dirOverride
+	if backupDir == "" {
+		backupDir = cfg.Backup.Dir
+	}
+	if backupDir == "" {
+		backupDir = filepath.Join(thrumDir, "backup")
+	}
+
+	repoName := cli.GetRepoName(flagRepo)
+
+	if !skipConfirm {
+		fmt.Printf("This will restore thrum data from backup.\n")
+		fmt.Printf("  Backup dir: %s\n", backupDir)
+		fmt.Printf("  Repo: %s\n", repoName)
+		if archivePath != "" {
+			fmt.Printf("  Archive: %s\n", archivePath)
+		} else {
+			fmt.Printf("  Source: current/\n")
+		}
+		fmt.Printf("A safety backup will be created first.\n")
+		fmt.Printf("Continue? [y/N] ")
+
+		var answer string
+		_, _ = fmt.Scanln(&answer)
+		if answer != "y" && answer != "Y" && answer != "yes" {
+			fmt.Println("Restore cancelled.")
+			return nil
+		}
+	}
+
+	// Stop daemon before restore to avoid file handle conflicts
+	daemonWasRunning := false
+	if stopErr := cli.DaemonStop(flagRepo); stopErr == nil {
+		daemonWasRunning = true
+		fmt.Println("Daemon stopped for restore.")
+	}
+
+	syncDir, err := paths.SyncWorktreePath(flagRepo)
+	if err != nil {
+		syncDir = ""
+	}
+
+	dbPath := filepath.Join(thrumDir, "var", "messages.db")
+
+	result, err := backup.RunRestore(backup.RestoreOptions{
+		BackupDir:   backupDir,
+		RepoName:    repoName,
+		ArchivePath: archivePath,
+		SyncDir:     syncDir,
+		ThrumDir:    thrumDir,
+		DBPath:      dbPath,
+		Plugins:     cfg.Backup.Plugins,
+		RepoPath:    flagRepo,
+	})
+	if err != nil {
+		return fmt.Errorf("restore failed: %w", err)
+	}
+
+	if flagJSON {
+		data, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		if result.SafetyBackup != "" {
+			fmt.Printf("Safety backup: %s\n", result.SafetyBackup)
+		}
+		fmt.Printf("Restored from: %s\n", result.Source)
+	}
+
+	// Restart daemon if it was running before restore
+	if daemonWasRunning {
+		if restartErr := cli.DaemonRestart(flagRepo, cfg.Daemon.LocalOnly); restartErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not restart daemon: %v\n", restartErr)
+			fmt.Println("Restart manually: thrum daemon start")
+		} else {
+			fmt.Println("Daemon restarted. SQLite will rebuild from restored JSONL.")
+		}
+	}
+
+	return nil
+}
+
+func pluginCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "plugin",
+		Short: "Manage backup plugins",
+	}
+
+	// plugin add
+	var addName, addCommand, addPreset string
+	var addIncludes []string
+	addCmd := &cobra.Command{
+		Use:   "add",
+		Short: "Add a backup plugin",
+		Long:  "Add a plugin by name/command/include or use --preset for built-in plugins.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginAdd(addName, addCommand, addIncludes, addPreset)
+		},
+	}
+	addCmd.Flags().StringVar(&addName, "name", "", "Plugin name")
+	addCmd.Flags().StringVar(&addCommand, "command", "", "Command to run before collecting files")
+	addCmd.Flags().StringSliceVar(&addIncludes, "include", nil, "File patterns to collect (glob)")
+	addCmd.Flags().StringVar(&addPreset, "preset", "", "Use built-in preset (beads, beads-rust)")
+	cmd.AddCommand(addCmd)
+
+	// plugin list
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List configured plugins",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginList()
+		},
+	})
+
+	// plugin remove
+	var removeName string
+	removeCmd := &cobra.Command{
+		Use:   "remove",
+		Short: "Remove a backup plugin",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginRemove(removeName)
+		},
+	}
+	removeCmd.Flags().StringVar(&removeName, "name", "", "Plugin name to remove")
+	_ = removeCmd.MarkFlagRequired("name")
+	cmd.AddCommand(removeCmd)
+
+	return cmd
+}
+
+func runPluginAdd(name, command string, includes []string, preset string) error {
+	if preset != "" {
+		p, ok := backup.PluginPresets[preset]
+		if !ok {
+			return fmt.Errorf("unknown preset %q (available: beads, beads-rust)", preset)
+		}
+		name = p.Name
+		command = p.Command
+		includes = p.Include
+	}
+
+	if name == "" {
+		return fmt.Errorf("--name or --preset is required")
+	}
+
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	cfg.AddPlugin(config.PluginConfig{
+		Name:    name,
+		Command: command,
+		Include: includes,
+	})
+
+	if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+
+	fmt.Printf("Plugin %q added.\n", name)
+	return nil
+}
+
+func runPluginList() error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	if len(cfg.Backup.Plugins) == 0 {
+		fmt.Println("No plugins configured.")
+		return nil
+	}
+
+	if flagJSON {
+		data, _ := json.MarshalIndent(cfg.Backup.Plugins, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		for _, p := range cfg.Backup.Plugins {
+			fmt.Printf("  %s\n", p.Name)
+			if p.Command != "" {
+				fmt.Printf("    command: %s\n", p.Command)
+			}
+			if len(p.Include) > 0 {
+				fmt.Printf("    include: %v\n", p.Include)
+			}
+		}
+	}
+
+	return nil
+}
+
+func runPluginRemove(name string) error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	if !cfg.RemovePlugin(name) {
+		return fmt.Errorf("plugin %q not found", name)
+	}
+
+	if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+
+	fmt.Printf("Plugin %q removed.\n", name)
 	return nil
 }
 
