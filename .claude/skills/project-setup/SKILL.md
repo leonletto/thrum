@@ -101,36 +101,12 @@ Manager", "Create Filter Component".
 
 Present the epic breakdown to the user for approval before creating anything.
 
-### Check Existing Worktrees
-
-Before proposing new worktrees, check what already exists:
-
-```bash
-# List all active worktrees
-git worktree list
-
-# Check which are occupied with in-progress work
-bd list --status=in_progress
-```
-
-Also check the worktree table in the project's root CLAUDE.md.
-
-**Decision criteria:**
-
-- Suggest **reusing** an idle worktree when its branch relates to the epic
-- Suggest **reusing** a worktree that has no in-progress beads tasks
-- Propose a **new worktree** only when no existing one is a reasonable fit
-
-Propose branch names for any new worktrees. Derive paths from the CLAUDE.md
-convention (e.g. `~/.workspaces/{repo}/{feature}`). Do not ask — infer from
-context.
-
 ### Create Epics in Beads
 
 Once the user approves the epic breakdown:
 
 ```bash
-bd epic create --title="Epic Title"
+bd create "Epic Title" --type=epic --priority=1
 
 # If epics have ordering dependencies:
 bd dep add <later-epic-id> <earlier-epic-id>
@@ -234,7 +210,180 @@ Before proceeding to Phase 3:
 - [ ] Each epic can be assigned to one worktree/branch
 - [ ] Total scope is realistic (flag if > 20 tasks per epic)
 
-## Phase 3: Generate Implementation Prompts
+## Phase 3: Select Worktrees & Agents
+
+**This phase is an interactive decision gate.** You MUST ask the user which
+worktree and agent to use for each epic before generating prompts. Do not infer
+silently — present options and let the user choose.
+
+### Step 1: Gather Current State
+
+Run these commands and present the results to the user:
+
+```bash
+# List all active worktrees with branches
+git worktree list
+
+# Check which worktrees have in-progress beads tasks
+bd list --status=in_progress
+
+# Check the CLAUDE.md worktree table for status info
+# (read the "Worktree Layout" section from the project root CLAUDE.md)
+```
+
+### Step 2: Present Worktree Options
+
+For each epic, use `AskUserQuestion` to let the user choose a worktree. Build
+the options from the gathered state:
+
+**Option types to present:**
+
+| Scenario                                           | Option label                          |
+| -------------------------------------------------- | ------------------------------------- |
+| Existing idle worktree with related branch         | "Reuse `<path>` (`<branch>`)"        |
+| Existing idle worktree, unrelated branch           | "Reuse `<path>`, create new branch"  |
+| No suitable worktree exists                        | "Create new worktree"                |
+| Work is small enough for the current branch        | "Use current worktree (`<branch>`)"  |
+
+Include in each option's description:
+- The worktree path and current branch
+- Whether it's clean or has uncommitted changes
+- Whether it has an existing agent registered
+- Its status from CLAUDE.md (active/idle/merged)
+
+**For "Create new worktree"**, suggest:
+- Path: `~/.workspaces/{repo}/{feature}` (from CLAUDE.md convention)
+- Branch: `feature/{feature-name}` (from `thrum-dev`)
+
+**For agent names**, suggest a name derived from the feature in each option
+description (e.g., `impl_{feature}`). The user can override.
+
+### Step 3: Set Up the Chosen Worktree
+
+Based on the user's choice, execute the appropriate setup:
+
+#### For reused worktrees:
+
+```bash
+cd <worktree-path>
+
+# Check if clean
+git status
+
+# Fast-forward or rebase to thrum-dev if behind
+git fetch origin thrum-dev
+git rebase origin/thrum-dev
+# OR if branches diverged: ask user before rebasing
+
+# Verify redirects are intact
+cat .thrum/redirect    # should point to <project-root>/.thrum
+cat .beads/redirect    # should point to <project-root>/.beads
+
+# If redirects are missing or wrong, fix them:
+# (from project root)
+./scripts/setup-worktree-thrum.sh <worktree-path>
+
+# Verify beads sees shared database
+bd where    # Should show <project-root>/.beads
+bd ready    # Should show issues from the shared database
+
+# Register the agent (if not already registered with the right name)
+thrum quickstart --name <agent-name> --role implementer \
+  --module <branch-name> --intent "Implementing <epic-id>"
+```
+
+#### For new worktrees:
+
+```bash
+# From the project root — MUST pass --base thrum-dev
+./scripts/setup-worktree-thrum.sh \
+  <worktree-path> <branch-name> \
+  --identity <agent-name> --role implementer --base thrum-dev
+```
+
+The setup script handles: branch creation, worktree creation, thrum redirect,
+beads redirect, and `thrum quickstart` registration.
+
+#### For current worktree (small fixes):
+
+```bash
+# Just register the agent
+thrum quickstart --name <agent-name> --role implementer \
+  --module <current-branch> --intent "Implementing <epic-id>"
+
+# Verify beads
+bd where
+bd ready
+```
+
+### Step 4: Verify Setup
+
+Before proceeding to Phase 4, verify for each worktree:
+
+```bash
+cd <worktree-path>
+
+# Beads sees shared database
+bd where
+# Expected: <project-root>/.beads
+
+# Issues are visible
+bd ready
+
+# Thrum daemon reachable
+thrum daemon status
+
+# Redirects correct
+cat .thrum/redirect
+cat .beads/redirect
+
+# Agent registered
+thrum agent list --context
+```
+
+### Step 5: Update CLAUDE.md
+
+If a new worktree was created, update the worktree table in the project root
+CLAUDE.md. Use the existing table format:
+
+```markdown
+| `<path>` | `<branch>` | <purpose> | active |
+```
+
+### Troubleshooting
+
+**"not in a bd workspace"** — The beads redirect file is missing or incorrect:
+
+```bash
+ls -la .beads/
+cat .beads/redirect
+bd where
+# Fix: run setup-worktree-thrum.sh <path> (redirect-only mode)
+```
+
+**Wrong database** — `bd where` shows a local database instead of shared:
+
+```bash
+bd where
+# Should show <project-root>/.beads, not a local database
+# Fix: rm .beads/*.db && re-run setup script
+```
+
+**Sync warnings in worktrees** — Warnings about "snapshot validation failed" or
+"git status failed" are **normal** in worktrees. If the final output shows
+success, it's fine.
+
+### Record Worktree Assignments
+
+At the end of this phase, you should have a confirmed assignment for each epic:
+
+| Epic | Worktree Path | Branch | Agent Name |
+|------|---------------|--------|------------|
+| `<epic-id>` | `<path>` | `<branch>` | `<agent-name>` |
+
+These values feed directly into the `{{PLACEHOLDER}}` resolution in Phase 4.
+
+## Phase 4: Generate Implementation Prompts
 
 For each epic/worktree assignment, generate a filled prompt file.
 
@@ -249,20 +398,21 @@ every time.
 
 ### Step 2: Resolve all placeholders
 
-Perform literal find-and-replace on every `{{PLACEHOLDER}}` in the template:
+Perform literal find-and-replace on every `{{PLACEHOLDER}}` in the template.
+All worktree-related values come from the Phase 3 assignments:
 
 | Placeholder            | Source                                              |
 | ---------------------- | --------------------------------------------------- |
 | `{{EPIC_ID}}`          | Beads epic ID from Phase 2                          |
 | `{{EPIC_TITLE}}`       | Epic title (used in commit messages)                |
-| `{{WORKTREE_PATH}}`    | Absolute path to the working worktree               |
-| `{{BRANCH_NAME}}`      | Git branch for this epic                            |
+| `{{WORKTREE_PATH}}`    | **From Phase 3 worktree assignment**                |
+| `{{BRANCH_NAME}}`      | **From Phase 3 worktree assignment**                |
 | `{{PROJECT_ROOT}}`     | Absolute path to the project root                   |
 | `{{DESIGN_DOC}}`       | Path to the design spec referenced by the plan file |
 | `{{REFERENCE_CODE}}`   | Relevant reference code paths                       |
 | `{{QUALITY_COMMANDS}}` | Test/lint commands                                  |
 | `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                   |
-| `{{AGENT_NAME}}`       | Unique name (e.g., `impl-{feature}`)                |
+| `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                 |
 | `{{PLAN_FILE}}`        | Path to the plan file (primary input)               |
 
 **Do not omit, reorganize, or summarize any section of the template.** The
@@ -289,8 +439,13 @@ architecture notes specific to this feature:
 
 ## Worktree Setup
 
+<!-- If worktree was already created in Phase 3, note that here: -->
+Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`.
+Agent `{{AGENT_NAME}}` registered.
+
+<!-- If worktree needs to be created by the implementation agent: -->
 ./scripts/setup-worktree-thrum.sh {{WORKTREE_PATH}} {{BRANCH_NAME}} \
- --identity {{AGENT_NAME}} --role implementer
+ --identity {{AGENT_NAME}} --role implementer --base thrum-dev
 
 ---
 
@@ -308,28 +463,6 @@ git add dev-docs/prompts/
 git commit -m "plan: add implementation prompts for {{FEATURE_NAME}}"
 ```
 
-## Phase 4: Create Worktrees
-
-For **new worktrees**, use the setup script:
-
-```bash
-./scripts/setup-worktree-thrum.sh {{WORKTREE_PATH}} {{BRANCH_NAME}} \
-  --identity {{AGENT_NAME}} --role implementer
-```
-
-Alternatively, invoke the `using-git-worktrees` skill.
-
-For **reused worktrees**, verify redirects are intact:
-
-```bash
-# In the existing worktree
-cat .thrum/redirect    # should point to <project-root>/.thrum
-cat .beads/redirect    # should point to <project-root>/.beads
-```
-
-If the project root CLAUDE.md has a worktree table, update it with any new
-entries.
-
 ## Common Mistakes
 
 **Too vague tasks:** "Add validation" is not a step —
@@ -342,9 +475,16 @@ focused session.
 **Missing dependencies:** Forgetting cross-epic deps leads to agents starting
 work they can't finish. Always run `bd blocked` to verify.
 
-**Skipping worktree reuse check:** Always run `git worktree list` and check
-`bd list --status=in_progress` before proposing new worktrees. Creating
-unnecessary worktrees adds overhead and clutter.
+**Skipping worktree selection:** Always ask the user which worktree to use.
+Check `git worktree list` and `bd list --status=in_progress` for idle worktrees
+before proposing new ones. Never silently assign worktrees.
+
+**Wrong base branch:** The setup script defaults `--base` to `main`. Always
+pass `--base thrum-dev` explicitly since features branch from `thrum-dev`.
+
+**Generating prompts before worktree setup:** Prompts embed the worktree path,
+branch, and agent name. These must be confirmed in Phase 3 before generating
+prompts in Phase 4.
 
 **Skipping the plan file:** This skill reads the plan file (from writing-plans)
 as primary input. If you only have a design doc, use writing-plans first to
@@ -355,13 +495,12 @@ produce the plan.
 When complete, you should have produced:
 
 1. **Beads epics and tasks** with dependency DAG and TDD-quality descriptions
-2. **Filled implementation prompts** at `dev-docs/prompts/{feature}.md`
-3. **Ready-to-use worktrees** with thrum/beads redirects configured
+2. **Ready-to-use worktrees** with thrum/beads redirects and agents registered
+3. **Filled implementation prompts** at `dev-docs/prompts/{feature}.md`
 4. **All artifacts committed** to git
 
 ## Handoff
 
 After setup is complete, each epic is ready for an implementation agent. The
 filled prompt at `dev-docs/prompts/{feature}.md` is the session start prompt —
-give it directly to the implementing agent. Use the **using-git-worktrees**
-skill if additional workspace setup is needed.
+give it directly to the implementing agent.
