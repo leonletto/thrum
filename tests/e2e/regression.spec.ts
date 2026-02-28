@@ -105,13 +105,14 @@ test.describe('Bugfix Regressions', () => {
   });
 
   test('J6: Ping resolves by agent name', async () => {
+    // Ping from coordinator to implementer (using coordinator's identity)
     let output = '';
     try {
-      output = thrum(['ping', '@e2e_coordinator']);
+      output = thrumIn(getTestRoot(), ['ping', '@e2e_implementer'], 10_000, coordEnv());
     } catch (err: any) {
       output = err.message || '';
     }
-    expect(output.toLowerCase()).toContain('coordinator');
+    expect(output.toLowerCase()).toContain('implementer');
     expect(output.toLowerCase()).not.toContain('not found');
   });
 
