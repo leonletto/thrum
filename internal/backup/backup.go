@@ -20,14 +20,16 @@ type BackupOptions struct {
 	DBPath       string                 // path to messages.db
 	ThrumVersion string                 // version string for manifest
 	Retention    *config.RetentionConfig // optional: apply GFS rotation after backup
+	Plugins      []config.PluginConfig  // optional: third-party backup plugins
 }
 
 // BackupResult holds the outcome of a backup run.
 type BackupResult struct {
-	CurrentDir   string
-	Manifest     *Manifest
-	SyncResult   SyncExportResult
-	LocalResult  LocalExportResult
+	CurrentDir    string
+	Manifest      *Manifest
+	SyncResult    SyncExportResult
+	LocalResult   LocalExportResult
+	PluginResults []PluginResult
 }
 
 // RunBackup orchestrates a full backup: exports JSONL, SQLite local tables,
@@ -88,7 +90,16 @@ func RunBackup(opts BackupOptions) (*BackupResult, error) {
 		}
 	}
 
-	// 4. Write manifest
+	// 4. Run plugins (non-fatal: failures are logged in results)
+	if len(opts.Plugins) > 0 {
+		pluginResults, err := RunPlugins(opts.Plugins, opts.SyncDir, currentDir)
+		if err != nil {
+			return nil, fmt.Errorf("run plugins: %w", err)
+		}
+		result.PluginResults = pluginResults
+	}
+
+	// 5. Write manifest
 	configFiles := 0
 	configDir := filepath.Join(currentDir, "config")
 	if entries, err := os.ReadDir(configDir); err == nil {
@@ -114,6 +125,7 @@ func RunBackup(opts BackupOptions) (*BackupResult, error) {
 			MessageFiles: result.SyncResult.MessageFiles,
 			LocalTables:  len(result.LocalResult.Tables),
 			ConfigFiles:  configFiles,
+			Plugins:      PluginNames(result.PluginResults),
 		},
 	}
 
@@ -122,7 +134,7 @@ func RunBackup(opts BackupOptions) (*BackupResult, error) {
 	}
 	result.Manifest = manifest
 
-	// Apply GFS retention if configured
+	// 6. Apply GFS retention if configured
 	if opts.Retention != nil {
 		if err := ApplyRetention(archivesDir, *opts.Retention); err != nil {
 			return nil, fmt.Errorf("apply retention: %w", err)
