@@ -11,6 +11,7 @@ import (
 type ThrumConfig struct {
 	Runtime RuntimeConfig `json:"runtime"`
 	Daemon  DaemonConfig  `json:"daemon"`
+	Backup  BackupConfig  `json:"backup"`
 }
 
 // RuntimeConfig holds runtime selection preferences.
@@ -24,6 +25,35 @@ type DaemonConfig struct {
 	SyncInterval int    `json:"sync_interval,omitempty"` // seconds; 0 means use default (60)
 	WSPort       string `json:"ws_port,omitempty"`       // "auto" or specific port number
 }
+
+// BackupConfig holds backup-related settings.
+type BackupConfig struct {
+	Dir        string          `json:"dir,omitempty"`
+	Retention  RetentionConfig `json:"retention"`
+	Plugins    []PluginConfig  `json:"plugins,omitempty"`
+	PostBackup string          `json:"post_backup,omitempty"`
+}
+
+// RetentionConfig controls GFS (Grandfather-Father-Son) archive rotation.
+type RetentionConfig struct {
+	Daily   int `json:"daily"`   // default 5
+	Weekly  int `json:"weekly"`  // default 4
+	Monthly int `json:"monthly"` // default -1 (keep forever)
+}
+
+// PluginConfig defines a third-party backup plugin.
+type PluginConfig struct {
+	Name    string   `json:"name"`
+	Command string   `json:"command"`
+	Include []string `json:"include"`
+}
+
+// Default retention values.
+const (
+	DefaultRetentionDaily   = 5
+	DefaultRetentionWeekly  = 4
+	DefaultRetentionMonthly = -1
+)
 
 // DefaultSyncInterval is the default git sync interval in seconds.
 const DefaultSyncInterval = 60
@@ -65,6 +95,15 @@ func applyDefaults(cfg *ThrumConfig) {
 	if cfg.Daemon.WSPort == "" {
 		cfg.Daemon.WSPort = DefaultWSPort
 	}
+	if cfg.Backup.Retention.Daily == 0 {
+		cfg.Backup.Retention.Daily = DefaultRetentionDaily
+	}
+	if cfg.Backup.Retention.Weekly == 0 {
+		cfg.Backup.Retention.Weekly = DefaultRetentionWeekly
+	}
+	if cfg.Backup.Retention.Monthly == 0 {
+		cfg.Backup.Retention.Monthly = DefaultRetentionMonthly
+	}
 }
 
 // SaveThrumConfig writes .thrum/config.json, merging with any existing content.
@@ -97,6 +136,20 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 	var daemonMap any
 	_ = json.Unmarshal(daemonBytes, &daemonMap)
 	existing["daemon"] = daemonMap
+
+	// Marshal and merge the backup section (only if user has configured something)
+	isDefaultRetention := (cfg.Backup.Retention.Daily == 0 || cfg.Backup.Retention.Daily == DefaultRetentionDaily) &&
+		(cfg.Backup.Retention.Weekly == 0 || cfg.Backup.Retention.Weekly == DefaultRetentionWeekly) &&
+		(cfg.Backup.Retention.Monthly == 0 || cfg.Backup.Retention.Monthly == DefaultRetentionMonthly)
+	if cfg.Backup.Dir != "" || len(cfg.Backup.Plugins) > 0 || cfg.Backup.PostBackup != "" || !isDefaultRetention {
+		backupBytes, err := json.Marshal(cfg.Backup)
+		if err != nil {
+			return err
+		}
+		var backupMap any
+		_ = json.Unmarshal(backupBytes, &backupMap)
+		existing["backup"] = backupMap
+	}
 
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
