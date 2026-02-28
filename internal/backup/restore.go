@@ -1,0 +1,303 @@
+package backup
+
+import (
+	"archive/zip"
+	"bufio"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// RestoreOptions configures a restore operation.
+type RestoreOptions struct {
+	BackupDir   string // resolved backup directory
+	RepoName    string // repo subfolder name
+	ArchivePath string // optional: specific zip to restore from (empty = use current/)
+	SyncDir     string // path to a-sync worktree to restore JSONL into
+	ThrumDir    string // path to .thrum directory
+	DBPath      string // path to messages.db
+}
+
+// RestoreResult holds the outcome of a restore.
+type RestoreResult struct {
+	SafetyBackup string // path to pre-restore zip, if created
+	Source       string // "current" or the archive path
+}
+
+// RunRestore restores thrum data from a backup.
+//  1. Creates a safety backup if existing data is present
+//  2. Determines source (archive zip or current/)
+//  3. Copies JSONL files to sync worktree
+//  4. Imports local tables into SQLite
+//  5. Restores config files to .thrum/
+//  6. Removes messages.db so projector rebuilds on next daemon start
+func RunRestore(opts RestoreOptions) (*RestoreResult, error) {
+	if opts.BackupDir == "" {
+		return nil, fmt.Errorf("backup directory is required")
+	}
+	if opts.RepoName == "" {
+		return nil, fmt.Errorf("repo name is required")
+	}
+
+	result := &RestoreResult{}
+
+	// 1. Safety backup
+	safetyPath, err := CreateSafetyBackup(opts.BackupDir, opts.RepoName)
+	if err != nil {
+		return nil, fmt.Errorf("create safety backup: %w", err)
+	}
+	result.SafetyBackup = safetyPath
+
+	// 2. Determine source directory
+	var sourceDir string
+	if opts.ArchivePath != "" {
+		// Extract zip to temp dir
+		tmpDir, err := os.MkdirTemp("", "thrum-restore-*")
+		if err != nil {
+			return nil, fmt.Errorf("create temp dir: %w", err)
+		}
+		defer func() { _ = os.RemoveAll(tmpDir) }()
+
+		if err := extractZip(opts.ArchivePath, tmpDir); err != nil {
+			return nil, fmt.Errorf("extract archive: %w", err)
+		}
+		sourceDir = tmpDir
+		result.Source = opts.ArchivePath
+	} else {
+		sourceDir = filepath.Join(opts.BackupDir, opts.RepoName, "current")
+		result.Source = "current"
+	}
+
+	// Verify source exists
+	if _, err := os.Stat(sourceDir); err != nil {
+		return nil, fmt.Errorf("backup source not found: %w", err)
+	}
+
+	// 3. Restore JSONL to sync worktree
+	if opts.SyncDir != "" {
+		if err := restoreSyncData(sourceDir, opts.SyncDir); err != nil {
+			return nil, fmt.Errorf("restore sync data: %w", err)
+		}
+	}
+
+	// 4. Import local tables
+	if opts.DBPath != "" {
+		localDir := filepath.Join(sourceDir, "local")
+		if _, err := os.Stat(localDir); err == nil {
+			if err := ImportLocalTables(opts.DBPath, localDir); err != nil {
+				return nil, fmt.Errorf("import local tables: %w", err)
+			}
+		}
+	}
+
+	// 5. Restore config files
+	if opts.ThrumDir != "" {
+		if err := restoreConfigFiles(sourceDir, opts.ThrumDir); err != nil {
+			return nil, fmt.Errorf("restore config files: %w", err)
+		}
+	}
+
+	// 6. Remove messages.db so projector rebuilds on daemon start
+	if opts.DBPath != "" {
+		_ = os.Remove(opts.DBPath)
+		// Also remove WAL/SHM files
+		_ = os.Remove(opts.DBPath + "-wal")
+		_ = os.Remove(opts.DBPath + "-shm")
+	}
+
+	return result, nil
+}
+
+// restoreSyncData copies JSONL files from backup source to sync worktree.
+func restoreSyncData(sourceDir, syncDir string) error {
+	// Copy events.jsonl
+	eventsPath := filepath.Join(sourceDir, "events.jsonl")
+	if _, err := os.Stat(eventsPath); err == nil {
+		if err := os.MkdirAll(syncDir, 0750); err != nil {
+			return err
+		}
+		if _, err := atomicCopyFile(eventsPath, filepath.Join(syncDir, "events.jsonl")); err != nil {
+			return fmt.Errorf("copy events.jsonl: %w", err)
+		}
+	}
+
+	// Copy messages/*.jsonl
+	msgSrcDir := filepath.Join(sourceDir, "messages")
+	entries, err := os.ReadDir(msgSrcDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	msgDstDir := filepath.Join(syncDir, "messages")
+	if err := os.MkdirAll(msgDstDir, 0750); err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
+		}
+		src := filepath.Join(msgSrcDir, entry.Name())
+		dst := filepath.Join(msgDstDir, entry.Name())
+		if _, err := atomicCopyFile(src, dst); err != nil {
+			return fmt.Errorf("copy %s: %w", entry.Name(), err)
+		}
+	}
+
+	return nil
+}
+
+// restoreConfigFiles copies config, identity, and context files from backup to thrum dir.
+func restoreConfigFiles(sourceDir, thrumDir string) error {
+	configSrcDir := filepath.Join(sourceDir, "config")
+	if _, err := os.Stat(configSrcDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	// Restore config.json
+	configSrc := filepath.Join(configSrcDir, "config.json")
+	if _, err := os.Stat(configSrc); err == nil {
+		if _, err := atomicCopyFile(configSrc, filepath.Join(thrumDir, "config.json")); err != nil {
+			return fmt.Errorf("restore config.json: %w", err)
+		}
+	}
+
+	// Restore identities
+	if err := copyDirFiles(filepath.Join(configSrcDir, "identities"), filepath.Join(thrumDir, "identities"), ".json"); err != nil {
+		return fmt.Errorf("restore identities: %w", err)
+	}
+
+	// Restore context
+	if err := copyDirFiles(filepath.Join(configSrcDir, "context"), filepath.Join(thrumDir, "context"), ".md"); err != nil {
+		return fmt.Errorf("restore context: %w", err)
+	}
+
+	return nil
+}
+
+// ImportLocalTables reads JSONL files from localDir and inserts rows into the SQLite database.
+func ImportLocalTables(dbPath, localDir string) error {
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	for _, table := range localOnlyTables {
+		jsonlPath := filepath.Join(localDir, table+".jsonl")
+		if _, err := os.Stat(jsonlPath); err != nil {
+			continue // skip missing tables
+		}
+		if err := importTable(db, table, jsonlPath); err != nil {
+			return fmt.Errorf("import %s: %w", table, err)
+		}
+	}
+
+	return nil
+}
+
+// importTable reads a JSONL file and inserts rows into the given table.
+func importTable(db *sql.DB, table, jsonlPath string) error {
+	f, err := os.Open(jsonlPath) //nolint:gosec // G304 - internal path
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+
+		var row map[string]any
+		if err := json.Unmarshal(line, &row); err != nil {
+			return fmt.Errorf("parse line: %w", err)
+		}
+
+		if len(row) == 0 {
+			continue
+		}
+
+		// Build INSERT OR IGNORE statement
+		columns := make([]string, 0, len(row))
+		placeholders := make([]string, 0, len(row))
+		values := make([]any, 0, len(row))
+		for col, val := range row {
+			columns = append(columns, `"`+col+`"`)
+			placeholders = append(placeholders, "?")
+			values = append(values, val)
+		}
+
+		query := fmt.Sprintf(`INSERT OR IGNORE INTO "%s" (%s) VALUES (%s)`,
+			table, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
+
+		if _, err := db.Exec(query, values...); err != nil {
+			return fmt.Errorf("insert into %s: %w", table, err)
+		}
+	}
+
+	return scanner.Err()
+}
+
+// extractZip extracts a zip file to the destination directory.
+func extractZip(zipPath, destDir string) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = r.Close() }()
+
+	for _, f := range r.File {
+		destPath := filepath.Join(destDir, f.Name) //nolint:gosec // G305 - internal backup file
+
+		// Verify the path is within destDir (zip slip protection)
+		if !strings.HasPrefix(filepath.Clean(destPath), filepath.Clean(destDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("illegal file path in zip: %s", f.Name)
+		}
+
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(destPath, 0750); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(destPath), 0750); err != nil {
+			return err
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+
+		outFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode()) //nolint:gosec // G304
+		if err != nil {
+			_ = rc.Close()
+			return err
+		}
+
+		if _, err := io.Copy(outFile, rc); err != nil {
+			_ = outFile.Close()
+			_ = rc.Close()
+			return err
+		}
+
+		_ = outFile.Close()
+		_ = rc.Close()
+	}
+
+	return nil
+}
