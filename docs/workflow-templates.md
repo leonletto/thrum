@@ -51,7 +51,7 @@ these before giving a template to an agent.
 ```bash
 {{FEATURE_DESCRIPTION}} → "Add WebSocket sync between agents"
 {{PROJECT_ROOT}}        → /home/user/projects/myproject
-{{DESIGN_DOC_DIR}}      → docs/plans/
+{{DESIGN_DOC_DIR}}      → dev-docs/plans/
 {{REFERENCE_DOCS}}      → .ref/example_project/, dev-docs/architecture.md
 {{TECH_STACK}}          → Go backend, React/TypeScript UI, SQLite, JSONL
 ```
@@ -70,7 +70,7 @@ these before giving a template to an agent.
 {{EPIC_ID}}          → bd-a3f8
 {{WORKTREE_PATH}}    → ~/.workspaces/myproject/auth
 {{BRANCH_NAME}}      → feature/auth
-{{DESIGN_DOC}}       → docs/plans/2026-02-auth-design.md
+{{DESIGN_DOC}}       → dev-docs/plans/2026-02-auth-design.md
 {{REFERENCE_CODE}}   → .ref/example_auth_impl/
 {{QUALITY_COMMANDS}} → make test && make lint
 {{COVERAGE_TARGET}}  → >80%
@@ -86,7 +86,7 @@ implementation template:
 {{EPIC_ID}}          → bd-k7m2
 {{WORKTREE_PATH}}    → ~/.workspaces/myservice/auth
 {{BRANCH_NAME}}      → feature/auth-jwt
-{{DESIGN_DOC}}       → docs/plans/2026-02-jwt-auth.md
+{{DESIGN_DOC}}       → dev-docs/plans/2026-02-jwt-auth.md
 {{REFERENCE_CODE}}   → .ref/gorilla-sessions-example/
 {{QUALITY_COMMANDS}} → go test ./... && golangci-lint run
 {{COVERAGE_TARGET}}  → >85%

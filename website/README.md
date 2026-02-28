@@ -60,7 +60,7 @@ npm run serve
 
 Epic: `thrum-235d` — Documentation Website
 
-- Design spec: `/docs/plans/2026-02-09-docs-website-design.md`
+- Design spec: `/dev-docs/plans/2026-02-09-docs-website-design.md`
 - Tasks tracked in beads issue tracker
 
 ## License

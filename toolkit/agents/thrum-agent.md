@@ -276,7 +276,7 @@ thrum ping @name
 thrum quickstart --name lead-agent --role planner --module website --intent "Coordinating website development"
 
 # Assign task via message
-thrum send "Please implement build script (task thrum-235d.3). Design spec in docs/plans/. Check beads for details." --to @implementer
+thrum send "Please implement build script (task thrum-235d.3). Design spec in dev-docs/plans/. Check beads for details." --to @implementer
 
 # Check for updates
 thrum inbox
@@ -749,7 +749,7 @@ bd sync
 bd ready --json
 
 # Assign via Thrum
-thrum send "Task bd-456 is ready for implementation. See design spec in docs/plans/. Estimated 2-3 hours." --to @implementer
+thrum send "Task bd-456 is ready for implementation. See design spec in dev-docs/plans/. Estimated 2-3 hours." --to @implementer
 ```
 
 **Implementer (MCP):**

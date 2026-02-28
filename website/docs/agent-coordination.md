@@ -69,7 +69,7 @@ thrum quickstart --name planner1 --role planner --module website \
 
 # Assign task via message
 thrum send "Please implement build script (task thrum-235d.3). \
-  Design spec in docs/plans/. Check beads for details." \
+  Design spec in dev-docs/plans/. Check beads for details." \
   --to @implementer
 
 # Check for updates

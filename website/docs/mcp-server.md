@@ -661,7 +661,7 @@ The MCP server logs warnings to stderr. Check for:
 
 ## References
 
-- Design document: `docs/plans/2026-02-06-mcp-server-design.md`
+- Design document: `dev-docs/plans/2026-02-06-mcp-server-design.md`
 - Daemon architecture: `docs/daemon.md`
 - RPC API reference: `docs/rpc-api.md`
 - Identity system: `docs/identity.md`
