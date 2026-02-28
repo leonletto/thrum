@@ -74,19 +74,14 @@ function createCoordinatorRepo(): void {
 
 function createImplementerWorktree(): void {
   console.log(`[global-setup] Creating implementer worktree at ${IMPLEMENTER_DIR}`);
-  const setupScript = path.join(SOURCE_ROOT, 'scripts', 'setup-worktree-thrum.sh');
-  execFileSync('bash', [
-    setupScript,
-    IMPLEMENTER_DIR, 'implementer-wt',
-    '--identity', 'e2e_implementer',
-    '--role', 'implementer',
-    '--base', 'main',
-  ], {
-    cwd: COORDINATOR_DIR,
-    encoding: 'utf-8',
-    timeout: 30_000,
-    stdio: 'inherit',
-  });
+
+  // Create git worktree from coordinator repo
+  execIn(COORDINATOR_DIR, 'git', ['worktree', 'add', IMPLEMENTER_DIR, '-b', 'implementer-wt', 'HEAD']);
+
+  // Write .thrum/redirect pointing to coordinator's .thrum/
+  const implThrumDir = path.join(IMPLEMENTER_DIR, '.thrum');
+  mkdirSync(implThrumDir, { recursive: true });
+  writeFileSync(path.join(implThrumDir, 'redirect'), path.join(COORDINATOR_DIR, '.thrum'));
 
   // Quickstart in implementer worktree (session + intent)
   execIn(IMPLEMENTER_DIR, BIN, [
