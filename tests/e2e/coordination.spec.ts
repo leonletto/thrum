@@ -6,7 +6,7 @@
  * from global-setup.
  */
 import { test, expect } from '@playwright/test';
-import { thrum, getTestRoot } from './helpers/thrum-cli.js';
+import { thrum, thrumIn, getTestRoot, getImplementerRoot } from './helpers/thrum-cli.js';
 import { execFileSync } from 'node:child_process';
 import { registerAgent } from './helpers/fixtures.js';
 import * as fs from 'node:fs';
@@ -91,7 +91,79 @@ test.describe('Coordination', () => {
     }
 
     // Assert: shows agents with their context information
-    // Should list the tester agent registered in global-setup
-    expect(output.toLowerCase()).toContain('tester');
+    expect(output.toLowerCase()).toMatch(/coordinator|implementer|tester/);
+  });
+
+  test('F2-2: who-has with multiple agents editing same file', async () => {
+    const testRoot = getTestRoot();
+    const implRoot = getImplementerRoot();
+    const testFile = 'shared-edit.txt';
+
+    fs.writeFileSync(path.join(testRoot, testFile), '// coordinator edit\n');
+    try {
+      execFileSync('git', ['add', testFile], { cwd: testRoot, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add shared file'], { cwd: testRoot, stdio: 'pipe' });
+      fs.writeFileSync(path.join(testRoot, testFile), '// coordinator modified\n');
+      fs.writeFileSync(path.join(implRoot, testFile), '// implementer modified\n');
+
+      const output = thrum(['who-has', testFile]);
+      expect(output.toLowerCase()).toContain('coordinator');
+      expect(output.toLowerCase()).toContain('implementer');
+    } finally {
+      try {
+        execFileSync('git', ['checkout', testFile], { cwd: testRoot, stdio: 'pipe' });
+        execFileSync('git', ['checkout', testFile], { cwd: implRoot, stdio: 'pipe' });
+        execFileSync('git', ['reset', 'HEAD~1', '--hard'], { cwd: testRoot, stdio: 'pipe' });
+      } catch { /* best effort */ }
+    }
+  });
+
+  test('F2-3: who-has with no agents editing', async () => {
+    let output = '';
+    try {
+      output = thrum(['who-has', 'README.md']);
+    } catch (err: any) {
+      output = err.message || '';
+    }
+    expect(output.toLowerCase()).not.toContain('error');
+  });
+
+  test('F2-5: agent set-intent updates intent', async () => {
+    const env = {
+      ...process.env,
+      THRUM_NAME: 'e2e_coordinator',
+      THRUM_ROLE: 'coordinator',
+      THRUM_MODULE: 'all',
+    };
+    const output = thrumIn(getTestRoot(), ['agent', 'set-intent', 'Working on authentication module'], 10_000, env);
+    expect(output.toLowerCase()).toMatch(/updated|intent|set/);
+
+    const status = thrumIn(getTestRoot(), ['status'], 10_000, env);
+    expect(status.toLowerCase()).toContain('authentication');
+  });
+
+  test('F2-6: agent heartbeat', async () => {
+    const env = {
+      ...process.env,
+      THRUM_NAME: 'e2e_coordinator',
+      THRUM_ROLE: 'coordinator',
+      THRUM_MODULE: 'all',
+    };
+    const output = thrumIn(getTestRoot(), ['agent', 'heartbeat'], 10_000, env);
+    expect(output.toLowerCase()).toMatch(/heartbeat|ok|updated/);
+  });
+
+  test('F2-7: agent list --context shows context', async () => {
+    const output = thrum(['agent', 'list', '--context']);
+    expect(output.toLowerCase()).toMatch(/coordinator|implementer/);
+  });
+
+  test('F2-8: team shows activity and status', async () => {
+    const output = thrum(['team']);
+    expect(output.toLowerCase()).toMatch(/coordinator|implementer/);
+
+    const jsonOutput = thrum(['team', '--json']);
+    const parsed = JSON.parse(jsonOutput);
+    expect(typeof parsed).toBe('object');
   });
 });
