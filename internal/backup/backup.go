@@ -7,17 +7,19 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/leonletto/thrum/internal/config"
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
 // BackupOptions configures a backup run.
 type BackupOptions struct {
-	BackupDir    string // resolved backup directory
-	RepoName     string // used as subfolder name
-	SyncDir      string // path to a-sync worktree
-	ThrumDir     string // path to .thrum directory
-	DBPath       string // path to messages.db
-	ThrumVersion string // version string for manifest
+	BackupDir    string                 // resolved backup directory
+	RepoName     string                 // used as subfolder name
+	SyncDir      string                 // path to a-sync worktree
+	ThrumDir     string                 // path to .thrum directory
+	DBPath       string                 // path to messages.db
+	ThrumVersion string                 // version string for manifest
+	Retention    *config.RetentionConfig // optional: apply GFS rotation after backup
 }
 
 // BackupResult holds the outcome of a backup run.
@@ -38,7 +40,15 @@ func RunBackup(opts BackupOptions) (*BackupResult, error) {
 		return nil, fmt.Errorf("repo name is required")
 	}
 
-	currentDir := filepath.Join(opts.BackupDir, opts.RepoName, "current")
+	repoDir := filepath.Join(opts.BackupDir, opts.RepoName)
+	currentDir := filepath.Join(repoDir, "current")
+	archivesDir := filepath.Join(repoDir, "archives")
+
+	// Archive existing current/ before writing new backup
+	if _, err := CompressCurrentToArchive(currentDir, archivesDir); err != nil {
+		return nil, fmt.Errorf("archive previous backup: %w", err)
+	}
+
 	if err := os.MkdirAll(currentDir, 0750); err != nil {
 		return nil, fmt.Errorf("create backup dir: %w", err)
 	}
@@ -111,6 +121,13 @@ func RunBackup(opts BackupOptions) (*BackupResult, error) {
 		return nil, fmt.Errorf("write manifest: %w", err)
 	}
 	result.Manifest = manifest
+
+	// Apply GFS retention if configured
+	if opts.Retention != nil {
+		if err := ApplyRetention(archivesDir, *opts.Retention); err != nil {
+			return nil, fmt.Errorf("apply retention: %w", err)
+		}
+	}
 
 	return result, nil
 }

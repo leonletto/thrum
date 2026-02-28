@@ -4947,6 +4947,7 @@ func runBackupCreate(dirOverride string) error {
 		ThrumDir:     thrumDir,
 		DBPath:       dbPath,
 		ThrumVersion: Version,
+		Retention:    &cfg.Backup.Retention,
 	})
 	if err != nil {
 		return fmt.Errorf("backup failed: %w", err)
