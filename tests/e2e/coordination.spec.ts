@@ -12,8 +12,20 @@ import { registerAgent } from './helpers/fixtures.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+/** Dedicated agent for coordination tests — avoids session conflicts with session.spec.ts. */
+function coordTestEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, THRUM_NAME: 'e2e_coordtest', THRUM_ROLE: 'coordinator', THRUM_MODULE: 'all' };
+}
+
 test.describe('Coordination', () => {
   test.describe.configure({ mode: 'serial' });
+
+  test.beforeAll(async () => {
+    try {
+      thrumIn(getTestRoot(), ['quickstart', '--role', 'coordinator', '--module', 'all',
+        '--name', 'e2e_coordtest', '--intent', 'Coordination testing'], 10_000, coordTestEnv());
+    } catch { /* may already exist */ }
+  });
 
   test('SC-30: Check who has a file', async () => {
     const testRoot = getTestRoot();
@@ -126,27 +138,15 @@ test.describe('Coordination', () => {
   });
 
   test('F2-5: agent set-intent updates intent', async () => {
-    const env = {
-      ...process.env,
-      THRUM_NAME: 'e2e_coordinator',
-      THRUM_ROLE: 'coordinator',
-      THRUM_MODULE: 'all',
-    };
-    const output = thrumIn(getTestRoot(), ['agent', 'set-intent', 'Working on authentication module'], 10_000, env);
+    const output = thrumIn(getTestRoot(), ['agent', 'set-intent', 'Working on authentication module'], 10_000, coordTestEnv());
     expect(output.toLowerCase()).toMatch(/updated|intent|set/);
 
-    const status = thrumIn(getTestRoot(), ['status'], 10_000, env);
+    const status = thrumIn(getTestRoot(), ['status'], 10_000, coordTestEnv());
     expect(status.toLowerCase()).toContain('authentication');
   });
 
   test('F2-6: agent heartbeat', async () => {
-    const env = {
-      ...process.env,
-      THRUM_NAME: 'e2e_coordinator',
-      THRUM_ROLE: 'coordinator',
-      THRUM_MODULE: 'all',
-    };
-    const output = thrumIn(getTestRoot(), ['agent', 'heartbeat'], 10_000, env);
+    const output = thrumIn(getTestRoot(), ['agent', 'heartbeat'], 10_000, coordTestEnv());
     expect(output.toLowerCase()).toMatch(/heartbeat|ok|updated/);
   });
 

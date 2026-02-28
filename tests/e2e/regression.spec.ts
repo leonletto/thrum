@@ -14,25 +14,30 @@ import * as path from 'node:path';
 const SOURCE_ROOT = path.resolve(__dirname, '../..');
 const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
 
-function coordEnv(): NodeJS.ProcessEnv {
-  return { ...process.env, THRUM_NAME: 'e2e_coordinator', THRUM_ROLE: 'coordinator', THRUM_MODULE: 'all' };
-}
-
-function implEnv(): NodeJS.ProcessEnv {
-  return { ...process.env, THRUM_NAME: 'e2e_implementer', THRUM_ROLE: 'implementer', THRUM_MODULE: 'main' };
+/** Dedicated agent for regression tests — avoids session conflicts with other specs. */
+function regressionEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, THRUM_NAME: 'e2e_regtest', THRUM_ROLE: 'tester', THRUM_MODULE: 'all' };
 }
 
 test.describe('Bugfix Regressions', () => {
+  test.beforeAll(async () => {
+    // Register a dedicated agent for regression tests to avoid session conflicts
+    try {
+      thrumIn(getTestRoot(), ['quickstart', '--role', 'tester', '--module', 'all',
+        '--name', 'e2e_regtest', '--intent', 'Regression testing'], 10_000, regressionEnv());
+    } catch { /* may already exist */ }
+  });
+
   test('J1: Priority flag removed from CLI', async () => {
     let error1 = '';
     try {
-      thrumIn(getTestRoot(), ['send', 'Priority test', '--to', '@e2e_implementer', '-p', 'critical'], 10_000, coordEnv());
+      thrumIn(getTestRoot(), ['send', 'Priority test', '--to', '@e2e_implementer', '-p', 'critical'], 10_000, regressionEnv());
     } catch (err: any) { error1 = err.message; }
     expect(error1.toLowerCase()).toContain('unknown');
 
     let error2 = '';
     try {
-      thrumIn(getTestRoot(), ['send', 'Priority test', '--to', '@e2e_implementer', '--priority', 'high'], 10_000, coordEnv());
+      thrumIn(getTestRoot(), ['send', 'Priority test', '--to', '@e2e_implementer', '--priority', 'high'], 10_000, regressionEnv());
     } catch (err: any) { error2 = err.message; }
     expect(error2.toLowerCase()).toContain('unknown');
   });
@@ -89,14 +94,14 @@ test.describe('Bugfix Regressions', () => {
     try {
       execFileSync(BIN, ['wait', '--timeout', '1s'], {
         cwd: getTestRoot(), encoding: 'utf-8', timeout: 10_000,
-        env: coordEnv(),
+        env: regressionEnv(),
       });
     } catch { /* timeout is expected */ }
 
     try {
       execFileSync(BIN, ['wait', '--timeout', '1s'], {
         cwd: getTestRoot(), encoding: 'utf-8', timeout: 10_000,
-        env: coordEnv(),
+        env: regressionEnv(),
       });
     } catch (err: any) {
       error = err.stderr?.toString() || err.message || '';
@@ -105,14 +110,14 @@ test.describe('Bugfix Regressions', () => {
   });
 
   test('J6: Ping resolves by agent name', async () => {
-    // Ping from coordinator to implementer (using coordinator's identity)
+    // Ping self — e2e_regtest agent is guaranteed to exist (registered in beforeAll)
     let output = '';
     try {
-      output = thrumIn(getTestRoot(), ['ping', '@e2e_implementer'], 10_000, coordEnv());
+      output = thrumIn(getTestRoot(), ['ping', '@e2e_regtest'], 10_000, regressionEnv());
     } catch (err: any) {
       output = err.message || '';
     }
-    expect(output.toLowerCase()).toContain('implementer');
+    expect(output.toLowerCase()).toContain('regtest');
     expect(output.toLowerCase()).not.toContain('not found');
   });
 
@@ -120,7 +125,7 @@ test.describe('Bugfix Regressions', () => {
     try {
       execFileSync(BIN, ['mcp', 'serve'], {
         cwd: getTestRoot(), encoding: 'utf-8', timeout: 3_000,
-        env: coordEnv(),
+        env: regressionEnv(),
       });
     } catch (err: any) {
       const stderr = err.stderr?.toString() || '';
@@ -134,7 +139,7 @@ test.describe('Bugfix Regressions', () => {
     try {
       execFileSync(BIN, ['wait', '--all', '--timeout', '1s'], {
         cwd: getTestRoot(), encoding: 'utf-8', timeout: 5_000,
-        env: coordEnv(),
+        env: regressionEnv(),
       });
     } catch (err: any) {
       error = err.stderr?.toString() || err.message || '';
@@ -145,7 +150,7 @@ test.describe('Bugfix Regressions', () => {
   test('J9: Unknown recipient hard error', async () => {
     let error = '';
     try {
-      thrumIn(getTestRoot(), ['send', 'fail', '--to', '@does-not-exist'], 10_000, coordEnv());
+      thrumIn(getTestRoot(), ['send', 'fail', '--to', '@does-not-exist'], 10_000, regressionEnv());
     } catch (err: any) {
       error = err.message || '';
     }
@@ -155,7 +160,7 @@ test.describe('Bugfix Regressions', () => {
   test('J11: Group-send warning excludes @everyone', async () => {
     let output = '';
     try {
-      output = thrumIn(getTestRoot(), ['send', 'Everyone message', '--to', '@everyone'], 10_000, coordEnv());
+      output = thrumIn(getTestRoot(), ['send', 'Everyone message', '--to', '@everyone'], 10_000, regressionEnv());
     } catch (err: any) {
       output = err.message || '';
     }
@@ -163,13 +168,13 @@ test.describe('Bugfix Regressions', () => {
   });
 
   test('J12: Wait excludes own outbound messages', async () => {
-    thrumIn(getTestRoot(), ['send', 'Self-exclude test', '--to', '@everyone'], 10_000, coordEnv());
+    thrumIn(getTestRoot(), ['send', 'Self-exclude test', '--to', '@everyone'], 10_000, regressionEnv());
 
     let waitOutput = '';
     try {
       waitOutput = execFileSync(BIN, ['wait', '--after', '-5s', '--timeout', '2s'], {
         cwd: getTestRoot(), encoding: 'utf-8', timeout: 10_000,
-        env: coordEnv(),
+        env: regressionEnv(),
       });
     } catch (err: any) {
       waitOutput = err.stdout?.toString() || '';
