@@ -54,5 +54,15 @@
 {"created_at":"2026-02-27T13:15:20Z","created_by":"Leon Letto","depends_on_id":"thrum-1xz","issue_id":"thrum-n0u","type":"blocks"}
 {"created_at":"2026-02-27T13:18:00Z","created_by":"Leon Letto","depends_on_id":"thrum-1xz","issue_id":"thrum-qd9","type":"blocks"}
 {"created_at":"2026-02-27T13:18:57Z","created_by":"Leon Letto","depends_on_id":"thrum-z41","issue_id":"thrum-qd9","type":"blocks"}
+{"created_at":"2026-02-28T11:04:57Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.1","type":"parent-child"}
+{"created_at":"2026-02-28T11:04:59Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.10","type":"parent-child"}
+{"created_at":"2026-02-28T11:04:57Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.2","type":"parent-child"}
+{"created_at":"2026-02-28T11:04:57Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.3","type":"parent-child"}
+{"created_at":"2026-02-28T11:04:57Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.4","type":"parent-child"}
+{"created_at":"2026-02-28T11:04:57Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.5","type":"parent-child"}
+{"created_at":"2026-02-28T11:04:58Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.6","type":"parent-child"}
+{"created_at":"2026-02-28T11:04:58Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.7","type":"parent-child"}
+{"created_at":"2026-02-28T11:04:58Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.8","type":"parent-child"}
+{"created_at":"2026-02-28T11:04:58Z","created_by":"Leon Letto","depends_on_id":"thrum-qel","issue_id":"thrum-qel.9","type":"parent-child"}
 {"created_at":"2026-02-27T13:15:20Z","created_by":"Leon Letto","depends_on_id":"thrum-n0u","issue_id":"thrum-ynl","type":"blocks"}
 {"created_at":"2026-02-27T13:17:07Z","created_by":"Leon Letto","depends_on_id":"thrum-1xz","issue_id":"thrum-z41","type":"blocks"}
