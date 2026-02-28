@@ -3,20 +3,34 @@
  *
  * Tests group creation, member management, role-based membership,
  * group messaging, and nested group behavior.
+ * Uses dedicated agents to avoid session conflicts with other specs.
  */
 import { test, expect } from '@playwright/test';
 import { thrum, thrumIn, getTestRoot, getImplementerRoot } from './helpers/thrum-cli.js';
 
-function coordEnv(): NodeJS.ProcessEnv {
-  return { ...process.env, THRUM_NAME: 'e2e_coordinator', THRUM_ROLE: 'coordinator', THRUM_MODULE: 'all' };
+/** Dedicated agents for group tests — avoid conflicts with session.spec.ts */
+function grpCoordEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, THRUM_NAME: 'e2e_grpcoord', THRUM_ROLE: 'coordinator', THRUM_MODULE: 'all' };
 }
 
-function implEnv(): NodeJS.ProcessEnv {
-  return { ...process.env, THRUM_NAME: 'e2e_implementer', THRUM_ROLE: 'implementer', THRUM_MODULE: 'main' };
+function grpImplEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, THRUM_NAME: 'e2e_grpimpl', THRUM_ROLE: 'implementer', THRUM_MODULE: 'main' };
 }
 
 test.describe('Groups', () => {
   test.describe.configure({ mode: 'serial' });
+
+  test.beforeAll(async () => {
+    // Register dedicated agents for group tests
+    try {
+      thrumIn(getTestRoot(), ['quickstart', '--role', 'coordinator', '--module', 'all',
+        '--name', 'e2e_grpcoord', '--intent', 'Group testing'], 10_000, grpCoordEnv());
+    } catch { /* may already exist */ }
+    try {
+      thrumIn(getImplementerRoot(), ['quickstart', '--role', 'implementer', '--module', 'main',
+        '--name', 'e2e_grpimpl', '--intent', 'Group testing'], 10_000, grpImplEnv());
+    } catch { /* may already exist */ }
+  });
 
   test('F1: Create group', async () => {
     const output = thrum(['group', 'create', 'test-team']);
@@ -27,8 +41,8 @@ test.describe('Groups', () => {
   });
 
   test('F2: Add members to group', async () => {
-    thrum(['group', 'add', 'test-team', '@e2e_coordinator']);
-    thrum(['group', 'add', 'test-team', '@e2e_implementer']);
+    thrum(['group', 'add', 'test-team', '@e2e_grpcoord']);
+    thrum(['group', 'add', 'test-team', '@e2e_grpimpl']);
 
     const list = thrum(['group', 'list']);
     expect(list.toLowerCase()).toContain('test-team');
@@ -45,14 +59,14 @@ test.describe('Groups', () => {
 
   test('F4: Send group message', async () => {
     // Mark all read first
-    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
+    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, grpImplEnv());
 
     // Send to group
-    const output = thrumIn(getTestRoot(), ['send', 'Group message to test-team', '--to', '@test-team'], 10_000, coordEnv());
+    const output = thrumIn(getTestRoot(), ['send', 'Group message to test-team', '--to', '@test-team'], 10_000, grpCoordEnv());
     expect(output.toLowerCase()).toMatch(/sent|msg_/);
 
     // Implementer should receive it (is a member of test-team)
-    const inbox = thrumIn(getImplementerRoot(), ['inbox', '--unread'], 10_000, implEnv());
+    const inbox = thrumIn(getImplementerRoot(), ['inbox', '--unread'], 10_000, grpImplEnv());
     expect(inbox.toLowerCase()).toContain('group message');
   });
 
