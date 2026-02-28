@@ -2,6 +2,20 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
+/** File written by global-setup with the implementer worktree path. */
+const IMPLEMENTER_REPO_FILE_PATH = path.join(
+  path.resolve(__dirname, '../../..'),
+  'node_modules',
+  '.e2e-implementer-repo',
+);
+
+/** File written by global-setup with the bare remote path. */
+const BARE_REMOTE_FILE_PATH = path.join(
+  path.resolve(__dirname, '../../..'),
+  'node_modules',
+  '.e2e-bare-remote',
+);
+
 /** Source repo root — for locating the built binary. */
 const SOURCE_ROOT = path.resolve(__dirname, '../../..');
 const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
@@ -26,6 +40,27 @@ export function getTestRoot(): string {
     return readFileSync(TEST_REPO_FILE, 'utf-8').trim();
   }
   return SOURCE_ROOT;
+}
+
+/**
+ * Get the implementer worktree root.
+ * Falls back to getTestRoot() if marker file doesn't exist.
+ */
+export function getImplementerRoot(): string {
+  if (existsSync(IMPLEMENTER_REPO_FILE_PATH)) {
+    return readFileSync(IMPLEMENTER_REPO_FILE_PATH, 'utf-8').trim();
+  }
+  return getTestRoot();
+}
+
+/**
+ * Get the bare remote path for sync tests.
+ */
+export function getBareRemote(): string {
+  if (existsSync(BARE_REMOTE_FILE_PATH)) {
+    return readFileSync(BARE_REMOTE_FILE_PATH, 'utf-8').trim();
+  }
+  throw new Error('Bare remote marker file not found. Is global-setup configured?');
 }
 
 /**
@@ -75,5 +110,31 @@ export function thrumJson<T>(args: string[], env?: NodeJS.ProcessEnv): T {
     return JSON.parse(output);
   } catch {
     throw new Error(`Invalid JSON from thrum ${args.join(' ')}:\n${output}`);
+  }
+}
+
+/**
+ * Execute a thrum CLI command in a specific working directory.
+ * Used for multi-worktree tests where coordinator and implementer
+ * need to run commands from different repos.
+ */
+export function thrumIn(
+  cwd: string,
+  args: string[],
+  timeout = 10_000,
+  env?: NodeJS.ProcessEnv,
+): string {
+  try {
+    return execFileSync(BIN, args, {
+      cwd,
+      encoding: 'utf-8',
+      timeout,
+      env: env ?? thrumEnv(),
+    }).trim();
+  } catch (err: any) {
+    const stderr = err.stderr?.toString() || '';
+    throw new Error(
+      `thrum ${args.join(' ')} failed in ${cwd} (exit ${err.status}):\n${stderr}`,
+    );
   }
 }
