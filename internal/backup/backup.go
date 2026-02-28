@@ -21,6 +21,7 @@ type BackupOptions struct {
 	ThrumVersion string                 // version string for manifest
 	Retention    *config.RetentionConfig // optional: apply GFS rotation after backup
 	Plugins      []config.PluginConfig  // optional: third-party backup plugins
+	PostBackup   string                 // optional: command to run after backup completes
 }
 
 // BackupResult holds the outcome of a backup run.
@@ -29,7 +30,8 @@ type BackupResult struct {
 	Manifest      *Manifest
 	SyncResult    SyncExportResult
 	LocalResult   LocalExportResult
-	PluginResults []PluginResult
+	PluginResults  []PluginResult
+	PostHookResult *PostHookResult
 }
 
 // RunBackup orchestrates a full backup: exports JSONL, SQLite local tables,
@@ -139,6 +141,16 @@ func RunBackup(opts BackupOptions) (*BackupResult, error) {
 		if err := ApplyRetention(archivesDir, *opts.Retention); err != nil {
 			return nil, fmt.Errorf("apply retention: %w", err)
 		}
+	}
+
+	// 7. Run post-backup hook (non-fatal)
+	if opts.PostBackup != "" {
+		repoPath := opts.SyncDir
+		if repoPath == "" {
+			repoPath = opts.ThrumDir
+		}
+		hookResult := RunPostBackup(opts.PostBackup, repoPath, opts.BackupDir, opts.RepoName, currentDir)
+		result.PostHookResult = hookResult
 	}
 
 	return result, nil

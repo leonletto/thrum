@@ -4968,6 +4968,7 @@ func runBackupCreate(dirOverride string) error {
 		ThrumVersion: Version,
 		Retention:    &cfg.Backup.Retention,
 		Plugins:      cfg.Backup.Plugins,
+		PostBackup:   cfg.Backup.PostBackup,
 	})
 	if err != nil {
 		return fmt.Errorf("backup failed: %w", err)
@@ -4984,6 +4985,13 @@ func runBackupCreate(dirOverride string) error {
 		fmt.Printf("  Config files: %d\n", result.Manifest.Counts.ConfigFiles)
 		if pluginSummary := backup.FormatPluginResults(result.PluginResults); pluginSummary != "" {
 			fmt.Printf("  Plugins:\n%s", pluginSummary)
+		}
+		if result.PostHookResult != nil {
+			if result.PostHookResult.Error != "" {
+				fmt.Printf("  Post-backup hook: FAILED (%s)\n", result.PostHookResult.Error)
+			} else {
+				fmt.Printf("  Post-backup hook: ok\n")
+			}
 		}
 	}
 
