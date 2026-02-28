@@ -411,6 +411,12 @@ func TestSanitizeAgentName(t *testing.T) {
 		{"multi///slashes", "multi_slashes"},
 		{"hyphen-ok", "hyphen-ok"},
 		{"MixedCase-With-Hyphens", "mixedcase-with-hyphens"},
+		{"-leading-hyphen", "leading-hyphen"},
+		{"trailing-hyphen-", "trailing-hyphen"},
+		{"---three-hyphens---", "three-hyphens"},
+		{"///", "main"},
+		{"...", "main"},
+		{"", "main"},
 	}
 
 	for _, tt := range tests {
@@ -419,11 +425,9 @@ func TestSanitizeAgentName(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("SanitizeAgentName(%q) = %q, want %q", tt.input, got, tt.want)
 			}
-			// Result should always pass validation (if non-empty)
-			if got != "" {
-				if err := identity.ValidateAgentName(got); err != nil {
-					t.Errorf("SanitizeAgentName(%q) result %q fails validation: %v", tt.input, got, err)
-				}
+			// Result should always pass validation
+			if err := identity.ValidateAgentName(got); err != nil {
+				t.Errorf("SanitizeAgentName(%q) result %q fails validation: %v", tt.input, got, err)
 			}
 		})
 	}

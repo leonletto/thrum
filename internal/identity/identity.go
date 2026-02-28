@@ -229,7 +229,7 @@ func ValidateAgentName(name string) error {
 
 // SanitizeAgentName converts a raw string (e.g., branch name) into a valid agent name component.
 // It lowercases, replaces invalid characters with underscores, collapses consecutive underscores,
-// and strips leading/trailing underscores.
+// and strips leading/trailing underscores and hyphens. Returns "main" for empty results.
 func SanitizeAgentName(s string) string {
 	s = strings.ToLower(s)
 
@@ -249,8 +249,12 @@ func SanitizeAgentName(s string) string {
 		s = strings.ReplaceAll(s, "__", "_")
 	}
 
-	// Strip leading/trailing underscores
-	s = strings.Trim(s, "_")
+	// Strip leading/trailing underscores and hyphens
+	s = strings.Trim(s, "_-")
+
+	if s == "" {
+		return "main"
+	}
 
 	return s
 }
