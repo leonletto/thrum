@@ -1,5 +1,5 @@
 import { type Page, expect } from '@playwright/test';
-import { thrum, thrumJson } from './thrum-cli.js';
+import { thrum, thrumJson, thrumIn, getTestRoot, getImplementerRoot } from './thrum-cli.js';
 
 /**
  * Register an agent via CLI.
@@ -96,4 +96,36 @@ export function getAgentList(): Array<{ role: string; agent_id: string }> {
  */
 export async function waitForWebSocket(page: Page): Promise<void> {
   await expect(page.getByText('CONNECTED')).toBeVisible({ timeout: 15_000 });
+}
+
+/**
+ * Register an agent in a specific worktree via quickstart.
+ */
+export function quickstartAgentIn(
+  cwd: string,
+  role: string,
+  module: string,
+  name: string,
+  intent?: string,
+): string {
+  const args = ['quickstart', '--role', role, '--module', module, '--name', name];
+  if (intent) args.push('--intent', intent);
+  return thrumIn(cwd, args);
+}
+
+/**
+ * Ensure both coordinator and implementer have active sessions.
+ * Useful as a beforeAll hook.
+ */
+export function ensureTestSessions(): void {
+  try {
+    thrumIn(getTestRoot(), ['session', 'start']);
+  } catch (err: any) {
+    if (!err.message?.toLowerCase().includes('already')) throw err;
+  }
+  try {
+    thrumIn(getImplementerRoot(), ['session', 'start']);
+  } catch (err: any) {
+    if (!err.message?.toLowerCase().includes('already')) throw err;
+  }
 }
