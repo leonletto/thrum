@@ -64,5 +64,16 @@ test.describe('Backup', () => {
       '--name', 'e2e_coordinator', '--intent', 'E2E test coordinator'], 10_000);
     thrumIn(getImplementerRoot(), ['quickstart', '--role', 'implementer', '--module', 'main',
       '--name', 'e2e_implementer', '--intent', 'E2E test implementer'], 10_000);
+
+    // Daemon may restart on a new port — update the marker file
+    // so browser tests (which read baseURL from the file) still work
+    const statusJson = execFileSync(BIN, ['daemon', 'status', '--json'], {
+      cwd: testRoot, encoding: 'utf-8', timeout: 5_000,
+    });
+    const status = JSON.parse(statusJson);
+    if (status.ws_port) {
+      const portFile = path.join(SOURCE_ROOT, 'node_modules', '.e2e-ws-port');
+      fs.writeFileSync(portFile, String(status.ws_port));
+    }
   });
 });
