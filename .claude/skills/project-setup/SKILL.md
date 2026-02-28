@@ -408,12 +408,20 @@ All worktree-related values come from the Phase 3 assignments:
 | `{{WORKTREE_PATH}}`    | **From Phase 3 worktree assignment**                |
 | `{{BRANCH_NAME}}`      | **From Phase 3 worktree assignment**                |
 | `{{PROJECT_ROOT}}`     | Absolute path to the project root                   |
-| `{{DESIGN_DOC}}`       | Path to the design spec referenced by the plan file |
-| `{{REFERENCE_CODE}}`   | Relevant reference code paths                       |
+| `{{DESIGN_DOC}}`       | **Absolute path** to the design spec                |
+| `{{REFERENCE_CODE}}`   | Relevant reference code paths (relative OK if committed) |
 | `{{QUALITY_COMMANDS}}` | Test/lint commands                                  |
 | `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                   |
 | `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                 |
-| `{{PLAN_FILE}}`        | Path to the plan file (primary input)               |
+| `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)  |
+
+**IMPORTANT — Absolute paths for gitignored files:** `{{DESIGN_DOC}}`,
+`{{PLAN_FILE}}`, and the saved prompt path (`dev-docs/prompts/`) are typically
+gitignored. Agents in worktrees cannot resolve relative paths to these files
+because worktrees only share committed content. Always resolve these to absolute
+paths (e.g., `/Users/you/project/dev-docs/plans/file.md`, not
+`dev-docs/plans/file.md`). This also applies to beads task descriptions — any
+reference to a plan or design doc in a task description must be an absolute path.
 
 **Do not omit, reorganize, or summarize any section of the template.** The
 output must contain every section from the original — Sub-Agent Strategy, all 4
@@ -489,6 +497,14 @@ prompts in Phase 4.
 **Skipping the plan file:** This skill reads the plan file (from writing-plans)
 as primary input. If you only have a design doc, use writing-plans first to
 produce the plan.
+
+**Using relative paths for gitignored files:** Plan files, design docs, and
+prompts live in gitignored directories (`dev-docs/`, `docs/plans/`). Agents in
+worktrees can't see these via relative paths — the worktree only shares
+committed files. Always use absolute paths (starting with `/`) when referencing
+these files in: placeholder resolution, beads task descriptions, and the
+generated implementation prompt. This is the most common source of "file not
+found" errors for worktree agents.
 
 ## Output Summary
 
