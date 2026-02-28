@@ -25,6 +25,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/backup"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/runtime"
@@ -132,6 +133,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(groupCmd())
 	rootCmd.AddCommand(runtimeGroupCmd())
 	rootCmd.AddCommand(syncCmd())
+	rootCmd.AddCommand(backupCmd())
 	rootCmd.AddCommand(peerCmd())
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(setupCmd())
@@ -4873,6 +4875,184 @@ func applyRolePreamble(thrumDir, agentName, role, preambleFile string) error {
 	if err := agentcontext.EnsurePreamble(thrumDir, agentName); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
 	}
+	return nil
+}
+
+func backupCmd() *cobra.Command {
+	var flagDir string
+
+	cmd := &cobra.Command{
+		Use:   "backup",
+		Short: "Backup thrum data",
+		Long:  "Snapshot all thrum data (events, messages, config, identities) to a backup directory.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runBackupCreate(flagDir)
+		},
+	}
+
+	cmd.PersistentFlags().StringVar(&flagDir, "dir", "", "Override backup directory")
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "status",
+		Short: "Show last backup info",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runBackupStatus(flagDir)
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "config",
+		Short: "Show effective backup config",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runBackupConfig()
+		},
+	})
+
+	return cmd
+}
+
+func runBackupCreate(dirOverride string) error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	// Resolve backup dir: CLI flag > config > default
+	backupDir := dirOverride
+	if backupDir == "" {
+		backupDir = cfg.Backup.Dir
+	}
+	if backupDir == "" {
+		backupDir = filepath.Join(thrumDir, "backup")
+	}
+
+	// Resolve sync worktree
+	syncDir, err := paths.SyncWorktreePath(flagRepo)
+	if err != nil {
+		syncDir = "" // non-fatal: sync dir may not exist yet
+	}
+
+	dbPath := filepath.Join(thrumDir, "var", "messages.db")
+	repoName := cli.GetRepoName(flagRepo)
+
+	result, err := backup.RunBackup(backup.BackupOptions{
+		BackupDir:    backupDir,
+		RepoName:     repoName,
+		SyncDir:      syncDir,
+		ThrumDir:     thrumDir,
+		DBPath:       dbPath,
+		ThrumVersion: Version,
+	})
+	if err != nil {
+		return fmt.Errorf("backup failed: %w", err)
+	}
+
+	if flagJSON {
+		data, _ := json.MarshalIndent(result.Manifest, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		fmt.Printf("Backup complete: %s\n", result.CurrentDir)
+		fmt.Printf("  Events: %d lines\n", result.SyncResult.EventLines)
+		fmt.Printf("  Message files: %d\n", result.SyncResult.MessageFiles)
+		fmt.Printf("  Local tables: %d\n", len(result.LocalResult.Tables))
+		fmt.Printf("  Config files: %d\n", result.Manifest.Counts.ConfigFiles)
+	}
+
+	return nil
+}
+
+func runBackupStatus(dirOverride string) error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	backupDir := dirOverride
+	if backupDir == "" {
+		backupDir = cfg.Backup.Dir
+	}
+	if backupDir == "" {
+		backupDir = filepath.Join(thrumDir, "backup")
+	}
+
+	repoName := cli.GetRepoName(flagRepo)
+	currentDir := filepath.Join(backupDir, repoName, "current")
+
+	manifest, err := backup.ReadManifest(currentDir)
+	if err != nil {
+		return fmt.Errorf("no backup found (looked in %s): %w", currentDir, err)
+	}
+
+	if flagJSON {
+		data, _ := json.MarshalIndent(manifest, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		fmt.Printf("Last backup: %s\n", manifest.Timestamp.Local().Format("2006-01-02 15:04:05"))
+		fmt.Printf("  Thrum version: %s\n", manifest.ThrumVersion)
+		fmt.Printf("  Repo: %s\n", manifest.RepoName)
+		fmt.Printf("  Events: %d\n", manifest.Counts.Events)
+		fmt.Printf("  Message files: %d\n", manifest.Counts.MessageFiles)
+		fmt.Printf("  Local tables: %d\n", manifest.Counts.LocalTables)
+		fmt.Printf("  Config files: %d\n", manifest.Counts.ConfigFiles)
+		if len(manifest.Counts.Plugins) > 0 {
+			fmt.Printf("  Plugins: %v\n", manifest.Counts.Plugins)
+		}
+		fmt.Printf("  Location: %s\n", currentDir)
+	}
+
+	return nil
+}
+
+func runBackupConfig() error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	effectiveDir := cfg.Backup.Dir
+	if effectiveDir == "" {
+		effectiveDir = filepath.Join(thrumDir, "backup") + " (default)"
+	}
+
+	if flagJSON {
+		data, _ := json.MarshalIndent(cfg.Backup, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		fmt.Printf("Backup directory: %s\n", effectiveDir)
+		fmt.Printf("Retention:\n")
+		fmt.Printf("  Daily: %d\n", cfg.Backup.Retention.Daily)
+		fmt.Printf("  Weekly: %d\n", cfg.Backup.Retention.Weekly)
+		monthly := fmt.Sprintf("%d", cfg.Backup.Retention.Monthly)
+		if cfg.Backup.Retention.Monthly == -1 {
+			monthly = "forever"
+		}
+		fmt.Printf("  Monthly: %s\n", monthly)
+		if len(cfg.Backup.Plugins) > 0 {
+			fmt.Printf("Plugins:\n")
+			for _, p := range cfg.Backup.Plugins {
+				fmt.Printf("  %s: %s\n", p.Name, p.Command)
+			}
+		}
+		if cfg.Backup.PostBackup != "" {
+			fmt.Printf("Post-backup: %s\n", cfg.Backup.PostBackup)
+		}
+	}
+
 	return nil
 }
 
