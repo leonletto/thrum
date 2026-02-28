@@ -191,7 +191,7 @@ func ApplyRetention(archivesDir string, retention config.RetentionConfig) error 
 
 	// Monthly: keep the oldest surviving archive per month
 	monthly := retention.RetentionMonthly()
-	if monthly != 0 { // -1 means keep forever
+	if monthly != 0 { // -1 means keep forever, 0 means skip monthly rotation
 		monthBuckets := make(map[string]*archive) // "YYYY-MM" → oldest
 		for i := range archives {
 			a := &archives[i]

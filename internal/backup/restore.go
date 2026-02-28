@@ -244,7 +244,14 @@ func importTable(db *sql.DB, table, jsonlPath string) error {
 	}
 	defer func() { _ = f.Close() }()
 
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }() // no-op if committed
+
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024) // 10 MB max line size
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -268,7 +275,7 @@ func importTable(db *sql.DB, table, jsonlPath string) error {
 			if !validCols[col] {
 				continue // skip unknown columns
 			}
-			columns = append(columns, `"`+col+`"`)
+			columns = append(columns, `"`+strings.ReplaceAll(col, `"`, `""`)+`"`)
 			placeholders = append(placeholders, "?")
 			values = append(values, val)
 		}
@@ -280,12 +287,15 @@ func importTable(db *sql.DB, table, jsonlPath string) error {
 		query := fmt.Sprintf(`INSERT OR IGNORE INTO "%s" (%s) VALUES (%s)`,
 			table, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
 
-		if _, err := db.Exec(query, values...); err != nil {
+		if _, err := tx.Exec(query, values...); err != nil {
 			return fmt.Errorf("insert into %s: %w", table, err)
 		}
 	}
 
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // getTableColumns returns the set of valid column names for a table.
@@ -349,7 +359,8 @@ func extractZip(zipPath, destDir string) error {
 			return err
 		}
 
-		if _, err := io.Copy(outFile, rc); err != nil {
+		const maxExtractedBytes = 2 << 30 // 2 GiB per file
+		if _, err := io.Copy(outFile, io.LimitReader(rc, maxExtractedBytes)); err != nil {
 			_ = outFile.Close()
 			_ = rc.Close()
 			return err

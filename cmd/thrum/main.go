@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/leonletto/thrum/internal/backup"
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
@@ -25,7 +26,6 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/state"
-	"github.com/leonletto/thrum/internal/backup"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/runtime"
@@ -5047,16 +5047,32 @@ func runBackupStatus(dirOverride string) error {
 		if entries, err := os.ReadDir(archivesDir); err == nil {
 			var archiveCount int
 			var totalSize int64
+			var oldest, newest time.Time
 			for _, e := range entries {
-				if !e.IsDir() {
-					archiveCount++
-					if info, err := e.Info(); err == nil {
-						totalSize += info.Size()
+				if e.IsDir() || strings.HasPrefix(e.Name(), "pre-restore-") {
+					continue
+				}
+				archiveCount++
+				if info, err := e.Info(); err == nil {
+					totalSize += info.Size()
+				}
+				// Parse timestamp from filename (2006-01-02T150405.zip)
+				name := strings.TrimSuffix(e.Name(), ".zip")
+				if ts, err := time.Parse("2006-01-02T150405", name); err == nil {
+					if oldest.IsZero() || ts.Before(oldest) {
+						oldest = ts
+					}
+					if newest.IsZero() || ts.After(newest) {
+						newest = ts
 					}
 				}
 			}
 			if archiveCount > 0 {
 				fmt.Printf("Archives: %d (%.1f MB)\n", archiveCount, float64(totalSize)/(1024*1024))
+				if !oldest.IsZero() {
+					fmt.Printf("  Oldest: %s\n", oldest.Local().Format("2006-01-02 15:04:05"))
+					fmt.Printf("  Newest: %s\n", newest.Local().Format("2006-01-02 15:04:05"))
+				}
 			}
 		}
 	}
