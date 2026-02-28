@@ -35,11 +35,39 @@ type BackupConfig struct {
 }
 
 // RetentionConfig controls GFS (Grandfather-Father-Son) archive rotation.
+// Pointer fields distinguish "not set" (nil → use default) from explicit zero.
 type RetentionConfig struct {
-	Daily   int `json:"daily"`   // default 5
-	Weekly  int `json:"weekly"`  // default 4
-	Monthly int `json:"monthly"` // default -1 (keep forever)
+	Daily   *int `json:"daily"`   // default 5; nil = use default
+	Weekly  *int `json:"weekly"`  // default 4; nil = use default
+	Monthly *int `json:"monthly"` // default -1 (keep forever); nil = use default
 }
+
+// RetentionDaily returns the effective daily retention count.
+func (r RetentionConfig) RetentionDaily() int {
+	if r.Daily != nil {
+		return *r.Daily
+	}
+	return DefaultRetentionDaily
+}
+
+// RetentionWeekly returns the effective weekly retention count.
+func (r RetentionConfig) RetentionWeekly() int {
+	if r.Weekly != nil {
+		return *r.Weekly
+	}
+	return DefaultRetentionWeekly
+}
+
+// RetentionMonthly returns the effective monthly retention count.
+func (r RetentionConfig) RetentionMonthly() int {
+	if r.Monthly != nil {
+		return *r.Monthly
+	}
+	return DefaultRetentionMonthly
+}
+
+// IntPtr is a helper to create a pointer to an int.
+func IntPtr(v int) *int { return &v }
 
 // PluginConfig defines a third-party backup plugin.
 type PluginConfig struct {
@@ -95,14 +123,14 @@ func applyDefaults(cfg *ThrumConfig) {
 	if cfg.Daemon.WSPort == "" {
 		cfg.Daemon.WSPort = DefaultWSPort
 	}
-	if cfg.Backup.Retention.Daily == 0 {
-		cfg.Backup.Retention.Daily = DefaultRetentionDaily
+	if cfg.Backup.Retention.Daily == nil {
+		cfg.Backup.Retention.Daily = IntPtr(DefaultRetentionDaily)
 	}
-	if cfg.Backup.Retention.Weekly == 0 {
-		cfg.Backup.Retention.Weekly = DefaultRetentionWeekly
+	if cfg.Backup.Retention.Weekly == nil {
+		cfg.Backup.Retention.Weekly = IntPtr(DefaultRetentionWeekly)
 	}
-	if cfg.Backup.Retention.Monthly == 0 {
-		cfg.Backup.Retention.Monthly = DefaultRetentionMonthly
+	if cfg.Backup.Retention.Monthly == nil {
+		cfg.Backup.Retention.Monthly = IntPtr(DefaultRetentionMonthly)
 	}
 }
 
@@ -138,9 +166,9 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 	existing["daemon"] = daemonMap
 
 	// Marshal and merge the backup section (only if user has configured something)
-	isDefaultRetention := (cfg.Backup.Retention.Daily == 0 || cfg.Backup.Retention.Daily == DefaultRetentionDaily) &&
-		(cfg.Backup.Retention.Weekly == 0 || cfg.Backup.Retention.Weekly == DefaultRetentionWeekly) &&
-		(cfg.Backup.Retention.Monthly == 0 || cfg.Backup.Retention.Monthly == DefaultRetentionMonthly)
+	isDefaultRetention := cfg.Backup.Retention.RetentionDaily() == DefaultRetentionDaily &&
+		cfg.Backup.Retention.RetentionWeekly() == DefaultRetentionWeekly &&
+		cfg.Backup.Retention.RetentionMonthly() == DefaultRetentionMonthly
 	if cfg.Backup.Dir != "" || len(cfg.Backup.Plugins) > 0 || cfg.Backup.PostBackup != "" || !isDefaultRetention {
 		backupBytes, err := json.Marshal(cfg.Backup)
 		if err != nil {

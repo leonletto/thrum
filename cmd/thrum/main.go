@@ -4969,6 +4969,7 @@ func runBackupCreate(dirOverride string) error {
 		Retention:    &cfg.Backup.Retention,
 		Plugins:      cfg.Backup.Plugins,
 		PostBackup:   cfg.Backup.PostBackup,
+		RepoPath:     flagRepo,
 	})
 	if err != nil {
 		return fmt.Errorf("backup failed: %w", err)
@@ -5040,6 +5041,24 @@ func runBackupStatus(dirOverride string) error {
 			fmt.Printf("  Plugins: %v\n", manifest.Counts.Plugins)
 		}
 		fmt.Printf("  Location: %s\n", currentDir)
+
+		// Show archive rotation stats
+		archivesDir := filepath.Join(backupDir, repoName, "archives")
+		if entries, err := os.ReadDir(archivesDir); err == nil {
+			var archiveCount int
+			var totalSize int64
+			for _, e := range entries {
+				if !e.IsDir() {
+					archiveCount++
+					if info, err := e.Info(); err == nil {
+						totalSize += info.Size()
+					}
+				}
+			}
+			if archiveCount > 0 {
+				fmt.Printf("Archives: %d (%.1f MB)\n", archiveCount, float64(totalSize)/(1024*1024))
+			}
+		}
 	}
 
 	return nil
@@ -5067,10 +5086,10 @@ func runBackupConfig() error {
 	} else {
 		fmt.Printf("Backup directory: %s\n", effectiveDir)
 		fmt.Printf("Retention:\n")
-		fmt.Printf("  Daily: %d\n", cfg.Backup.Retention.Daily)
-		fmt.Printf("  Weekly: %d\n", cfg.Backup.Retention.Weekly)
-		monthly := fmt.Sprintf("%d", cfg.Backup.Retention.Monthly)
-		if cfg.Backup.Retention.Monthly == -1 {
+		fmt.Printf("  Daily: %d\n", cfg.Backup.Retention.RetentionDaily())
+		fmt.Printf("  Weekly: %d\n", cfg.Backup.Retention.RetentionWeekly())
+		monthly := fmt.Sprintf("%d", cfg.Backup.Retention.RetentionMonthly())
+		if cfg.Backup.Retention.RetentionMonthly() == -1 {
 			monthly = "forever"
 		}
 		fmt.Printf("  Monthly: %s\n", monthly)
@@ -5129,6 +5148,13 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 		}
 	}
 
+	// Stop daemon before restore to avoid file handle conflicts
+	daemonWasRunning := false
+	if stopErr := cli.DaemonStop(flagRepo); stopErr == nil {
+		daemonWasRunning = true
+		fmt.Println("Daemon stopped for restore.")
+	}
+
 	syncDir, err := paths.SyncWorktreePath(flagRepo)
 	if err != nil {
 		syncDir = ""
@@ -5143,6 +5169,8 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 		SyncDir:     syncDir,
 		ThrumDir:    thrumDir,
 		DBPath:      dbPath,
+		Plugins:     cfg.Backup.Plugins,
+		RepoPath:    flagRepo,
 	})
 	if err != nil {
 		return fmt.Errorf("restore failed: %w", err)
@@ -5156,7 +5184,16 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 			fmt.Printf("Safety backup: %s\n", result.SafetyBackup)
 		}
 		fmt.Printf("Restored from: %s\n", result.Source)
-		fmt.Println("Restart the daemon to rebuild SQLite from restored JSONL.")
+	}
+
+	// Restart daemon if it was running before restore
+	if daemonWasRunning {
+		if restartErr := cli.DaemonRestart(flagRepo, cfg.Daemon.LocalOnly); restartErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not restart daemon: %v\n", restartErr)
+			fmt.Println("Restart manually: thrum daemon start")
+		} else {
+			fmt.Println("Daemon restarted. SQLite will rebuild from restored JSONL.")
+		}
 	}
 
 	return nil

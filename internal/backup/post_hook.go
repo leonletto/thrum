@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -26,8 +27,8 @@ func RunPostBackup(command, repoPath, backupDir, repoName, currentDir string) *P
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", command) //nolint:gosec // G204 - user-configured command
 	cmd.Dir = repoPath
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("THRUM_BACKUP_DIR=%s", backupDir),
 		fmt.Sprintf("THRUM_BACKUP_REPO=%s", repoName),
@@ -35,7 +36,15 @@ func RunPostBackup(command, repoPath, backupDir, repoName, currentDir string) *P
 	)
 
 	if err := cmd.Run(); err != nil {
-		result.Error = err.Error()
+		errMsg := err.Error()
+		if s := stderr.String(); s != "" {
+			const maxStderr = 4096
+			if len(s) > maxStderr {
+				s = s[len(s)-maxStderr:]
+			}
+			errMsg += ": " + strings.TrimSpace(s)
+		}
+		result.Error = errMsg
 	}
 
 	return result
