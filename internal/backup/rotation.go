@@ -24,7 +24,7 @@ func CompressCurrentToArchive(currentDir, archivesDir string) (string, error) {
 		if os.IsNotExist(err) {
 			return "", nil // nothing to archive
 		}
-		return err.Error(), err
+		return "", err
 	}
 	if len(entries) == 0 {
 		return "", nil
@@ -153,8 +153,9 @@ func ApplyRetention(archivesDir string, retention config.RetentionConfig) error 
 	keep := make(map[string]bool)
 
 	// Daily: keep the N most recent
-	if retention.Daily > 0 {
-		for i := range min(retention.Daily, len(archives)) {
+	daily := retention.RetentionDaily()
+	if daily > 0 {
+		for i := range min(daily, len(archives)) {
 			keep[archives[i].path] = true
 		}
 	}
@@ -181,14 +182,16 @@ func ApplyRetention(archivesDir string, retention config.RetentionConfig) error 
 	}
 	sort.Slice(weeks, func(i, j int) bool { return weeks[i].key > weeks[j].key })
 
-	if retention.Weekly > 0 {
-		for i := range min(retention.Weekly, len(weeks)) {
+	weekly := retention.RetentionWeekly()
+	if weekly > 0 {
+		for i := range min(weekly, len(weeks)) {
 			keep[weeks[i].a.path] = true
 		}
 	}
 
 	// Monthly: keep the oldest surviving archive per month
-	if retention.Monthly != 0 { // -1 means keep forever
+	monthly := retention.RetentionMonthly()
+	if monthly != 0 { // -1 means keep forever
 		monthBuckets := make(map[string]*archive) // "YYYY-MM" → oldest
 		for i := range archives {
 			a := &archives[i]
@@ -209,8 +212,8 @@ func ApplyRetention(archivesDir string, retention config.RetentionConfig) error 
 		sort.Slice(months, func(i, j int) bool { return months[i].key > months[j].key })
 
 		limit := len(months) // -1 = keep all
-		if retention.Monthly > 0 {
-			limit = min(retention.Monthly, len(months))
+		if monthly > 0 {
+			limit = min(monthly, len(months))
 		}
 		for i := range limit {
 			keep[months[i].a.path] = true

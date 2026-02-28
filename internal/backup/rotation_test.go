@@ -100,7 +100,7 @@ func TestApplyRetention_Daily(t *testing.T) {
 		createFakeArchive(t, archivesDir, base.AddDate(0, 0, -i))
 	}
 
-	retention := config.RetentionConfig{Daily: 5, Weekly: 0, Monthly: 0}
+	retention := config.RetentionConfig{Daily: config.IntPtr(5), Weekly: config.IntPtr(0), Monthly: config.IntPtr(0)}
 	if err := ApplyRetention(archivesDir, retention); err != nil {
 		t.Fatalf("ApplyRetention() error: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestApplyRetention_Weekly(t *testing.T) {
 		createFakeArchive(t, archivesDir, base.AddDate(0, 0, -i*7))
 	}
 
-	retention := config.RetentionConfig{Daily: 0, Weekly: 4, Monthly: 0}
+	retention := config.RetentionConfig{Daily: config.IntPtr(0), Weekly: config.IntPtr(4), Monthly: config.IntPtr(0)}
 	if err := ApplyRetention(archivesDir, retention); err != nil {
 		t.Fatalf("ApplyRetention() error: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestApplyRetention_MonthlyForever(t *testing.T) {
 		createFakeArchive(t, archivesDir, base.AddDate(0, -i, 0))
 	}
 
-	retention := config.RetentionConfig{Daily: 0, Weekly: 0, Monthly: -1} // keep forever
+	retention := config.RetentionConfig{Daily: config.IntPtr(0), Weekly: config.IntPtr(0), Monthly: config.IntPtr(-1)} // keep forever
 	if err := ApplyRetention(archivesDir, retention); err != nil {
 		t.Fatalf("ApplyRetention() error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestApplyRetention_PreRestoreExempt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	retention := config.RetentionConfig{Daily: 1, Weekly: 0, Monthly: 0}
+	retention := config.RetentionConfig{Daily: config.IntPtr(1), Weekly: config.IntPtr(0), Monthly: config.IntPtr(0)}
 	if err := ApplyRetention(archivesDir, retention); err != nil {
 		t.Fatalf("ApplyRetention() error: %v", err)
 	}
@@ -197,14 +197,14 @@ func TestApplyRetention_EmptyDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := ApplyRetention(archivesDir, config.RetentionConfig{Daily: 5})
+	err := ApplyRetention(archivesDir, config.RetentionConfig{Daily: config.IntPtr(5)})
 	if err != nil {
 		t.Fatalf("unexpected error on empty dir: %v", err)
 	}
 }
 
 func TestApplyRetention_NonexistentDir(t *testing.T) {
-	err := ApplyRetention(filepath.Join(t.TempDir(), "nope"), config.RetentionConfig{Daily: 5})
+	err := ApplyRetention(filepath.Join(t.TempDir(), "nope"), config.RetentionConfig{Daily: config.IntPtr(5)})
 	if err != nil {
 		t.Fatalf("unexpected error on nonexistent dir: %v", err)
 	}

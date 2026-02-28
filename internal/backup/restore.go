@@ -10,16 +10,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/leonletto/thrum/internal/config"
 )
 
 // RestoreOptions configures a restore operation.
 type RestoreOptions struct {
-	BackupDir   string // resolved backup directory
-	RepoName    string // repo subfolder name
-	ArchivePath string // optional: specific zip to restore from (empty = use current/)
-	SyncDir     string // path to a-sync worktree to restore JSONL into
-	ThrumDir    string // path to .thrum directory
-	DBPath      string // path to messages.db
+	BackupDir   string                 // resolved backup directory
+	RepoName    string                 // repo subfolder name
+	ArchivePath string                 // optional: specific zip to restore from (empty = use current/)
+	SyncDir     string                 // path to a-sync worktree to restore JSONL into
+	ThrumDir    string                 // path to .thrum directory
+	DBPath      string                 // path to messages.db
+	Plugins     []config.PluginConfig  // optional: plugins with restore commands
+	RepoPath    string                 // project repo root (CWD for plugin restore commands)
 }
 
 // RestoreResult holds the outcome of a restore.
@@ -101,7 +105,27 @@ func RunRestore(opts RestoreOptions) (*RestoreResult, error) {
 		}
 	}
 
-	// 6. Remove messages.db so projector rebuilds on daemon start
+	// 6. Run plugin restore commands (non-fatal)
+	if len(opts.Plugins) > 0 && opts.RepoPath != "" {
+		pluginDir := filepath.Join(sourceDir, "plugins")
+		for _, p := range opts.Plugins {
+			if p.Command == "" {
+				continue
+			}
+			// Set CWD to plugin backup dir if it exists, otherwise repo root
+			cwd := opts.RepoPath
+			pDir := filepath.Join(pluginDir, p.Name)
+			if _, err := os.Stat(pDir); err == nil {
+				cwd = pDir
+			}
+			hookResult := RunPostBackup(p.Command, cwd, opts.BackupDir, opts.RepoName, sourceDir)
+			if hookResult.Error != "" {
+				fmt.Fprintf(os.Stderr, "Warning: plugin %s restore failed: %s\n", p.Name, hookResult.Error)
+			}
+		}
+	}
+
+	// 7. Remove messages.db so projector rebuilds on daemon start
 	if opts.DBPath != "" {
 		_ = os.Remove(opts.DBPath)
 		// Also remove WAL/SHM files
@@ -208,6 +232,12 @@ func ImportLocalTables(dbPath, localDir string) error {
 
 // importTable reads a JSONL file and inserts rows into the given table.
 func importTable(db *sql.DB, table, jsonlPath string) error {
+	// Build allowlist of valid column names from table schema
+	validCols, err := getTableColumns(db, table)
+	if err != nil {
+		return fmt.Errorf("get columns for %s: %w", table, err)
+	}
+
 	f, err := os.Open(jsonlPath) //nolint:gosec // G304 - internal path
 	if err != nil {
 		return err
@@ -230,14 +260,21 @@ func importTable(db *sql.DB, table, jsonlPath string) error {
 			continue
 		}
 
-		// Build INSERT OR IGNORE statement
+		// Build INSERT OR IGNORE statement using only validated columns
 		columns := make([]string, 0, len(row))
 		placeholders := make([]string, 0, len(row))
 		values := make([]any, 0, len(row))
 		for col, val := range row {
+			if !validCols[col] {
+				continue // skip unknown columns
+			}
 			columns = append(columns, `"`+col+`"`)
 			placeholders = append(placeholders, "?")
 			values = append(values, val)
+		}
+
+		if len(columns) == 0 {
+			continue
 		}
 
 		query := fmt.Sprintf(`INSERT OR IGNORE INTO "%s" (%s) VALUES (%s)`,
@@ -251,6 +288,29 @@ func importTable(db *sql.DB, table, jsonlPath string) error {
 	return scanner.Err()
 }
 
+// getTableColumns returns the set of valid column names for a table.
+func getTableColumns(db *sql.DB, table string) (map[string]bool, error) {
+	rows, err := db.Query(`PRAGMA table_info("` + table + `")`) //nolint:gosec // table name from hardcoded localOnlyTables
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	cols := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notnull int
+		var dfltValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notnull, &dfltValue, &pk); err != nil {
+			return nil, err
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
+}
+
 // extractZip extracts a zip file to the destination directory.
 func extractZip(zipPath, destDir string) error {
 	r, err := zip.OpenReader(zipPath)
@@ -260,12 +320,12 @@ func extractZip(zipPath, destDir string) error {
 	defer func() { _ = r.Close() }()
 
 	for _, f := range r.File {
-		destPath := filepath.Join(destDir, f.Name) //nolint:gosec // G305 - internal backup file
-
-		// Verify the path is within destDir (zip slip protection)
-		if !strings.HasPrefix(filepath.Clean(destPath), filepath.Clean(destDir)+string(os.PathSeparator)) {
+		// Zip slip protection: reject paths with directory traversal
+		rel := filepath.Clean(f.Name)
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 			return fmt.Errorf("illegal file path in zip: %s", f.Name)
 		}
+		destPath := filepath.Join(destDir, rel) //nolint:gosec // G305 - validated above
 
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(destPath, 0750); err != nil {

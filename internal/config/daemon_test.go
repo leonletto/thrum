@@ -234,14 +234,14 @@ func TestLoadThrumConfig_BackupDefaults(t *testing.T) {
 	if cfg.Backup.Dir != "" {
 		t.Errorf("expected empty backup dir, got %q", cfg.Backup.Dir)
 	}
-	if cfg.Backup.Retention.Daily != config.DefaultRetentionDaily {
-		t.Errorf("expected Daily=%d, got %d", config.DefaultRetentionDaily, cfg.Backup.Retention.Daily)
+	if cfg.Backup.Retention.RetentionDaily() != config.DefaultRetentionDaily {
+		t.Errorf("expected Daily=%d, got %d", config.DefaultRetentionDaily, cfg.Backup.Retention.RetentionDaily())
 	}
-	if cfg.Backup.Retention.Weekly != config.DefaultRetentionWeekly {
-		t.Errorf("expected Weekly=%d, got %d", config.DefaultRetentionWeekly, cfg.Backup.Retention.Weekly)
+	if cfg.Backup.Retention.RetentionWeekly() != config.DefaultRetentionWeekly {
+		t.Errorf("expected Weekly=%d, got %d", config.DefaultRetentionWeekly, cfg.Backup.Retention.RetentionWeekly())
 	}
-	if cfg.Backup.Retention.Monthly != config.DefaultRetentionMonthly {
-		t.Errorf("expected Monthly=%d, got %d", config.DefaultRetentionMonthly, cfg.Backup.Retention.Monthly)
+	if cfg.Backup.Retention.RetentionMonthly() != config.DefaultRetentionMonthly {
+		t.Errorf("expected Monthly=%d, got %d", config.DefaultRetentionMonthly, cfg.Backup.Retention.RetentionMonthly())
 	}
 	if len(cfg.Backup.Plugins) != 0 {
 		t.Errorf("expected no plugins, got %d", len(cfg.Backup.Plugins))
@@ -272,14 +272,14 @@ func TestLoadThrumConfig_BackupFromJSON(t *testing.T) {
 	if cfg.Backup.Dir != "/tmp/backups" {
 		t.Errorf("expected dir=/tmp/backups, got %q", cfg.Backup.Dir)
 	}
-	if cfg.Backup.Retention.Daily != 3 {
-		t.Errorf("expected Daily=3, got %d", cfg.Backup.Retention.Daily)
+	if cfg.Backup.Retention.RetentionDaily() != 3 {
+		t.Errorf("expected Daily=3, got %d", cfg.Backup.Retention.RetentionDaily())
 	}
-	if cfg.Backup.Retention.Weekly != 2 {
-		t.Errorf("expected Weekly=2, got %d", cfg.Backup.Retention.Weekly)
+	if cfg.Backup.Retention.RetentionWeekly() != 2 {
+		t.Errorf("expected Weekly=2, got %d", cfg.Backup.Retention.RetentionWeekly())
 	}
-	if cfg.Backup.Retention.Monthly != 6 {
-		t.Errorf("expected Monthly=6, got %d", cfg.Backup.Retention.Monthly)
+	if cfg.Backup.Retention.RetentionMonthly() != 6 {
+		t.Errorf("expected Monthly=6, got %d", cfg.Backup.Retention.RetentionMonthly())
 	}
 	if len(cfg.Backup.Plugins) != 1 {
 		t.Fatalf("expected 1 plugin, got %d", len(cfg.Backup.Plugins))
@@ -303,9 +303,9 @@ func TestSaveThrumConfig_BackupSection(t *testing.T) {
 		Backup: config.BackupConfig{
 			Dir: "/custom/backup",
 			Retention: config.RetentionConfig{
-				Daily:   3,
-				Weekly:  2,
-				Monthly: 12,
+				Daily:   config.IntPtr(3),
+				Weekly:  config.IntPtr(2),
+				Monthly: config.IntPtr(12),
 			},
 			Plugins: []config.PluginConfig{
 				{Name: "beads", Command: "bd backup", Include: []string{".beads/*"}},
@@ -325,8 +325,8 @@ func TestSaveThrumConfig_BackupSection(t *testing.T) {
 	if loaded.Backup.Dir != "/custom/backup" {
 		t.Errorf("expected backup dir=/custom/backup, got %q", loaded.Backup.Dir)
 	}
-	if loaded.Backup.Retention.Daily != 3 {
-		t.Errorf("expected Daily=3, got %d", loaded.Backup.Retention.Daily)
+	if loaded.Backup.Retention.RetentionDaily() != 3 {
+		t.Errorf("expected Daily=3, got %d", loaded.Backup.Retention.RetentionDaily())
 	}
 	if len(loaded.Backup.Plugins) != 1 {
 		t.Errorf("expected 1 plugin, got %d", len(loaded.Backup.Plugins))

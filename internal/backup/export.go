@@ -85,8 +85,9 @@ func atomicCopyFile(src, dst string) (int, error) {
 		return 0, err
 	}
 
-	n, err := io.Copy(tmpFile, srcFile)
-	if err != nil {
+	// Use a counting writer to count newlines during the copy
+	cw := &lineCountWriter{w: tmpFile}
+	if _, err := io.Copy(cw, srcFile); err != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpPath)
 		return 0, err
@@ -101,18 +102,21 @@ func atomicCopyFile(src, dst string) (int, error) {
 		return 0, err
 	}
 
-	// Count lines (approximate — just count newlines in the copied bytes)
-	lines := 0
-	if n > 0 {
-		data, err := os.ReadFile(dst) //nolint:gosec // G304
-		if err == nil {
-			for _, b := range data {
-				if b == '\n' {
-					lines++
-				}
-			}
+	return cw.lines, nil
+}
+
+// lineCountWriter wraps a writer and counts newlines during writes.
+type lineCountWriter struct {
+	w     io.Writer
+	lines int
+}
+
+func (c *lineCountWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	for _, b := range p[:n] {
+		if b == '\n' {
+			c.lines++
 		}
 	}
-
-	return lines, nil
+	return n, err
 }

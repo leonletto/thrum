@@ -3,7 +3,6 @@ package backup
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -35,11 +34,19 @@ func RunPlugins(plugins []config.PluginConfig, repoPath, backupDir string) ([]Pl
 			ctx, cancel := context.WithTimeout(context.Background(), pluginTimeout)
 			cmd := exec.CommandContext(ctx, "sh", "-c", p.Command) //nolint:gosec // G204 - user-configured command
 			cmd.Dir = repoPath
-			cmd.Stdout = os.Stderr // route to stderr so it doesn't interfere with JSON output
-			cmd.Stderr = os.Stderr
+			var stderr strings.Builder
+			cmd.Stderr = &stderr
 
 			if err := cmd.Run(); err != nil {
-				result.CmdError = err.Error()
+				errMsg := err.Error()
+				if s := stderr.String(); s != "" {
+					const maxStderr = 4096
+					if len(s) > maxStderr {
+						s = s[len(s)-maxStderr:]
+					}
+					errMsg += ": " + strings.TrimSpace(s)
+				}
+				result.CmdError = errMsg
 				cancel()
 				results = append(results, result)
 				continue // skip file collection if command failed

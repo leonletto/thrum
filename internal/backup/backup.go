@@ -22,6 +22,7 @@ type BackupOptions struct {
 	Retention    *config.RetentionConfig // optional: apply GFS rotation after backup
 	Plugins      []config.PluginConfig  // optional: third-party backup plugins
 	PostBackup   string                 // optional: command to run after backup completes
+	RepoPath     string                 // project repo root (CWD for plugins/hooks)
 }
 
 // BackupResult holds the outcome of a backup run.
@@ -94,7 +95,7 @@ func RunBackup(opts BackupOptions) (*BackupResult, error) {
 
 	// 4. Run plugins (non-fatal: failures are logged in results)
 	if len(opts.Plugins) > 0 {
-		pluginResults, err := RunPlugins(opts.Plugins, opts.SyncDir, currentDir)
+		pluginResults, err := RunPlugins(opts.Plugins, opts.RepoPath, currentDir)
 		if err != nil {
 			return nil, fmt.Errorf("run plugins: %w", err)
 		}
@@ -145,11 +146,7 @@ func RunBackup(opts BackupOptions) (*BackupResult, error) {
 
 	// 7. Run post-backup hook (non-fatal)
 	if opts.PostBackup != "" {
-		repoPath := opts.SyncDir
-		if repoPath == "" {
-			repoPath = opts.ThrumDir
-		}
-		hookResult := RunPostBackup(opts.PostBackup, repoPath, opts.BackupDir, opts.RepoName, currentDir)
+		hookResult := RunPostBackup(opts.PostBackup, opts.RepoPath, opts.BackupDir, opts.RepoName, currentDir)
 		result.PostHookResult = hookResult
 	}
 
