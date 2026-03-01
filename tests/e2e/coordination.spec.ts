@@ -106,7 +106,47 @@ test.describe('Coordination', () => {
     expect(output.toLowerCase()).toMatch(/coordinator|implementer|tester/);
   });
 
-  test('F2-2: who-has JSON output for modified file', async () => {
+  test('F2-2: who-has with multiple agents editing same file', async () => {
+    const testRoot = getTestRoot();
+    const implRoot = getImplementerRoot();
+    const testFile = 'multi-edit.txt';
+
+    // Ensure implementer agent has an active session
+    try {
+      thrumIn(implRoot, ['quickstart', '--role', 'implementer', '--module', 'all',
+        '--name', 'e2e_impl_coord', '--intent', 'Multi-edit testing'], 10_000);
+    } catch { /* may already exist */ }
+
+    try {
+      // Create and commit a file in test root, then modify it
+      fs.writeFileSync(path.join(testRoot, testFile), '// original\n');
+      execFileSync('git', ['add', testFile], { cwd: testRoot, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add multi-edit file'], { cwd: testRoot, stdio: 'pipe' });
+      fs.writeFileSync(path.join(testRoot, testFile), '// modified by coordinator\n');
+
+      // Also modify the same file in the implementer worktree
+      fs.writeFileSync(path.join(implRoot, testFile), '// modified by implementer\n');
+
+      // Update contexts so daemon sees the changes
+      const implEnv = { ...process.env, THRUM_NAME: 'e2e_impl_coord', THRUM_ROLE: 'implementer', THRUM_MODULE: 'all' };
+      thrumIn(testRoot, ['agent', 'heartbeat'], 10_000, coordTestEnv());
+      thrumIn(implRoot, ['agent', 'heartbeat'], 10_000, implEnv);
+
+      // Act: run who-has
+      const output = thrum(['who-has', testFile]);
+
+      // Assert: output should not be empty and should not error
+      expect(output).not.toBe('');
+      expect(output.toLowerCase()).not.toContain('error');
+    } finally {
+      try {
+        fs.rmSync(path.join(implRoot, testFile), { force: true });
+        execFileSync('git', ['reset', 'HEAD~1', '--hard'], { cwd: testRoot, stdio: 'pipe' });
+      } catch { /* best effort */ }
+    }
+  });
+
+  test('F2-4: who-has JSON output for modified file', async () => {
     const testRoot = getTestRoot();
     const testFile = 'json-test.txt';
 
@@ -121,7 +161,6 @@ test.describe('Coordination', () => {
       expect(typeof parsed).toBe('object');
     } finally {
       try {
-        execFileSync('git', ['checkout', testFile], { cwd: testRoot, stdio: 'pipe' });
         execFileSync('git', ['reset', 'HEAD~1', '--hard'], { cwd: testRoot, stdio: 'pipe' });
       } catch { /* best effort */ }
     }
@@ -162,5 +201,24 @@ test.describe('Coordination', () => {
     const jsonOutput = thrum(['team', '--json']);
     const parsed = JSON.parse(jsonOutput);
     expect(typeof parsed).toBe('object');
+  });
+
+  test('F2-13: status standalone command', async () => {
+    // Act: run status with human output
+    const output = thrumIn(getTestRoot(), ['status'], 10_000, coordTestEnv());
+
+    // Assert: status output contains key sections
+    expect(output.toLowerCase()).toContain('agent');
+    expect(output.toLowerCase()).toContain('daemon');
+
+    // Act: run status with JSON output
+    const jsonOutput = thrumIn(getTestRoot(), ['status', '--json'], 10_000, coordTestEnv());
+    const parsed = JSON.parse(jsonOutput);
+
+    // Assert: JSON has expected top-level fields
+    expect(parsed).toHaveProperty('health');
+    expect(parsed).toHaveProperty('agent');
+    expect(parsed.health).toHaveProperty('status');
+    expect(parsed.agent).toHaveProperty('role');
   });
 });
