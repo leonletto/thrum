@@ -428,7 +428,7 @@ flag; use subscriptions if you need a firehose.
 # Wait for any message addressed to this agent
 thrum wait --timeout 5m
 
-# Wait for messages since a time offset (skip old messages)
+# Include messages sent up to 30s ago (--after -30s = "30 seconds ago"; negative = "N ago")
 thrum wait --after -30s --timeout 5m --json
 
 # Wait for mentions of your role
@@ -440,7 +440,7 @@ thrum wait --mention @reviewer --timeout 5m
 | `--timeout` | Duration (e.g., `5m`)        | Max wait time (default: `30s`)           |
 | `--scope`   | Scope string (e.g., `module:auth`) | Only messages matching this scope  |
 | `--mention` | `@role`                      | Wait for mentions of a role              |
-| `--after`   | Relative time (e.g., `-30s`) | Only messages after this offset          |
+| `--after`   | Relative time (e.g., `-30s`) | Negative = include messages sent up to N ago; positive = only messages N in the future; omit for "now" |
 | `--json`    | Boolean                      | Output messages as JSON                  |
 
 **Exit codes:**

@@ -88,22 +88,25 @@ Blocks until a matching message arrives or timeout. Exit codes: 0=message, 1=tim
 ```bash
 thrum wait                                     # Wait for any message (30s default)
 thrum wait --timeout 5m                        # Wait up to 5 minutes
-thrum wait --timeout 15m --after -1s           # Only new messages (last 1 second)
+thrum wait --timeout 15m --after -1s           # Include messages sent up to 1s ago (prevents stale replay)
 thrum wait --mention @reviewer                 # Wait for mention of role
 thrum wait --scope module:auth                 # Wait for scoped message
-thrum wait --after -30s                        # Accept messages from last 30 seconds
-thrum wait --after -5m --json                  # JSON output
+thrum wait --after -30s                        # Include messages sent up to 30s ago
+thrum wait --after -5m --json                  # Include messages sent up to 5m ago; JSON output
 ```
 
 Flags:
 ```
 --timeout string   Max wait time with unit (e.g., 30s, 5m) (default "30s")
---after string     Only return messages after this relative time (e.g., -30s, -5m, +60s)
+--after string     Relative time offset for filtering messages:
+                     Negative (e.g., -30s, -5m): include messages sent up to N ago
+                     Positive (e.g., +60s): only messages arriving at least N seconds in the future
+                     Omitted: default is "now" (only messages that arrive after wait starts)
 --mention string   Wait for mentions of role (format: @role)
 --scope string     Filter by scope (format: type:value)
 ```
 
-Note: `--after` defaults to "now" when not specified (only new messages).
+Note: `--after` sign convention: negative = "N ago" (look back), positive = "N from now" (skip ahead).
 Note: `--timeout` requires a Go duration unit — use `120s` not `120`.
 
 ### message

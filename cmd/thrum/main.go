@@ -1359,12 +1359,12 @@ func waitCmd() *cobra.Command {
 
 Useful for automation and hooks that need to wait for specific messages.
 
-Use --after to only accept messages created after a relative time offset:
-  -30s  = messages from the last 30 seconds
-  -5m   = messages from the last 5 minutes
-  +60s  = messages arriving at least 60 seconds from now
+Use --after to filter by relative time (sign convention):
+  -30s  = include messages sent up to 30 seconds ago  (negative = "N ago")
+  -5m   = include messages sent up to 5 minutes ago   (negative = "N ago")
+  +60s  = only messages arriving at least 60 seconds in the future (positive = "N from now")
 
-When --after is not specified, defaults to "now" (only new messages).
+When --after is not specified, defaults to "now" (only messages arriving after wait starts).
 
 Exit codes:
   0 = message received

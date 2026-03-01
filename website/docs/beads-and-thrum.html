@@ -168,6 +168,71 @@ commit. You can see who changed what, when, and why using standard Git tools.</p
 <p>This architecture trades real-time performance for persistence and simplicity.
 For agent workflows — where context loss is the primary failure mode — that&#39;s
 the right tradeoff.</p>
+<h2>Beads Command Reference for Sub-Agents</h2>
+<p>Sub-agents (spawned via the Task tool in Claude Code, or similar delegation in
+other frameworks) typically <strong>don&#39;t receive plugin context</strong>. They can run <code>bd</code>
+commands via Bash, but they don&#39;t know the correct syntax unless you tell them.</p>
+<p>If you use Beads for task tracking, add the block below to your project&#39;s
+<code>CLAUDE.md</code> (for Claude Code / Auggie) or <code>AGENTS.md</code> (for other agent
+frameworks). This prevents sub-agents from guessing wrong commands like
+<code>bd start</code> or <code>bd progress</code>.</p>
+<h3>Recommended Block for CLAUDE.md / AGENTS.md</h3>
+<pre><code>## Beads (bd) Quick Reference
+
+Task tracking uses Beads (`bd`). Sub-agents don&#39;t get the beads plugin context,
+so this section ensures all agents know the correct commands.
+
+### Essential Commands
+
+```bash
+bd ready                           # Show unblocked tasks
+bd list                            # All open issues
+bd show &lt;id&gt;                       # Issue details
+bd blocked                         # Show blocked issues
+bd create &quot;title&quot; -t task -p 2     # Create task (P2)
+bd update &lt;id&gt; -s in_progress      # Start working on issue
+bd update &lt;id&gt; --claim             # Atomically claim (assign + in_progress)
+bd close &lt;id&gt;                      # Mark done
+bd close &lt;id&gt; --suggest-next       # Mark done + show newly unblocked
+bd comments &lt;id&gt; add &quot;note&quot;        # Add comment
+bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;  # Add dependency
+```
+
+**Common mistakes:**
+- `bd start` does not exist — use `bd update &lt;id&gt; -s in_progress`
+- `bd progress` does not exist — use `bd update &lt;id&gt; -s in_progress`
+- `bd set-state` is for operational dimensions (patrol, health), NOT workflow status
+
+### Creating an Epic with Tasks
+
+```bash
+# 1. Create the epic
+bd create &quot;Epic title&quot; -t epic -p 1 -d &quot;Description&quot;
+# Output: Created thrum-abc
+
+# 2. Create child tasks under the epic
+bd create &quot;Task 1&quot; -t task --parent thrum-abc -d &quot;Details&quot;
+# Output: Created thrum-abc.1
+bd create &quot;Task 2&quot; -t task --parent thrum-abc -d &quot;Details&quot;
+# Output: Created thrum-abc.2
+bd create &quot;Task 3&quot; -t task --parent thrum-abc -d &quot;Details&quot;
+# Output: Created thrum-abc.3
+
+# 3. Add dependencies BETWEEN tasks (not epic→task)
+# &quot;task 2 depends on task 1&quot; = task 1 blocks task 2
+bd dep thrum-abc.1 --blocks thrum-abc.2
+
+# 4. Verify structure
+bd dep tree thrum-abc
+bd epic status thrum-abc
+```
+
+**Dependency direction:** `bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;` means the
+blocker must close before the blocked task becomes ready. The alternative
+syntax is `bd dep add &lt;blocked&gt; &lt;blocker&gt;` (reversed order).</code></pre>
+<p>You can also generate a minimal starter block with <code>bd onboard</code>, but the block
+above is more comprehensive and covers the epic/dependency patterns that
+sub-agents most commonly get wrong.</p>
 <h2>See Also</h2>
 <ul>
 <li><a href="./quickstart.html">Quickstart</a> — Get started with Beads and Thrum in 5 minutes</li>

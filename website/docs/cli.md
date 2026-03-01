@@ -1281,7 +1281,7 @@ thrum wait [flags]
 | Flag        | Description                                 | Default |
 | ----------- | ------------------------------------------- | ------- |
 | `--timeout` | Max wait time (e.g., `30s`, `5m`, `1h`)     | `30s`   |
-| `--after`   | Only messages after offset (e.g., `-30s`)   |         |
+| `--after`   | Relative time offset: negative (e.g., `-30s`) = include messages sent up to N ago; positive (e.g., `+60s`) = only messages arriving at least N in the future; omit for "now" |         |
 | `--mention` | Wait for mentions of role (format: `@role`) |         |
 | `--json`    | Machine-readable output                     | `false` |
 
@@ -1290,11 +1290,12 @@ Exit codes: `0` = message received, `1` = timeout, `2` = error.
 Example:
 
 ```text
+# Include messages sent up to 30s ago (--after -30s = "30 seconds ago")
 $ thrum wait --after -30s --timeout=5m --json
 ✓ Message received: msg_01HXE8Z7 from @planner
   We should refactor the sync daemon before adding embeddings.
 
-# Use in scripts
+# Use in scripts (only new messages — no --after means "now")
 if thrum wait --timeout=30s; then
   echo "New message received"
 else

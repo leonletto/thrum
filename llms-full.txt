@@ -295,7 +295,7 @@ All commands accept:
             --scope type:value   Filter by scope
             --mention @role      Wait for mentions of role
             --all                Subscribe to all messages (broadcasts + directed)
-            --after OFFSET       Only return messages after relative time (e.g., -30s, -5m, +60s)
+            --after OFFSET       Relative time offset (sign convention: negative e.g. -30s = include messages sent up to N ago; positive e.g. +60s = only messages N in the future; omit = "now")
   Action:   Blocks until a matching message arrives or timeout.
             When --all is used without --after, defaults to "now" (only new messages).
   Exit codes: 0 = message received, 1 = timeout, 2 = error.
