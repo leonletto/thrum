@@ -6,7 +6,15 @@ import path from 'node:path';
 const SOURCE_ROOT = path.resolve(__dirname, '../..');
 const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
 
-// Stable test environment path
+// Stable test environment path.
+// NOTE: Fixed path (not mkdtempSync) is intentional — playwright.config.ts
+// enforces workers:1, so parallel runs are not supported. The fixed path
+// enables easy inspection of test artifacts after runs. If parallel support
+// is ever needed, switch to mkdtempSync and pass the path via env vars.
+//
+// Worktree creation is done inline (not via scripts/setup-worktree-thrum.sh)
+// because the script is designed for human developer workflows, not headless
+// E2E test environments. The setup here is minimal: git worktree + redirect file.
 const E2E_ROOT = '/tmp/thrum-e2e-release';
 const COORDINATOR_DIR = path.join(E2E_ROOT, 'coordinator');
 const IMPLEMENTER_DIR = path.join(E2E_ROOT, 'implementer');

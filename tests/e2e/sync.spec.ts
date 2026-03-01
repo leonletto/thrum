@@ -104,8 +104,11 @@ test.describe('Sync', () => {
   });
 
   test.fixme('SC-40: Cross-worktree message visibility', async () => {
-    // FIXME: git commit fails in temp repo clones. Likely environment-specific
-    // issue with git config or default branch naming. Needs investigation.
+    // FIXME: `git push -u origin main` fails in cloneAndInit() when the system's
+    // git `init.defaultBranch` is not set to "main" (e.g. "master" on older git).
+    // The clone's local branch name doesn't match the hardcoded "main" push target.
+    // Fix: use `git symbolic-ref HEAD` to detect the actual default branch name,
+    // or set `init.defaultBranch=main` in the bare repo before cloning.
     // Arrange: create a bare remote and two clones
     const bare = createBareRemote();
     let repoA = '';
@@ -178,7 +181,7 @@ test.describe('Sync', () => {
   });
 
   test.fixme('SC-41: Cross-machine sync via git push/pull', async () => {
-    // FIXME: Same git commit issue in temp repos as SC-40.
+    // FIXME: Same `git push -u origin main` default branch mismatch as SC-40.
     // This simulates cross-machine by using two separate clones
     // of the same bare repo, each with their own thrum init
     const bare = createBareRemote();

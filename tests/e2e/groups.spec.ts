@@ -46,7 +46,8 @@ test.describe('Groups', () => {
 
     const list = thrum(['group', 'list']);
     expect(list.toLowerCase()).toContain('test-team');
-    expect(list).toMatch(/2/);
+    // Assert member count is anchored to the test-team group line
+    expect(list).toMatch(/test-team.*2\s*members/i);
   });
 
   test('F3: Add by role', async () => {
