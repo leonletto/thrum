@@ -504,3 +504,12 @@
 {"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T11:17:41Z","event_type":"closed","id":504,"issue_id":"thrum-nab.6","new_value":"Full verification complete: build, tests, e2e all pass","old_value":""}
 {"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T12:02:13Z","event_type":"closed","id":505,"issue_id":"thrum-eij","new_value":"Consolidated messaging instructions: expanded addressing table in plugin MESSAGING.md, slimmed CLAUDE.md Message Protocol to critical rule + link, added {{COORDINATOR_NAME}} template variable to implementation-agent.md, fixed ~25 --to @role examples across 5 files, added auto-threading docs to website/docs/messaging.md, synced codex-plugin mirrors","old_value":""}
 {"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T12:29:20Z","event_type":"created","id":506,"issue_id":"thrum-ic5","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T12:29:32Z","event_type":"created","id":507,"issue_id":"thrum-ic5.1","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T12:29:43Z","event_type":"created","id":508,"issue_id":"thrum-ic5.2","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T12:29:59Z","event_type":"created","id":509,"issue_id":"thrum-ic5.3","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T12:30:09Z","event_type":"created","id":510,"issue_id":"thrum-ic5.4","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T12:30:26Z","event_type":"created","id":511,"issue_id":"thrum-ic5.5","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T12:30:39Z","event_type":"created","id":512,"issue_id":"thrum-ic5.6","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T12:30:50Z","event_type":"created","id":513,"issue_id":"thrum-ic5.7","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T12:31:02Z","event_type":"created","id":514,"issue_id":"thrum-ic5.8","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-03-01T12:31:11Z","event_type":"created","id":515,"issue_id":"thrum-ic5.9","new_value":"","old_value":""}
