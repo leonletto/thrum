@@ -32,9 +32,9 @@ func TestBackfillEventID(t *testing.T) {
 			"message_id": "msg_001",
 		},
 		{
-			"type":      "thread.create",
-			"timestamp": "2024-01-01T12:02:00Z",
-			"thread_id": "thr_001",
+			"type":       "message.delete",
+			"timestamp":  "2024-01-01T12:02:00Z",
+			"message_id": "msg_001",
 		},
 	}
 

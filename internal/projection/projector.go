@@ -39,8 +39,6 @@ func (p *Projector) Apply(ctx context.Context, event json.RawMessage) error {
 		return p.applyMessageEdit(ctx, event)
 	case "message.delete":
 		return p.applyMessageDelete(ctx, event)
-	case "thread.create":
-		return p.applyThreadCreate(ctx, event)
 	case "agent.register":
 		return p.applyAgentRegister(ctx, event)
 	case "agent.session.start":
@@ -291,28 +289,6 @@ func (p *Projector) applyMessageDelete(ctx context.Context, data json.RawMessage
 	)
 	if err != nil {
 		return fmt.Errorf("delete message: %w", err)
-	}
-
-	return nil
-}
-
-func (p *Projector) applyThreadCreate(ctx context.Context, data json.RawMessage) error {
-	var event types.ThreadCreateEvent
-	if err := json.Unmarshal(data, &event); err != nil {
-		return fmt.Errorf("unmarshal thread.create: %w", err)
-	}
-
-	_, err := p.db.ExecContext(ctx, `
-		INSERT INTO threads (thread_id, title, created_at, created_by)
-		VALUES (?, ?, ?, ?)
-	`,
-		event.ThreadID,
-		event.Title,
-		event.Timestamp,
-		event.CreatedBy,
-	)
-	if err != nil {
-		return fmt.Errorf("insert thread: %w", err)
 	}
 
 	return nil
