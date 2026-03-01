@@ -191,8 +191,13 @@ func (l *SyncLoop) doSync(ctx context.Context) {
 	// 2. Merge all files (events.jsonl + messages/*.jsonl)
 	mergeResult, err := l.syncer.merger.MergeAll(ctx)
 	if err != nil {
-		l.setError(fmt.Errorf("merge: %w", err))
-		return
+		if !l.localOnly {
+			l.setError(fmt.Errorf("merge: %w", err))
+			return
+		}
+		// In local-only mode, merge errors are expected (no remote to merge
+		// from). Continue to CommitAndPush so local changes are committed.
+		log.Printf("sync: merge skipped in local-only mode: %v", err)
 	}
 
 	// 3. Update SQLite projection with new events
