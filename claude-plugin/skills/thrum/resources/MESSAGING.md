@@ -60,12 +60,7 @@ Agent identities are stored in `.thrum/identities/<name>.json` and persist
 across sessions. Registration via `thrum quickstart` is idempotent —
 re-registering with the same name updates the existing identity.
 
-For multi-worktree setups, set `THRUM_NAME` env var to distinguish agents:
-
-```bash
-export THRUM_NAME=feature_agent
-thrum quickstart --role impl --module feature --intent "Feature work"
-```
+For multi-worktree setups, see [WORKTREES.md](WORKTREES.md) for identity setup.
 
 ## Unified Workflow: Thrum + Beads
 

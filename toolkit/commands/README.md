@@ -38,5 +38,6 @@ future sessions.
 
 ## Detection
 
-Run `thrum context update` to check whether the skill is installed and get
-installation instructions if not.
+To check whether the skill is installed, look for `update-context.md` in
+`.claude/commands/` (project-level) or `~/.claude/commands/` (global).
+Context updates are managed via the `/update-context` Claude Code skill.

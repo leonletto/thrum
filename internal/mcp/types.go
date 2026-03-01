@@ -2,7 +2,7 @@ package mcp
 
 // SendMessageInput is the input for the send_message MCP tool.
 type SendMessageInput struct {
-	To       string            `json:"to" jsonschema:"Recipient: @role name or agent name"`
+	To       string            `json:"to" jsonschema:"Recipient agent name or role. Using a role name (e.g., @implementer) fans out to ALL agents with that role. Use agent name for direct delivery."`
 	Content  string            `json:"content" jsonschema:"Message text"`
 	ReplyTo  string            `json:"reply_to,omitempty" jsonschema:"Message ID to reply to"`
 	Metadata map[string]string `json:"metadata,omitempty" jsonschema:"Optional key-value metadata"`
@@ -72,18 +72,12 @@ type ListAgentsOutput struct {
 	Count  int         `json:"count"`
 }
 
-// BroadcastFilter defines optional filters for broadcast_message.
-type BroadcastFilter struct {
-	Status  string   `json:"status,omitempty" jsonschema:"Filter by agent status: all or active"`
-	Exclude []string `json:"exclude,omitempty" jsonschema:"Agent names to exclude from broadcast"`
-}
-
 // BroadcastInput is the input for the broadcast_message MCP tool.
 // AgentID/From is intentionally omitted — the MCP server resolves identity at startup
 // via config.LoadWithPath, so the client doesn't need to pass it.
+// Deprecated: use send_message with to="@everyone" instead.
 type BroadcastInput struct {
-	Content string           `json:"content" jsonschema:"Message text to broadcast"`
-	Filter  *BroadcastFilter `json:"filter,omitempty" jsonschema:"Optional filters for recipient selection"`
+	Content string `json:"content" jsonschema:"Message text to broadcast"`
 }
 
 // BroadcastOutput is the output for the broadcast_message MCP tool.

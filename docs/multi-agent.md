@@ -32,17 +32,7 @@ platform, and recover full session context after compaction.
 Groups let you send messages to collections of agents without addressing each
 one individually. Groups can contain specific agents or all agents with a role.
 
-### Quick Reference
-
-| Command                           | Description                                     |
-| --------------------------------- | ----------------------------------------------- |
-| `thrum group create NAME`         | Create a new group                              |
-| `thrum group delete NAME`         | Delete a group (cannot delete `@everyone`)      |
-| `thrum group add GROUP MEMBER`    | Add agent or role                               |
-| `thrum group remove GROUP MEMBER` | Remove a member                                 |
-| `thrum group list`                | List all groups                                 |
-| `thrum group info NAME`           | Show group details                              |
-| `thrum group members NAME`        | List members (`--expand` resolves to agent IDs) |
+For the full group commands reference, see [Messaging — Groups](/docs/messaging.html#groups).
 
 ### Auto-Created Groups
 
@@ -142,16 +132,7 @@ Output:
 ### MCP Group Tools
 
 When using the MCP server (`thrum mcp serve`), groups are managed via native MCP
-tools:
-
-| MCP Tool              | Parameters                             | Description                         |
-| --------------------- | -------------------------------------- | ----------------------------------- |
-| `create_group`        | `name`, `description?`                 | Create a named group                |
-| `delete_group`        | `name`                                 | Delete a group                      |
-| `add_group_member`    | `group`, `member_type`, `member_value` | Add member to group                 |
-| `remove_group_member` | `group`, `member_type`, `member_value` | Remove member from group            |
-| `list_groups`         | --                                     | List all groups                     |
-| `get_group`           | `name`, `expand?`                      | Get details with optional expansion |
+tools. See [MCP Server](/docs/mcp-server.html) for the complete tools reference.
 
 Example MCP usage:
 
@@ -161,7 +142,6 @@ mcp__thrum__add_group_member(group="backend", member_type="role", member_value="
 mcp__thrum__send_message(to="@backend", content="API changes merged")
 ```
 
----
 
 ## Runtime Presets
 
@@ -273,86 +253,21 @@ Add custom runtime presets via `~/.config/thrum/runtimes.json` (XDG-aware):
 
 Custom runtimes appear alongside built-in presets in `thrum runtime list`.
 
----
 
 ## Context Prime
 
-After compaction or starting a new session, you want to quickly answer: what was
-I working on? Context prime gathers all agent state into a single output so an
-agent can pick up where it left off.
-
-### Usage
+`thrum context prime` gathers identity, session info, team status, unread
+messages, git context, and saved context into a single output. Run it at session
+startup or after compaction to quickly orient a new or recovering agent.
 
 ```bash
-# Human-readable summary
-thrum context prime
-
-# Structured JSON for LLM consumption
-thrum context prime --json
+thrum context prime        # Human-readable summary
+thrum context prime --json # Structured JSON for LLM consumption
 ```
 
-### What It Gathers
+See [Context Management](/docs/context.html) for full documentation including
+output format, graceful degradation behavior, and use cases.
 
-Context prime collects information from multiple sources in one call:
-
-| Section  | Source          | Content                                         |
-| -------- | --------------- | ----------------------------------------------- |
-| Identity | Identity file   | Agent ID, role, module, display name            |
-| Session  | Daemon RPC      | Session ID, intent, task, uptime                |
-| Agents   | Daemon RPC      | List of registered agents with status and roles |
-| Inbox    | Daemon RPC      | Unread message count, total messages            |
-| Git      | Local git state | Current branch, recent commits, changed files   |
-| Context  | Context file    | Saved context from previous session (if exists) |
-
-### Example Output
-
-```text
-=== Context Prime for furiosa ===
-
-Identity: furiosa (implementer @ auth)
-Session:  ses_01HXF2A9... (active 2h15m)
-Intent:   JWT authentication implementation
-
-Agents Online:
-  planner    coordinator @ main    (active 5m ago)
-  reviewer   reviewer @ all        (active 12m ago)
-
-Inbox: 3 unread / 12 total
-
-Git:
-  Branch: feature/auth
-  Ahead:  3 commits
-  Files:  src/auth.go, src/auth_test.go (modified)
-
-Saved Context:
-  # Next Steps
-  - Finish JWT implementation
-  - Add rate limiting tests
-```
-
-### Graceful Degradation
-
-Context prime handles missing components gracefully:
-
-- **No daemon running** -- skips session, agents, and inbox sections
-- **No active session** -- shows identity only
-- **No git repo** -- skips git section
-- **No saved context** -- skips context section
-- **No remote** -- skips upstream comparison
-
-This makes it safe to run at any point, even before the daemon is started.
-
-### Use Cases
-
-- **Session startup** -- run at the beginning of every session to understand
-  current state
-- **After compaction** -- recover full context when the LLM's context window
-  resets
-- **Handoff between agents** -- incoming agent runs context prime to understand
-  the project state
-- **Debugging** -- quickly see what the agent knows and what it's working on
-
----
 
 ## Multi-Worktree Coordination
 
@@ -422,8 +337,10 @@ thrum quickstart --name nux --role implementer --module sync
 All three agents share the same daemon and can message each other:
 
 ```bash
-# furiosa sends to coordinator
-thrum send "Auth module complete, tests passing" --to @coordinator
+# furiosa sends directly to the coordinator by name (run `thrum team` to find names)
+# Using --to @coord_main (agent name) targets one agent.
+# Using --to @coordinator (role) would fan out to ALL agents with the coordinator role.
+thrum send "Auth module complete, tests passing" --to @coord_main
 
 # coordinator sends to the whole team
 thrum send "Both features ready, starting integration" --to @everyone
@@ -447,7 +364,6 @@ THRUM_NAME=furiosa thrum send "Implementation complete"
 THRUM_NAME=reviewer thrum send "LGTM, approved"
 ```
 
----
 
 ## Coordination Tools
 
@@ -504,12 +420,13 @@ thrum wait --after -30s --timeout 5m --json
 thrum wait --mention @reviewer --timeout 5m
 ```
 
-| Flag        | Format                       | Description                     |
-| ----------- | ---------------------------- | ------------------------------- |
-| `--timeout` | Duration (e.g., `5m`)        | Max wait time (default: `30s`)  |
-| `--mention` | `@role`                      | Wait for mentions of a role     |
-| `--after`   | Relative time (e.g., `-30s`) | Only messages after this offset |
-| `--json`    | Boolean                      | Output messages as JSON         |
+| Flag        | Format                       | Description                              |
+| ----------- | ---------------------------- | ---------------------------------------- |
+| `--timeout` | Duration (e.g., `5m`)        | Max wait time (default: `30s`)           |
+| `--scope`   | Scope string (e.g., `module:auth`) | Only messages matching this scope  |
+| `--mention` | `@role`                      | Wait for mentions of a role              |
+| `--after`   | Relative time (e.g., `-30s`) | Only messages after this offset          |
+| `--json`    | Boolean                      | Output messages as JSON                  |
 
 **Exit codes:**
 
@@ -517,7 +434,6 @@ thrum wait --mention @reviewer --timeout 5m
 - `1` -- timeout (no messages)
 - `2` -- error
 
----
 
 ## Complete Workflows
 
@@ -602,7 +518,6 @@ thrum inbox --unread
 thrum send "Auth complete, 15 tests passing" --to @coordinator
 ```
 
----
 
 ## Best Practices
 

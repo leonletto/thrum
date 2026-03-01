@@ -8,7 +8,7 @@ pattern.
 
 ```bash
 thrum wait                           # Default 30s timeout
-thrum wait --timeout 120             # 120 seconds
+thrum wait --timeout 120s            # 120 seconds
 thrum wait --after -30s --json # Recent messages only
 ```
 

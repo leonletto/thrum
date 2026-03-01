@@ -354,22 +354,6 @@ decisions and rationale.
 
 ---
 
-### thrum context update
-
-The `/update-context` skill is now integrated with the Thrum MCP server. Use the
-MCP server for guided context updates:
-
-```bash
-thrum mcp serve
-```
-
-**In Claude Code:**
-
-Configure the MCP server in `.claude/settings.json` and use the
-`wait_for_message` and `send_message` tools for context coordination.
-
----
-
 ## The /update-context Skill
 
 The `/update-context` skill is now integrated into the Thrum MCP server. The MCP

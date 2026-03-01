@@ -555,11 +555,6 @@ All commands accept:
   Action:   Copies context file to the a-sync branch for sharing across worktrees.
             Commits and pushes. No-op when no remote is configured (local-only mode).
 
-### thrum context update
-
-  Usage:    thrum context update
-  Action:   Updates agent context by delegating to the /update-context skill.
-
 ### thrum who-has
 
   Usage:    thrum who-has FILE

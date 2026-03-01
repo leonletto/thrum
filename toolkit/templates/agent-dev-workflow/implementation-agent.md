@@ -358,6 +358,10 @@ If a task is blocked:
 
 ```bash
 # Ask the blocking agent for help
+# NOTE: --mention @implementer is a message filter tag, not a delivery address.
+# The message is delivered to @{{COORDINATOR_NAME}}; the mention tag lets implementers
+# filter for messages that mention their role. To address a specific agent directly,
+# use --to @<agent-name> instead.
 thrum send "Blocked on {{TASK_ID}} — waiting for {{BLOCKER_ID}}. Can you prioritize?" --mention @implementer
 
 # Or escalate to the coordinator
@@ -376,6 +380,9 @@ thrum send "Completed task {{TASK_ID}}, moving to next" --to @{{COORDINATOR_NAME
 thrum send "Need input: should X use approach A or B? Context: ..." --to @{{COORDINATOR_NAME}}
 
 # If you realize your work affects another agent's files
+# NOTE: --mention @implementer is a filter tag, not a delivery address.
+# This tags the message so implementers can filter for it; delivery goes to @everyone by default.
+# Use --to @<agent-name> to target a specific agent.
 thrum send "Heads up: I'm modifying internal/daemon/rpc.go which may overlap with your work" --mention @implementer
 
 # Update your intent when switching tasks

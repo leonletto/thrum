@@ -16,12 +16,11 @@ thrum group create leads --description "Team leads"
 
 ## Adding Members
 
-Three member types: agents, roles, and nested groups.
+Two member types: agents and roles.
 
 ```bash
 thrum group add backend-team @alice            # Specific agent
 thrum group add backend-team --role implementer # All agents with role
-thrum group add leads --group backend-team      # Nest another group
 ```
 
 ## Sending to Groups
@@ -41,15 +40,6 @@ that include that role.
 thrum group list                               # All groups
 thrum group info backend-team                  # Group details
 thrum group members backend-team --expand      # Resolved to agent IDs
-```
-
-## Nesting and Cycle Detection
-
-Groups can contain other groups. Thrum detects and prevents cycles:
-
-```bash
-thrum group add leads --group backend-team     # OK
-thrum group add backend-team --group leads     # Error: cycle detected
 ```
 
 ## Removing Members

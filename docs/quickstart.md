@@ -240,24 +240,8 @@ thrum mcp serve
 thrum mcp serve --agent-id myagent  # Override agent identity
 ```
 
-Configure in `.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "thrum": {
-      "type": "stdio",
-      "command": "thrum",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
-```
-
-MCP tools (11 total): Core messaging — `send_message`, `check_messages`,
-`wait_for_message`, `list_agents`, `broadcast_message`. Group management —
-`create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
-`list_groups`, `get_group`.
+See [MCP Server](/docs/mcp-server.html) for configuration and the complete
+tools reference (11 tools: 5 core messaging + 6 group management).
 
 ## Typical Workflow
 
@@ -347,13 +331,13 @@ thrum daemon start
 
 # Feature worktree -- set up redirect to main
 cd ~/project-features/auth
-thrum setup
+thrum setup --main-repo ~/project
 thrum session start
 thrum send "Experimenting with auth approaches"
 ```
 
-The `thrum setup` command creates a `.thrum/redirect` file pointing to the main
-worktree's `.thrum/` directory. All worktrees then share the same sync worktree,
+The `thrum setup --main-repo <path>` command creates a `.thrum/redirect` file
+pointing to the main worktree's `.thrum/` directory. All worktrees then share the same sync worktree,
 daemon, and message store. Messages sync across all worktrees and machines
 through Git.
 

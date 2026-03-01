@@ -43,7 +43,6 @@ messaging system for AI agent coordination.
 | `thrum context clear`      | Clear agent context                                  |
 | `thrum context sync`       | Sync context to a-sync branch                        |
 | `thrum context prime`      | Collect all context for session initialization       |
-| `thrum context update`     | Install/update the /update-context skill             |
 | `thrum runtime`            | Manage runtime presets (list, show, set-default)     |
 | `thrum peer`               | Manage Tailscale peers                               |
 | `thrum config`             | Manage configuration (show, init)                    |
@@ -1194,26 +1193,6 @@ Example:
 $ thrum context sync
 ✓ Context synced for furiosa
   Committed and pushed to a-sync branch
-```
-
-### thrum context update
-
-Install or update the `/update-context` skill for Claude Code agents. Detects
-the skill in project-level (`.claude/commands/update-context.md`) or global
-(`~/.claude/commands/update-context.md`) locations.
-
-```text
-thrum context update
-```
-
-Example:
-
-```text
-$ thrum context update
-/update-context skill installed at:
-  /path/to/repo/.claude/commands/update-context.md
-
-Restart Claude Code to load the skill.
 ```
 
 ## Notifications

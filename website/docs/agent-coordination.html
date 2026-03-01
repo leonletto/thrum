@@ -50,18 +50,8 @@ handing it off — see <a href="philosophy.html">Why Thrum Exists</a>.</p>
 <p>Thrum supports two integration methods for agent coordination:</p>
 <h3>MCP Server (Recommended)</h3>
 <p>Native tool integration with async message notifications. Best for Claude Code
-agents.</p>
-<pre><code>{
-  &quot;mcpServers&quot;: {
-    &quot;thrum&quot;: {
-      &quot;type&quot;: &quot;stdio&quot;,
-      &quot;command&quot;: &quot;thrum&quot;,
-      &quot;args&quot;: [&quot;mcp&quot;, &quot;serve&quot;]
-    }
-  }
-}</code></pre>
-<p>MCP tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, <code>list_agents</code>,
-<code>broadcast_message</code>.</p>
+agents. See <a href="/docs/mcp-server.html">MCP Server</a> for configuration and the
+complete tools reference.</p>
 <h3>CLI (Fallback)</h3>
 <p>Shell commands for basic messaging. Works everywhere.</p>
 <pre><code>thrum send &quot;Starting work on task X&quot; --to @coord_main

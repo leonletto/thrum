@@ -25,7 +25,7 @@ thrum reply <msg-id> "response"          Reply (same audience)
 thrum inbox                              List messages (unread first)
 thrum inbox --unread                     Unread only
 thrum wait                               Block until message arrives (30s timeout)
-thrum wait --timeout 120                 Custom timeout (seconds)
+thrum wait --timeout 120s                Custom timeout (duration)
 ```
 
 ### Agents
