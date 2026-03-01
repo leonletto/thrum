@@ -116,8 +116,8 @@ test.describe('Coordination', () => {
       // Assert: who-has returns valid output (not an error)
       expect(output).not.toBe('');
       expect(output.toLowerCase()).not.toContain('error');
-      // who-has either shows agents editing or "No agents" message
-      expect(output.toLowerCase()).toMatch(/agent|no agent/);
+      // who-has either shows agents editing (@@name is editing...) or "No agents" message
+      expect(output.toLowerCase()).toMatch(/is editing|no agent/);
     } finally {
       try {
         execFileSync('git', ['reset', 'HEAD~1', '--hard'], { cwd: testRoot, stdio: 'pipe' });
