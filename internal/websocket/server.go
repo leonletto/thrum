@@ -260,6 +260,11 @@ func (s *Server) handleConnection(ctx context.Context, conn *websocket.Conn) {
 	// Create a connection wrapper
 	wsConn := NewConnection(conn, s)
 
+	// Track in the all-connections set so BroadcastAll can reach this client
+	// even before it registers a session (e.g. the browser UI passive observer).
+	s.clients.addConn(wsConn)
+	defer s.clients.removeConn(wsConn)
+
 	// Start read and write loops
 	errCh := make(chan error, 2)
 
