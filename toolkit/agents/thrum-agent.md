@@ -147,7 +147,7 @@ If MCP server is not available, use CLI commands:
 
 ```bash
 # Send message
-thrum send "Starting work on task X" --to @coordinator
+thrum send "Starting work on task X" --to @coord_main
 
 # Check inbox
 thrum inbox
@@ -196,12 +196,13 @@ Messages are the core communication primitive:
 
 **Routing rules (v0.4.5+):**
 
-- `@name` routes directly to a named agent
+- `@name` routes directly to a named agent — **always use this for direct messages**
 - `@role` routes via the auto-created role group (all agents with that role
-  receive it); sender gets a warning
-- Unknown recipients are a hard error — double-check agent names with
-  `thrum team`
+  receive it); sender gets a warning — only use when you want group fanout
+- Unknown recipients are a hard error — run `thrum team` to find agent names
 - Agent name must differ from role (registration rejects name==role)
+
+**Always run `thrum team` before sending** to get the correct agent name.
 
 **Message Storage:**
 
@@ -276,7 +277,7 @@ thrum ping @name
 thrum quickstart --name lead-agent --role planner --module website --intent "Coordinating website development"
 
 # Assign task via message
-thrum send "Please implement build script (task thrum-235d.3). Design spec in dev-docs/plans/. Check beads for details." --to @implementer
+thrum send "Please implement build script (task thrum-235d.3). Design spec in dev-docs/plans/. Check beads for details." --to @impl1
 
 # Check for updates
 thrum inbox
@@ -319,7 +320,7 @@ Task({
 thrum send "Starting work on auth module" --broadcast
 
 # Reserve file (via message convention)
-thrum send "Working on src/auth/login.ts" --to @coordinator
+thrum send "Working on src/auth/login.ts" --to @coord_main
 ```
 
 **Agent B:**
@@ -344,7 +345,7 @@ thrum send "Build script complete (commit abc123). Please review:
 - Search index generation
 - Error handling
 
-Tests passing. Beads task: thrum-235d.3" --to @reviewer
+Tests passing. Beads task: thrum-235d.3" --to @reviewer1
 ```
 
 **Reviewer:**
@@ -673,7 +674,7 @@ bd ready --json
 bd update bd-123 --status in_progress --json
 
 # 4. Announce via Thrum
-thrum send "Starting bd-123: JWT authentication" --to @coordinator
+thrum send "Starting bd-123: JWT authentication" --to @coord_main
 
 # 5. Work on implementation
 # (make code changes)
@@ -682,13 +683,13 @@ thrum send "Starting bd-123: JWT authentication" --to @coordinator
 bd create "Found validation bug" -t bug -p 1 --deps discovered-from:bd-123 --json
 
 # 7. Update coordinator via Thrum
-thrum send "Progress update: JWT working, found validation bug (filed bd-456)" --to @coordinator
+thrum send "Progress update: JWT working, found validation bug (filed bd-456)" --to @coord_main
 
 # 8. Complete in Beads
 bd close bd-123 --reason "JWT auth complete with tests" --json
 
 # 9. Announce via Thrum
-thrum send "Completed bd-123. Ready for review." --to @reviewer
+thrum send "Completed bd-123. Ready for review." --to @reviewer1
 
 # 10. Sync both
 bd sync
@@ -749,7 +750,7 @@ bd sync
 bd ready --json
 
 # Assign via Thrum
-thrum send "Task bd-456 is ready for implementation. See design spec in dev-docs/plans/. Estimated 2-3 hours." --to @implementer
+thrum send "Task bd-456 is ready for implementation. See design spec in dev-docs/plans/. Estimated 2-3 hours." --to @impl1
 ```
 
 **Implementer (MCP):**
@@ -775,7 +776,7 @@ await mcp.thrum.send_message({
 bd update bd-789 --status blocked --json
 
 # Notify team
-thrum send "Blocked on bd-789: Need API credentials for Stripe integration. @coordinator can you help?" --to @coordinator
+thrum send "Blocked on bd-789: Need API credentials for Stripe integration. @coordinator can you help?" --to @coord_main
 ```
 
 ### Pattern 3: Review Request
@@ -791,7 +792,7 @@ thrum send "bd-123 complete (commit a1b2c3d). Please review:
 - Middleware (src/auth/middleware.ts)
 - Tests (tests/auth.test.ts)
 
-All tests passing. Ready to merge." --to @reviewer
+All tests passing. Ready to merge." --to @reviewer1
 ```
 
 ### Pattern 4: Context Compaction Recovery
@@ -836,18 +837,18 @@ bd ready --json
 bd update <id> --status in_progress --json
 
 # 6. Announce start (Thrum)
-thrum send "Starting work on bd-<id>: <description>" --to @coordinator
+thrum send "Starting work on bd-<id>: <description>" --to @coord_main
 
 # === DURING SESSION ===
 
 # 7. Send status updates
-thrum send "Progress update: <status>" --to @coordinator
+thrum send "Progress update: <status>" --to @coord_main
 
 # 8. Handle incoming messages (via listener)
 # Process messages, respond as needed
 
 # 9. Coordinate on blockers
-thrum send "Blocked: <description>" --to @coordinator
+thrum send "Blocked: <description>" --to @coord_main
 
 # === END OF SESSION ===
 
@@ -856,7 +857,7 @@ bd close <id> --reason "Complete" --json
 bd sync
 
 # 11. Announce completion (Thrum)
-thrum send "Completed bd-<id>. Tests passing. Ready for review." --to @reviewer
+thrum send "Completed bd-<id>. Tests passing. Ready for review." --to @reviewer1
 
 # 12. End session
 thrum session end
@@ -1074,7 +1075,7 @@ thrum quickstart --name my_agent --role implementer --module website --intent "B
 # Task(subagent_type="message-listener", ...)
 
 # 3. Send message
-thrum send "Starting work" --to @coordinator
+thrum send "Starting work" --to @coord_main
 
 # 4. Check inbox
 thrum inbox

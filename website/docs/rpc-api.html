@@ -1,86 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RPC API — Thrum</title>
-  <meta name="description" content="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="RPC API — Thrum">
-  <meta property="og:description" content="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/rpc-api.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="RPC API — Thrum">
-  <meta name="twitter:description" content="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#rpc-api.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>RPC API — Thrum</title>
+<meta name="description" content="Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#rpc-api.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; API Reference &rsaquo; RPC API
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <strong>RPC API</strong> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Thrum Daemon RPC API</h2>
 <h2>Overview</h2>
-<p>The Thrum daemon exposes a JSON-RPC 2.0 API over Unix socket<br>(<code>.thrum/var/thrum.sock</code>) and WebSocket (<code>ws://localhost:9999</code>). This document<br>describes every available RPC method.</p>
+<p>The Thrum daemon exposes a JSON-RPC 2.0 API over Unix socket
+(<code>.thrum/var/thrum.sock</code>) and WebSocket (<code>ws://localhost:9999</code>). This document
+describes every available RPC method.</p>
 <h2>Protocol</h2>
 <h3>JSON-RPC 2.0</h3>
 <p>All requests and responses follow the JSON-RPC 2.0 specification.</p>
 <p><strong>Request format:</strong></p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;method_name&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;method&quot;: &quot;method_name&quot;,
+  &quot;params&quot;: {},
+  &quot;id&quot;: 1
+}</code></pre>
 <p><strong>Success response:</strong></p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-comment">/* method-specific result */</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;result&quot;: {
+    /* method-specific result */
+  },
+  &quot;id&quot;: 1
+}</code></pre>
 <p><strong>Error response:</strong></p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;error&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;code&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">-32000</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Error description&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;data&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Additional error info&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;error&quot;: {
+    &quot;code&quot;: -32000,
+    &quot;message&quot;: &quot;Error description&quot;,
+    &quot;data&quot;: &quot;Additional error info&quot;
+  },
+  &quot;id&quot;: 1
+}</code></pre>
 <h3>Standard Error Codes</h3>
 <table>
 <thead>
@@ -127,9 +117,11 @@
 </tr>
 </tbody></table>
 <h3>Transports</h3>
-<p>Both Unix socket and WebSocket expose the same set of methods, with one<br>exception:</p>
+<p>Both Unix socket and WebSocket expose the same set of methods, with one
+exception:</p>
 <ul>
-<li><code>user.register</code> is only available over WebSocket (returns <code>-32001</code> on Unix<br>socket)</li>
+<li><code>user.register</code> is only available over WebSocket (returns <code>-32001</code> on Unix
+socket)</li>
 </ul>
 <h2>Method Reference</h2>
 <h3>health</h3>
@@ -430,7 +422,8 @@
 </tbody></table>
 <p><strong>Errors:</strong></p>
 <ul>
-<li><code>resolve identity</code>: Could not determine agent identity from environment or<br>identity file</li>
+<li><code>resolve identity</code>: Could not determine agent identity from environment or
+identity file</li>
 </ul>
 <h3>agent.listContext</h3>
 <p>List agent work contexts (branch, commits, files, intent, task).</p>
@@ -553,7 +546,8 @@
 <li><code>invalid request</code>: Malformed JSON params</li>
 </ul>
 <h3>agent.delete</h3>
-<p>Delete an agent by name. Removes the identity file, per-agent JSONL message<br>file, and SQLite record. Emits an <code>agent.cleanup</code> event.</p>
+<p>Delete an agent by name. Removes the identity file, per-agent JSONL message
+file, and SQLite record. Emits an <code>agent.cleanup</code> event.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -603,7 +597,9 @@
 <li><code>agent not found</code>: No agent with given name</li>
 </ul>
 <h3>agent.cleanup</h3>
-<p>Detect and optionally remove orphaned agents. An agent is considered orphaned if<br>its identity file is missing, its worktree no longer exists, or it has been<br>inactive beyond the threshold.</p>
+<p>Detect and optionally remove orphaned agents. An agent is considered orphaned if
+its identity file is missing, its worktree no longer exists, or it has been
+inactive beyond the threshold.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -718,7 +714,8 @@
 <li><code>invalid request</code>: Malformed JSON params</li>
 </ul>
 <h3>session.start</h3>
-<p>Start a new work session for an agent. Automatically recovers any orphaned<br>sessions for the same agent.</p>
+<p>Start a new work session for an agent. Automatically recovers any orphaned
+sessions for the same agent.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -834,7 +831,8 @@
 <li><code>get session</code>: Session ID not found</li>
 </ul>
 <h3>session.heartbeat</h3>
-<p>Update session activity timestamp. Optionally add/remove scopes and refs.<br>Extracts git work context if a <code>worktree</code> ref is set.</p>
+<p>Update session activity timestamp. Optionally add/remove scopes and refs.
+Extracts git work context if a <code>worktree</code> ref is set.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -1580,7 +1578,8 @@
 <li><code>no active session found</code>: Agent does not have an active session</li>
 </ul>
 <h3>message.delete</h3>
-<p>Soft-delete a message. The message remains in the database and JSONL log but is<br>marked as deleted.</p>
+<p>Soft-delete a message. The message remains in the database and JSONL log but is
+marked as deleted.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -1631,7 +1630,8 @@
 <li><code>message already deleted</code>: Message was already soft-deleted</li>
 </ul>
 <h3>message.markRead</h3>
-<p>Batch mark messages as read for the current agent and session. Returns<br>collaboration info (other agents who also read the messages).</p>
+<p>Batch mark messages as read for the current agent and session. Returns
+collaboration info (other agents who also read the messages).</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -1671,11 +1671,13 @@
 </tbody></table>
 <p><strong>Errors:</strong></p>
 <ul>
-<li><code>message_ids is required and must not be empty</code>: Missing or empty<br><code>message_ids</code> array</li>
+<li><code>message_ids is required and must not be empty</code>: Missing or empty
+<code>message_ids</code> array</li>
 <li><code>no active session found</code>: Agent does not have an active session</li>
 </ul>
 <h3>group.create</h3>
-<p>Create a named group for targeted messaging. Groups can contain agents and<br>roles.</p>
+<p>Create a named group for targeted messaging. Groups can contain agents and
+roles.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -1735,7 +1737,8 @@
 <li><code>group already exists</code>: Group with this name already exists</li>
 </ul>
 <h3>group.delete</h3>
-<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be<br>deleted.</p>
+<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be
+deleted.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -2055,7 +2058,8 @@
 <li><code>group not found</code>: No group with given name</li>
 </ul>
 <h3>group.members</h3>
-<p>Get members of a group with optional expansion. When <code>expand</code> is <code>true</code>,<br>resolves roles to individual agent IDs.</p>
+<p>Get members of a group with optional expansion. When <code>expand</code> is <code>true</code>,
+resolves roles to individual agent IDs.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -2130,7 +2134,8 @@
 <li><code>group not found</code>: No group with given name</li>
 </ul>
 <h3>subscribe</h3>
-<p>Subscribe to push notifications for messages matching a scope, mention, or all<br>messages.</p>
+<p>Subscribe to push notifications for messages matching a scope, mention, or all
+messages.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -2188,7 +2193,8 @@
 </tbody></table>
 <p><strong>Errors:</strong></p>
 <ul>
-<li><code>at least one of scope, mention_role, or all must be specified</code>: No<br>subscription type given</li>
+<li><code>at least one of scope, mention_role, or all must be specified</code>: No
+subscription type given</li>
 <li><code>no active session found</code>: Agent does not have an active session</li>
 </ul>
 <h3>unsubscribe</h3>
@@ -2360,17 +2366,20 @@
 </tbody></table>
 <p><strong>Errors:</strong></p>
 <ul>
-<li><code>-32001</code> (Transport error): Method called over Unix socket instead of<br>WebSocket</li>
+<li><code>-32001</code> (Transport error): Method called over Unix socket instead of
+WebSocket</li>
 <li><code>username is required</code>: Missing <code>username</code> field</li>
 <li><code>username cannot start with &#39;agent:&#39; prefix</code>: Namespace conflict</li>
 <li><code>invalid username format</code>: Does not match <code>[a-zA-Z0-9_-]{1,32}</code></li>
 </ul>
 <p><strong>Notes:</strong></p>
 <ul>
-<li>Registration is idempotent: if the user already exists, returns the existing<br>info with a fresh token and status <code>&quot;existing&quot;</code>.</li>
+<li>Registration is idempotent: if the user already exists, returns the existing
+info with a fresh token and status <code>&quot;existing&quot;</code>.</li>
 </ul>
 <h3>user.identify</h3>
-<p>Get the current user&#39;s identity from git config. Used for browser<br>auto-registration.</p>
+<p>Get the current user&#39;s identity from git config. Used for browser
+auto-registration.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -2415,30 +2424,32 @@
 </tbody></table>
 <p><strong>Errors:</strong></p>
 <ul>
-<li><code>git config user.name not set</code>: Git user.name is not configured in the<br>repository</li>
+<li><code>git config user.name not set</code>: Git user.name is not configured in the
+repository</li>
 </ul>
 <h2>Push Notifications</h2>
-<p>When a message matches a subscription, the daemon sends a JSON-RPC notification<br>(no <code>id</code> field) over the same socket connection:</p>
+<p>When a message matches a subscription, the daemon sends a JSON-RPC notification
+(no <code>id</code> field) over the same socket connection:</p>
 <p><strong>Notification format:</strong></p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;notification.message&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;author&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:implementer:auth:ABC&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span>
-    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;First 100 chars of message...&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;module&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;matched_subscription&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;match_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope&quot;</span>
-    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;method&quot;: &quot;notification.message&quot;,
+  &quot;params&quot;: {
+    &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
+    &quot;author&quot;: {
+      &quot;agent_id&quot;: &quot;agent:implementer:auth:ABC&quot;,
+      &quot;role&quot;: &quot;implementer&quot;,
+      &quot;module&quot;: &quot;auth&quot;
+    },
+    &quot;preview&quot;: &quot;First 100 chars of message...&quot;,
+    &quot;scopes&quot;: [{ &quot;type&quot;: &quot;module&quot;, &quot;value&quot;: &quot;auth&quot; }],
+    &quot;matched_subscription&quot;: {
+      &quot;subscription_id&quot;: 42,
+      &quot;match_type&quot;: &quot;scope&quot;
+    },
+    &quot;timestamp&quot;: &quot;2026-02-03T10:00:00Z&quot;
+  }
+}</code></pre>
 <p><strong>Match types:</strong></p>
 <ul>
 <li><code>scope</code> - Message has a scope matching your subscription</li>
@@ -2450,10 +2461,12 @@
 <li>Keep connection open to receive notifications</li>
 <li>Notifications have no <code>id</code> field (one-way, no response expected)</li>
 <li>Use <code>message.get</code> to fetch full message content after notification</li>
-<li>Clients disconnected at notification time will see messages via<br><code>message.list</code> when reconnecting</li>
+<li>Clients disconnected at notification time will see messages via
+<code>message.list</code> when reconnecting</li>
 </ol>
 <h3>sync.status</h3>
-<p>Get current sync loop status and health. Available when the sync loop is active<br>(requires a remote origin).</p>
+<p>Get current sync loop status and health. Available when the sync loop is active
+(requires a remote origin).</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -2503,10 +2516,13 @@
 </tbody></table>
 <p><strong>Notes:</strong></p>
 <ul>
-<li>This method is only registered when the sync loop is initialized (i.e., the<br>repository has a remote origin). Returns method-not-found (<code>-32601</code>)<br>otherwise.</li>
+<li>This method is only registered when the sync loop is initialized (i.e., the
+repository has a remote origin). Returns method-not-found (<code>-32601</code>)
+otherwise.</li>
 </ul>
 <h3>sync.force</h3>
-<p>Trigger an immediate sync (non-blocking). Available when the sync loop is active<br>(requires a remote origin).</p>
+<p>Trigger an immediate sync (non-blocking). Available when the sync loop is active
+(requires a remote origin).</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -2551,94 +2567,97 @@
 </tbody></table>
 <p><strong>Notes:</strong></p>
 <ul>
-<li>This method is only registered when the sync loop is initialized (i.e., the<br>repository has a remote origin). Returns method-not-found (<code>-32601</code>)<br>otherwise.</li>
-<li>The sync loop runs every 60 seconds by default (configurable via<br><code>--sync-interval</code>).</li>
+<li>This method is only registered when the sync loop is initialized (i.e., the
+repository has a remote origin). Returns method-not-found (<code>-32601</code>)
+otherwise.</li>
+<li>The sync loop runs every 60 seconds by default (configurable via
+<code>--sync-interval</code>).</li>
 </ul>
 <h2>Using the API</h2>
 <h3>From Command Line</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Using netcat (nc)</span>
-<span class="hljs-built_in">echo</span> <span class="hljs-string">&#x27;{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;health&quot;,&quot;id&quot;:1}&#x27;</span> | nc -U .thrum/var/thrum.sock
+<pre><code># Using netcat (nc)
+echo &#39;{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;health&quot;,&quot;id&quot;:1}&#39; | nc -U .thrum/var/thrum.sock
 
-<span class="hljs-comment"># Using curl (requires HTTP-to-Unix-socket proxy)</span>
-<span class="hljs-comment"># Not directly supported without proxy</span></code></pre>
+# Using curl (requires HTTP-to-Unix-socket proxy)
+# Not directly supported without proxy</code></pre>
 <h3>From Go Code</h3>
-<pre><code class="language-go hljs"><span class="hljs-keyword">import</span> <span class="hljs-string">&quot;github.com/leonletto/thrum/internal/daemon&quot;</span>
+<pre><code>import &quot;github.com/leonletto/thrum/internal/daemon&quot;
 
-<span class="hljs-comment">// Connect to daemon</span>
-client, err := daemon.NewClient(<span class="hljs-string">&quot;.thrum/var/thrum.sock&quot;</span>)
-<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+// Connect to daemon
+client, err := daemon.NewClient(&quot;.thrum/var/thrum.sock&quot;)
+if err != nil {
     log.Fatal(err)
 }
-<span class="hljs-keyword">defer</span> client.Close()
+defer client.Close()
 
-<span class="hljs-comment">// Call health method</span>
-result, err := client.Call(<span class="hljs-string">&quot;health&quot;</span>, <span class="hljs-keyword">map</span>[<span class="hljs-type">string</span>]any{})
-<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
-    log.Fatal(err)
-}
-
-<span class="hljs-keyword">var</span> healthResp daemon.HealthResponse
-<span class="hljs-keyword">if</span> err := json.Unmarshal(result, &amp;healthResp); err != <span class="hljs-literal">nil</span> {
+// Call health method
+result, err := client.Call(&quot;health&quot;, map[string]any{})
+if err != nil {
     log.Fatal(err)
 }
 
-fmt.Printf(<span class="hljs-string">&quot;Status: %s\n&quot;</span>, healthResp.Status)</code></pre>
+var healthResp daemon.HealthResponse
+if err := json.Unmarshal(result, &amp;healthResp); err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf(&quot;Status: %s\n&quot;, healthResp.Status)</code></pre>
 <h3>From Other Languages</h3>
 <h4>Python Example</h4>
-<pre><code class="language-python hljs"><span class="hljs-keyword">import</span> socket
-<span class="hljs-keyword">import</span> json
+<pre><code>import socket
+import json
 
-<span class="hljs-keyword">def</span> <span class="hljs-title function_">call_rpc</span>(<span class="hljs-params">method, params={}</span>):
+def call_rpc(method, params={}):
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.connect(<span class="hljs-string">&#x27;.thrum/var/thrum.sock&#x27;</span>)
+    sock.connect(&#39;.thrum/var/thrum.sock&#39;)
 
     request = {
-        <span class="hljs-string">&#x27;jsonrpc&#x27;</span>: <span class="hljs-string">&#x27;2.0&#x27;</span>,
-        <span class="hljs-string">&#x27;method&#x27;</span>: method,
-        <span class="hljs-string">&#x27;params&#x27;</span>: params,
-        <span class="hljs-string">&#x27;id&#x27;</span>: <span class="hljs-number">1</span>
+        &#39;jsonrpc&#39;: &#39;2.0&#39;,
+        &#39;method&#39;: method,
+        &#39;params&#39;: params,
+        &#39;id&#39;: 1
     }
 
-    sock.sendall(json.dumps(request).encode() + <span class="hljs-string">b&#x27;\n&#x27;</span>)
-    response = sock.recv(<span class="hljs-number">4096</span>)
+    sock.sendall(json.dumps(request).encode() + b&#39;\n&#39;)
+    response = sock.recv(4096)
     sock.close()
 
-    <span class="hljs-keyword">return</span> json.loads(response)
+    return json.loads(response)
 
-<span class="hljs-comment"># Call health method</span>
-result = call_rpc(<span class="hljs-string">&#x27;health&#x27;</span>)
-<span class="hljs-built_in">print</span>(result[<span class="hljs-string">&#x27;result&#x27;</span>][<span class="hljs-string">&#x27;status&#x27;</span>])</code></pre>
+# Call health method
+result = call_rpc(&#39;health&#39;)
+print(result[&#39;result&#39;][&#39;status&#39;])</code></pre>
 <h4>Node.js Example</h4>
-<pre><code class="language-javascript hljs"><span class="hljs-keyword">const</span> net = <span class="hljs-built_in">require</span>(<span class="hljs-string">&quot;net&quot;</span>);
+<pre><code>const net = require(&quot;net&quot;);
 
-<span class="hljs-keyword">function</span> <span class="hljs-title function_">callRPC</span>(<span class="hljs-params">method, params = {}</span>) {
-  <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Promise</span>(<span class="hljs-function">(<span class="hljs-params">resolve, reject</span>) =&gt;</span> {
-    <span class="hljs-keyword">const</span> client = net.<span class="hljs-title function_">createConnection</span>(<span class="hljs-string">&quot;.thrum/var/thrum.sock&quot;</span>);
+function callRPC(method, params = {}) {
+  return new Promise((resolve, reject) =&gt; {
+    const client = net.createConnection(&quot;.thrum/var/thrum.sock&quot;);
 
-    <span class="hljs-keyword">const</span> request = {
-      <span class="hljs-attr">jsonrpc</span>: <span class="hljs-string">&quot;2.0&quot;</span>,
-      <span class="hljs-attr">method</span>: method,
-      <span class="hljs-attr">params</span>: params,
-      <span class="hljs-attr">id</span>: <span class="hljs-number">1</span>,
+    const request = {
+      jsonrpc: &quot;2.0&quot;,
+      method: method,
+      params: params,
+      id: 1,
     };
 
-    client.<span class="hljs-title function_">on</span>(<span class="hljs-string">&quot;connect&quot;</span>, <span class="hljs-function">() =&gt;</span> {
-      client.<span class="hljs-title function_">write</span>(<span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">stringify</span>(request) + <span class="hljs-string">&quot;\n&quot;</span>);
+    client.on(&quot;connect&quot;, () =&gt; {
+      client.write(JSON.stringify(request) + &quot;\n&quot;);
     });
 
-    client.<span class="hljs-title function_">on</span>(<span class="hljs-string">&quot;data&quot;</span>, <span class="hljs-function">(<span class="hljs-params">data</span>) =&gt;</span> {
-      <span class="hljs-keyword">const</span> response = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(data.<span class="hljs-title function_">toString</span>());
-      client.<span class="hljs-title function_">end</span>();
-      <span class="hljs-title function_">resolve</span>(response.<span class="hljs-property">result</span>);
+    client.on(&quot;data&quot;, (data) =&gt; {
+      const response = JSON.parse(data.toString());
+      client.end();
+      resolve(response.result);
     });
 
-    client.<span class="hljs-title function_">on</span>(<span class="hljs-string">&quot;error&quot;</span>, reject);
+    client.on(&quot;error&quot;, reject);
   });
 }
 
-<span class="hljs-comment">// Call health method</span>
-<span class="hljs-title function_">callRPC</span>(<span class="hljs-string">&quot;health&quot;</span>).<span class="hljs-title function_">then</span>(<span class="hljs-function">(<span class="hljs-params">result</span>) =&gt;</span> {
-  <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">&quot;Status:&quot;</span>, result.<span class="hljs-property">status</span>);
+// Call health method
+callRPC(&quot;health&quot;).then((result) =&gt; {
+  console.log(&quot;Status:&quot;, result.status);
 });</code></pre>
 <h2>Best Practices</h2>
 <h3>Connection Management</h3>
@@ -2661,14 +2680,14 @@ result = call_rpc(<span class="hljs-string">&#x27;health&#x27;</span>)
 </ol>
 <h2>Troubleshooting</h2>
 <h3>Connection Refused</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Check if daemon is running</span>
+<pre><code># Check if daemon is running
 ps aux | grep thrum
 
-<span class="hljs-comment"># Check socket exists</span>
-<span class="hljs-built_in">ls</span> -l .thrum/var/thrum.sock
+# Check socket exists
+ls -l .thrum/var/thrum.sock
 
-<span class="hljs-comment"># Check socket permissions</span>
-<span class="hljs-comment"># Should be: srw------- (0600)</span></code></pre>
+# Check socket permissions
+# Should be: srw------- (0600)</code></pre>
 <h3>Parse Errors</h3>
 <p>Common causes:</p>
 <ul>
@@ -2689,15 +2708,7 @@ ps aux | grep thrum
 <li>Development Guide: <code>docs/development.md</code></li>
 </ul>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#rpc-api.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#rpc-api.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#rpc-api.html')}</script>
 </body>
 </html>

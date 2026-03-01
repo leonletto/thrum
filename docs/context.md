@@ -139,6 +139,7 @@ echo "Working on auth module" | thrum context save
 thrum context save --agent coordinator --file notes.md
 ```
 
+---
 
 ### thrum context show
 
@@ -196,6 +197,7 @@ Raw (`--raw`, shows file boundaries):
 - Implementing JWT token refresh
 ```
 
+---
 
 ### thrum context clear
 
@@ -221,6 +223,7 @@ thrum context clear --agent furiosa
 
 Note: Idempotent - running clear when no context exists is a no-op.
 
+---
 
 ### thrum context sync
 
@@ -258,6 +261,7 @@ thrum context sync --agent furiosa
 - Respects the `--local` daemon flag
 - Manual only - context is never synced automatically
 
+---
 
 ### thrum context preamble
 
@@ -289,6 +293,7 @@ thrum context preamble --file my-preamble.md
 thrum context preamble --agent furiosa
 ```
 
+---
 
 ### thrum context prime
 
@@ -337,6 +342,7 @@ automatically saves context before compaction to `.thrum/context/{name}.md` and
 agent-initiated `/update-context` skill captures richer context including
 decisions and rationale.
 
+---
 
 ### thrum context update
 
@@ -352,6 +358,7 @@ thrum mcp serve
 Configure the MCP server in `.claude/settings.json` and use the
 `wait_for_message` and `send_message` tools for context coordination.
 
+---
 
 ## The /update-context Skill
 
@@ -385,6 +392,7 @@ Agent: [Saves formatted context]
 The skill reduces the friction of updating context and ensures consistent
 formatting.
 
+---
 
 ## Use Cases and Patterns
 
@@ -440,6 +448,7 @@ Context:  1.2 KB (updated 5m ago)    # ← Context indicator
 Inbox:    3 unread (12 total)
 ```
 
+---
 
 ## RPC API
 
@@ -474,6 +483,7 @@ Context operations are available via the daemon's RPC API:
 }
 ```
 
+---
 
 ### context.show
 
@@ -512,6 +522,7 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
 }
 ```
 
+---
 
 ### context.preamble.show
 
@@ -542,6 +553,7 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
 }
 ```
 
+---
 
 ### context.preamble.save
 
@@ -572,6 +584,7 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
 }
 ```
 
+---
 
 ### context.clear
 
@@ -601,6 +614,7 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
 }
 ```
 
+---
 
 ## Implementation Notes
 
@@ -639,6 +653,7 @@ Context sync is manual-only to avoid noise and respect agent autonomy:
 create unnecessary churn. Manual sync gives agents control over when and what to
 share.
 
+---
 
 ## Best Practices
 
@@ -690,6 +705,7 @@ Install it and use it regularly.
 Only sync context that is useful to other agents or future sessions on different
 machines. Local notes and WIP context can stay local.
 
+---
 
 ## See Also
 

@@ -48,7 +48,7 @@ const customTokenize = (text) => {
 };
 
 /**
- * Configure marked for syntax highlighting
+ * Configure marked for syntax highlighting (SPA version)
  */
 const renderer = new marked.Renderer();
 const originalCodeRenderer = renderer.code.bind(renderer);
@@ -68,6 +68,15 @@ renderer.code = function({ text, lang, escaped }) {
   const escapedText = escaped ? text : escape(text);
   const langClass = safeLang ? ` class="language-${safeLang}"` : '';
   return `<pre><code${langClass}>${escapedText}</code></pre>\n`;
+};
+
+/**
+ * Plain renderer for SEO/agent pages — no syntax highlighting spans
+ */
+const plainRenderer = new marked.Renderer();
+plainRenderer.code = function({ text, lang, escaped }) {
+  const escapedText = escaped ? text : escape(text);
+  return `<pre><code>${escapedText}</code></pre>\n`;
 };
 
 // Helper function for HTML escaping
@@ -156,88 +165,158 @@ async function processMarkdownFile(filePath, docsDir, outputDir) {
   };
 }
 
+// Category ordering and labels for SEO page sitemap nav
+// (mirrors docs-nav.js CATEGORY_ORDER / CATEGORY_LABELS)
+const SEO_CATEGORY_ORDER = [
+  'overview', 'quickstart', 'webui', 'cli', 'messaging', 'identity',
+  'guides', 'api', 'daemon', 'mcp', 'sync', 'development'
+];
+
+const SEO_CATEGORY_LABELS = {
+  overview: 'Overview',
+  quickstart: 'Getting Started',
+  tools: 'Recommended Tools',
+  webui: 'Web UI',
+  cli: 'CLI',
+  messaging: 'Messaging',
+  identity: 'Identity',
+  guides: 'Guides',
+  api: 'API Reference',
+  reference: 'Reference',
+  daemon: 'Daemon',
+  mcp: 'MCP Server',
+  sync: 'Sync',
+  context: 'Context',
+  architecture: 'Architecture',
+  development: 'Development'
+};
+
+const SEO_CATEGORY_CHILDREN = {
+  quickstart: ['tools']
+};
+
 /**
- * Generate per-doc SEO pages with Open Graph meta tags.
+ * Build a static sitemap nav HTML string from the docs index.
+ * Groups pages by category, marks the current page as bold text (no link).
+ */
+function buildSitemapNav(docs, currentDoc) {
+  // Group docs by category
+  const groups = {};
+  for (const doc of docs) {
+    const cat = doc.category || 'uncategorized';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(doc);
+  }
+
+  // Sort within each group by order then title
+  for (const cat of Object.keys(groups)) {
+    groups[cat].sort((a, b) => {
+      if (a.order !== b.order) return a.order - b.order;
+      return a.title.localeCompare(b.title);
+    });
+  }
+
+  // Collect all categories that appear, ordered by SEO_CATEGORY_ORDER
+  const childCats = new Set();
+  for (const children of Object.values(SEO_CATEGORY_CHILDREN)) {
+    for (const c of children) childCats.add(c);
+  }
+
+  const orderedCats = [];
+  for (const cat of SEO_CATEGORY_ORDER) {
+    if (groups[cat]) {
+      orderedCats.push(cat);
+      // Add children inline after parent
+      const children = SEO_CATEGORY_CHILDREN[cat] || [];
+      for (const child of children) {
+        if (groups[child]) orderedCats.push(child);
+      }
+    }
+  }
+  // Add any remaining categories not in the order list
+  for (const cat of Object.keys(groups)) {
+    if (!orderedCats.includes(cat)) orderedCats.push(cat);
+  }
+
+  // Compute relative prefix for links (pages in subdirs need different paths)
+  const currentDepth = (currentDoc.path.match(/\//g) || []).length;
+  const linkPrefix = currentDepth > 0 ? '../'.repeat(currentDepth) : '';
+
+  let html = '';
+  for (const cat of orderedCats) {
+    const label = SEO_CATEGORY_LABELS[cat] || cat;
+    const indent = childCats.has(cat) ? '  ' : '';
+    html += `${indent}<strong>${label}</strong>: `;
+    const links = groups[cat].map(doc => {
+      if (doc.path === currentDoc.path) {
+        return `<strong>${doc.title}</strong>`;
+      }
+      return `<a href="${linkPrefix}${doc.path}">${doc.title}</a>`;
+    });
+    html += links.join(' | ') + '<br>\n';
+  }
+
+  return html;
+}
+
+/**
+ * Render markdown to plain HTML without syntax highlighting.
+ * Used for SEO/agent pages to minimize token overhead.
+ */
+function renderPlainHTML(markdown) {
+  let html = marked.parse(markdown, { renderer: plainRenderer, breaks: false, gfm: true });
+  return rewriteLinks(html);
+}
+
+/**
+ * Generate per-doc SEO pages optimized for AI agents and crawlers.
  *
  * Each doc gets a lightweight HTML page at docs/{name}.html that:
- * - Has proper <title>, og:title, og:description for social sharing
- * - Includes the rendered content for crawler indexing
+ * - Has minimal <head> (title, description, canonical — no OG/Twitter/fonts/CSS)
+ * - Includes a sitemap nav showing all doc categories and pages
+ * - Renders content without syntax highlighting spans
  * - Redirects browsers to the SPA (docs.html#{path})
  */
 async function generateSEOPages(docs, docsDir) {
-  const seoTemplate = (doc, html) => `<!DOCTYPE html>
+  const seoTemplate = (doc, html, sitemapNav) => `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${doc.title} \u2014 Thrum</title>
-  <meta name="description" content="${escapeAttr(doc.description)}">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="${escapeAttr(doc.title)} \u2014 Thrum">
-  <meta property="og:description" content="${escapeAttr(doc.description)}">
-  <meta property="og:url" content="${CONFIG.siteUrl}/docs/${doc.path}">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="${CONFIG.siteUrl}/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="${escapeAttr(doc.title)} \u2014 Thrum">
-  <meta name="twitter:description" content="${escapeAttr(doc.description)}">
-  <meta name="twitter:image" content="${CONFIG.siteUrl}/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="${CONFIG.siteUrl}/docs.html#${doc.path}">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>${doc.title} — Thrum</title>
+<meta name="description" content="${escapeAttr(doc.description)}">
+<link rel="canonical" href="${CONFIG.siteUrl}/docs.html#${doc.path}">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="${doc.path.includes('/') ? '../' : ''}../docs.html">Thrum Docs</a></strong> &rsaquo; ${SEO_CATEGORY_LABELS[doc.category] || doc.category} &rsaquo; ${doc.title}
+<hr>
+${sitemapNav}</nav>
+<main>
 ${html}
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#${doc.path}">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#${doc.path}');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('${doc.path.includes('/') ? '../' : ''}../docs.html#${doc.path}')}</script>
 </body>
 </html>`;
 
   let count = 0;
   for (const doc of docs) {
-    const htmlPath = path.join(CONFIG.outputDir, doc.path);
-    const html = await fs.readFile(htmlPath, 'utf-8');
+    // Render plain HTML from original markdown (no hljs)
+    const plainHtml = renderPlainHTML(doc.content);
+    const sitemapNav = buildSitemapNav(docs, doc);
     const seoPath = path.join(docsDir, doc.path);
     await fs.ensureDir(path.dirname(seoPath));
-    await fs.writeFile(seoPath, seoTemplate(doc, html));
+    await fs.writeFile(seoPath, seoTemplate(doc, plainHtml, sitemapNav));
     count++;
   }
   return count;

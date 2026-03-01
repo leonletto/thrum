@@ -1,106 +1,117 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Web UI — Thrum</title>
-  <meta name="description" content="Browser-based dashboard for monitoring agents, reading messages, and managing groups — served from the daemon on a single port">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Web UI — Thrum">
-  <meta property="og:description" content="Browser-based dashboard for monitoring agents, reading messages, and managing groups — served from the daemon on a single port">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/web-ui.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Web UI — Thrum">
-  <meta name="twitter:description" content="Browser-based dashboard for monitoring agents, reading messages, and managing groups — served from the daemon on a single port">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#web-ui.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Web UI — Thrum</title>
+<meta name="description" content="Browser-based dashboard for monitoring agents, reading messages, and managing groups — served from the daemon on a single port">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#web-ui.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Web UI &rsaquo; Web UI
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <strong>Web UI</strong><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Web UI</h2>
 <blockquote>
-<p>The daemon serves a real-time dashboard alongside the WebSocket server. No<br>extra setup — <code>make install</code> includes it.</p>
+<p>The daemon serves a real-time dashboard alongside the WebSocket server. No
+extra setup — <code>make install</code> includes it.</p>
 </blockquote>
-<p>The web UI is a single-page application embedded in the daemon binary. It<br>connects over WebSocket on the same port the daemon already listens on (default<br><code>9999</code>). Everything the CLI can show you, the UI shows in real time.</p>
+<p>The web UI is a single-page application embedded in the daemon binary. It
+connects over WebSocket on the same port the daemon already listens on (default
+<code>9999</code>). Everything the CLI can show you, the UI shows in real time.</p>
 <h2>Opening the UI</h2>
 <p>Start the daemon if it isn&#39;t running:</p>
-<pre><code class="language-bash hljs">thrum daemon start</code></pre>
+<pre><code>thrum daemon start</code></pre>
 <p>Open your browser to <code>http://localhost:9999</code> (or whatever port you configured).</p>
-<p>The UI auto-registers a browser agent using your Git config name. The status bar<br>at the bottom shows connection state, daemon version, uptime, and which<br>repository you&#39;re connected to.</p>
+<p>The UI auto-registers a browser agent using your Git config name. The status bar
+at the bottom shows connection state, daemon version, uptime, and which
+repository you&#39;re connected to.</p>
 <p><img src="img/docs/ui-live-feed.png" alt="Full activity feed with 5 agents and all groups visible"></p>
 <h2>Live Feed</h2>
-<p>The Live Feed is the default view. It shows a chronological stream of everything<br>happening in the repository — agent registrations, session starts, messages<br>sent, group events, file locks.</p>
+<p>The Live Feed is the default view. It shows a chronological stream of everything
+happening in the repository — agent registrations, session starts, messages
+sent, group events, file locks.</p>
 <p>Three filter buttons sit at the top right:</p>
 <ul>
 <li><strong>All</strong> — every event type</li>
-<li><strong>Messages Only</strong> — strips out registrations and session events, shows only<br>message content</li>
+<li><strong>Messages Only</strong> — strips out registrations and session events, shows only
+message content</li>
 <li><strong>Errors</strong> — surfaces failures and warnings</li>
 </ul>
 <p><img src="img/docs/ui-feed-messages-filter.png" alt="Messages-only filter applied to the activity feed"></p>
 <h2>My Inbox</h2>
-<p>Click <strong>My Inbox</strong> in the sidebar to see messages addressed to you. Three tabs<br>across the top:</p>
+<p>Click <strong>My Inbox</strong> in the sidebar to see messages addressed to you. Three tabs
+across the top:</p>
 <ul>
 <li><strong>All</strong> — everything in your inbox</li>
 <li><strong>Unread</strong> — messages you haven&#39;t opened (badge count shown)</li>
 <li><strong>Mentions</strong> — messages where someone <code>@mentioned</code> you</li>
 </ul>
-<p>Each message shows the sender, timestamp, and a <strong>Reply</strong> button. The<br><strong>ComposeBar</strong> at the bottom lets you write new messages with <code>@mention</code><br>autocomplete — type <code>@</code> to see available agents and groups. The ComposeBar<br>expands as you type and collapses after sending, keeping the reading area clean.</p>
+<p>Each message shows the sender, timestamp, and a <strong>Reply</strong> button. The
+<strong>ComposeBar</strong> at the bottom lets you write new messages with <code>@mention</code>
+autocomplete — type <code>@</code> to see available agents and groups. The ComposeBar
+expands as you type and collapses after sending, keeping the reading area clean.</p>
 <p><img src="img/docs/ui-inbox.png" alt="Personal inbox with ComposeBar and reply threading"></p>
 <h2>Group Channels</h2>
-<p>Groups work like channels. Click any group in the sidebar to see its messages<br>and members. The header shows the group name, member count, and a <strong>Members</strong><br>button to view who belongs to the group.</p>
-<p>The <code>+</code> button next to the <strong>Groups</strong> heading lets you create new groups. Each<br>group has its own ComposeBar for sending messages scoped to that channel.</p>
+<p>Groups work like channels. Click any group in the sidebar to see its messages
+and members. The header shows the group name, member count, and a <strong>Members</strong>
+button to view who belongs to the group.</p>
+<p>The <code>+</code> button next to the <strong>Groups</strong> heading lets you create new groups. Each
+group has its own ComposeBar for sending messages scoped to that channel.</p>
 <p>Unread badges on group names tell you where new activity is.</p>
 <p><img src="img/docs/ui-group-channel.png" alt="#test-team group channel with message history and members panel"></p>
 <h2>Agent View</h2>
-<p>Click any agent name in the <strong>Agents</strong> sidebar section to open their view. The<br>agent view uses a compact thin header at the top showing the agent name, role,<br>module, and online status. A gear icon in the header opens a slide-out settings<br>panel with agent details and actions.</p>
-<p>The main area shows the agent&#39;s message history with reply buttons. The gear<br>slide-out provides:</p>
+<p>Click any agent name in the <strong>Agents</strong> sidebar section to open their view. The
+agent view uses a compact thin header at the top showing the agent name, role,
+module, and online status. A gear icon in the header opens a slide-out settings
+panel with agent details and actions.</p>
+<p>The main area shows the agent&#39;s message history with reply buttons. The gear
+slide-out provides:</p>
 <ul>
 <li><strong>Context info</strong> — current intent, branch, session uptime</li>
 <li><strong>Delete Agent</strong> — removes stale agents from the registry</li>
 </ul>
-<p>This is useful for understanding what an agent is working on and what<br>instructions it has received.</p>
+<p>This is useful for understanding what an agent is working on and what
+instructions it has received.</p>
 <p><img src="img/docs/ui-agent-inbox.png" alt="Agent view with thin header and gear slide-out for settings"></p>
 <h2>Who Has?</h2>
-<p>The <strong>Who Has?</strong> tool under the Tools section answers: &quot;which agent is editing<br>this file?&quot; Type a file path in the search box to see which agents have declared<br>ownership of it via <code>thrum who-has</code>.</p>
+<p>The <strong>Who Has?</strong> tool under the Tools section answers: &quot;which agent is editing
+this file?&quot; Type a file path in the search box to see which agents have declared
+ownership of it via <code>thrum who-has</code>.</p>
 <p>This prevents merge conflicts when multiple agents work in the same repository.</p>
 <p><img src="img/docs/ui-who-has.png" alt="File coordination search tool"></p>
 <h2>Settings</h2>
 <p>The Settings page shows:</p>
 <ul>
-<li><strong>Daemon Status</strong> — version, uptime, repo ID, sync state, with a<br>start/stop/restart button</li>
+<li><strong>Daemon Status</strong> — version, uptime, repo ID, sync state, with a
+start/stop/restart button</li>
 <li><strong>Notifications</strong> — browser notification preferences</li>
 <li><strong>Theme</strong> — toggle between Dark, Light, and System themes</li>
 <li><strong>Keyboard Shortcuts</strong> — reference table of all hotkeys</li>
@@ -145,18 +156,13 @@
 </tbody></table>
 <p>Shortcuts are listed on the Settings page for reference.</p>
 <h2>What the UI Shows You</h2>
-<p>The UI is a window into what&#39;s happening, not a control plane. It reflects the<br>same data the CLI and MCP server use — messages stored as JSONL, agent state in<br>SQLite, sync status from Git. Nothing is hidden, nothing is abstracted away.</p>
-<p>This is consistent with Thrum&#39;s core principle: everything is<br><a href="philosophy.html">inspectable by design</a>.</p>
+<p>The UI is a window into what&#39;s happening, not a control plane. It reflects the
+same data the CLI and MCP server use — messages stored as JSONL, agent state in
+SQLite, sync status from Git. Nothing is hidden, nothing is abstracted away.</p>
+<p>This is consistent with Thrum&#39;s core principle: everything is
+<a href="philosophy.html">inspectable by design</a>.</p>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#web-ui.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#web-ui.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#web-ui.html')}</script>
 </body>
 </html>

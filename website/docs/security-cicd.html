@@ -1,57 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Security & CI/CD — Thrum</title>
-  <meta name="description" content="Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Security &amp; CI/CD — Thrum">
-  <meta property="og:description" content="Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/security-cicd.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Security &amp; CI/CD — Thrum">
-  <meta name="twitter:description" content="Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#security-cicd.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Security & CI/CD — Thrum</title>
+<meta name="description" content="Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#security-cicd.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Development &rsaquo; Security & CI/CD
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <strong>Security & CI/CD</strong><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Security &amp; CI/CD</h2>
-<p>Thrum uses GitHub Actions for continuous integration, security scanning, and<br>automated deployment. This guide covers the available workflows and how to<br>configure them.</p>
+<p>Thrum uses GitHub Actions for continuous integration, security scanning, and
+automated deployment. This guide covers the available workflows and how to
+configure them.</p>
 <h2>GitHub Actions Workflows</h2>
 <h3>Documentation Deployment</h3>
 <p><strong>File:</strong> <code>.github/workflows/deploy-pages.yml</code></p>
@@ -65,11 +55,12 @@
 <ol>
 <li>Checkout repository</li>
 <li>Install Node.js dependencies (<code>website/</code> directory)</li>
-<li>Build docs (<code>npm run build-docs</code>) — generates HTML, search index, navigation<br>index</li>
+<li>Build docs (<code>npm run build-docs</code>) — generates HTML, search index, navigation
+index</li>
 <li>Deploy <code>website/</code> directory to GitHub Pages</li>
 </ol>
-<pre><code class="language-yaml hljs"><span class="hljs-comment"># Manual trigger</span>
-<span class="hljs-string">gh</span> <span class="hljs-string">workflow</span> <span class="hljs-string">run</span> <span class="hljs-string">deploy-pages.yml</span></code></pre>
+<pre><code># Manual trigger
+gh workflow run deploy-pages.yml</code></pre>
 <h3>Security Scanning</h3>
 <p>Additional security scanning workflows are planned for a future release.</p>
 <h2>Branch Protection</h2>
@@ -100,20 +91,24 @@
 </tbody></table>
 <h2>Local Development</h2>
 <h3>Building Docs Locally</h3>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> website
+<pre><code>cd website
 npm install
 npm run build-docs</code></pre>
 <h3>Running the Dev Server</h3>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> website
+<pre><code>cd website
 npm run serve
-<span class="hljs-comment"># Visit http://localhost:8080</span></code></pre>
+# Visit http://localhost:8080</code></pre>
 <h3>Syncing Docs</h3>
 <p>To sync <code>website/docs/</code> (with frontmatter) to <code>docs/</code> (clean markdown):</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> website
-./scripts/sync-docs.sh          <span class="hljs-comment"># sync all changed files</span>
-./scripts/sync-docs.sh --dry-run  <span class="hljs-comment"># preview changes</span></code></pre>
+<pre><code>cd website
+./scripts/sync-docs.sh          # sync all changed files
+./scripts/sync-docs.sh --dry-run  # preview changes</code></pre>
 <h2>Tailscale Security</h2>
-<p>For remote access and cross-machine synchronization, Thrum uses Tailscale as the<br>primary security model. Tailscale provides end-to-end WireGuard encryption,<br>zero-trust networking, and automatic key rotation. See<br><a href="tailscale-security.html">Tailscale Security</a> for detailed security model and<br>threat analysis.</p>
+<p>For remote access and cross-machine synchronization, Thrum uses Tailscale as the
+primary security model. Tailscale provides end-to-end WireGuard encryption,
+zero-trust networking, and automatic key rotation. See
+<a href="tailscale-security.html">Tailscale Security</a> for detailed security model and
+threat analysis.</p>
 <h2>See Also</h2>
 <ul>
 <li><a href="development.html">Development Guide</a> — contributing and local setup</li>
@@ -121,15 +116,7 @@ npm run serve
 <li><a href="tailscale-security.html">Tailscale Security</a> — remote access security model</li>
 </ul>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#security-cicd.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#security-cicd.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#security-cicd.html')}</script>
 </body>
 </html>

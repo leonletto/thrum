@@ -1,59 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Claude Code Agent Integration — Thrum</title>
-  <meta name="description" content="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Claude Code Agent Integration — Thrum">
-  <meta property="og:description" content="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/claude-agent-integration.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Claude Code Agent Integration — Thrum">
-  <meta name="twitter:description" content="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#claude-agent-integration.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Claude Code Agent Integration — Thrum</title>
+<meta name="description" content="Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#claude-agent-integration.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Claude Code Agent Integration
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <strong>Claude Code Agent Integration</strong> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Claude Code Agent Integration</h2>
-<p>Thrum ships two Claude Code agent definitions for multi-agent coordination.<br>Place these in <code>.claude/agents/</code> in any project that uses Thrum.</p>
+<p>Thrum ships two Claude Code agent definitions for multi-agent coordination.
+Place these in <code>.claude/agents/</code> in any project that uses Thrum.</p>
 <h2>thrum-agent</h2>
-<p>A comprehensive coordination guide that teaches Claude Code how to use Thrum for<br>multi-agent workflows. Covers:</p>
+<p>A comprehensive coordination guide that teaches Claude Code how to use Thrum for
+multi-agent workflows. Covers:</p>
 <ul>
 <li>MCP server integration and configuration</li>
 <li>CLI commands for messaging, sessions, and coordination</li>
@@ -62,135 +52,139 @@
 <li>Beads integration for combined task + messaging coordination</li>
 <li>Troubleshooting guide</li>
 </ul>
-<p><strong>Usage:</strong> Reference this agent when an AI agent needs to coordinate with other<br>agents via Thrum messaging.</p>
+<p><strong>Usage:</strong> Reference this agent when an AI agent needs to coordinate with other
+agents via Thrum messaging.</p>
 <details>
 <summary>thrum-agent.md</summary>
 
-<pre><code class="language-markdown hljs">---
+<pre><code>---
 name: thrum-agent
 description: &gt;
   Thrum multi-agent coordination guide. Git-backed messaging for AI agents to
   communicate across sessions, worktrees, and machines. Covers MCP server
-<span class="hljs-section">  integration, message-listener pattern, CLI usage, and Beads integration.
----</span>
+  integration, message-listener pattern, CLI usage, and Beads integration.
+---
 
-<span class="hljs-section"># Thrum - Multi-Agent Coordination via Git</span>
+# Thrum - Multi-Agent Coordination via Git
 
-<span class="hljs-section">## Overview</span>
+## Overview
 
 Thrum is a Git-backed messaging system that enables AI agents and humans to
 communicate persistently across sessions, worktrees, and machines. It uses Git
 as the synchronization layer, ensuring all messages survive context window
 limits, session restarts, and machine boundaries.
 
-<span class="hljs-section">## Quick Start</span>
+## Quick Start
 
-<span class="hljs-section">### 1. Register and Start Session</span>
+### 1. Register and Start Session
 
-thrum quickstart --name <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">your-name</span>&gt;</span></span> --role <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">role</span>&gt;</span></span> --module <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">module</span>&gt;</span></span> --intent
-&quot;<span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">description</span>&gt;</span></span>&quot;
+thrum quickstart --name &lt;your-name&gt; --role &lt;role&gt; --module &lt;module&gt; --intent
+&quot;&lt;description&gt;&quot;
 
 Common roles: planner, implementer, reviewer, tester, coordinator
 
-<span class="hljs-section">### 2. Configure MCP Server (recommended)</span>
+### 2. Configure MCP Server (recommended)
 
 Add to .claude/settings.json:
 
 { &quot;mcpServers&quot;: { &quot;thrum&quot;: { &quot;type&quot;: &quot;stdio&quot;, &quot;command&quot;: &quot;thrum&quot;, &quot;args&quot;:
 [&quot;mcp&quot;, &quot;serve&quot;] } } }
 
-<span class="hljs-section">### 3. Launch Background Listener</span>
+### 3. Launch Background Listener
 
 Spawn a message-listener sub-agent to get async notifications. Re-arm it every
-time it returns (both MESSAGES<span class="hljs-emphasis">_RECEIVED and NO_</span>MESSAGES<span class="hljs-emphasis">_TIMEOUT).
+time it returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
 
 ### 4. Communicate
 
 thrum send &quot;message&quot; --to @name # Direct message thrum send &quot;message&quot; --to
 @everyone # Broadcast to all thrum inbox --unread # Check for new messages thrum
-reply <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">msg-id</span>&gt;</span></span> &quot;response&quot; # Reply (creates a reply-to reference)
+reply &lt;msg-id&gt; &quot;response&quot; # Reply (creates a reply-to reference)
 
 ## MCP Tools (11 total)
 
-<span class="hljs-strong">**Core messaging (5):**</span>
+**Core messaging (5):**
 
-- send_</span>message — Send to specific agent via @name
-<span class="hljs-bullet">-</span> check<span class="hljs-emphasis">_messages — Poll inbox, auto-mark read
-- wait_</span>for<span class="hljs-emphasis">_message — Block until message arrives
-- list_</span>agents — Show registered agents
-<span class="hljs-bullet">-</span> broadcast<span class="hljs-emphasis">_message — Send to all agents (alias for send_</span>message to @everyone)
+- send_message — Send to specific agent via @name
+- check_messages — Poll inbox, auto-mark read
+- wait_for_message — Block until message arrives
+- list_agents — Show registered agents
+- broadcast_message — Send to all agents (alias for send_message to @everyone)
 
-<span class="hljs-strong">**Group management (6):**</span>
+**Group management (6):**
 
-<span class="hljs-bullet">-</span> create<span class="hljs-emphasis">_group — Create a named messaging group
-- delete_</span>group — Delete a messaging group
-<span class="hljs-bullet">-</span> add<span class="hljs-emphasis">_group_</span>member — Add agent or role to group
-<span class="hljs-bullet">-</span> remove<span class="hljs-emphasis">_group_</span>member — Remove member from group
-<span class="hljs-bullet">-</span> list<span class="hljs-emphasis">_groups — List all groups
-- get_</span>group — Get group details with optional expansion
+- create_group — Create a named messaging group
+- delete_group — Delete a messaging group
+- add_group_member — Add agent or role to group
+- remove_group_member — Remove member from group
+- list_groups — List all groups
+- get_group — Get group details with optional expansion
 
-<span class="hljs-section">## Session Template</span>
+## Session Template
 
-<span class="hljs-section"># Start</span>
+# Start
 
-thrum quickstart --name <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">name</span>&gt;</span></span> --role <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">role</span>&gt;</span></span> --module <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">module</span>&gt;</span></span> --intent &quot;<span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">desc</span>&gt;</span></span>&quot;
+thrum quickstart --name &lt;name&gt; --role &lt;role&gt; --module &lt;module&gt; --intent &quot;&lt;desc&gt;&quot;
 thrum inbox --unread
 
-<span class="hljs-section"># During work</span>
+# During work
 
 thrum send &quot;status update&quot; --to @coordinator
 
-<span class="hljs-section"># End</span>
+# End
 
 thrum session end</code></pre>
 </details>
 
 <h2>message-listener</h2>
-<p>A lightweight background agent (runs on Haiku for ~$0.00003/cycle) that polls<br>for incoming messages. It loops inbox checks with 30-second sleep intervals for<br>up to ~5 minutes, returning immediately when new messages arrive.</p>
-<p><strong>Usage:</strong> Spawn at the start of every coordination session. Re-arm immediately<br>when it returns.</p>
+<p>A lightweight background agent (runs on Haiku for ~$0.00003/cycle) that polls
+for incoming messages. It loops inbox checks with 30-second sleep intervals for
+up to ~5 minutes, returning immediately when new messages arrive.</p>
+<p><strong>Usage:</strong> Spawn at the start of every coordination session. Re-arm immediately
+when it returns.</p>
 <details>
 <summary>message-listener.md</summary>
 
-<pre><code class="language-markdown hljs">---
+<pre><code>---
 name: message-listener
 description: &gt;
   Background listener for incoming Thrum messages. Runs on Haiku for cost
-  efficiency (~$0.00003/cycle). Uses <span class="hljs-code">`thrum wait`</span> for efficient blocking instead
+  efficiency (~$0.00003/cycle). Uses `thrum wait` for efficient blocking instead
   of polling loops. Returns immediately when new messages arrive.
 model: haiku
 allowed-tools:
-<span class="hljs-section">  - Bash
----</span>
+  - Bash
+---
 
 You are a background message listener for the Thrum agent messaging system.
 
-<span class="hljs-section">## CRITICAL: Tool Constraints</span>
+## CRITICAL: Tool Constraints
 
 You do NOT have access to MCP tools. You MUST use the Bash tool exclusively to
 run thrum CLI commands.
 
-<span class="hljs-section">## Instructions</span>
+## Instructions
 
-You use <span class="hljs-code">`thrum wait`</span> to block efficiently until a message arrives. No polling
-loops needed — <span class="hljs-code">`thrum wait`</span> uses the daemon&#x27;s WebSocket push internally.
+You use `thrum wait` to block efficiently until a message arrives. No polling
+loops needed — `thrum wait` uses the daemon&#39;s WebSocket push internally.
 
-Your prompt contains the EXACT command to use after &quot;WAIT<span class="hljs-emphasis">_CMD=&quot;. Use that
+Your prompt contains the EXACT command to use after &quot;WAIT_CMD=&quot;. Use that
 command verbatim.
 
-<span class="hljs-strong">**LOOP**</span> (repeat up to 6 cycles, ~90 min coverage):
+**LOOP** (repeat up to 6 cycles, ~90 min coverage):
 
-1. Run the WAIT_</span>CMD from your prompt EXACTLY as given (Bash).
-<span class="hljs-bullet">2.</span> If messages found (exit code 0), return them immediately.
-<span class="hljs-bullet">3.</span> If timeout (exit code 1), go back to step 1.
-<span class="hljs-bullet">4.</span> If error (exit code 2), return the error.
+1. Run the WAIT_CMD from your prompt EXACTLY as given (Bash).
+2. If messages found (exit code 0), return them immediately.
+3. If timeout (exit code 1), go back to step 1.
+4. If error (exit code 2), return the error.
 
-After exhausting all cycles with no messages, return NO<span class="hljs-emphasis">_MESSAGES_</span>TIMEOUT.
+After exhausting all cycles with no messages, return NO_MESSAGES_TIMEOUT.
 
-<span class="hljs-section">## Return Format</span>
+## Return Format
 
 When messages received:
 
-<span class="hljs-section">## MESSAGES<span class="hljs-emphasis">_RECEIVED
+## MESSAGES_RECEIVED
 
 FROM: [sender] CONTENT: [message content]
 
@@ -198,33 +192,26 @@ FROM: [sender] CONTENT: [message content]
 
 When timeout:
 
-NO_</span>MESSAGES<span class="hljs-emphasis">_TIMEOUT
+NO_MESSAGES_TIMEOUT
 
 Always end with:
 
 RE-ARM: This listener has stopped. Spawn a new message-listener agent to
-continue listening.</span></span></code></pre>
+continue listening.</code></pre>
 </details>
 
 <h2>Setup</h2>
 <p>Copy both files into your project:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">mkdir</span> -p .claude/agents
-<span class="hljs-built_in">cp</span> docs/claude-agent-integration.md .  <span class="hljs-comment"># For reference</span>
+<pre><code>mkdir -p .claude/agents
+cp docs/claude-agent-integration.md .  # For reference
 
-<span class="hljs-comment"># Create the agent files (or copy from this doc)</span>
-<span class="hljs-comment"># .claude/agents/thrum-agent.md</span>
-<span class="hljs-comment"># .claude/agents/message-listener.md</span></code></pre>
-<p>Or see the full agent definitions in the<br><a href="https://leonletto.github.io/thrum">documentation site</a>.</p>
+# Create the agent files (or copy from this doc)
+# .claude/agents/thrum-agent.md
+# .claude/agents/message-listener.md</code></pre>
+<p>Or see the full agent definitions in the
+<a href="https://leonletto.github.io/thrum">documentation site</a>.</p>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#claude-agent-integration.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#claude-agent-integration.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#claude-agent-integration.html')}</script>
 </body>
 </html>

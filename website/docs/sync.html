@@ -1,62 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sync Protocol — Thrum</title>
-  <meta name="description" content="Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Sync Protocol — Thrum">
-  <meta property="og:description" content="Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/sync.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Sync Protocol — Thrum">
-  <meta name="twitter:description" content="Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#sync.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Sync Protocol — Thrum</title>
+<meta name="description" content="Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#sync.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Sync &rsaquo; Sync Protocol
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <strong>Sync Protocol</strong><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Sync Protocol</h2>
-<p>The sync protocol keeps message logs synchronized across repository clones using<br>Git as the transport layer. This enables offline-first operation with eventual<br>consistency.</p>
+<p>The sync protocol keeps message logs synchronized across repository clones using
+Git as the transport layer. This enables offline-first operation with eventual
+consistency.</p>
 <h2>Overview</h2>
-<p>Thrum uses a dedicated <code>a-sync</code> orphan branch to synchronize message history<br>independently from code changes. The JSONL event logs live in a sync worktree<br>(at <code>.git/thrum-sync/a-sync/</code>) checked out on this branch. The daemon<br>automatically fetches, merges, and pushes changes within the worktree on a<br>configurable interval (default: 60 seconds).</p>
-<p><strong>Key design decision:</strong> All sync operations happen within the sync worktree.<br>There is no <code>git checkout</code> or branch switching on the main working tree. This<br>avoids interfering with the developer&#39;s code work.</p>
+<p>Thrum uses a dedicated <code>a-sync</code> orphan branch to synchronize message history
+independently from code changes. The JSONL event logs live in a sync worktree
+(at <code>.git/thrum-sync/a-sync/</code>) checked out on this branch. The daemon
+automatically fetches, merges, and pushes changes within the worktree on a
+configurable interval (default: 60 seconds).</p>
+<p><strong>Key design decision:</strong> All sync operations happen within the sync worktree.
+There is no <code>git checkout</code> or branch switching on the main working tree. This
+avoids interfering with the developer&#39;s code work.</p>
 <h2>Architecture</h2>
-<pre><code class="language-text hljs">┌──────────────────────────────────────────────────────────────┐
+<pre><code>┌──────────────────────────────────────────────────────────────┐
 │          Sync Loop (60s) in .git/thrum-sync/a-sync/          │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
@@ -72,8 +68,9 @@
 └──────────────────────────────────────────────────────────────┘</code></pre>
 <h2>Worktree Model</h2>
 <h3>The Sync Worktree</h3>
-<p>The sync worktree is a git worktree at <code>.git/thrum-sync/a-sync/</code>, linked to the<br>repository and checked out on the <code>a-sync</code> orphan branch. It contains:</p>
-<pre><code class="language-text hljs">.git/thrum-sync/a-sync/
+<p>The sync worktree is a git worktree at <code>.git/thrum-sync/a-sync/</code>, linked to the
+repository and checked out on the <code>a-sync</code> orphan branch. It contains:</p>
+<pre><code>.git/thrum-sync/a-sync/
 ├── events.jsonl              Append-only agent lifecycle events
 └── messages/
     └── {agent_name}.jsonl    Per-agent message logs</code></pre>
@@ -84,22 +81,30 @@
 <li><strong>Operated on</strong> exclusively by the daemon via git commands</li>
 <li><strong>Independent</strong> from all code branches</li>
 <li><strong>Shared</strong> across all repository clones via the <code>a-sync</code> branch</li>
-<li><strong>Sparse checkout</strong> -- only <code>events.jsonl</code>, <code>messages/</code>, and <code>messages.jsonl</code><br>(migration compat) are checked out</li>
+<li><strong>Sparse checkout</strong> -- only <code>events.jsonl</code>, <code>messages/</code>, and <code>messages.jsonl</code>
+(migration compat) are checked out</li>
 <li><strong>Hidden</strong> from IDE file explorers (lives inside <code>.git/</code>)</li>
 </ul>
 <h3>Sparse Checkout</h3>
-<p>The worktree uses sparse checkout (non-cone mode) to only include Thrum data<br>files:</p>
-<pre><code class="language-text hljs">/events.jsonl
+<p>The worktree uses sparse checkout (non-cone mode) to only include Thrum data
+files:</p>
+<pre><code>/events.jsonl
 /messages/
 /messages.jsonl    # old monolithic format, kept for migration support</code></pre>
-<p>This is configured automatically during <code>CreateSyncWorktree()</code> and reduces disk<br>usage by excluding any non-Thrum files that may appear on the branch.</p>
+<p>This is configured automatically during <code>CreateSyncWorktree()</code> and reduces disk
+usage by excluding any non-Thrum files that may appear on the branch.</p>
 <h3>Path Resolution</h3>
 <p>The sync worktree path is resolved via <code>git rev-parse --git-common-dir</code>:</p>
-<pre><code class="language-go hljs"><span class="hljs-comment">// SyncWorktreePath returns: &lt;git-common-dir&gt;/thrum-sync/a-sync</span>
-<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">SyncWorktreePath</span><span class="hljs-params">(repoPath <span class="hljs-type">string</span>)</span></span> (<span class="hljs-type">string</span>, <span class="hljs-type">error</span>)</code></pre>
-<p>Using <code>git-common-dir</code> ensures correct resolution for both regular repos and<br>nested git worktrees. For a regular repo, <code>git-common-dir</code> returns <code>.git</code>, so<br>the path resolves to <code>.git/thrum-sync/a-sync/</code>. For a nested worktree, it<br>returns the main repo&#39;s <code>.git/</code> directory, ensuring all worktrees share the same<br>sync data.</p>
+<pre><code>// SyncWorktreePath returns: &lt;git-common-dir&gt;/thrum-sync/a-sync
+func SyncWorktreePath(repoPath string) (string, error)</code></pre>
+<p>Using <code>git-common-dir</code> ensures correct resolution for both regular repos and
+nested git worktrees. For a regular repo, <code>git-common-dir</code> returns <code>.git</code>, so
+the path resolves to <code>.git/thrum-sync/a-sync/</code>. For a nested worktree, it
+returns the main repo&#39;s <code>.git/</code> directory, ensuring all worktrees share the same
+sync data.</p>
 <h3>Worktree Health Checks</h3>
-<p><code>CreateSyncWorktree()</code> performs a 4-level health check before creating or<br>recreating the worktree:</p>
+<p><code>CreateSyncWorktree()</code> performs a 4-level health check before creating or
+recreating the worktree:</p>
 <ol>
 <li><code>.git</code> file exists (worktrees have a <code>.git</code> file, not a directory)</li>
 <li>Listed in <code>git worktree list --porcelain</code></li>
@@ -108,7 +113,8 @@
 </ol>
 <p>If any check fails, the worktree is removed and recreated.</p>
 <h3>The <code>a-sync</code> Orphan Branch</h3>
-<p>The <code>a-sync</code> branch is an orphan branch with no common history with <code>main</code> or<br>any code branch. It contains only JSONL event log files. This ensures:</p>
+<p>The <code>a-sync</code> branch is an orphan branch with no common history with <code>main</code> or
+any code branch. It contains only JSONL event log files. This ensures:</p>
 <ul>
 <li>No merge conflicts with code</li>
 <li>Clean separation of concerns</li>
@@ -116,15 +122,22 @@
 </ul>
 <h3>Branch Lifecycle</h3>
 <ol>
-<li><strong>Creation</strong>: <code>thrum init</code> creates the <code>a-sync</code> orphan branch using safe git<br>plumbing commands (<code>git commit-tree</code> + <code>git update-ref</code>), which never touch<br>the working tree or index</li>
+<li><strong>Creation</strong>: <code>thrum init</code> creates the <code>a-sync</code> orphan branch using safe git
+plumbing commands (<code>git commit-tree</code> + <code>git update-ref</code>), which never touch
+the working tree or index</li>
 <li><strong>Local-only</strong>: Works without a remote (offline mode)</li>
 <li><strong>Remote push</strong>: Automatically pushed when remote is available</li>
 <li><strong>Migration</strong>: Existing repos can upgrade via <code>thrum migrate</code></li>
 </ol>
-<p>The orphan branch is created using the well-known empty tree SHA<br>(<code>4b825dc642cb6eb9a060e54bf8d69288fbee4904</code>), ensuring the branch has no files<br>initially and no shared history with any code branch.</p>
+<p>The orphan branch is created using the well-known empty tree SHA
+(<code>4b825dc642cb6eb9a060e54bf8d69288fbee4904</code>), ensuring the branch has no files
+initially and no shared history with any code branch.</p>
 <h3>Feature Worktrees</h3>
-<p>When working in a feature worktree (e.g., via <code>git worktree add</code>), use<br><code>thrum setup</code> to configure the worktree. This creates a <code>.thrum/redirect</code> file<br>pointing to the main worktree&#39;s <code>.thrum/</code> directory, so all worktrees share the<br>same daemon and message store.</p>
-<pre><code class="language-text hljs"># In feature worktree:
+<p>When working in a feature worktree (e.g., via <code>git worktree add</code>), use
+<code>thrum setup</code> to configure the worktree. This creates a <code>.thrum/redirect</code> file
+pointing to the main worktree&#39;s <code>.thrum/</code> directory, so all worktrees share the
+same daemon and message store.</p>
+<pre><code># In feature worktree:
 .thrum/
 ├── redirect              → &quot;/path/to/main/repo/.thrum&quot; (absolute path)
 └── identities/           ← Per-worktree agent identities (NOT redirected)
@@ -164,7 +177,8 @@
 <td>Checks whether a redirect file exists</td>
 </tr>
 </tbody></table>
-<p><strong>Safety</strong>: Only single-hop redirects are supported. <code>ResolveThrumDir()</code> detects<br>and rejects redirect chains and self-references.</p>
+<p><strong>Safety</strong>: Only single-hop redirects are supported. <code>ResolveThrumDir()</code> detects
+and rejects redirect chains and self-references.</p>
 <h2>Merge Strategy</h2>
 <h3>Conflict-Free Merging</h3>
 <p>Since events are <strong>immutable</strong> with <strong>unique IDs</strong>, conflicts are impossible:</p>
@@ -181,31 +195,42 @@
 </li>
 </ol>
 <h3>Deduplication</h3>
-<p>Every event carries a globally unique <code>event_id</code> field (ULID). This is the<br>universal deduplication key for all event types:</p>
-<pre><code class="language-go hljs"><span class="hljs-comment">// All events deduplicate on event_id (ULID)</span>
-eventID, ok := obj[<span class="hljs-string">&quot;event_id&quot;</span>].(<span class="hljs-type">string</span>)
-<span class="hljs-keyword">if</span> localEvent.ID == remoteEvent.ID {
-    <span class="hljs-comment">// Same event_id = same content (immutability guarantee)</span>
+<p>Every event carries a globally unique <code>event_id</code> field (ULID). This is the
+universal deduplication key for all event types:</p>
+<pre><code>// All events deduplicate on event_id (ULID)
+eventID, ok := obj[&quot;event_id&quot;].(string)
+if localEvent.ID == remoteEvent.ID {
+    // Same event_id = same content (immutability guarantee)
     duplicates++
 }</code></pre>
-<p>The <code>event_id</code> (ULID) provides both uniqueness and lexicographic time-ordering.<br>This avoids collisions between different event types that share the same entity<br>ID (e.g., a <code>message.create</code> and <code>message.edit</code> for the same <code>message_id</code> are<br>distinct events with distinct <code>event_id</code> values).</p>
+<p>The <code>event_id</code> (ULID) provides both uniqueness and lexicographic time-ordering.
+This avoids collisions between different event types that share the same entity
+ID (e.g., a <code>message.create</code> and <code>message.edit</code> for the same <code>message_id</code> are
+distinct events with distinct <code>event_id</code> values).</p>
 <h3>Sharded JSONL Files</h3>
 <p>Events are sharded across multiple files:</p>
 <ul>
-<li><code>events.jsonl</code> -- agent lifecycle events (<code>agent.register</code>,<br><code>agent.session.start</code>, <code>agent.session.end</code>, <code>agent.cleanup</code>)</li>
-<li><code>messages/{agent_name}.jsonl</code> -- per-agent message events (<code>message.create</code>,<br><code>message.edit</code>, <code>message.delete</code>, <code>agent.update</code>)</li>
+<li><code>events.jsonl</code> -- agent lifecycle events (<code>agent.register</code>,
+<code>agent.session.start</code>, <code>agent.session.end</code>, <code>agent.cleanup</code>)</li>
+<li><code>messages/{agent_name}.jsonl</code> -- per-agent message events (<code>message.create</code>,
+<code>message.edit</code>, <code>message.delete</code>, <code>agent.update</code>)</li>
 </ul>
-<p>Each agent writes to its own message file (e.g., <code>messages/furiosa.jsonl</code>), so<br>different agents never contend on the same file. Sharding reduces merge<br>conflicts and improves performance for large deployments.</p>
+<p>Each agent writes to its own message file (e.g., <code>messages/furiosa.jsonl</code>), so
+different agents never contend on the same file. Sharding reduces merge
+conflicts and improves performance for large deployments.</p>
 <h3>Batch Remote Extraction</h3>
-<p>During merge, the sync engine uses <code>git archive</code> to batch-extract all remote<br>files in a single command, piped through <code>tar</code>:</p>
-<pre><code class="language-go hljs">gitCmd := exec.Command(<span class="hljs-string">&quot;git&quot;</span>, <span class="hljs-string">&quot;archive&quot;</span>, <span class="hljs-string">&quot;origin/a-sync&quot;</span>, <span class="hljs-string">&quot;--&quot;</span>, <span class="hljs-string">&quot;messages/&quot;</span>, <span class="hljs-string">&quot;events.jsonl&quot;</span>)
-tarCmd := exec.Command(<span class="hljs-string">&quot;tar&quot;</span>, <span class="hljs-string">&quot;-xf&quot;</span>, <span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-string">&quot;-C&quot;</span>, tmpDir)
+<p>During merge, the sync engine uses <code>git archive</code> to batch-extract all remote
+files in a single command, piped through <code>tar</code>:</p>
+<pre><code>gitCmd := exec.Command(&quot;git&quot;, &quot;archive&quot;, &quot;origin/a-sync&quot;, &quot;--&quot;, &quot;messages/&quot;, &quot;events.jsonl&quot;)
+tarCmd := exec.Command(&quot;tar&quot;, &quot;-xf&quot;, &quot;-&quot;, &quot;-C&quot;, tmpDir)
 tarCmd.Stdin, _ = gitCmd.StdoutPipe()</code></pre>
-<p>This is significantly faster than issuing per-file <code>git show</code> calls. If<br><code>git archive</code> fails (e.g., no remote tracking branch), the merger falls back to<br>per-file <code>git show</code> calls.</p>
+<p>This is significantly faster than issuing per-file <code>git show</code> calls. If
+<code>git archive</code> fails (e.g., no remote tracking branch), the merger falls back to
+per-file <code>git show</code> calls.</p>
 <h2>Push &amp; Retry Logic</h2>
 <h3>Atomic Commits</h3>
 <p>Each sync creates a single commit in the worktree:</p>
-<pre><code class="language-yaml hljs"><span class="hljs-attr">sync:</span> <span class="hljs-number">2024-01-15T10:30:00Z</span></code></pre>
+<pre><code>sync: 2024-01-15T10:30:00Z</code></pre>
 <h3>Push Rejection Handling</h3>
 <p>When remote is ahead (non-fast-forward):</p>
 <ol>
@@ -214,12 +239,12 @@ tarCmd.Stdin, _ = gitCmd.StdoutPipe()</code></pre>
 <li><strong>Re-commit and push</strong> with updated state</li>
 <li><strong>Fail</strong> if still rejected after 3 attempts</li>
 </ol>
-<pre><code class="language-go hljs"><span class="hljs-keyword">for</span> attempt := <span class="hljs-number">1</span>; attempt &lt;= <span class="hljs-number">3</span>; attempt++ {
-    <span class="hljs-keyword">if</span> err := push(); err == <span class="hljs-literal">nil</span> {
-        <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span> <span class="hljs-comment">// Success</span>
+<pre><code>for attempt := 1; attempt &lt;= 3; attempt++ {
+    if err := push(); err == nil {
+        return nil // Success
     }
 
-    <span class="hljs-comment">// Rejection - fetch, merge, retry</span>
+    // Rejection - fetch, merge, retry
     fetch()
     merge()
 }</code></pre>
@@ -251,9 +276,13 @@ tarCmd.Stdin, _ = gitCmd.StdoutPipe()</code></pre>
 <h2>Offline Operation</h2>
 <p>The sync protocol is designed for offline-first operation:</p>
 <h3>Local-Only Mode</h3>
-<p>For public repositories where you don&#39;t want to expose agent messages, enable<br>local-only mode to disable all remote sync:</p>
-<pre><code class="language-bash hljs">thrum daemon start --<span class="hljs-built_in">local</span></code></pre>
-<p>In local-only mode, the sync loop still runs but skips remote operations<br>(<code>git fetch</code> and <code>git push</code> to/from the remote). Local JSONL files and the<br>SQLite projection continue to update normally. See<br><a href="daemon.html#local-only-mode">Daemon Architecture</a> for details.</p>
+<p>For public repositories where you don&#39;t want to expose agent messages, enable
+local-only mode to disable all remote sync:</p>
+<pre><code>thrum daemon start --local</code></pre>
+<p>In local-only mode, the sync loop still runs but skips remote operations
+(<code>git fetch</code> and <code>git push</code> to/from the remote). Local JSONL files and the
+SQLite projection continue to update normally. See
+<a href="daemon.html#local-only-mode">Daemon Architecture</a> for details.</p>
 <h3>No Remote</h3>
 <p>When no remote is configured:</p>
 <ul>
@@ -278,17 +307,21 @@ tarCmd.Stdin, _ = gitCmd.StdoutPipe()</code></pre>
 <li>Subscribers are notified</li>
 </ul>
 <h2>Projection Updates (CQRS)</h2>
-<p>Thrum uses an event sourcing architecture with CQRS (Command Query<br>Responsibility Segregation):</p>
+<p>Thrum uses an event sourcing architecture with CQRS (Command Query
+Responsibility Segregation):</p>
 <ul>
 <li><strong>Source of truth</strong>: JSONL files in the sync worktree (append-only event log)</li>
-<li><strong>Read projection</strong>: SQLite database at <code>.thrum/var/messages.db</code> (derived,<br>rebuildable)</li>
+<li><strong>Read projection</strong>: SQLite database at <code>.thrum/var/messages.db</code> (derived,
+rebuildable)</li>
 </ul>
-<p>The projector (<code>internal/projection/</code>) replays events from JSONL into SQLite.<br>Two modes of operation:</p>
+<p>The projector (<code>internal/projection/</code>) replays events from JSONL into SQLite.
+Two modes of operation:</p>
 <h3>Incremental Update (Sync Loop)</h3>
-<p>During each sync cycle, new events from the merge step are passed directly to<br>the projector:</p>
-<pre><code class="language-go hljs"><span class="hljs-comment">// Phase 5 optimization: events are passed from merge step,</span>
-<span class="hljs-comment">// eliminating redundant file I/O</span>
-<span class="hljs-keyword">for</span> _, event := <span class="hljs-keyword">range</span> parsedEvents {
+<p>During each sync cycle, new events from the merge step are passed directly to
+the projector:</p>
+<pre><code>// Phase 5 optimization: events are passed from merge step,
+// eliminating redundant file I/O
+for _, event := range parsedEvents {
     projector.Apply(event)
 }</code></pre>
 <p>The <code>Apply()</code> method dispatches on event type:</p>
@@ -331,12 +364,15 @@ tarCmd.Stdin, _ = gitCmd.StdoutPipe()</code></pre>
 <p>Unknown event types are silently ignored (forward compatibility).</p>
 <h3>Full Rebuild</h3>
 <p>The projector can rebuild the entire SQLite database from scratch:</p>
-<pre><code class="language-go hljs">projector := projection.NewProjector(db)
-projector.Rebuild(syncDir) <span class="hljs-comment">// reads events.jsonl + messages/*.jsonl</span></code></pre>
-<p>Rebuild reads all JSONL files, sorts events globally by <code>(timestamp, event_id)</code><br>for deterministic ordering, and applies them in sequence. ULIDs in <code>event_id</code><br>make this globally consistent across files.</p>
+<pre><code>projector := projection.NewProjector(db)
+projector.Rebuild(syncDir) // reads events.jsonl + messages/*.jsonl</code></pre>
+<p>Rebuild reads all JSONL files, sorts events globally by <code>(timestamp, event_id)</code>
+for deterministic ordering, and applies them in sequence. ULIDs in <code>event_id</code>
+make this globally consistent across files.</p>
 <h2>Migration from Old Layout</h2>
-<p>Repos created before the worktree architecture had JSONL files tracked directly<br>on <code>main</code>:</p>
-<pre><code class="language-text hljs"># Old layout (tracked on main)
+<p>Repos created before the worktree architecture had JSONL files tracked directly
+on <code>main</code>:</p>
+<pre><code># Old layout (tracked on main)
 .thrum/
 ├── events.jsonl          # tracked on main
 ├── messages/             # tracked on main
@@ -352,15 +388,16 @@ projector.Rebuild(syncDir) <span class="hljs-comment">// reads events.jsonl + me
 </ol>
 <h2>Monitoring &amp; Status</h2>
 <h3>Sync Status</h3>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;running&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;last_sync_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-15T10:30:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;last_error&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;sync_state&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;synced&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;local_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;running&quot;: true,
+  &quot;last_sync_at&quot;: &quot;2024-01-15T10:30:00Z&quot;,
+  &quot;last_error&quot;: &quot;&quot;,
+  &quot;sync_state&quot;: &quot;synced&quot;,
+  &quot;local_only&quot;: false
+}</code></pre>
 <blockquote>
-<p><strong>Note:</strong> <code>thrum init</code> sets <code>local_only: true</code> by default. The example above<br>shows a repo where remote sync has been explicitly enabled.</p>
+<p><strong>Note:</strong> <code>thrum init</code> sets <code>local_only: true</code> by default. The example above
+shows a repo where remote sync has been explicitly enabled.</p>
 </blockquote>
 <p>States:</p>
 <ul>
@@ -374,21 +411,21 @@ projector.Rebuild(syncDir) <span class="hljs-comment">// reads events.jsonl + me
 <p>Force an immediate sync (non-blocking).</p>
 <p><strong>Request</strong>: <code>{}</code></p>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;triggered&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;last_sync_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-15T10:30:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;sync_state&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;synced&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;triggered&quot;: true,
+  &quot;last_sync_at&quot;: &quot;2024-01-15T10:30:00Z&quot;,
+  &quot;sync_state&quot;: &quot;synced&quot;
+}</code></pre>
 <h4><code>sync.status</code></h4>
 <p>Get current sync status.</p>
 <p><strong>Request</strong>: <code>{}</code></p>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;running&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;last_sync_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-15T10:30:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;last_error&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;sync_state&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;synced&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;running&quot;: true,
+  &quot;last_sync_at&quot;: &quot;2024-01-15T10:30:00Z&quot;,
+  &quot;last_error&quot;: &quot;&quot;,
+  &quot;sync_state&quot;: &quot;synced&quot;
+}</code></pre>
 <h2>Error Handling</h2>
 <h3>Transient Errors</h3>
 <p>Transient errors are logged but don&#39;t stop the sync loop:</p>
@@ -412,8 +449,10 @@ projector.Rebuild(syncDir) <span class="hljs-comment">// reads events.jsonl + me
 <li><strong>Atomic writes</strong> -- Uses temporary file + rename</li>
 <li><strong>Buffered channels</strong> -- Non-blocking notification delivery</li>
 <li><strong>Sharded files</strong> -- Reduces merge overhead per-agent</li>
-<li><strong>git archive batch extraction</strong> -- Single command extracts all remote files<br>(vs. per-file <code>git show</code>)</li>
-<li><strong>Parsed event passthrough</strong> -- Merge step passes parsed events directly to<br>projector (no re-read from disk)</li>
+<li><strong>git archive batch extraction</strong> -- Single command extracts all remote files
+(vs. per-file <code>git show</code>)</li>
+<li><strong>Parsed event passthrough</strong> -- Merge step passes parsed events directly to
+projector (no re-read from disk)</li>
 </ol>
 <h3>Scalability</h3>
 <p>The sync protocol scales well because:</p>
@@ -443,7 +482,7 @@ projector.Rebuild(syncDir) <span class="hljs-comment">// reads events.jsonl + me
 <h3>Sync Interval</h3>
 <p>Default: 60 seconds</p>
 <p>Can be configured when starting the daemon:</p>
-<pre><code class="language-go hljs">loop := sync.NewSyncLoop(syncer, projector, repoPath, syncDir, thrumDir, <span class="hljs-number">60</span>*time.Second)</code></pre>
+<pre><code>loop := sync.NewSyncLoop(syncer, projector, repoPath, syncDir, thrumDir, 60*time.Second)</code></pre>
 <p>Parameters:</p>
 <ul>
 <li><code>syncer</code>: handles git operations (fetch, merge, push)</li>
@@ -455,7 +494,7 @@ projector.Rebuild(syncDir) <span class="hljs-comment">// reads events.jsonl + me
 </ul>
 <h3>Manual Sync</h3>
 <p>Trigger an immediate sync via RPC or CLI:</p>
-<pre><code class="language-bash hljs">thrum <span class="hljs-built_in">sync</span> force</code></pre>
+<pre><code>thrum sync force</code></pre>
 <h2>Troubleshooting</h2>
 <h3>Sync Not Working</h3>
 <ol>
@@ -468,21 +507,23 @@ projector.Rebuild(syncDir) <span class="hljs-comment">// reads events.jsonl + me
 </ol>
 <h3>Worktree Missing or Corrupt</h3>
 <p>If the sync worktree is missing or detached:</p>
-<pre><code class="language-bash hljs">thrum init --force</code></pre>
+<pre><code>thrum init --force</code></pre>
 <p>This recreates the worktree and re-links it to the <code>a-sync</code> branch.</p>
 <h3>Conflicts</h3>
-<p><strong>Conflicts cannot occur</strong> in Thrum due to immutable events and append-only<br>JSONL dedup. If you see a git conflict in the worktree:</p>
+<p><strong>Conflicts cannot occur</strong> in Thrum due to immutable events and append-only
+JSONL dedup. If you see a git conflict in the worktree:</p>
 <ul>
 <li>The <code>a-sync</code> branch was manually modified</li>
 <li>Recovery: <code>cd .git/thrum-sync/a-sync &amp;&amp; git checkout --theirs .</code></li>
 </ul>
 <h3>Lock Stuck</h3>
 <p>If sync is permanently stuck:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">rm</span> .thrum/var/sync.lock</code></pre>
+<pre><code>rm .thrum/var/sync.lock</code></pre>
 <p>Then restart the daemon.</p>
 <h3>Upgrading from Old Layout</h3>
-<p>If your repo still has <code>.thrum/events.jsonl</code> or <code>.thrum/messages/</code> tracked on<br><code>main</code>:</p>
-<pre><code class="language-bash hljs">thrum migrate</code></pre>
+<p>If your repo still has <code>.thrum/events.jsonl</code> or <code>.thrum/messages/</code> tracked on
+<code>main</code>:</p>
+<pre><code>thrum migrate</code></pre>
 <h2>See Also</h2>
 <ul>
 <li><a href="daemon.html">Daemon Architecture</a></li>
@@ -491,15 +532,7 @@ projector.Rebuild(syncDir) <span class="hljs-comment">// reads events.jsonl + me
 </ul>
 <pre><code></code></pre>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#sync.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#sync.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#sync.html')}</script>
 </body>
 </html>

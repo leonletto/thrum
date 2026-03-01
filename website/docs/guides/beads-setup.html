@@ -1,76 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Beads Setup Guide — Thrum</title>
-  <meta name="description" content="Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Beads Setup Guide — Thrum">
-  <meta property="og:description" content="Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/guides/beads-setup.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Beads Setup Guide — Thrum">
-  <meta name="twitter:description" content="Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/beads-setup.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Beads Setup Guide — Thrum</title>
+<meta name="description" content="Set up Beads for git-backed task tracking alongside Thrum — installation, initialization, agent workflow, and worktree configuration">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/beads-setup.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; Recommended Tools &rsaquo; Beads Setup Guide
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <strong>Beads Setup Guide</strong> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a> | <a href="../overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="../architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="../context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="../cli.html">CLI Reference</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Beads Setup Guide</h2>
-<p><a href="https://github.com/leonletto/beads">Beads</a> is a git-backed, dependency-aware<br>issue tracker designed for AI agent workflows. It pairs with Thrum to give<br>agents persistent task memory that survives session boundaries.</p>
+<p><a href="https://github.com/leonletto/beads">Beads</a> is a git-backed, dependency-aware
+issue tracker designed for AI agent workflows. It pairs with Thrum to give
+agents persistent task memory that survives session boundaries.</p>
 <h3>Why Beads with Thrum</h3>
-<p>Thrum handles <strong>communication</strong> — messages, presence, coordination. Beads<br>handles <strong>task state</strong> — what needs doing, what&#39;s blocked, what&#39;s done. Together<br>they solve the two halves of the agent context-loss problem:</p>
+<p>Thrum handles <strong>communication</strong> — messages, presence, coordination. Beads
+handles <strong>task state</strong> — what needs doing, what&#39;s blocked, what&#39;s done. Together
+they solve the two halves of the agent context-loss problem:</p>
 <ul>
 <li>Agent restarts? <code>bd ready</code> shows what to work on next.</li>
-<li>Context compacts? The pre-compact hook saves <code>bd stats</code> and <code>bd list</code> output<br>to Thrum context, which agents restore on session start.</li>
-<li>Multiple agents? Each claims tasks with <code>bd update --status=in_progress</code> and<br>announces it via <code>thrum send</code>.</li>
+<li>Context compacts? The pre-compact hook saves <code>bd stats</code> and <code>bd list</code> output
+to Thrum context, which agents restore on session start.</li>
+<li>Multiple agents? Each claims tasks with <code>bd update --status=in_progress</code> and
+announces it via <code>thrum send</code>.</li>
 </ul>
 <h3>Installation</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Using Go</span>
+<pre><code># Using Go
 go install github.com/leonletto/beads/cmd/bd@latest
 
-<span class="hljs-comment"># Using Homebrew</span>
+# Using Homebrew
 brew install leonletto/tap/beads
 
-<span class="hljs-comment"># Verify installation</span>
+# Verify installation
 bd version</code></pre>
-<p>Requires Go 1.22+ for source install, or use the Homebrew tap for a pre-built<br>binary.</p>
+<p>Requires Go 1.22+ for source install, or use the Homebrew tap for a pre-built
+binary.</p>
 <h3>Initialize in Your Project</h3>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> your-project
+<pre><code>cd your-project
 bd init</code></pre>
 <p>This creates a <code>.beads/</code> directory with:</p>
 <table>
@@ -101,78 +96,86 @@ bd init</code></pre>
 <td>Quick reference</td>
 </tr>
 </tbody></table>
-<p>The key design: <code>issues.jsonl</code> is tracked in Git, while <code>beads.db</code> is<br>gitignored. On any fresh clone, Beads rebuilds the SQLite database from the<br>JSONL automatically.</p>
+<p>The key design: <code>issues.jsonl</code> is tracked in Git, while <code>beads.db</code> is
+gitignored. On any fresh clone, Beads rebuilds the SQLite database from the
+JSONL automatically.</p>
 <h3>Core Workflow</h3>
 <h4>Create issues</h4>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Create an epic (groups related tasks)</span>
-bd epic create --title=<span class="hljs-string">&quot;Add user authentication&quot;</span> --priority=1
+<pre><code># Create an epic (groups related tasks)
+bd epic create --title=&quot;Add user authentication&quot; --priority=1
 
-<span class="hljs-comment"># Create tasks under it</span>
-bd create --title=<span class="hljs-string">&quot;Implement JWT middleware&quot;</span> --<span class="hljs-built_in">type</span>=task --priority=2
-bd create --title=<span class="hljs-string">&quot;Write auth tests&quot;</span> --<span class="hljs-built_in">type</span>=task --priority=2
+# Create tasks under it
+bd create --title=&quot;Implement JWT middleware&quot; --type=task --priority=2
+bd create --title=&quot;Write auth tests&quot; --type=task --priority=2
 
-<span class="hljs-comment"># Set dependencies (tests depend on middleware)</span>
+# Set dependencies (tests depend on middleware)
 bd dep add &lt;tests-id&gt; &lt;middleware-id&gt;</code></pre>
 <h4>Find and claim work</h4>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Show tasks ready to work (no blockers)</span>
+<pre><code># Show tasks ready to work (no blockers)
 bd ready
 
-<span class="hljs-comment"># See what&#x27;s blocked and why</span>
+# See what&#39;s blocked and why
 bd blocked
 
-<span class="hljs-comment"># Claim a task</span>
-bd update &lt;<span class="hljs-built_in">id</span>&gt; --status=in_progress</code></pre>
+# Claim a task
+bd update &lt;id&gt; --status=in_progress</code></pre>
 <h4>Complete work</h4>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Close a task</span>
-bd close &lt;<span class="hljs-built_in">id</span>&gt;
+<pre><code># Close a task
+bd close &lt;id&gt;
 
-<span class="hljs-comment"># Close multiple at once</span>
+# Close multiple at once
 bd close &lt;id1&gt; &lt;id2&gt; &lt;id3&gt;
 
-<span class="hljs-comment"># Check progress</span>
+# Check progress
 bd stats</code></pre>
 <h3>Agent Integration with Thrum</h3>
 <p>The standard agent workflow combines both tools:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># 1. Agent starts — check for assigned work</span>
+<pre><code># 1. Agent starts — check for assigned work
 thrum inbox --unread
 bd ready
 
-<span class="hljs-comment"># 2. Claim a task and announce it</span>
-bd update &lt;<span class="hljs-built_in">id</span>&gt; --status=in_progress
-thrum send <span class="hljs-string">&quot;Starting work on &lt;id&gt;: &lt;title&gt;&quot;</span> --to @coordinator
+# 2. Claim a task and announce it
+bd update &lt;id&gt; --status=in_progress
+thrum send &quot;Starting work on &lt;id&gt;: &lt;title&gt;&quot; --to @coordinator
 
-<span class="hljs-comment"># 3. Do the work...</span>
+# 3. Do the work...
 
-<span class="hljs-comment"># 4. Complete and announce</span>
-bd close &lt;<span class="hljs-built_in">id</span>&gt;
-thrum send <span class="hljs-string">&quot;Completed &lt;id&gt;, tests passing&quot;</span> --to @coordinator
+# 4. Complete and announce
+bd close &lt;id&gt;
+thrum send &quot;Completed &lt;id&gt;, tests passing&quot; --to @coordinator
 
-<span class="hljs-comment"># 5. Find next task</span>
+# 5. Find next task
 bd ready</code></pre>
 <h3>Claude Code Configuration</h3>
-<p>To use Beads with Claude Code agents, add these instructions to your<br><code>CLAUDE.md</code>:</p>
-<pre><code class="language-markdown hljs"><span class="hljs-section">## Task Tracking</span>
+<p>To use Beads with Claude Code agents, add these instructions to your
+<code>CLAUDE.md</code>:</p>
+<pre><code>## Task Tracking
 
-Use <span class="hljs-code">`bd`</span> (beads) for all task tracking. Do not use TodoWrite, TaskCreate, or
+Use `bd` (beads) for all task tracking. Do not use TodoWrite, TaskCreate, or
 markdown files for tracking.
 
-<span class="hljs-bullet">-</span> <span class="hljs-code">`bd ready`</span> — find available work
-<span class="hljs-bullet">-</span> <span class="hljs-code">`bd update &lt;id&gt; --status=in_progress`</span> — claim a task
-<span class="hljs-bullet">-</span> <span class="hljs-code">`bd close &lt;id&gt;`</span> — mark complete
-<span class="hljs-bullet">-</span> <span class="hljs-code">`bd stats`</span> — check project progress</code></pre>
-<p>The Thrum Claude Code plugin automatically detects Beads and includes task<br>context in the pre-compact hook, so agents recover their task state after<br>context compaction.</p>
+- `bd ready` — find available work
+- `bd update &lt;id&gt; --status=in_progress` — claim a task
+- `bd close &lt;id&gt;` — mark complete
+- `bd stats` — check project progress</code></pre>
+<p>The Thrum Claude Code plugin automatically detects Beads and includes task
+context in the pre-compact hook, so agents recover their task state after
+context compaction.</p>
 <h3>Worktree Support</h3>
-<p>If you use git worktrees (common in multi-agent setups), Beads supports sharing<br>a single database across worktrees via a redirect file:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># In each worktree, create a redirect to the main repo&#x27;s .beads/</span>
-<span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;/path/to/main/repo/.beads&quot;</span> &gt; .beads/redirect</code></pre>
-<p>If your project includes the Thrum worktree setup script, this is handled<br>automatically:</p>
-<pre><code class="language-bash hljs">./scripts/setup-worktree-thrum.sh ~/.workspaces/project/feature feature/name</code></pre>
+<p>If you use git worktrees (common in multi-agent setups), Beads supports sharing
+a single database across worktrees via a redirect file:</p>
+<pre><code># In each worktree, create a redirect to the main repo&#39;s .beads/
+echo &quot;/path/to/main/repo/.beads&quot; &gt; .beads/redirect</code></pre>
+<p>If your project includes the Thrum worktree setup script, this is handled
+automatically:</p>
+<pre><code>./scripts/setup-worktree-thrum.sh ~/.workspaces/project/feature feature/name</code></pre>
 <h3>Git Hooks</h3>
 <p>Beads provides git hooks that keep the JSONL export fresh:</p>
-<pre><code class="language-bash hljs">bd hooks install</code></pre>
+<pre><code>bd hooks install</code></pre>
 <p>This adds:</p>
 <ul>
-<li><strong>pre-commit</strong>: Exports the SQLite state to <code>issues.jsonl</code> so it stays<br>in sync with Git</li>
+<li><strong>pre-commit</strong>: Exports the SQLite state to <code>issues.jsonl</code> so it stays
+in sync with Git</li>
 <li><strong>pre-push</strong>: Checks for stale data before pushing</li>
 </ul>
 <h3>Useful Commands Reference</h3>
@@ -226,20 +229,14 @@ markdown files for tracking.
 </tbody></table>
 <h3>Further Reading</h3>
 <ul>
-<li><a href="../beads-and-thrum.html">Beads and Thrum</a> — Conceptual overview of how the two<br>tools complement each other</li>
+<li><a href="../beads-and-thrum.html">Beads and Thrum</a> — Conceptual overview of how the two
+tools complement each other</li>
 <li><a href="beads-ui-setup.html">Beads UI Setup</a> — Visual dashboard for Beads</li>
-<li><a href="https://github.com/leonletto/beads">Beads GitHub</a> — Full documentation and<br>source</li>
+<li><a href="https://github.com/leonletto/beads">Beads GitHub</a> — Full documentation and
+source</li>
 </ul>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#guides/beads-setup.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#guides/beads-setup.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#guides/beads-setup.html')}</script>
 </body>
 </html>

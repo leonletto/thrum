@@ -1,110 +1,111 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tailscale Sync — Thrum</title>
-  <meta name="description" content="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Tailscale Sync — Thrum">
-  <meta property="og:description" content="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/tailscale-sync.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Tailscale Sync — Thrum">
-  <meta name="twitter:description" content="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#tailscale-sync.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Tailscale Sync — Thrum</title>
+<meta name="description" content="Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#tailscale-sync.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Tailscale Sync
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <strong>Tailscale Sync</strong> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Tailscale Sync</h2>
 <blockquote>
-<p>See also: <a href="tailscale-security.html">Tailscale Security</a> for the security model,<br><a href="multi-agent.html">Multi-Agent Support</a> for team coordination patterns,<br><a href="sync.html">Sync Protocol</a> for Git-based synchronization.</p>
+<p>See also: <a href="tailscale-security.html">Tailscale Security</a> for the security model,
+<a href="multi-agent.html">Multi-Agent Support</a> for team coordination patterns,
+<a href="sync.html">Sync Protocol</a> for Git-based synchronization.</p>
 </blockquote>
 <h2>Overview</h2>
-<p>Thrum&#39;s Tailscale sync enables real-time event synchronization between daemon<br>instances running on different machines connected via a<br><a href="https://tailscale.com">Tailscale</a> network. Agents on separate laptops, VMs, or<br>CI runners can coordinate as if they were on the same machine -- messages, agent<br>events, and session updates propagate automatically.</p>
+<p>Thrum&#39;s Tailscale sync enables real-time event synchronization between daemon
+instances running on different machines connected via a
+<a href="https://tailscale.com">Tailscale</a> network. Agents on separate laptops, VMs, or
+CI runners can coordinate as if they were on the same machine -- messages, agent
+events, and session updates propagate automatically.</p>
 <p><strong>Key capabilities:</strong></p>
 <ul>
-<li><strong>Cross-machine sync</strong> -- Events flow between daemons over Tailscale&#39;s<br>encrypted WireGuard tunnels</li>
-<li><strong>Push + pull</strong> -- Immediate push notifications on new events, with periodic<br>pull as a fallback</li>
-<li><strong>Human-mediated pairing</strong> -- Simple 4-digit code to pair two machines (no<br>auto-discovery, no complex key management)</li>
-<li><strong>Token authentication</strong> -- Each peer pair shares a unique 32-byte token for<br>ongoing auth</li>
-<li><strong>Zero config networking</strong> -- No port forwarding, no firewall rules. Tailscale<br>handles connectivity</li>
+<li><strong>Cross-machine sync</strong> -- Events flow between daemons over Tailscale&#39;s
+encrypted WireGuard tunnels</li>
+<li><strong>Push + pull</strong> -- Immediate push notifications on new events, with periodic
+pull as a fallback</li>
+<li><strong>Human-mediated pairing</strong> -- Simple 4-digit code to pair two machines (no
+auto-discovery, no complex key management)</li>
+<li><strong>Token authentication</strong> -- Each peer pair shares a unique 32-byte token for
+ongoing auth</li>
+<li><strong>Zero config networking</strong> -- No port forwarding, no firewall rules. Tailscale
+handles connectivity</li>
 </ul>
 <h2>Prerequisites</h2>
 <ol>
 <li><strong>Tailscale installed</strong> on all machines running Thrum daemons</li>
-<li><strong>Thrum v0.4.0+</strong> installed on all machines (Tailscale support added in<br>v0.4.0)</li>
+<li><strong>Thrum v0.4.0+</strong> installed on all machines (Tailscale support added in
+v0.4.0)</li>
 </ol>
 <h2>Getting Started</h2>
 <h3>1. Enable Tailscale Sync</h3>
 <p>Set the environment variable to enable Tailscale integration:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">export</span> THRUM_TS_ENABLED=<span class="hljs-literal">true</span></code></pre>
+<pre><code>export THRUM_TS_ENABLED=true</code></pre>
 <h3>2. Start the Daemon</h3>
-<pre><code class="language-bash hljs">thrum daemon start</code></pre>
+<pre><code>thrum daemon start</code></pre>
 <p>When Tailscale sync is enabled, the daemon:</p>
 <ul>
 <li>Starts a tsnet listener on port 9100 (configurable)</li>
-<li>Registers sync RPC handlers (<code>sync.pull</code>, <code>sync.notify</code>, <code>sync.peer_info</code>,<br><code>pair.request</code>)</li>
+<li>Registers sync RPC handlers (<code>sync.pull</code>, <code>sync.notify</code>, <code>sync.peer_info</code>,
+<code>pair.request</code>)</li>
 <li>Waits for peer pairing via CLI</li>
 </ul>
 <h3>3. Pair Two Machines</h3>
 <p>Pairing requires action on both machines simultaneously:</p>
 <p><strong>On Machine A</strong> (the one you want to share with):</p>
-<pre><code class="language-bash hljs">thrum peer add
-<span class="hljs-comment"># Output: Waiting for connection... Pairing code: 7392</span></code></pre>
+<pre><code>thrum peer add
+# Output: Waiting for connection... Pairing code: 7392</code></pre>
 <p><strong>On Machine B</strong> (the one joining):</p>
-<pre><code class="language-bash hljs">thrum peer <span class="hljs-built_in">join</span> my-laptop:9100
-<span class="hljs-comment"># Prompts: Enter pairing code:</span>
-<span class="hljs-comment"># You type: 7392</span>
-<span class="hljs-comment"># Output: Paired with &quot;my-laptop&quot;. Syncing started.</span></code></pre>
+<pre><code>thrum peer join my-laptop:9100
+# Prompts: Enter pairing code:
+# You type: 7392
+# Output: Paired with &quot;my-laptop&quot;. Syncing started.</code></pre>
 <p>Machine A will also show success:</p>
-<pre><code class="language-text hljs">Paired with &quot;office-server&quot; (100.64.2.10:9100). Syncing started.</code></pre>
+<pre><code>Paired with &quot;office-server&quot; (100.64.2.10:9100). Syncing started.</code></pre>
 <p>Both machines now sync events automatically.</p>
 <h3>4. Verify Sync</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># List paired peers</span>
+<pre><code># List paired peers
 thrum peer list
 
-<span class="hljs-comment"># Detailed sync status</span>
+# Detailed sync status
 thrum peer status
 
-<span class="hljs-comment"># Check health endpoint</span>
+# Check health endpoint
 thrum status</code></pre>
 <h2>Architecture</h2>
-<pre><code class="language-text hljs">Machine A                           Machine B
+<pre><code>Machine A                           Machine B
 ┌─────────────────────┐             ┌─────────────────────┐
 │  Thrum Daemon       │             │  Thrum Daemon       │
 │  ├─ Event Log       │             │  ├─ Event Log       │
@@ -165,10 +166,12 @@ thrum status</code></pre>
 <li><strong><code>origin_daemon</code></strong> -- Unique daemon ID identifying the source machine</li>
 <li><strong><code>sequence</code></strong> -- Monotonically increasing per-daemon sequence number</li>
 </ul>
-<p>Events are stored in a SQLite <code>events</code> table with sequence-based pagination,<br>enabling efficient delta sync.</p>
+<p>Events are stored in a SQLite <code>events</code> table with sequence-based pagination,
+enabling efficient delta sync.</p>
 <h3>Pull Sync</h3>
-<p>The primary sync mechanism. Daemon A asks Daemon B: &quot;Give me all events after<br>sequence N.&quot;</p>
-<pre><code class="language-text hljs">Daemon A                              Daemon B
+<p>The primary sync mechanism. Daemon A asks Daemon B: &quot;Give me all events after
+sequence N.&quot;</p>
+<pre><code>Daemon A                              Daemon B
    │                                      │
    │ sync.pull(after_seq=42, token=...)   │
    ├─────────────────────────────────────►│
@@ -183,23 +186,31 @@ thrum status</code></pre>
    │  {events: [...], next_seq: 1500,     │
    │   more_available: false}             │
    │◄─────────────────────────────────────┤</code></pre>
-<p>Batched pull with the <code>limit+1</code> trick to determine <code>more_available</code>. Checkpoints<br>are persisted per-peer so sync resumes from where it left off. All requests<br>include the peer&#39;s auth token.</p>
+<p>Batched pull with the <code>limit+1</code> trick to determine <code>more_available</code>. Checkpoints
+are persisted per-peer so sync resumes from where it left off. All requests
+include the peer&#39;s auth token.</p>
 <h3>Push Notifications</h3>
-<p>When a daemon writes a new event, it broadcasts a <code>sync.notify</code> to all known<br>peers:</p>
-<pre><code class="language-text hljs">Daemon A writes event
+<p>When a daemon writes a new event, it broadcasts a <code>sync.notify</code> to all known
+peers:</p>
+<pre><code>Daemon A writes event
    │
    ├──► sync.notify(daemon_id, latest_seq, token) ──► Daemon B
    ├──► sync.notify(daemon_id, latest_seq, token) ──► Daemon C
    │
    Daemons B and C pull new events from A</code></pre>
-<p>Push notifications are fire-and-forget -- failures are logged but do not block<br>the writer.</p>
+<p>Push notifications are fire-and-forget -- failures are logged but do not block
+the writer.</p>
 <h3>Periodic Sync Scheduler</h3>
-<p>A fallback mechanism that runs every 5 minutes. It pulls from all known peers<br>that were not synced recently (within the last 2 minutes). This ensures<br>convergence even if push notifications are lost.</p>
+<p>A fallback mechanism that runs every 5 minutes. It pulls from all known peers
+that were not synced recently (within the last 2 minutes). This ensures
+convergence even if push notifications are lost.</p>
 <h3>Deduplication</h3>
-<p>Events are deduplicated by <code>event_id</code> (ULID-based, globally unique). The<br><code>HasEvent()</code> function provides O(1) dedup via the SQLite primary key index.<br>Duplicate events from overlapping syncs are silently skipped.</p>
+<p>Events are deduplicated by <code>event_id</code> (ULID-based, globally unique). The
+<code>HasEvent()</code> function provides O(1) dedup via the SQLite primary key index.
+Duplicate events from overlapping syncs are silently skipped.</p>
 <h2>Pairing Flow</h2>
 <p>Pairing establishes mutual trust between two machines with a human in the loop.</p>
-<pre><code class="language-text hljs">Machine A (thrum peer add)           Machine B (thrum peer join)
+<pre><code>Machine A (thrum peer add)           Machine B (thrum peer join)
    │                                      │
    │  1. Generate 4-digit code + token    │
    │  2. Display code to user             │
@@ -267,39 +278,46 @@ thrum status</code></pre>
 <h2>CLI Commands</h2>
 <h3><code>thrum peer</code></h3>
 <p>Manage sync peers:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Start pairing on this machine (displays 4-digit code)</span>
+<pre><code># Start pairing on this machine (displays 4-digit code)
 thrum peer add
 
-<span class="hljs-comment"># Join a remote peer (prompts for pairing code)</span>
-thrum peer <span class="hljs-built_in">join</span> &lt;address:port&gt;
+# Join a remote peer (prompts for pairing code)
+thrum peer join &lt;address:port&gt;
 
-<span class="hljs-comment"># List all paired peers</span>
+# List all paired peers
 thrum peer list
 
-<span class="hljs-comment"># Remove a peer</span>
+# Remove a peer
 thrum peer remove &lt;name&gt;
 
-<span class="hljs-comment"># Detailed sync status for all peers</span>
+# Detailed sync status for all peers
 thrum peer status</code></pre>
 <h3><code>thrum status</code></h3>
 <p>When Tailscale sync is enabled, <code>thrum status</code> includes sync information:</p>
-<pre><code class="language-text hljs">Tailscale Sync: enabled
+<pre><code>Tailscale Sync: enabled
   Peers: 2 connected
   Last sync: 30s ago
   Hostname: my-laptop</code></pre>
 <h2>Security Model</h2>
 <p>Tailscale sync uses a simple three-layer security model:</p>
 <h3>1. Tailscale Encryption (Network Layer)</h3>
-<p>All traffic between daemons flows over Tailscale&#39;s WireGuard tunnels. This<br>provides end-to-end encryption and identity verification at the network level.<br>No data travels over the public internet unencrypted.</p>
+<p>All traffic between daemons flows over Tailscale&#39;s WireGuard tunnels. This
+provides end-to-end encryption and identity verification at the network level.
+No data travels over the public internet unencrypted.</p>
 <h3>2. Pairing Code (Trust Establishment)</h3>
-<p>A human-mediated 4-digit code establishes initial trust between two machines.<br>The pairing code must be shared out-of-band (verbally, chat, etc.), ensuring<br>both sides consent to the peering relationship.</p>
+<p>A human-mediated 4-digit code establishes initial trust between two machines.
+The pairing code must be shared out-of-band (verbally, chat, etc.), ensuring
+both sides consent to the peering relationship.</p>
 <ul>
 <li>4-digit random code (10,000 possibilities)</li>
 <li>3 attempts allowed before the session is locked</li>
 <li>5-minute timeout on pairing sessions</li>
 </ul>
 <h3>3. Token Authentication (Ongoing Auth)</h3>
-<p>After pairing, each request includes a 32-byte hex token. The receiving daemon<br>validates the token against its peer registry before processing any sync<br>request. The <code>pair.request</code> method is the only RPC exempt from token<br>authentication (it&#39;s how new peers establish their tokens).</p>
+<p>After pairing, each request includes a 32-byte hex token. The receiving daemon
+validates the token against its peer registry before processing any sync
+request. The <code>pair.request</code> method is the only RPC exempt from token
+authentication (it&#39;s how new peers establish their tokens).</p>
 <ul>
 <li>Token validation is centralized in the sync server</li>
 <li>Invalid or missing tokens are rejected immediately</li>
@@ -307,7 +325,8 @@ thrum peer status</code></pre>
 </ul>
 <h2>Peer Management</h2>
 <h3>Peer Registry</h3>
-<p>The peer registry is stored as JSON at <code>.thrum/var/peers.json</code> and persists<br>across daemon restarts. It tracks:</p>
+<p>The peer registry is stored as JSON at <code>.thrum/var/peers.json</code> and persists
+across daemon restarts. It tracks:</p>
 <ul>
 <li>Daemon ID and name</li>
 <li>Network address (Tailscale IP + port)</li>
@@ -317,23 +336,23 @@ thrum peer status</code></pre>
 <h2>Monitoring</h2>
 <h3>Health Endpoint</h3>
 <p>The daemon&#39;s <code>health</code> RPC method includes Tailscale sync status when enabled:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;tailscale_sync&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;hostname&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;my-laptop&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;peer_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;peers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-      <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">&quot;daemon_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;d_abc123&quot;</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;office-server&quot;</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">&quot;last_sync&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;30s ago&quot;</span>
-      <span class="hljs-punctuation">}</span>
-    <span class="hljs-punctuation">]</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;tailscale_sync&quot;: {
+    &quot;enabled&quot;: true,
+    &quot;hostname&quot;: &quot;my-laptop&quot;,
+    &quot;peer_count&quot;: 2,
+    &quot;peers&quot;: [
+      {
+        &quot;daemon_id&quot;: &quot;d_abc123&quot;,
+        &quot;name&quot;: &quot;office-server&quot;,
+        &quot;last_sync&quot;: &quot;30s ago&quot;
+      }
+    ]
+  }
+}</code></pre>
 <h3>Logs</h3>
 <p>Tailscale sync logs are prefixed for easy filtering:</p>
-<pre><code class="language-text hljs">[pairing] Session started, code=7392, timeout=5m0s
+<pre><code>[pairing] Session started, code=7392, timeout=5m0s
 [pairing] Paired with office-server (d_abc123) at 100.64.2.10:9100
 sync.notify: synced from d_abc123 — applied=5 skipped=0
 periodic_sync: starting with interval=5m0s, recent_threshold=2m0s</code></pre>
@@ -366,7 +385,8 @@ periodic_sync: starting with interval=5m0s, recent_threshold=2m0s</code></pre>
 </ul>
 <h3>Performance</h3>
 <ul>
-<li><strong>Push notifications</strong> handle most sync latency -- events typically propagate<br>within seconds</li>
+<li><strong>Push notifications</strong> handle most sync latency -- events typically propagate
+within seconds</li>
 <li><strong>Periodic sync</strong> (5 min) acts as a safety net, not the primary mechanism</li>
 <li><strong>Batch size</strong> of 1000 events per pull keeps memory bounded during large syncs</li>
 <li><strong>Checkpointing</strong> ensures no redundant transfers after restarts</li>
@@ -374,22 +394,16 @@ periodic_sync: starting with interval=5m0s, recent_threshold=2m0s</code></pre>
 <h2>See Also</h2>
 <ul>
 <li><a href="tailscale-security.html">Tailscale Security</a> -- Security model documentation</li>
-<li><a href="multi-agent.html">Multi-Agent Support</a> -- Groups, runtime presets, and team<br>coordination</li>
-<li><a href="agent-coordination.html">Agent Coordination</a> -- Workflow patterns and Beads<br>integration</li>
+<li><a href="multi-agent.html">Multi-Agent Support</a> -- Groups, runtime presets, and team
+coordination</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> -- Workflow patterns and Beads
+integration</li>
 <li><a href="sync.html">Sync Protocol</a> -- Git-based synchronization details</li>
 <li><a href="cli.html">CLI Reference</a> -- Complete command documentation</li>
 </ul>
 <pre><code></code></pre>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#tailscale-sync.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#tailscale-sync.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#tailscale-sync.html')}</script>
 </body>
 </html>

@@ -1,102 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Claude Code Plugin — Thrum</title>
-  <meta name="description" content="Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Claude Code Plugin — Thrum">
-  <meta property="og:description" content="Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/claude-code-plugin.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Claude Code Plugin — Thrum">
-  <meta name="twitter:description" content="Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#claude-code-plugin.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Claude Code Plugin — Thrum</title>
+<meta name="description" content="Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#claude-code-plugin.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Claude Code Plugin
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <strong>Claude Code Plugin</strong> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Claude Code Plugin</h2>
 <blockquote>
-<p>See also: <a href="quickstart.html">Quickstart Guide</a> for basic Thrum setup,<br><a href="codex-plugin.html">Codex Plugin</a> for Codex skill-based integration,<br><a href="agent-configs.html">Agent Configurations</a> for manual agent definitions,<br><a href="mcp-server.html">MCP Server</a> for the native MCP transport,<br><a href="multi-agent.html">Multi-Agent Support</a> for coordination patterns.</p>
+<p>See also: <a href="quickstart.html">Quickstart Guide</a> for basic Thrum setup,
+<a href="codex-plugin.html">Codex Plugin</a> for Codex skill-based integration,
+<a href="agent-configs.html">Agent Configurations</a> for manual agent definitions,
+<a href="mcp-server.html">MCP Server</a> for the native MCP transport,
+<a href="multi-agent.html">Multi-Agent Support</a> for coordination patterns.</p>
 </blockquote>
 <h2>Overview</h2>
-<p>The Thrum plugin for Claude Code gives agents native access to Thrum messaging<br>through slash commands, automatic context injection via hooks, and progressive<br>disclosure resource docs. It replaces the manual agent definition approach<br>(copying <code>.md</code> files into <code>.claude/agents/</code>) with a single plugin install.</p>
+<p>The Thrum plugin for Claude Code gives agents native access to Thrum messaging
+through slash commands, automatic context injection via hooks, and progressive
+disclosure resource docs. It replaces the manual agent definition approach
+(copying <code>.md</code> files into <code>.claude/agents/</code>) with a single plugin install.</p>
 <p><strong>What you get:</strong></p>
 <ul>
-<li><strong>10 slash commands</strong> — <code>/thrum:send</code>, <code>/thrum:inbox</code>, <code>/thrum:quickstart</code>,<br>and more</li>
-<li><strong>Automatic context</strong> — SessionStart and PreCompact hooks run <code>thrum prime</code> to<br>inject identity, team roster, inbox, and git state</li>
-<li><strong>8 resource docs</strong> — Progressive disclosure for messaging patterns, groups,<br>identity, worktrees, and anti-patterns</li>
+<li><strong>10 slash commands</strong> — <code>/thrum:send</code>, <code>/thrum:inbox</code>, <code>/thrum:quickstart</code>,
+and more</li>
+<li><strong>Automatic context</strong> — SessionStart and PreCompact hooks run <code>thrum prime</code> to
+inject identity, team roster, inbox, and git state</li>
+<li><strong>8 resource docs</strong> — Progressive disclosure for messaging patterns, groups,
+identity, worktrees, and anti-patterns</li>
 <li><strong>Background listener</strong> — Sub-agent template for async message monitoring</li>
 </ul>
 <h2>Prerequisites</h2>
 <p>Before installing the plugin, you need Thrum installed and initialized:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Install thrum (Go 1.26+)</span>
+<pre><code># Install thrum (Go 1.26+)
 go install github.com/leonletto/thrum@latest
 
-<span class="hljs-comment"># Or build from source</span>
-git <span class="hljs-built_in">clone</span> https://github.com/leonletto/thrum.git
-<span class="hljs-built_in">cd</span> thrum &amp;&amp; make install
+# Or build from source
+git clone https://github.com/leonletto/thrum.git
+cd thrum &amp;&amp; make install
 
-<span class="hljs-comment"># Initialize in your repository (v0.4.5+: init does full setup)</span>
-<span class="hljs-built_in">cd</span> /path/to/your/repo
+# Initialize in your repository (v0.4.5+: init does full setup)
+cd /path/to/your/repo
 thrum init</code></pre>
-<p><code>thrum init</code> (v0.4.5+) handles the full setup: prompts for runtime detection,<br>generates CLAUDE.md coordination instructions, starts the daemon, registers your<br>agent, and starts a session. For manual control, you can still run individual<br>steps:</p>
-<pre><code class="language-bash hljs">thrum setup claude-md --apply    <span class="hljs-comment"># Generate CLAUDE.md coordination instructions</span>
-thrum daemon start               <span class="hljs-comment"># Start the daemon separately</span></code></pre>
+<p><code>thrum init</code> (v0.4.5+) handles the full setup: prompts for runtime detection,
+generates CLAUDE.md coordination instructions, starts the daemon, registers your
+agent, and starts a session. For manual control, you can still run individual
+steps:</p>
+<pre><code>thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
+thrum daemon start               # Start the daemon separately</code></pre>
 <p>Verify the daemon is running:</p>
-<pre><code class="language-bash hljs">thrum daemon status</code></pre>
+<pre><code>thrum daemon status</code></pre>
 <h2>Installation</h2>
 <h3>From GitHub (self-hosted marketplace)</h3>
-<p>The plugin is distributed as a self-hosted marketplace. First add the<br>marketplace, then install the plugin:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Add the Thrum marketplace</span>
+<p>The plugin is distributed as a self-hosted marketplace. First add the
+marketplace, then install the plugin:</p>
+<pre><code># Add the Thrum marketplace
 claude plugin marketplace add https://github.com/leonletto/thrum
 
-<span class="hljs-comment"># Install the plugin</span>
+# Install the plugin
 claude plugin install thrum</code></pre>
 <h3>From local clone</h3>
 <p>If you&#39;ve cloned the Thrum repository locally:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Add as a local marketplace</span>
+<pre><code># Add as a local marketplace
 claude plugin marketplace add /path/to/thrum
 
-<span class="hljs-comment"># Install the plugin</span>
+# Install the plugin
 claude plugin install thrum</code></pre>
 <h3>Verify installation</h3>
-<p>Start a new Claude Code session. The SessionStart hook should automatically run<br><code>thrum prime</code> and inject context. You&#39;ll see your agent identity, team roster,<br>and unread messages in the session preamble.</p>
+<p>Start a new Claude Code session. The SessionStart hook should automatically run
+<code>thrum prime</code> and inject context. You&#39;ll see your agent identity, team roster,
+and unread messages in the session preamble.</p>
 <h2>Slash Commands</h2>
 <p>All commands live under the <code>/thrum:</code> namespace.</p>
 <table>
@@ -149,17 +153,17 @@ claude plugin install thrum</code></pre>
 </tbody></table>
 <h3>Common workflows</h3>
 <p><strong>Start a session:</strong></p>
-<pre><code class="language-text hljs">/thrum:quickstart</code></pre>
+<pre><code>/thrum:quickstart</code></pre>
 <p>Prompts for role, module, and intent — or pass flags directly:</p>
-<pre><code class="language-bash hljs">thrum quickstart --role implementer --module auth --intent <span class="hljs-string">&quot;Building login flow&quot;</span></code></pre>
+<pre><code>thrum quickstart --role implementer --module auth --intent &quot;Building login flow&quot;</code></pre>
 <p><strong>Send a message:</strong></p>
-<pre><code class="language-text hljs">/thrum:send</code></pre>
+<pre><code>/thrum:send</code></pre>
 <p>Guided prompt for recipient and message. Direct usage:</p>
-<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Starting auth work&quot;</span> --to @coordinator
-thrum send <span class="hljs-string">&quot;Need review&quot;</span> --to @reviewers
-thrum send <span class="hljs-string">&quot;Heads up: breaking change&quot;</span> --to @everyone</code></pre>
+<pre><code>thrum send &quot;Starting auth work&quot; --to @coordinator
+thrum send &quot;Need review&quot; --to @reviewers
+thrum send &quot;Heads up: breaking change&quot; --to @everyone</code></pre>
 <p><strong>Check inbox and reply:</strong></p>
-<pre><code class="language-text hljs">/thrum:inbox
+<pre><code>/thrum:inbox
 /thrum:reply</code></pre>
 <h2>Hooks</h2>
 <p>The plugin configures two hooks that run automatically:</p>
@@ -174,9 +178,12 @@ thrum send <span class="hljs-string">&quot;Heads up: breaking change&quot;</span
 </ul>
 <p>If Thrum isn&#39;t initialized, shows a friendly setup message instead of failing.</p>
 <h3>PreCompact</h3>
-<p>Runs <code>thrum prime</code> before context compaction. This ensures agent identity and<br>session state survive compaction — the agent can continue working without losing<br>track of who it is or what messages are pending.</p>
+<p>Runs <code>thrum prime</code> before context compaction. This ensures agent identity and
+session state survive compaction — the agent can continue working without losing
+track of who it is or what messages are pending.</p>
 <h2>Resource Docs</h2>
-<p>The plugin includes 8 resource documents that Claude loads on demand for deeper<br>guidance:</p>
+<p>The plugin includes 8 resource documents that Claude loads on demand for deeper
+guidance:</p>
 <table>
 <thead>
 <tr>
@@ -218,28 +225,41 @@ thrum send <span class="hljs-string">&quot;Heads up: breaking change&quot;</span
 </tr>
 </tbody></table>
 <h2>MCP Server Integration</h2>
-<p>For native tool-call integration (no shell-outs), configure the Thrum MCP server<br>in your project&#39;s <code>.claude/settings.json</code>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;mcpServers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;thrum&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;stdio&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;command&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;args&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;mcp&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;serve&quot;</span><span class="hljs-punctuation">]</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
-<p>This provides 11 MCP tools: 5 for core messaging (<code>send_message</code>,<br><code>check_messages</code>, <code>wait_for_message</code>, <code>list_agents</code>, <code>broadcast_message</code>) and 6<br>for group management (<code>create_group</code>, <code>delete_group</code>, <code>add_group_member</code>,<br><code>remove_group_member</code>, <code>list_groups</code>, <code>get_group</code>). See<br><a href="mcp-server.html">MCP Server</a> for the full API.</p>
-<p><strong>Plugin vs MCP:</strong> The plugin&#39;s slash commands use the CLI (<code>Bash(thrum:*)</code>).<br>The MCP server provides native tool calls. Both work — the plugin is simpler to<br>set up, the MCP server is more efficient for high-frequency messaging. You can<br>use both together.</p>
+<p>For native tool-call integration (no shell-outs), configure the Thrum MCP server
+in your project&#39;s <code>.claude/settings.json</code>:</p>
+<pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;thrum&quot;: {
+      &quot;type&quot;: &quot;stdio&quot;,
+      &quot;command&quot;: &quot;thrum&quot;,
+      &quot;args&quot;: [&quot;mcp&quot;, &quot;serve&quot;]
+    }
+  }
+}</code></pre>
+<p>This provides 11 MCP tools: 5 for core messaging (<code>send_message</code>,
+<code>check_messages</code>, <code>wait_for_message</code>, <code>list_agents</code>, <code>broadcast_message</code>) and 6
+for group management (<code>create_group</code>, <code>delete_group</code>, <code>add_group_member</code>,
+<code>remove_group_member</code>, <code>list_groups</code>, <code>get_group</code>). See
+<a href="mcp-server.html">MCP Server</a> for the full API.</p>
+<p><strong>Plugin vs MCP:</strong> The plugin&#39;s slash commands use the CLI (<code>Bash(thrum:*)</code>).
+The MCP server provides native tool calls. Both work — the plugin is simpler to
+set up, the MCP server is more efficient for high-frequency messaging. You can
+use both together.</p>
 <h2>Background Listener</h2>
-<p>When <code>thrum prime</code> runs in a Claude Code session and detects an active identity,<br>it outputs a ready-to-use listener spawn instruction with the correct repo path.<br>Copy and run it to start background message monitoring:</p>
-<pre><code class="language-text hljs">Task(
+<p>When <code>thrum prime</code> runs in a Claude Code session and detects an active identity,
+it outputs a ready-to-use listener spawn instruction with the correct repo path.
+Copy and run it to start background message monitoring:</p>
+<pre><code>Task(
   subagent_type=&quot;message-listener&quot;,
   model=&quot;haiku&quot;,
   run_in_background=true,
   prompt=&quot;Listen for Thrum messages.
     WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 15m --after -30s --json&quot;
 )</code></pre>
-<p>The listener runs 6 cycles of 15 minutes each (~90 min coverage), blocks on<br><code>thrum wait</code> (no polling), returns when messages arrive, and costs<br>~$0.00003/cycle on Haiku. Re-arm after processing each batch. See the<br><code>LISTENER_PATTERN.md</code> resource for the full template.</p>
+<p>The listener runs 6 cycles of 15 minutes each (~90 min coverage), blocks on
+<code>thrum wait</code> (no polling), returns when messages arrive, and costs
+~$0.00003/cycle on Haiku. Re-arm after processing each batch. See the
+<code>LISTENER_PATTERN.md</code> resource for the full template.</p>
 <h2>Plugin vs Manual Agent Definitions</h2>
 <table>
 <thead>
@@ -280,27 +300,24 @@ thrum send <span class="hljs-string">&quot;Heads up: breaking change&quot;</span
 <td>Ad-hoc</td>
 </tr>
 </tbody></table>
-<p>The manual agent definitions (<code>thrum-agent.md</code>, <code>message-listener.md</code>) still<br>work and are available in <code>toolkit/agents/</code> for environments that don&#39;t support<br>plugins.</p>
+<p>The manual agent definitions (<code>thrum-agent.md</code>, <code>message-listener.md</code>) still
+work and are available in <code>toolkit/agents/</code> for environments that don&#39;t support
+plugins.</p>
 <h2>Troubleshooting</h2>
 <p><strong>&quot;Thrum not initialized&quot; on session start</strong></p>
 <p>Run <code>thrum init &amp;&amp; thrum daemon start</code> in your repository root.</p>
 <p><strong>No context injected after plugin install</strong></p>
-<p>Verify the plugin is loaded: check that <code>/thrum:prime</code> is available as a slash<br>command. If not, reinstall the plugin.</p>
+<p>Verify the plugin is loaded: check that <code>/thrum:prime</code> is available as a slash
+command. If not, reinstall the plugin.</p>
 <p><strong>Messages not arriving</strong></p>
-<p>Check daemon status with <code>thrum daemon status</code>. The daemon must be running for<br>messaging to work. Start it with <code>thrum daemon start</code>.</p>
+<p>Check daemon status with <code>thrum daemon status</code>. The daemon must be running for
+messaging to work. Start it with <code>thrum daemon start</code>.</p>
 <p><strong>Identity conflicts in multi-worktree setups</strong></p>
-<p>Set <code>THRUM_NAME</code> environment variable to give each worktree a unique agent name.<br>See <a href="identity.html">Identity System</a> for details.</p>
+<p>Set <code>THRUM_NAME</code> environment variable to give each worktree a unique agent name.
+See <a href="identity.html">Identity System</a> for details.</p>
 <pre><code></code></pre>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#claude-code-plugin.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#claude-code-plugin.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#claude-code-plugin.html')}</script>
 </body>
 </html>

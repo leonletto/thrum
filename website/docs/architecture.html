@@ -1,70 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Architecture — Thrum</title>
-  <meta name="description" content="Thrum foundation architecture — packages, storage layer, daemon, sync engine, and event system">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Architecture — Thrum">
-  <meta property="og:description" content="Thrum foundation architecture — packages, storage layer, daemon, sync engine, and event system">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/architecture.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Architecture — Thrum">
-  <meta name="twitter:description" content="Thrum foundation architecture — packages, storage layer, daemon, sync engine, and event system">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#architecture.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Architecture — Thrum</title>
+<meta name="description" content="Thrum foundation architecture — packages, storage layer, daemon, sync engine, and event system">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#architecture.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Architecture &rsaquo; Architecture
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <strong>Architecture</strong><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Thrum Foundation Architecture</h2>
-<p>This document describes the foundational packages that support the Thrum agent<br>messaging system.</p>
+<p>This document describes the foundational packages that support the Thrum agent
+messaging system.</p>
 <h2>Overview</h2>
-<p>The foundation provides core functionality that both the daemon and CLI depend<br>on:</p>
+<p>The foundation provides core functionality that both the daemon and CLI depend
+on:</p>
 <ul>
-<li><strong>Configuration loading</strong> - Environment variables, identity files, CLI flags,<br>agent naming</li>
+<li><strong>Configuration loading</strong> - Environment variables, identity files, CLI flags,
+agent naming</li>
 <li><strong>ID generation</strong> - Deterministic and unique identifiers (ULID-based)</li>
 <li><strong>JSONL handling</strong> - Append-only event log with file locking</li>
 <li><strong>SQLite schema</strong> - Database tables, indexes, and migrations (version 7)</li>
 <li><strong>Event projection</strong> - Replay sharded JSONL events into SQLite</li>
-<li><strong>Path resolution</strong> - <code>.thrum/redirect</code> for multi-worktree, sync worktree path<br>via <code>git-common-dir</code></li>
-<li><strong>Git context</strong> - Extract live git state (branch, commits, files) for agent<br>work context</li>
+<li><strong>Path resolution</strong> - <code>.thrum/redirect</code> for multi-worktree, sync worktree path
+via <code>git-common-dir</code></li>
+<li><strong>Git context</strong> - Extract live git state (branch, commits, files) for agent
+work context</li>
 </ul>
 <h2>Package Structure</h2>
-<pre><code class="language-text hljs">internal/
+<pre><code>internal/
 ├── config/      # Configuration loading, identity files, agent naming
 ├── identity/    # ID generation (repo, agent, session, message, event)
 ├── jsonl/       # JSONL reader/writer with file locking
@@ -84,21 +77,22 @@
 <li>Error if required fields missing</li>
 </ol>
 <h3>Identity File Format</h3>
-<p>Identity files are stored at <code>.thrum/identities/{agent_name}.json</code><br>(per-worktree):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;repo_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;r_7K2Q1X9M3P0B&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;agent&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;sync-daemon&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Sync Implementer&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;worktree&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;daemon&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;confirmed_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;human:leon&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T18:02:10.000Z&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<p>Identity files are stored at <code>.thrum/identities/{agent_name}.json</code>
+(per-worktree):</p>
+<pre><code>{
+  &quot;version&quot;: 2,
+  &quot;repo_id&quot;: &quot;r_7K2Q1X9M3P0B&quot;,
+  &quot;agent&quot;: {
+    &quot;kind&quot;: &quot;agent&quot;,
+    &quot;name&quot;: &quot;furiosa&quot;,
+    &quot;role&quot;: &quot;implementer&quot;,
+    &quot;module&quot;: &quot;sync-daemon&quot;,
+    &quot;display&quot;: &quot;Sync Implementer&quot;
+  },
+  &quot;worktree&quot;: &quot;daemon&quot;,
+  &quot;confirmed_by&quot;: &quot;human:leon&quot;,
+  &quot;updated_at&quot;: &quot;2026-02-03T18:02:10.000Z&quot;
+}</code></pre>
 <h3>Agent Naming</h3>
 <p>Agents support human-readable names:</p>
 <ul>
@@ -107,27 +101,28 @@
 <li>Names: <code>[a-z0-9_]+</code> (lowercase alphanumeric + underscores)</li>
 <li>Reserved: <code>daemon</code>, <code>system</code>, <code>thrum</code>, <code>all</code>, <code>broadcast</code></li>
 <li>When name is provided, it becomes the agent ID directly (e.g., <code>furiosa</code>)</li>
-<li>When omitted, falls back to <code>{role}_{hash10}</code> format (e.g.,<br><code>coordinator_1B9K33T6RK</code>)</li>
+<li>When omitted, falls back to <code>{role}_{hash10}</code> format (e.g.,
+<code>coordinator_1B9K33T6RK</code>)</li>
 </ul>
 <h3>Config Struct</h3>
-<pre><code class="language-go hljs"><span class="hljs-keyword">type</span> Config <span class="hljs-keyword">struct</span> {
-    RepoID  <span class="hljs-type">string</span>      <span class="hljs-comment">// Repository ID</span>
-    Agent   AgentConfig <span class="hljs-comment">// Agent identity</span>
-    Display <span class="hljs-type">string</span>      <span class="hljs-comment">// Display name</span>
+<pre><code>type Config struct {
+    RepoID  string      // Repository ID
+    Agent   AgentConfig // Agent identity
+    Display string      // Display name
 }
 
-<span class="hljs-keyword">type</span> AgentConfig <span class="hljs-keyword">struct</span> {
-    Kind    <span class="hljs-type">string</span> <span class="hljs-comment">// &quot;agent&quot; or &quot;human&quot;</span>
-    Name    <span class="hljs-type">string</span> <span class="hljs-comment">// Agent name (e.g., &quot;furiosa&quot;)</span>
-    Role    <span class="hljs-type">string</span> <span class="hljs-comment">// Agent role (e.g., &quot;implementer&quot;)</span>
-    Module  <span class="hljs-type">string</span> <span class="hljs-comment">// Module/component responsibility</span>
-    Display <span class="hljs-type">string</span> <span class="hljs-comment">// Display name</span>
+type AgentConfig struct {
+    Kind    string // &quot;agent&quot; or &quot;human&quot;
+    Name    string // Agent name (e.g., &quot;furiosa&quot;)
+    Role    string // Agent role (e.g., &quot;implementer&quot;)
+    Module  string // Module/component responsibility
+    Display string // Display name
 }</code></pre>
 <h3>Loading</h3>
-<pre><code class="language-go hljs"><span class="hljs-comment">// Load from current directory</span>
+<pre><code>// Load from current directory
 cfg, err := config.Load(flagRole, flagModule)
 
-<span class="hljs-comment">// Load from specific repo path</span>
+// Load from specific repo path
 cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)</code></pre>
 <h2>Identity (<code>internal/identity</code>)</h2>
 <h3>ID Formats</h3>
@@ -182,8 +177,10 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)</code></pre>
 </tbody></table>
 <h3>Deterministic IDs</h3>
 <ul>
-<li><strong>Repo ID</strong>: Derived from Git origin URL (normalized to https, lowercased,<br><code>.git</code> suffix stripped)</li>
-<li><strong>Agent ID (unnamed)</strong>: Derived from repo_id + role + module (sha256 +<br>Crockford base32)</li>
+<li><strong>Repo ID</strong>: Derived from Git origin URL (normalized to https, lowercased,
+<code>.git</code> suffix stripped)</li>
+<li><strong>Agent ID (unnamed)</strong>: Derived from repo_id + role + module (sha256 +
+Crockford base32)</li>
 <li>Same inputs always produce the same ID</li>
 </ul>
 <h3>Unique IDs</h3>
@@ -192,10 +189,12 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)</code></pre>
 <li>ULID format: 26 characters, sortable by time, 128-bit random</li>
 <li>Thread-safe generation with mutex-protected monotonic entropy</li>
 </ul>
-<p>Agent IDs are generated internally from the role and a hash. See<br><a href="development.html">Development Guide</a> for implementation details.</p>
+<p>Agent IDs are generated internally from the role and a hash. See
+<a href="development.html">Development Guide</a> for implementation details.</p>
 <h2>Paths (<code>internal/paths</code>)</h2>
 <h3>Path Resolution</h3>
-<p>The <code>paths</code> package handles path resolution for multi-worktree setups and sync<br>worktree location.</p>
+<p>The <code>paths</code> package handles path resolution for multi-worktree setups and sync
+worktree location.</p>
 <p><strong>Key functions:</strong></p>
 <table>
 <thead>
@@ -227,63 +226,71 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)</code></pre>
 </tr>
 </tbody></table>
 <h3>Redirect File</h3>
-<p>Feature worktrees share the main worktree&#39;s daemon and state via a redirect<br>file:</p>
-<pre><code class="language-text hljs">.thrum/redirect    -&gt; /path/to/main/worktree/.thrum</code></pre>
+<p>Feature worktrees share the main worktree&#39;s daemon and state via a redirect
+file:</p>
+<pre><code>.thrum/redirect    -&gt; /path/to/main/worktree/.thrum</code></pre>
 <p><strong>Resolution rules:</strong></p>
 <ul>
-<li>If <code>.thrum/redirect</code> exists, read target path and use it as the effective<br><code>.thrum/</code> directory</li>
+<li>If <code>.thrum/redirect</code> exists, read target path and use it as the effective
+<code>.thrum/</code> directory</li>
 <li>Target must be an absolute path</li>
 <li>Redirect chains (A -&gt; B -&gt; C) are detected and rejected</li>
 <li>Self-referencing redirects are rejected</li>
 <li>If no redirect file, use local <code>.thrum/</code> (this is the main worktree)</li>
 </ul>
-<p><strong>Note:</strong> <code>IdentitiesDir()</code> always uses the LOCAL <code>.thrum/identities/</code> (not the<br>redirect target), because agent identities are per-worktree.</p>
+<p><strong>Note:</strong> <code>IdentitiesDir()</code> always uses the LOCAL <code>.thrum/identities/</code> (not the
+redirect target), because agent identities are per-worktree.</p>
 <h3>Sync Worktree Path</h3>
 <p>The sync worktree lives at <code>.git/thrum-sync/a-sync/</code>:</p>
-<pre><code class="language-go hljs">syncDir, err := paths.SyncWorktreePath(repoPath)
-<span class="hljs-comment">// Returns: /path/to/repo/.git/thrum-sync/a-sync</span></code></pre>
-<p>Uses <code>git rev-parse --git-common-dir</code> to find the correct <code>.git/</code> directory,<br>which handles nested worktrees correctly (where <code>.git</code> is a file pointing to the<br>parent repo&#39;s <code>.git/worktrees/</code> directory).</p>
+<pre><code>syncDir, err := paths.SyncWorktreePath(repoPath)
+// Returns: /path/to/repo/.git/thrum-sync/a-sync</code></pre>
+<p>Uses <code>git rev-parse --git-common-dir</code> to find the correct <code>.git/</code> directory,
+which handles nested worktrees correctly (where <code>.git</code> is a file pointing to the
+parent repo&#39;s <code>.git/worktrees/</code> directory).</p>
 <h2>Git Context (<code>internal/gitctx</code>)</h2>
 <h3>Work Context Extraction</h3>
-<p>The <code>gitctx</code> package extracts live Git state for agent work context tracking.<br>Called during <code>session.heartbeat</code> to provide real-time visibility into what each<br>agent is working on.</p>
+<p>The <code>gitctx</code> package extracts live Git state for agent work context tracking.
+Called during <code>session.heartbeat</code> to provide real-time visibility into what each
+agent is working on.</p>
 <p><strong>Exported types:</strong></p>
-<pre><code class="language-go hljs"><span class="hljs-keyword">type</span> WorkContext <span class="hljs-keyword">struct</span> {
-    Branch           <span class="hljs-type">string</span>          <span class="hljs-string">`json:&quot;branch&quot;`</span>
-    WorktreePath     <span class="hljs-type">string</span>          <span class="hljs-string">`json:&quot;worktree_path&quot;`</span>
-    UnmergedCommits  []CommitSummary <span class="hljs-string">`json:&quot;unmerged_commits&quot;`</span>
-    UncommittedFiles []<span class="hljs-type">string</span>        <span class="hljs-string">`json:&quot;uncommitted_files&quot;`</span>
-    ChangedFiles     []<span class="hljs-type">string</span>        <span class="hljs-string">`json:&quot;changed_files&quot;`</span>
-    ExtractedAt      time.Time       <span class="hljs-string">`json:&quot;extracted_at&quot;`</span>
+<pre><code>type WorkContext struct {
+    Branch           string          `json:&quot;branch&quot;`
+    WorktreePath     string          `json:&quot;worktree_path&quot;`
+    UnmergedCommits  []CommitSummary `json:&quot;unmerged_commits&quot;`
+    UncommittedFiles []string        `json:&quot;uncommitted_files&quot;`
+    ChangedFiles     []string        `json:&quot;changed_files&quot;`
+    ExtractedAt      time.Time       `json:&quot;extracted_at&quot;`
 }
 
-<span class="hljs-keyword">type</span> CommitSummary <span class="hljs-keyword">struct</span> {
-    SHA     <span class="hljs-type">string</span>   <span class="hljs-string">`json:&quot;sha&quot;`</span>
-    Message <span class="hljs-type">string</span>   <span class="hljs-string">`json:&quot;message&quot;`</span> <span class="hljs-comment">// First line only</span>
-    Files   []<span class="hljs-type">string</span> <span class="hljs-string">`json:&quot;files&quot;`</span>
+type CommitSummary struct {
+    SHA     string   `json:&quot;sha&quot;`
+    Message string   `json:&quot;message&quot;` // First line only
+    Files   []string `json:&quot;files&quot;`
 }</code></pre>
 <p><strong><code>ExtractWorkContext(worktreePath)</code>:</strong></p>
 <ul>
 <li>Returns empty context (not error) if path is not a git repo</li>
-<li>Determines base branch automatically (<code>origin/main</code>, <code>origin/master</code>, or<br><code>HEAD~10</code>)</li>
+<li>Determines base branch automatically (<code>origin/main</code>, <code>origin/master</code>, or
+<code>HEAD~10</code>)</li>
 <li>Extracts unmerged commits with per-commit file lists</li>
 <li>Runs in ~80ms typically</li>
 </ul>
 <h2>JSONL (<code>internal/jsonl</code>)</h2>
 <h3>Append-Only Log</h3>
-<pre><code class="language-go hljs"><span class="hljs-comment">// Writing</span>
-writer, _ := jsonl.NewWriter(<span class="hljs-string">&quot;events.jsonl&quot;</span>)
+<pre><code>// Writing
+writer, _ := jsonl.NewWriter(&quot;events.jsonl&quot;)
 writer.Append(event)
 writer.Close()
 
-<span class="hljs-comment">// Reading all</span>
-reader, _ := jsonl.NewReader(<span class="hljs-string">&quot;events.jsonl&quot;</span>)
+// Reading all
+reader, _ := jsonl.NewReader(&quot;events.jsonl&quot;)
 messages, _ := reader.ReadAll()
 
-<span class="hljs-comment">// Streaming</span>
+// Streaming
 ctx := context.Background()
 ch := reader.Stream(ctx)
-<span class="hljs-keyword">for</span> msg := <span class="hljs-keyword">range</span> ch {
-    <span class="hljs-comment">// Process message</span>
+for msg := range ch {
+    // Process message
 }</code></pre>
 <h3>Safety Features</h3>
 <ul>
@@ -293,15 +300,17 @@ ch := reader.Stream(ctx)
 <li><strong>In-process mutex</strong>: <code>sync.Mutex</code> for thread safety within the same process</li>
 </ul>
 <h3>Sharded File Layout</h3>
-<p>JSONL files are sharded by type and agent (in the sync worktree at<br><code>.git/thrum-sync/a-sync/</code>):</p>
-<pre><code class="language-text hljs">events.jsonl              # Agent lifecycle, sessions, threads
+<p>JSONL files are sharded by type and agent (in the sync worktree at
+<code>.git/thrum-sync/a-sync/</code>):</p>
+<pre><code>events.jsonl              # Agent lifecycle, sessions, threads
 messages/
   furiosa.jsonl           # Messages authored by agent &quot;furiosa&quot;
   coordinator_1B9K.jsonl  # Messages authored by unnamed agent</code></pre>
-<p>Event routing is handled by <code>internal/daemon/state/</code> which directs <code>message.*</code><br>events to per-agent files and all other events to <code>events.jsonl</code>.</p>
+<p>Event routing is handled by <code>internal/daemon/state/</code> which directs <code>message.*</code>
+events to per-agent files and all other events to <code>events.jsonl</code>.</p>
 <h2>Schema (<code>internal/schema</code>)</h2>
 <h3>Database Tables</h3>
-<pre><code class="language-text hljs">messages            # All messages (create/edit/delete)
+<pre><code>messages            # All messages (create/edit/delete)
 message_scopes      # Routing scopes (many-to-many)
 message_refs        # References (many-to-many)
 message_reads       # Per-session read tracking (local-only, no git sync)
@@ -321,21 +330,23 @@ schema_version      # Migration tracking</code></pre>
 <ul>
 <li>v3 -&gt; v4: Impersonation support (<code>authored_by</code>, <code>disclosed</code> columns)</li>
 <li>v5 -&gt; v6: Agent work contexts table, message reads, session scopes/refs</li>
-<li>v6 -&gt; v7: Event ID backfill (ULID <code>event_id</code> on all JSONL events), JSONL<br>sharding migration</li>
-<li>v7 -&gt; v8: Groups feature (<code>groups</code> and <code>group_members</code> tables), <code>@everyone</code><br>built-in group</li>
+<li>v6 -&gt; v7: Event ID backfill (ULID <code>event_id</code> on all JSONL events), JSONL
+sharding migration</li>
+<li>v7 -&gt; v8: Groups feature (<code>groups</code> and <code>group_members</code> tables), <code>@everyone</code>
+built-in group</li>
 </ul>
 <h3>Initialization</h3>
-<pre><code class="language-go hljs">db, _ := schema.OpenDB(<span class="hljs-string">&quot;thrum.db&quot;</span>)
-schema.InitDB(db)  <span class="hljs-comment">// Create tables and indexes</span>
+<pre><code>db, _ := schema.OpenDB(&quot;thrum.db&quot;)
+schema.InitDB(db)  // Create tables and indexes
 
-<span class="hljs-comment">// Or use migration (checks version first, runs incremental migrations)</span>
+// Or use migration (checks version first, runs incremental migrations)
 schema.Migrate(db)</code></pre>
 <h3>JSONL Migrations</h3>
 <p>The schema package also handles JSONL structure migrations:</p>
-<pre><code class="language-go hljs"><span class="hljs-comment">// Migrate monolithic messages.jsonl -&gt; per-agent sharded files</span>
+<pre><code>// Migrate monolithic messages.jsonl -&gt; per-agent sharded files
 schema.MigrateJSONLSharding(syncDir)
 
-<span class="hljs-comment">// Backfill event_id (ULID) for events that lack it</span>
+// Backfill event_id (ULID) for events that lack it
 schema.BackfillEventID(syncDir)</code></pre>
 <h3>Features</h3>
 <ul>
@@ -347,25 +358,27 @@ schema.BackfillEventID(syncDir)</code></pre>
 <h2>Projection (<code>internal/projection</code>)</h2>
 <h3>Event Replay</h3>
 <p>The projector rebuilds SQLite from sharded JSONL event logs:</p>
-<pre><code class="language-go hljs">db, _ := schema.OpenDB(<span class="hljs-string">&quot;thrum.db&quot;</span>)
+<pre><code>db, _ := schema.OpenDB(&quot;thrum.db&quot;)
 schema.InitDB(db)
 
 projector := projection.NewProjector(db)
 
-<span class="hljs-comment">// Rebuild from sync worktree (reads events.jsonl + messages/*.jsonl)</span>
+// Rebuild from sync worktree (reads events.jsonl + messages/*.jsonl)
 projector.Rebuild(syncDir)
 
-<span class="hljs-comment">// Or apply a single event</span>
+// Or apply a single event
 projector.Apply(eventJSON)</code></pre>
 <h3>Multi-File Rebuild</h3>
 <p><code>Rebuild(syncDir)</code> handles the sharded JSONL structure:</p>
 <ol>
 <li>Read <code>events.jsonl</code> (agent lifecycle, sessions)</li>
 <li>Glob <code>messages/*.jsonl</code> (per-agent message files)</li>
-<li>Sort ALL events globally by <code>(timestamp, event_id)</code> for deterministic<br>ordering</li>
+<li>Sort ALL events globally by <code>(timestamp, event_id)</code> for deterministic
+ordering</li>
 <li>Apply to SQLite in order</li>
 </ol>
-<p>File boundaries are transparent to the projector -- it only cares about event<br>ordering.</p>
+<p>File boundaries are transparent to the projector -- it only cares about event
+ordering.</p>
 <h3>Event Types</h3>
 <table>
 <thead>
@@ -412,7 +425,8 @@ projector.Apply(eventJSON)</code></pre>
 </tr>
 </tbody></table>
 <h3>Forward Compatibility</h3>
-<p>Unknown event types are silently ignored, allowing older projectors to process<br>logs with newer event types.</p>
+<p>Unknown event types are silently ignored, allowing older projectors to process
+logs with newer event types.</p>
 <h2>Types (<code>internal/types</code>)</h2>
 <p>Shared Go structs for all event types:</p>
 <ul>
@@ -439,19 +453,27 @@ projector.Apply(eventJSON)</code></pre>
 </ul>
 <h2>Design Principles</h2>
 <h3>1. Append-Only Events</h3>
-<p>JSONL is the source of truth. SQLite is a rebuildable projection for fast<br>queries. The projection can be deleted and rebuilt from JSONL at any time.</p>
+<p>JSONL is the source of truth. SQLite is a rebuildable projection for fast
+queries. The projection can be deleted and rebuilt from JSONL at any time.</p>
 <h3>2. Per-Agent Sharding</h3>
-<p>Message events are sharded into per-agent JSONL files<br>(<code>messages/{agent}.jsonl</code>). This reduces merge conflicts, improves sync<br>performance, and enables per-agent file tracking in Git.</p>
+<p>Message events are sharded into per-agent JSONL files
+(<code>messages/{agent}.jsonl</code>). This reduces merge conflicts, improves sync
+performance, and enables per-agent file tracking in Git.</p>
 <h3>3. Deterministic Hashing</h3>
-<p>Repo and agent IDs are deterministic (SHA256-based), enabling identity<br>verification across machines without central coordination.</p>
+<p>Repo and agent IDs are deterministic (SHA256-based), enabling identity
+verification across machines without central coordination.</p>
 <h3>4. Time-Ordered IDs</h3>
-<p>ULID format ensures IDs (messages, sessions, events) are sortable by creation<br>time and globally unique.</p>
+<p>ULID format ensures IDs (messages, sessions, events) are sortable by creation
+time and globally unique.</p>
 <h3>5. Offline-First</h3>
-<p>No network required for local operation. Git handles replication via the sync<br>loop.</p>
+<p>No network required for local operation. Git handles replication via the sync
+loop.</p>
 <h3>6. Low-Conflict</h3>
-<p>Immutable events + ULID timestamps + per-agent sharding minimize merge conflicts<br>during Git sync.</p>
+<p>Immutable events + ULID timestamps + per-agent sharding minimize merge conflicts
+during Git sync.</p>
 <h3>7. Path Indirection</h3>
-<p>The <code>.thrum/redirect</code> pattern allows multiple worktrees to share a single daemon<br>and state directory without hardcoding paths.</p>
+<p>The <code>.thrum/redirect</code> pattern allows multiple worktrees to share a single daemon
+and state directory without hardcoding paths.</p>
 <h3>8. Timeout Enforcement (v0.4.3)</h3>
 <p>All I/O paths enforce timeouts to prevent indefinite hangs:</p>
 <ul>
@@ -462,7 +484,8 @@ projector.Apply(eventJSON)</code></pre>
 <li><strong>5s/10s</strong> git command timeouts (via <code>safecmd</code> wrapper)</li>
 <li><strong>Context-scoped</strong> SQLite queries (via <code>safedb</code> wrapper)</li>
 </ul>
-<p>Lock scope has been reduced — no mutex is held during I/O, git, or WebSocket<br>dispatch operations.</p>
+<p>Lock scope has been reduced — no mutex is held during I/O, git, or WebSocket
+dispatch operations.</p>
 <h2>References</h2>
 <ul>
 <li>Design document: <code>dev-docs/2026-02-03-thrum-design.md</code></li>
@@ -472,15 +495,7 @@ projector.Apply(eventJSON)</code></pre>
 </ul>
 <pre><code></code></pre>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#architecture.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#architecture.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#architecture.html')}</script>
 </body>
 </html>

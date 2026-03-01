@@ -1,66 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Event Reference — Thrum</title>
-  <meta name="description" content="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Event Reference — Thrum">
-  <meta property="og:description" content="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/api/events.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Event Reference — Thrum">
-  <meta name="twitter:description" content="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#api/events.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Event Reference — Thrum</title>
+<meta name="description" content="All events emitted by the Thrum daemon over WebSocket — message, agent, session, sync, and subscription events">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#api/events.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; API Reference &rsaquo; Event Reference
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a> | <a href="../overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <strong>Event Reference</strong> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="../architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="../context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="../cli.html">CLI Reference</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Event Reference</h2>
-<p>This document provides detailed documentation for all events emitted by the<br>Thrum daemon over WebSocket connections.</p>
+<p>This document provides detailed documentation for all events emitted by the
+Thrum daemon over WebSocket connections.</p>
 <h2>Event Format</h2>
 <p>Events are sent as JSON-RPC 2.0 notifications (without an <code>id</code> field):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;event.type&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-comment">// event-specific payload</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;method&quot;: &quot;event.type&quot;,
+  &quot;params&quot;: {
+    // event-specific payload
+  }
+}</code></pre>
 <p><strong>Key characteristics</strong>:</p>
 <ul>
 <li>No <code>id</code> field (notifications don&#39;t expect responses)</li>
@@ -70,7 +59,8 @@
 </ul>
 <h2>Event Delivery</h2>
 <h3>Subscription-Based</h3>
-<p>Events are only delivered to clients that have active subscriptions matching the<br>event.</p>
+<p>Events are only delivered to clients that have active subscriptions matching the
+event.</p>
 <p><strong>Subscription types</strong>:</p>
 <ol>
 <li><strong>Scope-based</strong>: Receive events for messages with specific scopes</li>
@@ -80,17 +70,19 @@
 <h3>Delivery Guarantees</h3>
 <ul>
 <li><strong>At-least-once</strong>: Events may be delivered multiple times</li>
-<li><strong>Ordering</strong>: Events for the same message are ordered, but events across<br>messages may be out of order</li>
-<li><strong>Buffer limit</strong>: Client buffers have a limit (default 100); slow clients may<br>miss events</li>
+<li><strong>Ordering</strong>: Events for the same message are ordered, but events across
+messages may be out of order</li>
+<li><strong>Buffer limit</strong>: Client buffers have a limit (default 100); slow clients may
+miss events</li>
 </ul>
 <h2>Common Fields</h2>
 <p>All persisted events share a common base structure:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;event.type&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;type&quot;: &quot;event.type&quot;,
+  &quot;timestamp&quot;: &quot;2024-01-01T12:00:00Z&quot;,
+  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
+  &quot;v&quot;: 1
+}</code></pre>
 <table>
 <thead>
 <tr>
@@ -121,8 +113,9 @@
 </tr>
 </tbody></table>
 <h2>JSONL Storage</h2>
-<p>Events are persisted as sharded JSONL files in the sync worktree at<br><code>.git/thrum-sync/a-sync/</code>:</p>
-<pre><code class="language-text hljs">.git/thrum-sync/a-sync/
+<p>Events are persisted as sharded JSONL files in the sync worktree at
+<code>.git/thrum-sync/a-sync/</code>:</p>
+<pre><code>.git/thrum-sync/a-sync/
 ├── events.jsonl              Agent lifecycle events
 └── messages/
     └── {agent_name}.jsonl    Per-agent message events</code></pre>
@@ -143,7 +136,9 @@
 <td><code>message.create</code>, <code>message.edit</code>, <code>message.delete</code>, <code>thread.create</code>, <code>agent.update</code></td>
 </tr>
 </tbody></table>
-<p>Events are append-only and immutable. The JSONL files are the source of truth;<br>the SQLite database (<code>.thrum/var/messages.db</code>) is a derived read projection that<br>can be rebuilt from the JSONL at any time.</p>
+<p>Events are append-only and immutable. The JSONL files are the source of truth;
+the SQLite database (<code>.thrum/var/messages.db</code>) is a derived read projection that
+can be rebuilt from the JSONL at any time.</p>
 <h2>Event Types</h2>
 <h3>Message Events</h3>
 <h4>message.create</h4>
@@ -156,35 +151,35 @@
 </ul>
 <p><strong>Stored in</strong>: <code>messages/{agent_name}.jsonl</code></p>
 <p><strong>Payload</strong> (MessageCreateEvent):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;message.create&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_xyz789&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread_abc123&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;s_abc123&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Hello, world!&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;key\&quot;:\&quot;value\&quot;}&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;refs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;authored_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;disclosed&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;type&quot;: &quot;message.create&quot;,
+  &quot;timestamp&quot;: &quot;2024-01-01T12:00:00Z&quot;,
+  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
+  &quot;v&quot;: 1,
+  &quot;message_id&quot;: &quot;msg_xyz789&quot;,
+  &quot;thread_id&quot;: &quot;thread_abc123&quot;,
+  &quot;agent_id&quot;: &quot;furiosa&quot;,
+  &quot;session_id&quot;: &quot;s_abc123&quot;,
+  &quot;body&quot;: {
+    &quot;format&quot;: &quot;markdown&quot;,
+    &quot;content&quot;: &quot;Hello, world!&quot;,
+    &quot;structured&quot;: &quot;{\&quot;key\&quot;:\&quot;value\&quot;}&quot;
+  },
+  &quot;scopes&quot;: [
+    {
+      &quot;type&quot;: &quot;task&quot;,
+      &quot;value&quot;: &quot;PROJ-123&quot;
+    }
+  ],
+  &quot;refs&quot;: [
+    {
+      &quot;type&quot;: &quot;mention&quot;,
+      &quot;value&quot;: &quot;reviewer&quot;
+    }
+  ],
+  &quot;authored_by&quot;: &quot;&quot;,
+  &quot;disclosed&quot;: false
+}</code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -204,12 +199,12 @@
 </ul>
 <p><strong>Related methods</strong>: <code>message.send</code>, <code>message.list</code></p>
 <p><strong>Example usage</strong>:</p>
-<pre><code class="language-javascript hljs">ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
-  <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
-  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.create&quot;</span>) {
-    <span class="hljs-keyword">const</span> message = msg.<span class="hljs-property">params</span>;
-    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(
-      <span class="hljs-string">`New message from <span class="hljs-subst">${message.agent_id}</span>: <span class="hljs-subst">${message.body.content}</span>`</span>,
+<pre><code>ws.onmessage = (event) =&gt; {
+  const msg = JSON.parse(event.data);
+  if (msg.method === &quot;message.create&quot;) {
+    const message = msg.params;
+    console.log(
+      `New message from ${message.agent_id}: ${message.body.content}`,
     );
   }
 };</code></pre>
@@ -223,18 +218,18 @@
 </ul>
 <p><strong>Stored in</strong>: <code>messages/{agent_name}.jsonl</code></p>
 <p><strong>Payload</strong> (MessageEditEvent):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;message.edit&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_xyz789&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Updated content&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;updated\&quot;:true}&quot;</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;type&quot;: &quot;message.edit&quot;,
+  &quot;timestamp&quot;: &quot;2024-01-01T13:00:00Z&quot;,
+  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
+  &quot;v&quot;: 1,
+  &quot;message_id&quot;: &quot;msg_xyz789&quot;,
+  &quot;body&quot;: {
+    &quot;format&quot;: &quot;markdown&quot;,
+    &quot;content&quot;: &quot;Updated content&quot;,
+    &quot;structured&quot;: &quot;{\&quot;updated\&quot;:true}&quot;
+  }
+}</code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -242,7 +237,8 @@
 <li><code>timestamp</code>: Edit time (ISO 8601)</li>
 <li><code>body</code>: Updated message body</li>
 </ul>
-<p><strong>Edit history</strong>: Full edit history is stored in the database (<code>message_edits</code><br>table) and includes:</p>
+<p><strong>Edit history</strong>: Full edit history is stored in the database (<code>message_edits</code>
+table) and includes:</p>
 <ul>
 <li>Old content</li>
 <li>New content</li>
@@ -251,11 +247,11 @@
 </ul>
 <p><strong>Related methods</strong>: <code>message.edit</code>, <code>message.get</code></p>
 <p><strong>Example usage</strong>:</p>
-<pre><code class="language-javascript hljs">ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
-  <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
-  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.edit&quot;</span>) {
-    <span class="hljs-keyword">const</span> edit = msg.<span class="hljs-property">params</span>;
-    <span class="hljs-title function_">updateMessageInUI</span>(edit.<span class="hljs-property">message_id</span>, edit.<span class="hljs-property">body</span>.<span class="hljs-property">content</span>);
+<pre><code>ws.onmessage = (event) =&gt; {
+  const msg = JSON.parse(event.data);
+  if (msg.method === &quot;message.edit&quot;) {
+    const edit = msg.params;
+    updateMessageInUI(edit.message_id, edit.body.content);
   }
 };</code></pre>
 <h4>message.delete</h4>
@@ -268,14 +264,14 @@
 </ul>
 <p><strong>Stored in</strong>: <code>messages/{agent_name}.jsonl</code></p>
 <p><strong>Payload</strong> (MessageDeleteEvent):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;message.delete&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T14:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_xyz789&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;spam&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;type&quot;: &quot;message.delete&quot;,
+  &quot;timestamp&quot;: &quot;2024-01-01T14:00:00Z&quot;,
+  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
+  &quot;v&quot;: 1,
+  &quot;message_id&quot;: &quot;msg_xyz789&quot;,
+  &quot;reason&quot;: &quot;spam&quot;
+}</code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -283,14 +279,16 @@
 <li><code>timestamp</code>: Deletion time (ISO 8601)</li>
 <li><code>reason</code>: Optional deletion reason</li>
 </ul>
-<p><strong>Soft deletion</strong>: Messages are marked as deleted but not removed from the<br>database. The message content is preserved for audit purposes.</p>
-<p><strong>Related methods</strong>: <code>message.delete</code>, <code>message.list</code> (with <code>include_deleted</code><br>param)</p>
+<p><strong>Soft deletion</strong>: Messages are marked as deleted but not removed from the
+database. The message content is preserved for audit purposes.</p>
+<p><strong>Related methods</strong>: <code>message.delete</code>, <code>message.list</code> (with <code>include_deleted</code>
+param)</p>
 <p><strong>Example usage</strong>:</p>
-<pre><code class="language-javascript hljs">ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
-  <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
-  <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">method</span> === <span class="hljs-string">&quot;message.delete&quot;</span>) {
-    <span class="hljs-keyword">const</span> deletion = msg.<span class="hljs-property">params</span>;
-    <span class="hljs-title function_">removeMessageFromUI</span>(deletion.<span class="hljs-property">message_id</span>);
+<pre><code>ws.onmessage = (event) =&gt; {
+  const msg = JSON.parse(event.data);
+  if (msg.method === &quot;message.delete&quot;) {
+    const deletion = msg.params;
+    removeMessageFromUI(deletion.message_id);
   }
 };</code></pre>
 <h3>Thread Events</h3>
@@ -303,15 +301,15 @@
 </ul>
 <p><strong>Stored in</strong>: <code>messages/{agent_name}.jsonl</code></p>
 <p><strong>Payload</strong> (ThreadCreateEvent):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread.create&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread_abc123&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Discussion about feature X&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;created_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;type&quot;: &quot;thread.create&quot;,
+  &quot;timestamp&quot;: &quot;2024-01-01T12:00:00Z&quot;,
+  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
+  &quot;v&quot;: 1,
+  &quot;thread_id&quot;: &quot;thread_abc123&quot;,
+  &quot;title&quot;: &quot;Discussion about feature X&quot;,
+  &quot;created_by&quot;: &quot;furiosa&quot;
+}</code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -322,25 +320,26 @@
 </ul>
 <p><strong>Related methods</strong>: <code>thread.create</code>, <code>thread.list</code>, <code>thread.get</code></p>
 <h4>thread.updated</h4>
-<p>Real-time notification emitted when a thread is updated with new messages. This<br>event is a WebSocket notification only and is <strong>not persisted</strong> to JSONL.</p>
+<p>Real-time notification emitted when a thread is updated with new messages. This
+event is a WebSocket notification only and is <strong>not persisted</strong> to JSONL.</p>
 <p><strong>When emitted</strong>:</p>
 <ul>
 <li>After a new message is added to a thread</li>
 <li>Sent to clients with matching subscriptions</li>
 </ul>
 <p><strong>Payload</strong> (ThreadUpdatedEvent):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread.updated&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thread_abc123&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;message_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;unread_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;last_activity&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;last_sender&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Latest message text...&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;type&quot;: &quot;thread.updated&quot;,
+  &quot;timestamp&quot;: &quot;2024-01-01T13:00:00Z&quot;,
+  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
+  &quot;v&quot;: 1,
+  &quot;thread_id&quot;: &quot;thread_abc123&quot;,
+  &quot;message_count&quot;: 5,
+  &quot;unread_count&quot;: 2,
+  &quot;last_activity&quot;: &quot;2024-01-01T13:00:00Z&quot;,
+  &quot;last_sender&quot;: &quot;furiosa&quot;,
+  &quot;preview&quot;: &quot;Latest message text...&quot;
+}</code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>thread_id</code>: Thread that was updated</li>
@@ -360,32 +359,37 @@
 </ul>
 <p><strong>Stored in</strong>: <code>events.jsonl</code></p>
 <p><strong>Payload</strong> (AgentRegisterEvent):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.register&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;worktree&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;main&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Auth Implementer&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;type&quot;: &quot;agent.register&quot;,
+  &quot;timestamp&quot;: &quot;2024-01-01T12:00:00Z&quot;,
+  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
+  &quot;v&quot;: 1,
+  &quot;agent_id&quot;: &quot;furiosa&quot;,
+  &quot;kind&quot;: &quot;agent&quot;,
+  &quot;name&quot;: &quot;furiosa&quot;,
+  &quot;role&quot;: &quot;implementer&quot;,
+  &quot;module&quot;: &quot;auth&quot;,
+  &quot;worktree&quot;: &quot;main&quot;,
+  &quot;display&quot;: &quot;Auth Implementer&quot;
+}</code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
-<li><code>agent_id</code>: Agent identifier (name-based for named agents, legacy hash for<br>unnamed)</li>
+<li><code>agent_id</code>: Agent identifier (name-based for named agents, legacy hash for
+unnamed)</li>
 <li><code>kind</code>: Agent kind (<code>&quot;agent&quot;</code> or <code>&quot;user&quot;</code>)</li>
-<li><code>name</code>: Human-readable agent name (lowercase alphanumeric + underscores, e.g.,<br><code>furiosa</code>). Empty for legacy unnamed agents.</li>
+<li><code>name</code>: Human-readable agent name (lowercase alphanumeric + underscores, e.g.,
+<code>furiosa</code>). Empty for legacy unnamed agents.</li>
 <li><code>role</code>: Agent role (e.g., <code>implementer</code>, <code>reviewer</code>, <code>coordinator</code>)</li>
 <li><code>module</code>: Agent module (area of work)</li>
 <li><code>worktree</code>: Git worktree name the agent is operating in</li>
 <li><code>display</code>: Optional display name</li>
 <li><code>timestamp</code>: Registration time (ISO 8601)</li>
 </ul>
-<p><strong>Agent naming</strong>: Agents support human-readable names set via <code>--name</code> flag,<br><code>THRUM_NAME</code> env var, or identity files at <code>.thrum/identities/{name}.json</code>.<br>Names must match <code>[a-z0-9_]+</code> and cannot use reserved words (<code>daemon</code>, <code>system</code>,<br><code>thrum</code>, <code>all</code>, <code>broadcast</code>).</p>
+<p><strong>Agent naming</strong>: Agents support human-readable names set via <code>--name</code> flag,
+<code>THRUM_NAME</code> env var, or identity files at <code>.thrum/identities/{name}.json</code>.
+Names must match <code>[a-z0-9_]+</code> and cannot use reserved words (<code>daemon</code>, <code>system</code>,
+<code>thrum</code>, <code>all</code>, <code>broadcast</code>).</p>
 <p><strong>Related methods</strong>: <code>agent.register</code>, <code>agent.list</code></p>
 <h4>agent.cleanup</h4>
 <p>Emitted when an agent is deleted or cleaned up.</p>
@@ -397,15 +401,15 @@
 </ul>
 <p><strong>Stored in</strong>: <code>events.jsonl</code></p>
 <p><strong>Payload</strong> (AgentCleanupEvent):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.cleanup&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T15:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;manual deletion&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;manual&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;type&quot;: &quot;agent.cleanup&quot;,
+  &quot;timestamp&quot;: &quot;2024-01-01T15:00:00Z&quot;,
+  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
+  &quot;v&quot;: 1,
+  &quot;agent_id&quot;: &quot;furiosa&quot;,
+  &quot;reason&quot;: &quot;manual deletion&quot;,
+  &quot;method&quot;: &quot;manual&quot;
+}</code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -424,28 +428,28 @@
 </ul>
 <p><strong>Stored in</strong>: <code>messages/{agent_name}.jsonl</code></p>
 <p><strong>Payload</strong> (AgentUpdateEvent):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.update&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:30:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;work_contexts&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;s_abc123&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;branch&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;feature/auth&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;worktree_path&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;/path/to/repo&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;unmerged_commits&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;sha&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;abc1234&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Add login form&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;uncommitted_files&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;auth.go&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;changed_files&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;auth.go&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;auth_test.go&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;git_updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:30:00Z&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;current_task&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Implement login flow&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;task_updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;intent&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Building auth module&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;intent_updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">]</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;type&quot;: &quot;agent.update&quot;,
+  &quot;timestamp&quot;: &quot;2024-01-01T12:30:00Z&quot;,
+  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
+  &quot;v&quot;: 1,
+  &quot;agent_id&quot;: &quot;furiosa&quot;,
+  &quot;work_contexts&quot;: [
+    {
+      &quot;session_id&quot;: &quot;s_abc123&quot;,
+      &quot;branch&quot;: &quot;feature/auth&quot;,
+      &quot;worktree_path&quot;: &quot;/path/to/repo&quot;,
+      &quot;unmerged_commits&quot;: [{ &quot;sha&quot;: &quot;abc1234&quot;, &quot;message&quot;: &quot;Add login form&quot; }],
+      &quot;uncommitted_files&quot;: [&quot;auth.go&quot;],
+      &quot;changed_files&quot;: [&quot;auth.go&quot;, &quot;auth_test.go&quot;],
+      &quot;git_updated_at&quot;: &quot;2024-01-01T12:30:00Z&quot;,
+      &quot;current_task&quot;: &quot;Implement login flow&quot;,
+      &quot;task_updated_at&quot;: &quot;2024-01-01T12:00:00Z&quot;,
+      &quot;intent&quot;: &quot;Building auth module&quot;,
+      &quot;intent_updated_at&quot;: &quot;2024-01-01T12:00:00Z&quot;
+    }
+  ]
+}</code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -461,7 +465,8 @@
 <li><code>work_contexts[].current_task</code>: Current task description</li>
 <li><code>work_contexts[].intent</code>: Agent&#39;s stated intent</li>
 </ul>
-<p><strong>Projection</strong>: Work contexts are merged by <code>session_id</code> -- for contexts with<br>the same session, the one with the newer <code>git_updated_at</code> wins.</p>
+<p><strong>Projection</strong>: Work contexts are merged by <code>session_id</code> -- for contexts with
+the same session, the one with the newer <code>git_updated_at</code> wins.</p>
 <h3>Session Events</h3>
 <h4>agent.session.start</h4>
 <p>Emitted when a session starts.</p>
@@ -472,14 +477,14 @@
 </ul>
 <p><strong>Stored in</strong>: <code>events.jsonl</code></p>
 <p><strong>Payload</strong> (AgentSessionStartEvent):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.session.start&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;s_abc123&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;type&quot;: &quot;agent.session.start&quot;,
+  &quot;timestamp&quot;: &quot;2024-01-01T12:00:00Z&quot;,
+  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
+  &quot;v&quot;: 1,
+  &quot;session_id&quot;: &quot;s_abc123&quot;,
+  &quot;agent_id&quot;: &quot;furiosa&quot;
+}</code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -506,14 +511,14 @@
 </ul>
 <p><strong>Stored in</strong>: <code>events.jsonl</code></p>
 <p><strong>Payload</strong> (AgentSessionEndEvent):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent.session.end&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2024-01-01T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;event_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;01HQXYZ...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;v&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;s_abc123&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;normal&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;type&quot;: &quot;agent.session.end&quot;,
+  &quot;timestamp&quot;: &quot;2024-01-01T13:00:00Z&quot;,
+  &quot;event_id&quot;: &quot;01HQXYZ...&quot;,
+  &quot;v&quot;: 1,
+  &quot;session_id&quot;: &quot;s_abc123&quot;,
+  &quot;reason&quot;: &quot;normal&quot;
+}</code></pre>
 <p><strong>Fields</strong>:</p>
 <ul>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
@@ -532,18 +537,18 @@
 <h3>Scope-Based Subscriptions</h3>
 <p>Only receive events for messages that match the subscribed scope.</p>
 <p><strong>Example</strong>: Subscribe to all messages in task &quot;PROJ-123&quot;</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;subscribe.create&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;filter_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;scope&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;method&quot;: &quot;subscribe.create&quot;,
+  &quot;params&quot;: {
+    &quot;filter_type&quot;: &quot;scope&quot;,
+    &quot;scope&quot;: {
+      &quot;type&quot;: &quot;task&quot;,
+      &quot;value&quot;: &quot;PROJ-123&quot;
+    }
+  },
+  &quot;id&quot;: 1
+}</code></pre>
 <p><strong>Matching logic</strong>:</p>
 <ul>
 <li>Event&#39;s <code>scopes</code> array contains an exact match for the subscribed scope</li>
@@ -552,30 +557,31 @@
 <h3>Mention-Based Subscriptions</h3>
 <p>Only receive events for messages that mention a specific role.</p>
 <p><strong>Example</strong>: Subscribe to messages mentioning &quot;@reviewer&quot;</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;subscribe.create&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;filter_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;mention&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;method&quot;: &quot;subscribe.create&quot;,
+  &quot;params&quot;: {
+    &quot;filter_type&quot;: &quot;mention&quot;,
+    &quot;mention&quot;: &quot;reviewer&quot;
+  },
+  &quot;id&quot;: 1
+}</code></pre>
 <p><strong>Matching logic</strong>:</p>
 <ul>
-<li>Event&#39;s <code>refs</code> array contains a reference with <code>type: &quot;mention&quot;</code> and<br><code>value: &quot;reviewer&quot;</code></li>
+<li>Event&#39;s <code>refs</code> array contains a reference with <code>type: &quot;mention&quot;</code> and
+<code>value: &quot;reviewer&quot;</code></li>
 </ul>
 <h3>All-Events Subscriptions</h3>
 <p>Receive all events (use with caution, high volume).</p>
 <p><strong>Example</strong>: Subscribe to all events</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;subscribe.create&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;filter_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;all&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;method&quot;: &quot;subscribe.create&quot;,
+  &quot;params&quot;: {
+    &quot;filter_type&quot;: &quot;all&quot;
+  },
+  &quot;id&quot;: 1
+}</code></pre>
 <p><strong>Use cases</strong>:</p>
 <ul>
 <li>Admin dashboards</li>
@@ -586,7 +592,8 @@
 <h2>Event Ordering</h2>
 <h3>Guarantees</h3>
 <ul>
-<li><strong>Per-message ordering</strong>: Events for the same message (create → edit → delete)<br>are always in order</li>
+<li><strong>Per-message ordering</strong>: Events for the same message (create → edit → delete)
+are always in order</li>
 <li><strong>Cross-message ordering</strong>: No guarantee; events may arrive out of order</li>
 </ul>
 <h3>Timestamps</h3>
@@ -646,11 +653,14 @@
 </ul>
 <p><strong>Handling</strong>:</p>
 <ul>
-<li>Use <code>event_id</code> (ULID) for deduplication -- this is the universal dedup key<br>across all event types</li>
+<li>Use <code>event_id</code> (ULID) for deduplication -- this is the universal dedup key
+across all event types</li>
 <li>Maintain a set of processed event IDs</li>
 <li>Clear processed IDs periodically (TTL)</li>
 </ul>
-<p>Note: Do not use <code>message_id</code> for deduplication, as multiple events can share<br>the same <code>message_id</code> (e.g., a <code>message.create</code> and subsequent <code>message.edit</code><br>for the same message).</p>
+<p>Note: Do not use <code>message_id</code> for deduplication, as multiple events can share
+the same <code>message_id</code> (e.g., a <code>message.create</code> and subsequent <code>message.edit</code>
+for the same message).</p>
 <h2>Best Practices</h2>
 <h3>Subscription Management</h3>
 <ol>
@@ -678,88 +688,88 @@
 </ol>
 <h2>Example Event Handlers</h2>
 <h3>JavaScript/TypeScript</h3>
-<pre><code class="language-typescript hljs"><span class="hljs-keyword">const</span> eventHandlers = {
-  <span class="hljs-string">&quot;message.create&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageCreateEvent</span></span>) =&gt;</span> {
-    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`New message: <span class="hljs-subst">${params.message_id}</span>`</span>);
-    <span class="hljs-title function_">addMessageToUI</span>(params);
+<pre><code>const eventHandlers = {
+  &quot;message.create&quot;: (params: MessageCreateEvent) =&gt; {
+    console.log(`New message: ${params.message_id}`);
+    addMessageToUI(params);
   },
 
-  <span class="hljs-string">&quot;message.edit&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageEditEvent</span></span>) =&gt;</span> {
-    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`Message edited: <span class="hljs-subst">${params.message_id}</span>`</span>);
-    <span class="hljs-title function_">updateMessageInUI</span>(params);
+  &quot;message.edit&quot;: (params: MessageEditEvent) =&gt; {
+    console.log(`Message edited: ${params.message_id}`);
+    updateMessageInUI(params);
   },
 
-  <span class="hljs-string">&quot;message.delete&quot;</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">params</span>: <span class="hljs-title class_">MessageDeleteEvent</span></span>) =&gt;</span> {
-    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`Message deleted: <span class="hljs-subst">${params.message_id}</span>`</span>);
-    <span class="hljs-title function_">removeMessageFromUI</span>(params);
+  &quot;message.delete&quot;: (params: MessageDeleteEvent) =&gt; {
+    console.log(`Message deleted: ${params.message_id}`);
+    removeMessageFromUI(params);
   },
 };
 
-ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
-  <span class="hljs-keyword">const</span> msg = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
+ws.onmessage = (event) =&gt; {
+  const msg = JSON.parse(event.data);
 
-  <span class="hljs-comment">// Handle events (no id field)</span>
-  <span class="hljs-keyword">if</span> (!msg.<span class="hljs-property">id</span> &amp;&amp; msg.<span class="hljs-property">method</span>) {
-    <span class="hljs-keyword">const</span> handler = eventHandlers[msg.<span class="hljs-property">method</span>];
-    <span class="hljs-keyword">if</span> (handler) {
-      <span class="hljs-title function_">handler</span>(msg.<span class="hljs-property">params</span>);
-    } <span class="hljs-keyword">else</span> {
-      <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">warn</span>(<span class="hljs-string">`Unknown event type: <span class="hljs-subst">${msg.method}</span>`</span>);
+  // Handle events (no id field)
+  if (!msg.id &amp;&amp; msg.method) {
+    const handler = eventHandlers[msg.method];
+    if (handler) {
+      handler(msg.params);
+    } else {
+      console.warn(`Unknown event type: ${msg.method}`);
     }
   }
 
-  <span class="hljs-comment">// Handle RPC responses (has id field)</span>
-  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (msg.<span class="hljs-property">id</span>) {
-    <span class="hljs-title function_">handleRPCResponse</span>(msg);
+  // Handle RPC responses (has id field)
+  else if (msg.id) {
+    handleRPCResponse(msg);
   }
 };</code></pre>
 <h3>Go</h3>
-<pre><code class="language-go hljs"><span class="hljs-keyword">type</span> EventHandler <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(json.RawMessage)</span></span> <span class="hljs-type">error</span>
+<pre><code>type EventHandler func(json.RawMessage) error
 
-handlers := <span class="hljs-keyword">map</span>[<span class="hljs-type">string</span>]EventHandler{
-    <span class="hljs-string">&quot;message.create&quot;</span>: <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(params json.RawMessage)</span></span> <span class="hljs-type">error</span> {
-        <span class="hljs-keyword">var</span> event types.MessageCreateEvent
-        <span class="hljs-keyword">if</span> err := json.Unmarshal(params, &amp;event); err != <span class="hljs-literal">nil</span> {
-            <span class="hljs-keyword">return</span> err
+handlers := map[string]EventHandler{
+    &quot;message.create&quot;: func(params json.RawMessage) error {
+        var event types.MessageCreateEvent
+        if err := json.Unmarshal(params, &amp;event); err != nil {
+            return err
         }
-        log.Printf(<span class="hljs-string">&quot;New message: %s&quot;</span>, event.MessageID)
-        <span class="hljs-keyword">return</span> addMessageToUI(event)
+        log.Printf(&quot;New message: %s&quot;, event.MessageID)
+        return addMessageToUI(event)
     },
 
-    <span class="hljs-string">&quot;message.edit&quot;</span>: <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(params json.RawMessage)</span></span> <span class="hljs-type">error</span> {
-        <span class="hljs-keyword">var</span> event types.MessageEditEvent
-        <span class="hljs-keyword">if</span> err := json.Unmarshal(params, &amp;event); err != <span class="hljs-literal">nil</span> {
-            <span class="hljs-keyword">return</span> err
+    &quot;message.edit&quot;: func(params json.RawMessage) error {
+        var event types.MessageEditEvent
+        if err := json.Unmarshal(params, &amp;event); err != nil {
+            return err
         }
-        log.Printf(<span class="hljs-string">&quot;Message edited: %s&quot;</span>, event.MessageID)
-        <span class="hljs-keyword">return</span> updateMessageInUI(event)
+        log.Printf(&quot;Message edited: %s&quot;, event.MessageID)
+        return updateMessageInUI(event)
     },
 }
 
-<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">handleMessage</span><span class="hljs-params">(data []<span class="hljs-type">byte</span>)</span></span> <span class="hljs-type">error</span> {
-    <span class="hljs-keyword">var</span> msg <span class="hljs-keyword">struct</span> {
-        JSONRPC <span class="hljs-type">string</span>          <span class="hljs-string">`json:&quot;jsonrpc&quot;`</span>
-        Method  <span class="hljs-type">string</span>          <span class="hljs-string">`json:&quot;method,omitempty&quot;`</span>
-        Params  json.RawMessage <span class="hljs-string">`json:&quot;params,omitempty&quot;`</span>
-        ID      *<span class="hljs-type">int</span>            <span class="hljs-string">`json:&quot;id,omitempty&quot;`</span>
+func handleMessage(data []byte) error {
+    var msg struct {
+        JSONRPC string          `json:&quot;jsonrpc&quot;`
+        Method  string          `json:&quot;method,omitempty&quot;`
+        Params  json.RawMessage `json:&quot;params,omitempty&quot;`
+        ID      *int            `json:&quot;id,omitempty&quot;`
     }
 
-    <span class="hljs-keyword">if</span> err := json.Unmarshal(data, &amp;msg); err != <span class="hljs-literal">nil</span> {
-        <span class="hljs-keyword">return</span> err
+    if err := json.Unmarshal(data, &amp;msg); err != nil {
+        return err
     }
 
-    <span class="hljs-comment">// Event (no ID field)</span>
-    <span class="hljs-keyword">if</span> msg.ID == <span class="hljs-literal">nil</span> &amp;&amp; msg.Method != <span class="hljs-string">&quot;&quot;</span> {
+    // Event (no ID field)
+    if msg.ID == nil &amp;&amp; msg.Method != &quot;&quot; {
         handler, ok := handlers[msg.Method]
-        <span class="hljs-keyword">if</span> !ok {
-            log.Printf(<span class="hljs-string">&quot;Unknown event: %s&quot;</span>, msg.Method)
-            <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+        if !ok {
+            log.Printf(&quot;Unknown event: %s&quot;, msg.Method)
+            return nil
         }
-        <span class="hljs-keyword">return</span> handler(msg.Params)
+        return handler(msg.Params)
     }
 
-    <span class="hljs-comment">// RPC response (has ID)</span>
-    <span class="hljs-keyword">return</span> handleRPCResponse(&amp;msg)
+    // RPC response (has ID)
+    return handleRPCResponse(&amp;msg)
 }</code></pre>
 <h2>See Also</h2>
 <ul>
@@ -768,15 +778,7 @@ handlers := <span class="hljs-keyword">map</span>[<span class="hljs-type">string
 </ul>
 <pre><code></code></pre>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#api/events.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#api/events.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#api/events.html')}</script>
 </body>
 </html>
