@@ -54,6 +54,9 @@
 {"created_at":"2026-02-28T14:08:51Z","created_by":"Leon Letto","depends_on_id":"thrum-dl2","issue_id":"thrum-ckr","type":"parent-child"}
 {"created_at":"2026-02-28T21:15:04Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.1","type":"parent-child"}
 {"created_at":"2026-02-28T23:21:36Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.10","type":"parent-child"}
+{"created_at":"2026-03-01T00:29:55Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.11","type":"parent-child"}
+{"created_at":"2026-03-01T00:29:55Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.12","type":"parent-child"}
+{"created_at":"2026-03-01T00:29:55Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.13","type":"parent-child"}
 {"created_at":"2026-02-28T21:15:12Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.2","type":"parent-child"}
 {"created_at":"2026-02-28T21:15:19Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.3","type":"parent-child"}
 {"created_at":"2026-02-28T21:15:25Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.4","type":"parent-child"}
