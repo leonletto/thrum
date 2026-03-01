@@ -59,6 +59,8 @@
 {"created_at":"2026-02-28T21:15:29Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.5","type":"parent-child"}
 {"created_at":"2026-02-28T21:15:36Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.6","type":"parent-child"}
 {"created_at":"2026-02-28T21:52:16Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.7","type":"parent-child"}
+{"created_at":"2026-02-28T23:21:35Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.8","type":"parent-child"}
+{"created_at":"2026-02-28T23:21:36Z","created_by":"Leon Letto","depends_on_id":"thrum-cv9","issue_id":"thrum-cv9.9","type":"parent-child"}
 {"created_at":"2026-02-28T14:08:51Z","created_by":"Leon Letto","depends_on_id":"thrum-dl2","issue_id":"thrum-d7g","type":"parent-child"}
 {"created_at":"2026-02-28T14:06:13Z","created_by":"Leon Letto","depends_on_id":"thrum-sn4","issue_id":"thrum-dl2","type":"blocks"}
 {"created_at":"2026-02-28T14:08:51Z","created_by":"Leon Letto","depends_on_id":"thrum-dl2","issue_id":"thrum-dxl","type":"parent-child"}
