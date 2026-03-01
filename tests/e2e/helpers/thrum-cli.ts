@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { ensureTestRepo } from './integration-setup';
 
 /** File written by global-setup with the implementer worktree path. */
 const IMPLEMENTER_REPO_FILE_PATH = path.join(
@@ -33,13 +34,14 @@ export const TEST_AGENT_MODULE = 'e2e';
 
 /**
  * Get the test repo root. Reads from the marker file written by global-setup.
- * Falls back to SOURCE_ROOT if not available (e.g., running individual tests).
+ * Falls back to creating an isolated temp repo if running without global-setup
+ * (e.g., individual spec files). Never falls back to the source repo.
  */
 export function getTestRoot(): string {
   if (existsSync(TEST_REPO_FILE)) {
     return readFileSync(TEST_REPO_FILE, 'utf-8').trim();
   }
-  return SOURCE_ROOT;
+  return ensureTestRepo();
 }
 
 /**
