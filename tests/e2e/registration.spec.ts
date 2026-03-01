@@ -37,7 +37,7 @@ test.describe('Identity & Registration', () => {
   });
 
   test('SC-05: Register an agent via quickstart', async () => {
-    // Act: use quickstart command
+    // Act: use quickstart command (--name pins identity to avoid reuse override)
     const result = thrum([
       'quickstart',
       '--role',
@@ -48,6 +48,8 @@ test.describe('Identity & Registration', () => {
       'Claude-Main',
       '--intent',
       'Coordinating agents',
+      '--name',
+      'e2e_coordinator_sc05',
     ]);
 
     // Assert: quickstart successful (registers, starts session, sets intent)

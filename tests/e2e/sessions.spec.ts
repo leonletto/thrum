@@ -58,9 +58,9 @@ test.describe.serial('Sessions & Lifecycle Tests', () => {
     thrum(['session', 'end']);
   });
 
-  test.skip('SC-13: List all sessions', async () => {
-    // TODO: Issue thrum-nyjt - session.list RPC not yet implemented
-    // Arrange: create several sessions
+  test('SC-13: List all sessions', async () => {
+    // session.list RPC is implemented (thrum-nyjt resolved)
+    // Arrange: create sessions
     thrum(['session', 'start']);
     thrum(['session', 'end']);
 
@@ -72,7 +72,6 @@ test.describe.serial('Sessions & Lifecycle Tests', () => {
 
     // Assert: shows session history
     expect(sessionList.toLowerCase()).toContain('session');
-    // Should show multiple sessions (at least 2 we just created)
   });
 
   test('SC-14: Agent shows offline after session end', async () => {

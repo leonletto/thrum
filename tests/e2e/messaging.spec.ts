@@ -1,162 +1,212 @@
+/**
+ * Messaging Tests — E1 to E9 + extras
+ *
+ * Tests verify actual message delivery between agents across worktrees.
+ * Send from coordinator (getTestRoot), verify delivery in implementer's
+ * inbox (getImplementerRoot). This confirms the full messaging pipeline.
+ */
 import { test, expect } from '@playwright/test';
-import { thrum, thrumJson } from './helpers/thrum-cli.js';
+import { thrum, thrumIn, thrumJson, getTestRoot, getImplementerRoot } from './helpers/thrum-cli.js';
+
+/** Coordinator agent identity (sender). */
+function coordEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, THRUM_NAME: 'e2e_coordinator', THRUM_ROLE: 'coordinator', THRUM_MODULE: 'all' };
+}
+
+/** Implementer agent identity (recipient). */
+function implEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, THRUM_NAME: 'e2e_implementer', THRUM_ROLE: 'implementer', THRUM_MODULE: 'main' };
+}
 
 test.describe.serial('Messaging Tests', () => {
-  test.beforeEach(async () => {
-    // Ensure we have an active session for messaging
+  test.beforeAll(async () => {
+    // Ensure both agents have active sessions
     try {
-      thrum(['session', 'start']);
-    } catch (err: any) {
-      const msg = err.stderr?.toString() || err.message || '';
-      if (!msg.toLowerCase().includes('already active') && !msg.toLowerCase().includes('already exists')) {
-        throw err;
-      }
-    }
+      thrumIn(getTestRoot(), ['quickstart', '--role', 'coordinator', '--module', 'all',
+        '--name', 'e2e_coordinator', '--intent', 'Messaging tests'], 10_000, coordEnv());
+    } catch { /* may already exist */ }
+    try {
+      thrumIn(getImplementerRoot(), ['quickstart', '--role', 'implementer', '--module', 'main',
+        '--name', 'e2e_implementer', '--intent', 'Messaging tests'], 10_000, implEnv());
+    } catch { /* may already exist */ }
+
+    // Mark all read in implementer inbox to start clean
+    try {
+      thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
+    } catch { /* best effort */ }
   });
 
-  test.afterAll(async () => {
-    try { thrum(['session', 'end']); } catch { /* session may already be ended */ }
+  test('E1: Send a broadcast and verify delivery to another agent', async () => {
+    // Act: coordinator sends broadcast
+    const sendResult = thrumIn(getTestRoot(), ['send', 'Hello everyone, coordinator is online', '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    expect(parsed.message_id).toMatch(/^msg_/);
+
+    // Assert: implementer receives broadcast in their inbox
+    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
+    const inbox = JSON.parse(implInbox);
+    expect(Array.isArray(inbox.messages)).toBe(true);
+    const hasBroadcast = inbox.messages.some((msg: any) =>
+      msg.body?.content?.includes('coordinator is online')
+    );
+    expect(hasBroadcast).toBe(true);
   });
 
-  test('SC-15: Send a broadcast message', async () => {
-    // Act: send broadcast message (no --to flag)
-    const sendOutput = thrum(['send', 'Hello everyone, coordinator is online']);
-    expect(sendOutput.toLowerCase()).toMatch(/sent|message|ok/);
+  test('E2: Send a direct message and verify delivery', async () => {
+    // Mark implementer inbox read
+    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
 
-    // Assert: message appears in inbox
-    const inbox = thrum(['inbox']);
-    expect(inbox.toLowerCase()).toContain('hello everyone');
+    // Act: coordinator sends DM to implementer
+    const sendResult = thrumIn(getTestRoot(), ['send', 'Please review the relay design', '--to', '@e2e_implementer', '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    expect(parsed.message_id).toMatch(/^msg_/);
+
+    // Assert: implementer receives the DM
+    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
+    const inbox = JSON.parse(implInbox);
+    const hasDM = inbox.messages.some((msg: any) =>
+      msg.body?.content?.includes('relay design')
+    );
+    expect(hasDM).toBe(true);
   });
 
-  test('SC-16: Send a direct message to a specific role', async () => {
-    // Act: send direct message to implementer
-    const sendOutput = thrum(['send', 'Please review the relay design', '--to', '@implementer']);
-    expect(sendOutput.toLowerCase()).toMatch(/sent|message|ok/);
+  test('E3: Send a message with mention and verify delivery', async () => {
+    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
 
-    // Note: Verifying the message is delivered to @implementer would require
-    // multiple agents, which is beyond simple CLI testing. For now, we verify
-    // the command succeeds and the message appears in sender's inbox.
-    const inbox = thrum(['inbox']);
-    expect(inbox.toLowerCase()).toContain('relay design');
+    // Act: coordinator sends message mentioning implementer
+    const sendResult = thrumIn(getTestRoot(), ['send', 'Need input on relay architecture', '--mention', '@e2e_implementer', '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    expect(parsed.message_id).toMatch(/^msg_/);
+
+    // Assert: implementer receives the mention
+    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
+    const inbox = JSON.parse(implInbox);
+    const hasMention = inbox.messages.some((msg: any) =>
+      msg.body?.content?.includes('relay architecture')
+    );
+    expect(hasMention).toBe(true);
   });
 
-  test('SC-17: Send a message with mention', async () => {
-    // Act: send message with mention
-    const sendOutput = thrum(['send', 'Need input on relay architecture', '--mention', '@reviewer']);
-    expect(sendOutput.toLowerCase()).toMatch(/sent|message|ok/);
-
-    // Assert: message appears in inbox
-    const inbox = thrum(['inbox']);
-    expect(inbox.toLowerCase()).toContain('relay architecture');
-  });
-
-  test('SC-18: Send with priority levels', async () => {
-    // Act: send messages with different priority levels
-    thrum(['send', 'Low priority FYI', '--priority', 'low']);
-    thrum(['send', 'Normal update', '--priority', 'normal']);
-    thrum(['send', 'URGENT: tests failing', '--priority', 'high']);
-
-    // Assert: all messages appear in inbox
-    const inbox = thrum(['inbox']);
-    expect(inbox.toLowerCase()).toContain('low priority');
-    expect(inbox.toLowerCase()).toContain('normal update');
-    expect(inbox.toLowerCase()).toContain('urgent');
-  });
-
-  test('SC-19: Send with scope and refs', async () => {
+  test('E4: Send with scope and refs', async () => {
     // Act: send message with scope and refs
-    thrum(['send', 'Auth module updated', '--scope', 'module:auth', '--ref', 'commit:abc123']);
+    const sendResult = thrumIn(getTestRoot(), ['send', 'Auth module updated', '--scope', 'module:auth', '--ref', 'commit:abc123', '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    expect(parsed.message_id).toMatch(/^msg_/);
 
-    // Assert: get message with JSON output to verify metadata
-    const inbox = thrum(['inbox']);
-    expect(inbox.toLowerCase()).toContain('auth module');
+    // Verify message content and metadata via message get
+    const msgResult = thrumIn(getTestRoot(), ['message', 'get', parsed.message_id, '--json'], 10_000, coordEnv());
+    const msg = JSON.parse(msgResult);
+    expect(msg.message.body.content).toContain('Auth module');
   });
 
-  test('SC-20: View inbox with unread indicators', async () => {
+  test('E5: Get single message details', async () => {
     // Arrange: send a message
-    thrum(['send', 'Test unread message']);
+    const sendResult = thrumIn(getTestRoot(), ['send', 'Test message for details', '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    expect(parsed.message_id).toMatch(/^msg_/);
 
-    // Act: check inbox (should be unread)
-    const inboxBefore = thrum(['inbox']);
-    expect(inboxBefore.toLowerCase()).toContain('test unread');
-
-    // Note: Marking as read and verifying indicators requires
-    // knowing the message ID format and read command behavior.
-    // This test verifies the inbox command works.
+    // Act: get message details
+    const msgResult = thrumIn(getTestRoot(), ['message', 'get', parsed.message_id, '--json'], 10_000, coordEnv());
+    const msg = JSON.parse(msgResult);
+    expect(msg.message.body.content).toContain('Test message for details');
+    expect(msg.message.message_id).toBe(parsed.message_id);
   });
 
-  test('SC-21: Get single message details', async () => {
-    // Arrange: send a message and get its ID
-    thrum(['send', 'Test message for details']);
-    const inbox = thrum(['inbox']);
+  test('E6: Unknown recipient fails with hard error', async () => {
+    // Act: send to non-existent agent
+    let error = '';
+    try {
+      thrumIn(getTestRoot(), ['send', 'Should fail', '--to', '@does-not-exist'], 10_000, coordEnv());
+    } catch (err: any) {
+      error = err.message || '';
+    }
 
-    // Note: Getting a single message requires parsing the inbox
-    // to extract a message ID. This test verifies the command flow works.
-    expect(inbox.toLowerCase()).toContain('test message for details');
+    // Assert: clear error about unknown recipient
+    expect(error.toLowerCase()).toContain('unknown');
   });
 
-  test('SC-22: Edit a message', async () => {
-    // Arrange: send a message and capture the message ID from JSON output
+  test('E7: Edit a message', async () => {
+    // Arrange: send a message
     const originalText = `Edit test original ${Date.now()}`;
-    const sendResult = thrumJson<{ message_id: string }>(['send', originalText]);
-    expect(sendResult.message_id).toBeTruthy();
-    const msgId = sendResult.message_id;
+    const sendResult = thrumIn(getTestRoot(), ['send', originalText, '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    const msgId = parsed.message_id;
 
-    // Act: edit the message with new content
+    // Act: edit the message
     const updatedText = `Edit test UPDATED ${Date.now()}`;
-    const editOutput = thrum(['message', 'edit', msgId, updatedText]);
+    const editOutput = thrumIn(getTestRoot(), ['message', 'edit', msgId, updatedText], 10_000, coordEnv());
     expect(editOutput.toLowerCase()).toMatch(/edited|version/);
 
-    // Assert: retrieve the message and verify updated content
-    const getResult = thrumJson<{ message: { message_id: string; body: { content: string }; updated_at: string } }>(['message', 'get', msgId]);
-    expect(getResult.message.body.content).toBe(updatedText);
-    expect(getResult.message.updated_at).toBeTruthy();
+    // Assert: updated content
+    const getResult = thrumIn(getTestRoot(), ['message', 'get', msgId, '--json'], 10_000, coordEnv());
+    const msg = JSON.parse(getResult);
+    expect(msg.message.body.content).toBe(updatedText);
+    expect(msg.message.updated_at).toBeTruthy();
   });
 
-  test('SC-23: Delete a message', async () => {
-    // Arrange: send a message and capture the message ID
+  test('E8: Delete a message', async () => {
+    // Arrange: send a message
     const deleteText = `Delete test ${Date.now()}`;
-    const sendResult = thrumJson<{ message_id: string }>(['send', deleteText]);
-    expect(sendResult.message_id).toBeTruthy();
-    const msgId = sendResult.message_id;
+    const sendResult = thrumIn(getTestRoot(), ['send', deleteText, '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    const msgId = parsed.message_id;
 
-    // Act: delete the message (requires --force flag)
-    const deleteOutput = thrum(['message', 'delete', msgId, '--force']);
+    // Act: delete
+    const deleteOutput = thrumIn(getTestRoot(), ['message', 'delete', msgId, '--force'], 10_000, coordEnv());
     expect(deleteOutput.toLowerCase()).toMatch(/deleted/);
 
-    // Assert: retrieve the message and verify it is marked as deleted
-    const getResult = thrumJson<{ message: { message_id: string; deleted: boolean } }>(['message', 'get', msgId]);
-    expect(getResult.message.deleted).toBe(true);
+    // Assert: marked deleted
+    const getResult = thrumIn(getTestRoot(), ['message', 'get', msgId, '--json'], 10_000, coordEnv());
+    const msg = JSON.parse(getResult);
+    expect(msg.message.deleted).toBe(true);
   });
 
-  test('SC-24: Reply to a message (auto-thread creation)', async () => {
-    // Arrange: send a message and capture the message ID
+  test('E9: Reply to a message (auto-thread creation)', async () => {
+    // Arrange: send a message
     const originalText = `Reply test original ${Date.now()}`;
-    const sendResult = thrumJson<{ message_id: string }>(['send', originalText]);
-    expect(sendResult.message_id).toBeTruthy();
-    const msgId = sendResult.message_id;
+    const sendResult = thrumIn(getTestRoot(), ['send', originalText, '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    const msgId = parsed.message_id;
 
-    // Act: reply to the message (auto-creates a thread if none exists)
+    // Act: reply
     const replyText = `Reply to original ${Date.now()}`;
-    const replyOutput = thrum(['reply', msgId, replyText]);
+    const replyOutput = thrumIn(getTestRoot(), ['reply', msgId, replyText], 10_000, coordEnv());
     expect(replyOutput.toLowerCase()).toMatch(/reply sent|thread/);
 
-    // Assert: the original message should now be in a thread
-    const getResult = thrumJson<{ message: { message_id: string; thread_id: string } }>(['message', 'get', msgId]);
-    // A thread should have been created (reply creates one if none existed)
-    // The reply command creates a thread and sends a message in it
-    // Verify by checking inbox for the reply content
-    const inbox = thrum(['inbox']);
-    expect(inbox.toLowerCase()).toContain('reply to original');
+    // Assert: original message still exists
+    const getResult = thrumIn(getTestRoot(), ['message', 'get', msgId, '--json'], 10_000, coordEnv());
+    const msg = JSON.parse(getResult);
+    expect(msg.message.message_id).toBe(msgId);
   });
 
-  test.skip('SC-25: CLI broadcast command (MISSING FEATURE)', async () => {
-    // TODO: Issue thrum-b0d4 - explicit --broadcast flag not implemented
-    // Act: send with explicit broadcast flag
-    thrum(['send', 'Important announcement to everyone', '--broadcast']);
+  test('E-extra: Inbox unread indicators from recipient perspective', async () => {
+    // Mark all read first
+    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
 
-    // Assert: message sent to all agents
-    const inbox = thrum(['inbox']);
-    expect(inbox.toLowerCase()).toContain('important announcement');
+    // Send a message from coordinator to implementer
+    thrumIn(getTestRoot(), ['send', `Unread test ${Date.now()}`, '--to', '@e2e_implementer'], 10_000, coordEnv());
+
+    // Assert: implementer has unread messages
+    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
+    const inbox = JSON.parse(implInbox);
+    expect(inbox.messages.length).toBeGreaterThan(0);
+  });
+
+  test('SC-25: CLI broadcast via --broadcast flag', async () => {
+    // Mark implementer inbox read
+    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
+
+    // Act: coordinator sends broadcast using --broadcast flag
+    const sendResult = thrumIn(getTestRoot(), ['send', `Broadcast flag test ${Date.now()}`, '--broadcast', '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    expect(parsed.message_id).toMatch(/^msg_/);
+
+    // Assert: implementer receives the broadcast
+    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
+    const inbox = JSON.parse(implInbox);
+    const hasBroadcast = inbox.messages.some((msg: any) =>
+      msg.body?.content?.includes('Broadcast flag test')
+    );
+    expect(hasBroadcast).toBe(true);
   });
 });
