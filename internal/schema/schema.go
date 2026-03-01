@@ -818,8 +818,6 @@ func generateDeterministicEventID(event map[string]any) (string, error) {
 	switch {
 	case strings.HasPrefix(eventType, "message."):
 		entityID, _ = event["message_id"].(string)
-	case eventType == "thread.create":
-		entityID, _ = event["thread_id"].(string)
 	case strings.HasPrefix(eventType, "agent."):
 		if eventType == "agent.register" || eventType == "agent.update" {
 			entityID, _ = event["agent_id"].(string)

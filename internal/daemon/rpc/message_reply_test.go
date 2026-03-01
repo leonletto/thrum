@@ -190,3 +190,126 @@ func TestReplyTo_ListReturnsReplyTo(t *testing.T) {
 		t.Error("reply message not found in list")
 	}
 }
+
+func TestAutoThreadOnReply(t *testing.T) {
+	handler, st, _ := setupReplyTest(t)
+
+	// Send root message (no thread_id)
+	rootID := sendTestMessage(t, handler, "Root message")
+
+	// Send a reply to it
+	replyParams, _ := json.Marshal(SendRequest{
+		Content: "Reply to root",
+		ReplyTo: rootID,
+	})
+	replyResp, err := handler.HandleSend(context.Background(), replyParams)
+	if err != nil {
+		t.Fatalf("send reply: %v", err)
+	}
+	replyID := replyResp.(*SendResponse).MessageID
+	threadID := replyResp.(*SendResponse).ThreadID
+
+	// Assert thread_id starts with "thr_"
+	if threadID == "" {
+		t.Fatal("expected thread_id to be set on reply, got empty string")
+	}
+	if len(threadID) < 4 || threadID[:4] != "thr_" {
+		t.Errorf("expected thread_id to start with 'thr_', got %q", threadID)
+	}
+
+	// Assert both root and reply share the same thread_id
+	var rootThreadID, replyThreadID string
+	if err := st.RawDB().QueryRow(
+		`SELECT COALESCE(thread_id, '') FROM messages WHERE message_id = ?`, rootID,
+	).Scan(&rootThreadID); err != nil {
+		t.Fatalf("query root thread_id: %v", err)
+	}
+	if err := st.RawDB().QueryRow(
+		`SELECT COALESCE(thread_id, '') FROM messages WHERE message_id = ?`, replyID,
+	).Scan(&replyThreadID); err != nil {
+		t.Fatalf("query reply thread_id: %v", err)
+	}
+
+	if rootThreadID != threadID {
+		t.Errorf("root thread_id = %q, want %q", rootThreadID, threadID)
+	}
+	if replyThreadID != threadID {
+		t.Errorf("reply thread_id = %q, want %q", replyThreadID, threadID)
+	}
+}
+
+func TestAutoThreadJoinsExistingThread(t *testing.T) {
+	handler, st, _ := setupReplyTest(t)
+
+	// Send root message
+	rootID := sendTestMessage(t, handler, "Root message")
+
+	// First reply — creates a new thread
+	reply1Params, _ := json.Marshal(SendRequest{Content: "First reply", ReplyTo: rootID})
+	reply1Resp, err := handler.HandleSend(context.Background(), reply1Params)
+	if err != nil {
+		t.Fatalf("send first reply: %v", err)
+	}
+	reply1ID := reply1Resp.(*SendResponse).MessageID
+	threadID := reply1Resp.(*SendResponse).ThreadID
+
+	if threadID == "" {
+		t.Fatal("expected thread_id after first reply")
+	}
+
+	// Second reply to the same root
+	reply2Params, _ := json.Marshal(SendRequest{Content: "Second reply", ReplyTo: rootID})
+	reply2Resp, err := handler.HandleSend(context.Background(), reply2Params)
+	if err != nil {
+		t.Fatalf("send second reply: %v", err)
+	}
+	reply2ID := reply2Resp.(*SendResponse).MessageID
+
+	// All three should share the same thread_id
+	for label, msgID := range map[string]string{"root": rootID, "reply1": reply1ID, "reply2": reply2ID} {
+		var tid string
+		if err := st.RawDB().QueryRow(
+			`SELECT COALESCE(thread_id, '') FROM messages WHERE message_id = ?`, msgID,
+		).Scan(&tid); err != nil {
+			t.Fatalf("query %s thread_id: %v", label, err)
+		}
+		if tid != threadID {
+			t.Errorf("%s thread_id = %q, want %q", label, tid, threadID)
+		}
+	}
+}
+
+func TestAutoThreadDeepChain(t *testing.T) {
+	handler, st, _ := setupReplyTest(t)
+
+	// A -> B (reply to A) -> C (reply to B)
+	aID := sendTestMessage(t, handler, "Message A")
+
+	bParams, _ := json.Marshal(SendRequest{Content: "Message B", ReplyTo: aID})
+	bResp, err := handler.HandleSend(context.Background(), bParams)
+	if err != nil {
+		t.Fatalf("send B: %v", err)
+	}
+	bID := bResp.(*SendResponse).MessageID
+	threadID := bResp.(*SendResponse).ThreadID
+
+	cParams, _ := json.Marshal(SendRequest{Content: "Message C", ReplyTo: bID})
+	cResp, err := handler.HandleSend(context.Background(), cParams)
+	if err != nil {
+		t.Fatalf("send C: %v", err)
+	}
+	cID := cResp.(*SendResponse).MessageID
+
+	// A, B, C should all share the same thread_id
+	for label, msgID := range map[string]string{"A": aID, "B": bID, "C": cID} {
+		var tid string
+		if err := st.RawDB().QueryRow(
+			`SELECT COALESCE(thread_id, '') FROM messages WHERE message_id = ?`, msgID,
+		).Scan(&tid); err != nil {
+			t.Fatalf("query %s thread_id: %v", label, err)
+		}
+		if tid != threadID {
+			t.Errorf("%s thread_id = %q, want %q", label, tid, threadID)
+		}
+	}
+}

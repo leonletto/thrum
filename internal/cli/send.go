@@ -12,7 +12,6 @@ type SendOptions struct {
 	Scopes        []string // Format: "type:value"
 	Refs          []string // Format: "type:value"
 	Mentions      []string // Format: "@role"
-	Thread        string
 	ReplyTo       string // Message ID to reply to
 	Structured    string // JSON string
 	Format        string
@@ -82,10 +81,6 @@ func Send(client *Client, opts SendOptions) (*SendResult, error) {
 
 	if structured != nil {
 		params["structured"] = structured
-	}
-
-	if opts.Thread != "" {
-		params["thread_id"] = opts.Thread
 	}
 
 	if opts.ReplyTo != "" {

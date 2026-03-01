@@ -105,7 +105,6 @@ export type MessageDetail = z.infer<typeof MessageDetailSchema>;
 
 export const SendMessageRequestSchema = z.object({
   content: z.string(),
-  thread_id: z.string().optional(),
   scopes: z.array(MessageScopeSchema).optional(),
   refs: z.array(MessageRefSchema).optional(),
   body: MessageBodySchema.optional(),
