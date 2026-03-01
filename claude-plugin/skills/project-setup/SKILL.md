@@ -227,9 +227,16 @@ git worktree list
 # Check which worktrees have in-progress beads tasks
 bd list --status=in_progress
 
+# Check for active agents on each worktree
+thrum team --json
+
 # Check the CLAUDE.md worktree table for status info
 # (read the "Worktree Layout" section from the project root CLAUDE.md)
 ```
+
+Parse the `thrum team --json` output to map worktree paths to active agent
+names. An agent is "active on a worktree" when its `worktree` field matches
+the worktree path.
 
 ### Step 2: Present Worktree Options
 
@@ -248,7 +255,7 @@ the options from the gathered state:
 Include in each option's description:
 - The worktree path and current branch
 - Whether it's clean or has uncommitted changes
-- Whether it has an existing agent registered
+- Whether it has an existing active agent (name it: e.g. "agent: impl_foo already registered")
 - Its status from CLAUDE.md (active/idle/merged)
 
 **For "Create new worktree"**, suggest:
@@ -286,8 +293,24 @@ cat .beads/redirect    # should point to <project-root>/.beads
 # Verify beads sees shared database
 bd where    # Should show <project-root>/.beads
 bd ready    # Should show issues from the shared database
+```
 
-# Register the agent (if not already registered with the right name)
+**Agent registration — check for an existing agent first:**
+
+If `thrum team --json` showed an active agent on this worktree, **do not run
+`thrum quickstart`**. Send the assignment directly to the existing agent:
+
+```bash
+# Existing agent already on this worktree — send work to them
+thrum send "Assignment: implement <epic-id> (<epic-title>).
+Worktree: <worktree-path>, branch: <branch-name>.
+Start with: bd show <epic-id>" --to @<existing-agent-name>
+```
+
+If no active agent exists on the worktree, register a new one:
+
+```bash
+# No active agent — register a new one
 thrum quickstart --name <agent-name> --role implementer \
   --module <branch-name> --intent "Implementing <epic-id>"
 ```
@@ -307,13 +330,21 @@ beads redirect, and `thrum quickstart` registration.
 #### For current worktree (small fixes):
 
 ```bash
-# Just register the agent
-thrum quickstart --name <agent-name> --role implementer \
-  --module <current-branch> --intent "Implementing <epic-id>"
-
 # Verify beads
 bd where
 bd ready
+```
+
+If an active agent already exists on the current worktree (from `thrum team
+--json`), send the assignment to them. Otherwise register a new agent:
+
+```bash
+# If existing agent on this worktree:
+thrum send "Assignment: implement <epic-id>" --to @<existing-agent-name>
+
+# If no active agent:
+thrum quickstart --name <agent-name> --role implementer \
+  --module <current-branch> --intent "Implementing <epic-id>"
 ```
 
 ### Step 4: Verify Setup
@@ -447,9 +478,13 @@ architecture notes specific to this feature:
 
 ## Worktree Setup
 
-<!-- If worktree was already created in Phase 3, note that here: -->
+<!-- If worktree was already created in Phase 3 and an existing agent was found: -->
 Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`.
-Agent `{{AGENT_NAME}}` registered.
+Assignment sent to existing agent `{{AGENT_NAME}}` via `thrum send`.
+
+<!-- If worktree was already created in Phase 3 and a new agent was registered: -->
+Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`.
+Agent `{{AGENT_NAME}}` registered via `thrum quickstart`.
 
 <!-- If worktree needs to be created by the implementation agent: -->
 ./scripts/setup-worktree-thrum.sh {{WORKTREE_PATH}} {{BRANCH_NAME}} \
@@ -486,6 +521,12 @@ work they can't finish. Always run `bd blocked` to verify.
 **Skipping worktree selection:** Always ask the user which worktree to use.
 Check `git worktree list` and `bd list --status=in_progress` for idle worktrees
 before proposing new ones. Never silently assign worktrees.
+
+**Duplicate agent registration:** Always run `thrum team --json` before
+registering a new agent. If an agent is already active on the target worktree,
+send them the assignment via `thrum send --to @<agent-name>` instead of running
+`thrum quickstart`. Registering twice creates a ghost identity that never
+receives messages.
 
 **Wrong base branch:** The setup script defaults `--base` to `main`. Always
 pass `--base thrum-dev` explicitly since features branch from `thrum-dev`.

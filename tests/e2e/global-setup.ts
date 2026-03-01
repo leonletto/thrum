@@ -61,7 +61,7 @@ function createCoordinatorRepo(): void {
   mkdirSync(COORDINATOR_DIR, { recursive: true });
 
   // Git init with initial commit
-  execIn(COORDINATOR_DIR, 'git', ['init']);
+  execIn(COORDINATOR_DIR, 'git', ['init', '--initial-branch=main']);
   execIn(COORDINATOR_DIR, 'git', ['config', 'user.email', 'e2e@test.com']);
   execIn(COORDINATOR_DIR, 'git', ['config', 'user.name', 'E2E Test']);
   writeFileSync(path.join(COORDINATOR_DIR, 'README.md'), '# E2E Test Repo\n');
@@ -103,7 +103,7 @@ function createImplementerWorktree(): void {
 function createBareRemote(): void {
   console.log(`[global-setup] Creating bare remote at ${BARE_REMOTE_DIR}`);
   mkdirSync(BARE_REMOTE_DIR, { recursive: true });
-  execIn(BARE_REMOTE_DIR, 'git', ['init', '--bare']);
+  execIn(BARE_REMOTE_DIR, 'git', ['init', '--bare', '--initial-branch=main']);
 
   // Add as remote to coordinator and push
   try { execIn(COORDINATOR_DIR, 'git', ['remote', 'remove', 'origin']); } catch { /* no remote */ }
