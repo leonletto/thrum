@@ -69,13 +69,12 @@ reply <msg-id> "response" # Reply (creates a reply-to reference)
 
 ## MCP Tools (11 total)
 
-**Core messaging (5):**
+**Core messaging (4):**
 
 - send_message — Send to specific agent via @name
 - check_messages — Poll inbox, auto-mark read
 - wait_for_message — Block until message arrives
 - list_agents — Show registered agents
-- broadcast_message — Send to all agents (alias for send_message to @everyone)
 
 **Group management (6):**
 

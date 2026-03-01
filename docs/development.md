@@ -633,15 +633,20 @@ over stdin/stdout).
 - `internal/mcp/waiter.go`: WebSocket-based blocking message waiter
 - `cmd/thrum/mcp.go`: `thrum mcp serve` Cobra command
 
-**MCP Tools (5):**
+**MCP Tools (10):**
 
-| Tool                | Description                                                                   |
-| ------------------- | ----------------------------------------------------------------------------- |
-| `send_message`      | Send a message to another agent via @role addressing                          |
-| `check_messages`    | Poll for unread messages mentioning this agent                                |
-| `wait_for_message`  | Block until a message arrives (WebSocket push) or timeout                     |
-| `list_agents`       | List registered agents with active/offline status                             |
-| `broadcast_message` | Send to all agents (convenience wrapper around `send_message` to `@everyone`) |
+| Tool                  | Description                                                               |
+| --------------------- | ------------------------------------------------------------------------- |
+| `send_message`        | Send a message to another agent via @role addressing                      |
+| `check_messages`      | Poll for unread messages mentioning this agent                            |
+| `wait_for_message`    | Block until a message arrives (WebSocket push) or timeout                 |
+| `list_agents`         | List registered agents with active/offline status                         |
+| `create_group`        | Create a named messaging group                                            |
+| `delete_group`        | Delete a messaging group                                                  |
+| `add_group_member`    | Add an agent or role as a member of a group                               |
+| `remove_group_member` | Remove a member from a group                                              |
+| `list_groups`         | List all messaging groups                                                 |
+| `get_group`           | Get group details including members (expand=true resolves roles)          |
 
 **Architecture:**
 

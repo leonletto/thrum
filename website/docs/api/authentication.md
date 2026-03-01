@@ -641,9 +641,10 @@ THRUM_NAME=furiosa thrum mcp serve
 thrum mcp serve --agent-id furiosa
 ```
 
-The MCP server provides 5 tools: `send_message`, `check_messages`,
-`wait_for_message`, `list_agents`, `broadcast_message`. Identity is resolved
-once at startup.
+The MCP server provides 10 tools: 4 core messaging tools (`send_message`,
+`check_messages`, `wait_for_message`, `list_agents`) and 6 group management
+tools (`create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
+`list_groups`, `get_group`). Identity is resolved once at startup.
 
 ### User Registration (Browser Auto-Registration)
 

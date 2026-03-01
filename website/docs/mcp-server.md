@@ -19,7 +19,7 @@ It runs as a long-lived child process (`thrum mcp serve`) communicating over
 stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for
 message operations and via WebSocket for real-time push notifications.
 
-The server provides 11 MCP tools: 5 for core messaging operations and 6 for
+The server provides 10 MCP tools: 4 for core messaging operations and 6 for
 group management.
 
 The primary motivation is eliminating polling overhead. Without MCP, agents must
@@ -39,7 +39,6 @@ Claude Code (Opus/Sonnet)
   |     |   +-- message.list     -> check_messages tool
   |     |   +-- message.markRead -> check_messages tool (auto-mark consumed)
   |     |   +-- agent.list       -> list_agents tool
-  |     |   +-- message.send x N -> broadcast_message tool
   |     |
   |     +-- WebSocket Client (ws://localhost:{port}/ws)
   |     |   +-- user.identify + user.register -> session setup
@@ -59,7 +58,7 @@ Claude Code (Opus/Sonnet)
 ```text
 internal/mcp/
   server.go    -- NewServer(), tool registration, Run(), InitWaiter()
-  tools.go     -- send_message, check_messages, list_agents, broadcast_message handlers
+  tools.go     -- send_message, check_messages, list_agents, group management handlers
   waiter.go    -- WebSocket client, notification routing, wait_for_message handler
   types.go     -- MCP-specific input/output structs
 
@@ -78,7 +77,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command
    `identity.GenerateAgentID(repoID, role, module, name)`
 7. Create MCP server with the official Go SDK
    (`github.com/modelcontextprotocol/go-sdk/mcp`)
-8. Register all 11 tool handlers (5 core messaging + 6 group management)
+8. Register all 10 tool handlers (4 core messaging + 6 group management)
 9. Initialize WebSocket waiter (best-effort -- reads port from
    `.thrum/var/ws.port`)
    - Connect to `ws://localhost:{port}/ws`
@@ -113,7 +112,7 @@ When Claude Code terminates the process (closes stdin) or a signal is received
   mutex.
 - **Best-effort WebSocket**: If the WebSocket connection fails at startup, the
   MCP server still operates -- only `wait_for_message` returns errors. The other
-  10 tools work via Unix socket RPC.
+  9 tools work via Unix socket RPC.
 
 ## Usage
 
@@ -299,47 +298,6 @@ List all registered agents and their status.
 - 2+ minutes ago or missing: `offline`
 
 **Daemon RPC:** `agent.list`
-
-### broadcast_message
-
-Send a message to all agents via the `@everyone` group, with optional filtering.
-The sender is automatically excluded. This is a convenience wrapper around
-sending to `@everyone`.
-
-**Input:**
-
-| Parameter | Type   | Required | Description                |
-| --------- | ------ | -------- | -------------------------- |
-| `content` | string | yes      | Message text to broadcast  |
-| `filter`  | object | no       | Optional recipient filters |
-
-**BroadcastFilter:**
-
-| Field     | Type   | Description                                                  |
-| --------- | ------ | ------------------------------------------------------------ |
-| `status`  | string | `all` (default) or `active` (only agents seen in last 2 min) |
-| `exclude` | array  | Agent names or roles to exclude                              |
-
-**Output:**
-
-| Field         | Type    | Description                                           |
-| ------------- | ------- | ----------------------------------------------------- |
-| `status`      | string  | `sent`, `partial` (some failures), or `no_recipients` |
-| `sent_to`     | array   | Roles of agents that received the message             |
-| `failed_to`   | array   | Roles of agents where send failed                     |
-| `total_sent`  | integer | Count of successful sends                             |
-| `message_ids` | array   | IDs of sent messages                                  |
-
-**Behavior:**
-
-1. Fetch agent list via `agent.list` RPC
-2. Filter out self (by agent ID, not role -- so other agents with the same role
-   still receive the message)
-3. Apply exclude filter (matches against both role and display name)
-4. Apply status filter (if `active`, skip agents with `offline` status)
-5. Send individual messages to each remaining agent via `message.send` RPC
-
-**Daemon RPC:** `agent.list` + `message.send` (one per recipient)
 
 ### create_group
 
@@ -592,7 +550,7 @@ The project `CLAUDE.md` includes instructions for agents to use MCP tools:
 mcp__thrum__send_message(to="@reviewer", content="...")
 mcp__thrum__check_messages()
 mcp__thrum__list_agents()
-mcp__thrum__send_message(to="@everyone", content="...")  # preferred over broadcast_message
+mcp__thrum__send_message(to="@everyone", content="...")  # broadcast to all agents
 mcp__thrum__wait_for_message(timeout=300)
 ```
 
@@ -616,7 +574,7 @@ mcp__thrum__delete_group(name="backend")
 | `internal/mcp/server.go`             | Server struct, NewServer(), Run(), InitWaiter(), tool registration |
 | `internal/mcp/tools.go`              | Tool handlers, address parsing, status derivation                  |
 | `internal/mcp/waiter.go`             | WebSocket connection, readLoop, WaitForMessage, notification queue |
-| `internal/mcp/types.go`              | Input/output structs for all 11 tools                              |
+| `internal/mcp/types.go`              | Input/output structs for all 10 tools                              |
 | `cmd/thrum/mcp.go`                   | Cobra command, daemon health check, waiter init, signal handling   |
 | `.claude/agents/message-listener.md` | Haiku sub-agent definition                                         |
 
