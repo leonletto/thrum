@@ -422,3 +422,4 @@
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:51:59Z","event_type":"created","id":422,"issue_id":"thrum-2ug.5","new_value":"","old_value":""}
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:52:07Z","event_type":"created","id":423,"issue_id":"thrum-2ug.6","new_value":"","old_value":""}
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:52:16Z","event_type":"created","id":424,"issue_id":"thrum-cv9.7","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T22:09:38Z","event_type":"closed","id":425,"issue_id":"thrum-2ug.1","new_value":"Created setup-verification.spec.ts with D1-D4 tests verifying coordinator/implementer worktrees, redirect, agent registration, and team roster","old_value":""}
