@@ -74,8 +74,26 @@
     <!-- Content -->
     <main class="docs-content" id="docs-content">
       <div class="docs-content-inner" id="docs-content-inner">
-        <!-- Loaded dynamically -->
-        <div class="docs-loading">Loading documentation...</div>
+        <!-- Shown until JS loads content; visible to curl/wget/agents that don't execute JS -->
+        <div class="docs-loading" id="docs-loading">
+          <noscript>
+          <div style="max-width:40rem;margin:2rem auto;font-family:system-ui,sans-serif;line-height:1.6">
+            <h2>Thrum Documentation — Programmatic Access</h2>
+            <p><strong>You are viewing the single-page app shell, which requires JavaScript to render content.</strong></p>
+            <p>To read documentation without JavaScript (curl, wget, AI agents), use the direct page URLs:</p>
+            <pre style="background:#f5f5f5;padding:1rem;border-radius:4px">curl https://leonletto.github.io/thrum/docs/overview.html
+curl https://leonletto.github.io/thrum/docs/quickstart.html
+curl https://leonletto.github.io/thrum/docs/messaging.html
+curl https://leonletto.github.io/thrum/docs/cli.html
+curl https://leonletto.github.io/thrum/docs/rpc-api.html</pre>
+            <p>Full page index: <a href="assets/docs/index.json">assets/docs/index.json</a></p>
+            <p>All pages follow the pattern: <code>/docs/{page-name}.html</code></p>
+            <hr>
+            <p><em>If you expected a normal website, please check that JavaScript is enabled in your browser settings, or try a different browser.</em></p>
+          </div>
+          </noscript>
+          <p>Loading documentation...</p>
+        </div>
       </div>
     </main>
 
