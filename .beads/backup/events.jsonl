@@ -393,3 +393,11 @@
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T16:23:47Z","event_type":"created","id":393,"issue_id":"thrum-0mh","new_value":"","old_value":""}
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T16:23:50Z","event_type":"created","id":394,"issue_id":"thrum-dil","new_value":"","old_value":""}
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T16:23:53Z","event_type":"created","id":395,"issue_id":"thrum-jj3","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":396,"issue_id":"thrum-9yf","new_value":"F2-2 multi-agent who-has test added","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":397,"issue_id":"thrum-dil","new_value":"F2-4 restored as distinct who-has JSON test","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":398,"issue_id":"thrum-t99","new_value":"F2-13 status standalone command test added","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":399,"issue_id":"thrum-6zq","new_value":"J9 inbox verification added","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":400,"issue_id":"thrum-jj3","new_value":"F5 divergence documented in groups.spec.ts","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":401,"issue_id":"thrum-0mh","new_value":"All 9 pre-existing failures fixed — 0 failures, 81 passed","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:51Z","event_type":"closed","id":402,"issue_id":"thrum-22y","new_value":"All 6 tasks complete","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:14:16Z","event_type":"created","id":403,"issue_id":"thrum-z80","new_value":"","old_value":""}
