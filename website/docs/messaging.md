@@ -698,9 +698,9 @@ Optimized for common query patterns:
 ## MCP Server Integration
 
 The MCP server (`thrum mcp serve`) provides native messaging tools for AI agents
-running in Claude Code or similar environments. It exposes 11 MCP tools: 5 core
+running in Claude Code or similar environments. It exposes 10 MCP tools: 4 core
 messaging tools (`send_message`, `check_messages`, `wait_for_message`,
-`list_agents`, `broadcast_message`) and 6 group management tools. MCP tools use
+`list_agents`) and 6 group management tools. MCP tools use
 the same underlying RPC methods but add `@role` addressing and real-time
 WebSocket push notifications.
 

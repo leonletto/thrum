@@ -1394,17 +1394,16 @@ thrum mcp serve [flags]
 Requires the Thrum daemon to be running. The `--agent-id` flag sets `THRUM_NAME`
 internally for identity resolution.
 
-**MCP Tools provided (11 total):**
+**MCP Tools provided (10 total):**
 
-**Core messaging (5):**
+**Core messaging (4):**
 
-| Tool                | Description                                                                   |
-| ------------------- | ----------------------------------------------------------------------------- |
-| `send_message`      | Send a message to another agent via `@role` addressing                        |
-| `check_messages`    | Poll for unread messages mentioning this agent (auto-marks read)              |
-| `wait_for_message`  | Block until a message arrives (WebSocket push) or timeout                     |
-| `list_agents`       | List registered agents with active/offline status                             |
-| `broadcast_message` | Send to all agents (convenience wrapper around `send_message` to `@everyone`) |
+| Tool               | Description                                                      |
+| ------------------ | ---------------------------------------------------------------- |
+| `send_message`     | Send a message to another agent via `@role` addressing           |
+| `check_messages`   | Poll for unread messages mentioning this agent (auto-marks read) |
+| `wait_for_message` | Block until a message arrives (WebSocket push) or timeout        |
+| `list_agents`      | List registered agents with active/offline status                |
 
 **Group management (6):**
 

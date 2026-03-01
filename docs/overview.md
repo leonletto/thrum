@@ -115,11 +115,10 @@ messages and agent activity. Served from the same port as WebSocket (default
 **MCP Server** (`thrum mcp serve`): Exposes Thrum functionality as native MCP
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
 directly through MCP protocol without CLI shell-outs. Connects to the daemon via
-Unix socket for RPC and WebSocket for real-time push notifications. Provides 5
+Unix socket for RPC and WebSocket for real-time push notifications. Provides 4
 core messaging tools (`send_message`, `check_messages`, `wait_for_message`,
-`list_agents`, `broadcast_message`) and 6 group management tools
-(`create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
-`list_groups`, `get_group`).
+`list_agents`) and 6 group management tools (`create_group`, `delete_group`,
+`add_group_member`, `remove_group_member`, `list_groups`, `get_group`).
 
 ## Key Features
 
@@ -479,9 +478,9 @@ Thrum uses event sourcing with CQRS:
 ### For MCP Integration
 
 `thrum mcp serve` runs an MCP server on stdio (JSON-RPC over stdin/stdout),
-enabling LLM agents to communicate via native MCP tools. It provides 5 core
+enabling LLM agents to communicate via native MCP tools. It provides 4 core
 messaging tools (`send_message`, `check_messages`, `wait_for_message`,
-`list_agents`, `broadcast_message`) and 6 group management tools.
+`list_agents`) and 6 group management tools.
 
 See [MCP Server](/docs/mcp-server.html) for the complete tools reference,
 configuration, and setup instructions.
