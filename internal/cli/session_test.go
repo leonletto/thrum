@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net"
 	"testing"
+
+	"github.com/leonletto/thrum/internal/types"
 )
 
 func TestSessionStart(t *testing.T) {
@@ -242,7 +244,6 @@ func TestFormatHeartbeat(t *testing.T) {
 	tests := []struct {
 		name     string
 		response HeartbeatResponse
-		context  *AgentWorkContext
 		contains []string
 	}{
 		{
@@ -251,19 +252,19 @@ func TestFormatHeartbeat(t *testing.T) {
 				SessionID:  "ses_01HXE...",
 				LastSeenAt: "2026-02-03T12:00:00Z",
 			},
-			context:  nil,
 			contains: []string{"Heartbeat sent", "ses_01HXE..."},
 		},
 		{
-			name: "heartbeat with context",
+			name: "heartbeat with git context",
 			response: HeartbeatResponse{
-				SessionID:  "ses_01HXE...",
-				LastSeenAt: "2026-02-03T12:00:00Z",
-			},
-			context: &AgentWorkContext{
+				SessionID:       "ses_01HXE...",
+				LastSeenAt:      "2026-02-03T12:00:00Z",
 				Branch:          "feature/auth",
-				UnmergedCommits: []CommitSummary{{SHA: "abc1234", Message: "test"}},
-				ChangedFiles:    []string{"auth.go", "handler.go"},
+				UnmergedCommits: 1,
+				FileChanges: []types.FileChange{
+					{Path: "auth.go", Status: "modified"},
+					{Path: "handler.go", Status: "modified"},
+				},
 			},
 			contains: []string{"Heartbeat sent", "feature/auth", "1 commits", "2 files"},
 		},
@@ -271,7 +272,7 @@ func TestFormatHeartbeat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := FormatHeartbeat(&tt.response, tt.context)
+			output := FormatHeartbeat(&tt.response)
 			for _, substr := range tt.contains {
 				if !contains(output, substr) {
 					t.Errorf("Output should contain '%s', got: %s", substr, output)

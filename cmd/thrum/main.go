@@ -2282,6 +2282,11 @@ func sessionStartRunE(cmd *cobra.Command, args []string) error {
 		AgentID: whoami.AgentID,
 	}
 
+	// Auto-set worktree ref so heartbeat can extract git context
+	if worktreeRoot := cli.GitTopLevel("."); worktreeRoot != "" {
+		opts.Refs = append(opts.Refs, types.Ref{Type: "worktree", Value: worktreeRoot})
+	}
+
 	result, err := cli.SessionStart(client, opts)
 	if err != nil {
 		return err
@@ -4129,18 +4134,11 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Optionally fetch work context to show git summary
-	var workCtx *cli.AgentWorkContext
-	ctxResp, err := cli.AgentListContext(client, whoami.AgentID, "", "")
-	if err == nil && len(ctxResp.Contexts) > 0 {
-		workCtx = &ctxResp.Contexts[0]
-	}
-
 	if flagJSON {
 		output, _ := json.MarshalIndent(result, "", "  ")
 		fmt.Println(string(output))
 	} else {
-		fmt.Print(cli.FormatHeartbeat(result, workCtx))
+		fmt.Print(cli.FormatHeartbeat(result))
 		if !flagQuiet {
 			fmt.Print(cli.Hint("session.heartbeat", flagQuiet, flagJSON))
 		}

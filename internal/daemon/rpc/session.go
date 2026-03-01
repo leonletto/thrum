@@ -53,8 +53,11 @@ type HeartbeatRequest struct {
 
 // HeartbeatResponse represents the response from session.heartbeat RPC.
 type HeartbeatResponse struct {
-	SessionID  string `json:"session_id"`
-	LastSeenAt string `json:"last_seen_at"`
+	SessionID       string             `json:"session_id"`
+	LastSeenAt      string             `json:"last_seen_at"`
+	Branch          string             `json:"branch,omitempty"`
+	UnmergedCommits int                `json:"unmerged_commits,omitempty"`
+	FileChanges     []types.FileChange `json:"file_changes,omitempty"`
 }
 
 // SetIntentRequest represents the request for session.setIntent RPC.
@@ -433,18 +436,33 @@ func (h *SessionHandler) HandleHeartbeat(ctx context.Context, params json.RawMes
 	h.state.Unlock()
 
 	// Git extraction without lock (this runs git commands!)
+	resp := &HeartbeatResponse{
+		SessionID:  sessionID,
+		LastSeenAt: now,
+	}
+
 	worktreePath := h.getWorktreePath(ctx, sessionID)
 	if worktreePath != "" {
 		if gitCtx, err := gitctx.ExtractWorkContext(ctx, worktreePath); err == nil {
 			// updateWorkContext does its own DB writes, no lock needed
 			_ = h.updateWorkContext(ctx, sessionID, agentID, gitCtx)
+
+			// Populate response with git context
+			resp.Branch = gitCtx.Branch
+			resp.UnmergedCommits = len(gitCtx.UnmergedCommits)
+			for _, fc := range gitCtx.FileChanges {
+				resp.FileChanges = append(resp.FileChanges, types.FileChange{
+					Path:         fc.Path,
+					LastModified: fc.LastModified.Format(time.RFC3339),
+					Additions:    fc.Additions,
+					Deletions:    fc.Deletions,
+					Status:       fc.Status,
+				})
+			}
 		}
 	}
 
-	return &HeartbeatResponse{
-		SessionID:  sessionID,
-		LastSeenAt: now,
-	}, nil
+	return resp, nil
 }
 
 // recoverOrphanedSessions finds sessions for the agent with no end event and marks them as recovered.

@@ -281,8 +281,11 @@ type HeartbeatRequest struct {
 
 // HeartbeatResponse represents the response from session.heartbeat RPC.
 type HeartbeatResponse struct {
-	SessionID  string `json:"session_id"`
-	LastSeenAt string `json:"last_seen_at"`
+	SessionID       string             `json:"session_id"`
+	LastSeenAt      string             `json:"last_seen_at"`
+	Branch          string             `json:"branch,omitempty"`
+	UnmergedCommits int                `json:"unmerged_commits,omitempty"`
+	FileChanges     []types.FileChange `json:"file_changes,omitempty"`
 }
 
 // HeartbeatOptions contains options for sending a heartbeat.
@@ -307,27 +310,24 @@ func SessionHeartbeat(client *Client, opts HeartbeatOptions) (*HeartbeatResponse
 }
 
 // FormatHeartbeat formats the heartbeat response for display.
-func FormatHeartbeat(result *HeartbeatResponse, context *AgentWorkContext) string {
+func FormatHeartbeat(result *HeartbeatResponse) string {
 	var output strings.Builder
 
 	fmt.Fprintf(&output, "✓ Heartbeat sent: %s\n", result.SessionID)
 
-	if context != nil {
-		// Show git context summary
-		parts := []string{}
-		if context.Branch != "" {
-			parts = append(parts, fmt.Sprintf("branch: %s", context.Branch))
-		}
-		if len(context.UnmergedCommits) > 0 {
-			parts = append(parts, fmt.Sprintf("%d commits", len(context.UnmergedCommits)))
-		}
-		totalFiles := len(context.ChangedFiles) + len(context.UncommittedFiles)
-		if totalFiles > 0 {
-			parts = append(parts, fmt.Sprintf("%d files", totalFiles))
-		}
-		if len(parts) > 0 {
-			fmt.Fprintf(&output, "  Context: %s\n", strings.Join(parts, ", "))
-		}
+	// Show git context from the heartbeat response
+	parts := []string{}
+	if result.Branch != "" {
+		parts = append(parts, fmt.Sprintf("branch: %s", result.Branch))
+	}
+	if result.UnmergedCommits > 0 {
+		parts = append(parts, fmt.Sprintf("%d commits", result.UnmergedCommits))
+	}
+	if len(result.FileChanges) > 0 {
+		parts = append(parts, fmt.Sprintf("%d files", len(result.FileChanges)))
+	}
+	if len(parts) > 0 {
+		fmt.Fprintf(&output, "  Context: %s\n", strings.Join(parts, ", "))
 	}
 
 	return output.String()
