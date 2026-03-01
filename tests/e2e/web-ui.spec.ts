@@ -80,49 +80,32 @@ test.describe('Web UI', () => {
     await expect(page.getByText(realtimeMessage)).toBeVisible({ timeout: 10_000 });
   });
 
-  test.fixme('SC-52: Inbox view shows real messages', async ({ page }) => {
-    // FIXME: Inbox navigation selectors don't match current UI sidebar structure.
-    // The "My Inbox" button/link/text is not found by any selector variant.
+  test('SC-52: Inbox view shows real messages', async ({ page }) => {
     // Arrange: send a message addressed to current session
     const inboxMessage = `Inbox test ${Date.now()}`;
     sendMessage(inboxMessage);
 
-    // Act: navigate and click "My Inbox"
+    // Act: navigate and click "My Inbox" (same selector as SC-53)
     await page.goto('/');
     await waitForWebSocket(page);
 
-    // Look for inbox navigation - could be button, link, or tab
-    const inboxButton = page.getByRole('button', { name: /inbox|my inbox/i });
-    const inboxLink = page.getByRole('link', { name: /inbox|my inbox/i });
-    const inboxText = page.getByText(/inbox/i);
-
-    // Navigate to inbox — assert at least one navigation element exists
-    await expect(inboxButton.or(inboxLink).or(inboxText)).toBeVisible({ timeout: 5000 });
-
-    if (await inboxButton.isVisible().catch(() => false)) {
-      await inboxButton.click();
-    } else if (await inboxLink.isVisible().catch(() => false)) {
-      await inboxLink.click();
-    }
+    const inboxNav = page.getByText('My Inbox');
+    await expect(inboxNav).toBeVisible({ timeout: 5000 });
+    await inboxNav.click();
 
     // Wait for inbox content to load
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
 
     // Assert: page shows inbox content
     const pageContent = await page.textContent('body');
     expect(pageContent?.toLowerCase()).toContain('inbox');
-
-    // Verify CLI inbox also shows messages
-    const cliInbox = thrum(['inbox']);
-    expect(cliInbox.toLowerCase()).toContain('inbox');
   });
 
   test('SC-53: Inbox compose message', async ({ page }) => {
     // Arrange: register a recipient agent
     registerAgent('test-recipient', 'all', 'Test Recipient');
 
-    // Act: navigate to UI and switch to inbox view first
-    // The compose button lives in InboxHeader, which is inside InboxView
+    // Act: navigate to UI and switch to inbox view
     await page.goto('/');
     await waitForWebSocket(page);
 
@@ -131,39 +114,21 @@ test.describe('Web UI', () => {
     await expect(inboxNav).toBeVisible({ timeout: 5000 });
     await inboxNav.click();
 
-    // Assert: compose button must be visible (it's a <button> with class "compose-btn" and text "+ COMPOSE")
-    const composeButton = page.getByText('COMPOSE');
-    await expect(composeButton).toBeVisible({ timeout: 5000 });
-    await composeButton.click();
+    // The ComposeBar is always visible at the bottom of InboxView (no compose dialog)
+    const messageInput = page.getByRole('textbox', { name: /write a message/i });
+    await expect(messageInput).toBeVisible({ timeout: 5000 });
 
-    // Assert: compose dialog opens with "New Message" title
-    await expect(page.getByText('New Message')).toBeVisible({ timeout: 5000 });
+    // Fill in message content
+    const composeText = `Test compose message ${Date.now()}`;
+    await messageInput.fill(composeText);
 
-    // Fill in the Subject field (required)
-    const titleInput = page.getByPlaceholder('Thread title');
-    await expect(titleInput).toBeVisible({ timeout: 2000 });
-    const composeSubject = `Composed thread ${Date.now()}`;
-    await titleInput.fill(composeSubject);
-
-    // Fill in recipient if field exists (placeholder is "agent:name or user:name")
-    const recipientInput = page.getByPlaceholder('agent:name or user:name');
-    if (await recipientInput.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await recipientInput.fill('test-recipient');
-    }
-
-    // Fill in message content (MentionAutocomplete with placeholder "Write your message...")
-    const messageInput = page.getByPlaceholder(/write your message/i);
-    if (await messageInput.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await messageInput.fill('Test compose message from browser');
-    }
-
-    // Assert: send button must be visible and click it
+    // Assert: send button becomes enabled after typing and click it
     const sendButton = page.getByRole('button', { name: /^send$/i });
-    await expect(sendButton).toBeVisible({ timeout: 2000 });
+    await expect(sendButton).toBeEnabled({ timeout: 2000 });
     await sendButton.click();
 
-    // Assert: dialog should close and thread should appear in inbox
-    await expect(page.getByText('New Message')).not.toBeVisible({ timeout: 5000 });
+    // Assert: message input clears after successful send
+    await expect(messageInput).toHaveValue('', { timeout: 5000 });
   });
 
   test.fixme('SC-54: Agent list in sidebar', async ({ page }) => {
@@ -270,9 +235,10 @@ test.describe('Web UI', () => {
     await page.goto('/');
     await waitForWebSocket(page);
 
-    // Assert: settings button must be visible
-    // AppShell renders a <button> with aria-label="Settings" containing a gear icon
-    const settingsButton = page.getByRole('button', { name: /settings/i });
+    // Assert: settings button must be visible in header
+    // There are two "Settings" buttons: one in header (opens SubscriptionPanel)
+    // and one in sidebar nav (opens SettingsView). Scope to header to avoid ambiguity.
+    const settingsButton = page.locator('header').getByRole('button', { name: /settings/i });
     await expect(settingsButton).toBeVisible({ timeout: 5000 });
     await settingsButton.click();
 
