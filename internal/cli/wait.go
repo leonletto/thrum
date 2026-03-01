@@ -134,11 +134,18 @@ func Wait(socketPath string, opts WaitOptions) (*Message, error) {
 			if opts.CallerAgentID != "" {
 				listParams["caller_agent_id"] = opts.CallerAgentID
 			}
-			if opts.ForAgent != "" {
-				listParams["for_agent"] = opts.ForAgent
-			}
-			if opts.ForAgentRole != "" {
-				listParams["for_agent_role"] = opts.ForAgentRole
+			// Only apply for_agent / for_agent_role when no explicit scope or
+			// mention filter is active. When scope or mention is provided those
+			// filters are the primary constraint; AND-ing them with for_agent
+			// causes scoped messages (not directly @-mentioned) to be silently
+			// filtered out, making --scope and --mention always time out.
+			if scope == nil && opts.Mention == "" {
+				if opts.ForAgent != "" {
+					listParams["for_agent"] = opts.ForAgent
+				}
+				if opts.ForAgentRole != "" {
+					listParams["for_agent_role"] = opts.ForAgentRole
+				}
 			}
 			listParams["exclude_self"] = true
 

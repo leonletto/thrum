@@ -204,11 +204,27 @@ type archiveBody struct {
 	Content string `json:"content"`
 }
 
+// WSBroadcaster is an interface for broadcasting notifications to all connected
+// WebSocket clients, regardless of session ID. Used to push events to passive
+// observers like the browser UI that never call thrum subscribe.
+type WSBroadcaster interface {
+	BroadcastAll(notification any)
+}
+
 // MessageHandler handles message-related RPC methods.
 type MessageHandler struct {
 	state         *state.State
 	dispatcher    *subscriptions.Dispatcher
 	groupResolver *groups.Resolver
+	wsBroadcaster WSBroadcaster // optional; nil if not wired
+}
+
+// SetWSBroadcaster configures a broadcaster that will be called after every
+// message write to push real-time events to all connected WebSocket clients.
+// This is required for the browser UI live feed to work because the UI never
+// creates a subscription row in the DB.
+func (h *MessageHandler) SetWSBroadcaster(b WSBroadcaster) {
+	h.wsBroadcaster = b
 }
 
 // NewMessageHandler creates a new message handler.
@@ -420,6 +436,12 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 
 	// Find matching subscriptions and push notifications to connected clients
 	_, _ = h.dispatcher.DispatchForMessage(ctx, msgInfo)
+
+	// Broadcast to ALL connected WebSocket clients so the browser UI live feed
+	// receives events even though it never registers a subscription row in the DB.
+	if h.wsBroadcaster != nil {
+		h.wsBroadcaster.BroadcastAll(buildWSNotification(msgInfo))
+	}
 
 	// Emit thread.updated event for real-time updates
 	if threadID != "" {
@@ -1051,6 +1073,11 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 
 	// Dispatch notifications (same as message.create)
 	_, _ = h.dispatcher.DispatchForMessage(ctx, msgInfo)
+
+	// Broadcast to all connected WebSocket clients for browser UI live feed.
+	if h.wsBroadcaster != nil {
+		h.wsBroadcaster.BroadcastAll(buildWSNotification(msgInfo))
+	}
 
 	// Count edits for version number (count includes the edit we just applied)
 	var editCount int
@@ -1780,4 +1807,47 @@ func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.Ra
 	}
 
 	return &DeleteByAgentResponse{DeletedCount: count}, nil
+}
+
+// buildWSNotification constructs a notification.message payload for broadcast to
+// all connected WebSocket clients. It mirrors the structure produced by
+// subscriptions.Dispatcher.buildNotification so that browser UI hooks that listen
+// for "notification.message" receive a consistent event shape.
+// Unlike the subscription-based notification, matched_subscription is omitted
+// because this broadcast is not tied to any specific subscription row.
+func buildWSNotification(msg *subscriptions.MessageInfo) map[string]any {
+	preview := msg.Preview
+	if len(preview) > 100 {
+		preview = preview[:100] + "..."
+	}
+
+	// The "message" field is consumed by useBrowserNotifications.ts which reads
+	// data.message.agent_id, data.message.body.content, etc. for desktop push
+	// notifications. The flat fields (message_id, preview, etc.) are also
+	// included for useRealtimeMessages.ts which just invalidates query caches.
+	return map[string]any{
+		"method": "notification.message",
+		"params": map[string]any{
+			"message_id": msg.MessageID,
+			"thread_id":  msg.ThreadID,
+			"author": map[string]any{
+				"agent_id": msg.AgentID,
+				"name":     msg.AgentID,
+			},
+			"preview":   preview,
+			"scopes":    msg.Scopes,
+			"timestamp": msg.Timestamp,
+			"message": map[string]any{
+				"id":         msg.MessageID,
+				"thread_id":  msg.ThreadID,
+				"agent_id":   msg.AgentID,
+				"session_id": msg.SessionID,
+				"body": map[string]any{
+					"content": msg.Preview,
+				},
+				"scopes":    msg.Scopes,
+				"timestamp": msg.Timestamp,
+			},
+		},
+	}
 }

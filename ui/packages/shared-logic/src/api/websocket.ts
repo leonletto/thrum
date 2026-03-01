@@ -73,6 +73,8 @@ export class ThrumWebSocket {
         const onError = () => {
           cleanup();
           reject(new WebSocketConnectionError('Connection failed'));
+          // Schedule reconnect just like the main connect path does on error
+          this.scheduleReconnect();
         };
         const cleanup = () => {
           this.ws?.removeEventListener('open', onOpen);

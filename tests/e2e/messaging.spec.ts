@@ -192,6 +192,49 @@ test.describe.serial('Messaging Tests', () => {
     expect(inbox.messages.length).toBeGreaterThan(0);
   });
 
+  test('E-read-all: Mark all messages as read clears unread inbox', async () => {
+    // Arrange: ensure at least one unread message exists
+    thrumIn(getTestRoot(), ['send', `Read-all test ${Date.now()}`, '--to', '@e2e_implementer'], 10_000, coordEnv());
+
+    // Act: mark all as read for implementer
+    const readOutput = thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
+    expect(readOutput.toLowerCase()).toMatch(/marked/);
+    expect(readOutput.toLowerCase()).toMatch(/read/);
+
+    // Assert: no unread messages remain
+    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
+    const inbox = JSON.parse(implInbox);
+    expect(Array.isArray(inbox.messages)).toBe(true);
+    expect(inbox.messages.length).toBe(0);
+  });
+
+  test('E-atomic-reject: Mixed valid+invalid recipients atomically rejected', async () => {
+    // Arrange: start with a clean implementer inbox
+    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
+
+    // Act: send to one valid and one invalid recipient
+    let error = '';
+    try {
+      thrumIn(getTestRoot(), ['send', 'Mixed test', '--to', '@e2e_implementer', '--to', '@ghost_agent'], 10_000, coordEnv());
+    } catch (err: any) {
+      error = err.message || '';
+    }
+
+    // Assert: command failed with an error referencing the unknown recipient
+    expect(error).not.toBe('');
+    const errorLower = error.toLowerCase();
+    expect(errorLower.includes('unknown') || errorLower.includes('ghost_agent')).toBe(true);
+
+    // Assert: nothing was delivered — "Mixed test" is not in implementer's inbox
+    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
+    const inbox = JSON.parse(implInbox);
+    expect(Array.isArray(inbox.messages)).toBe(true);
+    const hasMixed = inbox.messages.some((msg: any) =>
+      msg.body?.content?.includes('Mixed test')
+    );
+    expect(hasMixed).toBe(false);
+  });
+
   test('SC-25: CLI broadcast via --broadcast flag', async () => {
     // Mark implementer inbox read
     thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());

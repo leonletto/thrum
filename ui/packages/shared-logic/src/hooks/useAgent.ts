@@ -40,6 +40,8 @@ export function useAgentList(options?: UseAgentListOptions) {
     },
     staleTime: 5000, // Consider data fresh for 5 seconds
     refetchInterval: 10000, // Poll every 10s (no push notification for agent events yet)
+    retry: 3, // Retry up to 3 times to handle WebSocket startup race
+    retryDelay: 1000, // Wait 1s between retries to give WS time to connect
   });
 }
 

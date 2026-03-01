@@ -4616,6 +4616,15 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 	wsServer := websocket.NewServer(wsAddr, wsRegistry, uiFS)
 
+	// Wire the WebSocket client registry into the message handler so it can
+	// broadcast notification.message to ALL connected clients (including the
+	// browser UI which never registers a subscription row in the DB).
+	messageHandler.SetWSBroadcaster(wsServer.GetClients())
+
+	// Wire the dispatcher's client notifier so subscription-based push
+	// notifications (thrum subscribe) also work for CLI agents connected via WS.
+	dispatcher.SetClientNotifier(daemon.NewBroadcaster(nil, wsServer.GetClients()))
+
 	// Clean up subscriptions when a WebSocket client disconnects (thrum-pgoc fix)
 	subSvc := subscriptions.NewService(st.DB())
 	wsServer.SetDisconnectHook(func(sessionID string) {
