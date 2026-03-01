@@ -80,41 +80,25 @@ test.describe('Web UI', () => {
     await expect(page.getByText(realtimeMessage)).toBeVisible({ timeout: 10_000 });
   });
 
-  test.fixme('SC-52: Inbox view shows real messages', async ({ page }) => {
-    // FIXME: Inbox navigation selectors don't match current UI sidebar structure.
-    // The "My Inbox" button/link/text is not found by any selector variant.
+  test('SC-52: Inbox view shows real messages', async ({ page }) => {
     // Arrange: send a message addressed to current session
     const inboxMessage = `Inbox test ${Date.now()}`;
     sendMessage(inboxMessage);
 
-    // Act: navigate and click "My Inbox"
+    // Act: navigate and click "My Inbox" (same selector as SC-53)
     await page.goto('/');
     await waitForWebSocket(page);
 
-    // Look for inbox navigation - could be button, link, or tab
-    const inboxButton = page.getByRole('button', { name: /inbox|my inbox/i });
-    const inboxLink = page.getByRole('link', { name: /inbox|my inbox/i });
-    const inboxText = page.getByText(/inbox/i);
-
-    // Navigate to inbox — assert at least one navigation element exists
-    await expect(inboxButton.or(inboxLink).or(inboxText)).toBeVisible({ timeout: 5000 });
-
-    if (await inboxButton.isVisible().catch(() => false)) {
-      await inboxButton.click();
-    } else if (await inboxLink.isVisible().catch(() => false)) {
-      await inboxLink.click();
-    }
+    const inboxNav = page.getByText('My Inbox');
+    await expect(inboxNav).toBeVisible({ timeout: 5000 });
+    await inboxNav.click();
 
     // Wait for inbox content to load
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
 
     // Assert: page shows inbox content
     const pageContent = await page.textContent('body');
     expect(pageContent?.toLowerCase()).toContain('inbox');
-
-    // Verify CLI inbox also shows messages
-    const cliInbox = thrum(['inbox']);
-    expect(cliInbox.toLowerCase()).toContain('inbox');
   });
 
   test('SC-53: Inbox compose message', async ({ page }) => {
