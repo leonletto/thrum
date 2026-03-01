@@ -87,23 +87,42 @@ test.describe('Coordination', () => {
   });
 
   test('SC-33: List agents with context', async () => {
-    // Arrange: register a couple of agents
-    try {
-      registerAgent('coordinator', 'all', 'Coordinator');
-    } catch {
-      // may already exist
-    }
-
     // Act: list agents with context flag
-    let output: string;
-    try {
-      output = thrum(['agent', 'list', '--context']);
-    } catch (e: any) {
-      output = e.stdout?.toString() || e.stderr?.toString() || e.message;
-    }
+    const output = thrum(['agent', 'list', '--context']);
 
-    // Assert: shows agents with their context information
-    expect(output.toLowerCase()).toMatch(/coordinator|implementer|tester/);
+    // Assert: the coordtest agent appears (name may be truncated in table output)
+    expect(output).toContain('e2e_co');
+    // Assert: context flag adds extra detail (branch, intent, commits, files, etc.)
+    expect(output.toLowerCase()).toMatch(/intent|branch|commits|files/);
+  });
+
+  test('F2-1: who-has with single agent editing a file', async () => {
+    const testRoot = getTestRoot();
+    const testFile = 'single-edit.txt';
+
+    try {
+      // Create, commit, then modify to generate uncommitted changes
+      fs.writeFileSync(path.join(testRoot, testFile), '// original\n');
+      execFileSync('git', ['add', testFile], { cwd: testRoot, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'add single-edit file'], { cwd: testRoot, stdio: 'pipe' });
+      fs.writeFileSync(path.join(testRoot, testFile), '// modified by coordinator\n');
+
+      // Update context so daemon sees the changes
+      thrumIn(testRoot, ['agent', 'heartbeat'], 10_000, coordTestEnv());
+
+      // Act: run who-has (human-readable output)
+      const output = thrumIn(testRoot, ['who-has', testFile], 10_000, coordTestEnv());
+
+      // Assert: who-has returns valid output (not an error)
+      expect(output).not.toBe('');
+      expect(output.toLowerCase()).not.toContain('error');
+      // who-has either shows agents editing or "No agents" message
+      expect(output.toLowerCase()).toMatch(/agent|no agent/);
+    } finally {
+      try {
+        execFileSync('git', ['reset', 'HEAD~1', '--hard'], { cwd: testRoot, stdio: 'pipe' });
+      } catch { /* best effort */ }
+    }
   });
 
   test('F2-2: who-has with multiple agents editing same file', async () => {
@@ -135,9 +154,11 @@ test.describe('Coordination', () => {
       // Act: run who-has
       const output = thrum(['who-has', testFile]);
 
-      // Assert: output should not be empty and should not error
+      // Assert: who-has returns valid output referencing the file
       expect(output).not.toBe('');
       expect(output.toLowerCase()).not.toContain('error');
+      // who-has either shows agents or "No agents" tip
+      expect(output.toLowerCase()).toMatch(/agent|who/i);
     } finally {
       try {
         fs.rmSync(path.join(implRoot, testFile), { force: true });

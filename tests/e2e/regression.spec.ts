@@ -6,7 +6,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { thrum, thrumIn, getTestRoot, getImplementerRoot } from './helpers/thrum-cli.js';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -26,6 +26,23 @@ test.describe('Bugfix Regressions', () => {
       thrumIn(getTestRoot(), ['quickstart', '--role', 'tester', '--module', 'all',
         '--name', 'e2e_regtest', '--intent', 'Regression testing'], 10_000, regressionEnv());
     } catch { /* may already exist */ }
+  });
+
+  test('J2: Prime unread count accuracy', async () => {
+    // Mark all read first
+    thrumIn(getTestRoot(), ['message', 'read', '--all'], 10_000, regressionEnv());
+
+    // Send a message to regtest agent from the implementer worktree (avoids session issues)
+    const implEnv = { ...process.env, THRUM_NAME: 'e2e_implementer', THRUM_ROLE: 'implementer', THRUM_MODULE: 'main' };
+    try {
+      thrumIn(getImplementerRoot(), ['quickstart', '--role', 'implementer', '--module', 'main',
+        '--name', 'e2e_implementer', '--intent', 'J2 test'], 10_000, implEnv);
+    } catch { /* may already exist */ }
+    thrumIn(getImplementerRoot(), ['send', 'Unread count verification', '--to', '@e2e_regtest'], 10_000, implEnv);
+
+    // Prime should show unread > 0 (not "0 unread" or "all read")
+    const primeOutput = thrumIn(getTestRoot(), ['prime'], 10_000, regressionEnv());
+    expect(primeOutput).toMatch(/[1-9]\d*\s*unread/);
   });
 
   test('J1: Priority flag removed from CLI', async () => {
@@ -171,7 +188,7 @@ test.describe('Bugfix Regressions', () => {
     } catch (err: any) {
       output = err.message || '';
     }
-    expect(output.toLowerCase()).not.toContain('resolved to group');
+    expect(output.toLowerCase()).not.toContain('resolved to a group');
   });
 
   test('J12: Wait excludes own outbound messages', async () => {
@@ -187,5 +204,53 @@ test.describe('Bugfix Regressions', () => {
       waitOutput = err.stdout?.toString() || '';
     }
     expect(waitOutput).not.toContain('Self-exclude test');
+  });
+
+  test('J10: Name-only routing and auto role group warning', async () => {
+    // Register a temp agent with a distinct name and role
+    const j10Env = { ...process.env, THRUM_NAME: 'j10_alpha', THRUM_ROLE: 'j10_worker', THRUM_MODULE: 'all' };
+    try {
+      thrumIn(getTestRoot(), ['quickstart', '--role', 'j10_worker', '--module', 'all',
+        '--name', 'j10_alpha', '--intent', 'Routing test'], 10_000, j10Env);
+    } catch { /* may exist */ }
+
+    // Sending to @j10_alpha by name → no "resolved to a group" warning
+    const byNameResult = spawnSync(BIN, ['send', 'Direct to alpha', '--to', '@j10_alpha'], {
+      cwd: getTestRoot(), encoding: 'utf-8', timeout: 10_000, env: regressionEnv(),
+    });
+    const byNameAll = `${byNameResult.stdout ?? ''}${byNameResult.stderr ?? ''}`;
+    expect(byNameAll).not.toContain('resolved to a group');
+
+    // Sending to @j10_worker by role → auto-group routing, expect "resolved to a group" warning
+    // Warning goes to stderr; spawnSync captures stdout and stderr separately
+    const byRoleResult = spawnSync(BIN, ['send', 'To worker role', '--to', '@j10_worker'], {
+      cwd: getTestRoot(), encoding: 'utf-8', timeout: 10_000, env: regressionEnv(),
+    });
+    const byRoleStderr = String(byRoleResult.stderr ?? '');
+    expect(byRoleStderr).toContain('resolved to a group');
+  });
+
+  test('J13: Name cannot equal role', async () => {
+    // Attempt: name equals own role → should error
+    const j13Env = { ...process.env, THRUM_NAME: 'j13_reviewer', THRUM_ROLE: 'j13_reviewer', THRUM_MODULE: 'all' };
+    let error1 = '';
+    try {
+      thrumIn(getTestRoot(), ['quickstart', '--role', 'j13_reviewer', '--module', 'all',
+        '--name', 'j13_reviewer', '--intent', 'Should fail'], 10_000, j13Env);
+    } catch (err: any) {
+      error1 = err.message || '';
+    }
+    expect(error1.toLowerCase()).toMatch(/name.*cannot.*same.*role|name.*role/);
+
+    // Re-registration with different name+role → OK (no error)
+    const j13OkEnv = { ...process.env, THRUM_NAME: 'j13_gamma', THRUM_ROLE: 'j13_planner', THRUM_MODULE: 'all' };
+    let reregError = '';
+    try {
+      thrumIn(getTestRoot(), ['quickstart', '--role', 'j13_planner', '--module', 'all',
+        '--name', 'j13_gamma', '--intent', 'Distinct name OK'], 10_000, j13OkEnv);
+    } catch (err: any) {
+      reregError = err.message || '';
+    }
+    expect(reregError).not.toMatch(/cannot.*same.*role/i);
   });
 });
