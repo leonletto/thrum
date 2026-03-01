@@ -52,7 +52,7 @@ else:
 | `--timeout 15m`  | Block up to 15 minutes per cycle                     |
 | `--after -30s`   | Only return messages from last 30 seconds (skip old) |
 | `--json`         | Machine-readable output                              |
-| `--mention-only` | Only messages that @mention you                      |
+| `--mention @<role>` | Only messages that mention the specified role      |
 
 ## Return Format
 

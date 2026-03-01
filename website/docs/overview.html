@@ -621,72 +621,11 @@ users:</p>
 </tbody></table>
 <h3>For MCP Integration</h3>
 <p><code>thrum mcp serve</code> runs an MCP server on stdio (JSON-RPC over stdin/stdout),
-enabling LLM agents to communicate via native MCP tools:</p>
-<table>
-<thead>
-<tr>
-<th>MCP Tool</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>send_message</code></td>
-<td>Send a message to another agent, role, or group</td>
-</tr>
-<tr>
-<td><code>check_messages</code></td>
-<td>Poll for unread messages mentioning this agent, auto-marks read</td>
-</tr>
-<tr>
-<td><code>wait_for_message</code></td>
-<td>Block until a message arrives (WebSocket push) or timeout</td>
-</tr>
-<tr>
-<td><code>list_agents</code></td>
-<td>List registered agents with active/offline status</td>
-</tr>
-<tr>
-<td><code>broadcast_message</code></td>
-<td>Send to all agents (convenience wrapper around <code>send_message</code> to <code>@everyone</code>)</td>
-</tr>
-<tr>
-<td><code>create_group</code></td>
-<td>Create a named group</td>
-</tr>
-<tr>
-<td><code>delete_group</code></td>
-<td>Delete a group</td>
-</tr>
-<tr>
-<td><code>add_group_member</code></td>
-<td>Add member to group</td>
-</tr>
-<tr>
-<td><code>remove_group_member</code></td>
-<td>Remove member from group</td>
-</tr>
-<tr>
-<td><code>list_groups</code></td>
-<td>List all groups</td>
-</tr>
-<tr>
-<td><code>get_group</code></td>
-<td>Get group details with optional expansion</td>
-</tr>
-</tbody></table>
-<p>Configure in Claude Code&#39;s <code>.claude/settings.json</code>:</p>
-<pre><code>{
-  &quot;mcpServers&quot;: {
-    &quot;thrum&quot;: {
-      &quot;type&quot;: &quot;stdio&quot;,
-      &quot;command&quot;: &quot;thrum&quot;,
-      &quot;args&quot;: [&quot;mcp&quot;, &quot;serve&quot;]
-    }
-  }
-}</code></pre>
-<p>Use <code>--agent-id NAME</code> to override the agent identity, or set <code>THRUM_NAME</code> env
-var. The MCP server connects to the daemon via Unix socket for RPC and WebSocket
-for real-time push notifications via the <code>wait_for_message</code> tool.</p>
+enabling LLM agents to communicate via native MCP tools. It provides 5 core
+messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
+<code>list_agents</code>, <code>broadcast_message</code>) and 6 group management tools.</p>
+<p>See <a href="/docs/mcp-server.html">MCP Server</a> for the complete tools reference,
+configuration, and setup instructions.</p>
 <h2>Getting Started</h2>
 <h3>Quick Start</h3>
 <pre><code># 1. Initialize in your project

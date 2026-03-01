@@ -366,14 +366,6 @@ automatically saves context before compaction to <code>.thrum/context/{name}.md<
 agent-initiated <code>/update-context</code> skill captures richer context including
 decisions and rationale.</p>
 <hr>
-<h3>thrum context update</h3>
-<p>The <code>/update-context</code> skill is now integrated with the Thrum MCP server. Use the
-MCP server for guided context updates:</p>
-<pre><code>thrum mcp serve</code></pre>
-<p><strong>In Claude Code:</strong></p>
-<p>Configure the MCP server in <code>.claude/settings.json</code> and use the
-<code>wait_for_message</code> and <code>send_message</code> tools for context coordination.</p>
-<hr>
 <h2>The /update-context Skill</h2>
 <p>The <code>/update-context</code> skill is now integrated into the Thrum MCP server. The MCP
 server provides message-based context coordination through the <code>send_message</code>

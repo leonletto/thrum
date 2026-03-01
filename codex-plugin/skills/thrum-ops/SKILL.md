@@ -1,6 +1,8 @@
 ---
 name: thrum-ops
 description: Use when the user asks to run or troubleshoot Thrum operational flows such as quickstart, inbox triage, wait loops, context save/load, daemon status, and sync/session health checks.
+# source: claude-plugin/skills/thrum/SKILL.md (condensed for codex)
+# last-synced: 2026-03-01
 ---
 
 # Thrum Ops
@@ -25,10 +27,52 @@ Use this skill for operational command execution and session lifecycle managemen
 thrum quickstart --role <role> --module <module> --intent "<intent>"
 thrum overview
 thrum inbox --unread
-thrum wait --timeout 120
+thrum wait --timeout 120s
 thrum context show
 thrum sync status
 thrum daemon status
+```
+
+## Sessions & Context
+
+```bash
+thrum session start                      Start session
+thrum session end                        End session
+thrum session set-intent "..."           Update work description
+thrum context prime                      Same as thrum prime
+thrum context show                       Show saved work context
+thrum context save --file <path>         Save context from file
+thrum overview                           Combined status + team + inbox
+```
+
+**Context workflow:**
+- Before compaction: save via update-context flow
+- After compaction: run load-context to restore work state
+- `thrum prime` gathers identity, team, inbox, git context, sync health
+
+## Daemon & Sync
+
+```bash
+thrum daemon start                       Start daemon
+thrum daemon stop                        Stop daemon
+thrum daemon status                      Daemon health
+thrum sync force                         Force immediate sync
+thrum sync status                        Sync state
+```
+
+## Quickstart Details
+
+Common roles: `coordinator`, `implementer`, `planner`, `reviewer`, `tester`.
+
+```bash
+# Full registration
+thrum quickstart --role implementer --module <branch> --intent "Implementing <epic>"
+
+# Just update intent
+thrum session set-intent "Now working on X"
+
+# Heartbeat (keep visible)
+thrum agent heartbeat
 ```
 
 ## References

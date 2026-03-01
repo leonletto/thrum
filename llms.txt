@@ -211,9 +211,6 @@ All commands accept these flags:
   thrum context sync [--agent NAME]
     Copy context to the a-sync branch for sharing across worktrees.
 
-  thrum context update
-    Update agent context (delegates to /update-context skill).
-
 ### Coordination
 
   thrum who-has FILE

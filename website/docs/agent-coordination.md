@@ -26,22 +26,8 @@ Thrum supports two integration methods for agent coordination:
 ### MCP Server (Recommended)
 
 Native tool integration with async message notifications. Best for Claude Code
-agents.
-
-```json
-{
-  "mcpServers": {
-    "thrum": {
-      "type": "stdio",
-      "command": "thrum",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
-```
-
-MCP tools: `send_message`, `check_messages`, `wait_for_message`, `list_agents`,
-`broadcast_message`.
+agents. See [MCP Server](/docs/mcp-server.html) for configuration and the
+complete tools reference.
 
 ### CLI (Fallback)
 

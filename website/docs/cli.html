@@ -190,10 +190,6 @@ messaging system for AI agent coordination.</p>
 <td>Collect all context for session initialization</td>
 </tr>
 <tr>
-<td><code>thrum context update</code></td>
-<td>Install/update the /update-context skill</td>
-</tr>
-<tr>
 <td><code>thrum runtime</code></td>
 <td>Manage runtime presets (list, show, set-default)</td>
 </tr>
@@ -1421,17 +1417,6 @@ daemon flag is set.</p>
 <pre><code>$ thrum context sync
 ✓ Context synced for furiosa
   Committed and pushed to a-sync branch</code></pre>
-<h3>thrum context update</h3>
-<p>Install or update the <code>/update-context</code> skill for Claude Code agents. Detects
-the skill in project-level (<code>.claude/commands/update-context.md</code>) or global
-(<code>~/.claude/commands/update-context.md</code>) locations.</p>
-<pre><code>thrum context update</code></pre>
-<p>Example:</p>
-<pre><code>$ thrum context update
-/update-context skill installed at:
-  /path/to/repo/.claude/commands/update-context.md
-
-Restart Claude Code to load the skill.</code></pre>
 <h2>Notifications</h2>
 <h3>thrum subscribe</h3>
 <p>Subscribe to push notifications. Subscription types are mutually exclusive:

@@ -504,9 +504,6 @@ For setup instructions, see [Quickstart Guide](quickstart.md).
 ```bash
 # Check if daemon is running (shows repo path from JSON PID)
 thrum daemon status
-
-# Health check via RPC
-thrum daemon health
 ```
 
 ### Stopping the Daemon

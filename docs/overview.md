@@ -479,39 +479,12 @@ Thrum uses event sourcing with CQRS:
 ### For MCP Integration
 
 `thrum mcp serve` runs an MCP server on stdio (JSON-RPC over stdin/stdout),
-enabling LLM agents to communicate via native MCP tools:
+enabling LLM agents to communicate via native MCP tools. It provides 5 core
+messaging tools (`send_message`, `check_messages`, `wait_for_message`,
+`list_agents`, `broadcast_message`) and 6 group management tools.
 
-| MCP Tool              | Description                                                                   |
-| --------------------- | ----------------------------------------------------------------------------- |
-| `send_message`        | Send a message to another agent, role, or group                               |
-| `check_messages`      | Poll for unread messages mentioning this agent, auto-marks read               |
-| `wait_for_message`    | Block until a message arrives (WebSocket push) or timeout                     |
-| `list_agents`         | List registered agents with active/offline status                             |
-| `broadcast_message`   | Send to all agents (convenience wrapper around `send_message` to `@everyone`) |
-| `create_group`        | Create a named group                                                          |
-| `delete_group`        | Delete a group                                                                |
-| `add_group_member`    | Add member to group                                                           |
-| `remove_group_member` | Remove member from group                                                      |
-| `list_groups`         | List all groups                                                               |
-| `get_group`           | Get group details with optional expansion                                     |
-
-Configure in Claude Code's `.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "thrum": {
-      "type": "stdio",
-      "command": "thrum",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
-```
-
-Use `--agent-id NAME` to override the agent identity, or set `THRUM_NAME` env
-var. The MCP server connects to the daemon via Unix socket for RPC and WebSocket
-for real-time push notifications via the `wait_for_message` tool.
+See [MCP Server](/docs/mcp-server.html) for the complete tools reference,
+configuration, and setup instructions.
 
 ## Getting Started
 

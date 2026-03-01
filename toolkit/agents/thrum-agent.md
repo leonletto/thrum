@@ -1,1102 +1,152 @@
 ---
 name: thrum-agent
 description: >
-  Thrum multi-agent coordination guide. Git-backed messaging for AI agents to
-  communicate across sessions, worktrees, and machines. Covers MCP server
-  integration, message-listener pattern, CLI usage, and Beads integration.
+  Thrum agent coordination reference. Lean complement to the claude-plugin
+  skill files. Covers routing rules, key gotchas, and quick command reference.
 ---
 
-# Thrum - Multi-Agent Coordination via Git
+# Thrum - Agent Coordination Reference
 
-## Overview
+> **Primary reference:** Claude Code users should use the Thrum plugin skills
+> (`/thrum:*` commands, `thrum prime`). This file covers routing rules and
+> gotchas not duplicated elsewhere.
+>
+> Full messaging docs: https://leonletto.github.io/thrum/docs/messaging.html
 
-Thrum is a Git-backed messaging system that enables AI agents and humans to
-communicate persistently across sessions, worktrees, and machines. It uses Git
-as the synchronization layer, ensuring all messages survive context window
-limits, session restarts, and machine boundaries.
-
-## Purpose
-
-Use Thrum when:
-
-- **Coordinating multi-agent workflows** - Share messages, assign work, track
-  progress
-- **Working across worktrees** - Agents in different worktrees need to
-  communicate
-- **Maintaining conversation history** - Messages persist across session
-  compaction
-- **Real-time notifications** - Get notified when messages arrive (via MCP
-  server)
-- **Tracking agent work context** - See what files agents are working on
-- **Long-running coordination** - Multi-session work requires persistent
-  communication
-
-**DO NOT use for:**
-
-- Simple single-agent tasks with no coordination needs
-- Temporary notes or scratch work (use Beads instead)
-- Task management (use Beads for that)
-
-## Quick Start (CRITICAL - Read This First)
-
-### Step 1: Choose Integration Method
-
-Thrum supports **two integration methods**:
-
-1. **MCP Server** (RECOMMENDED) - Native tool integration with async message
-   notifications
-2. **CLI** - Shell-out commands for basic usage
-
-**Use MCP Server when:**
-
-- You want real-time message notifications
-- You need async message listening
-- You're in a Claude Code environment with MCP support
-
-**Use CLI when:**
-
-- MCP server is not available
-- You only need basic message sending
-- You're doing simple status updates
-
-### Step 2: Register and Start Session
+## Agent Registration
 
 ```bash
-# Register as an agent with quickstart
-thrum quickstart --name <your-name> --role <role> --module <module> --intent "<description>"
+# Register at session start (idempotent — safe to re-run)
+thrum quickstart --role <role> --module <module> --intent "<description>"
 
-# Examples:
-thrum quickstart --name claude_implementer --role implementer --module website --intent "Implementing website build script"
-thrum quickstart --name claude_planner --role planner --module website --intent "Planning website architecture"
+# Common roles: coordinator, implementer, reviewer, planner, tester
+# Name must differ from role (registration rejects name==role)
 ```
 
-**Common roles:**
-
-- `planner` - Coordinates work, assigns tasks
-- `implementer` - Executes tasks
-- `reviewer` - Reviews code, provides feedback
-- `tester` - Runs tests, reports issues
-- `coordinator` - High-level project coordination
-
-### Step 3A: MCP Server Integration (RECOMMENDED)
-
-**Configure MCP Server in Claude Code:**
-
-Add to `.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "thrum": {
-      "type": "stdio",
-      "command": "thrum",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
-```
-
-**Launch Message Listener Sub-Agent:**
-
-```typescript
-// At start of session, launch background listener
-Task({
-  subagent_type: "message-listener",
-  description: "Listen for Thrum messages",
-  prompt: "Listen for messages and notify me when they arrive",
-  run_in_background: true,
-});
-```
-
-**The message-listener will:**
-
-1. Block until a message arrives or timeout (5 minutes default)
-2. Return when messages received: `MESSAGES_RECEIVED`
-3. Return on timeout: `NO_MESSAGES_TIMEOUT`
-
-**After listener returns:**
-
-```typescript
-// Process messages
-const messages = await mcp.thrum.check_messages();
-
-for (const msg of messages) {
-  // Handle messages
-}
-
-// Re-arm the listener
-Task({
-  subagent_type: "message-listener",
-  description: "Continue listening",
-  prompt: "Listen for more messages",
-  run_in_background: true,
-});
-```
-
-**MCP Tools Available:**
-
-- `send_message` - Send to specific agent via @name
-- `check_messages` - Poll inbox, auto-mark read
-- `wait_for_message` - Block until message arrives
-- `list_agents` - Show registered agents
-- `broadcast_message` - Send to all agents
-
-### Step 3B: CLI Integration (Fallback)
-
-If MCP server is not available, use CLI commands:
+Check who's active before sending:
 
 ```bash
-# Send message
-thrum send "Starting work on task X" --to @coord_main
-
-# Check inbox
-thrum inbox
-
-# Reply to message
-thrum reply <msg-id> "Here's my update"
-
-# Broadcast to all
-thrum send "Deploy complete" --broadcast
+thrum team                   # List active agents with names and intents
+thrum whoami                 # Show your identity
 ```
 
-## Core Concepts
+## Message Routing Rules
 
-### Agents and Identity
+| Address form       | Routing                                          | Use when                        |
+| ------------------ | ------------------------------------------------ | ------------------------------- |
+| `--to @lead_agent` | Direct to named agent                            | Default for all task messages   |
+| `--to @coordinator`| Role fanout — ALL agents with that role (warns)  | Only for intentional group send |
+| `--to @backend-team`| Group — all members                             | Team-wide announcements         |
+| `--to @everyone`   | Broadcast — all registered agents                | Critical alerts                 |
 
-Each agent has:
+**Critical:** `@coordinator` is a role, not a name. Sending `--to @coordinator`
+fans out to every agent registered with that role and emits a warning. Use
+`thrum team` to find the actual agent name, then send `--to @<name>`.
 
-- **Name** - Human-readable identifier (e.g., `claude_implementer`)
-- **Role** - Function category (e.g., `@implementer`, `@planner`)
-- **Module** - Work area (e.g., `website`, `auth`, `testing`)
-- **Intent** - Current work description
+**Unknown recipients are a hard error.** Always verify names with `thrum team`
+before sending.
 
-**Identity Files:**
+## Quick Command Reference
 
-- Stored in `.thrum/identities/<name>.json`
-- One identity per agent name
-- Multi-worktree support via `THRUM_NAME` env var
+### Messaging
 
-### Sessions
+```bash
+thrum send "msg" --to @name              # Direct to agent by name
+thrum send "msg" --to @everyone          # Broadcast to all
+thrum reply <msg-id> "response"          # Reply (implicit thread)
+thrum inbox                              # View inbox (excludes own messages)
+thrum inbox --unread                     # Unread only
+thrum wait                               # Block until message arrives (30s)
+thrum wait --timeout 120s                # Custom timeout (must include unit)
+thrum message read --all                 # Mark all as read
+```
 
-Sessions track agent activity:
+### Agents & Coordination
 
-- **Start** - `thrum session start` or via `thrum quickstart`
-- **End** - `thrum session end` (automatic on inactivity)
-- **Heartbeat** - `thrum session heartbeat` (keep alive)
-- **Intent** - `thrum session set-intent "description"` (update work context)
-
-### Messages
-
-Messages are the core communication primitive:
-
-- **To** - Direct message to specific agent (`--to @name`)
-- **Broadcast** - Send to all active agents (`--to @everyone`)
-- **Reply** - Reply to existing message (creates thread)
-- **Mentions** - Reference agents with `@name` syntax
-
-**Routing rules (v0.4.5+):**
-
-- `@name` routes directly to a named agent — **always use this for direct messages**
-- `@role` routes via the auto-created role group (all agents with that role
-  receive it); sender gets a warning — only use when you want group fanout
-- Unknown recipients are a hard error — run `thrum team` to find agent names
-- Agent name must differ from role (registration rejects name==role)
-
-**Always run `thrum team` before sending** to get the correct agent name.
-
-**Message Storage:**
-
-- Per-agent JSONL files: `.git/thrum-sync/a-sync/messages/<agent>.jsonl`
-- Git-backed, syncs via `git push/pull`
-- Event-sourced with ULID IDs
-
-### Threads
-
-Threads group related messages:
-
-- **Auto-created** - When replying to a message
-- **Manual** - `thrum thread create --message "topic" --to @name`
-- **List** - `thrum thread list`
-- **Show** - `thrum thread show <thread-id>`
+```bash
+thrum team                               # List active agents
+thrum status                             # My status + daemon
+thrum who-has <file>                     # Who's editing a file
+thrum ping @name                         # Check if agent online
+thrum overview                           # Combined status + team + inbox
+```
 
 ### Groups
 
-Groups enable sending messages to collections of agents:
+```bash
+thrum group create <name>                # Create group
+thrum group add <name> @agent            # Add agent
+thrum group add <name> --role <role>     # Add all agents with role
+thrum group list                         # List groups
+```
 
-- **Built-in @everyone** - Auto-created group containing all agents
-- **Custom groups** - Create groups for teams, roles, or projects
-- **Member types** - Groups can contain agents (`@alice`), roles
-  (`--role planner`), or other groups (`--group team`)
-- **Nesting** - Groups can contain other groups (with cycle detection)
-- **Pull model** - Group membership resolved at read time (receivers query)
-
-**Group examples:**
+### Sessions & Context
 
 ```bash
-# Create team group
-thrum group create backend-team
-
-# Add members
-thrum group add backend-team @alice       # Add specific agent
-thrum group add backend-team --role implementer  # Add all with role
-thrum group add leads --group backend-team      # Nest groups
-
-# Send to group
-thrum send "Team meeting at 3pm" --to @backend-team
+thrum session set-intent "..."           # Update work description
+thrum session end                        # End session when done
+thrum context show                       # Show saved work context
+thrum prime                              # Full session context
 ```
 
-### Work Context
-
-Agents can track what they're working on:
-
-- **Files** - What files they're editing
-- **Intent** - High-level description of work
-- **Status** - Active/idle state
-
-**Check context:**
+### Sync & Daemon
 
 ```bash
-# Who's working on what
-thrum status
-
-# Who has specific file
-thrum who-has <file>
-
-# Ping agent for status
-thrum ping @name
+thrum sync force                         # Force sync (bare `thrum sync` prints help)
+thrum sync status                        # Sync state
+thrum daemon status                      # Daemon health
 ```
 
-## Common Workflows
+## Key Gotchas
 
-### Workflow 1: Planner → Implementer Coordination
+| Gotcha | Correct usage |
+|--------|---------------|
+| `thrum sync` (bare) just prints help | Use `thrum sync force` or `thrum sync status` |
+| `--timeout` requires a duration unit | `--timeout 120s` not `--timeout 120` |
+| `thrum wait --all` does not exist | Use `thrum wait --timeout <duration>` |
+| `thrum daemon health` does not exist | Use `thrum daemon status` |
+| `thrum context update` does not exist | Use `/thrum:update-context` skill |
+| `--foreground` flag not on `daemon start` | Just use `thrum daemon start` |
+| `--group` nesting flag not on `group add` | Use `--group <name>` as member arg: `thrum group add leads --group backend-team` |
+| Name==role rejected at registration | `--name lead-agent --role coordinator`, not `--name coordinator --role coordinator` |
+| Threads are implicit — no explicit commands | Use `thrum reply <msg-id>` to continue a thread |
+| `broadcast_message` MCP tool filter fields are dead code | Use `send_message` with `to="@everyone"` |
 
-**Planner:**
+## Message Listener (CLI fallback)
+
+Sub-agents cannot access MCP tools and fall back to Bash. Use `thrum wait`
+directly:
 
 ```bash
-# Register as planner
-thrum quickstart --name lead-agent --role planner --module website --intent "Coordinating website development"
-
-# Assign task via message
-thrum send "Please implement build script (task thrum-235d.3). Design spec in dev-docs/plans/. Check beads for details." --to @impl1
-
-# Check for updates
-thrum inbox
+# Block until a message arrives (use this in listener sub-agent prompts)
+cd /path/to/repo && thrum wait --timeout 15m --after -1s --json
 ```
 
-**Implementer (with MCP):**
-
-```typescript
-// 1. Launch listener
-Task({
-  subagent_type: "message-listener",
-  prompt: "Listen for messages from planner",
-});
-
-// 2. When listener returns with MESSAGES_RECEIVED:
-const messages = await mcp.thrum.check_messages();
-
-// 3. Process task assignment
-// (read design spec, check beads, implement)
-
-// 4. Send status update
-await mcp.thrum.send_message({
-  to: "@planner",
-  content: "Build script complete. Tests passing. Ready for review.",
-});
-
-// 5. Re-arm listener
-Task({
-  subagent_type: "message-listener",
-  prompt: "Continue listening",
-});
-```
-
-### Workflow 2: Peer Collaboration
-
-**Agent A:**
-
-```bash
-# Start work, announce to team
-thrum send "Starting work on auth module" --broadcast
-
-# Reserve file (via message convention)
-thrum send "Working on src/auth/login.ts" --to @coord_main
-```
-
-**Agent B:**
-
-```bash
-# Check who has file before editing
-thrum who-has src/auth/login.ts
-# Output: @agent-a (active)
-
-# Coordinate via message
-thrum send "Need to edit login.ts for validation. ETA?" --to @agent-a
-```
-
-### Workflow 3: Code Review Request
-
-**Implementer:**
-
-```bash
-# Request review
-thrum send "Build script complete (commit abc123). Please review:
-- Markdown processing
-- Search index generation
-- Error handling
-
-Tests passing. Beads task: thrum-235d.3" --to @reviewer1
-```
-
-**Reviewer:**
-
-```bash
-# Check inbox
-thrum inbox
-
-# View message details
-thrum message get <msg-id>
-
-# Respond with findings
-thrum reply <msg-id> "Reviewed. Found 2 issues:
-1. Missing error handling in parseMarkdown()
-2. Search index doesn't handle compound terms
-
-See beads: thrum-abc (bug filed). Otherwise looks good."
-```
-
-### Workflow 4: Multi-Worktree Coordination
-
-**Agent in main worktree:**
-
-```bash
-cd /path/to/repo
-export THRUM_NAME=main_agent
-thrum quickstart --name main_agent --role coordinator --module main --intent "Main branch coordination"
-
-# Send to agent in other worktree
-thrum send "Feature branch ready for integration testing" --to @feature_agent
-```
-
-**Agent in feature worktree:**
-
-```bash
-cd ~/.workspaces/repo/feature
-export THRUM_NAME=feature_agent
-thrum quickstart --name feature_agent --role implementer --module feature --intent "Feature implementation"
-
-# Check inbox (sees messages from main_agent)
-thrum inbox
-```
-
-### Workflow 5: Team Groups
-
-**Coordinator sets up groups:**
-
-```bash
-# Create team groups
-thrum group create backend-team --description "Backend developers"
-thrum group create frontend-team --description "Frontend developers"
-thrum group create leads --description "Team leads"
-
-# Add members by role
-thrum group add backend-team --role implementer
-thrum group add frontend-team --role implementer
-
-# Add specific agents to leads
-thrum group add leads @coordinator
-thrum group add leads @senior-dev
-
-# Nest groups (leads includes both teams)
-thrum group add leads --group backend-team
-thrum group add leads --group frontend-team
-
-# Send to entire team
-thrum send "Sprint planning meeting at 2pm" --to @backend-team
-```
-
-**Agent receives group message:**
-
-```bash
-# Messages to groups show up in inbox
-thrum inbox --unread
-# Output includes: "Sprint planning meeting at 2pm" (from @coordinator to @backend-team)
-```
-
-## MCP Server Integration (DETAILED)
-
-### Message Listener Pattern
-
-The message-listener sub-agent enables **asynchronous message notifications**
-without polling:
-
-```typescript
-// 1. Start listener at beginning of session
-Task({
-  subagent_type: "message-listener",
-  description: "Background message listener",
-  prompt:
-    "Listen for Thrum messages. Block until message arrives or 5-minute timeout. Return MESSAGES_RECEIVED if messages arrive, NO_MESSAGES_TIMEOUT on timeout.",
-  run_in_background: true,
-});
-
-// 2. Work on other tasks while listener runs in background
-
-// 3. When listener returns (message arrived or timeout)
-const listenerResult = await TaskOutput(listenerId);
-
-if (listenerResult.includes("MESSAGES_RECEIVED")) {
-  // Process messages
-  const messages = await mcp.thrum.check_messages({
-    markAsRead: true,
-  });
-
-  // Re-arm listener
-  Task({
-    subagent_type: "message-listener",
-    prompt: "Continue listening for messages",
-  });
-} else {
-  // Timeout - re-arm if still working
-  if (stillHaveWork) {
-    Task({
-      subagent_type: "message-listener",
-      prompt: "Continue listening",
-    });
-  } else {
-    // Send status and exit
-    await mcp.thrum.send_message({
-      to: "@coordinator",
-      content: "Work complete. Going idle.",
-    });
-  }
-}
-```
-
-### MCP Tool Reference
-
-**send_message:**
-
-```typescript
-await mcp.thrum.send_message({
-  to: "@agent-name", // Required: recipient @name
-  content: "Message text", // Required: message body
-});
-```
-
-**check_messages:**
-
-```typescript
-const messages = await mcp.thrum.check_messages({
-  markAsRead: true, // Optional: auto-mark as read
-  limit: 20, // Optional: max messages to return
-});
-```
-
-**wait_for_message:**
-
-```typescript
-// Block until message arrives or timeout
-const result = await mcp.thrum.wait_for_message({
-  timeout: 300000, // Optional: 5 minutes default
-  mentionOnly: false, // Optional: only messages mentioning me
-});
-```
-
-**list_agents:**
-
-```typescript
-const agents = await mcp.thrum.list_agents({
-  includeOffline: false, // Optional: only show active agents
-});
-```
-
-**broadcast_message:**
-
-```typescript
-// DEPRECATED: Use send_message with to="@everyone" instead
-await mcp.thrum.broadcast_message({
-  content: "Deploy complete",
-});
-
-// PREFERRED: Send to @everyone group
-await mcp.thrum.send_message({
-  to: "@everyone",
-  content: "Deploy complete",
-});
-```
-
-**Group Management Tools:**
-
-```typescript
-// Create a group
-await mcp.thrum.create_group({
-  name: "backend-team",
-  description: "Backend developers",
-});
-
-// Add members (auto-detects type: agent, role, or group)
-await mcp.thrum.add_group_member({
-  group: "backend-team",
-  member: "@alice", // Add specific agent
-});
-
-await mcp.thrum.add_group_member({
-  group: "backend-team",
-  member: "--role implementer", // Add all agents with role
-});
-
-await mcp.thrum.add_group_member({
-  group: "leads",
-  member: "--group backend-team", // Add another group (nesting)
-});
-
-// Remove member
-await mcp.thrum.remove_group_member({
-  group: "backend-team",
-  member: "@alice",
-});
-
-// List all groups
-const groups = await mcp.thrum.list_groups();
-
-// Get group details (with expansion to agent IDs)
-const group = await mcp.thrum.get_group({
-  name: "backend-team",
-  expand: true, // Resolves nested groups/roles to agent IDs
-});
-
-// Delete a group
-await mcp.thrum.delete_group({
-  name: "old-team",
-});
-```
-
-## CLI Reference
-
-### Core Commands
-
-**Session Management:**
-
-```bash
-thrum quickstart --name <name> --role <role> --module <module> --intent "<description>"
-thrum agent register
-thrum agent list
-thrum agent delete <name>
-thrum session start
-thrum session end
-thrum session heartbeat
-thrum session set-intent "<description>"
-thrum status
-```
-
-**Messaging:**
-
-```bash
-thrum send "message" --to @name                 # Direct to agent by name
-thrum send "message" --to @groupname            # Send to group
-thrum send "message" --to @everyone             # Broadcast to all agents
-thrum inbox [--unread]                          # Auto-excludes own messages, marks displayed as read
-thrum reply <msg-id> "response"
-thrum message get <msg-id>
-thrum message edit <msg-id> "new-text"
-thrum message delete <msg-id>
-thrum message read <msg-id> [<msg-id>...]       # Mark specific messages as read
-thrum message read --all                         # Mark all unread messages as read
-```
-
-**Groups:**
-
-```bash
-thrum group create <name> [--description "text"]
-thrum group delete <name>
-thrum group add <group> <member>                # Auto-detects: @alice = agent, --role planner = role, --group team = group
-thrum group remove <group> <member>
-thrum group list [--json]
-thrum group info <name> [--json]
-thrum group members <name> [--expand] [--json]  # --expand resolves nested groups/roles to agent IDs
-```
-
-**Threads:**
-
-```bash
-thrum thread list
-thrum thread show <thread-id>
-thrum thread create --message "topic" --to @name
-```
-
-**Coordination:**
-
-```bash
-thrum who-has <file>
-thrum ping @name
-thrum overview                # Combined status view
-```
-
-**Sync:**
-
-```bash
-thrum sync                    # Sync with git remote
-thrum sync --status          # Check sync status
-```
-
-## Integration with Beads
-
-When both Thrum and Beads are available, use them together:
-
-**Use Thrum for:**
-
-- Real-time coordination messages
-- Status updates and check-ins
-- Code review requests
-- Question/answer exchanges
-- Notifications and alerts
-
-**Use Beads for:**
-
-- Task management and tracking
-- Dependencies and blockers
-- Work discovery and filing issues
-- Progress tracking
-- Persistent task state
-
-### Unified Workflow
-
-```bash
-# 1. Register in Thrum
-thrum quickstart --name impl-agent --role implementer --module auth --intent "Implementing auth system"
-
-# 2. Find work in Beads
-bd ready --json
-# Choose: bd-123 "Implement JWT authentication"
-
-# 3. Claim in Beads
-bd update bd-123 --status in_progress --json
-
-# 4. Announce via Thrum
-thrum send "Starting bd-123: JWT authentication" --to @coord_main
-
-# 5. Work on implementation
-# (make code changes)
-
-# 6. Discover issues -> file in Beads
-bd create "Found validation bug" -t bug -p 1 --deps discovered-from:bd-123 --json
-
-# 7. Update coordinator via Thrum
-thrum send "Progress update: JWT working, found validation bug (filed bd-456)" --to @coord_main
-
-# 8. Complete in Beads
-bd close bd-123 --reason "JWT auth complete with tests" --json
-
-# 9. Announce via Thrum
-thrum send "Completed bd-123. Ready for review." --to @reviewer1
-
-# 10. Sync both
-bd sync
-# (Thrum auto-syncs via daemon)
-```
-
-### Mapping Convention
-
-| Concept    | Beads                              | Thrum                                   |
-| ---------- | ---------------------------------- | --------------------------------------- |
-| Task ID    | `bd-123`                           | Include in message: "Working on bd-123" |
-| Status     | `bd update --status`               | Send message with update                |
-| Assignment | `bd update --assignee`             | Send message to specific agent          |
-| Completion | `bd close bd-123`                  | Send completion message                 |
-| Discovery  | `bd create --deps discovered-from` | Notify via message                      |
-
-## Best Practices
-
-### DO ✅
-
-- **Register at session start** - Always use `thrum quickstart`
-- **Use MCP server when available** - Better than CLI polling
-- **Launch message-listener** - Get real-time notifications
-- **Send status updates** - Keep team informed
-- **Use @mentions** - Reference agents by name
-- **Use groups for team messaging** - Create groups for common recipient sets
-- **Include context** - Beads IDs, file paths, commit hashes
-- **End sessions** - Run `thrum session end` when done
-- **Set clear intents** - Describe what you're working on
-- **Send to @everyone for broadcasts** - Use @everyone group instead of
-  --broadcast flag
-
-### DON'T ❌
-
-- **Don't use Thrum for task management** - Use Beads for that
-- **Don't spam messages** - Batch updates when possible
-- **Don't forget to re-arm listener** - After processing messages
-- **Don't ignore critical messages** - Stop work and respond
-- **Don't use Thrum for discovery** - File in Beads, announce via Thrum
-- **Don't skip registration** - System won't route messages correctly
-- **Don't leave sessions open** - End when done to avoid stale status
-- **Don't use vague intents** - Be specific about current work
-- **Don't use @role to address a single agent** - Use @name for direct messages;
-  @role fans out to all agents with that role
-- **Don't use unknown recipients** - Hard error; verify names with `thrum team`
-- **Don't use name==role when registering** - Registration rejects it (e.g.,
-  `--name coordinator --role coordinator`)
-- **Don't delete @everyone group** - It's protected and auto-created
-
-## Common Patterns
-
-### Pattern 1: Task Assignment
-
-**Coordinator:**
-
-```bash
-# Find ready work in Beads
-bd ready --json
-
-# Assign via Thrum
-thrum send "Task bd-456 is ready for implementation. See design spec in dev-docs/plans/. Estimated 2-3 hours." --to @impl1
-```
-
-**Implementer (MCP):**
-
-```typescript
-const messages = await mcp.thrum.check_messages();
-const task = messages.find((m) => m.content.includes("bd-456"));
-
-// Claim in Beads
-await bash("bd update bd-456 --status in_progress --json");
-
-// Acknowledge via Thrum
-await mcp.thrum.send_message({
-  to: "@coordinator",
-  content: "Claimed bd-456. Starting implementation.",
-});
-```
-
-### Pattern 2: Blocked Notification
-
-```bash
-# Hit blocker
-bd update bd-789 --status blocked --json
-
-# Notify team
-thrum send "Blocked on bd-789: Need API credentials for Stripe integration. @coordinator can you help?" --to @coord_main
-```
-
-### Pattern 3: Review Request
-
-```bash
-# Complete work
-git commit -m "feat: Add JWT auth (bd-123)"
-bd close bd-123 --reason "Complete with tests" --json
-
-# Request review
-thrum send "bd-123 complete (commit a1b2c3d). Please review:
-- JWT generation (src/auth/jwt.ts)
-- Middleware (src/auth/middleware.ts)
-- Tests (tests/auth.test.ts)
-
-All tests passing. Ready to merge." --to @reviewer1
-```
-
-### Pattern 4: Context Compaction Recovery
-
-After conversation compaction, agents can recover context via Thrum:
-
-```bash
-# Check inbox for recent context
-thrum inbox --unread
-
-# Check what others are working on
-thrum agent list
-
-# Review thread history
-thrum thread list
-
-# Check Beads for task state
-bd ready --json
-bd list --status in_progress --json
-```
-
-## Session Workflow Template
-
-Use this template for every agent session:
-
-```bash
-# === START OF SESSION ===
-
-# 1. Register and start session
-thrum quickstart --name <name> --role <role> --module <module> --intent "<description>"
-
-# 2. Launch message listener (if using MCP)
-# Task(subagent_type="message-listener", ...)
-
-# 3. Check inbox for any urgent messages
-thrum inbox --unread
-
-# 4. Find work (Beads)
-bd ready --json
-
-# 5. Claim task (Beads)
-bd update <id> --status in_progress --json
-
-# 6. Announce start (Thrum)
-thrum send "Starting work on bd-<id>: <description>" --to @coord_main
-
-# === DURING SESSION ===
-
-# 7. Send status updates
-thrum send "Progress update: <status>" --to @coord_main
-
-# 8. Handle incoming messages (via listener)
-# Process messages, respond as needed
-
-# 9. Coordinate on blockers
-thrum send "Blocked: <description>" --to @coord_main
-
-# === END OF SESSION ===
-
-# 10. Complete work (Beads)
-bd close <id> --reason "Complete" --json
-bd sync
-
-# 11. Announce completion (Thrum)
-thrum send "Completed bd-<id>. Tests passing. Ready for review." --to @reviewer1
-
-# 12. End session
-thrum session end
-```
-
-## Troubleshooting
-
-### Issue 1: Not receiving messages
-
-**Symptom:** Message listener times out, messages not appearing
-
-**Diagnosis:**
-
-```bash
-# Check registration
-thrum status
-
-# Check daemon
-thrum daemon status
-
-# Check inbox manually
-thrum inbox
-```
-
-**Solutions:**
-
-1. **Not registered** - Run `thrum quickstart`
-2. **Daemon not running** - Run `thrum daemon start`
-3. **Wrong agent name** - Check `THRUM_NAME` env var
-4. **Sync issues** - Run `git pull` to get latest messages
-
-### Issue 2: Message listener not working
-
-**Symptom:** MCP `wait_for_message` fails or hangs
-
-**Diagnosis:**
-
-```bash
-# Check MCP server is configured
-cat .claude/settings.json | grep thrum
-
-# Test MCP server directly
-thrum mcp serve --help
-```
-
-**Solutions:**
-
-1. **MCP not configured** - Add to `.claude/settings.json`
-2. **Daemon not running** - Start with `thrum daemon start`
-3. **WebSocket issues** - Check `http://localhost:9999` is accessible
-4. **Fallback to CLI** - Use `thrum inbox` polling instead
-
-### Issue 3: Messages not syncing
-
-**Symptom:** Other agents don't see my messages
-
-**Diagnosis:**
-
-```bash
-# Check sync status
-thrum sync --status
-
-# Check git remote
-git remote -v
-
-# Check if messages committed
-git log --oneline -10 a-sync
-```
-
-**Solutions:**
-
-1. **No remote** - Add git remote
-2. **Not committed** - Daemon auto-commits after 60s, or run `thrum sync`
-3. **Not pushed** - Run `thrum sync` to force push
-4. **Branch diverged** - Pull and retry
-
-### Issue 4: Multiple agents with same name
-
-**Symptom:** Messages routing to wrong agent
-
-**Diagnosis:**
-
-```bash
-# List all agents
-thrum agent list
-
-# Check identity files
-ls -la .thrum/identities/
-```
-
-**Solutions:**
-
-1. **Use unique names** - Each agent needs unique name
-2. **Delete duplicates** - `thrum agent delete <name>`
-3. **Use THRUM_NAME** - Set different names per worktree
-
-## Resources
-
-### Documentation
-
-- **CLAUDE.md** - (this file) Complete agent integration guide
-- `docs/mcp-server.md` - MCP server technical details
-- `docs/messaging.md` - Message concepts and workflows
-- `docs/identity.md` - Agent identity system
-- `docs/cli.md` - Complete CLI reference
-
-### Web UI
-
-View messages in browser:
-
-```bash
-# Check UI URL
-thrum status
-# Open: http://localhost:9999
-```
-
-### Git Artifacts
-
-All messages stored in Git:
-
-```text
-.git/thrum-sync/a-sync/
-├── events.jsonl              # Agent lifecycle events
-└── messages/
-    ├── agent1.jsonl          # Agent 1's messages
-    ├── agent2.jsonl          # Agent 2's messages
-    └── ...
-
-.thrum/
-├── identities/
-│   ├── agent1.json           # Agent 1's identity
-│   └── agent2.json           # Agent 2's identity
-└── var/
-    └── messages.db           # SQLite cache (gitignored)
-```
-
-## Quick Reference
-
-### Essential Commands
-
-```bash
-# Register and start
-thrum quickstart --name <name> --role <role> --module <module> --intent "<description>"
-
-# Send messages
-thrum send "message" --to @name                # Direct message
-thrum send "message" --to @groupname           # Send to group
-thrum send "message" --to @everyone            # Send to all agents
-thrum reply <msg-id> "response"                # Reply in thread
-
-# Check messages
-thrum inbox                                    # View inbox (auto-excludes own messages)
-thrum inbox --unread                          # Only unread (marks displayed as read)
-
-# Groups
-thrum group create <name>                      # Create group
-thrum group add <group> <member>               # Add member (@agent, --role role, --group group)
-thrum group list                               # List all groups
-
-# Coordination
-thrum who-has <file>                          # Check file ownership
-thrum ping @name                              # Check if agent active
-thrum status                                   # My status
-
-# Session management
-thrum session end                             # End session
-thrum agent delete <name>                     # Delete registration
-```
-
-### MCP Integration
-
-```typescript
-// Launch listener (start of session)
-Task({ subagent_type: "message-listener", prompt: "Listen for messages" });
-
-// Send message
-await mcp.thrum.send_message({ to: "@name", content: "text" });
-
-// Check messages
-const messages = await mcp.thrum.check_messages();
-
-// List agents
-const agents = await mcp.thrum.list_agents();
-```
-
-## Summary
-
-Thrum provides:
-
-- ✅ **Git-backed messaging** - Persistent across sessions and machines
-- ✅ **Multi-agent coordination** - Real-time communication between agents
-- ✅ **MCP Server integration** - Native tools with async notifications
-- ✅ **Message listener pattern** - Get notified when messages arrive
-- ✅ **Groups** - Send to teams, roles, or collections of agents
-- ✅ **Worktree support** - Agents in different worktrees can communicate
-- ✅ **Context preservation** - Messages survive conversation compaction
-- ✅ **Work context tracking** - See who's working on what files
-
-**Remember:**
-
-- **Always register at session start** - `thrum quickstart`
-- **Use MCP server when available** - Better than CLI
-- **Launch message-listener** - Get async notifications
-- **Integrate with Beads** - Use both for full coordination
-- **Send status updates** - Keep team informed
-- **End sessions cleanly** - `thrum session end`
-
-**Quick Start:**
-
-```bash
-# 1. Register
-thrum quickstart --name my_agent --role implementer --module website --intent "Building website"
-
-# 2. Launch listener (if MCP available)
-# Task(subagent_type="message-listener", ...)
-
-# 3. Send message
-thrum send "Starting work" --to @coord_main
-
-# 4. Check inbox
-thrum inbox
-
-# 5. End session
-thrum session end
-```
+Use `--after -1s` (not `--after -30s`) to avoid catching stale messages. See
+[LISTENER_PATTERN.md](../../claude-plugin/skills/thrum/resources/LISTENER_PATTERN.md)
+for the full background listener template.
+
+## Thrum + Beads: Division of Responsibility
+
+| Use Thrum for               | Use Beads for                |
+|-----------------------------|------------------------------|
+| Real-time coordination      | Task tracking and management |
+| Status updates between agents | Dependencies and blockers  |
+| Code review requests        | Work discovery and filing    |
+| Notifications and alerts    | Persistent task state        |
+
+## Plugin Resources
+
+The claude-plugin covers these topics in detail — do not duplicate here:
+
+- Full MCP tools reference → `thrum prime` or SKILL.md
+- Listener pattern → `claude-plugin/skills/thrum/resources/LISTENER_PATTERN.md`
+- Common anti-patterns → `claude-plugin/skills/thrum/resources/ANTI_PATTERNS.md`
+- Complete CLI syntax → `claude-plugin/skills/thrum/resources/CLI_REFERENCE.md`
+- Multi-worktree patterns → `claude-plugin/skills/thrum/resources/WORKTREES.md`
+- Group management → `claude-plugin/skills/thrum/resources/GROUPS.md`
+- Context compaction recovery → `claude-plugin/skills/thrum/resources/MESSAGING.md`
 
 ---
 
-**Version:** 1.4 **Last Updated:** 2026-02-20 **Status:** Production-Ready
-
-**Changes in v1.4 (thrum v0.4.5):** Name-only routing — `@name` routes directly
-to agent; `@role` routes via auto-created role group (with warning). Agent name
-must differ from role (registration rejects name==role). `thrum wait --all`
-removed — wait always filters by agent identity. Unknown recipients are a hard
-error. `--priority` flag removed from `thrum send`. `thrum init` does full
-setup; `thrum whoami` shows branch/intent.
-
-**Changes in v1.3:** Agent Groups feature added —
-`thrum group create/add/remove/list/info/members`, 6 new MCP tools
-(`create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
-`list_groups`, `get_group`). Built-in `@everyone` group for broadcasts. Groups
-support nesting (groups can contain other groups/roles) with cycle detection.
+**Version:** 2.0 | Condensed from v1.4 — plugin is now primary reference.

@@ -749,73 +749,13 @@ read state persists across session restarts for the same agent.</p>
 </ul>
 <h2>MCP Server Integration</h2>
 <p>The MCP server (<code>thrum mcp serve</code>) provides native messaging tools for AI agents
-running in Claude Code or similar environments. It exposes 11 MCP tools
-organized into two categories:</p>
-<p><strong>Core messaging (5 tools):</strong></p>
-<table>
-<thead>
-<tr>
-<th>MCP Tool</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>send_message</code></td>
-<td>Send a message to <code>@role</code> or agent name</td>
-</tr>
-<tr>
-<td><code>check_messages</code></td>
-<td>Poll for unread messages mentioning this agent, auto-marks read</td>
-</tr>
-<tr>
-<td><code>wait_for_message</code></td>
-<td>Block until a message arrives via WebSocket push or timeout (max 600s)</td>
-</tr>
-<tr>
-<td><code>list_agents</code></td>
-<td>List registered agents with active/offline status</td>
-</tr>
-<tr>
-<td><code>broadcast_message</code></td>
-<td>Send to all agents (convenience wrapper around <code>send_message</code> with <code>to=@everyone</code>)</td>
-</tr>
-</tbody></table>
-<p><strong>Group management (6 tools):</strong></p>
-<table>
-<thead>
-<tr>
-<th>MCP Tool</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>create_group</code></td>
-<td>Create a named messaging group</td>
-</tr>
-<tr>
-<td><code>delete_group</code></td>
-<td>Delete a messaging group</td>
-</tr>
-<tr>
-<td><code>add_group_member</code></td>
-<td>Add an agent or role as a member of a group</td>
-</tr>
-<tr>
-<td><code>remove_group_member</code></td>
-<td>Remove a member from a group</td>
-</tr>
-<tr>
-<td><code>list_groups</code></td>
-<td>List all messaging groups</td>
-</tr>
-<tr>
-<td><code>get_group</code></td>
-<td>Get group details including members (expand=true resolves roles)</td>
-</tr>
-</tbody></table>
-<p>MCP tools use the same underlying RPC methods (<code>message.send</code>, <code>message.list</code>,
-<code>message.markRead</code>) but add convenience features like <code>@role</code> addressing and
-real-time WebSocket push notifications.</p>
+running in Claude Code or similar environments. It exposes 11 MCP tools: 5 core
+messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
+<code>list_agents</code>, <code>broadcast_message</code>) and 6 group management tools. MCP tools use
+the same underlying RPC methods but add <code>@role</code> addressing and real-time
+WebSocket push notifications.</p>
+<p>See <a href="/docs/mcp-server.html">MCP Server</a> for the complete tools reference and
+configuration.</p>
 <h2>Agent Identity</h2>
 <p>Agents are identified by name using identity files stored at
 <code>.thrum/identities/{name}.json</code>. Identity is resolved in this priority order:</p>

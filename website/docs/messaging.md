@@ -698,33 +698,14 @@ Optimized for common query patterns:
 ## MCP Server Integration
 
 The MCP server (`thrum mcp serve`) provides native messaging tools for AI agents
-running in Claude Code or similar environments. It exposes 11 MCP tools
-organized into two categories:
+running in Claude Code or similar environments. It exposes 11 MCP tools: 5 core
+messaging tools (`send_message`, `check_messages`, `wait_for_message`,
+`list_agents`, `broadcast_message`) and 6 group management tools. MCP tools use
+the same underlying RPC methods but add `@role` addressing and real-time
+WebSocket push notifications.
 
-**Core messaging (5 tools):**
-
-| MCP Tool            | Description                                                                        |
-| ------------------- | ---------------------------------------------------------------------------------- |
-| `send_message`      | Send a message to `@role` or agent name                                            |
-| `check_messages`    | Poll for unread messages mentioning this agent, auto-marks read                    |
-| `wait_for_message`  | Block until a message arrives via WebSocket push or timeout (max 600s)             |
-| `list_agents`       | List registered agents with active/offline status                                  |
-| `broadcast_message` | Send to all agents (convenience wrapper around `send_message` with `to=@everyone`) |
-
-**Group management (6 tools):**
-
-| MCP Tool              | Description                                                      |
-| --------------------- | ---------------------------------------------------------------- |
-| `create_group`        | Create a named messaging group                                   |
-| `delete_group`        | Delete a messaging group                                         |
-| `add_group_member`    | Add an agent or role as a member of a group                      |
-| `remove_group_member` | Remove a member from a group                                     |
-| `list_groups`         | List all messaging groups                                        |
-| `get_group`           | Get group details including members (expand=true resolves roles) |
-
-MCP tools use the same underlying RPC methods (`message.send`, `message.list`,
-`message.markRead`) but add convenience features like `@role` addressing and
-real-time WebSocket push notifications.
+See [MCP Server](/docs/mcp-server.html) for the complete tools reference and
+configuration.
 
 ## Agent Identity
 

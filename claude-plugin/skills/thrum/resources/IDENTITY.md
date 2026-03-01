@@ -26,19 +26,7 @@ idempotent — re-registering with the same name updates the existing identity.
 
 ## Multi-Worktree Identity
 
-When working across multiple worktrees, use `THRUM_NAME` to distinguish agents:
-
-```bash
-# Main worktree
-export THRUM_NAME=main_agent
-thrum quickstart --role coordinator --module main --intent "Main branch work"
-
-# Feature worktree
-export THRUM_NAME=feature_agent
-thrum quickstart --role implementer --module feature --intent "Feature branch work"
-```
-
-Both agents share the same daemon and can message each other.
+See [WORKTREES.md](WORKTREES.md) for multi-worktree identity setup.
 
 ## Checking Identity
 
