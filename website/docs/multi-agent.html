@@ -425,7 +425,7 @@ flag; use subscriptions if you need a firehose.</p>
 <pre><code># Wait for any message addressed to this agent
 thrum wait --timeout 5m
 
-# Wait for messages since a time offset (skip old messages)
+# Include messages sent up to 30s ago (--after -30s = &quot;30 seconds ago&quot;; negative = &quot;N ago&quot;)
 thrum wait --after -30s --timeout 5m --json
 
 # Wait for mentions of your role
@@ -456,7 +456,7 @@ thrum wait --mention @reviewer --timeout 5m</code></pre>
 <tr>
 <td><code>--after</code></td>
 <td>Relative time (e.g., <code>-30s</code>)</td>
-<td>Only messages after this offset</td>
+<td>Negative = include messages sent up to N ago; positive = only messages N in the future; omit for &quot;now&quot;</td>
 </tr>
 <tr>
 <td><code>--json</code></td>

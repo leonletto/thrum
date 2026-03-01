@@ -1493,7 +1493,7 @@ messages directed to this agent by name or role. There is no <code>--all</code> 
 </tr>
 <tr>
 <td><code>--after</code></td>
-<td>Only messages after offset (e.g., <code>-30s</code>)</td>
+<td>Relative time offset: negative (e.g., <code>-30s</code>) = include messages sent up to N ago; positive (e.g., <code>+60s</code>) = only messages arriving at least N in the future; omit for &quot;now&quot;</td>
 <td></td>
 </tr>
 <tr>
@@ -1509,11 +1509,12 @@ messages directed to this agent by name or role. There is no <code>--all</code> 
 </tbody></table>
 <p>Exit codes: <code>0</code> = message received, <code>1</code> = timeout, <code>2</code> = error.</p>
 <p>Example:</p>
-<pre><code>$ thrum wait --after -30s --timeout=5m --json
+<pre><code># Include messages sent up to 30s ago (--after -30s = &quot;30 seconds ago&quot;)
+$ thrum wait --after -30s --timeout=5m --json
 ✓ Message received: msg_01HXE8Z7 from @planner
   We should refactor the sync daemon before adding embeddings.
 
-# Use in scripts
+# Use in scripts (only new messages — no --after means &quot;now&quot;)
 if thrum wait --timeout=30s; then
   echo &quot;New message received&quot;
 else

@@ -122,7 +122,7 @@ directly:
 cd /path/to/repo && thrum wait --timeout 15m --after -1s --json
 ```
 
-Use `--after -1s` (not `--after -30s`) to avoid catching stale messages. See
+Use `--after -1s` (negative = "N ago"; avoids catching stale messages). See
 [LISTENER_PATTERN.md](../../claude-plugin/skills/thrum/resources/LISTENER_PATTERN.md)
 for the full background listener template.
 

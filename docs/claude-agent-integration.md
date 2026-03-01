@@ -23,11 +23,13 @@ agents via Thrum messaging.
 <summary>thrum-agent.md</summary>
 
 ```markdown
+---
 name: thrum-agent
 description: >
   Thrum multi-agent coordination guide. Git-backed messaging for AI agents to
   communicate across sessions, worktrees, and machines. Covers MCP server
   integration, message-listener pattern, CLI usage, and Beads integration.
+---
 
 # Thrum - Multi-Agent Coordination via Git
 
@@ -115,6 +117,7 @@ when it returns.
 <summary>message-listener.md</summary>
 
 ```markdown
+---
 name: message-listener
 description: >
   Background listener for incoming Thrum messages. Runs on Haiku for cost
@@ -123,6 +126,7 @@ description: >
 model: haiku
 allowed-tools:
   - Bash
+---
 
 You are a background message listener for the Thrum agent messaging system.
 
@@ -156,6 +160,7 @@ When messages received:
 
 FROM: [sender] CONTENT: [message content]
 
+---
 
 When timeout:
 

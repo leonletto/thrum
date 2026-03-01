@@ -45,12 +45,12 @@ Task(
   subagent_type="message-listener",
   model="haiku",
   run_in_background=true,
-  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -30s --json"
+  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -1s --json"
 )
 ```
 
 - `--timeout 15m`: Block up to 15 minutes per cycle
-- `--after -30s`: Only return messages from the last 30 seconds (skips old)
+- `--after -1s`: Include messages sent up to 1s ago (negative = "N ago"; prevents stale replay)
 - `--json`: Machine-readable output
 
 ## Return Format

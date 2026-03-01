@@ -161,7 +161,7 @@ incoming messages and notifies the main agent when they arrive.
 
 **Recommended approach:** Use `thrum wait` which blocks until a message arrives
 or times out. This is more efficient than polling loops with sleep intervals.
-Use `--after -30s` to skip old messages, returning only recent/new ones.
+Use `--after -30s` to include messages sent up to 30 seconds ago (`--after` negative value = "N ago"). Omit `--after` to receive only messages that arrive after the wait starts.
 
 ### Return Format
 
@@ -169,9 +169,11 @@ When messages are received:
 
 ```text
 MESSAGES_RECEIVED
+---
 FROM: [sender]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]
+---
 ```
 
 When timeout occurs with no messages:

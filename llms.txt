@@ -85,7 +85,7 @@ All commands accept these flags:
 
   thrum wait [--timeout DURATION] [--scope type:value] [--mention @role] [--after OFFSET]
     Block until a matching message arrives.
-    --after accepts relative time: -30s, -5m, +60s. Exit 0=received, 1=timeout, 2=error.
+    --after sign convention: negative (e.g., -30s) = include messages sent up to N ago; positive (e.g., +60s) = only messages N in the future; omit for "now". Exit 0=received, 1=timeout, 2=error.
 
 ### Message Management
 

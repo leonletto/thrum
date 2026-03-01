@@ -137,6 +137,79 @@ This architecture trades real-time performance for persistence and simplicity.
 For agent workflows — where context loss is the primary failure mode — that's
 the right tradeoff.
 
+## Beads Command Reference for Sub-Agents
+
+Sub-agents (spawned via the Task tool in Claude Code, or similar delegation in
+other frameworks) typically **don't receive plugin context**. They can run `bd`
+commands via Bash, but they don't know the correct syntax unless you tell them.
+
+If you use Beads for task tracking, add the block below to your project's
+`CLAUDE.md` (for Claude Code / Auggie) or `AGENTS.md` (for other agent
+frameworks). This prevents sub-agents from guessing wrong commands like
+`bd start` or `bd progress`.
+
+### Recommended Block for CLAUDE.md / AGENTS.md
+
+````markdown
+## Beads (bd) Quick Reference
+
+Task tracking uses Beads (`bd`). Sub-agents don't get the beads plugin context,
+so this section ensures all agents know the correct commands.
+
+### Essential Commands
+
+```bash
+bd ready                           # Show unblocked tasks
+bd list                            # All open issues
+bd show <id>                       # Issue details
+bd blocked                         # Show blocked issues
+bd create "title" -t task -p 2     # Create task (P2)
+bd update <id> -s in_progress      # Start working on issue
+bd update <id> --claim             # Atomically claim (assign + in_progress)
+bd close <id>                      # Mark done
+bd close <id> --suggest-next       # Mark done + show newly unblocked
+bd comments <id> add "note"        # Add comment
+bd dep <blocker> --blocks <blocked>  # Add dependency
+```
+
+**Common mistakes:**
+- `bd start` does not exist — use `bd update <id> -s in_progress`
+- `bd progress` does not exist — use `bd update <id> -s in_progress`
+- `bd set-state` is for operational dimensions (patrol, health), NOT workflow status
+
+### Creating an Epic with Tasks
+
+```bash
+# 1. Create the epic
+bd create "Epic title" -t epic -p 1 -d "Description"
+# Output: Created thrum-abc
+
+# 2. Create child tasks under the epic
+bd create "Task 1" -t task --parent thrum-abc -d "Details"
+# Output: Created thrum-abc.1
+bd create "Task 2" -t task --parent thrum-abc -d "Details"
+# Output: Created thrum-abc.2
+bd create "Task 3" -t task --parent thrum-abc -d "Details"
+# Output: Created thrum-abc.3
+
+# 3. Add dependencies BETWEEN tasks (not epic→task)
+# "task 2 depends on task 1" = task 1 blocks task 2
+bd dep thrum-abc.1 --blocks thrum-abc.2
+
+# 4. Verify structure
+bd dep tree thrum-abc
+bd epic status thrum-abc
+```
+
+**Dependency direction:** `bd dep <blocker> --blocks <blocked>` means the
+blocker must close before the blocked task becomes ready. The alternative
+syntax is `bd dep add <blocked> <blocker>` (reversed order).
+````
+
+You can also generate a minimal starter block with `bd onboard`, but the block
+above is more comprehensive and covers the epic/dependency patterns that
+sub-agents most commonly get wrong.
+
 ## See Also
 
 - [Quickstart](./quickstart.md) — Get started with Beads and Thrum in 5 minutes
