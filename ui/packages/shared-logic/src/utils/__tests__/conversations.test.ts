@@ -100,4 +100,57 @@ describe('groupByConversation', () => {
     const replyIds = result[0].replies.map(r => r.message_id);
     expect(replyIds).toEqual(['r2', 'r1', 'r3']);
   });
+
+  // Phase 1: thread_id-based grouping tests
+  it('messages with the same thread_id are grouped into one conversation', () => {
+    const root = makeMessage({ message_id: 'a', created_at: '2024-01-01T10:00:00Z', thread_id: 'thr_1' });
+    const reply = makeMessage({ message_id: 'b', created_at: '2024-01-01T11:00:00Z', reply_to: 'a', thread_id: 'thr_1' });
+
+    const result = groupByConversation([root, reply]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].rootMessage.message_id).toBe('a');
+    expect(result[0].replies).toHaveLength(1);
+    expect(result[0].replies[0].message_id).toBe('b');
+  });
+
+  it('messages with different thread_ids form separate conversations', () => {
+    const a = makeMessage({ message_id: 'a', created_at: '2024-01-01T10:00:00Z', thread_id: 'thr_1' });
+    const b = makeMessage({ message_id: 'b', created_at: '2024-01-01T10:30:00Z', reply_to: 'a', thread_id: 'thr_1' });
+    const c = makeMessage({ message_id: 'c', created_at: '2024-01-01T09:00:00Z', thread_id: 'thr_2' });
+    const d = makeMessage({ message_id: 'd', created_at: '2024-01-01T09:30:00Z', reply_to: 'c', thread_id: 'thr_2' });
+
+    const result = groupByConversation([a, b, c, d]);
+
+    expect(result).toHaveLength(2);
+    // Sorted by last activity: thr_1 is newer (10:30) than thr_2 (09:30)
+    expect(result[0].rootMessage.message_id).toBe('a');
+    expect(result[1].rootMessage.message_id).toBe('c');
+  });
+
+  it('thread_id grouping finds root by absence of reply_to', () => {
+    // All messages in a thread: root has no reply_to
+    const root = makeMessage({ message_id: 'root', created_at: '2024-01-01T10:00:00Z', thread_id: 'thr_1' });
+    const reply1 = makeMessage({ message_id: 'r1', created_at: '2024-01-01T11:00:00Z', reply_to: 'root', thread_id: 'thr_1' });
+    const reply2 = makeMessage({ message_id: 'r2', created_at: '2024-01-01T12:00:00Z', reply_to: 'r1', thread_id: 'thr_1' });
+
+    const result = groupByConversation([reply1, root, reply2]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].rootMessage.message_id).toBe('root');
+    expect(result[0].replies).toHaveLength(2);
+  });
+
+  it('messages with thread_id and messages without are handled independently', () => {
+    const threaded = makeMessage({ message_id: 'a', created_at: '2024-01-01T10:00:00Z', thread_id: 'thr_1' });
+    const threadedReply = makeMessage({ message_id: 'b', created_at: '2024-01-01T11:00:00Z', reply_to: 'a', thread_id: 'thr_1' });
+    const standalone = makeMessage({ message_id: 'c', created_at: '2024-01-01T09:00:00Z' });
+
+    const result = groupByConversation([threaded, threadedReply, standalone]);
+
+    expect(result).toHaveLength(2);
+    // thr_1 is newer (11:00), standalone at 09:00
+    expect(result[0].rootMessage.message_id).toBe('a');
+    expect(result[1].rootMessage.message_id).toBe('c');
+  });
 });
