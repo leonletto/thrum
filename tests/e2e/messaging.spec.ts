@@ -192,11 +192,21 @@ test.describe.serial('Messaging Tests', () => {
     expect(inbox.messages.length).toBeGreaterThan(0);
   });
 
-  test.skip('SC-18: Send with priority levels (REMOVED FEATURE)', async () => {
-    // --priority flag was removed (see J1 regression test)
-  });
+  test('SC-25: CLI broadcast via --broadcast flag', async () => {
+    // Mark implementer inbox read
+    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
 
-  test.skip('SC-25: CLI broadcast command (MISSING FEATURE)', async () => {
-    // TODO: Issue thrum-b0d4 - explicit --broadcast flag not implemented
+    // Act: coordinator sends broadcast using --broadcast flag
+    const sendResult = thrumIn(getTestRoot(), ['send', `Broadcast flag test ${Date.now()}`, '--broadcast', '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    expect(parsed.message_id).toMatch(/^msg_/);
+
+    // Assert: implementer receives the broadcast
+    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
+    const inbox = JSON.parse(implInbox);
+    const hasBroadcast = inbox.messages.some((msg: any) =>
+      msg.body?.content?.includes('Broadcast flag test')
+    );
+    expect(hasBroadcast).toBe(true);
   });
 });
