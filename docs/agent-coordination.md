@@ -37,10 +37,14 @@ MCP tools: `send_message`, `check_messages`, `wait_for_message`, `list_agents`,
 Shell commands for basic messaging. Works everywhere.
 
 ```bash
-thrum send "Starting work on task X" --to @coordinator
+thrum send "Starting work on task X" --to @coord_main
 thrum inbox --unread
 thrum reply <msg-id> "Here's my update"
 ```
+
+> **Note:** Use agent names (e.g., `@coord_main`), not role names (e.g.,
+> `@coordinator`). Sending to a role fans out to ALL agents with that role.
+> Run `thrum team` to see agent names.
 
 ## Common Workflows
 
@@ -56,10 +60,10 @@ executes it.
 thrum quickstart --name planner1 --role planner --module website \
   --intent "Coordinating website development"
 
-# Assign task via message
+# Assign task via message (use agent name, not role)
 thrum send "Please implement build script (task thrum-235d.3). \
   Design spec in dev-docs/plans/. Check beads for details." \
-  --to @implementer
+  --to @impl1
 
 # Check for updates
 thrum inbox
@@ -78,9 +82,9 @@ thrum inbox --unread
 # Acknowledge and work
 thrum reply <msg-id> "Claimed task. Starting implementation."
 
-# Send completion update
+# Send completion update (use agent name from thrum team)
 thrum send "Build script complete. Tests passing. Ready for review." \
-  --to @planner
+  --to @planner1
 ```
 
 ### Peer Collaboration
@@ -179,9 +183,11 @@ When messages are received:
 
 ```text
 MESSAGES_RECEIVED
+---
 FROM: [sender]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]
+---
 ```
 
 When timeout occurs with no messages:
@@ -223,8 +229,8 @@ bd ready
 # 3. Claim in Beads
 bd update bd-123 --status in_progress
 
-# 4. Announce via Thrum
-thrum send "Starting bd-123: JWT authentication" --to @coordinator
+# 4. Announce via Thrum (use agent name, not role)
+thrum send "Starting bd-123: JWT authentication" --to @coord_main
 
 # 5. Work on implementation...
 
@@ -233,14 +239,14 @@ bd create --title="Found validation bug" --type=bug --priority=1
 
 # 7. Update coordinator via Thrum
 thrum send "Progress: JWT working, found validation bug (filed bd-456)" \
-  --to @coordinator
+  --to @coord_main
 
 # 8. Complete in Beads
 bd close bd-123 --reason="JWT auth complete with tests"
 
 # 9. Announce via Thrum
 thrum send "Completed bd-123. Ready for review." \
-  --to @reviewer
+  --to @reviewer1
 
 # 10. Sync both
 bd sync
@@ -277,19 +283,19 @@ bd ready
 # 4. Claim task (Beads)
 bd update <id> --status in_progress
 
-# 5. Announce start (Thrum)
-thrum send "Starting work on <id>: <description>" --to @coordinator
+# 5. Announce start (Thrum) — use agent name from `thrum team`
+thrum send "Starting work on <id>: <description>" --to @<coordinator-name>
 
 # === DURING SESSION ===
 
 # 6. Send periodic status updates
-thrum send "Progress: <status>" --to @coordinator
+thrum send "Progress: <status>" --to @<coordinator-name>
 
 # 7. Handle incoming messages
 thrum inbox --unread
 
 # 8. Coordinate on blockers
-thrum send "Blocked: <description>" --to @coordinator
+thrum send "Blocked: <description>" --to @<coordinator-name>
 
 # === END OF SESSION ===
 
@@ -297,9 +303,9 @@ thrum send "Blocked: <description>" --to @coordinator
 bd close <id> --reason "Complete"
 bd sync
 
-# 10. Announce completion (Thrum)
+# 10. Announce completion (Thrum) — use agent name from `thrum team`
 thrum send "Completed <id>. Tests passing. Ready for review." \
-  --to @reviewer
+  --to @<reviewer-name>
 
 # 11. End session
 thrum session end

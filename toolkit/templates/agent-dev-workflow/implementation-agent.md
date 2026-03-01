@@ -18,6 +18,8 @@ tasks in order, runs quality gates, and pushes completed work.
 - `{{COVERAGE_TARGET}}` — Minimum coverage threshold (e.g., >80%)
 - `{{AGENT_NAME}}` — Unique name for this agent (e.g., `impl-daemon`,
   `impl-cli`)
+- `{{COORDINATOR_NAME}}` — Agent name of the coordinator (from `thrum team`,
+  e.g., `coord_main`). Use for direct messages, not the role name.
 - `{{PLAN_FILE}}` — **Absolute path** to the implementation plan file
 - `{{PROJECT_ROOT}}` — Absolute path to the project root
 
@@ -99,12 +101,17 @@ section.
 cd {{WORKTREE_PATH}}
 thrum quickstart --name {{AGENT_NAME}} --role implementer --module {{BRANCH_NAME}} --intent "Implementing {{EPIC_ID}}"
 thrum inbox --unread
-thrum send "Starting work on {{EPIC_ID}}" --to @coordinator
+thrum send "Starting work on {{EPIC_ID}}" --to @{{COORDINATOR_NAME}}
 ```
 
 **Verify registration succeeded** — you must see your agent name in the output
 of `thrum quickstart`. If it fails, check that the daemon is running with
 `thrum daemon status`.
+
+**Finding agent names:** Run `thrum team` to see all active agents and their
+names. Always send to agent names (e.g., `--to @coord_main`), not role names
+(e.g., `--to @coordinator`). Sending to a role fans out to ALL agents with
+that role.
 
 **Use the message listener** — Spawn a background listener to get async
 notifications. Re-arm it every time it returns (both MESSAGES_RECEIVED and
@@ -113,13 +120,13 @@ NO_MESSAGES_TIMEOUT).
 When your work is complete (Phase 4), send a completion message:
 
 ```bash
-thrum send "Completed {{EPIC_ID}}. All tasks done, tests passing." --to @coordinator
+thrum send "Completed {{EPIC_ID}}. All tasks done, tests passing." --to @{{COORDINATOR_NAME}}
 ```
 
 If you hit a blocker from another agent's work, escalate:
 
 ```bash
-thrum send "Blocked on {{TASK_ID}} by {{BLOCKER_ID}}" --to @coordinator
+thrum send "Blocked on {{TASK_ID}} by {{BLOCKER_ID}}" --to @{{COORDINATOR_NAME}}
 ```
 
 ---
@@ -354,7 +361,7 @@ If a task is blocked:
 thrum send "Blocked on {{TASK_ID}} — waiting for {{BLOCKER_ID}}. Can you prioritize?" --mention @implementer
 
 # Or escalate to the coordinator
-thrum send "Blocked on {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @coordinator
+thrum send "Blocked on {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @{{COORDINATOR_NAME}}
 ```
 
 ### Communicating During Work
@@ -363,10 +370,10 @@ Use Thrum to stay coordinated:
 
 ```bash
 # Report progress on significant milestones
-thrum send "Completed task {{TASK_ID}}, moving to next" --to @coordinator
+thrum send "Completed task {{TASK_ID}}, moving to next" --to @{{COORDINATOR_NAME}}
 
 # Ask for input when you need a decision
-thrum send "Need input: should X use approach A or B? Context: ..." --to @coordinator
+thrum send "Need input: should X use approach A or B? Context: ..." --to @{{COORDINATOR_NAME}}
 
 # If you realize your work affects another agent's files
 thrum send "Heads up: I'm modifying internal/daemon/rpc.go which may overlap with your work" --mention @implementer
@@ -457,7 +464,7 @@ git push origin main
 ### Step 5: Report Completion via Thrum
 
 ```bash
-thrum send "Completed {{EPIC_ID}}. All tasks done, tests passing, merged to main." --to @coordinator
+thrum send "Completed {{EPIC_ID}}. All tasks done, tests passing, merged to main." --to @{{COORDINATOR_NAME}}
 ```
 
 ### Step 6: Clean Up (Only If Instructed)

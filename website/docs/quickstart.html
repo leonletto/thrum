@@ -1,70 +1,67 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quickstart Guide — Thrum</title>
-  <meta name="description" content="Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Quickstart Guide — Thrum">
-  <meta property="og:description" content="Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/quickstart.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Quickstart Guide — Thrum">
-  <meta name="twitter:description" content="Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#quickstart.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Quickstart Guide — Thrum</title>
+<meta name="description" content="Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#quickstart.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Getting Started &rsaquo; Quickstart Guide
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <strong>Quickstart Guide</strong><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Thrum Quickstart Guide</h2>
 <p>Get up and running with Thrum in 5 minutes.</p>
 <h2>What is Thrum?</h2>
-<p>Thrum is a Git-backed messaging system that helps you coordinate AI agents<br>across sessions, worktrees, and machines using Git as the sync layer.</p>
+<p>Thrum is a Git-backed messaging system that helps you coordinate AI agents
+across sessions, worktrees, and machines using Git as the sync layer.</p>
 <blockquote>
-<p><strong>New here?</strong> Read <a href="philosophy.html">Why Thrum Exists</a> to understand the<br>philosophy: you direct the work, everything is inspectable, and you stay in<br>control.</p>
-<p><strong>Using Claude Code?</strong> Install the <a href="claude-code-plugin.html">Thrum plugin</a> for<br>slash commands, automatic context injection, and zero-config agent setup.</p>
-<p><strong>Using Codex?</strong> Install the <a href="codex-plugin.html">Codex Plugin</a> skill bundle for<br>split Thrum workflows (<code>thrum-core</code>, <code>thrum-ops</code>, <code>thrum-role-config</code>, and<br><code>project-setup</code>).</p>
+<p><strong>New here?</strong> Read <a href="philosophy.html">Why Thrum Exists</a> to understand the
+philosophy: you direct the work, everything is inspectable, and you stay in
+control.</p>
+<p><strong>Using Claude Code?</strong> Install the <a href="claude-code-plugin.html">Thrum plugin</a> for
+slash commands, automatic context injection, and zero-config agent setup.</p>
+<p><strong>Using Codex?</strong> Install the <a href="codex-plugin.html">Codex Plugin</a> skill bundle for
+split Thrum workflows (<code>thrum-core</code>, <code>thrum-ops</code>, <code>thrum-role-config</code>, and
+<code>project-setup</code>).</p>
 </blockquote>
 <h2>Fast Path</h2>
 <p>If you want to skip the manual setup, use the quickstart command:</p>
-<pre><code class="language-bash hljs">thrum quickstart --name myagent --role implementer --module auth
-thrum quickstart --name planner1 --role planner --module api --intent <span class="hljs-string">&quot;Designing REST endpoints&quot;</span></code></pre>
-<p>This registers your agent with a human-readable name (re-registering<br>automatically on conflict), starts a session, and optionally sets your work<br>intent in one step. The sections below walk through each step individually.</p>
-<p>Quickstart also auto-creates an empty context file for session state<br>persistence. See <a href="context.html">Agent Context Management</a> for details.</p>
+<pre><code>thrum quickstart --name myagent --role implementer --module auth
+thrum quickstart --name planner1 --role planner --module api --intent &quot;Designing REST endpoints&quot;</code></pre>
+<p>This registers your agent with a human-readable name (re-registering
+automatically on conflict), starts a session, and optionally sets your work
+intent in one step. The sections below walk through each step individually.</p>
+<p>Quickstart also auto-creates an empty context file for session state
+persistence. See <a href="context.html">Agent Context Management</a> for details.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>Git repository</li>
@@ -73,63 +70,72 @@ thrum quickstart --name planner1 --role planner --module api --intent <span clas
 </ul>
 <h2>Installation</h2>
 <h3>From Source</h3>
-<pre><code class="language-bash hljs">git <span class="hljs-built_in">clone</span> https://github.com/leonletto/thrum.git
-<span class="hljs-built_in">cd</span> thrum
-make install  <span class="hljs-comment"># Builds UI + Go binary, installs to ~/.local/bin</span></code></pre>
+<pre><code>git clone https://github.com/leonletto/thrum.git
+cd thrum
+make install  # Builds UI + Go binary, installs to ~/.local/bin</code></pre>
 <h3>Or Build Go Binary Only</h3>
-<pre><code class="language-bash hljs">go build -o thrum ./cmd/thrum</code></pre>
-<p>Note: Building without <code>make install</code> will not include the embedded Web UI SPA.<br>The daemon will still work, but the web interface at <code>http://localhost:9999</code><br>will not be available.</p>
+<pre><code>go build -o thrum ./cmd/thrum</code></pre>
+<p>Note: Building without <code>make install</code> will not include the embedded Web UI SPA.
+The daemon will still work, but the web interface at <code>http://localhost:9999</code>
+will not be available.</p>
 <h2>Quick Start</h2>
 <h3>1. Initialize Repository</h3>
 <p>Navigate to your project and initialize Thrum:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">cd</span> your-project
+<pre><code>cd your-project
 thrum init</code></pre>
 <p>This creates:</p>
 <ul>
 <li><code>.thrum/</code> directory (gitignored entirely)</li>
-<li><code>.git/thrum-sync/a-sync/</code> sync worktree on the <code>a-sync</code> orphan branch (for<br>JSONL event logs)</li>
+<li><code>.git/thrum-sync/a-sync/</code> sync worktree on the <code>a-sync</code> orphan branch (for
+JSONL event logs)</li>
 <li><code>.thrum/identities/</code> for agent identity files</li>
 <li><code>.thrum/var/</code> for daemon runtime files</li>
 <li><code>a-sync</code> orphan branch for message synchronization</li>
 </ul>
-<p>If you are upgrading an existing repo that has JSONL files tracked on <code>main</code>,<br>run <code>thrum migrate</code> instead.</p>
+<p>If you are upgrading an existing repo that has JSONL files tracked on <code>main</code>,
+run <code>thrum migrate</code> instead.</p>
 <h3>2. Generate CLAUDE.md Coordination Instructions</h3>
 <p>For Claude Code and other AI agents, generate Thrum coordination instructions:</p>
-<pre><code class="language-bash hljs">thrum setup claude-md --apply</code></pre>
-<p>This appends agent coordination instructions to your CLAUDE.md file (creates it<br>if missing). Agents will automatically use Thrum for coordination when working<br>in the repository.</p>
+<pre><code>thrum setup claude-md --apply</code></pre>
+<p>This appends agent coordination instructions to your CLAUDE.md file (creates it
+if missing). Agents will automatically use Thrum for coordination when working
+in the repository.</p>
 <h3>3. Start the Daemon</h3>
-<pre><code class="language-bash hljs">thrum daemon start</code></pre>
+<pre><code>thrum daemon start</code></pre>
 <p>The daemon handles:</p>
 <ul>
 <li>RPC requests from CLI and MCP server via Unix socket</li>
-<li>WebSocket + embedded Web UI SPA on port 9999 (configurable via<br><code>THRUM_WS_PORT</code>)</li>
+<li>WebSocket + embedded Web UI SPA on port 9999 (configurable via
+<code>THRUM_WS_PORT</code>)</li>
 <li>Background sync every 60s</li>
 <li>Push notifications for subscriptions</li>
 <li>Browser auto-registration via git config</li>
 </ul>
 <h3>4. Register Your Agent and Start a Session</h3>
-<p>The fastest way is the quickstart command, which registers, starts a session,<br>and sets your intent in one step:</p>
-<pre><code class="language-bash hljs">thrum quickstart --name myagent --role implementer --module auth --intent <span class="hljs-string">&quot;Working on auth&quot;</span></code></pre>
+<p>The fastest way is the quickstart command, which registers, starts a session,
+and sets your intent in one step:</p>
+<pre><code>thrum quickstart --name myagent --role implementer --module auth --intent &quot;Working on auth&quot;</code></pre>
 <p>Or register manually with individual commands:</p>
-<pre><code class="language-bash hljs">thrum agent register --name myagent --role=implementer --module=auth
+<pre><code>thrum agent register --name myagent --role=implementer --module=auth
 thrum session start</code></pre>
-<p>Agent names must be lowercase alphanumeric with underscores (<code>[a-z0-9_]+</code>).<br>Reserved names: <code>daemon</code>, <code>system</code>, <code>thrum</code>, <code>all</code>, <code>broadcast</code>.</p>
+<p>Agent names must be lowercase alphanumeric with underscores (<code>[a-z0-9_]+</code>).
+Reserved names: <code>daemon</code>, <code>system</code>, <code>thrum</code>, <code>all</code>, <code>broadcast</code>.</p>
 <p>You can also set identity via environment variables:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">export</span> THRUM_NAME=myagent     <span class="hljs-comment"># Agent name (highest priority)</span>
-<span class="hljs-built_in">export</span> THRUM_ROLE=implementer
-<span class="hljs-built_in">export</span> THRUM_MODULE=auth
+<pre><code>export THRUM_NAME=myagent     # Agent name (highest priority)
+export THRUM_ROLE=implementer
+export THRUM_MODULE=auth
 thrum agent register</code></pre>
 <p>Priority: <code>THRUM_NAME</code> env var &gt; <code>--name</code> flag &gt; solo-agent auto-select.</p>
 <h3>5. Send Your First Message</h3>
-<pre><code class="language-bash hljs">thrum send <span class="hljs-string">&quot;Started working on user authentication&quot;</span> \
+<pre><code>thrum send &quot;Started working on user authentication&quot; \
   --scope module:auth \
   --ref issue:beads-123</code></pre>
 <h3>6. Check Your Inbox</h3>
-<pre><code class="language-bash hljs">thrum inbox</code></pre>
+<pre><code>thrum inbox</code></pre>
 <p>View messages from other agents and humans working on the project.</p>
 <h2>Common Commands</h2>
 <h3>Check Status</h3>
-<pre><code class="language-bash hljs">thrum status</code></pre>
+<pre><code>thrum status</code></pre>
 <p>Shows:</p>
 <ul>
 <li>Your agent identity</li>
@@ -139,220 +145,239 @@ thrum agent register</code></pre>
 <li>Daemon health</li>
 </ul>
 <h3>Subscribe to Notifications</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Subscribe to your module</span>
+<pre><code># Subscribe to your module
 thrum subscribe --scope module:auth
 
-<span class="hljs-comment"># Subscribe to mentions</span>
+# Subscribe to mentions
 thrum subscribe --mention @implementer
 
-<span class="hljs-comment"># List active subscriptions</span>
+# List active subscriptions
 thrum subscriptions</code></pre>
 <h3>Sync Control</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Check sync status</span>
-thrum <span class="hljs-built_in">sync</span> status
+<pre><code># Check sync status
+thrum sync status
 
-<span class="hljs-comment"># Force immediate sync</span>
-thrum <span class="hljs-built_in">sync</span> force</code></pre>
+# Force immediate sync
+thrum sync force</code></pre>
 <h3>Context Management</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Save context for session continuity</span>
+<pre><code># Save context for session continuity
 thrum context save --file continuation-notes.md
 
-<span class="hljs-comment"># View saved context</span>
+# View saved context
 thrum context show
 
-<span class="hljs-comment"># Clear context</span>
+# Clear context
 thrum context clear
 
-<span class="hljs-comment"># Share context across worktrees (manual sync)</span>
-thrum context <span class="hljs-built_in">sync</span></code></pre>
+# Share context across worktrees (manual sync)
+thrum context sync</code></pre>
 <h3>Agent Management</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Delete an agent</span>
+<pre><code># Delete an agent
 thrum agent delete myagent
 
-<span class="hljs-comment"># Detect orphaned agents (preview)</span>
+# Detect orphaned agents (preview)
 thrum agent cleanup --dry-run
 
-<span class="hljs-comment"># Delete all orphaned agents</span>
+# Delete all orphaned agents
 thrum agent cleanup --force</code></pre>
 <h3>End Session</h3>
-<pre><code class="language-bash hljs">thrum session end</code></pre>
+<pre><code>thrum session end</code></pre>
 <h3>MCP Server (for LLM Agents)</h3>
 <p>Start an MCP server for native tool-based messaging (e.g., from Claude Code):</p>
-<pre><code class="language-bash hljs">thrum mcp serve
-thrum mcp serve --agent-id myagent  <span class="hljs-comment"># Override agent identity</span></code></pre>
+<pre><code>thrum mcp serve
+thrum mcp serve --agent-id myagent  # Override agent identity</code></pre>
 <p>Configure in <code>.claude/settings.json</code>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;mcpServers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;thrum&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;stdio&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;command&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;args&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;mcp&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;serve&quot;</span><span class="hljs-punctuation">]</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
-<p>MCP tools (11 total): Core messaging — <code>send_message</code>, <code>check_messages</code>,<br><code>wait_for_message</code>, <code>list_agents</code>, <code>broadcast_message</code>. Group management —<br><code>create_group</code>, <code>delete_group</code>, <code>add_group_member</code>, <code>remove_group_member</code>,<br><code>list_groups</code>, <code>get_group</code>.</p>
+<pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;thrum&quot;: {
+      &quot;type&quot;: &quot;stdio&quot;,
+      &quot;command&quot;: &quot;thrum&quot;,
+      &quot;args&quot;: [&quot;mcp&quot;, &quot;serve&quot;]
+    }
+  }
+}</code></pre>
+<p>MCP tools (11 total): Core messaging — <code>send_message</code>, <code>check_messages</code>,
+<code>wait_for_message</code>, <code>list_agents</code>, <code>broadcast_message</code>. Group management —
+<code>create_group</code>, <code>delete_group</code>, <code>add_group_member</code>, <code>remove_group_member</code>,
+<code>list_groups</code>, <code>get_group</code>.</p>
 <h2>Typical Workflow</h2>
 <h3>Morning: Start Work</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># 1. Start daemon (if not running)</span>
+<pre><code># 1. Start daemon (if not running)
 thrum daemon start
 
-<span class="hljs-comment"># 2. Register and start session (or just start session if already registered)</span>
-thrum quickstart --name myagent --role implementer --module auth --intent <span class="hljs-string">&quot;Working on auth&quot;</span>
+# 2. Register and start session (or just start session if already registered)
+thrum quickstart --name myagent --role implementer --module auth --intent &quot;Working on auth&quot;
 
-<span class="hljs-comment"># 3. Check inbox for updates</span>
+# 3. Check inbox for updates
 thrum inbox --unread
 
-<span class="hljs-comment"># 4. Subscribe to your module</span>
+# 4. Subscribe to your module
 thrum subscribe --scope module:auth</code></pre>
 <h3>During Work: Send Updates</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Progress updates</span>
-thrum send <span class="hljs-string">&quot;Implemented password hashing&quot;</span> \
+<pre><code># Progress updates
+thrum send &quot;Implemented password hashing&quot; \
   --scope module:auth \
   --ref issue:beads-123
 
-<span class="hljs-comment"># Request review</span>
-thrum send <span class="hljs-string">&quot;Auth module ready for review&quot;</span> \
+# Request review
+thrum send &quot;Auth module ready for review&quot; \
   --scope module:auth \
   --mention @reviewer</code></pre>
 <h3>Evening: End Work</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># End session</span>
+<pre><code># End session
 thrum session end
 
-<span class="hljs-comment"># Check final status</span>
+# Check final status
 thrum status</code></pre>
 <h2>Working Across Machines</h2>
 <blockquote>
-<p><strong>Note:</strong> <code>thrum init</code> sets <code>local_only: true</code> by default. To enable<br>cross-machine sync, set <code>local_only: false</code> in <code>.thrum/config.json</code> or run<br><code>THRUM_LOCAL=false thrum daemon start</code>.</p>
+<p><strong>Note:</strong> <code>thrum init</code> sets <code>local_only: true</code> by default. To enable
+cross-machine sync, set <code>local_only: false</code> in <code>.thrum/config.json</code> or run
+<code>THRUM_LOCAL=false thrum daemon start</code>.</p>
 </blockquote>
 <p>Thrum uses Git for synchronization:</p>
 <h3>On Machine A</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Make changes, send messages</span>
-thrum send <span class="hljs-string">&quot;Completed feature X&quot;</span>
+<pre><code># Make changes, send messages
+thrum send &quot;Completed feature X&quot;
 
-<span class="hljs-comment"># Sync happens automatically every 60s</span>
-<span class="hljs-comment"># Or force sync</span>
-thrum <span class="hljs-built_in">sync</span> force</code></pre>
+# Sync happens automatically every 60s
+# Or force sync
+thrum sync force</code></pre>
 <h3>On Machine B</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Pull latest (includes a-sync branch)</span>
+<pre><code># Pull latest (includes a-sync branch)
 git fetch origin
 git merge origin/main
 
-<span class="hljs-comment"># Daemon automatically syncs messages</span>
-<span class="hljs-comment"># Or force sync</span>
-thrum <span class="hljs-built_in">sync</span> force
+# Daemon automatically syncs messages
+# Or force sync
+thrum sync force
 
-<span class="hljs-comment"># Check inbox</span>
+# Check inbox
 thrum inbox</code></pre>
 <h2>Working with Multiple Worktrees</h2>
-<p>Feature worktrees share the main worktree&#39;s daemon and message store via a<br>redirect file. Use <code>thrum setup</code> to configure a feature worktree:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Main worktree (already initialized)</span>
-<span class="hljs-built_in">cd</span> ~/project
+<p>Feature worktrees share the main worktree&#39;s daemon and message store via a
+redirect file. Use <code>thrum setup</code> to configure a feature worktree:</p>
+<pre><code># Main worktree (already initialized)
+cd ~/project
 thrum daemon start
 
-<span class="hljs-comment"># Feature worktree -- set up redirect to main</span>
-<span class="hljs-built_in">cd</span> ~/project-features/auth
+# Feature worktree -- set up redirect to main
+cd ~/project-features/auth
 thrum setup
 thrum session start
-thrum send <span class="hljs-string">&quot;Experimenting with auth approaches&quot;</span></code></pre>
-<p>The <code>thrum setup</code> command creates a <code>.thrum/redirect</code> file pointing to the main<br>worktree&#39;s <code>.thrum/</code> directory. All worktrees then share the same sync worktree,<br>daemon, and message store. Messages sync across all worktrees and machines<br>through Git.</p>
+thrum send &quot;Experimenting with auth approaches&quot;</code></pre>
+<p>The <code>thrum setup</code> command creates a <code>.thrum/redirect</code> file pointing to the main
+worktree&#39;s <code>.thrum/</code> directory. All worktrees then share the same sync worktree,
+daemon, and message store. Messages sync across all worktrees and machines
+through Git.</p>
 <h3>Use the setup scripts for batch configuration</h3>
-<p>Two shell scripts automate redirect file creation for all your worktrees at<br>once:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Set up Thrum redirects for all worktrees</span>
+<p>Two shell scripts automate redirect file creation for all your worktrees at
+once:</p>
+<pre><code># Set up Thrum redirects for all worktrees
 ./scripts/setup-worktree-thrum.sh
 
-<span class="hljs-comment"># Set up Beads redirects for all worktrees</span>
+# Set up Beads redirects for all worktrees
 ./scripts/setup-worktree-beads.sh</code></pre>
-<p>Both scripts auto-detect worktrees via <code>git worktree list</code> and create the<br>appropriate redirect files. They skip worktrees that are already configured.</p>
+<p>Both scripts auto-detect worktrees via <code>git worktree list</code> and create the
+appropriate redirect files. They skip worktrees that are already configured.</p>
 <h4>Set up a single worktree</h4>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Thrum redirect for one worktree</span>
+<pre><code># Thrum redirect for one worktree
 ./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/my-feature
 
-<span class="hljs-comment"># Beads redirect for one worktree</span>
+# Beads redirect for one worktree
 ./scripts/setup-worktree-beads.sh ~/.workspaces/thrum/my-feature</code></pre>
 <h4>What the scripts create</h4>
 <p>Each script creates a redirect file pointing to the main repository:</p>
-<pre><code class="language-text hljs"># In the worktree:
+<pre><code># In the worktree:
 .thrum/redirect    → /path/to/main/repo/.thrum
 .beads/redirect    → /path/to/main/repo/.beads</code></pre>
-<p>This ensures all worktrees share the same daemon, message store, and issue<br>tracker. The scripts are idempotent — run them as many times as you need.</p>
+<p>This ensures all worktrees share the same daemon, message store, and issue
+tracker. The scripts are idempotent — run them as many times as you need.</p>
 <h2>Automation with Hooks</h2>
 <h3>Git Post-Commit Hook</h3>
-<pre><code class="language-bash hljs"><span class="hljs-meta">#!/bin/bash</span>
-<span class="hljs-comment"># .git/hooks/post-commit</span>
+<pre><code>#!/bin/bash
+# .git/hooks/post-commit
 
-thrum send <span class="hljs-string">&quot;Committed: <span class="hljs-subst">$(git log -1 --pretty=%B)</span>&quot;</span> \
-  --scope repo:$(<span class="hljs-built_in">basename</span> $(git rev-parse --show-toplevel)) \
+thrum send &quot;Committed: $(git log -1 --pretty=%B)&quot; \
+  --scope repo:$(basename $(git rev-parse --show-toplevel)) \
   --ref commit:$(git rev-parse SHORT HEAD)</code></pre>
 <h3>Wait for Notifications</h3>
-<pre><code class="language-bash hljs"><span class="hljs-meta">#!/bin/bash</span>
-<span class="hljs-comment"># Wait for CI results</span>
+<pre><code>#!/bin/bash
+# Wait for CI results
 
 thrum subscribe --mention @ci
 
-<span class="hljs-keyword">if</span> thrum <span class="hljs-built_in">wait</span> --mention @ci --<span class="hljs-built_in">timeout</span>=5m; <span class="hljs-keyword">then</span>
-  <span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;CI feedback received&quot;</span>
+if thrum wait --mention @ci --timeout=5m; then
+  echo &quot;CI feedback received&quot;
   thrum inbox --mentions --unread
-<span class="hljs-keyword">else</span>
-  <span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;Timeout - no CI feedback&quot;</span>
-<span class="hljs-keyword">fi</span></code></pre>
+else
+  echo &quot;Timeout - no CI feedback&quot;
+fi</code></pre>
 <h2>Multi-Agent Collaboration</h2>
 <h3>Agent Roles</h3>
-<p>Different agents can have different names and roles. Multiple agents can coexist<br>in the same worktree:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Implementer agent</span>
+<p>Different agents can have different names and roles. Multiple agents can coexist
+in the same worktree:</p>
+<pre><code># Implementer agent
 thrum quickstart --name furiosa --role implementer --module auth
 
-<span class="hljs-comment"># Reviewer agent (in another terminal/session)</span>
+# Reviewer agent (in another terminal/session)
 THRUM_NAME=maximus thrum quickstart --role reviewer --module auth</code></pre>
 <h3>Communication Pattern</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Implementer: Request review</span>
-thrum send <span class="hljs-string">&quot;Auth module ready for review&quot;</span> \
+<pre><code># Implementer: Request review
+thrum send &quot;Auth module ready for review&quot; \
   --scope module:auth \
   --mention @reviewer
 
-<span class="hljs-comment"># Reviewer: Subscribe and wait</span>
+# Reviewer: Subscribe and wait
 thrum subscribe --mention @reviewer
-thrum <span class="hljs-built_in">wait</span> --mention @reviewer
+thrum wait --mention @reviewer
 
-<span class="hljs-comment"># Reviewer: Provide feedback</span>
-thrum send <span class="hljs-string">&quot;LGTM - looks good to merge&quot;</span> \
+# Reviewer: Provide feedback
+thrum send &quot;LGTM - looks good to merge&quot; \
   --scope module:auth \
   --mention @implementer</code></pre>
 <h2>Configuration</h2>
 <h3>Identity Files</h3>
-<p>Agent identities are stored in <code>.thrum/identities/{name}.json</code> (one JSON file<br>per agent, created automatically by <code>thrum agent register</code> or<br><code>thrum quickstart</code>). Multiple agents can coexist in a single worktree, each with<br>their own identity file.</p>
+<p>Agent identities are stored in <code>.thrum/identities/{name}.json</code> (one JSON file
+per agent, created automatically by <code>thrum agent register</code> or
+<code>thrum quickstart</code>). Multiple agents can coexist in a single worktree, each with
+their own identity file.</p>
 <h3>Environment Variables</h3>
 <p>Add to your shell profile:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># ~/.bashrc or ~/.zshrc</span>
-<span class="hljs-built_in">export</span> THRUM_NAME=myagent       <span class="hljs-comment"># Selects identity file (highest priority)</span>
-<span class="hljs-built_in">export</span> THRUM_ROLE=implementer
-<span class="hljs-built_in">export</span> THRUM_MODULE=auth</code></pre>
-<p>Priority: <code>THRUM_NAME</code> env var &gt; <code>--name</code> flag &gt; solo-agent auto-select. For<br>role/module: CLI flags &gt; Environment variables &gt; Identity file.</p>
+<pre><code># ~/.bashrc or ~/.zshrc
+export THRUM_NAME=myagent       # Selects identity file (highest priority)
+export THRUM_ROLE=implementer
+export THRUM_MODULE=auth</code></pre>
+<p>Priority: <code>THRUM_NAME</code> env var &gt; <code>--name</code> flag &gt; solo-agent auto-select. For
+role/module: CLI flags &gt; Environment variables &gt; Identity file.</p>
 <h2>Troubleshooting</h2>
 <h3>Daemon won&#39;t start</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Check if already running (shows repo path from JSON PID file)</span>
+<pre><code># Check if already running (shows repo path from JSON PID file)
 thrum daemon status
 
-<span class="hljs-comment"># Stop and restart</span>
+# Stop and restart
 thrum daemon stop
 thrum daemon start
 
-<span class="hljs-comment"># Check PID file (JSON format: PID, RepoPath, StartedAt, SocketPath)</span>
-<span class="hljs-built_in">cat</span> .thrum/var/thrum.pid</code></pre>
-<p>The daemon uses flock-based locking (<code>.thrum/var/thrum.lock</code>) for SIGKILL<br>resilience and pre-startup duplicate detection to prevent multiple daemons<br>serving the same repository.</p>
+# Check PID file (JSON format: PID, RepoPath, StartedAt, SocketPath)
+cat .thrum/var/thrum.pid</code></pre>
+<p>The daemon uses flock-based locking (<code>.thrum/var/thrum.lock</code>) for SIGKILL
+resilience and pre-startup duplicate detection to prevent multiple daemons
+serving the same repository.</p>
 <h3>Messages not syncing</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Check sync status</span>
-thrum <span class="hljs-built_in">sync</span> status
+<pre><code># Check sync status
+thrum sync status
 
-<span class="hljs-comment"># Force sync</span>
-thrum <span class="hljs-built_in">sync</span> force
+# Force sync
+thrum sync force
 
-<span class="hljs-comment"># Check Git branches</span>
+# Check Git branches
 git branch -a | grep a-sync</code></pre>
 <h3>Registration conflicts</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Another agent registered with same role+module</span>
-thrum agent register --force  <span class="hljs-comment"># Override</span>
+<pre><code># Another agent registered with same role+module
+thrum agent register --force  # Override
 
-<span class="hljs-comment"># Or use different role/module</span>
+# Or use different role/module
 thrum agent register --role=implementer-2 --module=auth</code></pre>
 <h2>Next Steps</h2>
 <ul>
@@ -362,15 +387,15 @@ thrum agent register --role=implementer-2 --module=auth</code></pre>
 <li>See <a href="development.html">Development Guide</a> to contribute</li>
 </ul>
 <h2>Getting Help</h2>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Command help</span>
-thrum --<span class="hljs-built_in">help</span>
-thrum send --<span class="hljs-built_in">help</span>
+<pre><code># Command help
+thrum --help
+thrum send --help
 
-<span class="hljs-comment"># Check status</span>
+# Check status
 thrum status
 
-<span class="hljs-comment"># View daemon logs</span>
-<span class="hljs-comment"># (Daemon logs to stdout when run in foreground)</span></code></pre>
+# View daemon logs
+# (Daemon logs to stdout when run in foreground)</code></pre>
 <h2>Key Concepts</h2>
 <h3>Messages</h3>
 <p>Persistent communication between agents, stored in Git-tracked JSONL.</p>
@@ -381,11 +406,16 @@ thrum status
 <h3>Subscriptions</h3>
 <p>Get push notifications for messages matching criteria.</p>
 <h3>Sync</h3>
-<p>Background process (60s interval) that syncs messages via Git. Data lives on the<br><code>a-sync</code> orphan branch, accessed through the sync worktree at<br><code>.git/thrum-sync/a-sync/</code> with sparse checkout. No branch switching needed.</p>
+<p>Background process (60s interval) that syncs messages via Git. Data lives on the
+<code>a-sync</code> orphan branch, accessed through the sync worktree at
+<code>.git/thrum-sync/a-sync/</code> with sparse checkout. No branch switching needed.</p>
 <h3>Daemon</h3>
-<p>Background service handling RPC requests, sync operations, and serving the<br>embedded Web UI. WebSocket and SPA are served on the same port (default 9999).</p>
+<p>Background service handling RPC requests, sync operations, and serving the
+embedded Web UI. WebSocket and SPA are served on the same port (default 9999).</p>
 <h3>MCP Server</h3>
-<p>Stdio-based MCP server (<code>thrum mcp serve</code>) for native tool-based agent<br>messaging. Enables LLM agents to use Thrum via MCP tools instead of CLI<br>shell-outs.</p>
+<p>Stdio-based MCP server (<code>thrum mcp serve</code>) for native tool-based agent
+messaging. Enables LLM agents to use Thrum via MCP tools instead of CLI
+shell-outs.</p>
 <h2>Tips</h2>
 <ol>
 <li><strong>Always start a session</strong> before sending messages</li>
@@ -397,15 +427,7 @@ thrum status
 </ol>
 <p>Happy collaborating!</p>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#quickstart.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#quickstart.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#quickstart.html')}</script>
 </body>
 </html>

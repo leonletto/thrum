@@ -90,7 +90,7 @@ bd ready --json
 bd update bd-123 --status in_progress --json
 
 # Announce via Thrum
-thrum send "Starting bd-123: implementing auth" --to @coordinator
+thrum send "Starting bd-123: implementing auth" --to @coord_main
 
 # Do the work...
 
@@ -98,7 +98,7 @@ thrum send "Starting bd-123: implementing auth" --to @coordinator
 bd close bd-123 --reason "Done" --json
 
 # Notify via Thrum
-thrum send "Completed bd-123, ready for review" --to @reviewer
+thrum send "Completed bd-123, ready for review" --to @reviewer1
 ```
 
 ## Requirements

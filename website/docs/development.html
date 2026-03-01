@@ -1,55 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Development Guide — Thrum</title>
-  <meta name="description" content="Setup, testing, building, contributing - complete guide for developing and extending Thrum">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Development Guide — Thrum">
-  <meta property="og:description" content="Setup, testing, building, contributing - complete guide for developing and extending Thrum">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/development.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Development Guide — Thrum">
-  <meta name="twitter:description" content="Setup, testing, building, contributing - complete guide for developing and extending Thrum">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#development.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Development Guide — Thrum</title>
+<meta name="description" content="Setup, testing, building, contributing - complete guide for developing and extending Thrum">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#development.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Development &rsaquo; Development Guide
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <strong>Development Guide</strong> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Thrum Development Guide</h2>
 <p>This guide explains how to set up and work with the Thrum codebase.</p>
 <h2>Prerequisites</h2>
@@ -62,25 +50,25 @@
 <li><strong>markdownlint-cli</strong>: Markdown linting (auto-installed by <code>make lint-md</code>)</li>
 </ul>
 <h2>Quick Start</h2>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Clone repository</span>
-git <span class="hljs-built_in">clone</span> &lt;repo-url&gt;
-<span class="hljs-built_in">cd</span> thrum
+<pre><code># Clone repository
+git clone &lt;repo-url&gt;
+cd thrum
 
-<span class="hljs-comment"># Install dependencies</span>
+# Install dependencies
 go mod download
-<span class="hljs-built_in">cd</span> ui &amp;&amp; pnpm install &amp;&amp; <span class="hljs-built_in">cd</span> ..
+cd ui &amp;&amp; pnpm install &amp;&amp; cd ..
 
-<span class="hljs-comment"># Run Go tests</span>
-make <span class="hljs-built_in">test</span>
+# Run Go tests
+make test
 
-<span class="hljs-comment"># Full build (UI + Go binary) and install to ~/.local/bin</span>
+# Full build (UI + Go binary) and install to ~/.local/bin
 make install
 
-<span class="hljs-comment"># Start daemon and verify</span>
+# Start daemon and verify
 thrum daemon start
 thrum daemon status</code></pre>
 <h2>Project Structure</h2>
-<pre><code class="language-text hljs">thrum/
+<pre><code>thrum/
 ├── cmd/
 │   └── thrum/               # CLI entry point
 │       ├── main.go          # Cobra command tree (all CLI commands)
@@ -140,113 +128,120 @@ thrum daemon status</code></pre>
 <h2>Development Workflow</h2>
 <h3>1. Running Tests</h3>
 <h4>Go Tests</h4>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Run all Go tests</span>
-make <span class="hljs-built_in">test</span>
+<pre><code># Run all Go tests
+make test
 
-<span class="hljs-comment"># Run unit tests only (fast, skips integration)</span>
+# Run unit tests only (fast, skips integration)
 make test-unit
 
-<span class="hljs-comment"># Run integration tests</span>
+# Run integration tests
 make test-integration
 
-<span class="hljs-comment"># Run tests with verbose output</span>
+# Run tests with verbose output
 make test-verbose
 
-<span class="hljs-comment"># Run specific package tests</span>
-go <span class="hljs-built_in">test</span> ./internal/config/... -v
+# Run specific package tests
+go test ./internal/config/... -v
 
-<span class="hljs-comment"># Run with race detector</span>
-go <span class="hljs-built_in">test</span> -race ./...
+# Run with race detector
+go test -race ./...
 
-<span class="hljs-comment"># Run resilience tests (requires build tag)</span>
-go <span class="hljs-built_in">test</span> -tags=resilience ./internal/daemon/...</code></pre>
+# Run resilience tests (requires build tag)
+go test -tags=resilience ./internal/daemon/...</code></pre>
 <p><strong>Resilience Test Suite (v0.4.3):</strong></p>
-<p>The resilience test suite includes 39 tests covering crash recovery, concurrent<br>access, and timeout enforcement. These tests require the <code>-tags=resilience</code><br>build flag:</p>
+<p>The resilience test suite includes 39 tests covering crash recovery, concurrent
+access, and timeout enforcement. These tests require the <code>-tags=resilience</code>
+build flag:</p>
 <ul>
 <li>Crash recovery scenarios (daemon restart, state restoration)</li>
 <li>Concurrent access patterns (multiple goroutines, race conditions)</li>
 <li>Timeout enforcement (I/O timeouts, RPC timeouts, WebSocket timeouts)</li>
 </ul>
 <p>Run the full resilience suite:</p>
-<pre><code class="language-bash hljs">go <span class="hljs-built_in">test</span> -tags=resilience -v ./internal/daemon/resilience_test.go</code></pre>
+<pre><code>go test -tags=resilience -v ./internal/daemon/resilience_test.go</code></pre>
 <h4>UI Tests</h4>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Run all UI tests (from monorepo root)</span>
-<span class="hljs-built_in">cd</span> ui &amp;&amp; pnpm <span class="hljs-built_in">test</span>
+<pre><code># Run all UI tests (from monorepo root)
+cd ui &amp;&amp; pnpm test
 
-<span class="hljs-comment"># Run web-app tests only</span>
-<span class="hljs-built_in">cd</span> ui/packages/web-app &amp;&amp; pnpm <span class="hljs-built_in">test</span>
+# Run web-app tests only
+cd ui/packages/web-app &amp;&amp; pnpm test
 
-<span class="hljs-comment"># Run shared-logic tests only</span>
-<span class="hljs-built_in">cd</span> ui/packages/shared-logic &amp;&amp; pnpm <span class="hljs-built_in">test</span>
+# Run shared-logic tests only
+cd ui/packages/shared-logic &amp;&amp; pnpm test
 
-<span class="hljs-comment"># Watch mode</span>
-<span class="hljs-built_in">cd</span> ui/packages/web-app &amp;&amp; pnpm <span class="hljs-built_in">test</span>:watch
+# Watch mode
+cd ui/packages/web-app &amp;&amp; pnpm test:watch
 
-<span class="hljs-comment"># Coverage report</span>
-<span class="hljs-built_in">cd</span> ui/packages/web-app &amp;&amp; pnpm <span class="hljs-built_in">test</span>:coverage</code></pre>
+# Coverage report
+cd ui/packages/web-app &amp;&amp; pnpm test:coverage</code></pre>
 <h4>E2E Tests (Playwright)</h4>
 <p>E2E tests require the daemon to be running and the binary to be built:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Build and install</span>
+<pre><code># Build and install
 make install
 
-<span class="hljs-comment"># Start daemon</span>
+# Start daemon
 thrum daemon start
 
-<span class="hljs-comment"># Run all E2E tests (serial execution required)</span>
-npx playwright <span class="hljs-built_in">test</span> --workers=1
+# Run all E2E tests (serial execution required)
+npx playwright test --workers=1
 
-<span class="hljs-comment"># Run a specific spec file</span>
-npx playwright <span class="hljs-built_in">test</span> tests/e2e/messaging.spec.ts --workers=1
+# Run a specific spec file
+npx playwright test tests/e2e/messaging.spec.ts --workers=1
 
-<span class="hljs-comment"># View HTML report</span>
+# View HTML report
 npx playwright show-report</code></pre>
-<p>The E2E test suite uses <code>global-setup.ts</code> to start the daemon and register a<br>test agent, and <code>global-teardown.ts</code> to stop the daemon after all tests<br>complete.</p>
+<p>The E2E test suite uses <code>global-setup.ts</code> to start the daemon and register a
+test agent, and <code>global-teardown.ts</code> to stop the daemon after all tests
+complete.</p>
 <h3>2. Code Coverage</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Generate Go coverage report</span>
+<pre><code># Generate Go coverage report
 make test-coverage
-<span class="hljs-comment"># Report output: output/coverage.html</span></code></pre>
+# Report output: output/coverage.html</code></pre>
 <h3>3. Linting</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Run Go linter (auto-installs golangci-lint if missing)</span>
+<pre><code># Run Go linter (auto-installs golangci-lint if missing)
 make lint
 
-<span class="hljs-comment"># Auto-fix Go lint issues</span>
+# Auto-fix Go lint issues
 make lint-fix
 
-<span class="hljs-comment"># Run Markdown linter</span>
+# Run Markdown linter
 make lint-md
 
-<span class="hljs-comment"># Auto-fix Markdown issues</span>
+# Auto-fix Markdown issues
 make lint-md-fix
 
-<span class="hljs-comment"># Run all linters (Go + Markdown)</span>
+# Run all linters (Go + Markdown)
 make lint-all</code></pre>
 <h3>4. Formatting</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Format Go code</span>
-make <span class="hljs-built_in">fmt</span>
+<pre><code># Format Go code
+make fmt
 
-<span class="hljs-comment"># Format Markdown files (requires prettier)</span>
+# Format Markdown files (requires prettier)
 make fmt-md
 
-<span class="hljs-comment"># Format all files (Go + Markdown)</span>
+# Format all files (Go + Markdown)
 make fmt-all</code></pre>
 <h3>5. Building</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Full build: UI + Go binary</span>
+<pre><code># Full build: UI + Go binary
 make build
-<span class="hljs-comment"># Output: ./bin/thrum</span>
+# Output: ./bin/thrum
 
-<span class="hljs-comment"># Build Go binary only (skip UI rebuild, uses existing internal/web/dist/)</span>
+# Build Go binary only (skip UI rebuild, uses existing internal/web/dist/)
 make build-go
 
-<span class="hljs-comment"># Build UI only (pnpm install + build, copies to internal/web/dist/)</span>
+# Build UI only (pnpm install + build, copies to internal/web/dist/)
 make build-ui
 
-<span class="hljs-comment"># Full build + install to ~/.local/bin</span>
+# Full build + install to ~/.local/bin
 make install
 
-<span class="hljs-comment"># Run built binary</span>
+# Run built binary
 ./bin/thrum</code></pre>
-<p>The build embeds the React SPA into the Go binary via <code>//go:embed</code> in<br><code>internal/web/embed.go</code>. The <code>make build-ui</code> step copies the Vite build output<br>into <code>internal/web/dist/</code> so the Go embed directive can include it.</p>
-<p>A <code>.gitkeep</code> file in <code>internal/web/dist/</code> ensures <code>go build</code> and <code>go vet</code> work<br>even when the UI has not been built.</p>
+<p>The build embeds the React SPA into the Go binary via <code>//go:embed</code> in
+<code>internal/web/embed.go</code>. The <code>make build-ui</code> step copies the Vite build output
+into <code>internal/web/dist/</code> so the Go embed directive can include it.</p>
+<p>A <code>.gitkeep</code> file in <code>internal/web/dist/</code> ensures <code>go build</code> and <code>go vet</code> work
+even when the UI has not been built.</p>
 <h2>Makefile Targets</h2>
 <table>
 <thead>
@@ -376,27 +371,27 @@ make install
 <li><code>agent.update</code></li>
 </ul>
 <p>Example:</p>
-<pre><code class="language-go hljs"><span class="hljs-comment">// 1. Define event type in internal/types/events.go</span>
-<span class="hljs-keyword">type</span> MyNewEvent <span class="hljs-keyword">struct</span> {
+<pre><code>// 1. Define event type in internal/types/events.go
+type MyNewEvent struct {
     BaseEvent
-    MyField <span class="hljs-type">string</span> <span class="hljs-string">`json:&quot;my_field&quot;`</span>
+    MyField string `json:&quot;my_field&quot;`
 }
 
-<span class="hljs-comment">// 2. Add handler in internal/projection/projector.go</span>
-<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(p *Projector)</span></span> applyMyNew(data json.RawMessage) <span class="hljs-type">error</span> {
-    <span class="hljs-keyword">var</span> event types.MyNewEvent
-    <span class="hljs-keyword">if</span> err := json.Unmarshal(data, &amp;event); err != <span class="hljs-literal">nil</span> {
-        <span class="hljs-keyword">return</span> fmt.Errorf(<span class="hljs-string">&quot;unmarshal my.new: %w&quot;</span>, err)
+// 2. Add handler in internal/projection/projector.go
+func (p *Projector) applyMyNew(data json.RawMessage) error {
+    var event types.MyNewEvent
+    if err := json.Unmarshal(data, &amp;event); err != nil {
+        return fmt.Errorf(&quot;unmarshal my.new: %w&quot;, err)
     }
 
-    <span class="hljs-comment">// Insert/update database</span>
-    _, err := p.db.Exec(<span class="hljs-string">`...`</span>)
-    <span class="hljs-keyword">return</span> err
+    // Insert/update database
+    _, err := p.db.Exec(`...`)
+    return err
 }
 
-<span class="hljs-comment">// 3. Update switch in Apply()</span>
-<span class="hljs-keyword">case</span> <span class="hljs-string">&quot;my.new&quot;</span>:
-    <span class="hljs-keyword">return</span> p.applyMyNew(event)</code></pre>
+// 3. Update switch in Apply()
+case &quot;my.new&quot;:
+    return p.applyMyNew(event)</code></pre>
 <h3>Modifying Database Schema</h3>
 <ol>
 <li>Update table definitions in <code>internal/schema/schema.go</code></li>
@@ -406,52 +401,52 @@ make install
 <li>Update <code>docs/architecture.md</code></li>
 </ol>
 <h3>Testing with Temporary Databases</h3>
-<pre><code class="language-go hljs"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">TestMyFeature</span><span class="hljs-params">(t *testing.T)</span></span> {
-    <span class="hljs-comment">// Create temp database</span>
+<pre><code>func TestMyFeature(t *testing.T) {
+    // Create temp database
     tmpDir := t.TempDir()
-    dbPath := filepath.Join(tmpDir, <span class="hljs-string">&quot;test.db&quot;</span>)
+    dbPath := filepath.Join(tmpDir, &quot;test.db&quot;)
 
     db, _ := schema.OpenDB(dbPath)
-    <span class="hljs-keyword">defer</span> db.Close()
+    defer db.Close()
 
     schema.InitDB(db)
 
-    <span class="hljs-comment">// Test your feature</span>
-    <span class="hljs-comment">// ...</span>
+    // Test your feature
+    // ...
 }</code></pre>
 <h3>Adding a New RPC Method</h3>
 <ol>
 <li>Create handler file in <code>internal/daemon/rpc/</code>:</li>
 </ol>
-<pre><code class="language-go hljs"><span class="hljs-comment">// internal/daemon/rpc/mymethod.go</span>
-<span class="hljs-keyword">package</span> rpc
+<pre><code>// internal/daemon/rpc/mymethod.go
+package rpc
 
-<span class="hljs-keyword">import</span> (
-    <span class="hljs-string">&quot;context&quot;</span>
-    <span class="hljs-string">&quot;encoding/json&quot;</span>
+import (
+    &quot;context&quot;
+    &quot;encoding/json&quot;
 )
 
-<span class="hljs-keyword">type</span> MyMethodHandler <span class="hljs-keyword">struct</span> {
-    <span class="hljs-comment">// dependencies</span>
+type MyMethodHandler struct {
+    // dependencies
 }
 
-<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewMyMethodHandler</span><span class="hljs-params">(deps...)</span></span> *MyMethodHandler {
-    <span class="hljs-keyword">return</span> &amp;MyMethodHandler{...}
+func NewMyMethodHandler(deps...) *MyMethodHandler {
+    return &amp;MyMethodHandler{...}
 }
 
-<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(h *MyMethodHandler)</span></span> Handle(ctx context.Context, params json.RawMessage) (any, <span class="hljs-type">error</span>) {
-    <span class="hljs-comment">// Parse params</span>
-    <span class="hljs-keyword">var</span> args MyMethodArgs
-    <span class="hljs-keyword">if</span> err := json.Unmarshal(params, &amp;args); err != <span class="hljs-literal">nil</span> {
-        <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, fmt.Errorf(<span class="hljs-string">&quot;invalid params: %w&quot;</span>, err)
+func (h *MyMethodHandler) Handle(ctx context.Context, params json.RawMessage) (any, error) {
+    // Parse params
+    var args MyMethodArgs
+    if err := json.Unmarshal(params, &amp;args); err != nil {
+        return nil, fmt.Errorf(&quot;invalid params: %w&quot;, err)
     }
 
-    <span class="hljs-comment">// Implementation</span>
+    // Implementation
     result := MyMethodResponse{
-        <span class="hljs-comment">// ...</span>
+        // ...
     }
 
-    <span class="hljs-keyword">return</span> result, <span class="hljs-literal">nil</span>
+    return result, nil
 }</code></pre>
 <ol start="2">
 <li><p>Add tests in <code>internal/daemon/rpc/mymethod_test.go</code></p>
@@ -459,8 +454,8 @@ make install
 <li><p>Register in daemon startup (in <code>cmd/thrum/main.go</code>):</p>
 </li>
 </ol>
-<pre><code class="language-go hljs">myMethodHandler := rpc.NewMyMethodHandler()
-server.RegisterHandler(<span class="hljs-string">&quot;mymethod&quot;</span>, myMethodHandler.Handle)</code></pre>
+<pre><code>myMethodHandler := rpc.NewMyMethodHandler()
+server.RegisterHandler(&quot;mymethod&quot;, myMethodHandler.Handle)</code></pre>
 <ol start="4">
 <li>Update documentation in <code>docs/rpc-api.md</code></li>
 </ol>
@@ -473,132 +468,149 @@ server.RegisterHandler(<span class="hljs-string">&quot;mymethod&quot;</span>, my
 <li>Identity file in <code>.thrum/identities/{name}.json</code></li>
 <li>Error if required fields are missing</li>
 </ol>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Select a named agent identity</span>
-<span class="hljs-built_in">export</span> THRUM_NAME=furiosa
+<pre><code># Select a named agent identity
+export THRUM_NAME=furiosa
 
-<span class="hljs-comment"># Or set agent properties directly</span>
-<span class="hljs-built_in">export</span> THRUM_ROLE=implementer
-<span class="hljs-built_in">export</span> THRUM_MODULE=auth
-<span class="hljs-built_in">export</span> THRUM_DISPLAY=<span class="hljs-string">&quot;Auth Agent&quot;</span></code></pre>
-<p>Identity files are stored per-agent at <code>.thrum/identities/{name}.json</code> and<br>contain repo ID, agent config, worktree name, and metadata.</p>
+# Or set agent properties directly
+export THRUM_ROLE=implementer
+export THRUM_MODULE=auth
+export THRUM_DISPLAY=&quot;Auth Agent&quot;</code></pre>
+<p>Identity files are stored per-agent at <code>.thrum/identities/{name}.json</code> and
+contain repo ID, agent config, worktree name, and metadata.</p>
 <h2>Storage Layout</h2>
 <p>Thrum uses a split storage model:</p>
-<pre><code class="language-go hljs">.git/thrum-sync/a-sync/              # Sync worktree (a-sync orphan branch)
+<pre><code>.git/thrum-sync/a-sync/              # Sync worktree (a-sync orphan branch)
 ├── events.jsonl                     # Agent lifecycle events (register, session, update)
 └── messages/                        # Per-agent message files (sharded)
-    ├── furiosa.jsonl                # Messages authored by agent <span class="hljs-string">&quot;furiosa&quot;</span>
-    └── coordinator.jsonl            # Messages authored by agent <span class="hljs-string">&quot;coordinator&quot;</span>
+    ├── furiosa.jsonl                # Messages authored by agent &quot;furiosa&quot;
+    └── coordinator.jsonl            # Messages authored by agent &quot;coordinator&quot;
 
 .thrum/                              # Runtime directory (gitignored)
-├── <span class="hljs-keyword">var</span>/
+├── var/
 │   ├── messages.db                  # SQLite projection cache (rebuilt from JSONL)
-│   ├── thrum.sock                   # Unix socket <span class="hljs-keyword">for</span> daemon RPC
+│   ├── thrum.sock                   # Unix socket for daemon RPC
 │   ├── thrum.pid                    # JSON PID file with repo-affinity metadata
-│   └── ws.port                      # WebSocket port file (<span class="hljs-keyword">default</span> <span class="hljs-number">9999</span>)
+│   └── ws.port                      # WebSocket port file (default 9999)
 ├── identities/                      # Per-agent identity files
 │   └── {name}.json                  # Agent identity (repo_id, role, module, etc.)
 └── redirect                         # Points to main worktree .thrum/ (feature worktrees only)</code></pre>
 <h3>Inspecting JSONL Files</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># View all events (agent lifecycle)</span>
-<span class="hljs-built_in">cat</span> .git/thrum-sync/a-sync/events.jsonl | jq .
+<pre><code># View all events (agent lifecycle)
+cat .git/thrum-sync/a-sync/events.jsonl | jq .
 
-<span class="hljs-comment"># View messages for a specific agent</span>
-<span class="hljs-built_in">cat</span> .git/thrum-sync/a-sync/messages/furiosa.jsonl | jq .
+# View messages for a specific agent
+cat .git/thrum-sync/a-sync/messages/furiosa.jsonl | jq .
 
-<span class="hljs-comment"># Filter by event type</span>
-<span class="hljs-built_in">cat</span> .git/thrum-sync/a-sync/events.jsonl | jq <span class="hljs-string">&#x27;select(.type == &quot;agent.register&quot;)&#x27;</span>
+# Filter by event type
+cat .git/thrum-sync/a-sync/events.jsonl | jq &#39;select(.type == &quot;agent.register&quot;)&#39;
 
-<span class="hljs-comment"># Count events</span>
-<span class="hljs-built_in">wc</span> -l .git/thrum-sync/a-sync/events.jsonl</code></pre>
+# Count events
+wc -l .git/thrum-sync/a-sync/events.jsonl</code></pre>
 <h3>Inspecting the SQLite Database</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Open database</span>
+<pre><code># Open database
 sqlite3 .thrum/var/messages.db
 
-<span class="hljs-comment"># List tables</span>
+# List tables
 .tables
 
-<span class="hljs-comment"># Query messages</span>
+# Query messages
 SELECT * FROM messages LIMIT 10;
 
-<span class="hljs-comment"># Check schema version</span>
+# Check schema version
 SELECT * FROM schema_version;</code></pre>
 <h2>Daemon Development</h2>
 <h3>Daemon Architecture</h3>
-<p>The daemon runs as a background service handling client connections via Unix<br>socket, with a WebSocket server and embedded SPA all on a single port (default<br>9999).</p>
+<p>The daemon runs as a background service handling client connections via Unix
+socket, with a WebSocket server and embedded SPA all on a single port (default
+9999).</p>
 <p><strong>Key components:</strong></p>
 <ul>
 <li><strong>Server</strong> (<code>internal/daemon/server.go</code>): JSON-RPC 2.0 over Unix socket</li>
-<li><strong>Lifecycle</strong> (<code>internal/daemon/lifecycle.go</code>): Signal handling, defer cleanup<br>safety net, flock-based process detection</li>
-<li><strong>PID file</strong> (<code>internal/daemon/pidfile.go</code>): JSON format with <code>PIDInfo</code> struct<br>(PID, repo path, socket path, started at). Backward-compatible reader falls<br>back to plain integer format.</li>
-<li><strong>File lock</strong> (<code>internal/daemon/flock.go</code>, <code>flock_unix.go</code>): OS-level<br><code>flock()</code> on socket file. Auto-released on process death (even SIGKILL). No-op<br>stubs for non-Unix platforms.</li>
-<li><strong>State</strong> (<code>internal/daemon/state/</code>): Manages JSONL writes (sharded per-agent)<br>and SQLite projection. <code>NewState(thrumDir, syncDir, repoID)</code> separates runtime<br>state from sync data.</li>
-<li><strong>RPC handlers</strong> (<code>internal/daemon/rpc/</code>): Method implementations for agent,<br>session, message, thread, health, sync, subscribe, and user operations</li>
-<li><strong>Client</strong> (<code>internal/daemon/client.go</code>): Connection library for CLI-to-daemon<br>communication</li>
-<li><strong>WebSocket</strong> (<code>internal/websocket/</code>): Server, connection registry, event<br>streaming</li>
-<li><strong>Web</strong> (<code>internal/web/embed.go</code>): Embedded SPA served at <code>/</code> on the same port<br>as WebSocket (<code>/ws</code>)</li>
+<li><strong>Lifecycle</strong> (<code>internal/daemon/lifecycle.go</code>): Signal handling, defer cleanup
+safety net, flock-based process detection</li>
+<li><strong>PID file</strong> (<code>internal/daemon/pidfile.go</code>): JSON format with <code>PIDInfo</code> struct
+(PID, repo path, socket path, started at). Backward-compatible reader falls
+back to plain integer format.</li>
+<li><strong>File lock</strong> (<code>internal/daemon/flock.go</code>, <code>flock_unix.go</code>): OS-level
+<code>flock()</code> on socket file. Auto-released on process death (even SIGKILL). No-op
+stubs for non-Unix platforms.</li>
+<li><strong>State</strong> (<code>internal/daemon/state/</code>): Manages JSONL writes (sharded per-agent)
+and SQLite projection. <code>NewState(thrumDir, syncDir, repoID)</code> separates runtime
+state from sync data.</li>
+<li><strong>RPC handlers</strong> (<code>internal/daemon/rpc/</code>): Method implementations for agent,
+session, message, thread, health, sync, subscribe, and user operations</li>
+<li><strong>Client</strong> (<code>internal/daemon/client.go</code>): Connection library for CLI-to-daemon
+communication</li>
+<li><strong>WebSocket</strong> (<code>internal/websocket/</code>): Server, connection registry, event
+streaming</li>
+<li><strong>Web</strong> (<code>internal/web/embed.go</code>): Embedded SPA served at <code>/</code> on the same port
+as WebSocket (<code>/ws</code>)</li>
 </ul>
 <p>See <code>docs/daemon.md</code> for detailed architecture.</p>
 <h3>Running the Daemon</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Start daemon (background, auto-creates sync worktree)</span>
+<pre><code># Start daemon (background, auto-creates sync worktree)
 thrum daemon start
 
-<span class="hljs-comment"># Start in foreground (for debugging)</span>
+# Start in foreground (for debugging)
 thrum daemon start --foreground
 
-<span class="hljs-comment"># Check status (shows PID, repo path, WebSocket port)</span>
+# Check status (shows PID, repo path, WebSocket port)
 thrum daemon status
 
-<span class="hljs-comment"># Stop daemon</span>
+# Stop daemon
 thrum daemon stop
 
-<span class="hljs-comment"># Auto-start (happens automatically via any CLI command)</span>
-thrum send <span class="hljs-string">&quot;Hello&quot;</span> --to @coordinator</code></pre>
+# Auto-start (happens automatically via any CLI command)
+thrum send &quot;Hello&quot; --to @coordinator</code></pre>
 <h3>Testing Daemon Code</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Run daemon tests</span>
-go <span class="hljs-built_in">test</span> ./internal/daemon/...
+<pre><code># Run daemon tests
+go test ./internal/daemon/...
 
-<span class="hljs-comment"># With coverage</span>
-go <span class="hljs-built_in">test</span> -cover ./internal/daemon/...
+# With coverage
+go test -cover ./internal/daemon/...
 
-<span class="hljs-comment"># RPC handler tests</span>
-go <span class="hljs-built_in">test</span> ./internal/daemon/rpc/... -v
+# RPC handler tests
+go test ./internal/daemon/rpc/... -v
 
-<span class="hljs-comment"># State tests</span>
-go <span class="hljs-built_in">test</span> ./internal/daemon/state/... -v</code></pre>
-<p>Use the <code>StartTestDaemon()</code> helper in <code>internal/daemon/testutil_test.go</code> for<br>integration tests. It provides automatic <code>t.Cleanup()</code> with force-kill to<br>prevent test orphan processes on timeout or panic.</p>
+# State tests
+go test ./internal/daemon/state/... -v</code></pre>
+<p>Use the <code>StartTestDaemon()</code> helper in <code>internal/daemon/testutil_test.go</code> for
+integration tests. It provides automatic <code>t.Cleanup()</code> with force-kill to
+prevent test orphan processes on timeout or panic.</p>
 <h3>Debugging Daemon</h3>
 <p><strong>Check if daemon is running:</strong></p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Check PID file (JSON format)</span>
-<span class="hljs-built_in">cat</span> .thrum/var/thrum.pid | jq .
+<pre><code># Check PID file (JSON format)
+cat .thrum/var/thrum.pid | jq .
 
-<span class="hljs-comment"># Check process</span>
+# Check process
 ps aux | grep thrum
 
-<span class="hljs-comment"># Check socket</span>
-<span class="hljs-built_in">ls</span> -l .thrum/var/thrum.sock</code></pre>
+# Check socket
+ls -l .thrum/var/thrum.sock</code></pre>
 <p><strong>Test RPC calls manually:</strong></p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Using netcat</span>
-<span class="hljs-built_in">echo</span> <span class="hljs-string">&#x27;{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;health&quot;,&quot;id&quot;:1}&#x27;</span> | nc -U .thrum/var/thrum.sock</code></pre>
+<pre><code># Using netcat
+echo &#39;{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;health&quot;,&quot;id&quot;:1}&#39; | nc -U .thrum/var/thrum.sock</code></pre>
 <p><strong>View daemon logs:</strong></p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Run daemon in foreground for debugging</span>
+<pre><code># Run daemon in foreground for debugging
 thrum daemon start --foreground
-<span class="hljs-comment"># Logs appear in stdout/stderr</span></code></pre>
+# Logs appear in stdout/stderr</code></pre>
 <p><strong>Clean restart:</strong></p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Stop daemon</span>
+<pre><code># Stop daemon
 thrum daemon stop
 
-<span class="hljs-comment"># Remove stale files if needed</span>
-<span class="hljs-built_in">rm</span> .thrum/var/thrum.sock
-<span class="hljs-built_in">rm</span> .thrum/var/thrum.pid
+# Remove stale files if needed
+rm .thrum/var/thrum.sock
+rm .thrum/var/thrum.pid
 
-<span class="hljs-comment"># Restart</span>
+# Restart
 thrum daemon start</code></pre>
 <h3>Common Daemon Issues</h3>
 <p><strong>Socket path too long:</strong></p>
 <ul>
 <li>Unix sockets limited to ~104 characters</li>
 <li>Use shorter temp directory paths in tests</li>
-<li>Example: <code>filepath.Join(tmpDir, &quot;d.sock&quot;)</code> not<br><code>filepath.Join(tmpDir, &quot;.thrum&quot;, &quot;var&quot;, &quot;thrum.sock&quot;)</code></li>
+<li>Example: <code>filepath.Join(tmpDir, &quot;d.sock&quot;)</code> not
+<code>filepath.Join(tmpDir, &quot;.thrum&quot;, &quot;var&quot;, &quot;thrum.sock&quot;)</code></li>
 </ul>
 <p><strong>Permission denied:</strong></p>
 <ul>
@@ -619,7 +631,9 @@ thrum daemon start</code></pre>
 <li>Verify socket file exists</li>
 </ul>
 <h2>MCP Server Development</h2>
-<p>The MCP server (<code>thrum mcp serve</code>) provides native MCP tools for Claude Code<br>agents instead of shelling out to the CLI. It uses stdio transport (JSON-RPC<br>over stdin/stdout).</p>
+<p>The MCP server (<code>thrum mcp serve</code>) provides native MCP tools for Claude Code
+agents instead of shelling out to the CLI. It uses stdio transport (JSON-RPC
+over stdin/stdout).</p>
 <p><strong>Key files:</strong></p>
 <ul>
 <li><code>internal/mcp/server.go</code>: Server skeleton and tool registration</li>
@@ -659,87 +673,95 @@ thrum daemon start</code></pre>
 </tbody></table>
 <p><strong>Architecture:</strong></p>
 <ul>
-<li>Per-call <code>cli.Client</code> creation (thread-safe; Unix socket connections are<br>cheap)</li>
+<li>Per-call <code>cli.Client</code> creation (thread-safe; Unix socket connections are
+cheap)</li>
 <li>WebSocket waiter with atomic incrementing JSON-RPC IDs</li>
 <li>Identity resolved at startup from <code>.thrum/identities/{name}.json</code></li>
 <li><code>THRUM_NAME</code> env var or <code>--agent-id</code> flag for multi-agent worktrees</li>
 </ul>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Start MCP server</span>
+<pre><code># Start MCP server
 thrum mcp serve
 
-<span class="hljs-comment"># Override agent identity</span>
+# Override agent identity
 thrum mcp serve --agent-id furiosa</code></pre>
 <h2>Sync Engine</h2>
-<p>The sync engine runs in the daemon, performing fetch/merge/push every 60 seconds<br>(configurable via <code>--sync-interval</code>).</p>
+<p>The sync engine runs in the daemon, performing fetch/merge/push every 60 seconds
+(configurable via <code>--sync-interval</code>).</p>
 <p><strong>Key files:</strong></p>
 <ul>
 <li><code>internal/sync/loop.go</code>: <code>SyncLoop</code> with periodic and manual sync triggers</li>
 <li><code>internal/sync/merge.go</code>: JSONL merge with deduplication (ULID event_id)</li>
 <li><code>internal/sync/push.go</code>: Git push to remote</li>
-<li><code>internal/sync/branch.go</code>: Safe orphan branch creation via <code>git commit-tree</code> +<br><code>git update-ref</code>, sync worktree with sparse checkout, 4-level health checks</li>
+<li><code>internal/sync/branch.go</code>: Safe orphan branch creation via <code>git commit-tree</code> +
+<code>git update-ref</code>, sync worktree with sparse checkout, 4-level health checks</li>
 <li><code>internal/sync/dedup.go</code>: Event deduplication by event_id</li>
 </ul>
-<p><strong>Sync worktree location:</strong> <code>.git/thrum-sync/a-sync/</code> (uses <code>git-common-dir</code> for<br>nested worktree support).</p>
-<p><strong>Sparse checkout patterns:</strong> <code>/events.jsonl</code>, <code>/messages/</code>, <code>/messages.jsonl</code><br>(migration compat).</p>
+<p><strong>Sync worktree location:</strong> <code>.git/thrum-sync/a-sync/</code> (uses <code>git-common-dir</code> for
+nested worktree support).</p>
+<p><strong>Sparse checkout patterns:</strong> <code>/events.jsonl</code>, <code>/messages/</code>, <code>/messages.jsonl</code>
+(migration compat).</p>
 <h2>Worktree Setup</h2>
-<p>Thrum supports multiple git worktrees sharing a single daemon and data store via<br>the <code>.thrum/redirect</code> mechanism. Feature worktrees point to the main worktree&#39;s<br><code>.thrum/</code> directory so all worktrees share one daemon, one SQLite database, and<br>one set of JSONL files.</p>
+<p>Thrum supports multiple git worktrees sharing a single daemon and data store via
+the <code>.thrum/redirect</code> mechanism. Feature worktrees point to the main worktree&#39;s
+<code>.thrum/</code> directory so all worktrees share one daemon, one SQLite database, and
+one set of JSONL files.</p>
 <h3>Setting Up a Worktree</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Option 1: Use the thrum setup command</span>
+<pre><code># Option 1: Use the thrum setup command
 thrum setup /path/to/worktree
 
-<span class="hljs-comment"># Option 2: Use the setup script</span>
+# Option 2: Use the setup script
 ./scripts/setup-worktree-thrum.sh /path/to/worktree
 
-<span class="hljs-comment"># Option 3: Manual setup</span>
-<span class="hljs-built_in">mkdir</span> -p /path/to/worktree/.thrum/identities
-<span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;/path/to/main/repo/.thrum&quot;</span> &gt; /path/to/worktree/.thrum/redirect</code></pre>
+# Option 3: Manual setup
+mkdir -p /path/to/worktree/.thrum/identities
+echo &quot;/path/to/main/repo/.thrum&quot; &gt; /path/to/worktree/.thrum/redirect</code></pre>
 <h3>Beads Issue Tracking for Worktrees</h3>
 <p>All worktrees should share the same beads issue database:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Use the setup script</span>
+<pre><code># Use the setup script
 ./scripts/setup-worktree-beads.sh /path/to/worktree
 
-<span class="hljs-comment"># Or manual setup</span>
-<span class="hljs-built_in">mkdir</span> -p /path/to/worktree/.beads
-<span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;/path/to/main/repo/.beads&quot;</span> &gt; /path/to/worktree/.beads/redirect
+# Or manual setup
+mkdir -p /path/to/worktree/.beads
+echo &quot;/path/to/main/repo/.beads&quot; &gt; /path/to/worktree/.beads/redirect
 
-<span class="hljs-comment"># Verify</span>
-<span class="hljs-built_in">cd</span> /path/to/worktree &amp;&amp; bd <span class="hljs-built_in">where</span></code></pre>
+# Verify
+cd /path/to/worktree &amp;&amp; bd where</code></pre>
 <h2>Testing Best Practices</h2>
 <h3>1. Use Table-Driven Tests</h3>
-<pre><code class="language-go hljs">tests := []<span class="hljs-keyword">struct</span> {
-    name <span class="hljs-type">string</span>
-    input <span class="hljs-type">string</span>
-    want <span class="hljs-type">string</span>
+<pre><code>tests := []struct {
+    name string
+    input string
+    want string
 }{
-    {<span class="hljs-string">&quot;case 1&quot;</span>, <span class="hljs-string">&quot;input1&quot;</span>, <span class="hljs-string">&quot;expected1&quot;</span>},
-    {<span class="hljs-string">&quot;case 2&quot;</span>, <span class="hljs-string">&quot;input2&quot;</span>, <span class="hljs-string">&quot;expected2&quot;</span>},
+    {&quot;case 1&quot;, &quot;input1&quot;, &quot;expected1&quot;},
+    {&quot;case 2&quot;, &quot;input2&quot;, &quot;expected2&quot;},
 }
 
-<span class="hljs-keyword">for</span> _, tt := <span class="hljs-keyword">range</span> tests {
-    t.Run(tt.name, <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(t *testing.T)</span></span> {
+for _, tt := range tests {
+    t.Run(tt.name, func(t *testing.T) {
         got := MyFunction(tt.input)
-        <span class="hljs-keyword">if</span> got != tt.want {
-            t.Errorf(<span class="hljs-string">&quot;got %v, want %v&quot;</span>, got, tt.want)
+        if got != tt.want {
+            t.Errorf(&quot;got %v, want %v&quot;, got, tt.want)
         }
     })
 }</code></pre>
 <h3>2. Clean Up Resources</h3>
-<pre><code class="language-go hljs"><span class="hljs-comment">// Use t.TempDir() for automatic cleanup</span>
+<pre><code>// Use t.TempDir() for automatic cleanup
 tmpDir := t.TempDir()
 
-<span class="hljs-comment">// Or defer cleanup</span>
+// Or defer cleanup
 db, _ := schema.OpenDB(dbPath)
-<span class="hljs-keyword">defer</span> db.Close()</code></pre>
+defer db.Close()</code></pre>
 <h3>3. Test Error Cases</h3>
-<pre><code class="language-go hljs"><span class="hljs-comment">// Test both happy path and error cases</span>
+<pre><code>// Test both happy path and error cases
 _, err := MyFunction(invalidInput)
-<span class="hljs-keyword">if</span> err == <span class="hljs-literal">nil</span> {
-    t.Error(<span class="hljs-string">&quot;expected error, got nil&quot;</span>)
+if err == nil {
+    t.Error(&quot;expected error, got nil&quot;)
 }</code></pre>
 <h3>4. Use StartTestDaemon for Integration Tests</h3>
-<pre><code class="language-go hljs"><span class="hljs-comment">// Automatically cleans up on test completion (even on panic/timeout)</span>
+<pre><code>// Automatically cleans up on test completion (even on panic/timeout)
 daemon := StartTestDaemon(t, tmpDir)
-<span class="hljs-keyword">defer</span> daemon.Stop()</code></pre>
+defer daemon.Stop()</code></pre>
 <h2>Code Style</h2>
 <ul>
 <li><strong>Formatting</strong>: Use <code>go fmt</code> (or <code>gofmt -s</code>)</li>
@@ -749,44 +771,47 @@ daemon := StartTestDaemon(t, tmpDir)
 <li><strong>Variable names</strong>: Short, descriptive (e.g., <code>db</code>, <code>cfg</code>, <code>msg</code>)</li>
 </ul>
 <h2>Git Workflow</h2>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Create feature branch</span>
+<pre><code># Create feature branch
 git checkout -b feature/my-feature
 
-<span class="hljs-comment"># Make changes and test</span>
-go <span class="hljs-built_in">test</span> ./...
+# Make changes and test
+go test ./...
 
-<span class="hljs-comment"># Commit</span>
+# Commit
 git add .
-git commit -m <span class="hljs-string">&quot;Add my feature&quot;</span>
+git commit -m &quot;Add my feature&quot;
 
-<span class="hljs-comment"># Push</span>
+# Push
 git push origin feature/my-feature
 
-<span class="hljs-comment"># Create PR</span>
-gh <span class="hljs-built_in">pr</span> create</code></pre>
+# Create PR
+gh pr create</code></pre>
 <h2>Troubleshooting</h2>
 <h3>&quot;no such table&quot; error</h3>
-<p>The SQLite projection database is a rebuild-able cache. Delete it and restart<br>the daemon to rebuild from JSONL:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">rm</span> .thrum/var/messages.db
+<p>The SQLite projection database is a rebuild-able cache. Delete it and restart
+the daemon to rebuild from JSONL:</p>
+<pre><code>rm .thrum/var/messages.db
 thrum daemon stop
 thrum daemon start</code></pre>
 <h3>&quot;cannot open file&quot; error</h3>
 <p>Check file permissions and directory existence:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">ls</span> -la .thrum/
-<span class="hljs-built_in">ls</span> -la .thrum/var/</code></pre>
+<pre><code>ls -la .thrum/
+ls -la .thrum/var/</code></pre>
 <h3>Tests fail with &quot;database is locked&quot;</h3>
 <p>Close any open SQLite connections or delete WAL files:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">rm</span> .thrum/var/*.db-wal
-<span class="hljs-built_in">rm</span> .thrum/var/*.db-shm</code></pre>
+<pre><code>rm .thrum/var/*.db-wal
+rm .thrum/var/*.db-shm</code></pre>
 <h3>Daemon won&#39;t start (duplicate detection)</h3>
-<p>The daemon validates no existing instance serves the same repository before<br>starting. Check for a stale PID file:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">cat</span> .thrum/var/thrum.pid | jq .
-<span class="hljs-comment"># If the process is dead, remove the PID file</span>
-<span class="hljs-built_in">rm</span> .thrum/var/thrum.pid
+<p>The daemon validates no existing instance serves the same repository before
+starting. Check for a stale PID file:</p>
+<pre><code>cat .thrum/var/thrum.pid | jq .
+# If the process is dead, remove the PID file
+rm .thrum/var/thrum.pid
 thrum daemon start</code></pre>
 <h3><code>go build</code> fails with embed error</h3>
-<p>If the UI has not been built, <code>internal/web/dist/</code> needs at least a <code>.gitkeep</code><br>file:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">touch</span> internal/web/dist/.gitkeep</code></pre>
+<p>If the UI has not been built, <code>internal/web/dist/</code> needs at least a <code>.gitkeep</code>
+file:</p>
+<pre><code>touch internal/web/dist/.gitkeep</code></pre>
 <p>Or build the UI first: <code>make build-ui</code></p>
 <h2>Key Dependencies</h2>
 <table>
@@ -826,20 +851,13 @@ thrum daemon start</code></pre>
 <li><strong>Quickstart Guide</strong>: <code>docs/quickstart.md</code></li>
 <li><strong>CLI Reference</strong>: <code>docs/cli.md</code></li>
 <li><strong>Identity System</strong>: <code>docs/identity.md</code></li>
-<li><strong>Workflow Templates</strong>: <code>docs/workflow-templates.md</code> (structured feature<br>development with AI agents)</li>
+<li><strong>Workflow Templates</strong>: <code>docs/workflow-templates.md</code> (structured feature
+development with AI agents)</li>
 <li><strong>Agent Reference</strong>: <code>llms.txt</code> (concise) and <code>llms-full.txt</code> (detailed)</li>
 </ul>
 <pre><code></code></pre>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#development.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#development.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#development.html')}</script>
 </body>
 </html>

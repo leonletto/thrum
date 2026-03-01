@@ -1,65 +1,62 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MCP Server — Thrum</title>
-  <meta name="description" content="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="MCP Server — Thrum">
-  <meta property="og:description" content="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/mcp-server.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="MCP Server — Thrum">
-  <meta name="twitter:description" content="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#mcp-server.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>MCP Server — Thrum</title>
+<meta name="description" content="Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#mcp-server.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Reference &rsaquo; MCP Server
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <strong>MCP Server</strong><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>MCP Server</h2>
 <blockquote>
-<p><strong>See also:</strong> <a href="daemon.html">Daemon Architecture</a> for the underlying daemon the<br>MCP server connects to, <a href="identity.html">Identity</a> for agent identity resolution.</p>
+<p><strong>See also:</strong> <a href="daemon.html">Daemon Architecture</a> for the underlying daemon the
+MCP server connects to, <a href="identity.html">Identity</a> for agent identity resolution.</p>
 </blockquote>
 <h2>Overview</h2>
-<p>The MCP (Model Context Protocol) server enables Claude Code agents to send and<br>receive messages using native MCP tools instead of shelling out to CLI commands.<br>It runs as a long-lived child process (<code>thrum mcp serve</code>) communicating over<br>stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for<br>message operations and via WebSocket for real-time push notifications.</p>
-<p>The server provides 11 MCP tools: 5 for core messaging operations and 6 for<br>group management.</p>
-<p>The primary motivation is eliminating polling overhead. Without MCP, agents must<br>periodically call <code>thrum inbox</code> (burning tokens and context). With MCP, a cheap<br>background sub-agent blocks on <code>wait_for_message</code> and wakes the main agent<br>instantly when a message arrives.</p>
+<p>The MCP (Model Context Protocol) server enables Claude Code agents to send and
+receive messages using native MCP tools instead of shelling out to CLI commands.
+It runs as a long-lived child process (<code>thrum mcp serve</code>) communicating over
+stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for
+message operations and via WebSocket for real-time push notifications.</p>
+<p>The server provides 11 MCP tools: 5 for core messaging operations and 6 for
+group management.</p>
+<p>The primary motivation is eliminating polling overhead. Without MCP, agents must
+periodically call <code>thrum inbox</code> (burning tokens and context). With MCP, a cheap
+background sub-agent blocks on <code>wait_for_message</code> and wakes the main agent
+instantly when a message arrives.</p>
 <h2>Architecture</h2>
-<pre><code class="language-text hljs">Claude Code (Opus/Sonnet)
+<pre><code>Claude Code (Opus/Sonnet)
   |
   +-- long-lived child: thrum mcp serve (stdio JSON-RPC)
   |     |
@@ -82,7 +79,7 @@
   +-- background sub-agent: message-listener (Haiku)
         +-- calls wait_for_message(timeout=300) -&gt; blocks until message or timeout</code></pre>
 <h3>Package Structure</h3>
-<pre><code class="language-text hljs">internal/mcp/
+<pre><code>internal/mcp/
   server.go    -- NewServer(), tool registration, Run(), InitWaiter()
   tools.go     -- send_message, check_messages, list_agents, broadcast_message handlers
   waiter.go    -- WebSocket client, notification routing, wait_for_message handler
@@ -94,12 +91,16 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <li>Resolve repo path (respects <code>--repo</code> flag, defaults to <code>.</code>)</li>
 <li>If <code>--agent-id</code> is provided, set <code>THRUM_NAME</code> env var before config load</li>
 <li>Verify daemon is running (connect to Unix socket, call <code>health</code> RPC)</li>
-<li>Load agent identity from <code>.thrum/identities/{name}.json</code> via<br><code>config.LoadWithPath</code></li>
+<li>Load agent identity from <code>.thrum/identities/{name}.json</code> via
+<code>config.LoadWithPath</code></li>
 <li>Resolve daemon socket path (follows <code>.thrum/redirect</code> in feature worktrees)</li>
-<li>Generate composite agent ID via<br><code>identity.GenerateAgentID(repoID, role, module, name)</code></li>
-<li>Create MCP server with the official Go SDK<br>(<code>github.com/modelcontextprotocol/go-sdk/mcp</code>)</li>
+<li>Generate composite agent ID via
+<code>identity.GenerateAgentID(repoID, role, module, name)</code></li>
+<li>Create MCP server with the official Go SDK
+(<code>github.com/modelcontextprotocol/go-sdk/mcp</code>)</li>
 <li>Register all 11 tool handlers (5 core messaging + 6 group management)</li>
-<li>Initialize WebSocket waiter (best-effort -- reads port from<br><code>.thrum/var/ws.port</code>)<ul>
+<li>Initialize WebSocket waiter (best-effort -- reads port from
+<code>.thrum/var/ws.port</code>)<ul>
 <li>Connect to <code>ws://localhost:{port}/ws</code></li>
 <li>Send <code>user.identify</code> to get git username</li>
 <li>Send <code>user.register</code> with the username</li>
@@ -107,10 +108,12 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <li>Start background <code>readLoop</code> goroutine for incoming notifications</li>
 </ul>
 </li>
-<li>Start MCP stdio server (blocks until client disconnects or context<br>cancelled)</li>
+<li>Start MCP stdio server (blocks until client disconnects or context
+cancelled)</li>
 </ol>
 <h3>Shutdown</h3>
-<p>When Claude Code terminates the process (closes stdin) or a signal is received<br>(SIGINT/SIGTERM):</p>
+<p>When Claude Code terminates the process (closes stdin) or a signal is received
+(SIGINT/SIGTERM):</p>
 <ul>
 <li>Context is cancelled</li>
 <li>Waiter closes WebSocket connection (daemon auto-unregisters)</li>
@@ -120,18 +123,27 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 </ul>
 <h3>Key Design Decisions</h3>
 <ul>
-<li><strong>Per-call <code>cli.Client</code> creation</strong>: <code>cli.Client</code> is not concurrent-safe. Each<br>tool handler creates a fresh Unix socket connection. This is cheap (local<br>socket) and avoids concurrency issues.</li>
-<li><strong>Atomic WebSocket request IDs</strong>: The waiter uses <code>atomic.Int64</code> for<br>incrementing JSON-RPC request IDs, ensuring uniqueness across concurrent<br>calls.</li>
-<li><strong>Single-waiter enforcement</strong>: Only one <code>wait_for_message</code> can be active at a<br>time per server instance. A second call returns an error. Enforced with a<br>mutex.</li>
-<li><strong>Best-effort WebSocket</strong>: If the WebSocket connection fails at startup, the<br>MCP server still operates -- only <code>wait_for_message</code> returns errors. The other<br>10 tools work via Unix socket RPC.</li>
+<li><strong>Per-call <code>cli.Client</code> creation</strong>: <code>cli.Client</code> is not concurrent-safe. Each
+tool handler creates a fresh Unix socket connection. This is cheap (local
+socket) and avoids concurrency issues.</li>
+<li><strong>Atomic WebSocket request IDs</strong>: The waiter uses <code>atomic.Int64</code> for
+incrementing JSON-RPC request IDs, ensuring uniqueness across concurrent
+calls.</li>
+<li><strong>Single-waiter enforcement</strong>: Only one <code>wait_for_message</code> can be active at a
+time per server instance. A second call returns an error. Enforced with a
+mutex.</li>
+<li><strong>Best-effort WebSocket</strong>: If the WebSocket connection fails at startup, the
+MCP server still operates -- only <code>wait_for_message</code> returns errors. The other
+10 tools work via Unix socket RPC.</li>
 </ul>
 <h2>Usage</h2>
 <h3>Command</h3>
-<pre><code class="language-bash hljs">thrum mcp serve [--agent-id NAME]</code></pre>
+<pre><code>thrum mcp serve [--agent-id NAME]</code></pre>
 <p><strong>Prerequisites:</strong></p>
 <ul>
 <li>Thrum daemon must be running (<code>thrum daemon start</code>)</li>
-<li>Agent must be registered<br>(<code>thrum quickstart --name NAME --role ROLE --module MODULE</code>)</li>
+<li>Agent must be registered
+(<code>thrum quickstart --name NAME --role ROLE --module MODULE</code>)</li>
 </ul>
 <p><strong>Flags:</strong></p>
 <table>
@@ -155,16 +167,17 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 </tbody></table>
 <h3>Claude Code Configuration</h3>
 <p>Add to <code>.claude/settings.json</code> (project or user level):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;mcpServers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;thrum&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;stdio&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;command&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;args&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;mcp&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;serve&quot;</span><span class="hljs-punctuation">]</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
-<p>Once configured, Claude Code starts <code>thrum mcp serve</code> as a child process and<br>exposes its tools as <code>mcp__thrum__&lt;tool_name&gt;</code>.</p>
+<pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;thrum&quot;: {
+      &quot;type&quot;: &quot;stdio&quot;,
+      &quot;command&quot;: &quot;thrum&quot;,
+      &quot;args&quot;: [&quot;mcp&quot;, &quot;serve&quot;]
+    }
+  }
+}</code></pre>
+<p>Once configured, Claude Code starts <code>thrum mcp serve</code> as a child process and
+exposes its tools as <code>mcp__thrum__&lt;tool_name&gt;</code>.</p>
 <h2>API Reference</h2>
 <h3>send_message</h3>
 <p>Send a message to another agent, role, or group.</p>
@@ -241,7 +254,8 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 </ul>
 <p><strong>Daemon RPC:</strong> <code>message.send</code></p>
 <h3>check_messages</h3>
-<p>Poll for unread messages mentioning this agent. Messages are automatically<br>marked as read after retrieval.</p>
+<p>Poll for unread messages mentioning this agent. Messages are automatically
+marked as read after retrieval.</p>
 <p><strong>Input:</strong></p>
 <table>
 <thead>
@@ -259,7 +273,8 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <td>Max messages to return (default 50)</td>
 </tr>
 </tbody></table>
-<p>Agent identity is resolved at server startup; the client does not pass an agent<br>ID.</p>
+<p>Agent identity is resolved at server startup; the client does not pass an agent
+ID.</p>
 <p><strong>Output:</strong></p>
 <table>
 <thead>
@@ -319,11 +334,13 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <ol>
 <li>Lists unread messages mentioning this agent&#39;s role via <code>message.list</code> RPC</li>
 <li>Marks all returned messages as read via <code>message.markRead</code> RPC (best-effort)</li>
-<li>Returns consumed messages (they will not appear on the next <code>check_messages</code><br>call)</li>
+<li>Returns consumed messages (they will not appear on the next <code>check_messages</code>
+call)</li>
 </ol>
 <p><strong>Daemon RPC:</strong> <code>message.list</code> + <code>message.markRead</code></p>
 <h3>wait_for_message</h3>
-<p>Block until a message arrives or timeout expires. Designed for background<br>listener sub-agents running on Haiku.</p>
+<p>Block until a message arrives or timeout expires. Designed for background
+listener sub-agents running on Haiku.</p>
 <p><strong>Input:</strong></p>
 <table>
 <thead>
@@ -368,16 +385,20 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 </tbody></table>
 <p><strong>Behavior:</strong></p>
 <ol>
-<li>Check the internal notification queue (messages that arrived while no waiter<br>was active)</li>
+<li>Check the internal notification queue (messages that arrived while no waiter
+was active)</li>
 <li>If a queued message exists, pop it and return immediately</li>
 <li>If queue is empty, block on a channel with the specified timeout</li>
-<li>When a WebSocket <code>notification.message</code> arrives, the <code>readLoop</code> pushes it to<br>the queue and closes the waiter channel</li>
+<li>When a WebSocket <code>notification.message</code> arrives, the <code>readLoop</code> pushes it to
+the queue and closes the waiter channel</li>
 <li>Fetch the full message via <code>message.get</code> RPC</li>
 <li>Mark as read via <code>message.markRead</code> RPC (best-effort)</li>
 <li>Return the message</li>
 </ol>
-<p><strong>Concurrency:</strong> Only one <code>wait_for_message</code> can be active at a time. A second<br>concurrent call returns an error.</p>
-<p><strong>Requires:</strong> WebSocket waiter initialized at startup. If the waiter failed to<br>connect, this tool returns an error.</p>
+<p><strong>Concurrency:</strong> Only one <code>wait_for_message</code> can be active at a time. A second
+concurrent call returns an error.</p>
+<p><strong>Requires:</strong> WebSocket waiter initialized at startup. If the waiter failed to
+connect, this tool returns an error.</p>
 <p><strong>Daemon RPC:</strong> WebSocket notifications + <code>message.get</code> + <code>message.markRead</code></p>
 <h3>list_agents</h3>
 <p>List all registered agents and their status.</p>
@@ -460,7 +481,9 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 </ul>
 <p><strong>Daemon RPC:</strong> <code>agent.list</code></p>
 <h3>broadcast_message</h3>
-<p>Send a message to all agents via the <code>@everyone</code> group, with optional filtering.<br>The sender is automatically excluded. This is a convenience wrapper around<br>sending to <code>@everyone</code>.</p>
+<p>Send a message to all agents via the <code>@everyone</code> group, with optional filtering.
+The sender is automatically excluded. This is a convenience wrapper around
+sending to <code>@everyone</code>.</p>
 <p><strong>Input:</strong></p>
 <table>
 <thead>
@@ -542,7 +565,8 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <p><strong>Behavior:</strong></p>
 <ol>
 <li>Fetch agent list via <code>agent.list</code> RPC</li>
-<li>Filter out self (by agent ID, not role -- so other agents with the same role<br>still receive the message)</li>
+<li>Filter out self (by agent ID, not role -- so other agents with the same role
+still receive the message)</li>
 <li>Apply exclude filter (matches against both role and display name)</li>
 <li>Apply status filter (if <code>active</code>, skip agents with <code>offline</code> status)</li>
 <li>Send individual messages to each remaining agent via <code>message.send</code> RPC</li>
@@ -595,7 +619,8 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 </tbody></table>
 <p><strong>Daemon RPC:</strong> <code>group.create</code></p>
 <h3>delete_group</h3>
-<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be<br>deleted.</p>
+<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be
+deleted.</p>
 <p><strong>Input:</strong></p>
 <table>
 <thead>
@@ -819,7 +844,8 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 </tbody></table>
 <p><strong>Daemon RPC:</strong> <code>group.list</code></p>
 <h3>get_group</h3>
-<p>Get detailed information about a specific group. Supports expansion to resolve<br>roles to individual agent IDs.</p>
+<p>Get detailed information about a specific group. Supports expansion to resolve
+roles to individual agent IDs.</p>
 <p><strong>Input:</strong></p>
 <table>
 <thead>
@@ -900,18 +926,25 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 </tbody></table>
 <p><strong>Daemon RPC:</strong> <code>group.info</code> (without expand) or <code>group.members</code> (with expand)</p>
 <h2>Identity Resolution</h2>
-<p>The MCP server resolves agent identity once at startup. The client never passes<br>agent IDs in tool calls.</p>
+<p>The MCP server resolves agent identity once at startup. The client never passes
+agent IDs in tool calls.</p>
 <p><strong>Resolution order:</strong></p>
 <ol>
 <li><code>--agent-id</code> flag on <code>thrum mcp serve</code> (sets <code>THRUM_NAME</code> env var)</li>
 <li><code>THRUM_NAME</code> environment variable</li>
 <li>Auto-select single identity file in <code>.thrum/identities/</code></li>
-<li>Error if no identity found or multiple identities exist without<br>disambiguation</li>
+<li>Error if no identity found or multiple identities exist without
+disambiguation</li>
 </ol>
-<p><strong>Identity file:</strong> <code>.thrum/identities/{name}.json</code> contains name, role, module,<br>and repo ID. The server generates a composite agent ID (<code>agent:{role}:{hash}</code>)<br>using <code>identity.GenerateAgentID()</code>, consistent with daemon RPC handlers.</p>
-<p><strong>Multi-agent worktrees:</strong> When multiple agents operate in the same worktree,<br>each must have a distinct identity file. Use <code>THRUM_NAME</code> env var or<br><code>--agent-id</code> flag to select.</p>
+<p><strong>Identity file:</strong> <code>.thrum/identities/{name}.json</code> contains name, role, module,
+and repo ID. The server generates a composite agent ID (<code>agent:{role}:{hash}</code>)
+using <code>identity.GenerateAgentID()</code>, consistent with daemon RPC handlers.</p>
+<p><strong>Multi-agent worktrees:</strong> When multiple agents operate in the same worktree,
+each must have a distinct identity file. Use <code>THRUM_NAME</code> env var or
+<code>--agent-id</code> flag to select.</p>
 <h2>WebSocket Waiter</h2>
-<p>The <code>Waiter</code> struct (<code>internal/mcp/waiter.go</code>) manages the WebSocket connection<br>for real-time message notifications.</p>
+<p>The <code>Waiter</code> struct (<code>internal/mcp/waiter.go</code>) manages the WebSocket connection
+for real-time message notifications.</p>
 <h3>Connection Setup</h3>
 <p>On initialization, the waiter:</p>
 <ol>
@@ -922,54 +955,63 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <li>Starts a background <code>readLoop</code> goroutine</li>
 </ol>
 <h3>Notification Flow</h3>
-<pre><code class="language-text hljs">Daemon WebSocket -&gt; readLoop -&gt; queue ([]MessageNotification) -&gt; waiterCh -&gt; WaitForMessage</code></pre>
+<pre><code>Daemon WebSocket -&gt; readLoop -&gt; queue ([]MessageNotification) -&gt; waiterCh -&gt; WaitForMessage</code></pre>
 <p>The <code>readLoop</code> goroutine:</p>
 <ul>
 <li>Reads WebSocket messages continuously</li>
 <li>Filters for <code>notification.message</code> method</li>
-<li>Parses the notification into a <code>MessageNotification</code> (message_id, preview,<br>agent_id, timestamp)</li>
+<li>Parses the notification into a <code>MessageNotification</code> (message_id, preview,
+agent_id, timestamp)</li>
 <li>Appends to the internal queue (max 1000 items; drops oldest on overflow)</li>
 <li>Closes the <code>waiterCh</code> channel to wake any blocked <code>WaitForMessage</code> call</li>
 </ul>
-<p>On connection loss, <code>readLoop</code> closes <code>waiterCh</code> (if set) before exiting, which<br>unblocks any active waiter with a timeout-like response rather than hanging<br>forever.</p>
+<p>On connection loss, <code>readLoop</code> closes <code>waiterCh</code> (if set) before exiting, which
+unblocks any active waiter with a timeout-like response rather than hanging
+forever.</p>
 <h3>JSON-RPC over WebSocket</h3>
-<p>The waiter uses JSON-RPC 2.0 for setup RPCs. Request IDs are atomically<br>incremented (<code>atomic.Int64</code>). During <code>wsRPC</code> calls, incoming notifications are<br>skipped (they have no <code>id</code> field and a non-empty <code>method</code> field).</p>
+<p>The waiter uses JSON-RPC 2.0 for setup RPCs. Request IDs are atomically
+incremented (<code>atomic.Int64</code>). During <code>wsRPC</code> calls, incoming notifications are
+skipped (they have no <code>id</code> field and a non-empty <code>method</code> field).</p>
 <h2>Integration</h2>
 <h3>Message-Listener Sub-Agent</h3>
-<p>The recommended pattern for receiving messages in Claude Code is a background<br>Haiku sub-agent that blocks on <code>wait_for_message</code>. This is defined in<br><code>.claude/agents/message-listener.md</code>.</p>
+<p>The recommended pattern for receiving messages in Claude Code is a background
+Haiku sub-agent that blocks on <code>wait_for_message</code>. This is defined in
+<code>.claude/agents/message-listener.md</code>.</p>
 <p><strong>How it works:</strong></p>
 <ol>
 <li>The main agent spawns the message-listener as a background <code>Task</code> sub-agent</li>
 <li>The listener calls <code>check_messages</code> to drain any backlog</li>
 <li>If messages are found, it returns them immediately</li>
 <li>If none, it calls <code>wait_for_message(timeout=300)</code> and blocks</li>
-<li>When a message arrives or timeout occurs, the listener returns to the main<br>agent</li>
+<li>When a message arrives or timeout occurs, the listener returns to the main
+agent</li>
 <li>The main agent processes the result and re-arms the listener</li>
 </ol>
 <p><strong>Return format:</strong></p>
 <p>When messages are received:</p>
-<pre><code class="language-text hljs">MESSAGES_RECEIVED
+<pre><code>MESSAGES_RECEIVED
 FROM: [sender]
 CONTENT: [message content]
 TIMESTAMP: [timestamp]</code></pre>
 <p>When timeout occurs:</p>
-<pre><code class="language-text hljs">NO_MESSAGES_TIMEOUT</code></pre>
+<pre><code>NO_MESSAGES_TIMEOUT</code></pre>
 <p><strong>Cost:</strong> Approximately $0.00003 per cycle (Haiku-class model).</p>
 <h3>Context Management</h3>
 <ul>
 <li>Compact after 10+ message cycles to prevent context overflow</li>
-<li>After 5 consecutive timeouts with no pending work, send status to the<br>coordinator and stop the listener</li>
+<li>After 5 consecutive timeouts with no pending work, send status to the
+coordinator and stop the listener</li>
 </ul>
 <h3>CLAUDE.md Protocol</h3>
 <p>The project <code>CLAUDE.md</code> includes instructions for agents to use MCP tools:</p>
 <p><strong>Core messaging:</strong></p>
-<pre><code class="language-text hljs">mcp__thrum__send_message(to=&quot;@reviewer&quot;, content=&quot;...&quot;)
+<pre><code>mcp__thrum__send_message(to=&quot;@reviewer&quot;, content=&quot;...&quot;)
 mcp__thrum__check_messages()
 mcp__thrum__list_agents()
 mcp__thrum__send_message(to=&quot;@everyone&quot;, content=&quot;...&quot;)  # preferred over broadcast_message
 mcp__thrum__wait_for_message(timeout=300)</code></pre>
 <p><strong>Group management:</strong></p>
-<pre><code class="language-text hljs">mcp__thrum__create_group(name=&quot;backend&quot;, description=&quot;Backend team&quot;)
+<pre><code>mcp__thrum__create_group(name=&quot;backend&quot;, description=&quot;Backend team&quot;)
 mcp__thrum__add_group_member(group=&quot;backend&quot;, member_type=&quot;role&quot;, member_value=&quot;implementer&quot;)
 mcp__thrum__list_groups()
 mcp__thrum__get_group(name=&quot;backend&quot;, expand=true)
@@ -1010,11 +1052,11 @@ mcp__thrum__delete_group(name=&quot;backend&quot;)</code></pre>
 </tr>
 </tbody></table>
 <h3>Testing</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Unit + sequential integration tests (no daemon needed)</span>
-go <span class="hljs-built_in">test</span> ./internal/mcp/...
+<pre><code># Unit + sequential integration tests (no daemon needed)
+go test ./internal/mcp/...
 
-<span class="hljs-comment"># With verbose output</span>
-go <span class="hljs-built_in">test</span> -v ./internal/mcp/...</code></pre>
+# With verbose output
+go test -v ./internal/mcp/...</code></pre>
 <p>Test coverage includes:</p>
 <ul>
 <li>Tool handler input validation</li>
@@ -1023,12 +1065,16 @@ go <span class="hljs-built_in">test</span> -v ./internal/mcp/...</code></pre>
 <li>Identity resolution</li>
 <li>18 tests passing (unit + sequential integration)</li>
 </ul>
-<p>WebSocket integration tests (requiring a running daemon WebSocket) are currently<br>deferred.</p>
+<p>WebSocket integration tests (requiring a running daemon WebSocket) are currently
+deferred.</p>
 <h3>Debugging</h3>
 <p>The MCP server logs warnings to stderr. Check for:</p>
 <ul>
-<li><code>Warning: WebSocket waiter not available</code> -- daemon WebSocket port not found<br>or connection failed; <code>wait_for_message</code> will not work but other tools<br>function normally</li>
-<li><code>agent name not configured</code> / <code>agent role not configured</code> -- agent identity<br>not registered; run <code>thrum quickstart</code> first</li>
+<li><code>Warning: WebSocket waiter not available</code> -- daemon WebSocket port not found
+or connection failed; <code>wait_for_message</code> will not work but other tools
+function normally</li>
+<li><code>agent name not configured</code> / <code>agent role not configured</code> -- agent identity
+not registered; run <code>thrum quickstart</code> first</li>
 <li><code>Thrum daemon is not running</code> -- start the daemon with <code>thrum daemon start</code></li>
 </ul>
 <h3>Dependencies</h3>
@@ -1048,15 +1094,7 @@ go <span class="hljs-built_in">test</span> -v ./internal/mcp/...</code></pre>
 </ul>
 <pre><code></code></pre>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#mcp-server.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#mcp-server.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#mcp-server.html')}</script>
 </body>
 </html>

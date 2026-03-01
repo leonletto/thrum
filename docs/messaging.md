@@ -48,7 +48,7 @@ SQLite.
 
 | Flag           | Format                  | Description                             |
 | -------------- | ----------------------- | --------------------------------------- |
-| `--to`         | `@role`                 | Direct recipient (adds a mention ref)   |
+| `--to`         | `@name` or `@group`     | Recipient — agent name, group, or role (adds a mention ref) |
 | `--scope`      | `type:value`            | Attach scope context (repeatable)       |
 | `--ref`        | `type:value`            | Attach reference (repeatable)           |
 | `--mention`    | `@role`                 | Mention an agent role (repeatable)      |
@@ -167,6 +167,37 @@ thrum reply msg_01HXF... "Acknowledged" --format plain
 > Reply sent: msg_01HXG...
   In reply to: msg_01HXE...
 ```
+
+### Auto-Threading (v0.5.0+)
+
+When you reply to a message, Thrum automatically assigns a shared `thread_id` to
+both the reply and the original message. This creates implicit conversation
+threads without any explicit thread creation.
+
+**How it works:**
+
+1. If the parent message already has a `thread_id`, the reply inherits it
+   (joining the existing thread).
+2. If the parent has no `thread_id`, a new one is generated (`thr_...`) and
+   set on both the parent and the reply.
+3. All subsequent replies in the chain share the same `thread_id`.
+
+**Example:**
+
+```bash
+# Send a message (no thread_id yet)
+thrum send "Auth module ready for review" --to @reviewer1
+
+# Reply creates a thread — both messages now share thread_id
+thrum reply msg_01HXE... "Looking at it now"
+
+# Further replies join the same thread
+thrum reply msg_01HXE... "Approved, merging"
+```
+
+The UI groups conversations by `thread_id` for efficient display. Messages
+without a `thread_id` fall back to `reply_to` chain-walking for backward
+compatibility.
 
 ## Inbox
 

@@ -1,88 +1,92 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Agent Identity & Registration — Thrum</title>
-  <meta name="description" content="Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Agent Identity &amp; Registration — Thrum">
-  <meta property="og:description" content="Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/identity.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Agent Identity &amp; Registration — Thrum">
-  <meta name="twitter:description" content="Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#identity.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Agent Identity & Registration — Thrum</title>
+<meta name="description" content="Named agents, deterministic IDs, identity resolution, registration, conflicts, cleanup, and multi-agent worktrees">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#identity.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Identity &rsaquo; Agent Identity & Registration
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <strong>Agent Identity & Registration</strong><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Agent Identity &amp; Registration</h2>
 <h2>Overview</h2>
-<p>Thrum uses a flexible identity system that supports both human-readable named<br>agents and deterministic hash-based IDs. Each agent is identified by a<br>combination of <strong>name</strong> (optional), <strong>role</strong>, and <strong>module</strong> within a<br>repository. Identity files are stored per-agent in<br><code>.thrum/identities/{name}.json</code>, supporting multiple agents per worktree.</p>
+<p>Thrum uses a flexible identity system that supports both human-readable named
+agents and deterministic hash-based IDs. Each agent is identified by a
+combination of <strong>name</strong> (optional), <strong>role</strong>, and <strong>module</strong> within a
+repository. Identity files are stored per-agent in
+<code>.thrum/identities/{name}.json</code>, supporting multiple agents per worktree.</p>
 <h2>Identity Components</h2>
 <h3>Agent ID</h3>
 <p>Agents can have one of two ID formats:</p>
 <p><strong>Named agents</strong> (recommended):</p>
-<pre><code class="language-text hljs">furiosa</code></pre>
-<p>When a <code>--name</code> flag or <code>THRUM_NAME</code> env var is provided, the name <strong>is</strong> the<br>agent ID. The name becomes the canonical identifier for display, messaging<br>(<code>@furiosa</code>), and file paths.</p>
+<pre><code>furiosa</code></pre>
+<p>When a <code>--name</code> flag or <code>THRUM_NAME</code> env var is provided, the name <strong>is</strong> the
+agent ID. The name becomes the canonical identifier for display, messaging
+(<code>@furiosa</code>), and file paths.</p>
 <p><strong>Unnamed agents</strong> (hash-based fallback):</p>
-<pre><code class="language-text hljs">coordinator_1B9K33T6RK</code></pre>
+<pre><code>coordinator_1B9K33T6RK</code></pre>
 <p>When no name is provided, the agent ID is generated deterministically:</p>
-<pre><code class="language-text hljs">hash = crockford_base32(sha256(repo_id + &quot;|&quot; + role + &quot;|&quot; + module))[:10]
+<pre><code>hash = crockford_base32(sha256(repo_id + &quot;|&quot; + role + &quot;|&quot; + module))[:10]
 agent_id = role + &quot;_&quot; + hash</code></pre>
 <p>This means:</p>
 <ul>
-<li><strong>Same role+module</strong> in the same repository with no name set produces the<br><strong>same agent ID</strong></li>
-<li>Different repositories produce different agent IDs (even with same<br>role+module)</li>
+<li><strong>Same role+module</strong> in the same repository with no name set produces the
+<strong>same agent ID</strong></li>
+<li>Different repositories produce different agent IDs (even with same
+role+module)</li>
 <li>Named agents always use their name as the ID regardless of role/module</li>
 </ul>
 <p><strong>Legacy format</strong> (backward compatible):</p>
-<pre><code class="language-text hljs">agent:implementer:9F2K3M1Q8Z</code></pre>
-<p>The <code>agent:{role}:{hash}</code> format is still recognized for backward compatibility<br>but is no longer generated. Legacy IDs are converted internally via<br><code>AgentIDToName()</code>.</p>
+<pre><code>agent:implementer:9F2K3M1Q8Z</code></pre>
+<p>The <code>agent:{role}:{hash}</code> format is still recognized for backward compatibility
+but is no longer generated. Legacy IDs are converted internally via
+<code>AgentIDToName()</code>.</p>
 <h3>Agent Name</h3>
 <p>Human-readable name for the agent. Names are validated with strict rules:</p>
 <ul>
-<li><strong>Allowed characters</strong>: lowercase letters (<code>a-z</code>), digits (<code>0-9</code>), underscores<br>(<code>_</code>)</li>
-<li><strong>Rejected</strong>: hyphens, dots, spaces, path separators, uppercase, special<br>characters</li>
+<li><strong>Allowed characters</strong>: lowercase letters (<code>a-z</code>), digits (<code>0-9</code>), underscores
+(<code>_</code>)</li>
+<li><strong>Rejected</strong>: hyphens, dots, spaces, path separators, uppercase, special
+characters</li>
 <li><strong>Reserved names</strong>: <code>daemon</code>, <code>system</code>, <code>thrum</code>, <code>all</code>, <code>broadcast</code></li>
 <li><strong>Cannot be empty</strong> (when explicitly provided)</li>
-<li><strong>Cannot equal the role</strong> (v0.4.5+): names that match the role are rejected to<br>prevent routing ambiguity. Use a distinct name, e.g.<br><code>--name coord_main --role coordinator</code> instead of<br><code>--name coordinator --role coordinator</code>.</li>
+<li><strong>Cannot equal the role</strong> (v0.4.5+): names that match the role are rejected to
+prevent routing ambiguity. Use a distinct name, e.g.
+<code>--name coord_main --role coordinator</code> instead of
+<code>--name coordinator --role coordinator</code>.</li>
 </ul>
-<p>Names must be safe for: file paths, <code>@mention</code> targets, JSONL field values, and<br>git tracking.</p>
+<p>Names must be safe for: file paths, <code>@mention</code> targets, JSONL field values, and
+git tracking.</p>
 <p><strong>Validation regex</strong>: <code>^[a-z0-9_]+$</code></p>
 <h3>Role</h3>
 <p>The agent&#39;s <strong>role</strong> describes what type of work they do.</p>
@@ -94,9 +98,11 @@ agent_id = role + &quot;_&quot; + hash</code></pre>
 <li><code>tester</code> - Writes and runs tests</li>
 <li><code>coordinator</code> - Coordinates work across agents</li>
 </ul>
-<p>Roles are <strong>user-defined</strong> and can be anything that makes sense for your<br>workflow.</p>
+<p>Roles are <strong>user-defined</strong> and can be anything that makes sense for your
+workflow.</p>
 <h3>Module</h3>
-<p>The <strong>module</strong> describes which part of the codebase the agent is responsible<br>for.</p>
+<p>The <strong>module</strong> describes which part of the codebase the agent is responsible
+for.</p>
 <p>Common modules:</p>
 <ul>
 <li>Component names: <code>auth</code>, <code>sync-daemon</code>, <code>cli</code>, <code>ui</code></li>
@@ -117,10 +123,11 @@ agent_id = role + &quot;_&quot; + hash</code></pre>
 <li>&quot;Claude (Planner)&quot;</li>
 <li>&quot;Test Runner Bot&quot;</li>
 </ul>
-<p>Set via <code>--display</code> flag, <code>THRUM_DISPLAY</code> env var, or the <code>display</code> field in the<br>identity file.</p>
+<p>Set via <code>--display</code> flag, <code>THRUM_DISPLAY</code> env var, or the <code>display</code> field in the
+identity file.</p>
 <h2>Identity Resolution</h2>
 <p>Thrum resolves agent identity using a priority chain:</p>
-<pre><code class="language-text hljs">1. THRUM_NAME env var → selects identity file     [Highest priority]
+<pre><code>1. THRUM_NAME env var → selects identity file     [Highest priority]
    ↓
 2. --agent-id flag (CLI)
    ↓
@@ -132,13 +139,20 @@ agent_id = role + &quot;_&quot; + hash</code></pre>
    ↓
 6. Error if required fields missing                [Lowest priority]</code></pre>
 <h3>Environment Variables</h3>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">export</span> THRUM_NAME=furiosa          <span class="hljs-comment"># Select identity file (highest priority)</span>
-<span class="hljs-built_in">export</span> THRUM_ROLE=implementer      <span class="hljs-comment"># Override role</span>
-<span class="hljs-built_in">export</span> THRUM_MODULE=auth           <span class="hljs-comment"># Override module</span>
-<span class="hljs-built_in">export</span> THRUM_DISPLAY=<span class="hljs-string">&quot;Auth Agent&quot;</span>  <span class="hljs-comment"># Override display name</span></code></pre>
-<p><code>THRUM_NAME</code> environment variable takes highest priority in identity resolution,<br>overriding the <code>--agent-id</code> flag and identity file auto-selection. It is the<br>primary way to select which identity file to load, especially in multi-agent<br>worktrees. It is also used by external orchestrators (e.g., Gastown) to inject<br>identity into agent processes.</p>
-<p>When <code>THRUM_NAME</code> is set and the corresponding identity file does not exist,<br>loading <strong>fails</strong> rather than falling back to env vars. This ensures validation<br>errors are not silently ignored.</p>
-<p><code>THRUM_ROLE</code> and <code>THRUM_MODULE</code> override the role and module from any identity<br>file but do not affect which file is loaded.</p>
+<pre><code>export THRUM_NAME=furiosa          # Select identity file (highest priority)
+export THRUM_ROLE=implementer      # Override role
+export THRUM_MODULE=auth           # Override module
+export THRUM_DISPLAY=&quot;Auth Agent&quot;  # Override display name</code></pre>
+<p><code>THRUM_NAME</code> environment variable takes highest priority in identity resolution,
+overriding the <code>--agent-id</code> flag and identity file auto-selection. It is the
+primary way to select which identity file to load, especially in multi-agent
+worktrees. It is also used by external orchestrators (e.g., Gastown) to inject
+identity into agent processes.</p>
+<p>When <code>THRUM_NAME</code> is set and the corresponding identity file does not exist,
+loading <strong>fails</strong> rather than falling back to env vars. This ensures validation
+errors are not silently ignored.</p>
+<p><code>THRUM_ROLE</code> and <code>THRUM_MODULE</code> override the role and module from any identity
+file but do not affect which file is loaded.</p>
 <p>Use environment variables when:</p>
 <ul>
 <li>Running in CI/CD pipelines</li>
@@ -147,36 +161,44 @@ agent_id = role + &quot;_&quot; + hash</code></pre>
 <li>Temporary identity changes</li>
 </ul>
 <h3>CLI Flags</h3>
-<pre><code class="language-bash hljs">thrum agent register --name=furiosa --role=implementer --module=auth
-thrum quickstart --name furiosa --role implementer --module auth --intent <span class="hljs-string">&quot;Working on auth&quot;</span></code></pre>
-<p>CLI flags (<code>--role</code>, <code>--module</code>) override environment variables and identity<br>file settings. The <code>--name</code> flag is available on <code>quickstart</code> and<br><code>agent register</code>.</p>
-<p><strong>Priority exception</strong>: <code>THRUM_NAME</code> env var overrides the <code>--name</code> CLI flag.<br>This allows orchestrators to control identity even when scripts pass a <code>--name</code><br>argument.</p>
+<pre><code>thrum agent register --name=furiosa --role=implementer --module=auth
+thrum quickstart --name furiosa --role implementer --module auth --intent &quot;Working on auth&quot;</code></pre>
+<p>CLI flags (<code>--role</code>, <code>--module</code>) override environment variables and identity
+file settings. The <code>--name</code> flag is available on <code>quickstart</code> and
+<code>agent register</code>.</p>
+<p><strong>Priority exception</strong>: <code>THRUM_NAME</code> env var overrides the <code>--name</code> CLI flag.
+This allows orchestrators to control identity even when scripts pass a <code>--name</code>
+argument.</p>
 <h3>Identity Files</h3>
-<p>Identity files are stored in <code>.thrum/identities/</code> as individual JSON files named<br>after the agent:</p>
-<pre><code class="language-text hljs">.thrum/identities/
+<p>Identity files are stored in <code>.thrum/identities/</code> as individual JSON files named
+after the agent:</p>
+<pre><code>.thrum/identities/
 ├── furiosa.json           # Named agent
 ├── nux.json               # Named agent
 └── coordinator_1B9K33T6RK.json  # Unnamed agent (hash-based)</code></pre>
 <p><strong>Identity file format</strong> (version 2):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;repo_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;r_7K2Q1X9M3P0B&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;agent&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Auth Implementer&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;worktree&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;confirmed_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;human:leon&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T18:02:10.000Z&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;version&quot;: 2,
+  &quot;repo_id&quot;: &quot;r_7K2Q1X9M3P0B&quot;,
+  &quot;agent&quot;: {
+    &quot;kind&quot;: &quot;agent&quot;,
+    &quot;name&quot;: &quot;furiosa&quot;,
+    &quot;role&quot;: &quot;implementer&quot;,
+    &quot;module&quot;: &quot;auth&quot;,
+    &quot;display&quot;: &quot;Auth Implementer&quot;
+  },
+  &quot;worktree&quot;: &quot;auth&quot;,
+  &quot;confirmed_by&quot;: &quot;human:leon&quot;,
+  &quot;updated_at&quot;: &quot;2026-02-03T18:02:10.000Z&quot;
+}</code></pre>
 <p><strong>Auto-selection rules</strong> for identity files:</p>
 <ol>
-<li>If <code>THRUM_NAME</code> is set, load <code>{THRUM_NAME}.json</code> directly (error if not<br>found)</li>
-<li>If only <strong>one</strong> <code>.json</code> file exists in <code>identities/</code>, load it automatically<br>(solo-agent worktree backward compatibility)</li>
-<li>If <strong>multiple</strong> files exist and no <code>THRUM_NAME</code> is set, return an error<br>asking the user to set <code>THRUM_NAME</code></li>
+<li>If <code>THRUM_NAME</code> is set, load <code>{THRUM_NAME}.json</code> directly (error if not
+found)</li>
+<li>If only <strong>one</strong> <code>.json</code> file exists in <code>identities/</code>, load it automatically
+(solo-agent worktree backward compatibility)</li>
+<li>If <strong>multiple</strong> files exist and no <code>THRUM_NAME</code> is set, return an error
+asking the user to set <code>THRUM_NAME</code></li>
 </ol>
 <p>Use identity files when:</p>
 <ul>
@@ -211,7 +233,8 @@ thrum quickstart --name furiosa --role implementer --module auth --intent <span 
 <td><code>messages/coordinator_1B9K33T6RK.jsonl</code></td>
 </tr>
 </tbody></table>
-<p>Message files are stored in the sync worktree at<br><code>.git/thrum-sync/a-sync/messages/</code>.</p>
+<p>Message files are stored in the sync worktree at
+<code>.git/thrum-sync/a-sync/messages/</code>.</p>
 <h2>Registration</h2>
 <h3>First-Time Registration</h3>
 <p>When an agent registers for the first time:</p>
@@ -220,7 +243,8 @@ thrum quickstart --name furiosa --role implementer --module auth --intent <span 
 <li>Daemon generates agent ID (name if provided, otherwise <code>{role}_{hash}</code>)</li>
 <li>Daemon checks for conflicts (same name or same role+module)</li>
 <li>If no conflict:<ul>
-<li>Writes <code>agent.register</code> event to JSONL (in<br><code>.git/thrum-sync/a-sync/events.jsonl</code>)</li>
+<li>Writes <code>agent.register</code> event to JSONL (in
+<code>.git/thrum-sync/a-sync/events.jsonl</code>)</li>
 <li>Updates SQLite agents table</li>
 <li>Returns <code>{agent_id, status: &quot;registered&quot;}</code></li>
 </ul>
@@ -229,8 +253,10 @@ thrum quickstart --name furiosa --role implementer --module auth --intent <span 
 <h3>Same Agent Returning</h3>
 <p>When an agent with the <strong>same agent ID</strong> registers again:</p>
 <ul>
-<li><strong>Without <code>re_register</code> flag:</strong> Succeeds silently (no event written), returns<br><code>{status: &quot;registered&quot;}</code></li>
-<li><strong>With <code>re_register</code> flag:</strong> Updates registration (writes event with status<br>&quot;updated&quot;)</li>
+<li><strong>Without <code>re_register</code> flag:</strong> Succeeds silently (no event written), returns
+<code>{status: &quot;registered&quot;}</code></li>
+<li><strong>With <code>re_register</code> flag:</strong> Updates registration (writes event with status
+&quot;updated&quot;)</li>
 </ul>
 <p>This allows agents to:</p>
 <ul>
@@ -245,51 +271,56 @@ thrum quickstart --name furiosa --role implementer --module auth --intent <span 
 <li>You want to update your display name</li>
 <li>You want to explicitly refresh your registration</li>
 </ul>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;re_register&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;name&quot;: &quot;furiosa&quot;,
+  &quot;role&quot;: &quot;implementer&quot;,
+  &quot;module&quot;: &quot;auth&quot;,
+  &quot;re_register&quot;: true
+}</code></pre>
 <p>Response:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;updated&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;agent_id&quot;: &quot;furiosa&quot;,
+  &quot;status&quot;: &quot;updated&quot;
+}</code></pre>
 <h3>Quickstart (Recommended)</h3>
-<p>The <code>quickstart</code> command combines registration, session start, and intent<br>setting into one step:</p>
-<pre><code class="language-bash hljs">thrum quickstart --name furiosa --role implementer --module auth --intent <span class="hljs-string">&quot;Working on auth&quot;</span></code></pre>
-<p>This chains: <code>agent.register</code> -&gt; <code>session.start</code> -&gt; <code>session.setIntent</code> (if<br>intent provided). If a conflict occurs, it automatically retries with<br>re-register.</p>
+<p>The <code>quickstart</code> command combines registration, session start, and intent
+setting into one step:</p>
+<pre><code>thrum quickstart --name furiosa --role implementer --module auth --intent &quot;Working on auth&quot;</code></pre>
+<p>This chains: <code>agent.register</code> -&gt; <code>session.start</code> -&gt; <code>session.setIntent</code> (if
+intent provided). If a conflict occurs, it automatically retries with
+re-register.</p>
 <h2>Conflict Detection</h2>
 <p>A conflict occurs when:</p>
 <ul>
-<li>A <strong>different agent</strong> (different agent ID) tries to register with the <strong>same<br>role+module</strong> as an existing registered agent</li>
+<li>A <strong>different agent</strong> (different agent ID) tries to register with the <strong>same
+role+module</strong> as an existing registered agent</li>
 <li>A different agent tries to use the <strong>same name</strong> as an existing agent</li>
 </ul>
 <h3>Conflict Response</h3>
 <p>When conflict is detected:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;conflict&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;conflict&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;existing_agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;registered_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;last_seen_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;agent_id&quot;: &quot;&quot;,
+  &quot;status&quot;: &quot;conflict&quot;,
+  &quot;conflict&quot;: {
+    &quot;existing_agent_id&quot;: &quot;furiosa&quot;,
+    &quot;registered_at&quot;: &quot;2026-02-03T10:00:00Z&quot;,
+    &quot;last_seen_at&quot;: &quot;2026-02-03T12:00:00Z&quot;
+  }
+}</code></pre>
 <h3>Conflict Resolution Options</h3>
 <h4>1. Change Your Role or Module</h4>
 <p>The simplest solution -- pick a different area:</p>
-<pre><code class="language-bash hljs">thrum quickstart --name nux --role implementer --module auth_testing</code></pre>
+<pre><code>thrum quickstart --name nux --role implementer --module auth_testing</code></pre>
 <h4>2. Use <code>--force</code> Flag</h4>
 <p>Override the existing agent (you take ownership):</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;force&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span>
-<span class="hljs-punctuation">}</span></code></pre>
-<p><strong>Warning:</strong> This is destructive. The previous agent&#39;s database entry is deleted<br>and replaced. Only use when:</p>
+<pre><code>{
+  &quot;name&quot;: &quot;furiosa&quot;,
+  &quot;role&quot;: &quot;implementer&quot;,
+  &quot;module&quot;: &quot;auth&quot;,
+  &quot;force&quot;: true
+}</code></pre>
+<p><strong>Warning:</strong> This is destructive. The previous agent&#39;s database entry is deleted
+and replaced. Only use when:</p>
 <ul>
 <li>The previous agent is no longer active</li>
 <li>You are taking over responsibility for this module</li>
@@ -310,10 +341,11 @@ thrum quickstart --name furiosa --role implementer --module auth --intent <span 
 <li><strong>Unclear ownership</strong> - Who is responsible for this module?</li>
 <li><strong>Lost work</strong> - Messages/sessions attributed to wrong agent</li>
 </ul>
-<p>The conflict system ensures <strong>intentional coordination</strong> when multiple agents<br>work on the same module.</p>
+<p>The conflict system ensures <strong>intentional coordination</strong> when multiple agents
+work on the same module.</p>
 <h2>Agent Deletion and Cleanup</h2>
 <h3>Deleting a Single Agent</h3>
-<pre><code class="language-bash hljs">thrum agent delete furiosa</code></pre>
+<pre><code>thrum agent delete furiosa</code></pre>
 <p>This removes:</p>
 <ul>
 <li>Identity file (<code>.thrum/identities/furiosa.json</code>)</li>
@@ -322,10 +354,10 @@ thrum quickstart --name furiosa --role implementer --module auth --intent <span 
 <li>Emits an <code>agent.cleanup</code> event in <code>events.jsonl</code></li>
 </ul>
 <h3>Orphan Detection and Cleanup</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Preview orphaned agents (dry-run)</span>
+<pre><code># Preview orphaned agents (dry-run)
 thrum agent cleanup --dry-run
 
-<span class="hljs-comment"># Delete all orphans without prompting</span>
+# Delete all orphans without prompting
 thrum agent cleanup --force</code></pre>
 <p>The cleanup command detects orphaned agents by checking:</p>
 <ul>
@@ -341,28 +373,33 @@ thrum agent cleanup --force</code></pre>
 </ul>
 <h2>Identity File Best Practices</h2>
 <h3>Worktree-Specific Identity</h3>
-<p>When using git worktrees for different features/modules, each worktree can have<br>its own identity files:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Main worktree - coordinator (name must differ from role)</span>
+<p>When using git worktrees for different features/modules, each worktree can have
+its own identity files:</p>
+<pre><code># Main worktree - coordinator (name must differ from role)
 thrum quickstart --name coord_main --role coordinator --module all
 
-<span class="hljs-comment"># Auth worktree - auth implementer</span>
-<span class="hljs-built_in">cd</span> ~/.workspaces/myapp/auth
+# Auth worktree - auth implementer
+cd ~/.workspaces/myapp/auth
 thrum quickstart --name furiosa --role implementer --module auth
 
-<span class="hljs-comment"># Sync worktree - sync implementer</span>
-<span class="hljs-built_in">cd</span> ~/.workspaces/myapp/sync
-thrum quickstart --name nux --role implementer --module <span class="hljs-built_in">sync</span></code></pre>
-<p>Each worktree gets its own <code>.thrum/identities/</code> directory (or uses<br><code>.thrum/redirect</code> to share a common <code>.thrum/</code> directory).</p>
+# Sync worktree - sync implementer
+cd ~/.workspaces/myapp/sync
+thrum quickstart --name nux --role implementer --module sync</code></pre>
+<p>Each worktree gets its own <code>.thrum/identities/</code> directory (or uses
+<code>.thrum/redirect</code> to share a common <code>.thrum/</code> directory).</p>
 <h3>Multi-Agent Worktrees</h3>
-<p>Multiple agents can operate in the same worktree. Each gets a separate identity<br>file:</p>
-<pre><code class="language-text hljs">.thrum/identities/
+<p>Multiple agents can operate in the same worktree. Each gets a separate identity
+file:</p>
+<pre><code>.thrum/identities/
 ├── furiosa.json     # agent working on implementation
 ├── reviewer.json    # agent reviewing code</code></pre>
 <p>Use <code>THRUM_NAME</code> to select which identity to use:</p>
-<pre><code class="language-bash hljs">THRUM_NAME=furiosa thrum send <span class="hljs-string">&quot;Implementation complete&quot;</span>
-THRUM_NAME=reviewer thrum send <span class="hljs-string">&quot;LGTM, approved&quot;</span></code></pre>
+<pre><code>THRUM_NAME=furiosa thrum send &quot;Implementation complete&quot;
+THRUM_NAME=reviewer thrum send &quot;LGTM, approved&quot;</code></pre>
 <h3>Gitignore Identity Files</h3>
-<p><strong>Important:</strong> The <code>.thrum/</code> directory is gitignored on the main branch.<br>Identity files are <strong>local configuration</strong>, not project code. They should NOT be<br>committed because:</p>
+<p><strong>Important:</strong> The <code>.thrum/</code> directory is gitignored on the main branch.
+Identity files are <strong>local configuration</strong>, not project code. They should NOT be
+committed because:</p>
 <ul>
 <li>Different developers have different roles/modules</li>
 <li>Identity files contain agent-specific information</li>
@@ -370,49 +407,62 @@ THRUM_NAME=reviewer thrum send <span class="hljs-string">&quot;LGTM, approved&qu
 </ul>
 <h2>Common Workflows</h2>
 <h3>New Agent Setup</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># One-step setup (recommended)</span>
-thrum quickstart --name furiosa --role implementer --module auth --intent <span class="hljs-string">&quot;Starting auth work&quot;</span>
+<pre><code># One-step setup (recommended)
+thrum quickstart --name furiosa --role implementer --module auth --intent &quot;Starting auth work&quot;
 
-<span class="hljs-comment"># Or step-by-step</span>
+# Or step-by-step
 thrum agent register --name=furiosa --role=implementer --module=auth
 thrum session start
-thrum send <span class="hljs-string">&quot;Starting work on auth module&quot;</span></code></pre>
+thrum send &quot;Starting work on auth module&quot;</code></pre>
 <h3>Check Current Identity</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># See who you are and if you have an active session</span>
-thrum agent <span class="hljs-built_in">whoami</span></code></pre>
+<pre><code># See who you are and if you have an active session
+thrum agent whoami</code></pre>
 <p>Response:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Auth Agent&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;source&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;identity_file&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE8Z7R9K3Q6M2W8F4VY&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;session_start&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;agent_id&quot;: &quot;furiosa&quot;,
+  &quot;role&quot;: &quot;implementer&quot;,
+  &quot;module&quot;: &quot;auth&quot;,
+  &quot;display&quot;: &quot;Auth Agent&quot;,
+  &quot;source&quot;: &quot;identity_file&quot;,
+  &quot;session_id&quot;: &quot;ses_01HXE8Z7R9K3Q6M2W8F4VY&quot;,
+  &quot;session_start&quot;: &quot;2026-02-03T10:00:00Z&quot;
+}</code></pre>
 <h3>List All Agents</h3>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># See all registered agents</span>
+<pre><code># See all registered agents
 thrum agent list
 
-<span class="hljs-comment"># Filter by role</span>
+# Filter by role
 thrum agent list --role=implementer
 
-<span class="hljs-comment"># Filter by module</span>
+# Filter by module
 thrum agent list --module=auth</code></pre>
 <h3>MCP Server Identity</h3>
-<p>The MCP server (<code>thrum mcp serve</code>) resolves identity at startup from<br><code>.thrum/identities/{name}.json</code>. In multi-agent worktrees, use the <code>--agent-id</code><br>flag or <code>THRUM_NAME</code> env var:</p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Use THRUM_NAME</span>
+<p>The MCP server (<code>thrum mcp serve</code>) resolves identity at startup from
+<code>.thrum/identities/{name}.json</code>. In multi-agent worktrees, use the <code>--agent-id</code>
+flag or <code>THRUM_NAME</code> env var:</p>
+<pre><code># Use THRUM_NAME
 THRUM_NAME=furiosa thrum mcp serve
 
-<span class="hljs-comment"># Or use --agent-id flag</span>
+# Or use --agent-id flag
 thrum mcp serve --agent-id furiosa</code></pre>
-<p>The MCP server requires a named agent (the <code>name</code> field must be set in the<br>identity file).</p>
+<p>The MCP server requires a named agent (the <code>name</code> field must be set in the
+identity file).</p>
 <h3>Git Username (user.identify)</h3>
-<p>The Web UI and MCP server use <code>user.identify</code> to read the git username from<br><code>git config user.name</code>. This username is used to auto-register a browser agent<br>in the Web UI (via <code>user.register</code>) and to associate the WebSocket session with<br>a human identity. The git username is read at connection time — no separate<br>configuration is needed beyond having a valid <code>git config user.name</code> set in your<br>environment.</p>
+<p>The Web UI and MCP server use <code>user.identify</code> to read the git username from
+<code>git config user.name</code>. This username is used to auto-register a browser agent
+in the Web UI (via <code>user.register</code>) and to associate the WebSocket session with
+a human identity. The git username is read at connection time — no separate
+configuration is needed beyond having a valid <code>git config user.name</code> set in your
+environment.</p>
 <h2>ID Generation Functions</h2>
-<p>All ID generation is in <code>internal/identity/identity.go</code>. Thrum uses<br><a href="https://github.com/ulid/spec">ULID</a> (Universally Unique Lexicographically<br>Sortable Identifier) for all unique IDs, and deterministic hashing for agent and<br>repository IDs.</p>
+<p>All ID generation is in <code>internal/identity/identity.go</code>. Thrum uses
+<a href="https://github.com/ulid/spec">ULID</a> (Universally Unique Lexicographically
+Sortable Identifier) for all unique IDs, and deterministic hashing for agent and
+repository IDs.</p>
 <h3>ULID-Based IDs</h3>
-<p>ULIDs provide globally unique, lexicographically sortable identifiers with<br>embedded timestamps. They are generated using monotonic entropy with mutex<br>protection for thread safety.</p>
+<p>ULIDs provide globally unique, lexicographically sortable identifiers with
+embedded timestamps. They are generated using monotonic entropy with mutex
+protection for thread safety.</p>
 <table>
 <thead>
 <tr>
@@ -447,7 +497,8 @@ thrum mcp serve --agent-id furiosa</code></pre>
 <td>Deduplication in JSONL merge</td>
 </tr>
 </tbody></table>
-<p>ULID timestamps can be extracted with <code>ParseULID()</code> or <code>ULIDTimestamp()</code> for<br>time-based queries.</p>
+<p>ULID timestamps can be extracted with <code>ParseULID()</code> or <code>ULIDTimestamp()</code> for
+time-based queries.</p>
 <h3>Deterministic IDs</h3>
 <table>
 <thead>
@@ -483,7 +534,9 @@ thrum mcp serve --agent-id furiosa</code></pre>
 <td>Identify browser/UI users</td>
 </tr>
 </tbody></table>
-<p>Repository IDs are generated from the normalized Git origin URL (SSH and HTTPS<br>URLs for the same repo produce the same ID). The normalization strips <code>.git</code><br>suffixes and converts to lowercase HTTPS format.</p>
+<p>Repository IDs are generated from the normalized Git origin URL (SSH and HTTPS
+URLs for the same repo produce the same ID). The normalization strips <code>.git</code>
+suffixes and converts to lowercase HTTPS format.</p>
 <h3>Utility Functions</h3>
 <table>
 <thead>
@@ -513,11 +566,13 @@ thrum mcp serve --agent-id furiosa</code></pre>
 <h3>&quot;Role not specified&quot; Error</h3>
 <p><strong>Cause:</strong> No identity source available.</p>
 <p><strong>Solution:</strong> Set environment variables, create identity file, or use CLI flags:</p>
-<pre><code class="language-bash hljs">thrum quickstart --name myagent --role your_role --module your_module</code></pre>
+<pre><code>thrum quickstart --name myagent --role your_role --module your_module</code></pre>
 <h3>&quot;Multiple identity files found&quot; Error</h3>
-<p><strong>Cause:</strong> Multiple identity files in <code>.thrum/identities/</code> and no <code>THRUM_NAME</code><br>set.</p>
-<p><strong>Solution:</strong> Set the <code>THRUM_NAME</code> environment variable to select which agent<br>you are:</p>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">export</span> THRUM_NAME=furiosa</code></pre>
+<p><strong>Cause:</strong> Multiple identity files in <code>.thrum/identities/</code> and no <code>THRUM_NAME</code>
+set.</p>
+<p><strong>Solution:</strong> Set the <code>THRUM_NAME</code> environment variable to select which agent
+you are:</p>
+<pre><code>export THRUM_NAME=furiosa</code></pre>
 <h3>Registration Conflict</h3>
 <p><strong>Cause:</strong> Another agent already registered with same role+module or same name.</p>
 <p><strong>Solution:</strong></p>
@@ -532,42 +587,40 @@ thrum mcp serve --agent-id furiosa</code></pre>
 </ol>
 <h3>Wrong Agent ID</h3>
 <p><strong>Cause:</strong> Changed name, role, or module, creating new agent ID.</p>
-<p><strong>Solution:</strong> Agent IDs are deterministic for unnamed agents. To get the same<br>agent ID:</p>
+<p><strong>Solution:</strong> Agent IDs are deterministic for unnamed agents. To get the same
+agent ID:</p>
 <ul>
-<li>Use the <strong>exact same</strong> role and module in the <strong>same repository</strong> (same<br>repo_id)</li>
+<li>Use the <strong>exact same</strong> role and module in the <strong>same repository</strong> (same
+repo_id)</li>
 <li>Or use a <strong>named agent</strong> where the name is always the ID</li>
 </ul>
 <h3>Identity Source Confusion</h3>
 <p><strong>Cause:</strong> Multiple identity sources (env vars + file + flags).</p>
 <p><strong>Check priority:</strong> <code>THRUM_NAME</code> &gt; CLI flags &gt; env vars &gt; identity file</p>
 <p><strong>Debug:</strong></p>
-<pre><code class="language-bash hljs"><span class="hljs-comment"># Check what identity will be used</span>
-thrum agent <span class="hljs-built_in">whoami</span>
+<pre><code># Check what identity will be used
+thrum agent whoami
 
-<span class="hljs-comment"># The &quot;source&quot; field shows which source was used:</span>
-<span class="hljs-comment"># - &quot;environment&quot; = env vars</span>
-<span class="hljs-comment"># - &quot;flags&quot; = CLI flags</span>
-<span class="hljs-comment"># - &quot;identity_file&quot; = .thrum/identities/{name}.json</span></code></pre>
+# The &quot;source&quot; field shows which source was used:
+# - &quot;environment&quot; = env vars
+# - &quot;flags&quot; = CLI flags
+# - &quot;identity_file&quot; = .thrum/identities/{name}.json</code></pre>
 <h2>References</h2>
 <ul>
-<li>RPC API: <code>docs/rpc-api.md</code> - agent.register, agent.list, agent.whoami,<br>agent.delete, agent.cleanup methods</li>
-<li>Design Document: <code>dev-docs/2026-02-06-jsonl-sharding-and-agent-naming.md</code> -<br>Agent naming system design</li>
-<li>Foundation Code: <code>internal/identity/identity.go</code> - ID generation and<br>validation functions</li>
+<li>RPC API: <code>docs/rpc-api.md</code> - agent.register, agent.list, agent.whoami,
+agent.delete, agent.cleanup methods</li>
+<li>Design Document: <code>dev-docs/2026-02-06-jsonl-sharding-and-agent-naming.md</code> -
+Agent naming system design</li>
+<li>Foundation Code: <code>internal/identity/identity.go</code> - ID generation and
+validation functions</li>
 <li>Config Loading: <code>internal/config/config.go</code> - Identity resolution chain</li>
-<li>Agent RPC: <code>internal/daemon/rpc/agent.go</code> - Registration, deletion, cleanup<br>handlers</li>
+<li>Agent RPC: <code>internal/daemon/rpc/agent.go</code> - Registration, deletion, cleanup
+handlers</li>
 <li>MCP Server: <code>internal/mcp/server.go</code> - MCP identity loading</li>
 </ul>
 <pre><code></code></pre>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#identity.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#identity.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#identity.html')}</script>
 </body>
 </html>

@@ -1,64 +1,67 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WebSocket API — Thrum</title>
-  <meta name="description" content="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="WebSocket API — Thrum">
-  <meta property="og:description" content="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/api/websocket.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="WebSocket API — Thrum">
-  <meta name="twitter:description" content="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#api/websocket.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>WebSocket API — Thrum</title>
+<meta name="description" content="Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#api/websocket.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; API Reference &rsaquo; WebSocket API
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a> | <a href="../overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <strong>WebSocket API</strong><br>
+<strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="../architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="../context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="../cli.html">CLI Reference</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>WebSocket API</h2>
-<p>The Thrum WebSocket API provides real-time, bidirectional communication between<br>clients and the Thrum daemon using JSON-RPC 2.0 over WebSocket.</p>
+<p>The Thrum WebSocket API provides real-time, bidirectional communication between
+clients and the Thrum daemon using JSON-RPC 2.0 over WebSocket.</p>
 <h2>Connection</h2>
-<p><strong>Endpoint</strong>: <code>ws://localhost:9999/ws</code> (when UI is embedded) <strong>Fallback</strong>:<br><code>ws://localhost:9999/</code> (when UI is not available) <strong>Port</strong>: Default 9999,<br>configurable via <code>THRUM_WS_PORT</code> environment variable <strong>Protocol</strong>: JSON-RPC 2.0<br>over WebSocket frames <strong>Encoding</strong>: JSON (text frames) <strong>Library</strong>:<br>gorilla/websocket</p>
-<p>The WebSocket server and the embedded web UI (React SPA) are served on the<br><strong>same port</strong>. When the UI is present, WebSocket upgrades happen at <code>/ws</code> and<br>the SPA is served at <code>/</code>. When no UI is embedded, WebSocket handles requests at<br><code>/</code> for backwards compatibility.</p>
+<p><strong>Endpoint</strong>: <code>ws://localhost:9999/ws</code> (when UI is embedded) <strong>Fallback</strong>:
+<code>ws://localhost:9999/</code> (when UI is not available) <strong>Port</strong>: Default 9999,
+configurable via <code>THRUM_WS_PORT</code> environment variable <strong>Protocol</strong>: JSON-RPC 2.0
+over WebSocket frames <strong>Encoding</strong>: JSON (text frames) <strong>Library</strong>:
+gorilla/websocket</p>
+<p>The WebSocket server and the embedded web UI (React SPA) are served on the
+<strong>same port</strong>. When the UI is present, WebSocket upgrades happen at <code>/ws</code> and
+the SPA is served at <code>/</code>. When no UI is embedded, WebSocket handles requests at
+<code>/</code> for backwards compatibility.</p>
 <h3>Security</h3>
-<p><strong>Local connections</strong>: Unix domain socket connections<br>(<code>$REPO/.thrum/daemon.sock</code>) are inherently secure with no network exposure.<br>Access is controlled via filesystem permissions.</p>
-<p><strong>Remote connections</strong>: When using Tailscale for remote access, WebSocket<br>connections are encrypted end-to-end via Tailscale&#39;s WireGuard tunnel. No<br>separate TLS layer is needed—the <code>ws://</code> protocol runs over the encrypted<br>WireGuard tunnel, providing equivalent security to <code>wss://</code> but managed at the<br>network layer.</p>
-<p>See <code>docs/tailscale-security.md</code> for detailed security architecture and threat<br>model.</p>
+<p><strong>Local connections</strong>: Unix domain socket connections
+(<code>$REPO/.thrum/daemon.sock</code>) are inherently secure with no network exposure.
+Access is controlled via filesystem permissions.</p>
+<p><strong>Remote connections</strong>: When using Tailscale for remote access, WebSocket
+connections are encrypted end-to-end via Tailscale&#39;s WireGuard tunnel. No
+separate TLS layer is needed—the <code>ws://</code> protocol runs over the encrypted
+WireGuard tunnel, providing equivalent security to <code>wss://</code> but managed at the
+network layer.</p>
+<p>See <code>docs/tailscale-security.md</code> for detailed security architecture and threat
+model.</p>
 <h3>Connection Flow</h3>
 <ol>
 <li>Client connects to WebSocket endpoint (<code>/ws</code>)</li>
@@ -67,142 +70,149 @@
 <li>Client can send RPC requests and receive push notifications</li>
 </ol>
 <h3>Keepalive</h3>
-<p>The server sends WebSocket ping frames every 54 seconds to keep connections<br>alive. Clients must respond with pong frames (handled automatically by most<br>WebSocket libraries). The read deadline is 60 seconds -- connections that don&#39;t<br>respond to pings within this window are closed.</p>
+<p>The server sends WebSocket ping frames every 54 seconds to keep connections
+alive. Clients must respond with pong frames (handled automatically by most
+WebSocket libraries). The read deadline is 60 seconds -- connections that don&#39;t
+respond to pings within this window are closed.</p>
 <h3>Example Connection</h3>
-<pre><code class="language-javascript hljs"><span class="hljs-keyword">const</span> ws = <span class="hljs-keyword">new</span> <span class="hljs-title class_">WebSocket</span>(<span class="hljs-string">&quot;ws://localhost:9999/ws&quot;</span>);
+<pre><code>const ws = new WebSocket(&quot;ws://localhost:9999/ws&quot;);
 
-ws.<span class="hljs-property">onopen</span> = <span class="hljs-function">() =&gt;</span> {
-  <span class="hljs-comment">// Register as user</span>
-  ws.<span class="hljs-title function_">send</span>(
-    <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">stringify</span>({
-      <span class="hljs-attr">jsonrpc</span>: <span class="hljs-string">&quot;2.0&quot;</span>,
-      <span class="hljs-attr">method</span>: <span class="hljs-string">&quot;user.register&quot;</span>,
-      <span class="hljs-attr">params</span>: {
-        <span class="hljs-attr">username</span>: <span class="hljs-string">&quot;alice&quot;</span>,
-        <span class="hljs-attr">display_name</span>: <span class="hljs-string">&quot;Alice Smith&quot;</span>,
+ws.onopen = () =&gt; {
+  // Register as user
+  ws.send(
+    JSON.stringify({
+      jsonrpc: &quot;2.0&quot;,
+      method: &quot;user.register&quot;,
+      params: {
+        username: &quot;alice&quot;,
+        display_name: &quot;Alice Smith&quot;,
       },
-      <span class="hljs-attr">id</span>: <span class="hljs-number">1</span>,
+      id: 1,
     }),
   );
 };
 
-ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
-  <span class="hljs-keyword">const</span> message = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(event.<span class="hljs-property">data</span>);
+ws.onmessage = (event) =&gt; {
+  const message = JSON.parse(event.data);
 
-  <span class="hljs-keyword">if</span> (message.<span class="hljs-property">id</span>) {
-    <span class="hljs-comment">// This is a response to a request we sent</span>
-    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">&quot;Response:&quot;</span>, message);
-  } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (message.<span class="hljs-property">method</span>) {
-    <span class="hljs-comment">// This is a push notification (no id field)</span>
-    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">&quot;Notification:&quot;</span>, message.<span class="hljs-property">method</span>, message.<span class="hljs-property">params</span>);
+  if (message.id) {
+    // This is a response to a request we sent
+    console.log(&quot;Response:&quot;, message);
+  } else if (message.method) {
+    // This is a push notification (no id field)
+    console.log(&quot;Notification:&quot;, message.method, message.params);
   }
 };</code></pre>
 <h2>Authentication</h2>
 <h3>User Registration (WebSocket-Only)</h3>
-<p>Users connect via WebSocket and register with a username. The daemon generates a<br>stable user ID based on the username.</p>
+<p>Users connect via WebSocket and register with a username. The daemon generates a
+stable user ID based on the username.</p>
 <p><strong>Method</strong>: <code>user.register</code></p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;username&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;alice&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// required: username (lowercase, alphanumeric + hyphens)</span>
-  <span class="hljs-attr">&quot;display_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Alice Smith&quot;</span> <span class="hljs-comment">// optional: human-readable display name</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;username&quot;: &quot;alice&quot;, // required: username (lowercase, alphanumeric + hyphens)
+  &quot;display_name&quot;: &quot;Alice Smith&quot; // optional: human-readable display name
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;user_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;user:alice&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;username&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;alice&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;display_name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Alice Smith&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;result&quot;: {
+    &quot;user_id&quot;: &quot;user:alice&quot;,
+    &quot;session_id&quot;: &quot;ses_01HXE...&quot;,
+    &quot;username&quot;: &quot;alice&quot;,
+    &quot;display_name&quot;: &quot;Alice Smith&quot;
+  },
+  &quot;id&quot;: 1
+}</code></pre>
 <p><strong>Errors</strong>:</p>
 <ul>
 <li><code>-32602</code>: Invalid username (must be lowercase, alphanumeric + hyphens)</li>
 <li><code>-32000</code>: Registration failed</li>
 </ul>
 <h3>Agent Registration</h3>
-<p>Agents can register via WebSocket or Unix socket using the same <code>agent.register</code><br>method.</p>
+<p>Agents can register via WebSocket or Unix socket using the same <code>agent.register</code>
+method.</p>
 <p><strong>Method</strong>: <code>agent.register</code></p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;assistant&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// required: agent role</span>
-  <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;claude&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// required: agent module</span>
-  <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Claude&quot;</span> <span class="hljs-comment">// optional: display name</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;role&quot;: &quot;assistant&quot;, // required: agent role
+  &quot;module&quot;: &quot;claude&quot;, // required: agent module
+  &quot;display&quot;: &quot;Claude&quot; // optional: display name
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;result&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;registered&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;result&quot;: {
+    &quot;agent_id&quot;: &quot;agent:assistant:claude:ABC123&quot;,
+    &quot;status&quot;: &quot;registered&quot;
+  },
+  &quot;id&quot;: 1
+}</code></pre>
 <h2>RPC Methods</h2>
 <p>All RPC methods follow JSON-RPC 2.0 specification:</p>
 <ul>
 <li>Request must include: <code>jsonrpc: &quot;2.0&quot;</code>, <code>method</code>, <code>params</code>, <code>id</code></li>
 <li>Response includes: <code>jsonrpc: &quot;2.0&quot;</code>, <code>result</code> or <code>error</code>, <code>id</code></li>
 </ul>
-<p>The WebSocket server supports the <strong>same RPC methods</strong> as the Unix socket<br>daemon. All handlers are registered on both transports.</p>
+<p>The WebSocket server supports the <strong>same RPC methods</strong> as the Unix socket
+daemon. All handlers are registered on both transports.</p>
 <h3>Agent Methods</h3>
 <h4>agent.register</h4>
 <p>Registers a new agent with the daemon.</p>
 <h4>agent.list</h4>
 <p>Lists all registered agents with optional filtering.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;assistant&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: filter by role</span>
-  <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;claude&quot;</span> <span class="hljs-comment">// optional: filter by module</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;role&quot;: &quot;assistant&quot;, // optional: filter by role
+  &quot;module&quot;: &quot;claude&quot; // optional: filter by module
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;agents&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;kind&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;assistant&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;claude&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;display&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Claude Assistant&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;registered_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T10:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;last_seen_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">]</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;agents&quot;: [
+    {
+      &quot;agent_id&quot;: &quot;agent:assistant:claude:ABC123&quot;,
+      &quot;kind&quot;: &quot;agent&quot;,
+      &quot;role&quot;: &quot;assistant&quot;,
+      &quot;module&quot;: &quot;claude&quot;,
+      &quot;display&quot;: &quot;Claude Assistant&quot;,
+      &quot;registered_at&quot;: &quot;2026-02-03T10:00:00Z&quot;,
+      &quot;last_seen_at&quot;: &quot;2026-02-03T12:00:00Z&quot;
+    }
+  ]
+}</code></pre>
 <h4>agent.whoami</h4>
 <p>Returns the current agent&#39;s identity information.</p>
 <h4>agent.listContext</h4>
 <p>Lists agents with their work context (branch, task, intent).</p>
 <h3>Message Methods</h3>
 <h4>message.send</h4>
-<p>Sends a new message to the system. Triggers subscription-based push<br>notifications.</p>
+<p>Sends a new message to the system. Triggers subscription-based push
+notifications.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Hello, world!&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// required: message content</span>
-  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_abc123&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: reply to thread</span>
-  <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-comment">// optional: message scopes</span>
-    <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span> <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;refs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-comment">// optional: references</span>
-    <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span> <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-comment">// optional: structured body</span>
-    <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;key\&quot;:\&quot;value\&quot;}&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;acting_as&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span> <span class="hljs-comment">// optional: impersonation (users only)</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;content&quot;: &quot;Hello, world!&quot;, // required: message content
+  &quot;thread_id&quot;: &quot;thr_abc123&quot;, // optional: reply to thread
+  &quot;scopes&quot;: [
+    // optional: message scopes
+    { &quot;type&quot;: &quot;task&quot;, &quot;value&quot;: &quot;PROJ-123&quot; }
+  ],
+  &quot;refs&quot;: [
+    // optional: references
+    { &quot;type&quot;: &quot;mention&quot;, &quot;value&quot;: &quot;reviewer&quot; }
+  ],
+  &quot;body&quot;: {
+    // optional: structured body
+    &quot;format&quot;: &quot;markdown&quot;,
+    &quot;structured&quot;: &quot;{\&quot;key\&quot;:\&quot;value\&quot;}&quot;
+  },
+  &quot;acting_as&quot;: &quot;agent:assistant:claude:ABC123&quot; // optional: impersonation (users only)
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_abc123&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
+  &quot;thread_id&quot;: &quot;thr_abc123&quot;,
+  &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;
+}</code></pre>
 <p><strong>Errors</strong>:</p>
 <ul>
 <li><code>-32602</code>: Invalid parameters (missing content, invalid scope format)</li>
@@ -213,68 +223,68 @@ ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<
 <h4>message.list</h4>
 <p>Lists messages with filtering and pagination.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_abc123&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: filter by thread</span>
-  <span class="hljs-attr">&quot;author_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: filter by author</span>
-  <span class="hljs-attr">&quot;scope&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-comment">// optional: filter by scope</span>
-    <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;ref&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-comment">// optional: filter by reference</span>
-    <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mention&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: results per page (max 100)</span>
-  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: page number</span>
-  <span class="hljs-attr">&quot;sort_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;created_at&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: &quot;created_at&quot; or &quot;updated_at&quot;</span>
-  <span class="hljs-attr">&quot;sort_order&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;desc&quot;</span> <span class="hljs-comment">// optional: &quot;asc&quot; or &quot;desc&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;thread_id&quot;: &quot;thr_abc123&quot;, // optional: filter by thread
+  &quot;author_id&quot;: &quot;agent:...&quot;, // optional: filter by author
+  &quot;scope&quot;: {
+    // optional: filter by scope
+    &quot;type&quot;: &quot;task&quot;,
+    &quot;value&quot;: &quot;PROJ-123&quot;
+  },
+  &quot;ref&quot;: {
+    // optional: filter by reference
+    &quot;type&quot;: &quot;mention&quot;,
+    &quot;value&quot;: &quot;reviewer&quot;
+  },
+  &quot;page_size&quot;: 50, // optional: results per page (max 100)
+  &quot;page&quot;: 1, // optional: page number
+  &quot;sort_by&quot;: &quot;created_at&quot;, // optional: &quot;created_at&quot; or &quot;updated_at&quot;
+  &quot;sort_order&quot;: &quot;desc&quot; // optional: &quot;asc&quot; or &quot;desc&quot;
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;messages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_abc123&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;author&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span>
-      <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;body&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;markdown&quot;</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Hello, world!&quot;</span>
-      <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;refs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;total_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">150</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;total_pages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;messages&quot;: [
+    {
+      &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
+      &quot;thread_id&quot;: &quot;thr_abc123&quot;,
+      &quot;author&quot;: {
+        &quot;agent_id&quot;: &quot;agent:assistant:claude:ABC123&quot;,
+        &quot;session_id&quot;: &quot;ses_01HXE...&quot;
+      },
+      &quot;body&quot;: {
+        &quot;format&quot;: &quot;markdown&quot;,
+        &quot;content&quot;: &quot;Hello, world!&quot;
+      },
+      &quot;scopes&quot;: [],
+      &quot;refs&quot;: [],
+      &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;
+    }
+  ],
+  &quot;page&quot;: 1,
+  &quot;page_size&quot;: 50,
+  &quot;total_count&quot;: 150,
+  &quot;total_pages&quot;: 3
+}</code></pre>
 <h4>message.get</h4>
 <p>Retrieves a single message by ID.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;message_id&quot;: &quot;msg_01HXE...&quot;
+}</code></pre>
 <p><strong>Response</strong>: Same structure as a single message from <code>message.list</code></p>
 <h4>message.edit</h4>
 <p>Edits an existing message (must be message author).</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Updated content&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;structured&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;updated\&quot;:true}&quot;</span> <span class="hljs-comment">// optional</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
+  &quot;content&quot;: &quot;Updated content&quot;,
+  &quot;structured&quot;: &quot;{\&quot;updated\&quot;:true}&quot; // optional
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;updated_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T13:00:00Z&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
+  &quot;updated_at&quot;: &quot;2026-02-03T13:00:00Z&quot;
+}</code></pre>
 <p><strong>Errors</strong>:</p>
 <ul>
 <li><code>-32003</code>: Not authorized (not the message author)</li>
@@ -283,190 +293,193 @@ ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<
 <h4>message.delete</h4>
 <p>Soft-deletes a message (must be message author).</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;spam&quot;</span> <span class="hljs-comment">// optional</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
+  &quot;reason&quot;: &quot;spam&quot; // optional
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;deleted_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T13:00:00Z&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
+  &quot;deleted_at&quot;: &quot;2026-02-03T13:00:00Z&quot;
+}</code></pre>
 <h4>message.markRead</h4>
 <p>Marks a message as read for the current session.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;message_id&quot;: &quot;msg_01HXE...&quot;
+}</code></pre>
 <h3>Thread Methods</h3>
 <h4>thread.create</h4>
 <p>Creates a new conversation thread.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Discussion about feature X&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;title&quot;: &quot;Discussion about feature X&quot;
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Discussion about feature X&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;created_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
+  &quot;title&quot;: &quot;Discussion about feature X&quot;,
+  &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;,
+  &quot;created_by&quot;: &quot;agent:assistant:claude:ABC123&quot;
+}</code></pre>
 <h4>thread.list</h4>
 <p>Lists threads with pagination.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">20</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: results per page</span>
-  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span> <span class="hljs-comment">// optional: page number</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;page_size&quot;: 20, // optional: results per page
+  &quot;page&quot;: 1 // optional: page number
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;threads&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Discussion about feature X&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;created_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;message_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;last_message_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T13:00:00Z&quot;</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">20</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;total_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;total_pages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;threads&quot;: [
+    {
+      &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
+      &quot;title&quot;: &quot;Discussion about feature X&quot;,
+      &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;,
+      &quot;created_by&quot;: &quot;agent:assistant:claude:ABC123&quot;,
+      &quot;message_count&quot;: 5,
+      &quot;last_message_at&quot;: &quot;2026-02-03T13:00:00Z&quot;
+    }
+  ],
+  &quot;page&quot;: 1,
+  &quot;page_size&quot;: 20,
+  &quot;total_count&quot;: 50,
+  &quot;total_pages&quot;: 3
+}</code></pre>
 <h4>thread.get</h4>
 <p>Gets thread details with messages.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: messages per page</span>
-  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span> <span class="hljs-comment">// optional: page number</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
+  &quot;page_size&quot;: 50, // optional: messages per page
+  &quot;page&quot;: 1 // optional: page number
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Discussion about feature X&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;created_by&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;messages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-comment">// ... message objects</span>
-  <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;page&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;page_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;total_messages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
+  &quot;title&quot;: &quot;Discussion about feature X&quot;,
+  &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;,
+  &quot;created_by&quot;: &quot;agent:assistant:claude:ABC123&quot;,
+  &quot;messages&quot;: [
+    // ... message objects
+  ],
+  &quot;page&quot;: 1,
+  &quot;page_size&quot;: 50,
+  &quot;total_messages&quot;: 5
+}</code></pre>
 <h3>Session Methods</h3>
 <h4>session.start</h4>
 <p>Starts a new session for an agent.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;agent_id&quot;: &quot;agent:assistant:claude:ABC123&quot;
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:assistant:claude:ABC123&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;started_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;recovered_sessions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">]</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;session_id&quot;: &quot;ses_01HXE...&quot;,
+  &quot;agent_id&quot;: &quot;agent:assistant:claude:ABC123&quot;,
+  &quot;started_at&quot;: &quot;2026-02-03T12:00:00Z&quot;,
+  &quot;recovered_sessions&quot;: []
+}</code></pre>
 <h4>session.end</h4>
 <p>Ends an active session.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;normal&quot;</span> <span class="hljs-comment">// optional: &quot;normal&quot; or &quot;crash&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;session_id&quot;: &quot;ses_01HXE...&quot;,
+  &quot;reason&quot;: &quot;normal&quot; // optional: &quot;normal&quot; or &quot;crash&quot;
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;ended_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T13:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;duration&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1h0m0s&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;session_id&quot;: &quot;ses_01HXE...&quot;,
+  &quot;ended_at&quot;: &quot;2026-02-03T13:00:00Z&quot;,
+  &quot;duration&quot;: &quot;1h0m0s&quot;
+}</code></pre>
 <h4>session.list</h4>
 <p>Lists sessions with optional filtering.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;agent:...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: filter by agent</span>
-  <span class="hljs-attr">&quot;active_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-comment">// optional: only active sessions</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;agent_id&quot;: &quot;agent:...&quot;, // optional: filter by agent
+  &quot;active_only&quot;: true // optional: only active sessions
+}</code></pre>
 <h4>session.heartbeat</h4>
 <p>Updates the session&#39;s last-seen timestamp.</p>
 <h4>session.setIntent</h4>
 <p>Sets the agent&#39;s current intent/description of work.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;intent&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Working on authentication module&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;intent&quot;: &quot;Working on authentication module&quot;
+}</code></pre>
 <h4>session.setTask</h4>
 <p>Sets the agent&#39;s current task.</p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;task&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thrum-abc1&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;task&quot;: &quot;thrum-abc1&quot;
+}</code></pre>
 <h3>Subscription Methods</h3>
 <h4>subscribe</h4>
-<p>Creates a subscription for event notifications. At least one of <code>scope</code>,<br><code>mention_role</code>, or <code>all</code> must be specified.</p>
+<p>Creates a subscription for event notifications. At least one of <code>scope</code>,
+<code>mention_role</code>, or <code>all</code> must be specified.</p>
 <p><strong>Method</strong>: <code>subscribe</code></p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;scope&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-comment">// optional: scope filter</span>
-    <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;mention_role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-comment">// optional: mention filter</span>
-  <span class="hljs-attr">&quot;all&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span> <span class="hljs-comment">// optional: firehose (receive all messages)</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;scope&quot;: {
+    // optional: scope filter
+    &quot;type&quot;: &quot;task&quot;,
+    &quot;value&quot;: &quot;PROJ-123&quot;
+  },
+  &quot;mention_role&quot;: &quot;reviewer&quot;, // optional: mention filter
+  &quot;all&quot;: false // optional: firehose (receive all messages)
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;session_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ses_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;subscription_id&quot;: 42,
+  &quot;session_id&quot;: &quot;ses_01HXE...&quot;,
+  &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;
+}</code></pre>
 <p><strong>Errors</strong>:</p>
 <ul>
-<li>Missing all parameters:<br><code>&quot;at least one of scope, mention_role, or all must be specified&quot;</code></li>
+<li>Missing all parameters:
+<code>&quot;at least one of scope, mention_role, or all must be specified&quot;</code></li>
 <li>Duplicate: <code>&quot;subscription already exists&quot;</code></li>
 <li>No active session: <code>&quot;no active session found for agent ...&quot;</code></li>
 </ul>
 <h4>unsubscribe</h4>
-<p>Removes a subscription. Only the session that created the subscription can<br>remove it.</p>
+<p>Removes a subscription. Only the session that created the subscription can
+remove it.</p>
 <p><strong>Method</strong>: <code>unsubscribe</code></p>
 <p><strong>Parameters</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;subscription_id&quot;: 42
+}</code></pre>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;removed&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;removed&quot;: true
+}</code></pre>
 <h4>subscriptions.list</h4>
 <p>Lists active subscriptions for the current session.</p>
 <p><strong>Method</strong>: <code>subscriptions.list</code></p>
 <p><strong>Parameters</strong>: <code>{}</code> (empty)</p>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;subscriptions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;scope_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;task&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;scope_value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;PROJ-123&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
-    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">43</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;mention_role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;reviewer&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:05:00Z&quot;</span>
-    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">44</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;all&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:10:00Z&quot;</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">]</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;subscriptions&quot;: [
+    {
+      &quot;id&quot;: 42,
+      &quot;scope_type&quot;: &quot;task&quot;,
+      &quot;scope_value&quot;: &quot;PROJ-123&quot;,
+      &quot;created_at&quot;: &quot;2026-02-03T12:00:00Z&quot;
+    },
+    {
+      &quot;id&quot;: 43,
+      &quot;mention_role&quot;: &quot;reviewer&quot;,
+      &quot;created_at&quot;: &quot;2026-02-03T12:05:00Z&quot;
+    },
+    {
+      &quot;id&quot;: 44,
+      &quot;all&quot;: true,
+      &quot;created_at&quot;: &quot;2026-02-03T12:10:00Z&quot;
+    }
+  ]
+}</code></pre>
 <h3>Sync Methods</h3>
 <h4>sync.force</h4>
 <p>Triggers an immediate sync operation.</p>
@@ -477,57 +490,60 @@ ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<
 <p>Health check endpoint.</p>
 <p><strong>Parameters</strong>: <code>{}</code> (empty)</p>
 <p><strong>Response</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ok&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;uptime_ms&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5445000</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;0.1.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;repo_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;r_ABC123&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;sync_state&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;idle&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;status&quot;: &quot;ok&quot;,
+  &quot;uptime_ms&quot;: 5445000,
+  &quot;version&quot;: &quot;0.1.0&quot;,
+  &quot;repo_id&quot;: &quot;r_ABC123&quot;,
+  &quot;sync_state&quot;: &quot;idle&quot;
+}</code></pre>
 <h2>Push Notifications</h2>
-<p>Push notifications are sent as JSON-RPC notifications (no <code>id</code> field, no<br>response expected). They are delivered to clients that have active subscriptions<br>matching the event.</p>
+<p>Push notifications are sent as JSON-RPC notifications (no <code>id</code> field, no
+response expected). They are delivered to clients that have active subscriptions
+matching the event.</p>
 <h3>Notification Format</h3>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;notification.message&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;params&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-comment">// event-specific payload</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;method&quot;: &quot;notification.message&quot;,
+  &quot;params&quot;: {
+    // event-specific payload
+  }
+}</code></pre>
 <h3>Notification Types</h3>
 <h4>notification.message</h4>
 <p>Sent when a new message matches a client&#39;s subscription.</p>
 <p><strong>Payload</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;message_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;msg_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;author&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;agent_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;implementer&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;module&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;First 100 characters...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;scopes&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;module&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auth&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;matched_subscription&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;subscription_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">42</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;match_type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;scope&quot;</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;message_id&quot;: &quot;msg_01HXE...&quot;,
+  &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
+  &quot;author&quot;: {
+    &quot;agent_id&quot;: &quot;furiosa&quot;,
+    &quot;name&quot;: &quot;furiosa&quot;,
+    &quot;role&quot;: &quot;implementer&quot;,
+    &quot;module&quot;: &quot;&quot;
+  },
+  &quot;preview&quot;: &quot;First 100 characters...&quot;,
+  &quot;scopes&quot;: [{ &quot;type&quot;: &quot;module&quot;, &quot;value&quot;: &quot;auth&quot; }],
+  &quot;matched_subscription&quot;: {
+    &quot;subscription_id&quot;: 42,
+    &quot;match_type&quot;: &quot;scope&quot;
+  },
+  &quot;timestamp&quot;: &quot;2026-02-03T12:00:00Z&quot;
+}</code></pre>
 <p><code>match_type</code> values: <code>&quot;scope&quot;</code>, <code>&quot;mention&quot;</code>, <code>&quot;all&quot;</code></p>
 <h4>notification.thread.updated</h4>
-<p>Sent when a thread has new activity. Delivered to all sessions with any active<br>subscription.</p>
+<p>Sent when a thread has new activity. Delivered to all sessions with any active
+subscription.</p>
 <p><strong>Payload</strong>:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;thread_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;thr_01HXE...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;message_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">5</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;unread_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;last_activity&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;last_sender&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;furiosa&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;preview&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Latest message text...&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-02-03T12:00:00Z&quot;</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;thread_id&quot;: &quot;thr_01HXE...&quot;,
+  &quot;message_count&quot;: 5,
+  &quot;unread_count&quot;: 2,
+  &quot;last_activity&quot;: &quot;2026-02-03T12:00:00Z&quot;,
+  &quot;last_sender&quot;: &quot;furiosa&quot;,
+  &quot;preview&quot;: &quot;Latest message text...&quot;,
+  &quot;timestamp&quot;: &quot;2026-02-03T12:00:00Z&quot;
+}</code></pre>
 <h2>Error Codes</h2>
 <h3>Standard JSON-RPC Errors</h3>
 <ul>
@@ -546,18 +562,18 @@ ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<
 <li><code>-32004</code>: Validation error (invalid format, constraints)</li>
 </ul>
 <h3>Error Response Format</h3>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;jsonrpc&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2.0&quot;</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;error&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;code&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">-32602</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Invalid params&quot;</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;data&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;username&quot;</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">&quot;reason&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;must be lowercase alphanumeric&quot;</span>
-    <span class="hljs-punctuation">}</span>
-  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;error&quot;: {
+    &quot;code&quot;: -32602,
+    &quot;message&quot;: &quot;Invalid params&quot;,
+    &quot;data&quot;: {
+      &quot;field&quot;: &quot;username&quot;,
+      &quot;reason&quot;: &quot;must be lowercase alphanumeric&quot;
+    }
+  },
+  &quot;id&quot;: 1
+}</code></pre>
 <h2>WebSocket Server Architecture</h2>
 <h3>Server Components</h3>
 <table>
@@ -624,10 +640,11 @@ ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<
 </tr>
 </tbody></table>
 <h3>Client Registry</h3>
-<p>The WebSocket client registry tracks connected clients by session ID and<br>supports push notifications:</p>
-<pre><code class="language-go hljs"><span class="hljs-keyword">type</span> ClientRegistry <span class="hljs-keyword">struct</span> {
+<p>The WebSocket client registry tracks connected clients by session ID and
+supports push notifications:</p>
+<pre><code>type ClientRegistry struct {
     mu      sync.RWMutex
-    clients <span class="hljs-keyword">map</span>[<span class="hljs-type">string</span>]*Connection
+    clients map[string]*Connection
 }</code></pre>
 <p><strong>Methods</strong>:</p>
 <ul>
@@ -636,21 +653,26 @@ ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<
 <li><code>Get(sessionID)</code> -- Look up connection by session</li>
 <li><code>Count()</code> -- Number of connected clients</li>
 <li><code>CloseAll()</code> -- Close all connections (used during graceful shutdown)</li>
-<li><code>Notify(sessionID, notification)</code> -- Send JSON-RPC notification to a specific<br>client</li>
+<li><code>Notify(sessionID, notification)</code> -- Send JSON-RPC notification to a specific
+client</li>
 </ul>
-<p>When <code>Notify</code> fails (client disconnected or buffer full), the client is<br>automatically unregistered.</p>
+<p>When <code>Notify</code> fails (client disconnected or buffer full), the client is
+automatically unregistered.</p>
 <h2>Best Practices</h2>
 <h3>Connection Management</h3>
 <ol>
 <li><strong>Use <code>/ws</code> endpoint</strong>: Connect to <code>ws://localhost:9999/ws</code> (not root path)</li>
 <li><strong>Reconnection</strong>: Implement exponential backoff for reconnections</li>
-<li><strong>Pong handling</strong>: Most WebSocket libraries handle pong responses<br>automatically</li>
+<li><strong>Pong handling</strong>: Most WebSocket libraries handle pong responses
+automatically</li>
 <li><strong>Cleanup</strong>: End sessions before disconnecting</li>
 </ol>
 <h3>Event Handling</h3>
 <ol>
-<li><strong>Subscription filtering</strong>: Only subscribe to events you need (scope or<br>mention filters)</li>
-<li><strong>Buffer management</strong>: Handle event bursts gracefully; slow consumers may be<br>disconnected</li>
+<li><strong>Subscription filtering</strong>: Only subscribe to events you need (scope or
+mention filters)</li>
+<li><strong>Buffer management</strong>: Handle event bursts gracefully; slow consumers may be
+disconnected</li>
 <li><strong>Idempotency</strong>: Use message IDs for deduplication</li>
 </ol>
 <h3>Error Handling</h3>
@@ -663,7 +685,8 @@ ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<
 <ol>
 <li><strong>Pagination</strong>: Use appropriate page sizes (don&#39;t fetch all data at once)</li>
 <li><strong>Connection reuse</strong>: Reuse WebSocket connections when possible</li>
-<li><strong>Targeted subscriptions</strong>: Use scope-based subscriptions instead of &quot;all&quot;<br>when possible</li>
+<li><strong>Targeted subscriptions</strong>: Use scope-based subscriptions instead of &quot;all&quot;
+when possible</li>
 </ol>
 <h2>Examples</h2>
 <p>See the <a href="./examples/">examples directory</a> for complete, working examples:</p>
@@ -674,22 +697,17 @@ ws.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<
 <h2>See Also</h2>
 <ul>
 <li><a href="./events.html">Event Reference</a> - Detailed event documentation</li>
-<li><a href="./authentication.html">Authentication Guide</a> - Authentication and authorization<br>details</li>
-<li><a href="../subscriptions.html">Subscriptions</a> - Subscription model and notification<br>dispatch</li>
-<li><a href="../event-streaming.html">Event Streaming</a> - Event streaming architecture and<br>Broadcaster</li>
+<li><a href="./authentication.html">Authentication Guide</a> - Authentication and authorization
+details</li>
+<li><a href="../subscriptions.html">Subscriptions</a> - Subscription model and notification
+dispatch</li>
+<li><a href="../event-streaming.html">Event Streaming</a> - Event streaming architecture and
+Broadcaster</li>
 <li><a href="../rpc-api.html">RPC API</a> - Full RPC method reference</li>
 <li><a href="../daemon.html">Daemon Architecture</a> - Daemon lifecycle and component overview</li>
 </ul>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#api/websocket.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#api/websocket.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#api/websocket.html')}</script>
 </body>
 </html>

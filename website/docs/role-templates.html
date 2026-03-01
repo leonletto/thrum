@@ -1,66 +1,62 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Role-Based Preamble Templates — Thrum</title>
-  <meta name="description" content="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Role-Based Preamble Templates — Thrum">
-  <meta property="og:description" content="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/role-templates.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Role-Based Preamble Templates — Thrum">
-  <meta name="twitter:description" content="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#role-templates.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Role-Based Preamble Templates — Thrum</title>
+<meta name="description" content="Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#role-templates.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; uncategorized &rsaquo; Role-Based Preamble Templates
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <strong>Role-Based Preamble Templates</strong><br>
+</nav>
+<main>
 <h2>Role-Based Preamble Templates</h2>
 <h2>Overview</h2>
-<p>Role templates automatically generate agent preambles during registration.<br>Instead of every agent getting the same default preamble, each role gets a<br>customized set of behavioral directives — scope boundaries, task protocol,<br>communication patterns, idle behavior, and efficiency rules.</p>
+<p>Role templates automatically generate agent preambles during registration.
+Instead of every agent getting the same default preamble, each role gets a
+customized set of behavioral directives — scope boundaries, task protocol,
+communication patterns, idle behavior, and efficiency rules.</p>
 <p><strong>Three layers:</strong></p>
 <ol>
-<li><strong>Shipped examples</strong> in <code>toolkit/templates/roles/</code> — reference material with<br>strict and autonomous variants for each role</li>
-<li><strong>Active templates</strong> in <code>.thrum/role_templates/</code> — per-project templates that<br>auto-apply on agent registration</li>
-<li><strong>Claude skill</strong> (<code>thrum:configure-roles</code>) — interactive environment-aware<br>template generation</li>
+<li><strong>Shipped examples</strong> in <code>toolkit/templates/roles/</code> — reference material with
+strict and autonomous variants for each role</li>
+<li><strong>Active templates</strong> in <code>.thrum/role_templates/</code> — per-project templates that
+auto-apply on agent registration</li>
+<li><strong>Claude skill</strong> (<code>thrum:configure-roles</code>) — interactive environment-aware
+template generation</li>
 </ol>
 <h2>How It Works</h2>
-<p>When an agent registers via <code>thrum quickstart --role implementer</code>, the system<br>checks for <code>.thrum/role_templates/implementer.md</code>. If found, it renders the<br>template with the agent&#39;s identity data and saves it as the agent&#39;s preamble.</p>
+<p>When an agent registers via <code>thrum quickstart --role implementer</code>, the system
+checks for <code>.thrum/role_templates/implementer.md</code>. If found, it renders the
+template with the agent&#39;s identity data and saves it as the agent&#39;s preamble.</p>
 <p><strong>Precedence:</strong></p>
 <ol>
 <li><code>--preamble-file</code> flag (highest — explicit user choice)</li>
@@ -103,27 +99,27 @@
 </tbody></table>
 <h2>Template Structure</h2>
 <p>Every role template follows the same section structure:</p>
-<pre><code class="language-markdown hljs"><span class="hljs-section"># Agent: {{.AgentName}}</span>
+<pre><code># Agent: {{.AgentName}}
 
-<span class="hljs-strong">**Role:**</span> {{.Role}} <span class="hljs-strong">**Module:**</span> {{.Module}} <span class="hljs-strong">**Worktree:**</span> {{.WorktreePath}}
+**Role:** {{.Role}} **Module:** {{.Module}} **Worktree:** {{.WorktreePath}}
 
-<span class="hljs-section">## Identity &amp; Authority</span>
+## Identity &amp; Authority
 
-<span class="hljs-section">## Scope Boundaries</span>
+## Scope Boundaries
 
-<span class="hljs-section">## Task Protocol</span>
+## Task Protocol
 
-<span class="hljs-section">## Communication Protocol</span>
+## Communication Protocol
 
-<span class="hljs-section">## Message Listener</span>
+## Message Listener
 
-<span class="hljs-section">## Task Tracking</span>
+## Task Tracking
 
-<span class="hljs-section">## Efficiency &amp; Context Management</span>
+## Efficiency &amp; Context Management
 
-<span class="hljs-section">## Idle Behavior</span>
+## Idle Behavior
 
-<span class="hljs-section">## Project-Specific Rules</span></code></pre>
+## Project-Specific Rules</code></pre>
 <h2>Shipped Examples</h2>
 <p>Reference templates in <code>toolkit/templates/roles/</code>:</p>
 <table>
@@ -169,35 +165,36 @@
 <h2>CLI Commands</h2>
 <h3>thrum roles list</h3>
 <p>List configured templates and matching agents:</p>
-<pre><code class="language-bash hljs">thrum roles list
-<span class="hljs-comment"># coordinator.md    (2 agents: coord_main, coord_api)</span>
-<span class="hljs-comment"># implementer.md    (3 agents: impl_auth, impl_payments, impl_ui)</span>
-<span class="hljs-comment"># planner.md        (0 agents)</span></code></pre>
+<pre><code>thrum roles list
+# coordinator.md    (2 agents: coord_main, coord_api)
+# implementer.md    (3 agents: impl_auth, impl_payments, impl_ui)
+# planner.md        (0 agents)</code></pre>
 <h3>thrum roles deploy</h3>
 <p>Re-render preambles for registered agents from role templates:</p>
-<pre><code class="language-bash hljs">thrum roles deploy              <span class="hljs-comment"># Deploy for all agents</span>
-thrum roles deploy --agent foo  <span class="hljs-comment"># Deploy for a specific agent</span>
-thrum roles deploy --dry-run    <span class="hljs-comment"># Preview what would change</span></code></pre>
+<pre><code>thrum roles deploy              # Deploy for all agents
+thrum roles deploy --agent foo  # Deploy for a specific agent
+thrum roles deploy --dry-run    # Preview what would change</code></pre>
 <p>Deploy is a full overwrite — templates are the source of truth.</p>
 <h2>Setting Up</h2>
 <h3>Manual setup</h3>
 <ol>
 <li>Copy a shipped example to <code>.thrum/role_templates/</code>:</li>
 </ol>
-<pre><code class="language-bash hljs"><span class="hljs-built_in">cp</span> toolkit/templates/roles/implementer-autonomous.md .thrum/role_templates/implementer.md</code></pre>
+<pre><code>cp toolkit/templates/roles/implementer-autonomous.md .thrum/role_templates/implementer.md</code></pre>
 <ol>
 <li><p>Edit to customize for your project.</p>
 </li>
 <li><p>Register agents — templates auto-apply:</p>
 </li>
 </ol>
-<pre><code class="language-bash hljs">thrum quickstart --name impl_auth --role implementer --module auth</code></pre>
+<pre><code>thrum quickstart --name impl_auth --role implementer --module auth</code></pre>
 <h3>Interactive setup (Claude Code)</h3>
 <p>Run the configure-roles skill:</p>
-<pre><code class="language-bash hljs">/thrum:configure-roles</code></pre>
-<p>The skill detects your environment (runtimes, worktrees, beads, MCP servers) and<br>generates customized templates interactively.</p>
+<pre><code>/thrum:configure-roles</code></pre>
+<p>The skill detects your environment (runtimes, worktrees, beads, MCP servers) and
+generates customized templates interactively.</p>
 <h2>File Layout</h2>
-<pre><code class="language-text hljs">.thrum/
+<pre><code>.thrum/
 ├── role_templates/           # Active templates (per-project)
 │   ├── coordinator.md
 │   ├── implementer.md
@@ -209,15 +206,7 @@ thrum roles deploy --dry-run    <span class="hljs-comment"># Preview what would 
     ├── impl_auth.json
     └── coord_main.json</code></pre>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#role-templates.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#role-templates.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#role-templates.html')}</script>
 </body>
 </html>

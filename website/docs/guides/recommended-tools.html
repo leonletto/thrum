@@ -1,57 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Recommended Tools — Thrum</title>
-  <meta name="description" content="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Recommended Tools — Thrum">
-  <meta property="og:description" content="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/guides/recommended-tools.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Recommended Tools — Thrum">
-  <meta name="twitter:description" content="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/recommended-tools.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Recommended Tools — Thrum</title>
+<meta name="description" content="Tools, extensions, and integrations that work well with Thrum for AI agent coordination workflows">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/recommended-tools.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; Recommended Tools &rsaquo; Recommended Tools
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <strong>Recommended Tools</strong> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a> | <a href="../overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="../architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="../context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="../cli.html">CLI Reference</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Recommended Tools</h2>
-<p>A curated list of tools and integrations that complement Thrum for AI agent<br>coordination. Each tool addresses a specific gap in the agent workflow — task<br>tracking, visual oversight, or browser automation.</p>
+<p>A curated list of tools and integrations that complement Thrum for AI agent
+coordination. Each tool addresses a specific gap in the agent workflow — task
+tracking, visual oversight, or browser automation.</p>
 <h3>Task Tracking</h3>
 <table>
 <thead>
@@ -72,8 +62,13 @@
 <td><code>npm i beads-ui -g</code></td>
 </tr>
 </tbody></table>
-<p><strong>Beads</strong> is the task-tracking counterpart to Thrum&#39;s messaging. Where Thrum<br>answers &quot;what did my teammates tell me?&quot;, Beads answers &quot;what should I work on?&quot;<br>Both persist to Git, require no external services, and survive session<br>boundaries.</p>
-<p><strong>Beads UI</strong> gives developers a browser-based view of what agents are working on<br>— a Kanban board, epics view, and issue list that update in real time as agents<br>claim and close tasks.</p>
+<p><strong>Beads</strong> is the task-tracking counterpart to Thrum&#39;s messaging. Where Thrum
+answers &quot;what did my teammates tell me?&quot;, Beads answers &quot;what should I work on?&quot;
+Both persist to Git, require no external services, and survive session
+boundaries.</p>
+<p><strong>Beads UI</strong> gives developers a browser-based view of what agents are working on
+— a Kanban board, epics view, and issue list that update in real time as agents
+claim and close tasks.</p>
 <h3>Browser Automation</h3>
 <table>
 <thead>
@@ -89,7 +84,10 @@
 <td>Claude Code skill</td>
 </tr>
 </tbody></table>
-<p><strong>Playwright CLI</strong> lets agents interact with web pages during their workflow —<br>capture screenshots for context, fill forms, extract data, or verify that a web<br>UI renders correctly. It runs as a Claude Code skill using the <code>playwright-cli</code><br>command.</p>
+<p><strong>Playwright CLI</strong> lets agents interact with web pages during their workflow —
+capture screenshots for context, fill forms, extract data, or verify that a web
+UI renders correctly. It runs as a Claude Code skill using the <code>playwright-cli</code>
+command.</p>
 <h3>How These Tools Work Together</h3>
 <p>A typical multi-agent workflow using all three:</p>
 <ol>
@@ -112,20 +110,15 @@
     │  (task moves to Done)  │                        │</code></pre>
 <h3>Further Reading</h3>
 <ul>
-<li><a href="../beads-and-thrum.html">Beads and Thrum</a> — How persistent task tracking and<br>messaging solve context loss together</li>
-<li><a href="../multi-agent.html">Multi-Agent Coordination</a> — Patterns for multi-agent<br>workflows</li>
-<li><a href="../claude-code-plugin.html">Claude Code Plugin</a> — Thrum&#39;s Claude Code plugin<br>reference</li>
+<li><a href="../beads-and-thrum.html">Beads and Thrum</a> — How persistent task tracking and
+messaging solve context loss together</li>
+<li><a href="../multi-agent.html">Multi-Agent Coordination</a> — Patterns for multi-agent
+workflows</li>
+<li><a href="../claude-code-plugin.html">Claude Code Plugin</a> — Thrum&#39;s Claude Code plugin
+reference</li>
 </ul>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#guides/recommended-tools.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#guides/recommended-tools.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#guides/recommended-tools.html')}</script>
 </body>
 </html>

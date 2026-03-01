@@ -1,66 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Configuration — Thrum</title>
-  <meta name="description" content="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">
-  <!-- Open Graph -->
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="Configuration — Thrum">
-  <meta property="og:description" content="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">
-  <meta property="og:url" content="https://leonletto.github.io/thrum/docs/configuration.html">
-  <meta property="og:site_name" content="Thrum">
-  <meta property="og:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Configuration — Thrum">
-  <meta name="twitter:description" content="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">
-  <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
-  <!-- Canonical: SPA is the primary URL -->
-  <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#configuration.html">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/theme.css">
-  <link rel="stylesheet" href="../css/docs.css">
-  <script>
-    (function(){var t=localStorage.getItem('thrum-theme');if(t){document.documentElement.setAttribute('data-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:light)').matches){document.documentElement.setAttribute('data-theme','light')}else{document.documentElement.setAttribute('data-theme','dark')}})();
-  </script>
+<meta charset="UTF-8">
+<title>Configuration — Thrum</title>
+<meta name="description" content="Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#configuration.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <nav class="header-nav">
-        <a href="../index.html" class="logo">
-          <span class="logo-glyph">&gt;_</span>
-          <span class="logo-text">thrum</span>
-        </a>
-        <div class="nav-links">
-          <a href="../index.html" class="nav-link">Home</a>
-          <a href="../docs.html" class="nav-link nav-link-active">Docs</a>
-          <a href="../about.html" class="nav-link">About</a>
-          <a href="https://github.com/leonletto/thrum" class="nav-link nav-link-external" target="_blank" rel="noopener">GitHub</a>
-        </div>
-      </nav>
-    </div>
-  </header>
-  <main class="docs-content" style="max-width:48rem;margin:2rem auto;padding:0 1.5rem">
-    <div class="docs-content-inner">
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Configuration
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <strong>Configuration</strong> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
 <h2>Configuration</h2>
-<p>Thrum uses <code>.thrum/config.json</code> as the single source of truth for user<br>preferences. Everything works with sensible defaults — you only need to edit<br>config.json when you want to change something.</p>
+<p>Thrum uses <code>.thrum/config.json</code> as the single source of truth for user
+preferences. Everything works with sensible defaults — you only need to edit
+config.json when you want to change something.</p>
 <h2>Config File</h2>
 <p>Located at <code>.thrum/config.json</code> in your repository:</p>
-<pre><code class="language-json hljs"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">&quot;daemon&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">&quot;local_only&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;sync_interval&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">60</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">&quot;ws_port&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;auto&quot;</span>
-  <span class="hljs-punctuation">}</span>
-<span class="hljs-punctuation">}</span></code></pre>
+<pre><code>{
+  &quot;daemon&quot;: {
+    &quot;local_only&quot;: true,
+    &quot;sync_interval&quot;: 60,
+    &quot;ws_port&quot;: &quot;auto&quot;
+  }
+}</code></pre>
 <p>This file is created during <code>thrum init</code> and can be edited at any time.</p>
 <h2>Schema Reference</h2>
 <h3><code>daemon.local_only</code></h3>
@@ -87,8 +77,9 @@
 </ul>
 <h2>Priority Chain</h2>
 <p>When the same setting can come from multiple sources, this order applies:</p>
-<pre><code class="language-text hljs">CLI flag  &gt;  Environment variable  &gt;  config.json  &gt;  Default</code></pre>
-<p>Environment variables are intended for CI/automation overrides, not primary<br>configuration. For day-to-day use, edit <code>config.json</code>.</p>
+<pre><code>CLI flag  &gt;  Environment variable  &gt;  config.json  &gt;  Default</code></pre>
+<p>Environment variables are intended for CI/automation overrides, not primary
+configuration. For day-to-day use, edit <code>config.json</code>.</p>
 <h3>Environment Variable Reference</h3>
 <table>
 <thead>
@@ -130,7 +121,8 @@
 </tr>
 </tbody></table>
 <h2>Runtime Templates</h2>
-<p>During <code>thrum init</code>, Thrum can generate configuration files for various AI<br>coding runtimes:</p>
+<p>During <code>thrum init</code>, Thrum can generate configuration files for various AI
+coding runtimes:</p>
 <ul>
 <li><strong>Claude Code</strong> - CLAUDE.md and .claude/agents/</li>
 <li><strong>Augment</strong> - .augment/ directory</li>
@@ -139,10 +131,13 @@
 <li><strong>Gemini</strong> - .gemini/</li>
 <li><strong>CLI-only</strong> - No runtime configuration files</li>
 </ul>
-<p>Use <code>thrum init --runtime &lt;name&gt;</code> to specify which runtime template to generate.<br>Runtime templates are created during initialization and are not tracked in<br><code>config.json</code>.</p>
+<p>Use <code>thrum init --runtime &lt;name&gt;</code> to specify which runtime template to generate.
+Runtime templates are created during initialization and are not tracked in
+<code>config.json</code>.</p>
 <h2>Viewing Configuration</h2>
-<p>Use <code>thrum config show</code> to see the effective configuration and where each value<br>comes from:</p>
-<pre><code class="language-text hljs">Thrum Configuration
+<p>Use <code>thrum config show</code> to see the effective configuration and where each value
+comes from:</p>
+<pre><code>Thrum Configuration
   Config file: .thrum/config.json
 
 Runtime
@@ -167,21 +162,15 @@ Overrides (environment)
 <h2>What&#39;s NOT in config.json</h2>
 <p>These remain separate for good reasons:</p>
 <ul>
-<li><strong>Identity files</strong> (<code>.thrum/identities/*.json</code>) — per-agent config, one file<br>per registered agent</li>
+<li><strong>Identity files</strong> (<code>.thrum/identities/*.json</code>) — per-agent config, one file
+per registered agent</li>
 <li><strong>Context files</strong> (<code>.thrum/context/*.md</code>) — volatile session state</li>
-<li><strong>Runtime templates</strong> — generated config files for your AI runtime (CLAUDE.md,<br>.cursorrules, etc.)</li>
+<li><strong>Runtime templates</strong> — generated config files for your AI runtime (CLAUDE.md,
+.cursorrules, etc.)</li>
 </ul>
 <pre><code></code></pre>
 
-    </div>
-    <p style="margin-top:2rem"><a href="../docs.html#configuration.html">&larr; View in documentation</a></p>
-  </main>
-  <script>
-    // Redirect browsers to the SPA for full navigation experience.
-    // Crawlers (which don't execute JS) will index the static content above.
-    if (window.location.search.indexOf('nospa') === -1) {
-      window.location.replace('../docs.html#configuration.html');
-    }
-  </script>
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#configuration.html')}</script>
 </body>
 </html>
