@@ -73,28 +73,17 @@ test.describe('Initialization Tests', () => {
       execFileSync('git', ['commit', '-m', 'init'], { cwd: tmpDir, stdio: 'pipe' });
       execFileSync(BIN, ['init'], { cwd: tmpDir, timeout: 30_000 });
 
-      // NOTE: The scenario expects idempotent behavior (no error),
-      // but the current implementation requires --force flag.
-      // Testing actual behavior here.
+      // thrum init on an already-initialized repo is idempotent: it continues
+      // to runtime/agent setup and exits 0 (no error). Verify this behavior.
+      const reinitOutput = execFileSync(BIN, ['init'], {
+        cwd: tmpDir,
+        encoding: 'utf-8',
+        timeout: 30_000,
+      });
+      // Re-init should succeed without error
+      expect(reinitOutput.toLowerCase()).not.toContain('fatal');
 
-      // Act: initialize thrum again without --force should error
-      let errorThrown = false;
-      let errorMessage = '';
-      try {
-        execFileSync(BIN, ['init'], {
-          cwd: tmpDir,
-          encoding: 'utf-8',
-        });
-      } catch (err: any) {
-        errorThrown = true;
-        errorMessage = err.stderr?.toString() || err.message || '';
-      }
-
-      // Assert: error is thrown
-      expect(errorThrown).toBe(true);
-      expect(errorMessage.toLowerCase()).toContain('already exists');
-
-      // Act: initialize with --force should succeed
+      // Act: initialize with --force should also succeed
       const output = execFileSync(BIN, ['init', '--force'], {
         cwd: tmpDir,
         encoding: 'utf-8',

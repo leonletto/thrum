@@ -71,8 +71,13 @@ test.describe('Groups', () => {
   });
 
   test('F5: Adding non-agent to group fails', async () => {
+    // DIVERGENCE: Original spec expected nested group support (adding group
+    // "test-team" as member of "meta-group"). Current implementation treats
+    // all member identifiers as agent names — group names are not resolved,
+    // so adding "test-team" fails with "not found" (agent lookup, not a
+    // "nested groups unsupported" error). This is the intended behavior:
+    // groups contain agents only, not other groups.
     thrum(['group', 'create', 'meta-group']);
-    // Adding a non-existent agent name should fail (no nested groups)
     let error = '';
     try {
       thrum(['group', 'add', 'meta-group', 'test-team']);

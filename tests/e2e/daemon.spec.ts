@@ -151,8 +151,13 @@ test.describe('Daemon Management', () => {
       }
       expect(processExists).toBe(false);
 
-      // Verify status shows not running
-      const afterStatus = thrumIn(repo, ['daemon', 'status']);
+      // Verify status shows not running (daemon status exits 1 when stopped)
+      let afterStatus: string;
+      try {
+        afterStatus = thrumIn(repo, ['daemon', 'status']);
+      } catch (e: any) {
+        afterStatus = e.stdout?.toString() || e.message || '';
+      }
       expect(afterStatus.toLowerCase()).toMatch(/not running|stopped/);
     } finally {
       stopDaemonSafe(repo);

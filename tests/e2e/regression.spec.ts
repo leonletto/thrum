@@ -147,7 +147,10 @@ test.describe('Bugfix Regressions', () => {
     expect(error.toLowerCase()).toContain('unknown flag');
   });
 
-  test('J9: Unknown recipient hard error', async () => {
+  test('J9: Unknown recipient hard error with inbox verification', async () => {
+    // Mark all read before the test
+    thrumIn(getTestRoot(), ['message', 'read', '--all'], 10_000, regressionEnv());
+
     let error = '';
     try {
       thrumIn(getTestRoot(), ['send', 'fail', '--to', '@does-not-exist'], 10_000, regressionEnv());
@@ -155,6 +158,10 @@ test.describe('Bugfix Regressions', () => {
       error = err.message || '';
     }
     expect(error.toLowerCase()).toContain('unknown');
+
+    // Verify: failed send must not create a phantom message in our inbox
+    const inbox = thrumIn(getTestRoot(), ['inbox', '--unread'], 10_000, regressionEnv());
+    expect(inbox.toLowerCase()).not.toContain('fail');
   });
 
   test('J11: Group-send warning excludes @everyone', async () => {
