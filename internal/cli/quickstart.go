@@ -7,6 +7,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/runtime"
+	"github.com/leonletto/thrum/internal/types"
 )
 
 // QuickstartOptions contains options for the quickstart command.
@@ -109,6 +110,15 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	// Step 2: Start session
 	sessOpts := SessionStartOptions{
 		AgentID: regResult.AgentID,
+	}
+
+	// Auto-set worktree ref so heartbeat can extract git context
+	repoPathForRef := opts.RepoPath
+	if repoPathForRef == "" {
+		repoPathForRef = "."
+	}
+	if worktreeRoot := GitTopLevel(repoPathForRef); worktreeRoot != "" {
+		sessOpts.Refs = append(sessOpts.Refs, types.Ref{Type: "worktree", Value: worktreeRoot})
 	}
 
 	sessResult, err := SessionStart(client, sessOpts)

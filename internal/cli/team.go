@@ -37,7 +37,7 @@ type TeamMember struct {
 	Module          string       `json:"module"`
 	Display         string       `json:"display,omitempty"`
 	Hostname        string       `json:"hostname,omitempty"`
-	WorktreePath    string       `json:"worktree_path,omitempty"`
+	WorktreePath    string       `json:"worktree,omitempty"`
 	SessionID       string       `json:"session_id,omitempty"`
 	SessionStart    string       `json:"session_start,omitempty"`
 	LastSeen        string       `json:"last_seen,omitempty"`
