@@ -157,8 +157,8 @@ test.describe('Coordination', () => {
       // Assert: who-has returns valid output referencing the file
       expect(output).not.toBe('');
       expect(output.toLowerCase()).not.toContain('error');
-      // who-has either shows agents or "No agents" tip
-      expect(output.toLowerCase()).toMatch(/agent|who/i);
+      // who-has either shows agents editing (@@name is editing...) or "No agents" tip
+      expect(output.toLowerCase()).toMatch(/is editing|no agent/i);
     } finally {
       try {
         fs.rmSync(path.join(implRoot, testFile), { force: true });
