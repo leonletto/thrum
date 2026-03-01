@@ -158,9 +158,14 @@ git worktree list
 
 # Check which worktrees have in-progress beads tasks
 bd list --status=in_progress
+
+# Check for active agents on each worktree
+thrum team --json
 ```
 
-Also check the CLAUDE.md worktree table for status info (active/idle/merged).
+Parse `thrum team --json` to map worktree paths to active agent names (match
+on the `worktree` field). Also check the CLAUDE.md worktree table for status
+info (active/idle/merged).
 
 ### Step 2: Present Worktree Options
 
@@ -174,7 +179,8 @@ For each epic, use `AskUserQuestion` to let the user choose a worktree:
 | Work is small enough for the current branch        | "Use current worktree (`<branch>`)"  |
 
 Include in each option's description: worktree path, current branch, whether
-clean, existing agent registration, status from CLAUDE.md.
+clean, any active agent already on that worktree (name it explicitly), status
+from CLAUDE.md.
 
 For agent names, suggest a name derived from the feature (e.g., `impl_{feature}`).
 
@@ -189,11 +195,24 @@ git fetch origin && git rebase origin/<dev-branch>  # Catch up if behind
 cat .thrum/redirect                 # Verify redirect
 cat .beads/redirect                 # Verify redirect
 bd where                            # Confirm shared beads database
-thrum quickstart --name <agent-name> --role implementer \
-  --module <branch> --intent "Implementing <epic-id>"
 ```
 
 If redirects are missing, run the worktree setup script in redirect-only mode.
+
+**Agent registration — check for an existing agent first.** If `thrum team
+--json` showed an active agent on this worktree, send the assignment to them
+instead of registering a new one:
+
+```bash
+# Existing agent on this worktree:
+thrum send "Assignment: implement <epic-id> (<epic-title>).
+Worktree: <worktree-path>, branch: <branch-name>.
+Start with: bd show <epic-id>" --to @<existing-agent-name>
+
+# No active agent — register a new one:
+thrum quickstart --name <agent-name> --role implementer \
+  --module <branch> --intent "Implementing <epic-id>"
+```
 
 #### For new worktrees:
 
@@ -210,10 +229,19 @@ beads redirect, and `thrum quickstart` registration.
 #### For current worktree (small fixes):
 
 ```bash
-# Just register the agent
+bd where && bd ready    # Verify beads
+```
+
+If an active agent already exists on this worktree, send the assignment to
+them. Otherwise register a new agent:
+
+```bash
+# Existing agent: send work
+thrum send "Assignment: implement <epic-id>" --to @<existing-agent-name>
+
+# No active agent: register
 thrum quickstart --name <agent-name> --role implementer \
   --module <current-branch> --intent "Implementing <epic-id>"
-bd where && bd ready    # Verify beads
 ```
 
 ### Step 4: Verify & Record
@@ -315,6 +343,11 @@ git commit -m "plan: add implementation prompts for {{FEATURE_NAME}}"
 **Missing dependencies:** Always run `bd blocked` to verify.
 
 **Skipping worktree selection:** Always ask the user; never silently assign.
+
+**Duplicate agent registration:** Always run `thrum team --json` before
+registering. If an agent is already active on the target worktree, send them
+the assignment via `thrum send --to @<agent-name>` — do not run `thrum
+quickstart` again.
 
 **Wrong base branch:** Always pass `--base thrum-dev` explicitly.
 
