@@ -68,18 +68,6 @@ type MessageDeleteEvent struct {
 	Reason       string `json:"reason,omitempty"`
 }
 
-// ThreadCreateEvent represents a thread.create event.
-type ThreadCreateEvent struct {
-	Type         string `json:"type"`
-	Timestamp    string `json:"timestamp"`
-	EventID      string `json:"event_id"`
-	Version      int    `json:"v"`
-	OriginDaemon string `json:"origin_daemon,omitempty"`
-	ThreadID     string `json:"thread_id"`
-	Title        string `json:"title"`
-	CreatedBy    string `json:"created_by"`
-}
-
 // ThreadUpdatedEvent represents a thread.updated event (real-time notification, not persisted).
 type ThreadUpdatedEvent struct {
 	Type         string  `json:"type"`

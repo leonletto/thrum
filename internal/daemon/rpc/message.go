@@ -25,7 +25,6 @@ type SendRequest struct {
 	Content       string         `json:"content"`
 	Format        string         `json:"format,omitempty"`     // default: "markdown"
 	Structured    map[string]any `json:"structured,omitempty"` // optional typed payload
-	ThreadID      string         `json:"thread_id,omitempty"`
 	ReplyTo       string         `json:"reply_to,omitempty"`
 	Scopes        []types.Scope  `json:"scopes,omitempty"`
 	Refs          []types.Ref    `json:"refs,omitempty"`
@@ -349,14 +348,29 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 			strings.Join(unknownRecipients, ", "))
 	}
 
-	// Handle reply_to: validate parent message exists and add reply_to ref
+	// Handle reply_to: validate parent, auto-thread, add reply_to ref
+	var threadID string
 	if req.ReplyTo != "" {
-		var exists int
-		err := h.state.DB().QueryRowContext(ctx, `SELECT COUNT(1) FROM messages WHERE message_id = ?`, req.ReplyTo).Scan(&exists)
-		if err != nil || exists == 0 {
+		var parentThreadID sql.NullString
+		err := h.state.DB().QueryRowContext(ctx,
+			`SELECT thread_id FROM messages WHERE message_id = ?`, req.ReplyTo,
+		).Scan(&parentThreadID)
+		if err != nil {
 			return nil, fmt.Errorf("reply_to message not found: %s", req.ReplyTo)
 		}
 		refs = append(refs, types.Ref{Type: "reply_to", Value: req.ReplyTo})
+
+		// Auto-thread: propagate existing or create new thread_id
+		if parentThreadID.Valid && parentThreadID.String != "" {
+			threadID = parentThreadID.String
+		} else {
+			threadID = identity.GenerateThreadID()
+			// Update parent to join the thread
+			_, _ = h.state.DB().ExecContext(ctx,
+				`UPDATE messages SET thread_id = ? WHERE message_id = ?`,
+				threadID, req.ReplyTo,
+			)
+		}
 	}
 
 	// Build message.create event
@@ -364,7 +378,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		Type:      "message.create",
 		Timestamp: now,
 		MessageID: messageID,
-		ThreadID:  req.ThreadID,
+		ThreadID:  threadID,
 		AgentID:   agentID,
 		SessionID: sessionID,
 		Body: types.MessageBody{
@@ -395,7 +409,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 
 	msgInfo := &subscriptions.MessageInfo{
 		MessageID: messageID,
-		ThreadID:  req.ThreadID,
+		ThreadID:  threadID,
 		AgentID:   agentID,
 		SessionID: sessionID,
 		Scopes:    event.Scopes,
@@ -408,13 +422,13 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	_, _ = h.dispatcher.DispatchForMessage(ctx, msgInfo)
 
 	// Emit thread.updated event for real-time updates
-	if req.ThreadID != "" {
-		_ = h.emitThreadUpdated(ctx, req.ThreadID)
+	if threadID != "" {
+		_ = h.emitThreadUpdated(ctx, threadID)
 	}
 
 	return &SendResponse{
 		MessageID:  messageID,
-		ThreadID:   req.ThreadID,
+		ThreadID:   threadID,
 		CreatedAt:  now,
 		ResolvedTo: resolvedTo,
 		Warnings:   warnings,

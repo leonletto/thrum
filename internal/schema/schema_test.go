@@ -468,15 +468,14 @@ func TestMigrateJSONLSharding(t *testing.T) {
 			"role":      "coordinator",
 			"module":    "main",
 		},
-		// Thread create event (should go to events.jsonl)
+		// Agent session start event (should go to events.jsonl)
 		{
-			"type":       "thread.create",
+			"type":       "agent.session.start",
 			"timestamp":  "2026-01-01T00:01:00Z",
 			"event_id":   "evt_002",
 			"v":          1,
-			"thread_id":  "thr_001",
-			"title":      "Test Thread",
-			"created_by": "agent:alice:ABC",
+			"agent_id":   "agent:alice:ABC",
+			"session_id": "ses_001",
 		},
 		// Message create from alice (should go to messages/alice_ABC.jsonl)
 		{

@@ -213,7 +213,7 @@ func TestPushSync_EventWriteHookTriggersNotification(t *testing.T) {
 	})
 
 	// Write an event — this should trigger the hook → BroadcastNotify → peer receives sync.notify
-	writeTestEvent(t, daemonA.state, "thread.create")
+	writeTestEvent(t, daemonA.state, "message.create")
 
 	// Wait for async notification
 	time.Sleep(200 * time.Millisecond)
@@ -264,7 +264,7 @@ func TestPushSync_PeriodicSyncCatchesMissedNotifications(t *testing.T) {
 
 	// Write events on daemon A (WITHOUT notifying daemon B)
 	writeTestEvent(t, daemonA.state, "message.create")
-	writeTestEvent(t, daemonA.state, "thread.create")
+	writeTestEvent(t, daemonA.state, "message.create")
 
 	// Create sync manager for daemon B
 	syncManager, err := NewDaemonSyncManager(daemonB.state, t.TempDir())
@@ -316,8 +316,16 @@ func TestPushSync_PeriodicSyncSkipsRecentlySynced(t *testing.T) {
 	scheduler := NewPeriodicSyncScheduler(syncManager, daemonB.state)
 	scheduler.syncFromPeers()
 
-	// Write another event on daemon A
-	writeTestEvent(t, daemonA.state, "thread.create")
+	// Write another event on daemon A (only one new event — no agent re-registration)
+	if err := daemonA.state.WriteEvent(context.Background(), types.MessageCreateEvent{
+		Type:      "message.create",
+		MessageID: "msg_test_second",
+		AgentID:   "test-agent",
+		Body:      types.MessageBody{Format: "text/plain", Content: "second message"},
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("write second message: %v", err)
+	}
 
 	// Run another sync cycle — but with long threshold, it should skip
 	scheduler.SetRecentThreshold(1 * time.Hour)
@@ -333,7 +341,7 @@ func TestPushSync_PeriodicSyncSkipsRecentlySynced(t *testing.T) {
 		t.Errorf("expected 2 events (skipped recent peer), got %d", len(events))
 	}
 
-	// Now with 0 threshold, sync should catch the thread.create event
+	// Now with 0 threshold, sync should catch the second message.create event
 	scheduler.SetRecentThreshold(0)
 	scheduler.syncFromPeers()
 
@@ -476,23 +484,13 @@ func writeTestEvent(t *testing.T, st *state.State, eventType string) {
 		})
 		err := st.WriteEvent(context.Background(), types.MessageCreateEvent{
 			Type:      "message.create",
+			MessageID: "msg_test_" + time.Now().Format("150405.000000"),
 			AgentID:   "test-agent",
-			ThreadID:  "t_test",
 			Body:      types.MessageBody{Format: "text/plain", Content: "test message"},
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		})
 		if err != nil {
 			t.Fatalf("write message event: %v", err)
-		}
-	case "thread.create":
-		err := st.WriteEvent(context.Background(), types.ThreadCreateEvent{
-			Type:      "thread.create",
-			ThreadID:  "t_test_" + time.Now().Format("150405.000"),
-			Title:     "Test Thread",
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-		})
-		if err != nil {
-			t.Fatalf("write thread event: %v", err)
 		}
 	default:
 		t.Fatalf("unsupported event type for test: %s", eventType)
