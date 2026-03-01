@@ -449,3 +449,5 @@
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T22:41:31Z","event_type":"closed","id":449,"issue_id":"thrum-bmu.3","new_value":"HeartbeatResponse now includes branch, unmerged_commits, and file_changes. Removed extra AgentListContext RPC call from CLI.","old_value":""}
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T22:41:31Z","event_type":"closed","id":450,"issue_id":"thrum-bmu.4","new_value":"FormatTeam correctly displays git data — Branch with commit count and Files with diffs confirmed working.","old_value":""}
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T22:41:31Z","event_type":"closed","id":451,"issue_id":"thrum-bmu","new_value":"All 4 tasks complete. Git context flows through heartbeat, JSON fields aligned, team shows branch and file changes.","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T23:21:35Z","event_type":"created","id":452,"issue_id":"thrum-cv9.8","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T23:21:36Z","event_type":"created","id":453,"issue_id":"thrum-cv9.9","new_value":"","old_value":""}
