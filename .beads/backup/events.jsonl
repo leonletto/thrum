@@ -393,3 +393,32 @@
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T16:23:47Z","event_type":"created","id":393,"issue_id":"thrum-0mh","new_value":"","old_value":""}
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T16:23:50Z","event_type":"created","id":394,"issue_id":"thrum-dil","new_value":"","old_value":""}
 {"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T16:23:53Z","event_type":"created","id":395,"issue_id":"thrum-jj3","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":396,"issue_id":"thrum-9yf","new_value":"F2-2 multi-agent who-has test added","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":397,"issue_id":"thrum-dil","new_value":"F2-4 restored as distinct who-has JSON test","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":398,"issue_id":"thrum-t99","new_value":"F2-13 status standalone command test added","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":399,"issue_id":"thrum-6zq","new_value":"J9 inbox verification added","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":400,"issue_id":"thrum-jj3","new_value":"F5 divergence documented in groups.spec.ts","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:50Z","event_type":"closed","id":401,"issue_id":"thrum-0mh","new_value":"All 9 pre-existing failures fixed — 0 failures, 81 passed","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:13:51Z","event_type":"closed","id":402,"issue_id":"thrum-22y","new_value":"All 6 tasks complete","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:14:16Z","event_type":"created","id":403,"issue_id":"thrum-z80","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:14:24Z","event_type":"created","id":404,"issue_id":"thrum-z80.1","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:14:29Z","event_type":"created","id":405,"issue_id":"thrum-z80.2","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:14:33Z","event_type":"created","id":406,"issue_id":"thrum-z80.3","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:14:40Z","event_type":"created","id":407,"issue_id":"thrum-z80.4","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:14:45Z","event_type":"created","id":408,"issue_id":"thrum-z80.5","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:14:51Z","event_type":"created","id":409,"issue_id":"thrum-z80.6","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:14:57Z","event_type":"created","id":410,"issue_id":"thrum-cv9","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:15:04Z","event_type":"created","id":411,"issue_id":"thrum-cv9.1","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:15:12Z","event_type":"created","id":412,"issue_id":"thrum-cv9.2","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:15:19Z","event_type":"created","id":413,"issue_id":"thrum-cv9.3","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:15:25Z","event_type":"created","id":414,"issue_id":"thrum-cv9.4","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:15:29Z","event_type":"created","id":415,"issue_id":"thrum-cv9.5","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:15:36Z","event_type":"created","id":416,"issue_id":"thrum-cv9.6","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:51:18Z","event_type":"created","id":417,"issue_id":"thrum-2ug","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:51:25Z","event_type":"created","id":418,"issue_id":"thrum-2ug.1","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:51:34Z","event_type":"created","id":419,"issue_id":"thrum-2ug.2","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:51:43Z","event_type":"created","id":420,"issue_id":"thrum-2ug.3","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:51:53Z","event_type":"created","id":421,"issue_id":"thrum-2ug.4","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:51:59Z","event_type":"created","id":422,"issue_id":"thrum-2ug.5","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:52:07Z","event_type":"created","id":423,"issue_id":"thrum-2ug.6","new_value":"","old_value":""}
+{"actor":"Leon Letto","comment":null,"created_at":"2026-02-28T21:52:16Z","event_type":"created","id":424,"issue_id":"thrum-cv9.7","new_value":"","old_value":""}
