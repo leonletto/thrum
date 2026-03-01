@@ -63,10 +63,7 @@ test.describe('Web UI', () => {
     await expect(page.getByText(uniqueMessage)).toBeVisible({ timeout: 10_000 });
   });
 
-  test.fixme('SC-51: Live Feed real-time updates', async ({ page }) => {
-    // FIXME: WebSocket push notifications do not trigger Live Feed re-render.
-    // The message is sent successfully but React Query invalidation via WS
-    // is not propagating to the LiveFeed component. Needs UI debugging.
+  test('SC-51: Live Feed real-time updates', async ({ page }) => {
     // Arrange: open browser to Live Feed first
     await page.goto('/');
     await waitForWebSocket(page);
@@ -131,10 +128,7 @@ test.describe('Web UI', () => {
     await expect(messageInput).toHaveValue('', { timeout: 5000 });
   });
 
-  test.fixme('SC-54: Agent list in sidebar', async ({ page }) => {
-    // FIXME: Agent list heading shows Agents (0) even after registering agents.
-    // The agents are registered via CLI but the UI's agent list RPC returns 0.
-    // May be a timing issue or the daemon restart clears the projection.
+  test('SC-54: Agent list in sidebar', async ({ page }) => {
     // Arrange: register multiple agents so the sidebar has agents to display
     registerAgent('agent_sidebar_1', 'all', 'Agent One', 'sidebar_one');
     registerAgent('agent_sidebar_2', 'relay', 'Agent Two', 'sidebar_two');

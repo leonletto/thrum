@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 /** Source repo root — used for building and locating the binary. */
@@ -121,7 +121,22 @@ export default async function globalSetup(): Promise<void> {
   if (existsSync(E2E_ROOT)) {
     console.log('[global-setup] Cleaning previous test environment...');
     // Stop daemon from previous run if still running
-    try { execIn(COORDINATOR_DIR, BIN, ['daemon', 'stop']); } catch { /* not running */ }
+    try {
+      execIn(COORDINATOR_DIR, BIN, ['daemon', 'stop']);
+    } catch {
+      // daemon stop failed (binary mismatch, wedged process, etc.)
+      // Read PID file and force-kill the process
+      const pidFile = path.join(COORDINATOR_DIR, '.thrum', 'var', 'daemon.pid');
+      if (existsSync(pidFile)) {
+        try {
+          const pid = readFileSync(pidFile, 'utf-8').trim();
+          console.log(`[global-setup] Force-killing stale daemon PID ${pid}`);
+          process.kill(Number(pid), 'SIGKILL');
+        } catch { /* process already dead */ }
+      }
+    }
+    // Brief pause to let OS release file locks after kill
+    execFileSync('sleep', ['1']);
     rmSync(E2E_ROOT, { recursive: true, force: true });
   }
 

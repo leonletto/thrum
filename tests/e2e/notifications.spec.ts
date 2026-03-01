@@ -5,50 +5,35 @@
  * notification system using the globally running daemon.
  *
  * Note: SC-34/35/36 use concurrent operations — we start `thrum wait`
- * in a background process, then send a matching message, and verify
- * the wait resolves.
+ * in a background process (as the coordinator agent), then send a
+ * matching message from the IMPLEMENTER worktree (a different agent),
+ * and verify the wait resolves. Using a different sender is critical
+ * because `thrum wait` sets `exclude_self=true`, filtering out
+ * messages authored by the waiting agent.
  *
- * The daemon resolves identity via THRUM_ROLE/THRUM_MODULE env vars
- * as fallback. All commands ensure the default test agent has an active
- * session before subscribing or sending.
+ * The daemon resolves identity via identity files in each worktree.
+ * The e2e infrastructure provides separate coordinator and implementer
+ * repos with distinct identities.
  */
 import { test, expect } from '@playwright/test';
-import { thrum, getTestRoot, TEST_AGENT_ROLE, TEST_AGENT_MODULE } from './helpers/thrum-cli.js';
+import { thrum, getTestRoot, getImplementerRoot, thrumIn } from './helpers/thrum-cli.js';
+import { ensureTestSessions } from './helpers/fixtures.js';
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
 
 const SOURCE_ROOT = path.resolve(__dirname, '../..');
 const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
 
-/**
- * Ensure the default test agent has an active session.
- * Needed for subscribe and send operations.
- */
-function ensureTestSession(): void {
-  try {
-    thrum(['session', 'start']);
-  } catch (err: any) {
-    const msg = err.message || '';
-    if (!msg.toLowerCase().includes('already active') && !msg.toLowerCase().includes('already exists')) {
-      throw err;
-    }
-  }
-}
-
-/** Run thrum wait in background, resolves with stdout when it exits. */
+/** Run thrum wait in background from the coordinator repo, resolves with stdout when it exits. */
 function thrumWaitBackground(
   args: string[],
   timeoutMs = 15_000,
-): Promise<{ stdout: string; exitCode: number }> {
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
     const child = spawn(BIN, ['wait', ...args], {
       cwd: getTestRoot(),
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        THRUM_ROLE: TEST_AGENT_ROLE,
-        THRUM_MODULE: TEST_AGENT_MODULE,
-      },
+      env: { ...process.env },
     });
 
     let stdout = '';
@@ -62,7 +47,7 @@ function thrumWaitBackground(
 
     child.on('close', (code) => {
       clearTimeout(timer);
-      resolve({ stdout: stdout.trim(), exitCode: code ?? 1 });
+      resolve({ stdout: stdout.trim(), stderr: stderr.trim(), exitCode: code ?? 1 });
     });
   });
 }
@@ -70,20 +55,17 @@ function thrumWaitBackground(
 test.describe('Notifications & Subscriptions', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeEach(async () => {
-    // Ensure the test agent has an active session
-    ensureTestSession();
+  test.beforeAll(() => {
+    // Ensure both coordinator and implementer have active sessions
+    ensureTestSessions();
   });
 
-  test.fixme('SC-34: Subscribe to scope notifications', async () => {
-    // FIXME: thrum wait exits with code 1 instead of 0. The notification
-    // delivery via wait command needs investigation — subscribe works but
-    // wait doesn't receive the scoped notification within timeout.
-    // Arrange: subscribe to module:auth scope
+  test('SC-34: Subscribe to scope notifications', async () => {
+    // Arrange: subscribe to module:auth scope (as coordinator)
     const subOutput = thrum(['subscribe', '--scope', 'module:auth']);
     expect(subOutput.toLowerCase()).toMatch(/watch|subscri|scope|listening|module:auth/i);
 
-    // Act: start wait in background, then send matching message
+    // Act: start wait in background (as coordinator), then send from implementer worktree
     const waitPromise = thrumWaitBackground(
       ['--scope', 'module:auth', '--timeout', '10s'],
       12_000,
@@ -92,8 +74,8 @@ test.describe('Notifications & Subscriptions', () => {
     // Small delay to let wait establish connection
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Send a message with matching scope
-    thrum(['send', 'Auth module updated for SC-34', '--scope', 'module:auth']);
+    // Send from the IMPLEMENTER worktree (different agent identity)
+    thrumIn(getImplementerRoot(), ['send', 'Auth module updated for SC-34', '--scope', 'module:auth']);
 
     // Assert: wait should receive the notification
     const result = await waitPromise;
@@ -101,43 +83,46 @@ test.describe('Notifications & Subscriptions', () => {
     expect(result.stdout).toContain('Auth module updated');
   });
 
-  test.fixme('SC-35: Subscribe to mention notifications', async () => {
-    // FIXME: Same issue as SC-34 — thrum wait exits with code 1.
-    // The notification delivery via wait needs investigation.
-    // Arrange: subscribe to mentions of @coordinator
-    const subOutput = thrum(['subscribe', '--mention', '@coordinator']);
+  test('SC-35: Subscribe to mention notifications', async () => {
+    // Arrange: subscribe to mentions of @e2e_coordinator (the coordinator's name)
+    const subOutput = thrum(['subscribe', '--mention', '@e2e_coordinator']);
     expect(subOutput.toLowerCase()).toMatch(/watch|subscri|scope|listening|coordinator/i);
 
-    // Act: start wait, then send mentioning message
+    // Act: start wait (as coordinator), then send mentioning message from implementer
     const waitPromise = thrumWaitBackground(
-      ['--mention', '@coordinator', '--timeout', '10s'],
+      ['--mention', '@e2e_coordinator', '--timeout', '10s'],
       12_000,
     );
 
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    thrum(['send', 'Hey coordinator, SC-35 test', '--mention', '@coordinator']);
+    // Send from implementer mentioning the coordinator
+    thrumIn(getImplementerRoot(), ['send', 'Hey coordinator, SC-35 test', '--mention', '@e2e_coordinator']);
 
     const result = await waitPromise;
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('SC-35');
   });
 
-  test.fixme('SC-36: Subscribe to all (firehose)', async () => {
-    // FIXME: Same thrum wait issue as SC-34 and SC-35.
-    // Arrange: subscribe to all messages
+  test('SC-36: Subscribe to all (firehose)', async () => {
+    // Arrange: subscribe to all messages (as coordinator)
     const subOutput = thrum(['subscribe', '--all']);
     expect(subOutput.toLowerCase()).toMatch(/watch|subscri|scope|listening|all|firehose/i);
 
-    // Act: start wait, then send any message
+    // Brief pause to ensure previous test's messages are in the past
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Act: start wait (as coordinator) with --after +0s to ignore stale messages,
+    // then send from implementer
     const waitPromise = thrumWaitBackground(
-      ['--timeout', '10s'],
+      ['--timeout', '10s', '--after', '+0s'],
       12_000,
     );
 
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    thrum(['send', 'Firehose test SC-36']);
+    // Send from implementer
+    thrumIn(getImplementerRoot(), ['send', 'Firehose test SC-36']);
 
     const result = await waitPromise;
     expect(result.exitCode).toBe(0);
