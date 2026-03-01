@@ -1,67 +1,66 @@
 import { test, expect } from '@playwright/test';
-import { thrum, thrumJson, thrumIn, getTestRoot } from './helpers/thrum-cli.js';
-import { registerAgent, quickstartAgent, sendMessage, waitForWebSocket } from './helpers/fixtures.js';
+import { thrum, thrumJson, thrumIn, getTestRoot, getImplementerRoot } from './helpers/thrum-cli.js';
+import { quickstartAgent, sendMessage, waitForWebSocket } from './helpers/fixtures.js';
 
 /**
  * E2E tests for Multi-Agent Scenarios (SC-58 to SC-64)
  *
- * These tests validate realistic multi-agent coordination workflows:
- * - Two agents coordinating on a feature
- * - Human supervising agents via browser
- * - Agent crash and impersonation
- * - Broadcast announcements
- * - File conflict detection
- * - Session handoffs
- * - Multiple agents in parallel worktrees with sync
- *
- * Note: The daemon resolves identity via THRUM_ROLE/THRUM_MODULE env vars
- * as fallback. All message sends resolve to the default test agent. Each
- * test ensures an active session exists for the test agent before sending.
+ * These tests validate realistic multi-agent coordination workflows
+ * with cross-worktree delivery verification: messages are sent from
+ * the coordinator worktree and verified in the implementer worktree's
+ * inbox to confirm actual delivery, not just storage.
  */
 
-/**
- * Ensure the default test agent has an active session.
- * This is needed because previous tests may have ended the session.
- */
-function ensureTestSession(): void {
-  try {
-    thrum(['session', 'start']);
-  } catch (err: any) {
-    const msg = err.message || '';
-    if (!msg.toLowerCase().includes('already active') && !msg.toLowerCase().includes('already exists')) {
-      throw err;
-    }
-  }
+/** Coordinator agent identity (sender). */
+function coordEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, THRUM_NAME: 'e2e_coordinator', THRUM_ROLE: 'coordinator', THRUM_MODULE: 'all' };
+}
+
+/** Implementer agent identity (recipient). */
+function implEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, THRUM_NAME: 'e2e_implementer', THRUM_ROLE: 'implementer', THRUM_MODULE: 'main' };
 }
 
 test.describe('Multi-Agent Scenarios', () => {
-  test('SC-58: Two agents coordinate on a feature', async () => {
-    // Arrange: register two agents with sessions (--name pins identity)
-    quickstartAgent('coordinator', 'all', 'Claude-Main', 'Coordinating relay feature', 'e2e_sc58_coord');
-    quickstartAgent('implementer', 'relay', 'Claude-Relay', 'Building relay service', 'e2e_sc58_impl');
+  test.beforeAll(() => {
+    // Ensure both agents have active sessions
+    try {
+      thrumIn(getTestRoot(), ['quickstart', '--role', 'coordinator', '--module', 'all',
+        '--name', 'e2e_coordinator', '--intent', 'Multi-agent tests'], 10_000, coordEnv());
+    } catch { /* may already exist */ }
+    try {
+      thrumIn(getImplementerRoot(), ['quickstart', '--role', 'implementer', '--module', 'main',
+        '--name', 'e2e_implementer', '--intent', 'Multi-agent tests'], 10_000, implEnv());
+    } catch { /* may already exist */ }
 
-    // Ensure the default test agent has a session for sending messages
-    ensureTestSession();
+    // Mark implementer inbox read to start clean
+    try {
+      thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
+    } catch { /* best effort */ }
+  });
+
+  test('SC-58: Two agents coordinate on a feature', async () => {
+    // Mark implementer inbox read
+    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
 
     // Act: coordinator sends task to implementer
-    const sendResult = thrumJson<{ message_id: string }>(['send', 'Please implement the WebSocket relay endpoint', '--to', '@e2e_sc58_impl']);
-    expect(sendResult.message_id).toMatch(/^msg_/);
+    const sendResult = thrumIn(getTestRoot(), ['send', 'Please implement the WebSocket relay endpoint', '--to', '@e2e_implementer', '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    expect(parsed.message_id).toMatch(/^msg_/);
 
-    // Verify: message exists and has correct content
-    const msgResult = thrumJson<{ message: { body: { content: string } } }>(['message', 'get', sendResult.message_id]);
-    expect(msgResult.message.body.content).toContain('WebSocket relay endpoint');
+    // Assert: implementer receives the task in their inbox (cross-worktree delivery)
+    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
+    const inbox = JSON.parse(implInbox);
+    expect(Array.isArray(inbox.messages)).toBe(true);
+    const hasTask = inbox.messages.some((msg: any) =>
+      msg.body?.content?.includes('WebSocket relay endpoint')
+    );
+    expect(hasTask).toBe(true);
   });
 
   test('SC-59: Human supervises agents via browser', async ({ page }) => {
-    // Arrange: register two agents with sessions
-    quickstartAgent('coordinator', 'all', 'Claude-Main', 'Coordinating agents');
-    quickstartAgent('implementer', 'relay', 'Claude-Relay', 'Building relay');
-
-    // Ensure the default test agent has a session for sending messages
-    ensureTestSession();
-
-    // Send a message between agents
-    sendMessage('Task assigned', { to: '@implementer' });
+    // Send a message from coordinator for the browser to display
+    thrumIn(getTestRoot(), ['send', 'Task assigned for browser test'], 10_000, coordEnv());
 
     // Act: open browser
     await page.goto('/');
@@ -75,69 +74,61 @@ test.describe('Multi-Agent Scenarios', () => {
     const headerText = await header.textContent();
     expect(headerText).not.toContain('Unknown');
 
-    // Assert: agents should be visible in sidebar (if working)
-    // Note: This may fail if agent list not properly wired
+    // Assert: page has content
     const pageContent = await page.textContent('body');
     expect(pageContent?.trim().length).toBeGreaterThan(0);
-
-    // Note: Full compose and send from browser depends on SC-53 passing
   });
 
   test.skip('SC-60: Agent impersonation (FEATURE MISSING)', async () => {
     // Missing feature: --as or --role flag on thrum reply
-    // When implemented, should allow a human to reply on behalf of a crashed agent:
-    //   thrum reply <msg_id> "..." --as @implementer
   });
 
   test.skip('SC-61: Broadcast (FEATURE MISSING)', async () => {
     // Missing feature: --broadcast flag (see thrum-b0d4)
-    // When implemented, should allow:
-    //   thrum send "ANNOUNCEMENT: ..." --broadcast
   });
 
   test.skip('SC-62: File conflict detection (FEATURE MISSING)', async () => {
     // Requires multiple agents modifying the same file and `thrum who-has <file>`
-    // showing both agents. Complex to simulate — needs active sessions with
-    // uncommitted changes in E2E context.
   });
 
   test('SC-63: Session handoff between agents', async () => {
-    // Arrange: agent A working, reviewer registered as recipient
-    quickstartAgent('agent_a', 'relay', 'Agent A', 'Working on relay', 'e2e_sc63_agent_a');
-    quickstartAgent('reviewer', 'relay', 'Reviewer', 'Reviewing code', 'e2e_sc63_reviewer');
+    // Mark implementer inbox read
+    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
 
-    // Ensure the default test agent has a session for sending messages
-    ensureTestSession();
+    // Act: coordinator sends handoff message to implementer
+    const sendResult = thrumIn(getTestRoot(), ['send', 'Completed relay endpoint, passing to reviewer', '--to', '@e2e_implementer', '--json'], 10_000, coordEnv());
+    const parsed = JSON.parse(sendResult);
+    expect(parsed.message_id).toMatch(/^msg_/);
 
-    // Act: agent A sends handoff message to reviewer
-    const sendResult = thrumJson<{ message_id: string }>(['send', 'Completed relay endpoint, passing to reviewer', '--to', '@e2e_sc63_reviewer']);
-    expect(sendResult.message_id).toMatch(/^msg_/);
-
-    // Verify: message exists and has correct handoff content
-    const msgResult = thrumJson<{ message: { body: { content: string } } }>(['message', 'get', sendResult.message_id]);
-    expect(msgResult.message.body.content).toContain('passing to reviewer');
+    // Assert: implementer receives handoff in their inbox (cross-worktree delivery)
+    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
+    const inbox = JSON.parse(implInbox);
+    const hasHandoff = inbox.messages.some((msg: any) =>
+      msg.body?.content?.includes('passing to reviewer')
+    );
+    expect(hasHandoff).toBe(true);
   });
 
   test('SC-64: Multiple agents in parallel with sync', async () => {
-    // Register multiple agents with sessions (--name pins identity)
-    quickstartAgent('agent_1', 'main', 'Agent 1', 'Working on main', 'e2e_sc64_agent1');
-    quickstartAgent('agent_2', 'relay', 'Agent 2', 'Working on relay', 'e2e_sc64_agent2');
-    quickstartAgent('agent_3', 'daemon', 'Agent 3', 'Working on daemon', 'e2e_sc64_agent3');
+    // Mark implementer inbox read
+    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
 
-    // Ensure the default test agent has a session for sending messages
-    ensureTestSession();
+    // Act: coordinator sends messages to implementer
+    thrumIn(getTestRoot(), ['send', 'Sync test message 1', '--to', '@e2e_implementer'], 10_000, coordEnv());
+    thrumIn(getTestRoot(), ['send', 'Sync test message 2', '--to', '@e2e_implementer'], 10_000, coordEnv());
 
-    // Send messages to named agents
-    sendMessage('Sync test message 1', { to: '@e2e_sc64_agent2' });
-    sendMessage('Sync test message 2', { to: '@e2e_sc64_agent3' });
+    // Assert: implementer receives both messages in their inbox (cross-worktree delivery)
+    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
+    const inbox = JSON.parse(implInbox);
+    expect(inbox.messages.length).toBeGreaterThanOrEqual(2);
 
-    // Query inbox as agent_2 to verify delivery (exclude_self filters sender's own messages)
-    const agent2Env = { ...process.env, THRUM_NAME: 'e2e_sc64_agent2', THRUM_ROLE: 'agent_2', THRUM_MODULE: 'relay' };
-    const inbox = thrumJson<{ messages: Array<{ body: { content?: string } }> }>(['inbox'], agent2Env);
-    expect(inbox.messages.length).toBeGreaterThan(0);
-    const hasSyncMessage = inbox.messages.some((msg: { body: { content?: string } }) =>
-      msg.body.content?.includes('Sync test message 1')
+    const hasMsg1 = inbox.messages.some((msg: any) =>
+      msg.body?.content?.includes('Sync test message 1')
     );
-    expect(hasSyncMessage).toBe(true);
+    const hasMsg2 = inbox.messages.some((msg: any) =>
+      msg.body?.content?.includes('Sync test message 2')
+    );
+    expect(hasMsg1).toBe(true);
+    expect(hasMsg2).toBe(true);
   });
 });
