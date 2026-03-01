@@ -221,36 +221,6 @@ func TestProjector_ApplyMessageDelete(t *testing.T) {
 	}
 }
 
-func TestProjector_ApplyThreadCreate(t *testing.T) {
-	db := setupTestDB(t)
-	defer func() { _ = db.Close() }()
-
-	p := projection.NewProjector(safedb.New(db))
-
-	event := types.ThreadCreateEvent{
-		Type:      "thread.create",
-		Timestamp: "2026-01-01T00:00:00Z",
-		ThreadID:  "thr_100",
-		Title:     "Test Thread",
-		CreatedBy: "agent:test:ABC",
-	}
-
-	data, _ := json.Marshal(event)
-	if err := p.Apply(context.Background(), data); err != nil {
-		t.Fatalf("Apply() failed: %v", err)
-	}
-
-	// Verify thread was inserted
-	var title string
-	err := db.QueryRow("SELECT title FROM threads WHERE thread_id = ?", "thr_100").Scan(&title)
-	if err != nil {
-		t.Fatalf("Query thread failed: %v", err)
-	}
-	if title != "Test Thread" {
-		t.Errorf("Expected title 'Test Thread', got '%s'", title)
-	}
-}
-
 func TestProjector_ApplyAgentRegister(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()
@@ -387,17 +357,6 @@ func TestProjector_Rebuild(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("append: %v", err)
 	}
-	if err := eventsWriter.Append(types.ThreadCreateEvent{
-		Type:      "thread.create",
-		Timestamp: "2026-01-01T00:01:00Z",
-		EventID:   "01JKHM00000000000000000002",
-		Version:   1,
-		ThreadID:  "thr_001",
-		Title:     "Test Thread",
-		CreatedBy: "agent:test:ABC",
-	}); err != nil {
-		t.Fatalf("append: %v", err)
-	}
 	if err := eventsWriter.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -432,12 +391,9 @@ func TestProjector_Rebuild(t *testing.T) {
 	}
 
 	// Verify all events were applied
-	var agentCount, threadCount, messageCount int
+	var agentCount, messageCount int
 	if err := db.QueryRow("SELECT COUNT(*) FROM agents").Scan(&agentCount); err != nil {
 		t.Fatalf("query agents: %v", err)
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM threads").Scan(&threadCount); err != nil {
-		t.Fatalf("query threads: %v", err)
 	}
 	if err := db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&messageCount); err != nil {
 		t.Fatalf("query messages: %v", err)
@@ -445,9 +401,6 @@ func TestProjector_Rebuild(t *testing.T) {
 
 	if agentCount != 1 {
 		t.Errorf("Expected 1 agent, got %d", agentCount)
-	}
-	if threadCount != 1 {
-		t.Errorf("Expected 1 thread, got %d", threadCount)
 	}
 	if messageCount != 1 {
 		t.Errorf("Expected 1 message, got %d", messageCount)

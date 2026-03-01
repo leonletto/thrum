@@ -472,9 +472,9 @@ func TestExtractEventIDFromRaw(t *testing.T) {
 			expectedID: "evt_MSG123",
 		},
 		{
-			name:       "thread.create event",
-			event:      json.RawMessage(`{"type":"thread.create","event_id":"evt_THR456","thread_id":"thread-456","timestamp":"2024-01-01T00:00:00Z"}`),
-			expectedID: "evt_THR456",
+			name:       "agent.register event",
+			event:      json.RawMessage(`{"type":"agent.register","event_id":"evt_AGT456","agent_id":"agent:test:ABC","timestamp":"2024-01-01T00:00:00Z"}`),
+			expectedID: "evt_AGT456",
 		},
 		{
 			name:        "invalid JSON",

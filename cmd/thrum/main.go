@@ -741,7 +741,6 @@ The daemon must be running and you must have an active session.`,
 			scopes, _ := cmd.Flags().GetStringSlice("scope")
 			refs, _ := cmd.Flags().GetStringSlice("ref")
 			mentions, _ := cmd.Flags().GetStringSlice("mention")
-			thread, _ := cmd.Flags().GetString("thread")
 			structured, _ := cmd.Flags().GetString("structured")
 			format, _ := cmd.Flags().GetString("format")
 			to, _ := cmd.Flags().GetString("to")
@@ -758,7 +757,6 @@ The daemon must be running and you must have an active session.`,
 				Scopes:        scopes,
 				Refs:          refs,
 				Mentions:      mentions,
-				Thread:        thread,
 				Structured:    structured,
 				Format:        format,
 				To:            to,
@@ -806,7 +804,6 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().StringSlice("scope", nil, "Add scope (repeatable, format: type:value)")
 	cmd.Flags().StringSlice("ref", nil, "Add reference (repeatable, format: type:value)")
 	cmd.Flags().StringSlice("mention", nil, "Mention a role (repeatable, format: @role)")
-	cmd.Flags().String("thread", "", "Reply to thread")
 	cmd.Flags().String("structured", "", "Structured payload (JSON)")
 	cmd.Flags().String("format", "markdown", "Message format (markdown, plain, json)")
 	cmd.Flags().String("to", "", "Direct recipient (format: @role)")

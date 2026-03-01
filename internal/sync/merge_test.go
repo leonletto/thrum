@@ -156,10 +156,10 @@ func TestExtractEventID(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:      "thread.create",
-			eventType: "thread.create",
-			data:      `{"type":"thread.create","event_id":"evt_THR456","thread_id":"thr_456","timestamp":"2026-02-03T10:00:00Z"}`,
-			wantID:    "evt_THR456",
+			name:      "message.edit",
+			eventType: "message.edit",
+			data:      `{"type":"message.edit","event_id":"evt_EDT456","message_id":"msg_456","timestamp":"2026-02-03T10:00:00Z"}`,
+			wantID:    "evt_EDT456",
 			wantErr:   false,
 		},
 		{
@@ -309,7 +309,7 @@ func TestParseEvents(t *testing.T) {
 
 	messages := []json.RawMessage{
 		json.RawMessage(`{"type":"message.create","timestamp":"2026-02-03T10:00:00Z","event_id":"evt_001","message_id":"msg_001"}`),
-		json.RawMessage(`{"type":"thread.create","timestamp":"2026-02-03T10:01:00Z","event_id":"evt_002","thread_id":"thr_001"}`),
+		json.RawMessage(`{"type":"agent.register","timestamp":"2026-02-03T10:01:00Z","event_id":"evt_002","agent_id":"agent:test:ABC"}`),
 		json.RawMessage(`{invalid json}`), // Should be skipped
 		json.RawMessage(`{"type":"message.create","timestamp":"2026-02-03T10:02:00Z","event_id":"evt_003","message_id":"msg_002"}`),
 	}
@@ -355,7 +355,7 @@ func TestMerger_ParseEvents_AllEventTypes(t *testing.T) {
 		json.RawMessage(`{"type":"message.create","timestamp":"2026-02-03T10:00:00Z","event_id":"evt_MC1","message_id":"msg_001"}`),
 		json.RawMessage(`{"type":"message.edit","timestamp":"2026-02-03T10:01:00Z","event_id":"evt_ME1","message_id":"msg_002"}`),
 		json.RawMessage(`{"type":"message.delete","timestamp":"2026-02-03T10:02:00Z","event_id":"evt_MD1","message_id":"msg_003"}`),
-		json.RawMessage(`{"type":"thread.create","timestamp":"2026-02-03T10:03:00Z","event_id":"evt_TC1","thread_id":"thr_001"}`),
+		json.RawMessage(`{"type":"agent.update","timestamp":"2026-02-03T10:03:00Z","event_id":"evt_AU1","agent_id":"agent:test:123"}`),
 		json.RawMessage(`{"type":"agent.register","timestamp":"2026-02-03T10:04:00Z","event_id":"evt_AR1","agent_id":"agent:test:123"}`),
 		json.RawMessage(`{"type":"agent.session.start","timestamp":"2026-02-03T10:05:00Z","event_id":"evt_SS1","session_id":"ses_001"}`),
 		json.RawMessage(`{"type":"agent.session.end","timestamp":"2026-02-03T10:06:00Z","event_id":"evt_SE1","session_id":"ses_002"}`),
@@ -375,7 +375,7 @@ func TestMerger_ParseEvents_AllEventTypes(t *testing.T) {
 		"message.create":      true,
 		"message.edit":        true,
 		"message.delete":      true,
-		"thread.create":       true,
+		"agent.update":        true,
 		"agent.register":      true,
 		"agent.session.start": true,
 		"agent.session.end":   true,
@@ -573,7 +573,7 @@ func TestMerger_MergeAll(t *testing.T) {
 	// Write local events.jsonl
 	eventsPath := filepath.Join(syncDir, "events.jsonl")
 	eventsData := `{"type":"agent.register","timestamp":"2026-02-06T10:00:00Z","event_id":"evt_LOCAL_AR1","agent_id":"agent:test:123"}
-{"type":"thread.create","timestamp":"2026-02-06T10:01:00Z","event_id":"evt_LOCAL_TC1","thread_id":"thr_001"}
+{"type":"agent.session.start","timestamp":"2026-02-06T10:01:00Z","event_id":"evt_LOCAL_SS1","session_id":"ses_001","agent_id":"agent:test:123"}
 `
 	if err := os.WriteFile(eventsPath, []byte(eventsData), 0600); err != nil {
 		t.Fatalf("write events.jsonl: %v", err)

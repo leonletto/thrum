@@ -117,23 +117,9 @@ func TestMessageSend(t *testing.T) {
 		}
 	})
 
-	t.Run("send message with thread", func(t *testing.T) {
-		// Create thread first
-		threadID := identity.GenerateThreadID()
-		threadEvent := types.ThreadCreateEvent{
-			Type:      "thread.create",
-			Timestamp: "2025-01-01T00:00:00Z",
-			ThreadID:  threadID,
-			Title:     "Test Thread",
-			CreatedBy: agentID,
-		}
-		if err := st.WriteEvent(context.Background(), threadEvent); err != nil {
-			t.Fatalf("failed to create thread: %v", err)
-		}
-
+	t.Run("send message without thread has no thread_id", func(t *testing.T) {
 		req := SendRequest{
-			Content:  "Message in thread",
-			ThreadID: threadID,
+			Content: "Message without explicit thread",
 		}
 		params, _ := json.Marshal(req)
 
@@ -146,19 +132,10 @@ func TestMessageSend(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *SendResponse, got %T", resp)
 		}
-		if sendResp.ThreadID != threadID {
-			t.Errorf("expected thread_id '%s', got '%s'", threadID, sendResp.ThreadID)
-		}
 
-		// Verify thread_id in database
-		var msgThreadID string
-		query := `SELECT thread_id FROM messages WHERE message_id = ?`
-		err = st.RawDB().QueryRow(query, sendResp.MessageID).Scan(&msgThreadID)
-		if err != nil {
-			t.Fatalf("failed to query message: %v", err)
-		}
-		if msgThreadID != threadID {
-			t.Errorf("expected thread_id '%s', got '%s'", threadID, msgThreadID)
+		// Non-reply messages should not have a thread_id
+		if sendResp.ThreadID != "" {
+			t.Errorf("expected empty thread_id for non-reply message, got '%s'", sendResp.ThreadID)
 		}
 	})
 
@@ -512,23 +489,19 @@ func TestMessageGet(t *testing.T) {
 		}
 	})
 
-	t.Run("get message with thread", func(t *testing.T) {
-		// Create thread and message
-		threadID := identity.GenerateThreadID()
-		threadEvent := types.ThreadCreateEvent{
-			Type:      "thread.create",
-			Timestamp: "2025-01-01T00:00:00Z",
-			ThreadID:  threadID,
-			Title:     "Test Thread",
-			CreatedBy: agentID,
+	t.Run("get message with thread (via reply auto-threading)", func(t *testing.T) {
+		// Send root message, then reply to create auto-thread
+		rootReq := SendRequest{Content: "Root message for thread test"}
+		rootParams, _ := json.Marshal(rootReq)
+		rootResp, err := handler.HandleSend(context.Background(), rootParams)
+		if err != nil {
+			t.Fatalf("failed to send root message: %v", err)
 		}
-		if err := st.WriteEvent(context.Background(), threadEvent); err != nil {
-			t.Fatalf("failed to create thread: %v", err)
-		}
+		rootID := rootResp.(*SendResponse).MessageID
 
 		sendReq := SendRequest{
-			Content:  "Message in thread",
-			ThreadID: threadID,
+			Content: "Message in thread (reply)",
+			ReplyTo: rootID,
 		}
 		sendParams, _ := json.Marshal(sendReq)
 		sendResp, err := handler.HandleSend(context.Background(), sendParams)
@@ -540,6 +513,10 @@ func TestMessageGet(t *testing.T) {
 			t.Fatalf("expected *SendResponse, got %T", sendResp)
 		}
 		msgID := sendResponse.MessageID
+		threadID := sendResponse.ThreadID
+		if threadID == "" {
+			t.Fatal("expected auto-threading to set a thread_id")
+		}
 
 		// Get message
 		req := GetMessageRequest{MessageID: msgID}
@@ -675,59 +652,44 @@ func TestMessageList(t *testing.T) {
 	// Create message handler
 	handler := NewMessageHandler(st)
 
-	// Create test thread
-	threadID := identity.GenerateThreadID()
-	threadEvent := types.ThreadCreateEvent{
-		Type:      "thread.create",
-		Timestamp: "2025-01-01T00:00:00Z",
-		ThreadID:  threadID,
-		Title:     "Test Thread",
-		CreatedBy: agentID,
+	// Send root message (will become thread root via reply)
+	rootReq := SendRequest{
+		Content: "Root message for thread",
+		Scopes:  []types.Scope{{Type: "repo", Value: "github.com/test/repo"}},
+		Refs:    []types.Ref{{Type: "issue", Value: "beads-123"}},
 	}
-	if err := st.WriteEvent(context.Background(), threadEvent); err != nil {
-		t.Fatalf("failed to create thread: %v", err)
+	rootParams, _ := json.Marshal(rootReq)
+	rootResp, err := handler.HandleSend(context.Background(), rootParams)
+	if err != nil {
+		t.Fatalf("failed to send root message: %v", err)
+	}
+	rootID := rootResp.(*SendResponse).MessageID
+
+	// Message 2: standalone message (no thread)
+	msg2Req := SendRequest{
+		Content: "Message 2",
+		Scopes:  []types.Scope{{Type: "file", Value: "src/main.go"}},
+	}
+	msg2Params, _ := json.Marshal(msg2Req)
+	_, err = handler.HandleSend(context.Background(), msg2Params)
+	if err != nil {
+		t.Fatalf("failed to send message 2: %v", err)
 	}
 
-	// Create multiple test messages
-	messages := []struct {
-		content  string
-		threadID string
-		scopes   []types.Scope
-		refs     []types.Ref
-	}{
-		{
-			content:  "Message 1",
-			threadID: threadID,
-			scopes:   []types.Scope{{Type: "repo", Value: "github.com/test/repo"}},
-			refs:     []types.Ref{{Type: "issue", Value: "beads-123"}},
-		},
-		{
-			content:  "Message 2",
-			threadID: "",
-			scopes:   []types.Scope{{Type: "file", Value: "src/main.go"}},
-			refs:     []types.Ref{},
-		},
-		{
-			content:  "Message 3",
-			threadID: threadID,
-			scopes:   []types.Scope{{Type: "repo", Value: "github.com/test/repo"}},
-			refs:     []types.Ref{{Type: "commit", Value: "abc123"}},
-		},
+	// Message 3: reply to root (creates thread via auto-threading)
+	msg3Req := SendRequest{
+		Content: "Message 3",
+		ReplyTo: rootID,
+		Scopes:  []types.Scope{{Type: "repo", Value: "github.com/test/repo"}},
+		Refs:    []types.Ref{{Type: "commit", Value: "abc123"}},
 	}
-
-	for _, msg := range messages {
-		req := SendRequest{
-			Content:  msg.content,
-			ThreadID: msg.threadID,
-			Scopes:   msg.scopes,
-			Refs:     msg.refs,
-		}
-		params, _ := json.Marshal(req)
-		_, err := handler.HandleSend(context.Background(), params)
-		if err != nil {
-			t.Fatalf("failed to send message: %v", err)
-		}
+	msg3Params, _ := json.Marshal(msg3Req)
+	msg3Resp, err := handler.HandleSend(context.Background(), msg3Params)
+	if err != nil {
+		t.Fatalf("failed to send message 3: %v", err)
 	}
+	// Thread ID is auto-assigned when replying
+	threadID := msg3Resp.(*SendResponse).ThreadID
 
 	t.Run("list all messages", func(t *testing.T) {
 		req := ListMessagesRequest{}
@@ -843,8 +805,8 @@ func TestMessageList(t *testing.T) {
 		if listResp.Total != 1 {
 			t.Errorf("expected total 1, got %d", listResp.Total)
 		}
-		if listResp.Messages[0].Body.Content != "Message 1" {
-			t.Errorf("expected 'Message 1', got '%s'", listResp.Messages[0].Body.Content)
+		if listResp.Messages[0].Body.Content != "Root message for thread" {
+			t.Errorf("expected 'Root message for thread', got '%s'", listResp.Messages[0].Body.Content)
 		}
 	})
 
@@ -909,8 +871,8 @@ func TestMessageList(t *testing.T) {
 			t.Fatalf("expected *ListMessagesResponse, got %T", resp)
 		}
 		// Oldest first
-		if listResp.Messages[0].Body.Content != "Message 1" {
-			t.Errorf("expected first message 'Message 1', got '%s'", listResp.Messages[0].Body.Content)
+		if listResp.Messages[0].Body.Content != "Root message for thread" {
+			t.Errorf("expected first message 'Root message for thread', got '%s'", listResp.Messages[0].Body.Content)
 		}
 		if listResp.Messages[2].Body.Content != "Message 3" {
 			t.Errorf("expected last message 'Message 3', got '%s'", listResp.Messages[2].Body.Content)
