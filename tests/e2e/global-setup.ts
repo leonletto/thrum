@@ -120,9 +120,11 @@ export default async function globalSetup(): Promise<void> {
   // Step 2: Clean previous run
   if (existsSync(E2E_ROOT)) {
     console.log('[global-setup] Cleaning previous test environment...');
-    // Stop daemon from previous run if still running
+    // Stop daemon from previous run — try graceful stop, then force-kill
+    let stopped = false;
     try {
       execIn(COORDINATOR_DIR, BIN, ['daemon', 'stop']);
+      stopped = true;
     } catch {
       // daemon stop failed (binary mismatch, wedged process, etc.)
       // Read PID file and force-kill the process
@@ -132,11 +134,14 @@ export default async function globalSetup(): Promise<void> {
           const pid = readFileSync(pidFile, 'utf-8').trim();
           console.log(`[global-setup] Force-killing stale daemon PID ${pid}`);
           process.kill(Number(pid), 'SIGKILL');
+          stopped = true;
         } catch { /* process already dead */ }
       }
     }
-    // Brief pause to let OS release file locks after kill
-    execFileSync('sleep', ['1']);
+    // Brief pause to let daemon fully exit and release file locks
+    if (stopped) {
+      execFileSync('sleep', ['1']);
+    }
     rmSync(E2E_ROOT, { recursive: true, force: true });
   }
 
