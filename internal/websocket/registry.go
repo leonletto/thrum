@@ -77,11 +77,19 @@ func (r *ClientRegistry) Notify(sessionID string, notification any) error {
 		return nil
 	}
 
-	// Send JSON-RPC notification (no id field, no response expected)
+	// Send JSON-RPC notification (no id field, no response expected).
+	// Extract inner params to avoid double-wrapping when notification
+	// is already a {method, params} map from buildNotification().
+	var params any = notification
+	if m, ok := notification.(map[string]any); ok {
+		if inner, ok := m["params"]; ok {
+			params = inner
+		}
+	}
 	payload := map[string]any{
 		"jsonrpc": "2.0",
 		"method":  getNotificationMethod(notification),
-		"params":  notification,
+		"params":  params,
 	}
 
 	data, err := json.Marshal(payload)

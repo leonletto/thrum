@@ -80,6 +80,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch {
           // Session start may fail if one already exists — that's fine
         }
+
+        // Subscribe to all notifications so the daemon pushes real-time
+        // events (new messages, thread updates) over this WebSocket.
+        try {
+          await wsClient.call('subscribe', { all: true });
+        } catch {
+          // Subscribe may fail if session already has a subscription — that's fine
+        }
         if (cancelled) return;
 
         setUser(result);

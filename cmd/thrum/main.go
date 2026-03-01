@@ -1407,8 +1407,10 @@ Exit codes:
 					afterTime = time.Now().Add(d)
 				}
 			} else {
-				// Default: only show messages arriving after this point
-				afterTime = time.Now()
+				// Default: look back 1s to avoid race between sender and wait startup.
+				// Without this, a message sent at the same instant as wait starts
+				// would be filtered out by the created_after > threshold check.
+				afterTime = time.Now().Add(-1 * time.Second)
 			}
 
 			agentID, err := resolveLocalAgentID()
@@ -1544,8 +1546,9 @@ func daemonCmd() *cobra.Command {
 				fmt.Print(cli.FormatDaemonStatus(result))
 			}
 
-			// Exit code 1 when daemon is not running (like systemctl status)
-			if !result.Running {
+			// Exit code 1 when daemon is not running (like systemctl status).
+			// In JSON mode, always exit 0 — the running status is in the JSON body.
+			if !result.Running && !flagJSON {
 				os.Exit(1)
 			}
 
@@ -3712,10 +3715,6 @@ Examples:
 			noInit, _ := cmd.Flags().GetBool("no-init")
 			forceInit, _ := cmd.Flags().GetBool("force")
 
-			if flagRole == "" || flagModule == "" {
-				return fmt.Errorf("--role and --module are required (or set THRUM_ROLE and THRUM_MODULE env vars)")
-			}
-
 			// Validate runtime if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
 				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, auggie, cli-only", runtimeFlag)
@@ -3741,10 +3740,15 @@ Examples:
 				if err == nil && existingCfg.Agent.Name != "" {
 					switch name {
 					case "":
-						// No --name given (automated/template call): fully adopt existing identity.
+						// No --name given (automated/template call): adopt existing identity,
+						// but respect explicitly-passed --role/--module flags.
 						name = existingCfg.Agent.Name
-						flagRole = existingCfg.Agent.Role
-						flagModule = existingCfg.Agent.Module
+						if !cmd.Flags().Changed("role") {
+							flagRole = existingCfg.Agent.Role
+						}
+						if !cmd.Flags().Changed("module") {
+							flagModule = existingCfg.Agent.Module
+						}
 						if display == "" && existingCfg.Agent.Display != "" {
 							display = existingCfg.Agent.Display
 						}
@@ -3759,6 +3763,11 @@ Examples:
 							existingCfg.Agent.Name)
 					}
 				}
+			}
+
+			// Validate after identity reuse so file values can satisfy the requirement
+			if flagRole == "" || flagModule == "" {
+				return fmt.Errorf("--role and --module are required (or set THRUM_ROLE and THRUM_MODULE env vars)")
 			}
 
 			// Compute default intent if none provided

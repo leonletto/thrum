@@ -39,7 +39,7 @@ export function useAgentList(options?: UseAgentListOptions) {
       );
     },
     staleTime: 5000, // Consider data fresh for 5 seconds
-    refetchInterval: 30000,
+    refetchInterval: 10000, // Poll every 10s (no push notification for agent events yet)
   });
 }
 
