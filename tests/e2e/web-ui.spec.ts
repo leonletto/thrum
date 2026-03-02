@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { thrum } from './helpers/thrum-cli.js';
+import { thrum, getWebUIUrl } from './helpers/thrum-cli.js';
 import { sendMessage, registerAgent, waitForWebSocket } from './helpers/fixtures.js';
 
 /**
@@ -33,7 +33,7 @@ test.describe('Web UI', () => {
   });
   test('SC-49: WebSocket connection and health bar', async ({ page }) => {
     // Act: navigate to UI
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
 
     // Assert: footer shows connected status
     await waitForWebSocket(page);
@@ -54,7 +54,7 @@ test.describe('Web UI', () => {
     sendMessage(uniqueMessage);
 
     // Act: navigate to Live Feed (default view)
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
     await waitForWebSocket(page);
 
     // Assert: real message appears in Live Feed
@@ -65,7 +65,7 @@ test.describe('Web UI', () => {
 
   test('SC-51: Live Feed real-time updates', async ({ page }) => {
     // Arrange: open browser to Live Feed first
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
     await waitForWebSocket(page);
 
     // Act: send a message while browser is watching
@@ -83,7 +83,7 @@ test.describe('Web UI', () => {
     sendMessage(inboxMessage);
 
     // Act: navigate and click "My Inbox" (same selector as SC-53)
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
     await waitForWebSocket(page);
 
     const inboxNav = page.getByText('My Inbox');
@@ -103,7 +103,7 @@ test.describe('Web UI', () => {
     registerAgent('test-recipient', 'all', 'Test Recipient');
 
     // Act: navigate to UI and switch to inbox view
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
     await waitForWebSocket(page);
 
     // Navigate to "My Inbox" via sidebar
@@ -134,7 +134,7 @@ test.describe('Web UI', () => {
     registerAgent('agent_sidebar_2', 'relay', 'Agent Two', 'sidebar_two');
 
     // Act: navigate to UI
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
     await waitForWebSocket(page);
 
     // The AgentList component renders:
@@ -155,7 +155,7 @@ test.describe('Web UI', () => {
 
   test('SC-55: Who Has? view', async ({ page }) => {
     // Navigate to UI
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
     await waitForWebSocket(page);
 
     // Look for "Who Has?" navigation item — must be visible
@@ -179,7 +179,7 @@ test.describe('Web UI', () => {
 
   test('SC-56: Theme toggle', async ({ page }) => {
     // Navigate to UI
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
     await waitForWebSocket(page);
 
     // Assert: theme toggle button must be visible
@@ -226,7 +226,7 @@ test.describe('Web UI', () => {
 
   test('SC-57: Settings panel', async ({ page }) => {
     // Navigate to UI
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
     await waitForWebSocket(page);
 
     // Assert: settings button must be visible in header

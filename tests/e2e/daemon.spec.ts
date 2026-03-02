@@ -275,7 +275,8 @@ test.describe('Daemon Management', () => {
 
   test('SC-48: Daemon serves embedded UI', async ({ page }) => {
     // Use the globally running daemon
-    const response = await page.goto('/');
+    const port = getGlobalDaemonPort();
+    const response = await page.goto(`http://localhost:${port}/`);
     expect(response?.status()).toBe(200);
 
     // Should serve the React SPA

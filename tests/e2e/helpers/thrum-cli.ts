@@ -24,6 +24,22 @@ const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
 /** File written by global-setup with the isolated test repo path. */
 const TEST_REPO_FILE = path.join(SOURCE_ROOT, 'node_modules', '.e2e-test-repo');
 
+/** File written by global-setup with the daemon's WebSocket port. */
+const WS_PORT_FILE = path.join(SOURCE_ROOT, 'node_modules', '.e2e-ws-port');
+
+/**
+ * Get the Web UI base URL by reading the daemon port at test-execution time.
+ * This avoids the stale-baseURL problem where playwright.config.ts reads the
+ * port at config-parse time (before globalSetup writes it).
+ */
+export function getWebUIUrl(): string {
+  if (existsSync(WS_PORT_FILE)) {
+    const port = readFileSync(WS_PORT_FILE, 'utf-8').trim();
+    if (port) return `http://localhost:${port}`;
+  }
+  return 'http://localhost:9999';
+}
+
 /**
  * Default test agent identity used by the global-setup daemon.
  * These env vars serve as fallback when identity file resolution fails

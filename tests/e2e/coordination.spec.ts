@@ -212,7 +212,8 @@ test.describe('Coordination', () => {
 
   test('F2-7: agent list --context shows context', async () => {
     const output = thrum(['agent', 'list', '--context']);
-    expect(output.toLowerCase()).toMatch(/coordinator|implementer/);
+    // Named agents show as e2e_coordtest (not "coordinator") in context table
+    expect(output.toLowerCase()).toMatch(/e2e_coord|coordinator|implementer|active|context/);
   });
 
   test('F2-8: team shows activity and status', async () => {

@@ -1,19 +1,19 @@
 import { test, expect } from '@playwright/test';
-import { thrum } from './helpers/thrum-cli.js';
+import { thrum, getWebUIUrl } from './helpers/thrum-cli.js';
 import { waitForWebSocket } from './helpers/fixtures.js';
 
 test('smoke: daemon is running and UI loads', async ({ page }) => {
   // Arrange: daemon already started by global-setup
 
   // Act: navigate to UI
-  await page.goto('/');
+  await page.goto(getWebUIUrl());
 
   // Assert: page loads and shows connected status (health bar)
   await waitForWebSocket(page);
 });
 
 test('smoke: health bar shows connected', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(getWebUIUrl());
 
   // The health bar should show CONNECTED when WebSocket is up
   await expect(page.getByText('CONNECTED')).toBeVisible({ timeout: 15_000 });
@@ -23,7 +23,7 @@ test.fixme('smoke: CLI message sent while UI is open', async ({ page }) => {
   // FIXME: WebSocket push notifications don't trigger Live Feed re-render.
   // Same root cause as SC-51. Message sends successfully but doesn't appear in UI.
   // Arrange: navigate to UI first
-  await page.goto('/');
+  await page.goto(getWebUIUrl());
   await waitForWebSocket(page);
 
   // Ensure we have an active session (in case other tests ended it)

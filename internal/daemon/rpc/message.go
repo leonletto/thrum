@@ -152,9 +152,10 @@ type DeleteMessageResponse struct {
 
 // EditRequest represents the request for message.edit RPC.
 type EditRequest struct {
-	MessageID  string         `json:"message_id"`
-	Content    string         `json:"content,omitempty"`    // New content
-	Structured map[string]any `json:"structured,omitempty"` // New structured data
+	MessageID     string         `json:"message_id"`
+	Content       string         `json:"content,omitempty"`          // New content
+	Structured    map[string]any `json:"structured,omitempty"`       // New structured data
+	CallerAgentID string         `json:"caller_agent_id,omitempty"`  // CLI-resolved agent identity
 }
 
 // EditResponse represents the response from message.edit RPC.
@@ -932,7 +933,7 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	}
 
 	// Get current agent and session
-	agentID, sessionID, err := h.resolveAgentAndSession("")
+	agentID, sessionID, err := h.resolveAgentAndSession(req.CallerAgentID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent and session: %w", err)
 	}

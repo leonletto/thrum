@@ -261,7 +261,7 @@ func TestMessageEdit(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	result, err := MessageEdit(client, "msg_01HXE8Z7", "Updated content")
+	result, err := MessageEdit(client, "msg_01HXE8Z7", "Updated content", "test_agent")
 	if err != nil {
 		t.Fatalf("MessageEdit() error = %v", err)
 	}

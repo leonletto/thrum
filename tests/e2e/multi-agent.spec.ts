@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { thrum, thrumJson, thrumIn, getTestRoot, getImplementerRoot } from './helpers/thrum-cli.js';
+import { thrum, thrumJson, thrumIn, getTestRoot, getImplementerRoot, getWebUIUrl } from './helpers/thrum-cli.js';
 import { quickstartAgent, sendMessage, waitForWebSocket } from './helpers/fixtures.js';
 
 /**
@@ -63,7 +63,7 @@ test.describe('Multi-Agent Scenarios', () => {
     thrumIn(getTestRoot(), ['send', 'Task assigned for browser test'], 10_000, coordEnv());
 
     // Act: open browser
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
     await waitForWebSocket(page);
 
     // Wait for header to load with identity (not "Unknown")
