@@ -85,7 +85,7 @@ thrum sync status                        Sync state
 ### Utility
 
 ```bash
-thrum init                               Initialize thrum in repo
+thrum init                               Initialize thrum in repo (also starts the daemon)
 thrum prime                              Full session context
 thrum prime --json                       Machine-readable output
 thrum <cmd> --help                       Detailed command usage

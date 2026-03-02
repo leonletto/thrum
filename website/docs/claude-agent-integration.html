@@ -103,13 +103,13 @@ reply &lt;msg-id&gt; &quot;response&quot; # Reply (creates a reply-to reference)
 
 ## MCP Tools (11 total)
 
-**Core messaging (5):**
+**Core messaging (4):**
 
 - send_message — Send to specific agent via @name
 - check_messages — Poll inbox, auto-mark read
 - wait_for_message — Block until message arrives
 - list_agents — Show registered agents
-- broadcast_message — Send to all agents (alias for send_message to @everyone)
+- broadcast_message — (Deprecated — use `send_message` with `to=&quot;@everyone&quot;` instead)
 
 **Group management (6):**
 
@@ -137,9 +137,10 @@ thrum session end</code></pre>
 </details>
 
 <h2>message-listener</h2>
-<p>A lightweight background agent (runs on Haiku for ~$0.00003/cycle) that polls
-for incoming messages. It loops inbox checks with 30-second sleep intervals for
-up to ~5 minutes, returning immediately when new messages arrive.</p>
+<p>A lightweight background agent (runs on Haiku for <del>$0.00003/cycle) that uses
+<code>thrum wait</code> for efficient blocking until messages arrive — no polling loops or
+sleep intervals needed. It loops up to ~6 cycles (</del>90 minutes of coverage),
+returning immediately when new messages arrive.</p>
 <p><strong>Usage:</strong> Spawn at the start of every coordination session. Re-arm immediately
 when it returns.</p>
 <details>

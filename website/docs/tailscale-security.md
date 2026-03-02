@@ -199,4 +199,3 @@ Three incorrect codes were entered.
 
 **Fix**: Run `thrum peer add` again on Machine A to start a fresh session with a
 new code.
-```

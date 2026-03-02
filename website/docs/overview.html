@@ -51,6 +51,7 @@ across sessions, worktrees, and machines. It provides:</p>
 <li><strong>Automatic synchronization</strong> via Git</li>
 <li><strong>Real-time visibility</strong> into what other agents are working on</li>
 <li><strong>Subscription-based notifications</strong> for targeted communication</li>
+<li><strong>Backup &amp; Restore</strong> for protecting your message history and agent state</li>
 </ul>
 <p>Everything is inspectable — messages are JSONL files on a Git branch, state is a
 queryable SQLite database, and sync is plain Git push/pull.</p>
@@ -165,11 +166,10 @@ messages and agent activity. Served from the same port as WebSocket (default
 <p><strong>MCP Server</strong> (<code>thrum mcp serve</code>): Exposes Thrum functionality as native MCP
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
 directly through MCP protocol without CLI shell-outs. Connects to the daemon via
-Unix socket for RPC and WebSocket for real-time push notifications. Provides 5
+Unix socket for RPC and WebSocket for real-time push notifications. Provides 4
 core messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
-<code>list_agents</code>, <code>broadcast_message</code>) and 6 group management tools
-(<code>create_group</code>, <code>delete_group</code>, <code>add_group_member</code>, <code>remove_group_member</code>,
-<code>list_groups</code>, <code>get_group</code>).</p>
+<code>list_agents</code>) and 6 group management tools (<code>create_group</code>, <code>delete_group</code>,
+<code>add_group_member</code>, <code>remove_group_member</code>, <code>list_groups</code>, <code>get_group</code>).</p>
 <h2>Key Features</h2>
 <h3>1. Persistent Messaging</h3>
 <p>Messages are stored in append-only JSONL logs on a dedicated <code>a-sync</code> orphan
@@ -621,27 +621,24 @@ users:</p>
 </tbody></table>
 <h3>For MCP Integration</h3>
 <p><code>thrum mcp serve</code> runs an MCP server on stdio (JSON-RPC over stdin/stdout),
-enabling LLM agents to communicate via native MCP tools. It provides 5 core
+enabling LLM agents to communicate via native MCP tools. It provides 4 core
 messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
-<code>list_agents</code>, <code>broadcast_message</code>) and 6 group management tools.</p>
+<code>list_agents</code>) and 6 group management tools.</p>
 <p>See <a href="/docs/mcp-server.html">MCP Server</a> for the complete tools reference,
 configuration, and setup instructions.</p>
 <h2>Getting Started</h2>
 <h3>Quick Start</h3>
-<pre><code># 1. Initialize in your project
+<pre><code># 1. Initialize in your project (also starts the daemon automatically)
 cd your-project
 thrum init
 
-# 2. Start the daemon
-thrum daemon start
-
-# 3. Register, start session, and set intent in one step
+# 2. Register, start session, and set intent in one step
 thrum quickstart --name myagent --role implementer --module feature --intent &quot;Working on feature X&quot;
 
-# 4. Send your first message
+# 3. Send your first message
 thrum send &quot;Starting work on feature X&quot; --scope module:feature
 
-# 5. Subscribe to your module
+# 4. Subscribe to your module
 thrum subscribe --scope module:feature</code></pre>
 <h3>Check What Other Agents Are Working On</h3>
 <pre><code># List all agent work contexts
@@ -721,6 +718,10 @@ thrum wait --scope module:feature --timeout 5m</code></pre>
 <tr>
 <td><a href="architecture.html">Architecture</a></td>
 <td>Foundation packages</td>
+</tr>
+<tr>
+<td><a href="cli.html">CLI Reference</a></td>
+<td>Backup &amp; restore commands (<code>thrum backup</code>)</td>
 </tr>
 </tbody></table>
 <h2>Design Principles</h2>

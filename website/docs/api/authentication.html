@@ -541,9 +541,10 @@ THRUM_NAME=furiosa thrum mcp serve
 
 # Or with explicit agent-id override
 thrum mcp serve --agent-id furiosa</code></pre>
-<p>The MCP server provides 5 tools: <code>send_message</code>, <code>check_messages</code>,
-<code>wait_for_message</code>, <code>list_agents</code>, <code>broadcast_message</code>. Identity is resolved
-once at startup.</p>
+<p>The MCP server provides 10 tools: 4 core messaging tools (<code>send_message</code>,
+<code>check_messages</code>, <code>wait_for_message</code>, <code>list_agents</code>) and 6 group management
+tools (<code>create_group</code>, <code>delete_group</code>, <code>add_group_member</code>, <code>remove_group_member</code>,
+<code>list_groups</code>, <code>get_group</code>). Identity is resolved once at startup.</p>
 <h3>User Registration (Browser Auto-Registration)</h3>
 <p>The browser handles registration automatically via <code>AuthProvider</code>. No manual
 code is needed. The flow is:</p>

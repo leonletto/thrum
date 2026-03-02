@@ -893,6 +893,21 @@ Extracts git work context if a <code>worktree</code> ref is set.</p>
 <td>string</td>
 <td>ISO 8601 updated last-seen timestamp</td>
 </tr>
+<tr>
+<td><code>branch</code></td>
+<td>string</td>
+<td>Current git branch name; omitted if no <code>worktree</code> ref is set or git extraction fails</td>
+</tr>
+<tr>
+<td><code>unmerged_commits</code></td>
+<td>integer</td>
+<td>Count of commits on the current branch not yet merged to the default branch; omitted if no git context</td>
+</tr>
+<tr>
+<td><code>file_changes</code></td>
+<td>array</td>
+<td>List of changed files: <code>[{&quot;path&quot;: &quot;...&quot;, &quot;last_modified&quot;: &quot;...&quot;, &quot;additions&quot;: N, &quot;deletions&quot;: N, &quot;status&quot;: &quot;...&quot;}]</code>; omitted if no git context</td>
+</tr>
 </tbody></table>
 <p><strong>Errors:</strong></p>
 <ul>
@@ -1130,13 +1145,13 @@ Extracts git work context if a <code>worktree</code> ref is set.</p>
 <td><code>thread_id</code></td>
 <td>string</td>
 <td>no</td>
-<td>Thread identifier (deprecated in v0.4.0, use <code>reply_to</code> instead)</td>
+<td>Thread identifier (deprecated in v0.4.0). Use <code>reply_to</code> instead — replying to a message automatically creates or joins a thread, and the resulting <code>thread_id</code> is returned in the response.</td>
 </tr>
 <tr>
 <td><code>reply_to</code></td>
 <td>string</td>
 <td>no</td>
-<td>Message ID to reply to (creates a reply chain)</td>
+<td>Message ID to reply to. Triggers implicit auto-threading: a <code>thread_id</code> is automatically created (for the first reply) or joined (for subsequent replies), and returned in the response.</td>
 </tr>
 <tr>
 <td><code>scopes</code></td>
@@ -1190,9 +1205,24 @@ Extracts git work context if a <code>worktree</code> ref is set.</p>
 <td>Generated message ID (e.g., <code>&quot;msg_01HXE...&quot;</code>)</td>
 </tr>
 <tr>
+<td><code>thread_id</code></td>
+<td>string</td>
+<td>Thread ID if the message was sent with <code>reply_to</code> (auto-created or joined); omitted otherwise</td>
+</tr>
+<tr>
 <td><code>created_at</code></td>
 <td>string</td>
 <td>ISO 8601 creation timestamp</td>
+</tr>
+<tr>
+<td><code>resolved_to</code></td>
+<td>integer</td>
+<td>Number of <code>mentions</code> that were resolved to known agents</td>
+</tr>
+<tr>
+<td><code>warnings</code></td>
+<td>array</td>
+<td>Informational warning strings (e.g., unresolvable mentions); omitted when empty</td>
 </tr>
 </tbody></table>
 <p><strong>Errors:</strong></p>

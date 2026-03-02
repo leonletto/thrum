@@ -425,8 +425,8 @@ flag; use subscriptions if you need a firehose.</p>
 <pre><code># Wait for any message addressed to this agent
 thrum wait --timeout 5m
 
-# Include messages sent up to 30s ago (--after -30s = &quot;30 seconds ago&quot;; negative = &quot;N ago&quot;)
-thrum wait --after -30s --timeout 5m --json
+# Include messages sent up to 1s ago (--after -1s = &quot;1 second ago&quot;; negative = &quot;N ago&quot;)
+thrum wait --after -1s --timeout 5m --json
 
 # Wait for mentions of your role
 thrum wait --mention @reviewer --timeout 5m</code></pre>
@@ -455,7 +455,7 @@ thrum wait --mention @reviewer --timeout 5m</code></pre>
 </tr>
 <tr>
 <td><code>--after</code></td>
-<td>Relative time (e.g., <code>-30s</code>)</td>
+<td>Relative time (e.g., <code>-1s</code>)</td>
 <td>Negative = include messages sent up to N ago; positive = only messages N in the future; omit for &quot;now&quot;</td>
 </tr>
 <tr>
@@ -536,7 +536,7 @@ thrum send &quot;Both features shipping in v0.4&quot; --to @backend
 cd ~/.workspaces/repo/auth
 export THRUM_NAME=furiosa
 thrum inbox --unread
-thrum send &quot;Auth complete, 15 tests passing&quot; --to @coordinator</code></pre>
+thrum send &quot;Auth complete, 15 tests passing&quot; --to @coord_main</code></pre>
 <hr>
 <h2>Best Practices</h2>
 <h3>Group Organization</h3>

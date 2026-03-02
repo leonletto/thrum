@@ -34,23 +34,7 @@ the code produces. Common use cases with Thrum:
 
 Playwright CLI runs as a Claude Code skill. There are two ways to set it up:
 
-#### Option 1: Playwright MCP Plugin (Recommended)
-
-The official Playwright MCP plugin from Microsoft provides browser tools
-directly to Claude Code:
-
-1. Install the plugin in Claude Code:
-   ```
-   claude plugin add playwright
-   ```
-
-2. The plugin automatically registers MCP tools like `browser_navigate`,
-   `browser_click`, `browser_snapshot`, and `browser_take_screenshot`.
-
-3. No additional configuration needed — the plugin runs
-   `npx @playwright/mcp@latest` as the MCP server.
-
-#### Option 2: Playwright CLI Skill
+#### Option 1: Playwright CLI Skill (Recommended)
 
 If you have the `playwright-cli` binary installed, you can use it via a Claude
 Code skill:
@@ -70,6 +54,24 @@ Code skill:
    ```
 
 3. The skill gives agents access to `Bash(playwright-cli:*)` commands.
+
+#### Option 2: Playwright MCP Plugin (Alternative)
+
+The official Playwright MCP plugin from Microsoft provides browser tools
+directly to Claude Code. Note: this approach sends screenshots as base64 inline
+images, which consumes significantly more tokens than the CLI skill. The CLI
+skill is preferred for agent workflows.
+
+1. Install the plugin in Claude Code:
+   ```
+   claude plugin add playwright
+   ```
+
+2. The plugin automatically registers MCP tools like `browser_navigate`,
+   `browser_click`, `browser_snapshot`, and `browser_take_screenshot`.
+
+3. No additional configuration needed — the plugin runs
+   `npx @playwright/mcp@latest` as the MCP server.
 
 ### Core Commands
 
@@ -101,7 +103,7 @@ playwright-cli screenshot --selector ".dashboard-header"
 playwright-cli screenshot --full-page
 
 # Save to a specific file
-playwright-cli screenshot --output dashboard.png
+playwright-cli screenshot --filename dashboard.png
 ```
 
 #### Page Inspection
@@ -156,13 +158,13 @@ thrum send "Starting UI task <id>" --to @coordinator
 
 # 2. Open the app and capture the "before" state
 playwright-cli open http://localhost:65018
-playwright-cli screenshot --output before.png
+playwright-cli screenshot --filename before.png
 
 # 3. Make code changes...
 
 # 4. Reload and capture the "after" state
 playwright-cli goto http://localhost:65018
-playwright-cli screenshot --output after.png
+playwright-cli screenshot --filename after.png
 
 # 5. Verify the change visually
 playwright-cli snapshot    # check accessibility tree

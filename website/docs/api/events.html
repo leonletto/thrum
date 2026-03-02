@@ -185,7 +185,10 @@ can be rebuilt from the JSONL at any time.</p>
 <li><code>event_id</code>: Globally unique ULID for deduplication</li>
 <li><code>v</code>: Event schema version</li>
 <li><code>message_id</code>: Unique message identifier</li>
-<li><code>thread_id</code>: Parent thread (empty if standalone message)</li>
+<li><code>thread_id</code>: Parent thread (empty if standalone message). When a message is
+sent with <code>reply_to</code>, <code>thread_id</code> is automatically assigned: the first reply
+creates a new thread and all subsequent replies to any message in that thread
+join the existing thread.</li>
 <li><code>agent_id</code>: Message author&#39;s agent name or legacy ID</li>
 <li><code>session_id</code>: Session that created the message</li>
 <li><code>timestamp</code>: Message creation time (ISO 8601)</li>

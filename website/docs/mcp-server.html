@@ -49,8 +49,8 @@ receive messages using native MCP tools instead of shelling out to CLI commands.
 It runs as a long-lived child process (<code>thrum mcp serve</code>) communicating over
 stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for
 message operations and via WebSocket for real-time push notifications.</p>
-<p>The server provides 11 MCP tools: 5 for core messaging operations and 6 for
-group management.</p>
+<p>The server provides 11 MCP tools: 4 for core messaging operations, 6 for
+group management, and 1 deprecated broadcast tool.</p>
 <p>The primary motivation is eliminating polling overhead. Without MCP, agents must
 periodically call <code>thrum inbox</code> (burning tokens and context). With MCP, a cheap
 background sub-agent blocks on <code>wait_for_message</code> and wakes the main agent
@@ -65,7 +65,6 @@ instantly when a message arrives.</p>
   |     |   +-- message.list     -&gt; check_messages tool
   |     |   +-- message.markRead -&gt; check_messages tool (auto-mark consumed)
   |     |   +-- agent.list       -&gt; list_agents tool
-  |     |   +-- message.send x N -&gt; broadcast_message tool
   |     |
   |     +-- WebSocket Client (ws://localhost:{port}/ws)
   |     |   +-- user.identify + user.register -&gt; session setup
@@ -81,7 +80,7 @@ instantly when a message arrives.</p>
 <h3>Package Structure</h3>
 <pre><code>internal/mcp/
   server.go    -- NewServer(), tool registration, Run(), InitWaiter()
-  tools.go     -- send_message, check_messages, list_agents, broadcast_message handlers
+  tools.go     -- send_message, check_messages, list_agents, group management handlers
   waiter.go    -- WebSocket client, notification routing, wait_for_message handler
   types.go     -- MCP-specific input/output structs
 
@@ -98,7 +97,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <code>identity.GenerateAgentID(repoID, role, module, name)</code></li>
 <li>Create MCP server with the official Go SDK
 (<code>github.com/modelcontextprotocol/go-sdk/mcp</code>)</li>
-<li>Register all 11 tool handlers (5 core messaging + 6 group management)</li>
+<li>Register all 11 tool handlers (4 core messaging + 6 group management + 1 deprecated)</li>
 <li>Initialize WebSocket waiter (best-effort -- reads port from
 <code>.thrum/var/ws.port</code>)<ul>
 <li>Connect to <code>ws://localhost:{port}/ws</code></li>
@@ -207,7 +206,7 @@ exposes its tools as <code>mcp__thrum__&lt;tool_name&gt;</code>.</p>
 <td><code>reply_to</code></td>
 <td>string</td>
 <td>no</td>
-<td>Message ID to reply to (creates a reply chain)</td>
+<td>Message ID to reply to (creates a reply chain; a <code>thread_id</code> is automatically assigned and returned in the response)</td>
 </tr>
 <tr>
 <td><code>metadata</code></td>
@@ -480,98 +479,6 @@ connect, this tool returns an error.</p>
 <li>2+ minutes ago or missing: <code>offline</code></li>
 </ul>
 <p><strong>Daemon RPC:</strong> <code>agent.list</code></p>
-<h3>broadcast_message</h3>
-<p>Send a message to all agents via the <code>@everyone</code> group, with optional filtering.
-The sender is automatically excluded. This is a convenience wrapper around
-sending to <code>@everyone</code>.</p>
-<p><strong>Input:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Type</th>
-<th>Required</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>content</code></td>
-<td>string</td>
-<td>yes</td>
-<td>Message text to broadcast</td>
-</tr>
-<tr>
-<td><code>filter</code></td>
-<td>object</td>
-<td>no</td>
-<td>Optional recipient filters</td>
-</tr>
-</tbody></table>
-<p><strong>BroadcastFilter:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>status</code></td>
-<td>string</td>
-<td><code>all</code> (default) or <code>active</code> (only agents seen in last 2 min)</td>
-</tr>
-<tr>
-<td><code>exclude</code></td>
-<td>array</td>
-<td>Agent names or roles to exclude</td>
-</tr>
-</tbody></table>
-<p><strong>Output:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>status</code></td>
-<td>string</td>
-<td><code>sent</code>, <code>partial</code> (some failures), or <code>no_recipients</code></td>
-</tr>
-<tr>
-<td><code>sent_to</code></td>
-<td>array</td>
-<td>Roles of agents that received the message</td>
-</tr>
-<tr>
-<td><code>failed_to</code></td>
-<td>array</td>
-<td>Roles of agents where send failed</td>
-</tr>
-<tr>
-<td><code>total_sent</code></td>
-<td>integer</td>
-<td>Count of successful sends</td>
-</tr>
-<tr>
-<td><code>message_ids</code></td>
-<td>array</td>
-<td>IDs of sent messages</td>
-</tr>
-</tbody></table>
-<p><strong>Behavior:</strong></p>
-<ol>
-<li>Fetch agent list via <code>agent.list</code> RPC</li>
-<li>Filter out self (by agent ID, not role -- so other agents with the same role
-still receive the message)</li>
-<li>Apply exclude filter (matches against both role and display name)</li>
-<li>Apply status filter (if <code>active</code>, skip agents with <code>offline</code> status)</li>
-<li>Send individual messages to each remaining agent via <code>message.send</code> RPC</li>
-</ol>
-<p><strong>Daemon RPC:</strong> <code>agent.list</code> + <code>message.send</code> (one per recipient)</p>
 <h3>create_group</h3>
 <p>Create a named group for targeted messaging.</p>
 <p><strong>Input:</strong></p>
@@ -925,6 +832,30 @@ roles to individual agent IDs.</p>
 </tr>
 </tbody></table>
 <p><strong>Daemon RPC:</strong> <code>group.info</code> (without expand) or <code>group.members</code> (with expand)</p>
+<h3>broadcast_message <em>(Deprecated)</em></h3>
+<blockquote>
+<p><strong>Deprecated:</strong> Use <code>send_message(to=&quot;@everyone&quot;, content=&quot;...&quot;)</code> instead.
+This tool is registered but deprecated and may be removed in a future release.</p>
+</blockquote>
+<p>Broadcast a message to all agents. Equivalent to <code>send_message</code> with <code>to=&quot;@everyone&quot;</code>.</p>
+<p><strong>Input:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>content</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Message text</td>
+</tr>
+</tbody></table>
+<p><strong>Daemon RPC:</strong> <code>message.send</code></p>
 <h2>Identity Resolution</h2>
 <p>The MCP server resolves agent identity once at startup. The client never passes
 agent IDs in tool calls.</p>
@@ -1008,7 +939,7 @@ coordinator and stop the listener</li>
 <pre><code>mcp__thrum__send_message(to=&quot;@reviewer&quot;, content=&quot;...&quot;)
 mcp__thrum__check_messages()
 mcp__thrum__list_agents()
-mcp__thrum__send_message(to=&quot;@everyone&quot;, content=&quot;...&quot;)  # preferred over broadcast_message
+mcp__thrum__send_message(to=&quot;@everyone&quot;, content=&quot;...&quot;)  # broadcast to all agents
 mcp__thrum__wait_for_message(timeout=300)</code></pre>
 <p><strong>Group management:</strong></p>
 <pre><code>mcp__thrum__create_group(name=&quot;backend&quot;, description=&quot;Backend team&quot;)

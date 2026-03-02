@@ -24,6 +24,7 @@ the shared `.thrum/` directory at the git root.
 
 ```bash
 # Start daemon once (from any worktree)
+# Note: thrum init also starts the daemon automatically if not already running
 thrum daemon start
 
 # All worktrees connect to the same daemon

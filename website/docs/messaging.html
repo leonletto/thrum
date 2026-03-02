@@ -749,9 +749,9 @@ read state persists across session restarts for the same agent.</p>
 </ul>
 <h2>MCP Server Integration</h2>
 <p>The MCP server (<code>thrum mcp serve</code>) provides native messaging tools for AI agents
-running in Claude Code or similar environments. It exposes 11 MCP tools: 5 core
+running in Claude Code or similar environments. It exposes 10 MCP tools: 4 core
 messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
-<code>list_agents</code>, <code>broadcast_message</code>) and 6 group management tools. MCP tools use
+<code>list_agents</code>) and 6 group management tools. MCP tools use
 the same underlying RPC methods but add <code>@role</code> addressing and real-time
 WebSocket push notifications.</p>
 <p>See <a href="/docs/mcp-server.html">MCP Server</a> for the complete tools reference and

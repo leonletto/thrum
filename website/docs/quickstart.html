@@ -92,6 +92,8 @@ JSONL event logs)</li>
 <li><code>.thrum/var/</code> for daemon runtime files</li>
 <li><code>a-sync</code> orphan branch for message synchronization</li>
 </ul>
+<p><code>thrum init</code> also starts the daemon automatically (since v0.4.5). You do not
+need a separate <code>thrum daemon start</code> step for first-time setup.</p>
 <p>If you are upgrading an existing repo that has JSONL files tracked on <code>main</code>,
 run <code>thrum migrate</code> instead.</p>
 <h3>2. Generate CLAUDE.md Coordination Instructions</h3>
@@ -100,18 +102,7 @@ run <code>thrum migrate</code> instead.</p>
 <p>This appends agent coordination instructions to your CLAUDE.md file (creates it
 if missing). Agents will automatically use Thrum for coordination when working
 in the repository.</p>
-<h3>3. Start the Daemon</h3>
-<pre><code>thrum daemon start</code></pre>
-<p>The daemon handles:</p>
-<ul>
-<li>RPC requests from CLI and MCP server via Unix socket</li>
-<li>WebSocket + embedded Web UI SPA on port 9999 (configurable via
-<code>THRUM_WS_PORT</code>)</li>
-<li>Background sync every 60s</li>
-<li>Push notifications for subscriptions</li>
-<li>Browser auto-registration via git config</li>
-</ul>
-<h3>4. Register Your Agent and Start a Session</h3>
+<h3>3. Register Your Agent and Start a Session</h3>
 <p>The fastest way is the quickstart command, which registers, starts a session,
 and sets your intent in one step:</p>
 <pre><code>thrum quickstart --name myagent --role implementer --module auth --intent &quot;Working on auth&quot;</code></pre>
@@ -190,16 +181,14 @@ thrum mcp serve --agent-id myagent  # Override agent identity</code></pre>
 tools reference (11 tools: 5 core messaging + 6 group management).</p>
 <h2>Typical Workflow</h2>
 <h3>Morning: Start Work</h3>
-<pre><code># 1. Start daemon (if not running)
-thrum daemon start
-
-# 2. Register and start session (or just start session if already registered)
+<pre><code># 1. Register and start session (or just start session if already registered)
+#    (Use `thrum daemon start` explicitly if the daemon stopped for any reason)
 thrum quickstart --name myagent --role implementer --module auth --intent &quot;Working on auth&quot;
 
-# 3. Check inbox for updates
+# 2. Check inbox for updates
 thrum inbox --unread
 
-# 4. Subscribe to your module
+# 3. Subscribe to your module
 thrum subscribe --scope module:auth</code></pre>
 <h3>During Work: Send Updates</h3>
 <pre><code># Progress updates
@@ -412,6 +401,7 @@ shell-outs.</p>
 <li><strong>Mention other agents</strong> when you need their attention</li>
 <li><strong>Check sync status</strong> if messages aren&#39;t appearing</li>
 <li><strong>Use <code>--json</code> flag</strong> for scripting and automation</li>
+<li><strong>Back up your data</strong> regularly: <code>thrum backup</code></li>
 </ol>
 <p>Happy collaborating!</p>
 

@@ -360,35 +360,42 @@ thrum context prime --json</code></pre>
 <li>Debugging - gather all relevant state in one command</li>
 <li>Agent onboarding - provide comprehensive context to new agents</li>
 </ul>
-<p><strong>Note:</strong> This command is an alias for <code>thrum prime</code>. The PreCompact hook
-automatically saves context before compaction to <code>.thrum/context/{name}.md</code> and
+<p><strong>Note:</strong> <code>thrum prime</code> is the canonical top-level command; <code>thrum context prime</code>
+is an alias for it. The PreCompact hook automatically saves context before
+compaction to <code>.thrum/context/{name}.md</code> and
 <code>/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md</code>, but the
 agent-initiated <code>/update-context</code> skill captures richer context including
 decisions and rationale.</p>
 <hr>
 <h2>The /update-context Skill</h2>
-<p>The <code>/update-context</code> skill is now integrated into the Thrum MCP server. The MCP
-server provides message-based context coordination through the <code>send_message</code>
-and <code>wait_for_message</code> tools.</p>
-<p><strong>Usage:</strong></p>
-<p>Configure the MCP server in <code>.claude/settings.json</code> and agents can coordinate
-context updates via messages.</p>
-<p><strong>Workflow:</strong></p>
+<p>The <code>/update-context</code> skill is a Claude Code plugin slash command defined in
+<code>claude-plugin/commands/update-context.md</code>. It does <strong>not</strong> use MCP messaging —
+it works entirely through local shell commands and a spawned sub-agent.</p>
+<p><strong>What it does:</strong></p>
 <ol>
-<li>Agent sends context via <code>send_message</code></li>
-<li>Other agents receive via <code>wait_for_message</code> or <code>check_messages</code></li>
-<li>Skill formats your input as markdown and saves it via
-<code>thrum context save --file /tmp/context.md</code></li>
+<li>You provide a brief narrative of your session: what you worked on, key
+decisions made, current state, and what the next session needs to know.</li>
+<li>The skill spawns a <strong>general-purpose sub-agent</strong> that:<ul>
+<li>Runs <code>git log</code>, <code>git status</code>, <code>git branch</code> to gather repo state</li>
+<li>Runs <code>bd stats</code>, <code>bd list --status=in_progress</code>, <code>bd ready</code> if available</li>
+<li>Reads existing context via <code>thrum context show</code></li>
+<li>Merges your narrative with the gathered state into structured markdown</li>
+<li>Saves the result via <code>echo &quot;$CONTENT&quot; | thrum context save</code></li>
+</ul>
+</li>
+<li>The sub-agent returns a brief summary of what was saved.</li>
 </ol>
 <p><strong>Example:</strong></p>
 <pre><code>User: /update-context
-Agent: What context should I preserve for the next session?
+Agent: Please write a brief narrative of what you worked on this session,
+       key decisions, current state, and what the next session needs to know.
 User: We&#39;re refactoring the auth module. Decided to use JWT with
       refresh tokens. Need to add rate limiting tests.
-Agent: [Saves formatted context]
+Agent: [Spawns sub-agent to gather git/task state and merge with narrative]
       ✓ Context saved (248 bytes)</code></pre>
 <p>The skill reduces the friction of updating context and ensures consistent
-formatting.</p>
+formatting by combining your narrative with automatically gathered repo and task
+state.</p>
 <hr>
 <h2>Use Cases and Patterns</h2>
 <h3>Single-Agent Session Continuity</h3>

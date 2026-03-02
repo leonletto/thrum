@@ -91,7 +91,7 @@ thrum daemon status</code></pre>
 │   ├── gitctx/              # Git-derived work context (branch, uncommitted files)
 │   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, event)
 │   ├── jsonl/               # JSONL reader/writer with file locking
-│   ├── mcp/                 # MCP stdio server (5 tools, WebSocket waiter)
+│   ├── mcp/                 # MCP stdio server (11 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
 │   ├── schema/              # SQLite schema, DDL, and migrations (v7)
@@ -369,6 +369,7 @@ even when the UI has not been built.</p>
 <li><code>agent.register</code></li>
 <li><code>agent.session.start</code>, <code>agent.session.end</code></li>
 <li><code>agent.update</code></li>
+<li><code>thread.create</code></li>
 </ul>
 <p>Example:</p>
 <pre><code>// 1. Define event type in internal/types/events.go
@@ -551,9 +552,6 @@ as WebSocket (<code>/ws</code>)</li>
 <pre><code># Start daemon (background, auto-creates sync worktree)
 thrum daemon start
 
-# Start in foreground (for debugging)
-thrum daemon start --foreground
-
 # Check status (shows PID, repo path, WebSocket port)
 thrum daemon status
 
@@ -591,9 +589,11 @@ ls -l .thrum/var/thrum.sock</code></pre>
 <pre><code># Using netcat
 echo &#39;{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;health&quot;,&quot;id&quot;:1}&#39; | nc -U .thrum/var/thrum.sock</code></pre>
 <p><strong>View daemon logs:</strong></p>
-<pre><code># Run daemon in foreground for debugging
-thrum daemon start --foreground
-# Logs appear in stdout/stderr</code></pre>
+<pre><code># Check daemon logs
+cat .thrum/var/daemon.log
+
+# Check daemon status (shows PID, repo path, WebSocket port)
+thrum daemon status</code></pre>
 <p><strong>Clean restart:</strong></p>
 <pre><code># Stop daemon
 thrum daemon stop
@@ -642,7 +642,7 @@ over stdin/stdout).</p>
 <li><code>internal/mcp/waiter.go</code>: WebSocket-based blocking message waiter</li>
 <li><code>cmd/thrum/mcp.go</code>: <code>thrum mcp serve</code> Cobra command</li>
 </ul>
-<p><strong>MCP Tools (5):</strong></p>
+<p><strong>MCP Tools (11 total: 10 active + 1 deprecated):</strong></p>
 <table>
 <thead>
 <tr>
@@ -667,8 +667,32 @@ over stdin/stdout).</p>
 <td>List registered agents with active/offline status</td>
 </tr>
 <tr>
+<td><code>create_group</code></td>
+<td>Create a named messaging group</td>
+</tr>
+<tr>
+<td><code>delete_group</code></td>
+<td>Delete a messaging group</td>
+</tr>
+<tr>
+<td><code>add_group_member</code></td>
+<td>Add an agent or role as a member of a group</td>
+</tr>
+<tr>
+<td><code>remove_group_member</code></td>
+<td>Remove a member from a group</td>
+</tr>
+<tr>
+<td><code>list_groups</code></td>
+<td>List all messaging groups</td>
+</tr>
+<tr>
+<td><code>get_group</code></td>
+<td>Get group details including members (expand=true resolves roles)</td>
+</tr>
+<tr>
 <td><code>broadcast_message</code></td>
-<td>Send to all agents (convenience wrapper around <code>send_message</code> to <code>@everyone</code>)</td>
+<td><em>(Deprecated)</em> Broadcast to all agents — use <code>send_message(to=&quot;@everyone&quot;)</code> instead</td>
 </tr>
 </tbody></table>
 <p><strong>Architecture:</strong></p>

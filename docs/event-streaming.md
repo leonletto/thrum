@@ -65,6 +65,10 @@ Currently implemented:
 
 - **`notification.message`** - Pushed when a new message is created or edited,
   matching a subscription
+- **`notification.thread.updated`** - Pushed after every reply that creates or
+  joins a thread; carries updated message count, unread count, last sender, and
+  a preview of the latest message. This event is a real-time WebSocket
+  notification only and is **not persisted** to JSONL.
 
 ### Notification Format
 
@@ -193,6 +197,8 @@ ws.onmessage = (event) => {
   const notification = JSON.parse(event.data);
   if (notification.method === "notification.message") {
     console.log("New message:", notification.params.preview);
+  } else if (notification.method === "notification.thread.updated") {
+    console.log("Thread updated:", notification.params.thread_id);
   }
 };
 ```

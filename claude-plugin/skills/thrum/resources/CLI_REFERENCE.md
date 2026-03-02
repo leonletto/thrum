@@ -458,8 +458,10 @@ Note: `--foreground` flag does NOT exist. Daemon always starts in background.
 
 ## Init
 
+`thrum init` also automatically starts the daemon if it is not already running.
+
 ```bash
-thrum init                                     # Init + interactive runtime selection
+thrum init                                     # Init + interactive runtime selection (also starts daemon)
 thrum init --runtime claude                    # Init + generate Claude configs
 thrum init --runtime codex --force             # Init + overwrite Codex configs
 thrum init --runtime all --dry-run             # Preview all runtime configs

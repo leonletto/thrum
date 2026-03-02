@@ -20,7 +20,7 @@ on:
   agent naming
 - **ID generation** - Deterministic and unique identifiers (ULID-based)
 - **JSONL handling** - Append-only event log with file locking
-- **SQLite schema** - Database tables, indexes, and migrations (version 7)
+- **SQLite schema** - Database tables, indexes, and migrations (version 13)
 - **Event projection** - Replay sharded JSONL events into SQLite
 - **Path resolution** - `.thrum/redirect` for multi-worktree, sync worktree path
   via `git-common-dir`
@@ -294,6 +294,8 @@ subscriptions       # Push notification subscriptions
 agent_work_contexts # Live git state per session
 groups              # Named collections for targeted messaging
 group_members       # Group membership (agents and roles)
+events              # Sequence-ordered, deduplicated event log (for sync)
+sync_checkpoints    # Per-peer sync progress tracking
 schema_version      # Migration tracking
 ```
 
@@ -309,6 +311,15 @@ Key migrations:
   sharding migration
 - v7 -> v8: Groups feature (`groups` and `group_members` tables), `@everyone`
   built-in group
+- v8 -> v9: `events` and `sync_checkpoints` tables added for Tailscale-style
+  daemon-to-daemon sync (sequence-ordered deduplicated event log)
+- v9 -> v10: `file_changes` column added to `agent_work_contexts`
+- v10 -> v11: `hostname` column added to `agents` table
+- v11 -> v12: `threads` table dropped (threads are now implicit — every message
+  with a `thread_id` forms a thread automatically, removing the need for explicit
+  thread creation events)
+- v12 -> v13: Backfill NULL `display`, `hostname`, and `last_seen_at` values in
+  `agents` table to empty strings (ensures NOT NULL invariants on existing rows)
 
 ### Initialization
 
@@ -378,6 +389,7 @@ ordering.
 | `message.create`      | Insert into messages, scopes, refs                   |
 | `message.edit`        | Update body_content, updated_at, record edit history |
 | `message.delete`      | Set deleted=1, deleted_at, delete_reason             |
+| `thread.updated`      | Notify subscribers of thread activity (UI push)      |
 | `group.create`        | Insert into groups                                   |
 | `group.delete`        | Delete group and members                             |
 | `agent.register`      | Insert/replace agent                                 |
@@ -466,6 +478,26 @@ All I/O paths enforce timeouts to prevent indefinite hangs:
 
 Lock scope has been reduced — no mutex is held during I/O, git, or WebSocket
 dispatch operations.
+
+## Backup & Restore
+
+Thrum provides built-in backup and restore via `thrum backup` / `thrum backup restore`.
+
+**What gets backed up:**
+
+- **JSONL event logs** — `events.jsonl` and `messages/*.jsonl` copied from the sync worktree (source of truth)
+- **Local-only SQLite tables** — `message_reads`, `subscriptions`, and `sync_checkpoints` exported as JSONL (these are not in the git-synced JSONL logs)
+- **Config files** — `.thrum/config.json` and related runtime config
+
+**Backup layout** (`~/.thrum-backups/<repo>/`):
+
+- `current/` — most recent backup (JSONL + local tables + config)
+- `archives/` — compressed `.zip` snapshots of previous `current/` runs
+- GFS (Grandfather-Father-Son) rotation trims archives by daily/weekly/monthly retention windows
+
+**Plugin hooks** — third-party data (e.g., Beads task DB) can register a backup plugin via `thrum backup plugin add`. The plugin's command runs after the core backup and receives `THRUM_BACKUP_DIR`, `THRUM_BACKUP_REPO`, and `THRUM_BACKUP_CURRENT` env vars.
+
+**Restore** creates a safety backup of existing data first, then copies JSONL back to the sync worktree, imports local tables into SQLite, and removes `messages.db` so the projector rebuilds from JSONL on the next daemon start. Plugin restore commands run after the core restore.
 
 ## References
 

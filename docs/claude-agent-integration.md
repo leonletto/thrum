@@ -75,6 +75,7 @@ reply <msg-id> "response" # Reply (creates a reply-to reference)
 - check_messages — Poll inbox, auto-mark read
 - wait_for_message — Block until message arrives
 - list_agents — Show registered agents
+- broadcast_message — (Deprecated — use `send_message` with `to="@everyone"` instead)
 
 **Group management (6):**
 
@@ -105,9 +106,10 @@ thrum session end
 
 ## message-listener
 
-A lightweight background agent (runs on Haiku for ~$0.00003/cycle) that polls
-for incoming messages. It loops inbox checks with 30-second sleep intervals for
-up to ~5 minutes, returning immediately when new messages arrive.
+A lightweight background agent (runs on Haiku for ~$0.00003/cycle) that uses
+`thrum wait` for efficient blocking until messages arrive — no polling loops or
+sleep intervals needed. It loops up to ~6 cycles (~90 minutes of coverage),
+returning immediately when new messages arrive.
 
 **Usage:** Spawn at the start of every coordination session. Re-arm immediately
 when it returns.

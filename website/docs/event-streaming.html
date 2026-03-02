@@ -103,6 +103,10 @@ Server-side requests have a 10s per-request timeout (v0.4.3).</p>
 <ul>
 <li><strong><code>notification.message</code></strong> - Pushed when a new message is created or edited,
 matching a subscription</li>
+<li><strong><code>notification.thread.updated</code></strong> - Pushed after every reply that creates or
+joins a thread; carries updated message count, unread count, last sender, and
+a preview of the latest message. This event is a real-time WebSocket
+notification only and is <strong>not persisted</strong> to JSONL.</li>
 </ul>
 <h3>Notification Format</h3>
 <p>Notifications use JSON-RPC 2.0 notification format (no <code>id</code> field, no response
@@ -202,6 +206,8 @@ ws.onmessage = (event) =&gt; {
   const notification = JSON.parse(event.data);
   if (notification.method === &quot;notification.message&quot;) {
     console.log(&quot;New message:&quot;, notification.params.preview);
+  } else if (notification.method === &quot;notification.thread.updated&quot;) {
+    console.log(&quot;Thread updated:&quot;, notification.params.thread_id);
   }
 };</code></pre>
 <h3>MCP Server Integration</h3>

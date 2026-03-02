@@ -72,6 +72,12 @@ messaging system for AI agent coordination.
 | `thrum daemon restart`     | Restart the daemon                                   |
 | `thrum sync status`        | Show sync loop status                                |
 | `thrum sync force`         | Trigger an immediate sync                            |
+| `thrum backup`             | Snapshot all thrum data to a backup directory        |
+| `thrum backup status`      | Show last backup info                                |
+| `thrum backup config`      | Show effective backup config                         |
+| `thrum backup restore`     | Restore from latest backup or a specific archive     |
+| `thrum backup plugin list` | List configured backup plugins                       |
+| `thrum backup plugin add`  | Add a backup plugin (or use a built-in preset)       |
 | `thrum mcp serve`          | Start MCP stdio server for agent messaging           |
 
 ## Global Flags
@@ -306,6 +312,43 @@ Daemon:   running (2h15m uptime, v0.1.0)
 WebSocket: ws://localhost:9999
 ```
 
+### thrum team
+
+Show a rich, multi-line status report for every active agent. Displays session
+info, work context, inbox counts, branch status, and per-file change details.
+
+Git context fields (branch, unmerged commits ahead, and file changes) are
+populated automatically when an agent has a `worktree` session ref set — this
+happens on `session start` and `quickstart`. When an agent has an active session
+with a worktree ref, the daemon extracts the current branch, number of commits
+ahead of the default branch, and the list of changed files on each heartbeat.
+
+```text
+thrum team [flags]
+```
+
+| Flag    | Description                 | Default |
+| ------- | --------------------------- | ------- |
+| `--all` | Include offline agents      | `false` |
+
+Example:
+
+```text
+$ thrum team
+@implementer [active]
+  Module:   auth
+  Worktree: auth-fix
+  Session:  ses_01HXF2A9... (duration: 2h15m)
+  Intent:   Fixing token refresh
+  Inbox:    3 unread / 12 total
+  Branch:   feature/auth (2 commits ahead)
+  Files:
+    internal/auth/token.go        5m ago   +42 -10
+    internal/auth/refresh.go      5m ago   +15 -3
+
+$ thrum team --all     # Include agents with no active session
+```
+
 ## Messaging
 
 ### thrum send
@@ -355,7 +398,8 @@ $ thrum send "Backend review needed" --to @backend
 
 Reply to a message by ID. Creates a reply-to reference so replies are grouped
 with the original message in your inbox. The replied-to message is marked as
-read.
+read. Replies automatically create or join threads. See
+[Auto-Threading](messaging.md#auto-threading-v050) for details.
 
 ```text
 thrum reply MSG_ID TEXT [flags]
@@ -1133,10 +1177,11 @@ Display the saved context for the current agent.
 thrum context show [flags]
 ```
 
-| Flag      | Description                                        | Default |
-| --------- | -------------------------------------------------- | ------- |
-| `--agent` | Override agent name (defaults to current identity) |         |
-| `--raw`   | Output raw content without decoration              | `false` |
+| Flag            | Description                                        | Default |
+| --------------- | -------------------------------------------------- | ------- |
+| `--agent`       | Override agent name (defaults to current identity) |         |
+| `--raw`         | Output raw content without decoration              | `false` |
+| `--no-preamble` | Output raw context without preamble markers        | `false` |
 
 Example:
 
@@ -1280,7 +1325,7 @@ thrum wait [flags]
 
 | Flag        | Description                                 | Default |
 | ----------- | ------------------------------------------- | ------- |
-| `--timeout` | Max wait time (e.g., `30s`, `5m`, `1h`)     | `30s`   |
+| `--timeout` | Max wait time — requires Go duration units (e.g., `30s`, `5m`, `1h`); bare integers like `120` are not accepted | `30s`   |
 | `--after`   | Relative time offset: negative (e.g., `-30s`) = include messages sent up to N ago; positive (e.g., `+60s`) = only messages arriving at least N in the future; omit for "now" |         |
 | `--mention` | Wait for mentions of role (format: `@role`) |         |
 | `--json`    | Machine-readable output                     | `false` |
@@ -1354,6 +1399,9 @@ Restart the daemon (stop + start).
 thrum daemon restart
 ```
 
+**Note:** Running `thrum sync` without a subcommand just prints help — use
+`thrum sync force` or `thrum sync status` to take action.
+
 ### thrum sync status
 
 Show sync loop status, last sync time, and any errors. When local-only mode is
@@ -1373,6 +1421,151 @@ local-only mode is active, displays "local-only (remote sync disabled)".
 
 ```text
 thrum sync force
+```
+
+## Backup & Restore
+
+### thrum backup
+
+Snapshot all thrum data (events, messages, config, and identity files) to a
+backup directory. By default, backups are written to `.thrum/backup/` inside
+the repo. The backup directory can be overridden via `--dir` or configured in
+`.thrum/config.yaml`.
+
+```text
+thrum backup [flags]
+```
+
+| Flag    | Description                | Default              |
+| ------- | -------------------------- | -------------------- |
+| `--dir` | Override backup directory  | `.thrum/backup/`     |
+
+The `--dir` flag is a persistent flag inherited by all `backup` subcommands.
+
+Example:
+
+```text
+$ thrum backup
+Backup complete: .thrum/backup/my-repo/current
+  Events: 1240 lines
+  Message files: 3
+  Local tables: 7
+  Config files: 4
+
+$ thrum backup --dir /path/to/backups
+Backup complete: /path/to/backups/my-repo/current
+```
+
+### thrum backup status
+
+Show information about the most recent backup — timestamp, counts, and archive
+history.
+
+```text
+thrum backup status [--dir DIR]
+```
+
+Example:
+
+```text
+$ thrum backup status
+Last backup: 2026-03-01 22:15:03
+  Events: 1240 lines
+  Message files: 3
+  Config files: 4
+Archives: 7 (12.3 MB)
+  Oldest: 2026-02-01 10:00:00
+  Newest: 2026-03-01 22:15:03
+```
+
+### thrum backup config
+
+Show the effective backup configuration including directory, retention policy,
+and any configured plugins.
+
+```text
+thrum backup config
+```
+
+Example:
+
+```text
+$ thrum backup config
+Backup directory: .thrum/backup (default)
+Retention:
+  Daily: 7
+  Weekly: 4
+  Monthly: forever
+```
+
+### thrum backup restore
+
+Restore thrum data from the latest backup or a specific archive zip. A safety
+backup is automatically created before restoring, and the daemon is stopped
+during the restore to avoid file handle conflicts.
+
+```text
+thrum backup restore [archive.zip] [flags]
+```
+
+| Flag    | Description               | Default |
+| ------- | ------------------------- | ------- |
+| `--yes` | Skip confirmation prompt  | `false` |
+
+Example:
+
+```text
+$ thrum backup restore
+This will restore thrum data from backup.
+  Backup dir: .thrum/backup
+  Repo: my-repo
+  Source: current/
+A safety backup will be created first.
+Continue? [y/N] y
+Daemon stopped for restore.
+Safety backup: .thrum/backup/my-repo/safety-2026-03-02T10:00:00Z.zip
+Restored from: .thrum/backup/my-repo/current
+
+# Restore from a specific archive
+$ thrum backup restore .thrum/backup/my-repo/2026-02-15T10:00:00Z.zip --yes
+```
+
+### thrum backup plugin list
+
+List all backup plugins configured in `.thrum/config.yaml`.
+
+```text
+thrum backup plugin list
+```
+
+### thrum backup plugin add
+
+Add a backup plugin by name/command/include pattern, or use a built-in preset.
+
+```text
+thrum backup plugin add [flags]
+```
+
+| Flag               | Description                                           |
+| ------------------ | ----------------------------------------------------- |
+| `--preset string`  | Use built-in preset: `beads`, `beads-rust`            |
+| `--name string`    | Plugin name                                           |
+| `--command string` | Command to run before collecting files                |
+| `--include strings`| File patterns to collect (glob, repeatable)           |
+
+Example:
+
+```text
+$ thrum backup plugin add --preset beads
+$ thrum backup plugin add --name myplugin --command "bd backup --force" --include ".beads/backup/*.jsonl"
+```
+
+### thrum backup plugin remove
+
+Remove a configured backup plugin by name.
+
+```text
+thrum backup plugin remove --name NAME
 ```
 
 ## MCP Server
@@ -1480,7 +1673,7 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
 
 ```json
 {
-  "version": 1,
+  "version": 3,
   "repo_id": "r_0123456789AB",
   "agent": {
     "kind": "agent",

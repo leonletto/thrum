@@ -61,7 +61,7 @@ From: @planner
 Message: "Search UI should use the MiniSearch interface we built in thrum-c3d4"
 
 # Claim the task
-$ bd update thrum-a1b2 --status in_progress
+$ bd update thrum-a1b2 -s in_progress
 
 # Acknowledge and ask question
 $ thrum send "Starting on search UI. Should it support dark mode?" --to @planner
@@ -215,4 +215,4 @@ sub-agents most commonly get wrong.
 - [Quickstart](./quickstart.md) — Get started with Beads and Thrum in 5 minutes
 - [Agent Coordination](./agent-coordination.md) — Patterns for multi-agent
   workflows
-- [CLI Reference](./cli-reference.md) — Complete command documentation
+- [CLI Reference](./cli.md) — Complete command documentation

@@ -81,6 +81,9 @@ This creates:
 - `.thrum/var/` for daemon runtime files
 - `a-sync` orphan branch for message synchronization
 
+`thrum init` also starts the daemon automatically (since v0.4.5). You do not
+need a separate `thrum daemon start` step for first-time setup.
+
 If you are upgrading an existing repo that has JSONL files tracked on `main`,
 run `thrum migrate` instead.
 
@@ -96,22 +99,7 @@ This appends agent coordination instructions to your CLAUDE.md file (creates it
 if missing). Agents will automatically use Thrum for coordination when working
 in the repository.
 
-### 3. Start the Daemon
-
-```bash
-thrum daemon start
-```
-
-The daemon handles:
-
-- RPC requests from CLI and MCP server via Unix socket
-- WebSocket + embedded Web UI SPA on port 9999 (configurable via
-  `THRUM_WS_PORT`)
-- Background sync every 60s
-- Push notifications for subscriptions
-- Browser auto-registration via git config
-
-### 4. Register Your Agent and Start a Session
+### 3. Register Your Agent and Start a Session
 
 The fastest way is the quickstart command, which registers, starts a session,
 and sets your intent in one step:
@@ -248,16 +236,14 @@ tools reference (11 tools: 5 core messaging + 6 group management).
 ### Morning: Start Work
 
 ```bash
-# 1. Start daemon (if not running)
-thrum daemon start
-
-# 2. Register and start session (or just start session if already registered)
+# 1. Register and start session (or just start session if already registered)
+#    (Use `thrum daemon start` explicitly if the daemon stopped for any reason)
 thrum quickstart --name myagent --role implementer --module auth --intent "Working on auth"
 
-# 3. Check inbox for updates
+# 2. Check inbox for updates
 thrum inbox --unread
 
-# 4. Subscribe to your module
+# 3. Subscribe to your module
 thrum subscribe --scope module:auth
 ```
 
@@ -572,5 +558,6 @@ shell-outs.
 4. **Mention other agents** when you need their attention
 5. **Check sync status** if messages aren't appearing
 6. **Use `--json` flag** for scripting and automation
+7. **Back up your data** regularly: `thrum backup`
 
 Happy collaborating!

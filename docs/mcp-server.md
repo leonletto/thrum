@@ -12,8 +12,8 @@ It runs as a long-lived child process (`thrum mcp serve`) communicating over
 stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for
 message operations and via WebSocket for real-time push notifications.
 
-The server provides 10 MCP tools: 4 for core messaging operations and 6 for
-group management.
+The server provides 11 MCP tools: 4 for core messaging operations, 6 for
+group management, and 1 deprecated broadcast tool.
 
 The primary motivation is eliminating polling overhead. Without MCP, agents must
 periodically call `thrum inbox` (burning tokens and context). With MCP, a cheap
@@ -70,7 +70,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command
    `identity.GenerateAgentID(repoID, role, module, name)`
 7. Create MCP server with the official Go SDK
    (`github.com/modelcontextprotocol/go-sdk/mcp`)
-8. Register all 10 tool handlers (4 core messaging + 6 group management)
+8. Register all 11 tool handlers (4 core messaging + 6 group management + 1 deprecated)
 9. Initialize WebSocket waiter (best-effort -- reads port from
    `.thrum/var/ws.port`)
    - Connect to `ws://localhost:{port}/ws`
@@ -105,7 +105,7 @@ When Claude Code terminates the process (closes stdin) or a signal is received
   mutex.
 - **Best-effort WebSocket**: If the WebSocket connection fails at startup, the
   MCP server still operates -- only `wait_for_message` returns errors. The other
-  9 tools work via Unix socket RPC.
+  10 tools work via Unix socket RPC.
 
 ## Usage
 
@@ -159,7 +159,7 @@ Send a message to another agent, role, or group.
 | ---------- | ------ | -------- | ---------------------------------------------------------------------------- |
 | `to`       | string | yes      | Recipient: `@role`, agent name, `@groupname`, or composite `agent:role:hash` |
 | `content`  | string | yes      | Message text (markdown)                                                      |
-| `reply_to` | string | no       | Message ID to reply to (creates a reply chain)                               |
+| `reply_to` | string | no       | Message ID to reply to (creates a reply chain; a `thread_id` is automatically assigned and returned in the response) |
 | `metadata` | object | no       | Key-value metadata (passed as structured data)                               |
 
 **Output:**
@@ -429,6 +429,21 @@ roles to individual agent IDs.
 
 **Daemon RPC:** `group.info` (without expand) or `group.members` (with expand)
 
+### broadcast_message _(Deprecated)_
+
+> **Deprecated:** Use `send_message(to="@everyone", content="...")` instead.
+> This tool is registered but deprecated and may be removed in a future release.
+
+Broadcast a message to all agents. Equivalent to `send_message` with `to="@everyone"`.
+
+**Input:**
+
+| Parameter | Type   | Required | Description      |
+| --------- | ------ | -------- | ---------------- |
+| `content` | string | yes      | Message text     |
+
+**Daemon RPC:** `message.send`
+
 ## Identity Resolution
 
 The MCP server resolves agent identity once at startup. The client never passes
@@ -567,7 +582,7 @@ mcp__thrum__delete_group(name="backend")
 | `internal/mcp/server.go`             | Server struct, NewServer(), Run(), InitWaiter(), tool registration |
 | `internal/mcp/tools.go`              | Tool handlers, address parsing, status derivation                  |
 | `internal/mcp/waiter.go`             | WebSocket connection, readLoop, WaitForMessage, notification queue |
-| `internal/mcp/types.go`              | Input/output structs for all 10 tools                              |
+| `internal/mcp/types.go`              | Input/output structs for all 11 tools                              |
 | `cmd/thrum/mcp.go`                   | Cobra command, daemon health check, waiter init, signal handling   |
 | `.claude/agents/message-listener.md` | Haiku sub-agent definition                                         |
 
