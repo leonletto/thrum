@@ -50,7 +50,7 @@ they solve the two halves of the agent context-loss problem:</p>
 <li>Agent restarts? <code>bd ready</code> shows what to work on next.</li>
 <li>Context compacts? The pre-compact hook saves <code>bd stats</code> and <code>bd list</code> output
 to Thrum context, which agents restore on session start.</li>
-<li>Multiple agents? Each claims tasks with <code>bd update --status=in_progress</code> and
+<li>Multiple agents? Each claims tasks with <code>bd update -s in_progress</code> and
 announces it via <code>thrum send</code>.</li>
 </ul>
 <h3>Installation</h3>
@@ -102,14 +102,15 @@ JSONL automatically.</p>
 <h3>Core Workflow</h3>
 <h4>Create issues</h4>
 <pre><code># Create an epic (groups related tasks)
-bd epic create --title=&quot;Add user authentication&quot; --priority=1
+bd create &quot;Add user authentication&quot; -t epic -p 1
 
 # Create tasks under it
-bd create --title=&quot;Implement JWT middleware&quot; --type=task --priority=2
-bd create --title=&quot;Write auth tests&quot; --type=task --priority=2
+bd create &quot;Implement JWT middleware&quot; -t task -p 2
+bd create &quot;Write auth tests&quot; -t task -p 2
 
 # Set dependencies (tests depend on middleware)
-bd dep add &lt;tests-id&gt; &lt;middleware-id&gt;</code></pre>
+# bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;: blocker must close before blocked becomes ready
+bd dep &lt;middleware-id&gt; --blocks &lt;tests-id&gt;</code></pre>
 <h4>Find and claim work</h4>
 <pre><code># Show tasks ready to work (no blockers)
 bd ready
@@ -118,7 +119,7 @@ bd ready
 bd blocked
 
 # Claim a task
-bd update &lt;id&gt; --status=in_progress</code></pre>
+bd update &lt;id&gt; -s in_progress</code></pre>
 <h4>Complete work</h4>
 <pre><code># Close a task
 bd close &lt;id&gt;
@@ -135,7 +136,7 @@ thrum inbox --unread
 bd ready
 
 # 2. Claim a task and announce it
-bd update &lt;id&gt; --status=in_progress
+bd update &lt;id&gt; -s in_progress
 thrum send &quot;Starting work on &lt;id&gt;: &lt;title&gt;&quot; --to @coordinator
 
 # 3. Do the work...
@@ -155,7 +156,7 @@ Use `bd` (beads) for all task tracking. Do not use TodoWrite, TaskCreate, or
 markdown files for tracking.
 
 - `bd ready` — find available work
-- `bd update &lt;id&gt; --status=in_progress` — claim a task
+- `bd update &lt;id&gt; -s in_progress` — claim a task
 - `bd close &lt;id&gt;` — mark complete
 - `bd stats` — check project progress</code></pre>
 <p>The Thrum Claude Code plugin automatically detects Beads and includes task
@@ -195,7 +196,7 @@ in sync with Git</li>
 <td>All open issues</td>
 </tr>
 <tr>
-<td><code>bd list --status=in_progress</code></td>
+<td><code>bd list -s in_progress</code></td>
 <td>Active work</td>
 </tr>
 <tr>
@@ -211,20 +212,16 @@ in sync with Git</li>
 <td>Project health overview</td>
 </tr>
 <tr>
-<td><code>bd dep add &lt;a&gt; &lt;b&gt;</code></td>
-<td>A depends on B</td>
+<td><code>bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;</code></td>
+<td>Blocker must close before blocked is ready</td>
 </tr>
 <tr>
-<td><code>bd epic create --title=&quot;...&quot;</code></td>
+<td><code>bd create &quot;Title&quot; -t epic -p 1</code></td>
 <td>Create an epic</td>
 </tr>
 <tr>
 <td><code>bd close &lt;id&gt;</code></td>
 <td>Mark complete</td>
-</tr>
-<tr>
-<td><code>bd sync --from-main</code></td>
-<td>Pull beads updates (for branches)</td>
 </tr>
 </tbody></table>
 <h3>Further Reading</h3>

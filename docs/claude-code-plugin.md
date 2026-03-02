@@ -197,10 +197,11 @@ in your project's `.claude/settings.json`:
 }
 ```
 
-This provides 10 MCP tools: 4 for core messaging (`send_message`,
-`check_messages`, `wait_for_message`, `list_agents`) and 6 for group management
-(`create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
-`list_groups`, `get_group`). See
+This provides 11 MCP tools (10 active + 1 deprecated): 4 for core messaging
+(`send_message`, `check_messages`, `wait_for_message`, `list_agents`), 6 for
+group management (`create_group`, `delete_group`, `add_group_member`,
+`remove_group_member`, `list_groups`, `get_group`), and `broadcast_message`
+(deprecated — use `send_message(to="@everyone")` instead). See
 [MCP Server](mcp-server.md) for the full API.
 
 **Plugin vs MCP:** The plugin's slash commands use the CLI (`Bash(thrum:*)`).

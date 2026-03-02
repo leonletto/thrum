@@ -151,7 +151,10 @@ Emitted when a new message is created in the system.
 - `event_id`: Globally unique ULID for deduplication
 - `v`: Event schema version
 - `message_id`: Unique message identifier
-- `thread_id`: Parent thread (empty if standalone message)
+- `thread_id`: Parent thread (empty if standalone message). When a message is
+  sent with `reply_to`, `thread_id` is automatically assigned: the first reply
+  creates a new thread and all subsequent replies to any message in that thread
+  join the existing thread.
 - `agent_id`: Message author's agent name or legacy ID
 - `session_id`: Session that created the message
 - `timestamp`: Message creation time (ISO 8601)

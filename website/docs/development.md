@@ -70,7 +70,7 @@ thrum/
 │   ├── gitctx/              # Git-derived work context (branch, uncommitted files)
 │   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, event)
 │   ├── jsonl/               # JSONL reader/writer with file locking
-│   ├── mcp/                 # MCP stdio server (5 tools, WebSocket waiter)
+│   ├── mcp/                 # MCP stdio server (11 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
 │   ├── schema/              # SQLite schema, DDL, and migrations (v7)
@@ -308,6 +308,7 @@ Current event types handled by the projector:
 - `agent.register`
 - `agent.session.start`, `agent.session.end`
 - `agent.update`
+- `thread.create`
 
 Example:
 
@@ -525,9 +526,6 @@ See `docs/daemon.md` for detailed architecture.
 # Start daemon (background, auto-creates sync worktree)
 thrum daemon start
 
-# Start in foreground (for debugging)
-thrum daemon start --foreground
-
 # Check status (shows PID, repo path, WebSocket port)
 thrum daemon status
 
@@ -583,9 +581,11 @@ echo '{"jsonrpc":"2.0","method":"health","id":1}' | nc -U .thrum/var/thrum.sock
 **View daemon logs:**
 
 ```bash
-# Run daemon in foreground for debugging
-thrum daemon start --foreground
-# Logs appear in stdout/stderr
+# Check daemon logs
+cat .thrum/var/daemon.log
+
+# Check daemon status (shows PID, repo path, WebSocket port)
+thrum daemon status
 ```
 
 **Clean restart:**
@@ -643,7 +643,7 @@ over stdin/stdout).
 - `internal/mcp/waiter.go`: WebSocket-based blocking message waiter
 - `cmd/thrum/mcp.go`: `thrum mcp serve` Cobra command
 
-**MCP Tools (10):**
+**MCP Tools (11 total: 10 active + 1 deprecated):**
 
 | Tool                  | Description                                                               |
 | --------------------- | ------------------------------------------------------------------------- |
@@ -657,6 +657,7 @@ over stdin/stdout).
 | `remove_group_member` | Remove a member from a group                                              |
 | `list_groups`         | List all messaging groups                                                 |
 | `get_group`           | Get group details including members (expand=true resolves roles)          |
+| `broadcast_message`   | _(Deprecated)_ Broadcast to all agents — use `send_message(to="@everyone")` instead |
 
 **Architecture:**
 

@@ -49,7 +49,7 @@ on:</p>
 agent naming</li>
 <li><strong>ID generation</strong> - Deterministic and unique identifiers (ULID-based)</li>
 <li><strong>JSONL handling</strong> - Append-only event log with file locking</li>
-<li><strong>SQLite schema</strong> - Database tables, indexes, and migrations (version 7)</li>
+<li><strong>SQLite schema</strong> - Database tables, indexes, and migrations (version 13)</li>
 <li><strong>Event projection</strong> - Replay sharded JSONL events into SQLite</li>
 <li><strong>Path resolution</strong> - <code>.thrum/redirect</code> for multi-worktree, sync worktree path
 via <code>git-common-dir</code></li>
@@ -323,6 +323,8 @@ subscriptions       # Push notification subscriptions
 agent_work_contexts # Live git state per session
 groups              # Named collections for targeted messaging
 group_members       # Group membership (agents and roles)
+events              # Sequence-ordered, deduplicated event log (for sync)
+sync_checkpoints    # Per-peer sync progress tracking
 schema_version      # Migration tracking</code></pre>
 <h3>Schema Version</h3>
 <p>Current version: <strong>13</strong></p>
@@ -334,6 +336,15 @@ schema_version      # Migration tracking</code></pre>
 sharding migration</li>
 <li>v7 -&gt; v8: Groups feature (<code>groups</code> and <code>group_members</code> tables), <code>@everyone</code>
 built-in group</li>
+<li>v8 -&gt; v9: <code>events</code> and <code>sync_checkpoints</code> tables added for Tailscale-style
+daemon-to-daemon sync (sequence-ordered deduplicated event log)</li>
+<li>v9 -&gt; v10: <code>file_changes</code> column added to <code>agent_work_contexts</code></li>
+<li>v10 -&gt; v11: <code>hostname</code> column added to <code>agents</code> table</li>
+<li>v11 -&gt; v12: <code>threads</code> table dropped (threads are now implicit — every message
+with a <code>thread_id</code> forms a thread automatically, removing the need for explicit
+thread creation events)</li>
+<li>v12 -&gt; v13: Backfill NULL <code>display</code>, <code>hostname</code>, and <code>last_seen_at</code> values in
+<code>agents</code> table to empty strings (ensures NOT NULL invariants on existing rows)</li>
 </ul>
 <h3>Initialization</h3>
 <pre><code>db, _ := schema.OpenDB(&quot;thrum.db&quot;)
@@ -398,6 +409,10 @@ ordering.</p>
 <tr>
 <td><code>message.delete</code></td>
 <td>Set deleted=1, deleted_at, delete_reason</td>
+</tr>
+<tr>
+<td><code>thread.updated</code></td>
+<td>Notify subscribers of thread activity (UI push)</td>
 </tr>
 <tr>
 <td><code>group.create</code></td>
@@ -486,6 +501,22 @@ and state directory without hardcoding paths.</p>
 </ul>
 <p>Lock scope has been reduced — no mutex is held during I/O, git, or WebSocket
 dispatch operations.</p>
+<h2>Backup &amp; Restore</h2>
+<p>Thrum provides built-in backup and restore via <code>thrum backup</code> / <code>thrum backup restore</code>.</p>
+<p><strong>What gets backed up:</strong></p>
+<ul>
+<li><strong>JSONL event logs</strong> — <code>events.jsonl</code> and <code>messages/*.jsonl</code> copied from the sync worktree (source of truth)</li>
+<li><strong>Local-only SQLite tables</strong> — <code>message_reads</code>, <code>subscriptions</code>, and <code>sync_checkpoints</code> exported as JSONL (these are not in the git-synced JSONL logs)</li>
+<li><strong>Config files</strong> — <code>.thrum/config.json</code> and related runtime config</li>
+</ul>
+<p><strong>Backup layout</strong> (<code>~/.thrum-backups/&lt;repo&gt;/</code>):</p>
+<ul>
+<li><code>current/</code> — most recent backup (JSONL + local tables + config)</li>
+<li><code>archives/</code> — compressed <code>.zip</code> snapshots of previous <code>current/</code> runs</li>
+<li>GFS (Grandfather-Father-Son) rotation trims archives by daily/weekly/monthly retention windows</li>
+</ul>
+<p><strong>Plugin hooks</strong> — third-party data (e.g., Beads task DB) can register a backup plugin via <code>thrum backup plugin add</code>. The plugin&#39;s command runs after the core backup and receives <code>THRUM_BACKUP_DIR</code>, <code>THRUM_BACKUP_REPO</code>, and <code>THRUM_BACKUP_CURRENT</code> env vars.</p>
+<p><strong>Restore</strong> creates a safety backup of existing data first, then copies JSONL back to the sync worktree, imports local tables into SQLite, and removes <code>messages.db</code> so the projector rebuilds from JSONL on the next daemon start. Plugin restore commands run after the core restore.</p>
 <h2>References</h2>
 <ul>
 <li>Design document: <code>dev-docs/2026-02-03-thrum-design.md</code></li>

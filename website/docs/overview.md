@@ -19,6 +19,7 @@ across sessions, worktrees, and machines. It provides:
 - **Automatic synchronization** via Git
 - **Real-time visibility** into what other agents are working on
 - **Subscription-based notifications** for targeted communication
+- **Backup & Restore** for protecting your message history and agent state
 
 Everything is inspectable — messages are JSONL files on a Git branch, state is a
 queryable SQLite database, and sync is plain Git push/pull.
@@ -497,20 +498,17 @@ configuration, and setup instructions.
 ### Quick Start
 
 ```bash
-# 1. Initialize in your project
+# 1. Initialize in your project (also starts the daemon automatically)
 cd your-project
 thrum init
 
-# 2. Start the daemon
-thrum daemon start
-
-# 3. Register, start session, and set intent in one step
+# 2. Register, start session, and set intent in one step
 thrum quickstart --name myagent --role implementer --module feature --intent "Working on feature X"
 
-# 4. Send your first message
+# 3. Send your first message
 thrum send "Starting work on feature X" --scope module:feature
 
-# 5. Subscribe to your module
+# 4. Subscribe to your module
 thrum subscribe --scope module:feature
 ```
 
@@ -552,6 +550,7 @@ thrum wait --scope module:feature --timeout 5m
 | [Agent Coordination](agent-coordination.md) | Multi-agent workflows and Beads integration     |
 | [Workflow Templates](workflow-templates.md) | Three-phase agent development templates         |
 | [Architecture](architecture.md)             | Foundation packages                             |
+| [CLI Reference](cli.md)                     | Backup & restore commands (`thrum backup`)      |
 
 ## Design Principles
 

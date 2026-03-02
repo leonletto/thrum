@@ -417,8 +417,8 @@ flag; use subscriptions if you need a firehose.
 # Wait for any message addressed to this agent
 thrum wait --timeout 5m
 
-# Include messages sent up to 30s ago (--after -30s = "30 seconds ago"; negative = "N ago")
-thrum wait --after -30s --timeout 5m --json
+# Include messages sent up to 1s ago (--after -1s = "1 second ago"; negative = "N ago")
+thrum wait --after -1s --timeout 5m --json
 
 # Wait for mentions of your role
 thrum wait --mention @reviewer --timeout 5m
@@ -429,7 +429,7 @@ thrum wait --mention @reviewer --timeout 5m
 | `--timeout` | Duration (e.g., `5m`)        | Max wait time (default: `30s`)           |
 | `--scope`   | Scope string (e.g., `module:auth`) | Only messages matching this scope  |
 | `--mention` | `@role`                      | Wait for mentions of a role              |
-| `--after`   | Relative time (e.g., `-30s`) | Negative = include messages sent up to N ago; positive = only messages N in the future; omit for "now" |
+| `--after`   | Relative time (e.g., `-1s`) | Negative = include messages sent up to N ago; positive = only messages N in the future; omit for "now" |
 | `--json`    | Boolean                      | Output messages as JSON                  |
 
 **Exit codes:**
@@ -520,7 +520,7 @@ thrum send "Both features shipping in v0.4" --to @backend
 cd ~/.workspaces/repo/auth
 export THRUM_NAME=furiosa
 thrum inbox --unread
-thrum send "Auth complete, 15 tests passing" --to @coordinator
+thrum send "Auth complete, 15 tests passing" --to @coord_main
 ```
 
 ---

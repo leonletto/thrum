@@ -236,10 +236,11 @@ in your project&#39;s <code>.claude/settings.json</code>:</p>
     }
   }
 }</code></pre>
-<p>This provides 11 MCP tools: 5 for core messaging (<code>send_message</code>,
-<code>check_messages</code>, <code>wait_for_message</code>, <code>list_agents</code>, <code>broadcast_message</code>) and 6
-for group management (<code>create_group</code>, <code>delete_group</code>, <code>add_group_member</code>,
-<code>remove_group_member</code>, <code>list_groups</code>, <code>get_group</code>). See
+<p>This provides 11 MCP tools (10 active + 1 deprecated): 4 for core messaging
+(<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, <code>list_agents</code>), 6 for
+group management (<code>create_group</code>, <code>delete_group</code>, <code>add_group_member</code>,
+<code>remove_group_member</code>, <code>list_groups</code>, <code>get_group</code>), and <code>broadcast_message</code>
+(deprecated — use <code>send_message(to=&quot;@everyone&quot;)</code> instead). See
 <a href="mcp-server.html">MCP Server</a> for the full API.</p>
 <p><strong>Plugin vs MCP:</strong> The plugin&#39;s slash commands use the CLI (<code>Bash(thrum:*)</code>).
 The MCP server provides native tool calls. Both work — the plugin is simpler to

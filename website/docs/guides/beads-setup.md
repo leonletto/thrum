@@ -24,7 +24,7 @@ they solve the two halves of the agent context-loss problem:
 - Agent restarts? `bd ready` shows what to work on next.
 - Context compacts? The pre-compact hook saves `bd stats` and `bd list` output
   to Thrum context, which agents restore on session start.
-- Multiple agents? Each claims tasks with `bd update --status=in_progress` and
+- Multiple agents? Each claims tasks with `bd update -s in_progress` and
   announces it via `thrum send`.
 
 ### Installation
@@ -70,14 +70,15 @@ JSONL automatically.
 
 ```bash
 # Create an epic (groups related tasks)
-bd epic create --title="Add user authentication" --priority=1
+bd create "Add user authentication" -t epic -p 1
 
 # Create tasks under it
-bd create --title="Implement JWT middleware" --type=task --priority=2
-bd create --title="Write auth tests" --type=task --priority=2
+bd create "Implement JWT middleware" -t task -p 2
+bd create "Write auth tests" -t task -p 2
 
 # Set dependencies (tests depend on middleware)
-bd dep add <tests-id> <middleware-id>
+# bd dep <blocker> --blocks <blocked>: blocker must close before blocked becomes ready
+bd dep <middleware-id> --blocks <tests-id>
 ```
 
 #### Find and claim work
@@ -90,7 +91,7 @@ bd ready
 bd blocked
 
 # Claim a task
-bd update <id> --status=in_progress
+bd update <id> -s in_progress
 ```
 
 #### Complete work
@@ -116,7 +117,7 @@ thrum inbox --unread
 bd ready
 
 # 2. Claim a task and announce it
-bd update <id> --status=in_progress
+bd update <id> -s in_progress
 thrum send "Starting work on <id>: <title>" --to @coordinator
 
 # 3. Do the work...
@@ -141,7 +142,7 @@ Use `bd` (beads) for all task tracking. Do not use TodoWrite, TaskCreate, or
 markdown files for tracking.
 
 - `bd ready` — find available work
-- `bd update <id> --status=in_progress` — claim a task
+- `bd update <id> -s in_progress` — claim a task
 - `bd close <id>` — mark complete
 - `bd stats` — check project progress
 ```
@@ -186,14 +187,13 @@ This adds:
 |---------|---------|
 | `bd ready` | Tasks with no blockers |
 | `bd list` | All open issues |
-| `bd list --status=in_progress` | Active work |
+| `bd list -s in_progress` | Active work |
 | `bd blocked` | Blocked issues with reasons |
 | `bd show <id>` | Full issue detail |
 | `bd stats` | Project health overview |
-| `bd dep add <a> <b>` | A depends on B |
-| `bd epic create --title="..."` | Create an epic |
+| `bd dep <blocker> --blocks <blocked>` | Blocker must close before blocked is ready |
+| `bd create "Title" -t epic -p 1` | Create an epic |
 | `bd close <id>` | Mark complete |
-| `bd sync --from-main` | Pull beads updates (for branches) |
 
 ### Further Reading
 

@@ -657,6 +657,7 @@ rm .thrum/var/thrum.pid
 | Agent Cleanup   | `agent.delete`, `agent.cleanup` (orphan detection)          | Complete |
 | Browser Auth    | Browser auto-registration via git config                    | Complete |
 | Local-Only Mode | Disable remote sync for public repos                        | Complete |
+| Backup/Restore  | JSONL export, SQLite snapshot, GFS rotation, plugin hooks   | Complete |
 
 ## References
 

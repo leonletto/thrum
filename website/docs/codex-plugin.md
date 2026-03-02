@@ -38,8 +38,7 @@ The bundle is split into focused skills:
 If you have not initialized Thrum yet:
 
 ```bash
-thrum init
-thrum daemon start
+thrum init  # also starts the daemon automatically
 thrum quickstart --name myagent --role implementer --module auth
 ```
 

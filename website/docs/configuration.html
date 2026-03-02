@@ -49,6 +49,22 @@ config.json when you want to change something.</p>
     &quot;local_only&quot;: true,
     &quot;sync_interval&quot;: 60,
     &quot;ws_port&quot;: &quot;auto&quot;
+  },
+  &quot;backup&quot;: {
+    &quot;dir&quot;: &quot;/path/to/backups&quot;,
+    &quot;retention&quot;: {
+      &quot;daily&quot;: 5,
+      &quot;weekly&quot;: 4,
+      &quot;monthly&quot;: -1
+    },
+    &quot;post_backup&quot;: &quot;aws s3 sync /path/to/backups s3://my-bucket/thrum&quot;,
+    &quot;plugins&quot;: [
+      {
+        &quot;name&quot;: &quot;my-plugin&quot;,
+        &quot;command&quot;: &quot;/usr/local/bin/my-backup-plugin&quot;,
+        &quot;include&quot;: [&quot;messages&quot;, &quot;agents&quot;]
+      }
+    ]
   }
 }</code></pre>
 <p>This file is created during <code>thrum init</code> and can be edited at any time.</p>
@@ -75,6 +91,91 @@ config.json when you want to change something.</p>
 <li><strong>Values:</strong> <code>&quot;auto&quot;</code> or a specific port number like <code>&quot;9999&quot;</code></li>
 <li><strong>Override:</strong> <code>THRUM_WS_PORT</code> environment variable</li>
 </ul>
+<h2>Backup</h2>
+<p>Thrum can archive your message history and agent data using a
+Grandfather-Father-Son (GFS) rotation scheme. The <code>backup</code> section is omitted
+from <code>config.json</code> if you are using all defaults.</p>
+<h3><code>backup.dir</code></h3>
+<p>Directory where backup archives are written.</p>
+<ul>
+<li><strong>Type:</strong> string (path)</li>
+<li><strong>Default:</strong> none (backup disabled when <code>dir</code> is not set)</li>
+</ul>
+<h3><code>backup.retention.daily</code></h3>
+<p>Number of daily backup archives to retain.</p>
+<ul>
+<li><strong>Type:</strong> integer</li>
+<li><strong>Default:</strong> <code>5</code></li>
+<li><strong>Special:</strong> <code>0</code> keeps no daily backups; <code>-1</code> keeps all</li>
+</ul>
+<h3><code>backup.retention.weekly</code></h3>
+<p>Number of weekly backup archives to retain.</p>
+<ul>
+<li><strong>Type:</strong> integer</li>
+<li><strong>Default:</strong> <code>4</code></li>
+<li><strong>Special:</strong> <code>0</code> keeps no weekly backups; <code>-1</code> keeps all</li>
+</ul>
+<h3><code>backup.retention.monthly</code></h3>
+<p>Number of monthly backup archives to retain.</p>
+<ul>
+<li><strong>Type:</strong> integer</li>
+<li><strong>Default:</strong> <code>-1</code> (keep all monthly backups)</li>
+<li><strong>Special:</strong> <code>0</code> keeps no monthly backups</li>
+</ul>
+<h3><code>backup.post_backup</code></h3>
+<p>Shell command to run after each backup completes successfully. Useful for
+offloading archives to cloud storage or triggering external notifications.</p>
+<ul>
+<li><strong>Type:</strong> string</li>
+<li><strong>Default:</strong> none</li>
+<li><strong>Example:</strong> <code>&quot;aws s3 sync /path/to/backups s3://my-bucket/thrum&quot;</code></li>
+</ul>
+<h3><code>backup.plugins</code></h3>
+<p>List of third-party backup plugin definitions. Each plugin is an object with
+the following fields:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Unique plugin identifier</td>
+</tr>
+<tr>
+<td><code>command</code></td>
+<td>string</td>
+<td>Absolute path to the plugin executable</td>
+</tr>
+<tr>
+<td><code>include</code></td>
+<td>array of strings</td>
+<td>Data categories the plugin should receive</td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>{
+  &quot;backup&quot;: {
+    &quot;dir&quot;: &quot;~/.thrum-backups&quot;,
+    &quot;retention&quot;: {
+      &quot;daily&quot;: 7,
+      &quot;weekly&quot;: 4,
+      &quot;monthly&quot;: -1
+    },
+    &quot;post_backup&quot;: &quot;rsync -a ~/.thrum-backups/ backup-host:/thrum/&quot;,
+    &quot;plugins&quot;: [
+      {
+        &quot;name&quot;: &quot;s3-uploader&quot;,
+        &quot;command&quot;: &quot;/usr/local/bin/thrum-s3&quot;,
+        &quot;include&quot;: [&quot;messages&quot;, &quot;agents&quot;, &quot;sessions&quot;]
+      }
+    ]
+  }
+}</code></pre>
 <h2>Priority Chain</h2>
 <p>When the same setting can come from multiple sources, this order applies:</p>
 <pre><code>CLI flag  &gt;  Environment variable  &gt;  config.json  &gt;  Default</code></pre>
@@ -168,7 +269,9 @@ per registered agent</li>
 <li><strong>Runtime templates</strong> — generated config files for your AI runtime (CLAUDE.md,
 .cursorrules, etc.)</li>
 </ul>
-<pre><code></code></pre>
+<p>Note: <code>daemon</code>, <code>backup</code>, and <code>runtime</code> settings <em>are</em> all stored in
+<code>config.json</code>. The items above are intentionally kept as separate files because
+they are per-agent or volatile state, not global repository settings.</p>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#configuration.html')}</script>

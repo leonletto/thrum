@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "thrum prime 2>/dev/null || echo 'Thrum not initialized (run: thrum init && thrum daemon start)'"
+            "command": "thrum prime 2>/dev/null || echo 'Thrum not initialized (run: thrum init)'"
           }
         ]
       }

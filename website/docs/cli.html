@@ -278,6 +278,30 @@ messaging system for AI agent coordination.</p>
 <td>Trigger an immediate sync</td>
 </tr>
 <tr>
+<td><code>thrum backup</code></td>
+<td>Snapshot all thrum data to a backup directory</td>
+</tr>
+<tr>
+<td><code>thrum backup status</code></td>
+<td>Show last backup info</td>
+</tr>
+<tr>
+<td><code>thrum backup config</code></td>
+<td>Show effective backup config</td>
+</tr>
+<tr>
+<td><code>thrum backup restore</code></td>
+<td>Restore from latest backup or a specific archive</td>
+</tr>
+<tr>
+<td><code>thrum backup plugin list</code></td>
+<td>List configured backup plugins</td>
+</tr>
+<tr>
+<td><code>thrum backup plugin add</code></td>
+<td>Add a backup plugin (or use a built-in preset)</td>
+</tr>
+<tr>
 <td><code>thrum mcp serve</code></td>
 <td>Start MCP stdio server for agent messaging</td>
 </tr>
@@ -546,6 +570,43 @@ Inbox:    47 messages (12 unread)
 Sync:     ✓ synced
 Daemon:   running (2h15m uptime, v0.1.0)
 WebSocket: ws://localhost:9999</code></pre>
+<h3>thrum team</h3>
+<p>Show a rich, multi-line status report for every active agent. Displays session
+info, work context, inbox counts, branch status, and per-file change details.</p>
+<p>Git context fields (branch, unmerged commits ahead, and file changes) are
+populated automatically when an agent has a <code>worktree</code> session ref set — this
+happens on <code>session start</code> and <code>quickstart</code>. When an agent has an active session
+with a worktree ref, the daemon extracts the current branch, number of commits
+ahead of the default branch, and the list of changed files on each heartbeat.</p>
+<pre><code>thrum team [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--all</code></td>
+<td>Include offline agents</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>$ thrum team
+@implementer [active]
+  Module:   auth
+  Worktree: auth-fix
+  Session:  ses_01HXF2A9... (duration: 2h15m)
+  Intent:   Fixing token refresh
+  Inbox:    3 unread / 12 total
+  Branch:   feature/auth (2 commits ahead)
+  Files:
+    internal/auth/token.go        5m ago   +42 -10
+    internal/auth/refresh.go      5m ago   +15 -3
+
+$ thrum team --all     # Include agents with no active session</code></pre>
 <h2>Messaging</h2>
 <h3>thrum send</h3>
 <p>Send a message to the messaging system. The daemon must be running and you must
@@ -620,7 +681,8 @@ $ thrum send &quot;Backend review needed&quot; --to @backend
 <h3>thrum reply</h3>
 <p>Reply to a message by ID. Creates a reply-to reference so replies are grouped
 with the original message in your inbox. The replied-to message is marked as
-read.</p>
+read. Replies automatically create or join threads. See
+<a href="messaging.html#auto-threading-v050">Auto-Threading</a> for details.</p>
 <pre><code>thrum reply MSG_ID TEXT [flags]</code></pre>
 <table>
 <thead>
@@ -1355,6 +1417,11 @@ $ echo &quot;Working on auth module&quot; | thrum context save
 <td>Output raw content without decoration</td>
 <td><code>false</code></td>
 </tr>
+<tr>
+<td><code>--no-preamble</code></td>
+<td>Output raw context without preamble markers</td>
+<td><code>false</code></td>
+</tr>
 </tbody></table>
 <p>Example:</p>
 <pre><code>$ thrum context show
@@ -1488,7 +1555,7 @@ messages directed to this agent by name or role. There is no <code>--all</code> 
 </thead>
 <tbody><tr>
 <td><code>--timeout</code></td>
-<td>Max wait time (e.g., <code>30s</code>, <code>5m</code>, <code>1h</code>)</td>
+<td>Max wait time — requires Go duration units (e.g., <code>30s</code>, <code>5m</code>, <code>1h</code>); bare integers like <code>120</code> are not accepted</td>
 <td><code>30s</code></td>
 </tr>
 <tr>
@@ -1555,6 +1622,8 @@ served.</p>
 <h3>thrum daemon restart</h3>
 <p>Restart the daemon (stop + start).</p>
 <pre><code>thrum daemon restart</code></pre>
+<p><strong>Note:</strong> Running <code>thrum sync</code> without a subcommand just prints help — use
+<code>thrum sync force</code> or <code>thrum sync status</code> to take action.</p>
 <h3>thrum sync status</h3>
 <p>Show sync loop status, last sync time, and any errors. When local-only mode is
 active, displays &quot;Mode: local-only&quot; instead of &quot;Mode: normal&quot;.</p>
@@ -1565,6 +1634,131 @@ active, displays &quot;Mode: local-only&quot; instead of &quot;Mode: normal&quot
 and pushes local messages. The default sync interval is 60 seconds. When
 local-only mode is active, displays &quot;local-only (remote sync disabled)&quot;.</p>
 <pre><code>thrum sync force</code></pre>
+<h2>Backup &amp; Restore</h2>
+<h3>thrum backup</h3>
+<p>Snapshot all thrum data (events, messages, config, and identity files) to a
+backup directory. By default, backups are written to <code>.thrum/backup/</code> inside
+the repo. The backup directory can be overridden via <code>--dir</code> or configured in
+<code>.thrum/config.yaml</code>.</p>
+<pre><code>thrum backup [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--dir</code></td>
+<td>Override backup directory</td>
+<td><code>.thrum/backup/</code></td>
+</tr>
+</tbody></table>
+<p>The <code>--dir</code> flag is a persistent flag inherited by all <code>backup</code> subcommands.</p>
+<p>Example:</p>
+<pre><code>$ thrum backup
+Backup complete: .thrum/backup/my-repo/current
+  Events: 1240 lines
+  Message files: 3
+  Local tables: 7
+  Config files: 4
+
+$ thrum backup --dir /path/to/backups
+Backup complete: /path/to/backups/my-repo/current</code></pre>
+<h3>thrum backup status</h3>
+<p>Show information about the most recent backup — timestamp, counts, and archive
+history.</p>
+<pre><code>thrum backup status [--dir DIR]</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum backup status
+Last backup: 2026-03-01 22:15:03
+  Events: 1240 lines
+  Message files: 3
+  Config files: 4
+Archives: 7 (12.3 MB)
+  Oldest: 2026-02-01 10:00:00
+  Newest: 2026-03-01 22:15:03</code></pre>
+<h3>thrum backup config</h3>
+<p>Show the effective backup configuration including directory, retention policy,
+and any configured plugins.</p>
+<pre><code>thrum backup config</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum backup config
+Backup directory: .thrum/backup (default)
+Retention:
+  Daily: 7
+  Weekly: 4
+  Monthly: forever</code></pre>
+<h3>thrum backup restore</h3>
+<p>Restore thrum data from the latest backup or a specific archive zip. A safety
+backup is automatically created before restoring, and the daemon is stopped
+during the restore to avoid file handle conflicts.</p>
+<pre><code>thrum backup restore [archive.zip] [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--yes</code></td>
+<td>Skip confirmation prompt</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>$ thrum backup restore
+This will restore thrum data from backup.
+  Backup dir: .thrum/backup
+  Repo: my-repo
+  Source: current/
+A safety backup will be created first.
+Continue? [y/N] y
+Daemon stopped for restore.
+Safety backup: .thrum/backup/my-repo/safety-2026-03-02T10:00:00Z.zip
+Restored from: .thrum/backup/my-repo/current
+
+# Restore from a specific archive
+$ thrum backup restore .thrum/backup/my-repo/2026-02-15T10:00:00Z.zip --yes</code></pre>
+<h3>thrum backup plugin list</h3>
+<p>List all backup plugins configured in <code>.thrum/config.yaml</code>.</p>
+<pre><code>thrum backup plugin list</code></pre>
+<h3>thrum backup plugin add</h3>
+<p>Add a backup plugin by name/command/include pattern, or use a built-in preset.</p>
+<pre><code>thrum backup plugin add [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--preset string</code></td>
+<td>Use built-in preset: <code>beads</code>, <code>beads-rust</code></td>
+</tr>
+<tr>
+<td><code>--name string</code></td>
+<td>Plugin name</td>
+</tr>
+<tr>
+<td><code>--command string</code></td>
+<td>Command to run before collecting files</td>
+</tr>
+<tr>
+<td><code>--include strings</code></td>
+<td>File patterns to collect (glob, repeatable)</td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>$ thrum backup plugin add --preset beads
+$ thrum backup plugin add --name myplugin --command &quot;bd backup --force&quot; --include &quot;.beads/backup/*.jsonl&quot;</code></pre>
+<h3>thrum backup plugin remove</h3>
+<p>Remove a configured backup plugin by name.</p>
+<pre><code>thrum backup plugin remove --name NAME</code></pre>
 <h2>MCP Server</h2>
 <h3>thrum mcp serve</h3>
 <p>Start an MCP (Model Context Protocol) server on stdin/stdout for native
@@ -1587,8 +1781,8 @@ MCP tools instead of shelling out to the CLI.</p>
 </tbody></table>
 <p>Requires the Thrum daemon to be running. The <code>--agent-id</code> flag sets <code>THRUM_NAME</code>
 internally for identity resolution.</p>
-<p><strong>MCP Tools provided (11 total):</strong></p>
-<p><strong>Core messaging (5):</strong></p>
+<p><strong>MCP Tools provided (10 total):</strong></p>
+<p><strong>Core messaging (4):</strong></p>
 <table>
 <thead>
 <tr>
@@ -1611,10 +1805,6 @@ internally for identity resolution.</p>
 <tr>
 <td><code>list_agents</code></td>
 <td>List registered agents with active/offline status</td>
-</tr>
-<tr>
-<td><code>broadcast_message</code></td>
-<td>Send to all agents (convenience wrapper around <code>send_message</code> to <code>@everyone</code>)</td>
 </tr>
 </tbody></table>
 <p><strong>Group management (6):</strong></p>
@@ -1733,7 +1923,7 @@ select the correct one.</p>
 automatically on successful registration. The filename is derived from the agent
 name (e.g., <code>furiosa.json</code> or <code>implementer_35HV62T9B9.json</code>).</p>
 <pre><code>{
-  &quot;version&quot;: 1,
+  &quot;version&quot;: 3,
   &quot;repo_id&quot;: &quot;r_0123456789AB&quot;,
   &quot;agent&quot;: {
     &quot;kind&quot;: &quot;agent&quot;,
