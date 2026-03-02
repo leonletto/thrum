@@ -153,9 +153,9 @@ type DeleteMessageResponse struct {
 // EditRequest represents the request for message.edit RPC.
 type EditRequest struct {
 	MessageID     string         `json:"message_id"`
-	Content       string         `json:"content,omitempty"`          // New content
-	Structured    map[string]any `json:"structured,omitempty"`       // New structured data
-	CallerAgentID string         `json:"caller_agent_id,omitempty"`  // CLI-resolved agent identity
+	Content       string         `json:"content,omitempty"`         // New content
+	Structured    map[string]any `json:"structured,omitempty"`      // New structured data
+	CallerAgentID string         `json:"caller_agent_id,omitempty"` // CLI-resolved agent identity
 }
 
 // EditResponse represents the response from message.edit RPC.

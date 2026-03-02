@@ -12,7 +12,7 @@ import (
 // connect but never call session.start / subscribe.
 type ClientRegistry struct {
 	mu          sync.RWMutex
-	clients     map[string]*Connection // sessionID → connection (registered clients)
+	clients     map[string]*Connection   // sessionID → connection (registered clients)
 	connections map[*Connection]struct{} // all active connections, keyed by pointer
 }
 

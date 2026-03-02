@@ -2143,4 +2143,3 @@ func TestInboxGroupMembership(t *testing.T) {
 		}
 	})
 }
-

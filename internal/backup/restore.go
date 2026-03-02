@@ -16,14 +16,14 @@ import (
 
 // RestoreOptions configures a restore operation.
 type RestoreOptions struct {
-	BackupDir   string                 // resolved backup directory
-	RepoName    string                 // repo subfolder name
-	ArchivePath string                 // optional: specific zip to restore from (empty = use current/)
-	SyncDir     string                 // path to a-sync worktree to restore JSONL into
-	ThrumDir    string                 // path to .thrum directory
-	DBPath      string                 // path to messages.db
-	Plugins     []config.PluginConfig  // optional: plugins with restore commands
-	RepoPath    string                 // project repo root (CWD for plugin restore commands)
+	BackupDir   string                // resolved backup directory
+	RepoName    string                // repo subfolder name
+	ArchivePath string                // optional: specific zip to restore from (empty = use current/)
+	SyncDir     string                // path to a-sync worktree to restore JSONL into
+	ThrumDir    string                // path to .thrum directory
+	DBPath      string                // path to messages.db
+	Plugins     []config.PluginConfig // optional: plugins with restore commands
+	RepoPath    string                // project repo root (CWD for plugin restore commands)
 }
 
 // RestoreResult holds the outcome of a restore.
