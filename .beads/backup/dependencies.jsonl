@@ -140,6 +140,15 @@
 {"created_at":"2026-02-28T14:08:57Z","created_by":"Leon Letto","depends_on_id":"thrum-sn4.3","issue_id":"thrum-sn4.4","type":"blocks"}
 {"created_at":"2026-02-28T14:08:45Z","created_by":"Leon Letto","depends_on_id":"thrum-sn4","issue_id":"thrum-sn4.5","type":"parent-child"}
 {"created_at":"2026-02-28T14:08:57Z","created_by":"Leon Letto","depends_on_id":"thrum-sn4.4","issue_id":"thrum-sn4.5","type":"blocks"}
+{"created_at":"2026-03-02T09:59:36Z","created_by":"Leon Letto","depends_on_id":"thrum-xuf","issue_id":"thrum-xuf.1","type":"parent-child"}
+{"created_at":"2026-03-02T09:59:36Z","created_by":"Leon Letto","depends_on_id":"thrum-xuf","issue_id":"thrum-xuf.2","type":"parent-child"}
+{"created_at":"2026-03-02T09:59:36Z","created_by":"Leon Letto","depends_on_id":"thrum-xuf","issue_id":"thrum-xuf.3","type":"parent-child"}
+{"created_at":"2026-03-02T09:59:36Z","created_by":"Leon Letto","depends_on_id":"thrum-xuf","issue_id":"thrum-xuf.4","type":"parent-child"}
+{"created_at":"2026-03-02T09:59:37Z","created_by":"Leon Letto","depends_on_id":"thrum-xuf","issue_id":"thrum-xuf.5","type":"parent-child"}
+{"created_at":"2026-03-02T09:59:37Z","created_by":"Leon Letto","depends_on_id":"thrum-xuf","issue_id":"thrum-xuf.6","type":"parent-child"}
+{"created_at":"2026-03-02T09:59:37Z","created_by":"Leon Letto","depends_on_id":"thrum-xuf","issue_id":"thrum-xuf.7","type":"parent-child"}
+{"created_at":"2026-03-02T09:59:37Z","created_by":"Leon Letto","depends_on_id":"thrum-xuf","issue_id":"thrum-xuf.8","type":"parent-child"}
+{"created_at":"2026-03-02T09:59:37Z","created_by":"Leon Letto","depends_on_id":"thrum-xuf","issue_id":"thrum-xuf.9","type":"parent-child"}
 {"created_at":"2026-02-27T13:15:20Z","created_by":"Leon Letto","depends_on_id":"thrum-n0u","issue_id":"thrum-ynl","type":"blocks"}
 {"created_at":"2026-02-27T13:17:07Z","created_by":"Leon Letto","depends_on_id":"thrum-1xz","issue_id":"thrum-z41","type":"blocks"}
 {"created_at":"2026-02-28T21:14:24Z","created_by":"Leon Letto","depends_on_id":"thrum-z80","issue_id":"thrum-z80.1","type":"parent-child"}
