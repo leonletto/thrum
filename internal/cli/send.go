@@ -12,8 +12,8 @@ type SendOptions struct {
 	Scopes        []string // Format: "type:value"
 	Refs          []string // Format: "type:value"
 	Mentions      []string // Format: "@role"
-	ReplyTo       string // Message ID to reply to
-	Structured    string // JSON string
+	ReplyTo       string   // Message ID to reply to
+	Structured    string   // JSON string
 	Format        string
 	To            string // Direct recipient (e.g., "@reviewer")
 	Broadcast     bool   // Send as broadcast (no specific recipient)

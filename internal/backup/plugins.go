@@ -15,10 +15,10 @@ const pluginTimeout = 60 * time.Second
 
 // PluginResult holds the outcome of a single plugin backup.
 type PluginResult struct {
-	Name      string
-	Command   string
-	Files     int
-	CmdError  string // non-empty if command failed (non-fatal)
+	Name     string
+	Command  string
+	Files    int
+	CmdError string // non-empty if command failed (non-fatal)
 }
 
 // RunPlugins executes backup plugins and collects their output files.

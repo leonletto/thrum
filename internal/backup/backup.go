@@ -13,24 +13,24 @@ import (
 
 // BackupOptions configures a backup run.
 type BackupOptions struct {
-	BackupDir    string                 // resolved backup directory
-	RepoName     string                 // used as subfolder name
-	SyncDir      string                 // path to a-sync worktree
-	ThrumDir     string                 // path to .thrum directory
-	DBPath       string                 // path to messages.db
-	ThrumVersion string                 // version string for manifest
+	BackupDir    string                  // resolved backup directory
+	RepoName     string                  // used as subfolder name
+	SyncDir      string                  // path to a-sync worktree
+	ThrumDir     string                  // path to .thrum directory
+	DBPath       string                  // path to messages.db
+	ThrumVersion string                  // version string for manifest
 	Retention    *config.RetentionConfig // optional: apply GFS rotation after backup
-	Plugins      []config.PluginConfig  // optional: third-party backup plugins
-	PostBackup   string                 // optional: command to run after backup completes
-	RepoPath     string                 // project repo root (CWD for plugins/hooks)
+	Plugins      []config.PluginConfig   // optional: third-party backup plugins
+	PostBackup   string                  // optional: command to run after backup completes
+	RepoPath     string                  // project repo root (CWD for plugins/hooks)
 }
 
 // BackupResult holds the outcome of a backup run.
 type BackupResult struct {
-	CurrentDir    string
-	Manifest      *Manifest
-	SyncResult    SyncExportResult
-	LocalResult   LocalExportResult
+	CurrentDir     string
+	Manifest       *Manifest
+	SyncResult     SyncExportResult
+	LocalResult    LocalExportResult
 	PluginResults  []PluginResult
 	PostHookResult *PostHookResult
 }
