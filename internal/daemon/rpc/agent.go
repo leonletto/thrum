@@ -596,35 +596,36 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	// Build query with filters
-	query := `SELECT session_id, agent_id, branch, worktree_path,
-	                 unmerged_commits, uncommitted_files, changed_files, file_changes, git_updated_at,
-	                 current_task, task_updated_at, intent, intent_updated_at
-	          FROM agent_work_contexts
+	// Build query with filters — only return contexts for active (non-ended) sessions
+	query := `SELECT wc.session_id, wc.agent_id, wc.branch, wc.worktree_path,
+	                 wc.unmerged_commits, wc.uncommitted_files, wc.changed_files, wc.file_changes, wc.git_updated_at,
+	                 wc.current_task, wc.task_updated_at, wc.intent, wc.intent_updated_at
+	          FROM agent_work_contexts wc
+	          JOIN sessions s ON wc.session_id = s.session_id AND s.ended_at IS NULL
 	          WHERE 1=1`
 
 	args := []any{}
 
 	// Filter by agent_id
 	if req.AgentID != "" {
-		query += " AND agent_id = ?"
+		query += " AND wc.agent_id = ?"
 		args = append(args, req.AgentID)
 	}
 
 	// Filter by branch
 	if req.Branch != "" {
-		query += " AND branch = ?"
+		query += " AND wc.branch = ?"
 		args = append(args, req.Branch)
 	}
 
 	// Filter by file (in changed_files or uncommitted_files)
 	if req.File != "" {
-		query += ` AND (changed_files LIKE ? OR uncommitted_files LIKE ?)`
+		query += ` AND (wc.changed_files LIKE ? OR wc.uncommitted_files LIKE ?)`
 		filePattern := fmt.Sprintf("%%\"%s\"%%", req.File)
 		args = append(args, filePattern, filePattern)
 	}
 
-	query += " ORDER BY git_updated_at DESC"
+	query += " ORDER BY wc.git_updated_at DESC"
 
 	rows, err := h.state.DB().QueryContext(ctx, query, args...)
 	if err != nil {

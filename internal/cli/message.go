@@ -107,10 +107,11 @@ type MessageEditResponse struct {
 }
 
 // MessageEdit edits a message's content.
-func MessageEdit(client *Client, messageID, content string) (*MessageEditResponse, error) {
+func MessageEdit(client *Client, messageID, content, callerAgentID string) (*MessageEditResponse, error) {
 	req := map[string]string{
-		"message_id": messageID,
-		"content":    content,
+		"message_id":      messageID,
+		"content":         content,
+		"caller_agent_id": callerAgentID,
 	}
 	var resp MessageEditResponse
 	if err := client.Call("message.edit", req, &resp); err != nil {

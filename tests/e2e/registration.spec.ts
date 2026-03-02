@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { thrum } from './helpers/thrum-cli.js';
+import { thrum, getWebUIUrl } from './helpers/thrum-cli.js';
 import { registerAgent, getAgentList, waitForWebSocket } from './helpers/fixtures.js';
 
 /**
@@ -103,7 +103,7 @@ test.describe('Identity & Registration', () => {
     // Arrange: ensure daemon is running (already started by global-setup)
 
     // Act: open browser
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
 
     // Wait for WebSocket connection
     await waitForWebSocket(page);
@@ -124,7 +124,7 @@ test.describe('Identity & Registration', () => {
 
   test('SC-09: Browser identity persists across page reload', async ({ page }) => {
     // Arrange: open browser and wait for identity to load
-    await page.goto('/');
+    await page.goto(getWebUIUrl());
     await waitForWebSocket(page);
 
     // Get the initial identity

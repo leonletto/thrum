@@ -2684,13 +2684,18 @@ Examples:
   thrum message edit msg_01HXE... "Updated text here"`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w", err)
+			}
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("failed to connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.MessageEdit(client, args[0], args[1])
+			result, err := cli.MessageEdit(client, args[0], args[1], agentID)
 			if err != nil {
 				return err
 			}
