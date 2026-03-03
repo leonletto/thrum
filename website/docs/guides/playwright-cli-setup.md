@@ -5,7 +5,8 @@ description:
   screenshots, page context, form filling, and web testing"
 category: "tools"
 order: 3
-tags: ["playwright", "browser", "automation", "screenshots", "claude-code", "guide"]
+tags:
+  ["playwright", "browser", "automation", "screenshots", "claude-code", "guide"]
 last_updated: "2026-02-27"
 ---
 
@@ -40,11 +41,13 @@ If you have the `playwright-cli` binary installed, you can use it via a Claude
 Code skill:
 
 1. Install the skill:
+
    ```bash
    playwright-cli install --skills
    ```
 
 2. Allow the skill in your project's `.claude/settings.local.json`:
+
    ```json
    {
      "permissions": {
@@ -63,6 +66,7 @@ images, which consumes significantly more tokens than the CLI skill. The CLI
 skill is preferred for agent workflows.
 
 1. Install the plugin in Claude Code:
+
    ```
    claude plugin add playwright
    ```
@@ -197,8 +201,8 @@ playwright-cli -s=app close
 - **Use `snapshot` over `screenshot`** when you need to interact with elements.
   Snapshots return an accessibility tree with element references (`e1`, `e2`,
   etc.) that you can use with `click`, `fill`, and other commands.
-- **Screenshots are for context** — save them when you need visual evidence of
-  a state change, but use snapshots for programmatic page interaction.
+- **Screenshots are for context** — save them when you need visual evidence of a
+  state change, but use snapshots for programmatic page interaction.
 - **Named sessions** are useful when testing multi-page flows or comparing two
   different views side by side.
 - **The MCP plugin and CLI skill coexist** — you can have both installed

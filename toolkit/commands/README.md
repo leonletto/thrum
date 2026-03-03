@@ -39,5 +39,5 @@ future sessions.
 ## Detection
 
 To check whether the skill is installed, look for `update-context.md` in
-`.claude/commands/` (project-level) or `~/.claude/commands/` (global).
-Context updates are managed via the `/update-context` Claude Code skill.
+`.claude/commands/` (project-level) or `~/.claude/commands/` (global). Context
+updates are managed via the `/update-context` Claude Code skill.

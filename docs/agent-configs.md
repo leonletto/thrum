@@ -1,4 +1,3 @@
-
 ## Agent Configurations
 
 > **Recommended:** Install the [Thrum plugin](claude-code-plugin.md) instead of
@@ -84,7 +83,8 @@ cycles.
 - Blocking wait via `thrum wait --timeout 15m` (6 cycles max, filters by agent
   identity)
 - Immediate return on message arrival
-- Time-based filtering with `--after` flag (negative value = "N ago"; e.g., `-1s` includes messages sent up to 1 second ago)
+- Time-based filtering with `--after` flag (negative value = "N ago"; e.g.,
+  `-1s` includes messages sent up to 1 second ago)
 - CLI-only (no MCP tools — sub-agents can't access MCP)
 
 ## Configure the message listener
@@ -108,7 +108,8 @@ Task({
 **Wait command flags:**
 
 - `--timeout 15m` — Block up to 15 minutes per cycle
-- `--after -1s` — Include messages sent up to 1 second ago (negative = "N ago"; prevents stale replay)
+- `--after -1s` — Include messages sent up to 1 second ago (negative = "N ago";
+  prevents stale replay)
 - `--json` — Machine-readable output
 
 The listener uses `thrum wait` which blocks until a message arrives or the

@@ -11,15 +11,14 @@ last_updated: "2026-02-27"
 
 ## Beads UI Setup Guide
 
-[Beads UI](https://github.com/mantoni/beads-ui) is a local web interface for
-the Beads issue tracker. It gives developers a real-time browser view of what
-agents are working on — without polling, refreshing, or switching to the
-terminal.
+[Beads UI](https://github.com/mantoni/beads-ui) is a local web interface for the
+Beads issue tracker. It gives developers a real-time browser view of what agents
+are working on — without polling, refreshing, or switching to the terminal.
 
 ### Why Use It
 
-When agents coordinate via Thrum and track tasks with Beads, the developer
-needs visibility. Running `bd list` in a terminal works, but Beads UI provides:
+When agents coordinate via Thrum and track tasks with Beads, the developer needs
+visibility. Running `bd list` in a terminal works, but Beads UI provides:
 
 - **Live updates** — Issues move across the board as agents claim and close
   them, with no manual refresh needed
@@ -30,8 +29,8 @@ needs visibility. Running `bd list` in a terminal works, but Beads UI provides:
   comments directly in the browser
 
 The UI watches the Beads SQLite database for changes and pushes updates over
-WebSocket. When an agent runs `bd close <id>`, the card moves to Done in
-your browser instantly.
+WebSocket. When an agent runs `bd close <id>`, the card moves to Done in your
+browser instantly.
 
 ### Installation
 
@@ -75,9 +74,9 @@ and their statuses. Useful for tracking high-level project progress.
 
 Kanban-style columns:
 
-| Blocked | Ready | In Progress | Closed |
-|---------|-------|-------------|--------|
-| Tasks waiting on dependencies | Tasks with no blockers | Claimed by an agent | Done |
+| Blocked                       | Ready                  | In Progress         | Closed |
+| ----------------------------- | ---------------------- | ------------------- | ------ |
+| Tasks waiting on dependencies | Tasks with no blockers | Claimed by an agent | Done   |
 
 Drag cards between columns to change status. Each column shows a badge with its
 card count.
@@ -97,11 +96,11 @@ bdui list               # List all running instances
 
 #### Environment Variables
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `BD_BIN` | `bd` | Path to the Beads CLI binary |
-| `PORT` | `3000` | Listen port |
-| `HOST` | `127.0.0.1` | Bind address |
+| Variable | Default     | Purpose                      |
+| -------- | ----------- | ---------------------------- |
+| `BD_BIN` | `bd`        | Path to the Beads CLI binary |
+| `PORT`   | `3000`      | Listen port                  |
+| `HOST`   | `127.0.0.1` | Bind address                 |
 
 ### Multi-Project Support
 

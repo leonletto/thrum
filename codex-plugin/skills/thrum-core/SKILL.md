@@ -1,6 +1,9 @@
 ---
 name: thrum-core
-description: Use when the user needs multi-agent coordination with durable Thrum messaging across worktrees, including routing via identities/groups, ownership checks, and cross-session message continuity.
+description:
+  Use when the user needs multi-agent coordination with durable Thrum messaging
+  across worktrees, including routing via identities/groups, ownership checks,
+  and cross-session message continuity.
 # source: claude-plugin/skills/thrum/SKILL.md (condensed for codex)
 # last-synced: 2026-03-01
 ---
@@ -10,6 +13,7 @@ description: Use when the user needs multi-agent coordination with durable Thrum
 Use this skill for durable multi-agent coordination with `thrum`.
 
 ## Use this when
+
 - Messages must persist across context compaction or session restart.
 - Coordination spans multiple worktrees or agents.
 - You need identity, group routing, or ownership checks.
@@ -28,13 +32,17 @@ Use this skill for durable multi-agent coordination with `thrum`.
 in other worktrees?" YES = Thrum.
 
 ## Core workflow
-1. Prime context with `thrum prime` and capture identity, team, inbox, and sync health.
-2. Choose audience (`@agent`, `@group`, `@everyone`) and send concise actionable messages.
+
+1. Prime context with `thrum prime` and capture identity, team, inbox, and sync
+   health.
+2. Choose audience (`@agent`, `@group`, `@everyone`) and send concise actionable
+   messages.
 3. Use reply chains for continuity (`thrum reply <id> "..."`).
 4. Keep scope explicit: branch, worktree, files, and expected output.
 5. Re-arm listener pattern if continuous monitoring is needed.
 
 ## Command baseline
+
 ```bash
 thrum prime
 thrum whoami
@@ -65,6 +73,7 @@ Re-arm after processing. See `references/LISTENER_PATTERN.md` and
 - Agent identity persists in `.thrum/identities/`
 
 ## References
+
 - `references/BOUNDARIES.md`
 - `references/MESSAGING.md`
 - `references/GROUPS.md`

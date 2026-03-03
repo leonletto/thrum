@@ -1,4 +1,3 @@
-
 ## Authentication Guide
 
 This document explains authentication and authorization in the Thrum API.
@@ -636,8 +635,9 @@ thrum mcp serve --agent-id furiosa
 
 The MCP server provides 10 tools: 4 core messaging tools (`send_message`,
 `check_messages`, `wait_for_message`, `list_agents`) and 6 group management
-tools (`create_group`, `delete_group`, `add_group_member`, `remove_group_member`,
-`list_groups`, `get_group`). Identity is resolved once at startup.
+tools (`create_group`, `delete_group`, `add_group_member`,
+`remove_group_member`, `list_groups`, `get_group`). Identity is resolved once at
+startup.
 
 ### User Registration (Browser Auto-Registration)
 
@@ -684,4 +684,7 @@ ws.on("message", (data: string) => {
   documentation
 - [WebSocket API](./websocket.md) - Full API reference
 - [Event Reference](./events.md) - Event types and payloads
+
+```
+
 ```

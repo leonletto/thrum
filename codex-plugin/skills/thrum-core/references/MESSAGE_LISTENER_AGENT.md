@@ -50,7 +50,8 @@ Task(
 ```
 
 - `--timeout 15m`: Block up to 15 minutes per cycle
-- `--after -1s`: Include messages sent up to 1s ago (negative = "N ago"; prevents stale replay)
+- `--after -1s`: Include messages sent up to 1s ago (negative = "N ago";
+  prevents stale replay)
 - `--json`: Machine-readable output
 
 ## Return Format

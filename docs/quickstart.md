@@ -1,4 +1,3 @@
-
 ## Thrum Quickstart Guide
 
 Get up and running with Thrum in 5 minutes.
@@ -228,8 +227,8 @@ thrum mcp serve
 thrum mcp serve --agent-id myagent  # Override agent identity
 ```
 
-See [MCP Server](/docs/mcp-server.html) for configuration and the complete
-tools reference (11 tools: 5 core messaging + 6 group management).
+See [MCP Server](/docs/mcp-server.html) for configuration and the complete tools
+reference (11 tools: 5 core messaging + 6 group management).
 
 ## Typical Workflow
 
@@ -323,9 +322,9 @@ thrum send "Experimenting with auth approaches"
 ```
 
 The `thrum setup --main-repo <path>` command creates a `.thrum/redirect` file
-pointing to the main worktree's `.thrum/` directory. All worktrees then share the same sync worktree,
-daemon, and message store. Messages sync across all worktrees and machines
-through Git.
+pointing to the main worktree's `.thrum/` directory. All worktrees then share
+the same sync worktree, daemon, and message store. Messages sync across all
+worktrees and machines through Git.
 
 ### Use the setup scripts for batch configuration
 

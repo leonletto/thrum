@@ -1,4 +1,3 @@
-
 ## Beads and Thrum
 
 ## The Context Loss Problem
@@ -173,9 +172,11 @@ bd dep <blocker> --blocks <blocked>  # Add dependency
 ```
 
 **Common mistakes:**
+
 - `bd start` does not exist — use `bd update <id> -s in_progress`
 - `bd progress` does not exist — use `bd update <id> -s in_progress`
-- `bd set-state` is for operational dimensions (patrol, health), NOT workflow status
+- `bd set-state` is for operational dimensions (patrol, health), NOT workflow
+  status
 
 ### Creating an Epic with Tasks
 
@@ -202,8 +203,8 @@ bd epic status thrum-abc
 ```
 
 **Dependency direction:** `bd dep <blocker> --blocks <blocked>` means the
-blocker must close before the blocked task becomes ready. The alternative
-syntax is `bd dep add <blocked> <blocker>` (reversed order).
+blocker must close before the blocked task becomes ready. The alternative syntax
+is `bd dep add <blocked> <blocker>` (reversed order).
 ````
 
 You can also generate a minimal starter block with `bd onboard`, but the block

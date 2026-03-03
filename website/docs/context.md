@@ -94,7 +94,8 @@ directly or replace it with `thrum context preamble --file custom.md`.
 `thrum send "message" --to @role` **Reply:** `thrum reply <MSG_ID> "response"`
 **Status:** `thrum status` **Who's online:** `thrum agent list --context` **Save
 context:** `thrum context save` **Wait for messages:**
-`thrum wait --after -30s --timeout 5m` (`--after -30s` = include messages sent up to 30s ago)
+`thrum wait --after -30s --timeout 5m` (`--after -30s` = include messages sent
+up to 30s ago)
 ```
 
 **Customization examples:**
@@ -346,9 +347,9 @@ thrum context prime --json
 - Debugging - gather all relevant state in one command
 - Agent onboarding - provide comprehensive context to new agents
 
-**Note:** `thrum prime` is the canonical top-level command; `thrum context prime`
-is an alias for it. The PreCompact hook automatically saves context before
-compaction to `.thrum/context/{name}.md` and
+**Note:** `thrum prime` is the canonical top-level command;
+`thrum context prime` is an alias for it. The PreCompact hook automatically
+saves context before compaction to `.thrum/context/{name}.md` and
 `/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md`, but the
 agent-initiated `/update-context` skill captures richer context including
 decisions and rationale.
@@ -710,4 +711,7 @@ machines. Local notes and WIP context can stay local.
 - [CLI Reference](cli.md) - All CLI commands
 - [RPC API Reference](rpc-api.md) - Complete RPC method documentation
 - [Agent Coordination](agent-coordination.md) - Multi-agent workflows
+
+```
+
 ```

@@ -1,4 +1,3 @@
-
 ## Workflow Templates
 
 Thrum ships ready-to-use templates that guide AI agents through planning,
@@ -162,4 +161,7 @@ picks up from the first incomplete task. Completed work is never redone.
   beads for task tracking and Thrum for coordination
 - [Quick Start](quickstart.md) — Set up Thrum and run your first multi-agent
   workflow
+
+```
+
 ```

@@ -1,4 +1,3 @@
-
 ## Configuration
 
 Thrum uses `.thrum/config.json` as the single source of truth for user
@@ -112,14 +111,14 @@ offloading archives to cloud storage or triggering external notifications.
 
 ### `backup.plugins`
 
-List of third-party backup plugin definitions. Each plugin is an object with
-the following fields:
+List of third-party backup plugin definitions. Each plugin is an object with the
+following fields:
 
-| Field     | Type             | Description                                    |
-| --------- | ---------------- | ---------------------------------------------- |
-| `name`    | string           | Unique plugin identifier                       |
-| `command` | string           | Absolute path to the plugin executable         |
-| `include` | array of strings | Data categories the plugin should receive      |
+| Field     | Type             | Description                               |
+| --------- | ---------------- | ----------------------------------------- |
+| `name`    | string           | Unique plugin identifier                  |
+| `command` | string           | Absolute path to the plugin executable    |
+| `include` | array of strings | Data categories the plugin should receive |
 
 Example:
 

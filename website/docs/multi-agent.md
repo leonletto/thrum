@@ -43,19 +43,20 @@ platform, and recover full session context after compaction.
 Groups let you send messages to collections of agents without addressing each
 one individually. Groups can contain specific agents or all agents with a role.
 
-For the full group commands reference, see [Messaging — Groups](/docs/messaging.html#groups).
+For the full group commands reference, see
+[Messaging — Groups](/docs/messaging.html#groups).
 
 ### Auto-Created Groups
 
 Thrum automatically creates two types of system groups:
 
-- **`@everyone`** — Created on daemon startup. Includes all registered agents via
-  a `role:*` wildcard. New agents are automatically reachable through it. Cannot
-  be deleted or modified.
-- **Role groups** — Created automatically when an agent registers with a new role
-  (e.g., registering with `--role reviewer` creates a `@reviewer` group containing
-  all agents with that role). Role groups have IDs like `grp_role_reviewer` and
-  are managed by the system.
+- **`@everyone`** — Created on daemon startup. Includes all registered agents
+  via a `role:*` wildcard. New agents are automatically reachable through it.
+  Cannot be deleted or modified.
+- **Role groups** — Created automatically when an agent registers with a new
+  role (e.g., registering with `--role reviewer` creates a `@reviewer` group
+  containing all agents with that role). Role groups have IDs like
+  `grp_role_reviewer` and are managed by the system.
 
 This means `@reviewer` always routes to all agents with the `reviewer` role,
 even without manually creating or managing a group.
@@ -435,13 +436,13 @@ thrum wait --after -1s --timeout 5m --json
 thrum wait --mention @reviewer --timeout 5m
 ```
 
-| Flag        | Format                       | Description                              |
-| ----------- | ---------------------------- | ---------------------------------------- |
-| `--timeout` | Duration (e.g., `5m`)        | Max wait time (default: `30s`)           |
-| `--scope`   | Scope string (e.g., `module:auth`) | Only messages matching this scope  |
-| `--mention` | `@role`                      | Wait for mentions of a role              |
-| `--after`   | Relative time (e.g., `-1s`) | Negative = include messages sent up to N ago; positive = only messages N in the future; omit for "now" |
-| `--json`    | Boolean                      | Output messages as JSON                  |
+| Flag        | Format                             | Description                                                                                            |
+| ----------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `--timeout` | Duration (e.g., `5m`)              | Max wait time (default: `30s`)                                                                         |
+| `--scope`   | Scope string (e.g., `module:auth`) | Only messages matching this scope                                                                      |
+| `--mention` | `@role`                            | Wait for mentions of a role                                                                            |
+| `--after`   | Relative time (e.g., `-1s`)        | Negative = include messages sent up to N ago; positive = only messages N in the future; omit for "now" |
+| `--json`    | Boolean                            | Output messages as JSON                                                                                |
 
 **Exit codes:**
 
@@ -579,4 +580,7 @@ thrum send "Auth complete, 15 tests passing" --to @coord_main
 - [MCP Server](mcp-server.md) -- MCP tools for AI agent integration
 - [Context Management](context.md) -- Per-agent context storage and preambles
 - [CLI Reference](cli.md) -- Complete command documentation
+
+```
+
 ```

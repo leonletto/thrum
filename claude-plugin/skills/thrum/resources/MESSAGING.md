@@ -11,12 +11,12 @@
 
 ## Addressing
 
-| Target | Routing | When to use |
-|---|---|---|
-| `--to @lead_agent` | **Direct** — routes to the named agent | Default for all task messages |
-| `--to @coordinator` | **Role fanout** — ALL agents with that role (warning emitted) | Only when you want every coordinator |
-| `--to @backend-team` | **Group** — all members of the named group | Team-wide announcements |
-| `--to @everyone` | **Broadcast** — all registered agents | Critical alerts |
+| Target               | Routing                                                       | When to use                          |
+| -------------------- | ------------------------------------------------------------- | ------------------------------------ |
+| `--to @lead_agent`   | **Direct** — routes to the named agent                        | Default for all task messages        |
+| `--to @coordinator`  | **Role fanout** — ALL agents with that role (warning emitted) | Only when you want every coordinator |
+| `--to @backend-team` | **Group** — all members of the named group                    | Team-wide announcements              |
+| `--to @everyone`     | **Broadcast** — all registered agents                         | Critical alerts                      |
 
 **Critical:** `@coordinator` is a role, not an agent name. Sending
 `--to @coordinator` fans out to every agent registered with that role. Use

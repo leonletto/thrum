@@ -1,21 +1,27 @@
 ---
 name: thrum-ops
-description: Use when the user asks to run or troubleshoot Thrum operational flows such as quickstart, inbox triage, wait loops, context save/load, daemon status, and sync/session health checks.
+description:
+  Use when the user asks to run or troubleshoot Thrum operational flows such as
+  quickstart, inbox triage, wait loops, context save/load, daemon status, and
+  sync/session health checks.
 # source: claude-plugin/skills/thrum/SKILL.md (condensed for codex)
 # last-synced: 2026-03-01
 ---
 
 # Thrum Ops
 
-Use this skill for operational command execution and session lifecycle management.
+Use this skill for operational command execution and session lifecycle
+management.
 
 ## Use this when
+
 - Starting a new agent session (`quickstart`, `session start`, intent setup).
 - Running inbox/overview triage loops.
 - Handling context persistence before or after compaction.
 - Checking daemon/sync/session health.
 
 ## Operational loop
+
 1. Bootstrap identity/session (`thrum quickstart ...` or `thrum session start`).
 2. Triage with `thrum overview` and `thrum inbox --unread`.
 3. Act with `send`, `reply`, `group`, `team` as needed.
@@ -23,6 +29,7 @@ Use this skill for operational command execution and session lifecycle managemen
 5. Verify daemon and sync health before handoff.
 
 ## Command baseline
+
 ```bash
 thrum quickstart --role <role> --module <module> --intent "<intent>"
 thrum overview
@@ -46,6 +53,7 @@ thrum overview                           Combined status + team + inbox
 ```
 
 **Context workflow:**
+
 - Before compaction: save via update-context flow
 - After compaction: run load-context to restore work state
 - `thrum prime` gathers identity, team, inbox, git context, sync health
@@ -76,6 +84,7 @@ thrum agent heartbeat
 ```
 
 ## References
+
 - `references/CLI_REFERENCE.md`
 - `references/quickstart.md`
 - `references/overview.md`

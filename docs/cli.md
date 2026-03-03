@@ -1,4 +1,3 @@
-
 ## Thrum CLI Reference
 
 Complete reference for the `thrum` command-line interface -- a Git-backed
@@ -320,9 +319,9 @@ ahead of the default branch, and the list of changed files on each heartbeat.
 thrum team [flags]
 ```
 
-| Flag    | Description                 | Default |
-| ------- | --------------------------- | ------- |
-| `--all` | Include offline agents      | `false` |
+| Flag    | Description            | Default |
+| ------- | ---------------------- | ------- |
+| `--all` | Include offline agents | `false` |
 
 Example:
 
@@ -1316,12 +1315,12 @@ messages directed to this agent by name or role. There is no `--all` flag.
 thrum wait [flags]
 ```
 
-| Flag        | Description                                 | Default |
-| ----------- | ------------------------------------------- | ------- |
-| `--timeout` | Max wait time — requires Go duration units (e.g., `30s`, `5m`, `1h`); bare integers like `120` are not accepted | `30s`   |
+| Flag        | Description                                                                                                                                                                  | Default |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `--timeout` | Max wait time — requires Go duration units (e.g., `30s`, `5m`, `1h`); bare integers like `120` are not accepted                                                              | `30s`   |
 | `--after`   | Relative time offset: negative (e.g., `-30s`) = include messages sent up to N ago; positive (e.g., `+60s`) = only messages arriving at least N in the future; omit for "now" |         |
-| `--mention` | Wait for mentions of role (format: `@role`) |         |
-| `--json`    | Machine-readable output                     | `false` |
+| `--mention` | Wait for mentions of role (format: `@role`)                                                                                                                                  |         |
+| `--json`    | Machine-readable output                                                                                                                                                      | `false` |
 
 Exit codes: `0` = message received, `1` = timeout, `2` = error.
 
@@ -1421,17 +1420,17 @@ thrum sync force
 ### thrum backup
 
 Snapshot all thrum data (events, messages, config, and identity files) to a
-backup directory. By default, backups are written to `.thrum/backup/` inside
-the repo. The backup directory can be overridden via `--dir` or configured in
+backup directory. By default, backups are written to `.thrum/backup/` inside the
+repo. The backup directory can be overridden via `--dir` or configured in
 `.thrum/config.yaml`.
 
 ```text
 thrum backup [flags]
 ```
 
-| Flag    | Description                | Default              |
-| ------- | -------------------------- | -------------------- |
-| `--dir` | Override backup directory  | `.thrum/backup/`     |
+| Flag    | Description               | Default          |
+| ------- | ------------------------- | ---------------- |
+| `--dir` | Override backup directory | `.thrum/backup/` |
 
 The `--dir` flag is a persistent flag inherited by all `backup` subcommands.
 
@@ -1501,9 +1500,9 @@ during the restore to avoid file handle conflicts.
 thrum backup restore [archive.zip] [flags]
 ```
 
-| Flag    | Description               | Default |
-| ------- | ------------------------- | ------- |
-| `--yes` | Skip confirmation prompt  | `false` |
+| Flag    | Description              | Default |
+| ------- | ------------------------ | ------- |
+| `--yes` | Skip confirmation prompt | `false` |
 
 Example:
 
@@ -1539,12 +1538,12 @@ Add a backup plugin by name/command/include pattern, or use a built-in preset.
 thrum backup plugin add [flags]
 ```
 
-| Flag               | Description                                           |
-| ------------------ | ----------------------------------------------------- |
-| `--preset string`  | Use built-in preset: `beads`, `beads-rust`            |
-| `--name string`    | Plugin name                                           |
-| `--command string` | Command to run before collecting files                |
-| `--include strings`| File patterns to collect (glob, repeatable)           |
+| Flag                | Description                                 |
+| ------------------- | ------------------------------------------- |
+| `--preset string`   | Use built-in preset: `beads`, `beads-rust`  |
+| `--name string`     | Plugin name                                 |
+| `--command string`  | Command to run before collecting files      |
+| `--include strings` | File patterns to collect (glob, repeatable) |
 
 Example:
 
