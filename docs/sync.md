@@ -1,4 +1,3 @@
-
 ## Sync Protocol
 
 The sync protocol keeps message logs synchronized across repository clones using
@@ -593,4 +592,7 @@ thrum migrate
 - [Daemon Architecture](daemon.md)
 - [System Overview](overview.md)
 - [RPC API Reference](rpc-api.md)
+
+```
+
 ```

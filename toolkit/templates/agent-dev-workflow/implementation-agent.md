@@ -110,8 +110,8 @@ of `thrum quickstart`. If it fails, check that the daemon is running with
 
 **Finding agent names:** Run `thrum team` to see all active agents and their
 names. Always send to agent names (e.g., `--to @coord_main`), not role names
-(e.g., `--to @coordinator`). Sending to a role fans out to ALL agents with
-that role.
+(e.g., `--to @coordinator`). Sending to a role fans out to ALL agents with that
+role.
 
 **Use the message listener** — Spawn a background listener to get async
 notifications. Re-arm it every time it returns (both MESSAGES_RECEIVED and

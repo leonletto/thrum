@@ -2,7 +2,8 @@
 description: Combines identity, team, inbox, and sync status
 ---
 
-Show a combined view of agent identity, active team members, inbox messages, and sync status.
+Show a combined view of agent identity, active team members, inbox messages, and
+sync status.
 
 ```bash
 thrum overview               # Human-readable

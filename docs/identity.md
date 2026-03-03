@@ -1,4 +1,3 @@
-
 ## Agent Identity & Registration
 
 ## Overview
@@ -670,4 +669,7 @@ thrum agent whoami
 - Agent RPC: `internal/daemon/rpc/agent.go` - Registration, deletion, cleanup
   handlers
 - MCP Server: `internal/mcp/server.go` - MCP identity loading
+
+```
+
 ```

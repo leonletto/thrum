@@ -1,4 +1,3 @@
-
 ## Thrum Foundation Architecture
 
 This document describes the foundational packages that support the Thrum agent
@@ -309,8 +308,8 @@ Key migrations:
 - v9 -> v10: `file_changes` column added to `agent_work_contexts`
 - v10 -> v11: `hostname` column added to `agents` table
 - v11 -> v12: `threads` table dropped (threads are now implicit — every message
-  with a `thread_id` forms a thread automatically, removing the need for explicit
-  thread creation events)
+  with a `thread_id` forms a thread automatically, removing the need for
+  explicit thread creation events)
 - v12 -> v13: Backfill NULL `display`, `hostname`, and `last_seen_at` values in
   `agents` table to empty strings (ensures NOT NULL invariants on existing rows)
 
@@ -474,23 +473,34 @@ dispatch operations.
 
 ## Backup & Restore
 
-Thrum provides built-in backup and restore via `thrum backup` / `thrum backup restore`.
+Thrum provides built-in backup and restore via `thrum backup` /
+`thrum backup restore`.
 
 **What gets backed up:**
 
-- **JSONL event logs** — `events.jsonl` and `messages/*.jsonl` copied from the sync worktree (source of truth)
-- **Local-only SQLite tables** — `message_reads`, `subscriptions`, and `sync_checkpoints` exported as JSONL (these are not in the git-synced JSONL logs)
+- **JSONL event logs** — `events.jsonl` and `messages/*.jsonl` copied from the
+  sync worktree (source of truth)
+- **Local-only SQLite tables** — `message_reads`, `subscriptions`, and
+  `sync_checkpoints` exported as JSONL (these are not in the git-synced JSONL
+  logs)
 - **Config files** — `.thrum/config.json` and related runtime config
 
 **Backup layout** (`~/.thrum-backups/<repo>/`):
 
 - `current/` — most recent backup (JSONL + local tables + config)
 - `archives/` — compressed `.zip` snapshots of previous `current/` runs
-- GFS (Grandfather-Father-Son) rotation trims archives by daily/weekly/monthly retention windows
+- GFS (Grandfather-Father-Son) rotation trims archives by daily/weekly/monthly
+  retention windows
 
-**Plugin hooks** — third-party data (e.g., Beads task DB) can register a backup plugin via `thrum backup plugin add`. The plugin's command runs after the core backup and receives `THRUM_BACKUP_DIR`, `THRUM_BACKUP_REPO`, and `THRUM_BACKUP_CURRENT` env vars.
+**Plugin hooks** — third-party data (e.g., Beads task DB) can register a backup
+plugin via `thrum backup plugin add`. The plugin's command runs after the core
+backup and receives `THRUM_BACKUP_DIR`, `THRUM_BACKUP_REPO`, and
+`THRUM_BACKUP_CURRENT` env vars.
 
-**Restore** creates a safety backup of existing data first, then copies JSONL back to the sync worktree, imports local tables into SQLite, and removes `messages.db` so the projector rebuilds from JSONL on the next daemon start. Plugin restore commands run after the core restore.
+**Restore** creates a safety backup of existing data first, then copies JSONL
+back to the sync worktree, imports local tables into SQLite, and removes
+`messages.db` so the projector rebuilds from JSONL on the next daemon start.
+Plugin restore commands run after the core restore.
 
 ## References
 
@@ -498,4 +508,7 @@ Thrum provides built-in backup and restore via `thrum backup` / `thrum backup re
 - Sharding design: `dev-docs/2026-02-06-jsonl-sharding-and-agent-naming.md`
 - Daemon architecture: `docs/daemon.md`
 - Sync protocol: `docs/sync.md`
+
+```
+
 ```

@@ -1,4 +1,3 @@
-
 ## Codex Plugin
 
 > See also: [Quickstart Guide](quickstart.md) for base Thrum setup,
@@ -8,8 +7,8 @@
 
 ## Overview
 
-Codex does not currently use the Claude-style plugin marketplace model.
-Instead, Thrum integration is packaged as a **Codex skill bundle** in
+Codex does not currently use the Claude-style plugin marketplace model. Instead,
+Thrum integration is packaged as a **Codex skill bundle** in
 `codex-plugin/skills`.
 
 The bundle is split into focused skills:
@@ -40,8 +39,8 @@ From the Thrum repository root:
 ./codex-plugin/scripts/install-skills.sh
 ```
 
-This installs the bundled skills into `~/.codex/skills` (or
-`$CODEX_HOME/skills` if `CODEX_HOME` is set).
+This installs the bundled skills into `~/.codex/skills` (or `$CODEX_HOME/skills`
+if `CODEX_HOME` is set).
 
 ### Verify installed skills
 
@@ -116,11 +115,11 @@ cp -R codex-plugin/skills/project-setup "${CODEX_HOME:-$HOME/.codex}/skills/"
 
 ## Codex Bundle vs Claude Plugin
 
-| Capability           | Codex Skill Bundle (`codex-plugin/`) | Claude Code Plugin (`claude plugin`) |
-| -------------------- | ------------------------------------- | ------------------------------------ |
-| Packaging            | Local skill folders                   | Marketplace plugin                   |
-| Installation         | `install-skills.sh`                   | `claude plugin install thrum`        |
-| Updates              | `sync-skills.sh`                      | Reinstall/update plugin              |
-| Command UX           | Skill-guided CLI workflows            | Slash commands (`/thrum:*`)          |
-| Role customization   | `thrum-role-config` skill             | Configure-roles plugin skill         |
-| Project decomposition| `project-setup` skill                 | project-setup plugin skill           |
+| Capability            | Codex Skill Bundle (`codex-plugin/`) | Claude Code Plugin (`claude plugin`) |
+| --------------------- | ------------------------------------ | ------------------------------------ |
+| Packaging             | Local skill folders                  | Marketplace plugin                   |
+| Installation          | `install-skills.sh`                  | `claude plugin install thrum`        |
+| Updates               | `sync-skills.sh`                     | Reinstall/update plugin              |
+| Command UX            | Skill-guided CLI workflows           | Slash commands (`/thrum:*`)          |
+| Role customization    | `thrum-role-config` skill            | Configure-roles plugin skill         |
+| Project decomposition | `project-setup` skill                | project-setup plugin skill           |

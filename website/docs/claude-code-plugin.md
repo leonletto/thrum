@@ -236,7 +236,12 @@ Task(
 )
 ```
 
-`--after -1s` means include messages sent up to 1 second ago (negative = "N ago"; prevents stale replay on restart). The listener runs 6 cycles of 15 minutes each (~90 min coverage), blocks on `thrum wait` (no polling), returns when messages arrive, and costs ~$0.00003/cycle on Haiku. Re-arm after processing each batch. See the `LISTENER_PATTERN.md` resource for the full template.
+`--after -1s` means include messages sent up to 1 second ago (negative = "N
+ago"; prevents stale replay on restart). The listener runs 6 cycles of 15
+minutes each (~90 min coverage), blocks on `thrum wait` (no polling), returns
+when messages arrive, and costs ~$0.00003/cycle on Haiku. Re-arm after
+processing each batch. See the `LISTENER_PATTERN.md` resource for the full
+template.
 
 ## Plugin vs Manual Agent Definitions
 
@@ -273,4 +278,7 @@ messaging to work. Start it with `thrum daemon start`.
 
 Set `THRUM_NAME` environment variable to give each worktree a unique agent name.
 See [Identity System](identity.md) for details.
+
+```
+
 ```

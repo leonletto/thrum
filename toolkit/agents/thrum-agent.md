@@ -1,8 +1,8 @@
 ---
 name: thrum-agent
 description: >
-  Thrum agent coordination reference. Lean complement to the claude-plugin
-  skill files. Covers routing rules, key gotchas, and quick command reference.
+  Thrum agent coordination reference. Lean complement to the claude-plugin skill
+  files. Covers routing rules, key gotchas, and quick command reference.
 ---
 
 # Thrum - Agent Coordination Reference
@@ -32,12 +32,12 @@ thrum whoami                 # Show your identity
 
 ## Message Routing Rules
 
-| Address form       | Routing                                          | Use when                        |
-| ------------------ | ------------------------------------------------ | ------------------------------- |
-| `--to @lead_agent` | Direct to named agent                            | Default for all task messages   |
-| `--to @coordinator`| Role fanout — ALL agents with that role (warns)  | Only for intentional group send |
-| `--to @backend-team`| Group — all members                             | Team-wide announcements         |
-| `--to @everyone`   | Broadcast — all registered agents                | Critical alerts                 |
+| Address form         | Routing                                         | Use when                        |
+| -------------------- | ----------------------------------------------- | ------------------------------- |
+| `--to @lead_agent`   | Direct to named agent                           | Default for all task messages   |
+| `--to @coordinator`  | Role fanout — ALL agents with that role (warns) | Only for intentional group send |
+| `--to @backend-team` | Group — all members                             | Team-wide announcements         |
+| `--to @everyone`     | Broadcast — all registered agents               | Critical alerts                 |
 
 **Critical:** `@coordinator` is a role, not a name. Sending `--to @coordinator`
 fans out to every agent registered with that role and emits a warning. Use
@@ -99,18 +99,18 @@ thrum daemon status                      # Daemon health
 
 ## Key Gotchas
 
-| Gotcha | Correct usage |
-|--------|---------------|
-| `thrum sync` (bare) just prints help | Use `thrum sync force` or `thrum sync status` |
-| `--timeout` requires a duration unit | `--timeout 120s` not `--timeout 120` |
-| `thrum wait --all` does not exist | Use `thrum wait --timeout <duration>` |
-| `thrum daemon health` does not exist | Use `thrum daemon status` |
-| `thrum context update` does not exist | Use `/thrum:update-context` skill |
-| `--foreground` flag not on `daemon start` | Just use `thrum daemon start` |
-| `--group` nesting flag not on `group add` | Use `--group <name>` as member arg: `thrum group add leads --group backend-team` |
-| Name==role rejected at registration | `--name lead-agent --role coordinator`, not `--name coordinator --role coordinator` |
-| Threads are implicit — no explicit commands | Use `thrum reply <msg-id>` to continue a thread |
-| `broadcast_message` MCP tool filter fields are dead code | Use `send_message` with `to="@everyone"` |
+| Gotcha                                                   | Correct usage                                                                       |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `thrum sync` (bare) just prints help                     | Use `thrum sync force` or `thrum sync status`                                       |
+| `--timeout` requires a duration unit                     | `--timeout 120s` not `--timeout 120`                                                |
+| `thrum wait --all` does not exist                        | Use `thrum wait --timeout <duration>`                                               |
+| `thrum daemon health` does not exist                     | Use `thrum daemon status`                                                           |
+| `thrum context update` does not exist                    | Use `/thrum:update-context` skill                                                   |
+| `--foreground` flag not on `daemon start`                | Just use `thrum daemon start`                                                       |
+| `--group` nesting flag not on `group add`                | Use `--group <name>` as member arg: `thrum group add leads --group backend-team`    |
+| Name==role rejected at registration                      | `--name lead-agent --role coordinator`, not `--name coordinator --role coordinator` |
+| Threads are implicit — no explicit commands              | Use `thrum reply <msg-id>` to continue a thread                                     |
+| `broadcast_message` MCP tool filter fields are dead code | Use `send_message` with `to="@everyone"`                                            |
 
 ## Message Listener (CLI fallback)
 
@@ -128,12 +128,12 @@ for the full background listener template.
 
 ## Thrum + Beads: Division of Responsibility
 
-| Use Thrum for               | Use Beads for                |
-|-----------------------------|------------------------------|
-| Real-time coordination      | Task tracking and management |
-| Status updates between agents | Dependencies and blockers  |
-| Code review requests        | Work discovery and filing    |
-| Notifications and alerts    | Persistent task state        |
+| Use Thrum for                 | Use Beads for                |
+| ----------------------------- | ---------------------------- |
+| Real-time coordination        | Task tracking and management |
+| Status updates between agents | Dependencies and blockers    |
+| Code review requests          | Work discovery and filing    |
+| Notifications and alerts      | Persistent task state        |
 
 ## Plugin Resources
 
@@ -145,7 +145,8 @@ The claude-plugin covers these topics in detail — do not duplicate here:
 - Complete CLI syntax → `claude-plugin/skills/thrum/resources/CLI_REFERENCE.md`
 - Multi-worktree patterns → `claude-plugin/skills/thrum/resources/WORKTREES.md`
 - Group management → `claude-plugin/skills/thrum/resources/GROUPS.md`
-- Context compaction recovery → `claude-plugin/skills/thrum/resources/MESSAGING.md`
+- Context compaction recovery →
+  `claude-plugin/skills/thrum/resources/MESSAGING.md`
 
 ---
 

@@ -17,10 +17,10 @@ tracking, visual oversight, or browser automation.
 
 ### Task Tracking
 
-| Tool | What it does | Install |
-|------|-------------|---------|
-| [Beads](beads-setup.md) | Git-backed issue tracker with dependencies | `go install` / `brew` |
-| [Beads UI](beads-ui-setup.md) | Live web dashboard for Beads issues and boards | `npm i beads-ui -g` |
+| Tool                          | What it does                                   | Install               |
+| ----------------------------- | ---------------------------------------------- | --------------------- |
+| [Beads](beads-setup.md)       | Git-backed issue tracker with dependencies     | `go install` / `brew` |
+| [Beads UI](beads-ui-setup.md) | Live web dashboard for Beads issues and boards | `npm i beads-ui -g`   |
 
 **Beads** is the task-tracking counterpart to Thrum's messaging. Where Thrum
 answers "what did my teammates tell me?", Beads answers "what should I work on?"
@@ -33,8 +33,8 @@ claim and close tasks.
 
 ### Browser Automation
 
-| Tool | What it does | Install |
-|------|-------------|---------|
+| Tool                                      | What it does                              | Install           |
+| ----------------------------------------- | ----------------------------------------- | ----------------- |
 | [Playwright CLI](playwright-cli-setup.md) | Browser automation for Claude Code agents | Claude Code skill |
 
 **Playwright CLI** lets agents interact with web pages during their workflow —
@@ -49,7 +49,8 @@ A typical multi-agent workflow using all three:
 1. **Beads** tracks the work — epics, tasks, dependencies, and priorities
 2. **Thrum** coordinates the agents — messaging, presence, and session context
 3. **Beads UI** gives the developer a live dashboard of agent progress
-4. **Playwright CLI** lets agents capture browser context or verify web UI changes
+4. **Playwright CLI** lets agents capture browser context or verify web UI
+   changes
 
 ```
 Developer                 Agents                    Tools

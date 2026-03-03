@@ -47,8 +47,8 @@ digraph when_to_use {
 ## Inputs
 
 Primary input: **plan file path** (output of writing-plans, e.g.
-`dev-docs/plans/2026-02-21-feature-plan.md`). The plan references the design doc —
-both are read in Phase 1.
+`dev-docs/plans/2026-02-21-feature-plan.md`). The plan references the design doc
+— both are read in Phase 1.
 
 Also needed from CLAUDE.md or conversation context:
 
@@ -235,8 +235,8 @@ thrum team --json
 ```
 
 Parse the `thrum team --json` output to map worktree paths to active agent
-names. An agent is "active on a worktree" when its `worktree` field matches
-the worktree path.
+names. An agent is "active on a worktree" when its `worktree` field matches the
+worktree path.
 
 ### Step 2: Present Worktree Options
 
@@ -245,20 +245,23 @@ the options from the gathered state:
 
 **Option types to present:**
 
-| Scenario                                           | Option label                          |
-| -------------------------------------------------- | ------------------------------------- |
-| Existing idle worktree with related branch         | "Reuse `<path>` (`<branch>`)"        |
-| Existing idle worktree, unrelated branch           | "Reuse `<path>`, create new branch"  |
-| No suitable worktree exists                        | "Create new worktree"                |
-| Work is small enough for the current branch        | "Use current worktree (`<branch>`)"  |
+| Scenario                                    | Option label                        |
+| ------------------------------------------- | ----------------------------------- |
+| Existing idle worktree with related branch  | "Reuse `<path>` (`<branch>`)"       |
+| Existing idle worktree, unrelated branch    | "Reuse `<path>`, create new branch" |
+| No suitable worktree exists                 | "Create new worktree"               |
+| Work is small enough for the current branch | "Use current worktree (`<branch>`)" |
 
 Include in each option's description:
+
 - The worktree path and current branch
 - Whether it's clean or has uncommitted changes
-- Whether it has an existing active agent (name it: e.g. "agent: impl_foo already registered")
+- Whether it has an existing active agent (name it: e.g. "agent: impl_foo
+  already registered")
 - Its status from CLAUDE.md (active/idle/merged)
 
 **For "Create new worktree"**, suggest:
+
 - Path: `~/.workspaces/{repo}/{feature}` (from CLAUDE.md convention)
 - Branch: `feature/{feature-name}` (from `thrum-dev`)
 
@@ -335,8 +338,9 @@ bd where
 bd ready
 ```
 
-If an active agent already exists on the current worktree (from `thrum team
---json`), send the assignment to them. Otherwise register a new agent:
+If an active agent already exists on the current worktree (from
+`thrum team --json`), send the assignment to them. Otherwise register a new
+agent:
 
 ```bash
 # If existing agent on this worktree:
@@ -408,9 +412,9 @@ success, it's fine.
 
 At the end of this phase, you should have a confirmed assignment for each epic:
 
-| Epic | Worktree Path | Branch | Agent Name |
-|------|---------------|--------|------------|
-| `<epic-id>` | `<path>` | `<branch>` | `<agent-name>` |
+| Epic        | Worktree Path | Branch     | Agent Name     |
+| ----------- | ------------- | ---------- | -------------- |
+| `<epic-id>` | `<path>`      | `<branch>` | `<agent-name>` |
 
 These values feed directly into the `{{PLACEHOLDER}}` resolution in Phase 4.
 
@@ -429,22 +433,22 @@ every time.
 
 ### Step 2: Resolve all placeholders
 
-Perform literal find-and-replace on every `{{PLACEHOLDER}}` in the template.
-All worktree-related values come from the Phase 3 assignments:
+Perform literal find-and-replace on every `{{PLACEHOLDER}}` in the template. All
+worktree-related values come from the Phase 3 assignments:
 
-| Placeholder            | Source                                              |
-| ---------------------- | --------------------------------------------------- |
-| `{{EPIC_ID}}`          | Beads epic ID from Phase 2                          |
-| `{{EPIC_TITLE}}`       | Epic title (used in commit messages)                |
-| `{{WORKTREE_PATH}}`    | **From Phase 3 worktree assignment**                |
-| `{{BRANCH_NAME}}`      | **From Phase 3 worktree assignment**                |
-| `{{PROJECT_ROOT}}`     | Absolute path to the project root                   |
-| `{{DESIGN_DOC}}`       | **Absolute path** to the design spec                |
+| Placeholder            | Source                                                   |
+| ---------------------- | -------------------------------------------------------- |
+| `{{EPIC_ID}}`          | Beads epic ID from Phase 2                               |
+| `{{EPIC_TITLE}}`       | Epic title (used in commit messages)                     |
+| `{{WORKTREE_PATH}}`    | **From Phase 3 worktree assignment**                     |
+| `{{BRANCH_NAME}}`      | **From Phase 3 worktree assignment**                     |
+| `{{PROJECT_ROOT}}`     | Absolute path to the project root                        |
+| `{{DESIGN_DOC}}`       | **Absolute path** to the design spec                     |
 | `{{REFERENCE_CODE}}`   | Relevant reference code paths (relative OK if committed) |
-| `{{QUALITY_COMMANDS}}` | Test/lint commands                                  |
-| `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                   |
-| `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                 |
-| `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)  |
+| `{{QUALITY_COMMANDS}}` | Test/lint commands                                       |
+| `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                        |
+| `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                      |
+| `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)       |
 
 **IMPORTANT — Absolute paths for gitignored files:** `{{DESIGN_DOC}}`,
 `{{PLAN_FILE}}`, and the saved prompt path (`dev-docs/prompts/`) are typically
@@ -452,7 +456,8 @@ gitignored. Agents in worktrees cannot resolve relative paths to these files
 because worktrees only share committed content. Always resolve these to absolute
 paths (e.g., `/Users/you/project/dev-docs/plans/file.md`, not
 `dev-docs/plans/file.md`). This also applies to beads task descriptions — any
-reference to a plan or design doc in a task description must be an absolute path.
+reference to a plan or design doc in a task description must be an absolute
+path.
 
 **Do not omit, reorganize, or summarize any section of the template.** The
 output must contain every section from the original — Sub-Agent Strategy, all 4
@@ -479,14 +484,17 @@ architecture notes specific to this feature:
 ## Worktree Setup
 
 <!-- If worktree was already created in Phase 3 and an existing agent was found: -->
-Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`.
-Assignment sent to existing agent `{{AGENT_NAME}}` via `thrum send`.
+
+Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`. Assignment
+sent to existing agent `{{AGENT_NAME}}` via `thrum send`.
 
 <!-- If worktree was already created in Phase 3 and a new agent was registered: -->
-Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`.
-Agent `{{AGENT_NAME}}` registered via `thrum quickstart`.
+
+Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`. Agent
+`{{AGENT_NAME}}` registered via `thrum quickstart`.
 
 <!-- If worktree needs to be created by the implementation agent: -->
+
 ./scripts/setup-worktree-thrum.sh {{WORKTREE_PATH}} {{BRANCH_NAME}} \
  --identity {{AGENT_NAME}} --role implementer --base thrum-dev
 
@@ -528,8 +536,8 @@ send them the assignment via `thrum send --to @<agent-name>` instead of running
 `thrum quickstart`. Registering twice creates a ghost identity that never
 receives messages.
 
-**Wrong base branch:** The setup script defaults `--base` to `main`. Always
-pass `--base thrum-dev` explicitly since features branch from `thrum-dev`.
+**Wrong base branch:** The setup script defaults `--base` to `main`. Always pass
+`--base thrum-dev` explicitly since features branch from `thrum-dev`.
 
 **Generating prompts before worktree setup:** Prompts embed the worktree path,
 branch, and agent name. These must be confirmed in Phase 3 before generating

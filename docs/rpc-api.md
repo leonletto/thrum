@@ -1,4 +1,3 @@
-
 ## Thrum Daemon RPC API
 
 ## Overview
@@ -348,13 +347,13 @@ Extracts git work context if a `worktree` ref is set.
 
 **Response:**
 
-| Field               | Type    | Description                                                                                                              |
-| ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `session_id`        | string  | Session ID                                                                                                               |
-| `last_seen_at`      | string  | ISO 8601 updated last-seen timestamp                                                                                     |
-| `branch`            | string  | Current git branch name; omitted if no `worktree` ref is set or git extraction fails                                     |
-| `unmerged_commits`  | integer | Count of commits on the current branch not yet merged to the default branch; omitted if no git context                   |
-| `file_changes`      | array   | List of changed files: `[{"path": "...", "last_modified": "...", "additions": N, "deletions": N, "status": "..."}]`; omitted if no git context |
+| Field              | Type    | Description                                                                                                                                    |
+| ------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session_id`       | string  | Session ID                                                                                                                                     |
+| `last_seen_at`     | string  | ISO 8601 updated last-seen timestamp                                                                                                           |
+| `branch`           | string  | Current git branch name; omitted if no `worktree` ref is set or git extraction fails                                                           |
+| `unmerged_commits` | integer | Count of commits on the current branch not yet merged to the default branch; omitted if no git context                                         |
+| `file_changes`     | array   | List of changed files: `[{"path": "...", "last_modified": "...", "additions": N, "deletions": N, "status": "..."}]`; omitted if no git context |
 
 **Errors:**
 
@@ -447,29 +446,29 @@ Send a message to the messaging system. Triggers subscription notifications.
 
 **Request:**
 
-| Parameter    | Type    | Required | Description                                                      |
-| ------------ | ------- | -------- | ---------------------------------------------------------------- |
-| `content`    | string  | yes      | Message body text                                                |
-| `format`     | string  | no       | `"markdown"` (default), `"plain"`, or `"json"`                   |
-| `structured` | object  | no       | Typed JSON payload                                               |
+| Parameter    | Type    | Required | Description                                                                                                                                                                                  |
+| ------------ | ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `content`    | string  | yes      | Message body text                                                                                                                                                                            |
+| `format`     | string  | no       | `"markdown"` (default), `"plain"`, or `"json"`                                                                                                                                               |
+| `structured` | object  | no       | Typed JSON payload                                                                                                                                                                           |
 | `thread_id`  | string  | no       | Thread identifier (deprecated in v0.4.0). Use `reply_to` instead — replying to a message automatically creates or joins a thread, and the resulting `thread_id` is returned in the response. |
-| `reply_to`   | string  | no       | Message ID to reply to. Triggers implicit auto-threading: a `thread_id` is automatically created (for the first reply) or joined (for subsequent replies), and returned in the response.      |
-| `scopes`     | array   | no       | Message scopes (`[{"type": "...", "value": "..."}]`)             |
-| `refs`       | array   | no       | Message references (`[{"type": "...", "value": "..."}]`)         |
-| `mentions`   | array   | no       | Mention roles (e.g., `["@reviewer"]`)                            |
-| `tags`       | array   | no       | Message tags                                                     |
-| `acting_as`  | string  | no       | Impersonate this agent ID (users only)                           |
-| `disclose`   | boolean | no       | Show `[via user:X]` tag when impersonating                       |
+| `reply_to`   | string  | no       | Message ID to reply to. Triggers implicit auto-threading: a `thread_id` is automatically created (for the first reply) or joined (for subsequent replies), and returned in the response.     |
+| `scopes`     | array   | no       | Message scopes (`[{"type": "...", "value": "..."}]`)                                                                                                                                         |
+| `refs`       | array   | no       | Message references (`[{"type": "...", "value": "..."}]`)                                                                                                                                     |
+| `mentions`   | array   | no       | Mention roles (e.g., `["@reviewer"]`)                                                                                                                                                        |
+| `tags`       | array   | no       | Message tags                                                                                                                                                                                 |
+| `acting_as`  | string  | no       | Impersonate this agent ID (users only)                                                                                                                                                       |
+| `disclose`   | boolean | no       | Show `[via user:X]` tag when impersonating                                                                                                                                                   |
 
 **Response:**
 
-| Field         | Type    | Description                                                                                          |
-| ------------- | ------- | ---------------------------------------------------------------------------------------------------- |
-| `message_id`  | string  | Generated message ID (e.g., `"msg_01HXE..."`)                                                        |
-| `thread_id`   | string  | Thread ID if the message was sent with `reply_to` (auto-created or joined); omitted otherwise        |
-| `created_at`  | string  | ISO 8601 creation timestamp                                                                          |
-| `resolved_to` | integer | Number of `mentions` that were resolved to known agents                                              |
-| `warnings`    | array   | Informational warning strings (e.g., unresolvable mentions); omitted when empty                      |
+| Field         | Type    | Description                                                                                   |
+| ------------- | ------- | --------------------------------------------------------------------------------------------- |
+| `message_id`  | string  | Generated message ID (e.g., `"msg_01HXE..."`)                                                 |
+| `thread_id`   | string  | Thread ID if the message was sent with `reply_to` (auto-created or joined); omitted otherwise |
+| `created_at`  | string  | ISO 8601 creation timestamp                                                                   |
+| `resolved_to` | integer | Number of `mentions` that were resolved to known agents                                       |
+| `warnings`    | array   | Informational warning strings (e.g., unresolvable mentions); omitted when empty               |
 
 **Errors:**
 

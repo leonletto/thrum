@@ -1,6 +1,9 @@
 ---
 name: thrum-role-config
-description: Use when the user wants to create, audit, or update .thrum/role_templates by detecting repo/team context and generating role preambles with explicit autonomy and scope boundaries.
+description:
+  Use when the user wants to create, audit, or update .thrum/role_templates by
+  detecting repo/team context and generating role preambles with explicit
+  autonomy and scope boundaries.
 # source: claude-plugin/skills/configure-roles/SKILL.md (condensed for codex)
 # last-synced: 2026-03-01
 ---
@@ -14,9 +17,11 @@ Templates auto-apply when agents register via `thrum quickstart`.
 team."
 
 ## Use this when
+
 - Team roles need to be initialized for Thrum agents.
 - Role templates exist but must be adjusted.
-- Environment changes (worktrees, runtimes, skills, tooling) require template updates.
+- Environment changes (worktrees, runtimes, skills, tooling) require template
+  updates.
 
 ## Phase 1: Detect Environment
 
@@ -115,16 +120,16 @@ When `.thrum/role_templates/` already has files:
 
 ## Environment-Specific Customizations
 
-| Detected             | Template Customization                                   |
-| -------------------- | -------------------------------------------------------- |
-| Codex runtime        | Add sub-agent guidance to Efficiency section             |
-| Augment runtime      | Add codebase-retrieval to Efficiency section             |
-| Beads installed      | Add `bd` commands to Task Tracking, disable TodoWrite    |
-| Thrum MCP server     | Add MCP tool references, CLI fallback for sub-agents     |
-| Multiple worktrees   | Add worktree scope rules to Scope Boundaries             |
+| Detected           | Template Customization                                |
+| ------------------ | ----------------------------------------------------- |
+| Codex runtime      | Add sub-agent guidance to Efficiency section          |
+| Augment runtime    | Add codebase-retrieval to Efficiency section          |
+| Beads installed    | Add `bd` commands to Task Tracking, disable TodoWrite |
+| Thrum MCP server   | Add MCP tool references, CLI fallback for sub-agents  |
+| Multiple worktrees | Add worktree scope rules to Scope Boundaries          |
 
 ## Output contract
+
 - Template files in `.thrum/role_templates/<role>.md`
 - Short summary of generated/updated roles and autonomy mode
 - Deploy recommendation and command results when deploy is requested
-

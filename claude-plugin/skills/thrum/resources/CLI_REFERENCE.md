@@ -35,6 +35,7 @@ thrum send <message> --to @name --structured '{"key":"value"}'
 ```
 
 Flags:
+
 ```
 --to string           Direct recipient (format: @role or @name)
 --everyone            Send to all agents (alias for --to @everyone)
@@ -54,6 +55,7 @@ thrum reply <msg-id> <response> --format plain
 ```
 
 Flags:
+
 ```
 --format string   Message format: markdown, plain, json (default "markdown")
 ```
@@ -71,6 +73,7 @@ thrum inbox --limit N                          # Alias for --page-size
 ```
 
 Flags:
+
 ```
 -a, --all           Show all messages (disable auto-filtering)
 --unread            Only unread messages
@@ -83,7 +86,8 @@ Flags:
 
 ### wait
 
-Blocks until a matching message arrives or timeout. Exit codes: 0=message, 1=timeout, 2=error.
+Blocks until a matching message arrives or timeout. Exit codes: 0=message,
+1=timeout, 2=error.
 
 ```bash
 thrum wait                                     # Wait for any message (30s default)
@@ -96,6 +100,7 @@ thrum wait --after -5m --json                  # Include messages sent up to 5m 
 ```
 
 Flags:
+
 ```
 --timeout string   Max wait time with unit (e.g., 30s, 5m) (default "30s")
 --after string     Relative time offset for filtering messages:
@@ -106,8 +111,9 @@ Flags:
 --scope string     Filter by scope (format: type:value)
 ```
 
-Note: `--after` sign convention: negative = "N ago" (look back), positive = "N from now" (skip ahead).
-Note: `--timeout` requires a Go duration unit — use `120s` not `120`.
+Note: `--after` sign convention: negative = "N ago" (look back), positive = "N
+from now" (skip ahead). Note: `--timeout` requires a Go duration unit — use
+`120s` not `120`.
 
 ### message
 
@@ -120,6 +126,7 @@ thrum message read --all                       # Mark all as read
 ```
 
 Subcommand flags:
+
 ```
 # message delete
 --force   Confirm deletion (required)
@@ -134,7 +141,8 @@ Subcommand flags:
 
 ### quickstart
 
-Bootstrap a full session in one command: detect runtime, generate config, register, start, set intent.
+Bootstrap a full session in one command: detect runtime, generate config,
+register, start, set intent.
 
 ```bash
 thrum quickstart --role implementer --module auth
@@ -145,6 +153,7 @@ thrum quickstart --role tester --module api --dry-run
 ```
 
 Flags:
+
 ```
 --role string            Agent role (or THRUM_ROLE env var)
 --module string          Agent module (or THRUM_MODULE env var)
@@ -168,6 +177,7 @@ thrum agent register --re-register             # Re-register same agent
 ```
 
 Flags:
+
 ```
 --role string      Agent role (or THRUM_ROLE env var)
 --module string    Agent module (or THRUM_MODULE env var)
@@ -188,6 +198,7 @@ thrum agent list --json
 ```
 
 Flags:
+
 ```
 --context         Show work context (branch, commits, intent)
 --role string     Filter by role
@@ -204,6 +215,7 @@ thrum agent context --file auth.go             # Filter by changed file
 ```
 
 Flags:
+
 ```
 --agent string    Filter by agent role
 --branch string   Filter by branch
@@ -237,6 +249,7 @@ thrum session heartbeat --add-ref pr:123 --remove-scope module:old
 ```
 
 Flags:
+
 ```
 --add-scope strings      Add scope (repeatable, format: type:value)
 --remove-scope strings   Remove scope (repeatable, format: type:value)
@@ -261,6 +274,7 @@ thrum session end --session-id <id>
 ```
 
 Flags:
+
 ```
 --reason string       End reason: normal|crash (default "normal")
 --session-id string   Session ID to end (defaults to current session)
@@ -276,6 +290,7 @@ thrum agent cleanup --threshold 60             # Custom staleness threshold (day
 ```
 
 Flags:
+
 ```
 --dry-run         List orphans without deleting
 --force           Delete all orphans without prompting
@@ -290,6 +305,7 @@ thrum agent delete coordinator_1B9K --force
 ```
 
 Flags:
+
 ```
 --force   Skip confirmation prompt
 ```
@@ -312,6 +328,7 @@ thrum session list --json
 ```
 
 Flags:
+
 ```
 --active         Show only active sessions
 --agent string   Filter by agent ID
@@ -333,6 +350,7 @@ thrum team --json
 ```
 
 Flags:
+
 ```
 --all   Include offline agents
 ```
@@ -371,6 +389,7 @@ thrum group remove <group> --role reviewer     # Remove role-based member
 ```
 
 Subcommand flags:
+
 ```
 # group create
 --description string   Group description
@@ -410,6 +429,7 @@ thrum context update                           # Delegates to /update-context sk
 ```
 
 `context show` flags:
+
 ```
 --agent string    Override agent name
 --raw             Raw output with file boundary markers, no header
@@ -417,12 +437,14 @@ thrum context update                           # Delegates to /update-context sk
 ```
 
 `context save` flags:
+
 ```
 --agent string   Override agent name
 --file string    Read context from file (default: stdin)
 ```
 
 `context preamble` flags:
+
 ```
 --agent string   Override agent name
 --file string    Set preamble from file
@@ -430,6 +452,7 @@ thrum context update                           # Delegates to /update-context sk
 ```
 
 `context clear` / `context sync` flags:
+
 ```
 --agent string   Override agent name
 ```
@@ -448,6 +471,7 @@ thrum daemon start --local                     # Local-only mode (no git push/fe
 ```
 
 The `--local` flag is available on all daemon subcommands:
+
 ```
 --local   Local-only mode: skip git push/fetch in sync loop
 ```
@@ -470,6 +494,7 @@ thrum init --agent-role implementer --agent-module auth --agent-name alice
 ```
 
 Flags:
+
 ```
 --runtime string        Generate runtime-specific configs: claude|codex|cursor|gemini|cli-only|all
 --stealth               Use .git/info/exclude instead of .gitignore (zero footprint)
@@ -493,11 +518,13 @@ thrum setup claude-md --apply --force          # Overwrite existing Thrum sectio
 ```
 
 `setup worktree` flags:
+
 ```
 --main-repo string   Path to the main repository (where daemon runs) (default ".")
 ```
 
 `setup claude-md` flags:
+
 ```
 --apply   Append to CLAUDE.md (create if missing)
 --force   Overwrite existing Thrum section
@@ -513,7 +540,8 @@ thrum sync status                              # Show sync status, last sync tim
 thrum sync status --json
 ```
 
-Note: `thrum sync` alone prints help — use `thrum sync force` or `thrum sync status`.
+Note: `thrum sync` alone prints help — use `thrum sync force` or
+`thrum sync status`.
 
 ---
 
@@ -534,11 +562,13 @@ thrum backup plugin remove --name myplugin
 ```
 
 `backup` flags (inherited by all subcommands):
+
 ```
 --dir string   Override backup directory
 ```
 
 `backup plugin add` flags:
+
 ```
 --preset string     Use built-in preset: beads, beads-rust
 --name string       Plugin name
@@ -547,6 +577,7 @@ thrum backup plugin remove --name myplugin
 ```
 
 `backup restore` flags:
+
 ```
 --yes   Skip confirmation prompt
 ```
@@ -576,6 +607,7 @@ thrum unsubscribe <subscription-id>            # Remove a subscription
 ```
 
 `subscribe` flags:
+
 ```
 --scope string     Subscribe to scope (format: type:value)
 --mention string   Subscribe to mentions of role
@@ -608,6 +640,7 @@ thrum roles deploy --dry-run                   # Preview changes without writing
 ```
 
 `roles deploy` flags:
+
 ```
 --agent string   Deploy for a specific agent only
 --dry-run        Preview changes without writing files
@@ -623,11 +656,13 @@ thrum mcp serve --agent-id alice               # Override agent identity
 ```
 
 `mcp serve` flags:
+
 ```
 --agent-id string   Override agent identity (selects .thrum/identities/{name}.json)
 ```
 
 Configure in `.claude/settings.json`:
+
 ```json
 {
   "mcpServers": {
@@ -657,7 +692,8 @@ thrum config show --json
 thrum migrate                                  # Migrate from old layout to worktree architecture
 ```
 
-Safe to run multiple times — detects what needs migration and skips completed steps.
+Safe to run multiple times — detects what needs migration and skips completed
+steps.
 
 ---
 

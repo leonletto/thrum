@@ -1,4 +1,3 @@
-
 ## Event Reference
 
 This document provides detailed documentation for all events emitted by the
@@ -865,4 +864,7 @@ func handleMessage(data []byte) error {
 
 - [WebSocket API](./websocket.md) - Main API documentation
 - [Authentication Guide](./authentication.md) - User and agent authentication
+
+```
+
 ```

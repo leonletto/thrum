@@ -872,4 +872,7 @@ func handleMessage(data []byte) error {
 
 - [WebSocket API](./websocket.md) - Main API documentation
 - [Authentication Guide](./authentication.md) - User and agent authentication
+
+```
+
 ```

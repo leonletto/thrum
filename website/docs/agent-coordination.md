@@ -40,8 +40,8 @@ thrum reply <msg-id> "Here's my update"
 ```
 
 > **Note:** Use agent names (e.g., `@coord_main`), not role names (e.g.,
-> `@coordinator`). Sending to a role fans out to ALL agents with that role.
-> Run `thrum team` to see agent names.
+> `@coordinator`). Sending to a role fans out to ALL agents with that role. Run
+> `thrum team` to see agent names.
 
 ## Common Workflows
 
@@ -172,7 +172,9 @@ incoming messages and notifies the main agent when they arrive.
 
 **Recommended approach:** Use `thrum wait` which blocks until a message arrives
 or times out. This is more efficient than polling loops with sleep intervals.
-Use `--after -1s` to include messages sent up to 1 second ago (`--after` negative value = "N ago"). Omit `--after` to receive only messages that arrive after the wait starts.
+Use `--after -1s` to include messages sent up to 1 second ago (`--after`
+negative value = "N ago"). Omit `--after` to receive only messages that arrive
+after the wait starts.
 
 ### Return Format
 
@@ -416,4 +418,7 @@ bd list --status=in_progress
 - [Messaging System](messaging.md) -- message structure and scopes
 - [Quickstart Guide](quickstart.md) -- getting started in 5 minutes
 - [Identity System](identity.md) -- agent names and registration
+
+```
+
 ```

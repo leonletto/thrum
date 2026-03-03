@@ -1,4 +1,3 @@
-
 ## Beads Setup Guide
 
 [Beads](https://github.com/leonletto/beads) is a git-backed, dependency-aware
@@ -42,13 +41,13 @@ bd init
 
 This creates a `.beads/` directory with:
 
-| File | Purpose |
-|------|---------|
-| `config.yaml` | Configuration (defaults work out of the box) |
-| `issues.jsonl` | Append-only event log — the git-tracked source of truth |
-| `beads.db` | SQLite projection for fast queries (gitignored) |
-| `metadata.json` | Database metadata |
-| `README.md` | Quick reference |
+| File            | Purpose                                                 |
+| --------------- | ------------------------------------------------------- |
+| `config.yaml`   | Configuration (defaults work out of the box)            |
+| `issues.jsonl`  | Append-only event log — the git-tracked source of truth |
+| `beads.db`      | SQLite projection for fast queries (gitignored)         |
+| `metadata.json` | Database metadata                                       |
+| `README.md`     | Quick reference                                         |
 
 The key design: `issues.jsonl` is tracked in Git, while `beads.db` is
 gitignored. On any fresh clone, Beads rebuilds the SQLite database from the
@@ -167,23 +166,24 @@ bd hooks install
 ```
 
 This adds:
-- **pre-commit**: Exports the SQLite state to `issues.jsonl` so it stays
-  in sync with Git
+
+- **pre-commit**: Exports the SQLite state to `issues.jsonl` so it stays in sync
+  with Git
 - **pre-push**: Checks for stale data before pushing
 
 ### Useful Commands Reference
 
-| Command | Purpose |
-|---------|---------|
-| `bd ready` | Tasks with no blockers |
-| `bd list` | All open issues |
-| `bd list -s in_progress` | Active work |
-| `bd blocked` | Blocked issues with reasons |
-| `bd show <id>` | Full issue detail |
-| `bd stats` | Project health overview |
+| Command                               | Purpose                                    |
+| ------------------------------------- | ------------------------------------------ |
+| `bd ready`                            | Tasks with no blockers                     |
+| `bd list`                             | All open issues                            |
+| `bd list -s in_progress`              | Active work                                |
+| `bd blocked`                          | Blocked issues with reasons                |
+| `bd show <id>`                        | Full issue detail                          |
+| `bd stats`                            | Project health overview                    |
 | `bd dep <blocker> --blocks <blocked>` | Blocker must close before blocked is ready |
-| `bd create "Title" -t epic -p 1` | Create an epic |
-| `bd close <id>` | Mark complete |
+| `bd create "Title" -t epic -p 1`      | Create an epic                             |
+| `bd close <id>`                       | Mark complete                              |
 
 ### Further Reading
 

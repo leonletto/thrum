@@ -82,7 +82,8 @@ reply <msg-id> "response" # Reply (creates a reply-to reference)
 - check_messages — Poll inbox, auto-mark read
 - wait_for_message — Block until message arrives
 - list_agents — Show registered agents
-- broadcast_message — (Deprecated — use `send_message` with `to="@everyone"` instead)
+- broadcast_message — (Deprecated — use `send_message` with `to="@everyone"`
+  instead)
 
 **Group management (6):**
 

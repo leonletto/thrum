@@ -53,14 +53,14 @@ SQLite.
 
 ### Flags
 
-| Flag           | Format                  | Description                             |
-| -------------- | ----------------------- | --------------------------------------- |
+| Flag           | Format                  | Description                                                 |
+| -------------- | ----------------------- | ----------------------------------------------------------- |
 | `--to`         | `@name` or `@group`     | Recipient — agent name, group, or role (adds a mention ref) |
-| `--scope`      | `type:value`            | Attach scope context (repeatable)       |
-| `--ref`        | `type:value`            | Attach reference (repeatable)           |
-| `--mention`    | `@role`                 | Mention an agent role (repeatable)      |
-| `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)    |
-| `--structured` | JSON string             | Typed payload for machine-readable data |
+| `--scope`      | `type:value`            | Attach scope context (repeatable)                           |
+| `--ref`        | `type:value`            | Attach reference (repeatable)                               |
+| `--mention`    | `@role`                 | Mention an agent role (repeatable)                          |
+| `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)                        |
+| `--structured` | JSON string             | Typed payload for machine-readable data                     |
 
 ### Direct Messaging with --to
 
@@ -185,8 +185,8 @@ threads without any explicit thread creation.
 
 1. If the parent message already has a `thread_id`, the reply inherits it
    (joining the existing thread).
-2. If the parent has no `thread_id`, a new one is generated (`thr_...`) and
-   set on both the parent and the reply.
+2. If the parent has no `thread_id`, a new one is generated (`thr_...`) and set
+   on both the parent and the reply.
 3. All subsequent replies in the chain share the same `thread_id`.
 
 **Example:**
@@ -700,9 +700,9 @@ Optimized for common query patterns:
 The MCP server (`thrum mcp serve`) provides native messaging tools for AI agents
 running in Claude Code or similar environments. It exposes 10 MCP tools: 4 core
 messaging tools (`send_message`, `check_messages`, `wait_for_message`,
-`list_agents`) and 6 group management tools. MCP tools use
-the same underlying RPC methods but add `@role` addressing and real-time
-WebSocket push notifications.
+`list_agents`) and 6 group management tools. MCP tools use the same underlying
+RPC methods but add `@role` addressing and real-time WebSocket push
+notifications.
 
 See [MCP Server](/docs/mcp-server.html) for the complete tools reference and
 configuration.
@@ -728,4 +728,7 @@ shard.
 - RPC API Reference: `docs/rpc-api.md`
 - Daemon Architecture: `docs/daemon.md`
 - Development Guide: `docs/development.md`
+
+```
+
 ```

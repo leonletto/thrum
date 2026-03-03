@@ -47,12 +47,12 @@ else:
 
 ## Wait Command Flags
 
-| Flag             | Purpose                                              |
-| ---------------- | ---------------------------------------------------- |
-| `--timeout 15m`  | Block up to 15 minutes per cycle                     |
-| `--after -1s`    | Include messages sent up to 1s ago (prevents stale replay; negative = "N ago") |
-| `--json`         | Machine-readable output                              |
-| `--mention @<role>` | Only messages that mention the specified role      |
+| Flag                | Purpose                                                                        |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `--timeout 15m`     | Block up to 15 minutes per cycle                                               |
+| `--after -1s`       | Include messages sent up to 1s ago (prevents stale replay; negative = "N ago") |
+| `--json`            | Machine-readable output                                                        |
+| `--mention @<role>` | Only messages that mention the specified role                                  |
 
 ## Return Format
 
