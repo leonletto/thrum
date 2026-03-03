@@ -254,8 +254,8 @@ threads without any explicit thread creation.</p>
 <ol>
 <li>If the parent message already has a <code>thread_id</code>, the reply inherits it
 (joining the existing thread).</li>
-<li>If the parent has no <code>thread_id</code>, a new one is generated (<code>thr_...</code>) and
-set on both the parent and the reply.</li>
+<li>If the parent has no <code>thread_id</code>, a new one is generated (<code>thr_...</code>) and set
+on both the parent and the reply.</li>
 <li>All subsequent replies in the chain share the same <code>thread_id</code>.</li>
 </ol>
 <p><strong>Example:</strong></p>
@@ -751,9 +751,9 @@ read state persists across session restarts for the same agent.</p>
 <p>The MCP server (<code>thrum mcp serve</code>) provides native messaging tools for AI agents
 running in Claude Code or similar environments. It exposes 10 MCP tools: 4 core
 messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
-<code>list_agents</code>) and 6 group management tools. MCP tools use
-the same underlying RPC methods but add <code>@role</code> addressing and real-time
-WebSocket push notifications.</p>
+<code>list_agents</code>) and 6 group management tools. MCP tools use the same underlying
+RPC methods but add <code>@role</code> addressing and real-time WebSocket push
+notifications.</p>
 <p>See <a href="/docs/mcp-server.html">MCP Server</a> for the complete tools reference and
 configuration.</p>
 <h2>Agent Identity</h2>

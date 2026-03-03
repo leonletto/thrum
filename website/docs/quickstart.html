@@ -177,8 +177,8 @@ thrum agent cleanup --force</code></pre>
 <p>Start an MCP server for native tool-based messaging (e.g., from Claude Code):</p>
 <pre><code>thrum mcp serve
 thrum mcp serve --agent-id myagent  # Override agent identity</code></pre>
-<p>See <a href="/docs/mcp-server.html">MCP Server</a> for configuration and the complete
-tools reference (11 tools: 5 core messaging + 6 group management).</p>
+<p>See <a href="/docs/mcp-server.html">MCP Server</a> for configuration and the complete tools
+reference (11 tools: 5 core messaging + 6 group management).</p>
 <h2>Typical Workflow</h2>
 <h3>Morning: Start Work</h3>
 <pre><code># 1. Register and start session (or just start session if already registered)
@@ -244,9 +244,9 @@ thrum setup --main-repo ~/project
 thrum session start
 thrum send &quot;Experimenting with auth approaches&quot;</code></pre>
 <p>The <code>thrum setup --main-repo &lt;path&gt;</code> command creates a <code>.thrum/redirect</code> file
-pointing to the main worktree&#39;s <code>.thrum/</code> directory. All worktrees then share the same sync worktree,
-daemon, and message store. Messages sync across all worktrees and machines
-through Git.</p>
+pointing to the main worktree&#39;s <code>.thrum/</code> directory. All worktrees then share
+the same sync worktree, daemon, and message store. Messages sync across all
+worktrees and machines through Git.</p>
 <h3>Use the setup scripts for batch configuration</h3>
 <p>Two shell scripts automate redirect file creation for all your worktrees at
 once:</p>

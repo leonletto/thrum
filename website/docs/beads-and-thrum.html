@@ -199,9 +199,11 @@ bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;  # Add dependency
 ```
 
 **Common mistakes:**
+
 - `bd start` does not exist — use `bd update &lt;id&gt; -s in_progress`
 - `bd progress` does not exist — use `bd update &lt;id&gt; -s in_progress`
-- `bd set-state` is for operational dimensions (patrol, health), NOT workflow status
+- `bd set-state` is for operational dimensions (patrol, health), NOT workflow
+  status
 
 ### Creating an Epic with Tasks
 
@@ -228,8 +230,8 @@ bd epic status thrum-abc
 ```
 
 **Dependency direction:** `bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;` means the
-blocker must close before the blocked task becomes ready. The alternative
-syntax is `bd dep add &lt;blocked&gt; &lt;blocker&gt;` (reversed order).</code></pre>
+blocker must close before the blocked task becomes ready. The alternative syntax
+is `bd dep add &lt;blocked&gt; &lt;blocker&gt;` (reversed order).</code></pre>
 <p>You can also generate a minimal starter block with <code>bd onboard</code>, but the block
 above is more comprehensive and covers the epic/dependency patterns that
 sub-agents most commonly get wrong.</p>

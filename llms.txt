@@ -473,7 +473,10 @@ All commands accept these flags:
     message-listener.md     Background message polling agent (Haiku model)
 
   toolkit/templates/        Agent development workflow patterns
-    agent-dev-workflow/     Templates and guides for agent development
+    agent-dev-workflow/     Four-phase skill pipeline (Design/Plan/Setup/Implement)
+      implementation-agent.md   Active: prompt template for implementation agents
+      philosophy-template.md    Active: anti-patterns template for implementation standards
+      planning-agent.md         Reference: superseded by skill pipeline
     README.md               Documentation for using templates
 
   Install: cp toolkit/agents/*.md your-project/.claude/agents/

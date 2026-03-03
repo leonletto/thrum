@@ -221,7 +221,7 @@
   {
     "path": "workflow-templates.html",
     "title": "Workflow Templates",
-    "description": "Three-phase development templates for planning, preparing, and implementing features with AI agents",
+    "description": "Four-phase skill pipeline for designing, planning, setting up, and implementing features with AI agents",
     "category": "guides",
     "order": 3,
     "tags": [
@@ -232,7 +232,7 @@
       "agents",
       "toolkit"
     ],
-    "lastUpdated": "2026-02-12"
+    "lastUpdated": "2026-03-03"
   },
   {
     "path": "beads-and-thrum.html",

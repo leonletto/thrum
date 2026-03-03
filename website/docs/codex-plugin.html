@@ -46,8 +46,8 @@ a{color:#0366d6}
 <a href="role-templates.html">Role Templates</a> for role preamble details.</p>
 </blockquote>
 <h2>Overview</h2>
-<p>Codex does not currently use the Claude-style plugin marketplace model.
-Instead, Thrum integration is packaged as a <strong>Codex skill bundle</strong> in
+<p>Codex does not currently use the Claude-style plugin marketplace model. Instead,
+Thrum integration is packaged as a <strong>Codex skill bundle</strong> in
 <code>codex-plugin/skills</code>.</p>
 <p>The bundle is split into focused skills:</p>
 <ul>
@@ -68,8 +68,8 @@ thrum quickstart --name myagent --role implementer --module auth</code></pre>
 <h2>Installation</h2>
 <p>From the Thrum repository root:</p>
 <pre><code>./codex-plugin/scripts/install-skills.sh</code></pre>
-<p>This installs the bundled skills into <code>~/.codex/skills</code> (or
-<code>$CODEX_HOME/skills</code> if <code>CODEX_HOME</code> is set).</p>
+<p>This installs the bundled skills into <code>~/.codex/skills</code> (or <code>$CODEX_HOME/skills</code>
+if <code>CODEX_HOME</code> is set).</p>
 <h3>Verify installed skills</h3>
 <pre><code>find &quot;${CODEX_HOME:-$HOME/.codex}/skills&quot; -maxdepth 1 -type d -name &quot;thrum-*&quot; -o -name &quot;project-setup&quot;</code></pre>
 <h3>Restart Codex</h3>

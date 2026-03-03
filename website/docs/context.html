@@ -105,7 +105,8 @@ directly or replace it with <code>thrum context preamble --file custom.md</code>
 `thrum send &quot;message&quot; --to @role` **Reply:** `thrum reply &lt;MSG_ID&gt; &quot;response&quot;`
 **Status:** `thrum status` **Who&#39;s online:** `thrum agent list --context` **Save
 context:** `thrum context save` **Wait for messages:**
-`thrum wait --after -30s --timeout 5m` (`--after -30s` = include messages sent up to 30s ago)</code></pre>
+`thrum wait --after -30s --timeout 5m` (`--after -30s` = include messages sent
+up to 30s ago)</code></pre>
 <p><strong>Customization examples:</strong></p>
 <p>You can edit the preamble to add project conventions, role-specific
 instructions, team rosters, or boot sequences:</p>
@@ -360,9 +361,9 @@ thrum context prime --json</code></pre>
 <li>Debugging - gather all relevant state in one command</li>
 <li>Agent onboarding - provide comprehensive context to new agents</li>
 </ul>
-<p><strong>Note:</strong> <code>thrum prime</code> is the canonical top-level command; <code>thrum context prime</code>
-is an alias for it. The PreCompact hook automatically saves context before
-compaction to <code>.thrum/context/{name}.md</code> and
+<p><strong>Note:</strong> <code>thrum prime</code> is the canonical top-level command;
+<code>thrum context prime</code> is an alias for it. The PreCompact hook automatically
+saves context before compaction to <code>.thrum/context/{name}.md</code> and
 <code>/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md</code>, but the
 agent-initiated <code>/update-context</code> skill captures richer context including
 decisions and rationale.</p>

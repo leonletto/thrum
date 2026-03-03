@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Workflow Templates — Thrum</title>
-<meta name="description" content="Three-phase development templates for planning, preparing, and implementing features with AI agents">
+<meta name="description" content="Four-phase skill pipeline for designing, planning, setting up, and implementing features with AI agents">
 <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#workflow-templates.html">
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
@@ -39,103 +39,175 @@ a{color:#0366d6}
 </nav>
 <main>
 <h2>Workflow Templates</h2>
-<p>Thrum ships ready-to-use templates that guide AI agents through planning,
-preparing, and implementing features. You copy them into your project and
-customize the placeholders for your environment.</p>
-<p>Templates live in <code>toolkit/templates/</code> in the Thrum repository.</p>
-<h2>The three-phase workflow</h2>
-<pre><code>1. PLAN              2. PREPARE            3. IMPLEMENT
-─────────────        ──────────────        ─────────────────────
-Brainstorm           Select/create         Orient from beads
-Write spec           worktree              Implement tasks
-Create epics         Setup thrum +         Test → commit → close
-Create tasks         beads redirect        Quality gates
-Set deps             Run quickstart        Merge to main</code></pre>
-<p><strong>Plan</strong> — Explore codebase, propose approaches, write design spec, decompose
-into beads epics with detailed task descriptions.</p>
-<p><strong>Prepare</strong> — Select or create git worktree, configure thrum and beads redirects
-so all worktrees share the same daemon and issue database. Bootstrap agent
-identity.</p>
+<p>Thrum ships ready-to-use templates and skills that guide AI agents through
+designing, planning, setting up, and implementing features. The workflow is
+driven by a <strong>skill pipeline</strong> — brainstorming, writing-plans, and project-setup
+— with templates available as reference and customization files.</p>
+<p>Templates live in <code>toolkit/templates/agent-dev-workflow/</code> in the Thrum
+repository.</p>
+<h2>The four-phase skill pipeline</h2>
+<pre><code>1. DESIGN           2. PLAN              3. SETUP             4. IMPLEMENT
+─────────────       ──────────────       ──────────────       ─────────────────────
+brainstorming       writing-plans        project-setup        implementation-agent.md
+  ↓                   ↓                    ↓                    ↓
+Design doc          Plan file            Beads epics/tasks    Orient from beads
+(interactive)       (interactive)        Worktree assignments Pick up first task
+                                         Impl prompts         Implement → test → commit
+                                         Create worktrees     Close task, repeat</code></pre>
+<p><strong>Design</strong> — Explore codebase, propose approaches, write design spec
+interactively with the user.</p>
+<p><strong>Plan</strong> — Structure the approved design into phased, ordered implementation
+steps with task-ID anchors.</p>
+<p><strong>Setup</strong> — Decompose the plan into beads epics and tasks, select or create git
+worktrees, generate filled implementation prompts.</p>
 <p><strong>Implement</strong> — Work through tasks in dependency order: claim → read → implement
 → test → commit → close. Orient phase reads beads status and git history for
 resume after context loss.</p>
+<h2>The Two-Artifact System</h2>
+<p>Implementation agents work from two complementary artifacts per task:</p>
+<table>
+<thead>
+<tr>
+<th>Artifact</th>
+<th>Contains</th>
+<th>Authoritative For</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Beads task</strong></td>
+<td>Acceptance criteria, deps, status</td>
+<td>What must be true to close the task</td>
+</tr>
+<tr>
+<td><strong>Plan file section</strong></td>
+<td>Step-by-step code, file paths, verify commands</td>
+<td>How to implement the task</td>
+</tr>
+</tbody></table>
+<p>Agents read <code>bd show {TASK_ID}</code> first (what to achieve), then search the plan
+file for <code>## Task: {BEAD_ID}</code> (how to get there).</p>
+<p>Additional context layers:</p>
+<table>
+<thead>
+<tr>
+<th>Artifact</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Design doc</strong></td>
+<td>Architecture decisions — WHY things are built a certain way</td>
+</tr>
+<tr>
+<td><strong>Philosophy doc</strong></td>
+<td>Anti-patterns and red flags — what agents must NOT do</td>
+</tr>
+<tr>
+<td><strong>Filled prompt</strong></td>
+<td>Epic-specific overrides, scoped quality commands, cross-epic deps</td>
+</tr>
+</tbody></table>
 <h2>Install the templates</h2>
-<p>Copy the templates into your project documentation:</p>
-<pre><code>cp toolkit/templates/*.md your-project/docs/templates/</code></pre>
+<p>Copy the template set into your project documentation:</p>
+<pre><code>cp toolkit/templates/agent-dev-workflow/*.md your-project/docs/templates/</code></pre>
 <p>Or reference them directly from the Thrum repo when starting a new agent
 session.</p>
+<h2>Template files</h2>
+<table>
+<thead>
+<tr>
+<th>Template</th>
+<th>Status</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>implementation-agent.md</code></td>
+<td>Active</td>
+<td>Prompt template filled by project-setup skill, given to implementation agents</td>
+</tr>
+<tr>
+<td><code>philosophy-template.md</code></td>
+<td>Active</td>
+<td>Reusable anti-patterns template — used by project-setup when a project lacks a philosophy doc</td>
+</tr>
+<tr>
+<td><code>planning-agent.md</code></td>
+<td>Reference</td>
+<td>Full planning template — superseded by brainstorming + writing-plans + project-setup skills</td>
+</tr>
+<tr>
+<td><code>worktree-setup.md</code></td>
+<td>Reference</td>
+<td>Worktree creation docs — superseded by project-setup Phase 3 + using-git-worktrees skill</td>
+</tr>
+<tr>
+<td><code>CLAUDE.md</code></td>
+<td>Reference</td>
+<td>Overview of the workflow and how templates fit together</td>
+</tr>
+</tbody></table>
 <h2>Customize the placeholders</h2>
-<p>Templates use <code>{{PLACEHOLDER}}</code> syntax for project-specific values. Replace
-these before giving a template to an agent.</p>
-<h3>Planning agent placeholders</h3>
-<pre><code>{{FEATURE_DESCRIPTION}} → &quot;Add WebSocket sync between agents&quot;
-{{PROJECT_ROOT}}        → /home/user/projects/myproject
-{{DESIGN_DOC_DIR}}      → dev-docs/plans/
-{{REFERENCE_DOCS}}      → .ref/example_project/, dev-docs/architecture.md
-{{TECH_STACK}}          → Go backend, React/TypeScript UI, SQLite, JSONL</code></pre>
-<h3>Worktree setup placeholders</h3>
-<pre><code>{{PROJECT_ROOT}}  → /home/user/projects/myproject
-{{WORKTREE_BASE}} → ~/.workspaces/myproject
-{{FEATURE_NAME}}  → auth</code></pre>
+<p>Templates use <code>{{PLACEHOLDER}}</code> syntax for project-specific values. The
+project-setup skill resolves these automatically, but you can also fill them
+manually.</p>
 <h3>Implementation agent placeholders</h3>
 <pre><code>{{EPIC_ID}}          → bd-a3f8
 {{WORKTREE_PATH}}    → ~/.workspaces/myproject/auth
 {{BRANCH_NAME}}      → feature/auth
-{{DESIGN_DOC}}       → dev-docs/plans/2026-02-auth-design.md
+{{DESIGN_DOC}}       → /abs/path/to/dev-docs/plans/2026-02-auth-design.md
+{{PLAN_FILE}}        → /abs/path/to/dev-docs/plans/2026-02-auth-plan.md
 {{REFERENCE_CODE}}   → .ref/example_auth_impl/
-{{QUALITY_COMMANDS}} → make test &amp;&amp; make lint
+{{QUALITY_COMMANDS}} → go test ./internal/auth/... &amp;&amp; golangci-lint run
 {{COVERAGE_TARGET}}  → &gt;80%
-{{AGENT_NAME}}       → impl-auth</code></pre>
+{{AGENT_NAME}}       → impl-auth
+{{ANTI_PATTERNS}}    → (generated from design doc + philosophy doc)
+{{CROSS_EPIC_DEPS}}  → (from cross-epic dependency map, or &quot;No cross-epic dependencies.&quot;)</code></pre>
+<p><strong>Important:</strong> Use absolute paths for <code>{{DESIGN_DOC}}</code> and <code>{{PLAN_FILE}}</code> —
+these files typically live in gitignored directories and worktree agents cannot
+resolve relative paths to them.</p>
 <h3>Example: Fill in for a real project</h3>
-<p>You&#39;re building authentication for a Go service. Here&#39;s how you customize the
-implementation template:</p>
+<p>You&#39;re building authentication for a Go service:</p>
 <pre><code>{{EPIC_ID}}          → bd-k7m2
 {{WORKTREE_PATH}}    → ~/.workspaces/myservice/auth
 {{BRANCH_NAME}}      → feature/auth-jwt
-{{DESIGN_DOC}}       → dev-docs/plans/2026-02-jwt-auth.md
-{{REFERENCE_CODE}}   → .ref/gorilla-sessions-example/
-{{QUALITY_COMMANDS}} → go test ./... &amp;&amp; golangci-lint run
+{{DESIGN_DOC}}       → /home/user/myservice/dev-docs/plans/2026-02-jwt-auth.md
+{{PLAN_FILE}}        → /home/user/myservice/dev-docs/plans/2026-02-jwt-auth-plan.md
+{{QUALITY_COMMANDS}} → go test ./internal/auth/... -v
 {{COVERAGE_TARGET}}  → &gt;85%
 {{AGENT_NAME}}       → impl-auth-jwt</code></pre>
 <p>Save the filled-in template as a file or paste it directly into your agent&#39;s
 prompt.</p>
-<h2>Use the planning template</h2>
-<p>Give <code>planning-agent.md</code> to a planning agent when you have a feature idea and
-need actionable tasks.</p>
-<p><strong>Produces:</strong> Design spec, beads epics, detailed task descriptions, dependency
-relationships.</p>
-<p>Planning agents front-load detail into task descriptions so implementation
-agents work autonomously without conversation history.</p>
-<h2>Use the worktree setup guide</h2>
-<p>Follow <code>worktree-setup.md</code> when an epic needs an isolated workspace.</p>
-<p><strong>Does:</strong> Check existing worktrees for reuse, create new worktree + branch if
-needed, configure thrum and beads redirects, bootstrap agent identity, verify
-with <code>bd where</code>, <code>bd ready</code>, and <code>thrum context show</code>.</p>
-<p>Without redirect configuration, agents in different worktrees see different
-tasks and different daemon instances.</p>
-<h3>Setup script</h3>
-<p>The <code>setup-worktree-thrum.sh</code> script handles full worktree bootstrapping in a
-single command:</p>
-<pre><code># Full worktree setup with identity
-./scripts/setup-worktree-thrum.sh ~/.workspaces/myproject/auth feature/auth \
-  --identity impl-auth \
-  --role implementer</code></pre>
-<p>This creates the worktree, sets up thrum and beads redirects, and registers the
-agent identity. The <code>thrum quickstart</code> command (used internally) auto-creates a
-default preamble with thrum quick-reference commands. For projects using custom
-agent docs in <code>.agents/</code>, run <code>thrum setup claude-md --apply</code> to configure the
-worktree&#39;s CLAUDE.md.</p>
 <h2>Use the implementation template</h2>
-<p>Give <code>implementation-agent.md</code> to an implementation agent when an epic has tasks
-and a worktree is ready.</p>
+<p>Give a filled <code>implementation-agent.md</code> to an implementation agent when an epic
+has tasks and a worktree is ready.</p>
 <p><strong>Orient</strong> — Check beads status and git state to find starting point (works for
 fresh starts and resumes).</p>
 <p><strong>Implement</strong> — Work through tasks: claim → read → implement → test → commit →
 close.</p>
 <p><strong>Verify</strong> — Run full quality gates after all tasks complete.</p>
-<p><strong>Land</strong> — Close epic, merge to main, push.</p>
+<p><strong>Land</strong> — Close epic, push branch, notify coordinator for review and merge.</p>
 <p>After context loss, restart with the same filled-in template. Orient re-runs and
 picks up from the first incomplete task. Completed work is never redone.</p>
+<h2>Use the philosophy template</h2>
+<p>The <code>philosophy-template.md</code> defines implementation standards for your project —
+anti-patterns, red flags, and BAD/GOOD code examples. The project-setup skill
+checks for a philosophy doc in Phase 1 and offers to create one from this
+template if none exists.</p>
+<p>Philosophy docs are injected into each epic&#39;s implementation prompt as the
+<code>{{ANTI_PATTERNS}}</code> section, enabling the verifier sub-agent pattern to check
+for architectural violations beyond just &quot;tests pass.&quot;</p>
+<h2>Worktree setup</h2>
+<p>The project-setup skill handles worktree selection and setup in Phase 3. The
+<code>setup-worktree-thrum.sh</code> script handles full worktree bootstrapping in a single
+command:</p>
+<pre><code># Full worktree setup with identity
+./scripts/setup-worktree-thrum.sh ~/.workspaces/myproject/auth feature/auth \
+  --identity impl-auth \
+  --role implementer \
+  --base thrum-dev</code></pre>
+<p>This creates the worktree, sets up thrum and beads redirects, and registers the
+agent identity.</p>
 <h2>See also</h2>
 <ul>
 <li><a href="agent-configs.html">Agent Configuration</a> — How to configure agents for
@@ -145,7 +217,6 @@ beads for task tracking and Thrum for coordination</li>
 <li><a href="quickstart.html">Quick Start</a> — Set up Thrum and run your first multi-agent
 workflow</li>
 </ul>
-<pre><code></code></pre>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#workflow-templates.html')}</script>
