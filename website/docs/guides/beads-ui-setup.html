@@ -39,13 +39,12 @@ a{color:#0366d6}
 </nav>
 <main>
 <h2>Beads UI Setup Guide</h2>
-<p><a href="https://github.com/mantoni/beads-ui">Beads UI</a> is a local web interface for
-the Beads issue tracker. It gives developers a real-time browser view of what
-agents are working on — without polling, refreshing, or switching to the
-terminal.</p>
+<p><a href="https://github.com/mantoni/beads-ui">Beads UI</a> is a local web interface for the
+Beads issue tracker. It gives developers a real-time browser view of what agents
+are working on — without polling, refreshing, or switching to the terminal.</p>
 <h3>Why Use It</h3>
-<p>When agents coordinate via Thrum and track tasks with Beads, the developer
-needs visibility. Running <code>bd list</code> in a terminal works, but Beads UI provides:</p>
+<p>When agents coordinate via Thrum and track tasks with Beads, the developer needs
+visibility. Running <code>bd list</code> in a terminal works, but Beads UI provides:</p>
 <ul>
 <li><strong>Live updates</strong> — Issues move across the board as agents claim and close
 them, with no manual refresh needed</li>
@@ -56,8 +55,8 @@ drag-and-drop</li>
 comments directly in the browser</li>
 </ul>
 <p>The UI watches the Beads SQLite database for changes and pushes updates over
-WebSocket. When an agent runs <code>bd close &lt;id&gt;</code>, the card moves to Done in
-your browser instantly.</p>
+WebSocket. When an agent runs <code>bd close &lt;id&gt;</code>, the card moves to Done in your
+browser instantly.</p>
 <h3>Installation</h3>
 <pre><code># Install globally from npm
 npm install beads-ui -g
