@@ -5,6 +5,7 @@ package context
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +15,39 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 )
+
+//go:embed strategies/*.md
+var strategyFS embed.FS
+
+// WriteStrategies writes embedded strategy files to .thrum/strategies/.
+// Overwrites existing files (keeps strategies in sync with binary version).
+func WriteStrategies(thrumDir string) error {
+	strategiesDir := filepath.Join(thrumDir, "strategies")
+	if err := os.MkdirAll(strategiesDir, 0750); err != nil {
+		return fmt.Errorf("create strategies directory: %w", err)
+	}
+
+	entries, err := strategyFS.ReadDir("strategies")
+	if err != nil {
+		return fmt.Errorf("read embedded strategies: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		data, err := strategyFS.ReadFile("strategies/" + entry.Name())
+		if err != nil {
+			return fmt.Errorf("read embedded strategy %s: %w", entry.Name(), err)
+		}
+		outPath := filepath.Join(strategiesDir, entry.Name())
+		if err := os.WriteFile(outPath, data, 0644); err != nil { //#nosec G306 -- markdown strategy file, not sensitive data
+			return fmt.Errorf("write strategy %s: %w", entry.Name(), err)
+		}
+	}
+
+	return nil
+}
 
 // Save writes context content for the named agent.
 // Creates the context directory if it doesn't exist.

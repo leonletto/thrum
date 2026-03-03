@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/sync"
 )
@@ -121,6 +122,12 @@ func Init(opts InitOptions) error {
 	identitiesDir := filepath.Join(thrumDir, "identities")
 	if err := os.MkdirAll(identitiesDir, 0750); err != nil {
 		retErr = fmt.Errorf("failed to create .thrum/identities/: %w", err)
+		return retErr
+	}
+
+	// 2c. Write strategy reference files to .thrum/strategies/
+	if err := context.WriteStrategies(thrumDir); err != nil {
+		retErr = fmt.Errorf("failed to write strategies: %w", err)
 		return retErr
 	}
 
