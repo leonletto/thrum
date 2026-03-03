@@ -85,7 +85,7 @@ don't need to clone this repo into your project.
 - **Multi-Worktree** — Each git worktree gets its own agent identity via
   `.thrum/redirect`
 
-**v0.5.0 highlights:** Slack-style web UI with live feed, inbox, group channels,
+**v0.5.2 highlights:** Slack-style web UI with live feed, inbox, group channels,
 agent context panels, keyboard shortcuts, and file coordination — plus
 role-based preamble templates and project setup pipeline.
 
