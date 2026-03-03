@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Resume After Context Loss — Thrum</title>
+<meta name="description" content="How to recover and pick up work after compaction, a new session, or a crash">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#strategies/resume-after-context-loss.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; strategies &rsaquo; Resume After Context Loss
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a> | <a href="../overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="../architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="../context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="../cli.html">CLI Reference</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>strategies</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <strong>Resume After Context Loss</strong><br>
+<strong>uncategorized</strong>: <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
+<h2>Resume After Context Loss</h2>
+<p>This is an operational strategy that agents receive via <code>.thrum/strategies/</code>. It
+describes the exact sequence to follow when resuming after a context loss event
+such as compaction, a new session start, or a crash.</p>
+<p>If you are resuming after context loss (compaction, new session, crash, etc.),
+follow this sequence exactly. Do not skip steps.</p>
+<h3>Step 1: Re-Register with Thrum (Mandatory)</h3>
+<pre><code>thrum quickstart --role &lt;your-role&gt; --module &lt;branch-name&gt; --intent &quot;Resuming &lt;task-or-epic&gt;&quot;
+thrum inbox --unread</code></pre>
+<p>You must re-register even if you were registered in the previous session.
+Registration is per-session and does not persist across context loss.</p>
+<h3>Step 2: Orient from Beads</h3>
+<pre><code>bd show &lt;EPIC_ID&gt;              # What is the overall state of the epic?
+bd list --status=in_progress   # Is anything currently mid-flight?
+bd ready                       # What tasks are unblocked and available?</code></pre>
+<h3>Step 3: Orient from Git</h3>
+<pre><code>git --no-pager log --oneline -10   # What was committed recently?
+git status                          # Is there any uncommitted work?
+git diff                            # What changes exist but are not staged?</code></pre>
+<h3>Step 4: Pick Up from the First Incomplete Task</h3>
+<p>Read beads status and git history to determine exactly where work stopped. Then:</p>
+<ul>
+<li>If a task is <code>in_progress</code> in beads and has uncommitted changes: review the
+diff, decide whether to complete or reset, then continue</li>
+<li>If a task is <code>in_progress</code> but git shows it is fully committed: close the
+task in beads and move to the next</li>
+<li>If all visible tasks are <code>completed</code>: verify nothing was missed, then proceed
+to the next unblocked task or wrap up</li>
+</ul>
+<p><strong>Key principle: DO NOT redo completed work.</strong> Trust beads task status and git
+commit history. If a task is closed in beads and committed in git, it is done —
+do not re-implement it.</p>
+
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#strategies/resume-after-context-loss.html')}</script>
+</body>
+</html>
