@@ -122,7 +122,7 @@ func (b *BranchManager) checkGitRepo() error {
 
 // branchExists checks if a git branch exists.
 func (b *BranchManager) branchExists(branchName string) bool {
-	cmd := exec.Command("git", "rev-parse", "--verify", branchName)
+	cmd := exec.Command("git", "rev-parse", "--verify", branchName) // #nosec G204 -- hardcoded "git" binary; branchName is an internal constant
 	cmd.Dir = b.repoPath
 	err := cmd.Run()
 	return err == nil
@@ -147,7 +147,7 @@ func (b *BranchManager) createOrphanBranch() error {
 
 	// Step 2: Create the branch ref atomically.
 	// git update-ref is atomic — either it succeeds or the ref is unchanged.
-	cmd = exec.Command("git", "update-ref", "refs/heads/"+SyncBranchName, commitSHA) //nolint:gosec // commitSHA from git commit-tree output
+	cmd = exec.Command("git", "update-ref", "refs/heads/"+SyncBranchName, commitSHA) // #nosec G204 -- commitSHA is output from git commit-tree, not user input
 	cmd.Dir = b.repoPath
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git update-ref failed: %w", err)
@@ -181,7 +181,7 @@ func (b *BranchManager) CreateSyncWorktree(syncDir string) error {
 	}
 
 	// Create worktree with --no-checkout so sparse checkout can be configured first
-	cmd := exec.Command("git", "worktree", "add", "-f", "--no-checkout", syncDir, SyncBranchName)
+	cmd := exec.Command("git", "worktree", "add", "-f", "--no-checkout", syncDir, SyncBranchName) // #nosec G204 -- hardcoded "git" binary; syncDir is an internal path from SyncWorktreePath()
 	cmd.Dir = b.repoPath
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git worktree add failed: %w", err)
@@ -269,7 +269,7 @@ func (b *BranchManager) isHealthyWorktree(syncDir string) bool {
 		return false
 	}
 	sparseFile := filepath.Join(gitDir, "info", "sparse-checkout")
-	sparseContent, err := os.ReadFile(sparseFile) //nolint:gosec // G304 - path from git worktree metadata
+	sparseContent, err := os.ReadFile(sparseFile) // #nosec G304 -- path is constructed from git worktree's own .git directory metadata
 	if err != nil {
 		return false
 	}
@@ -310,7 +310,7 @@ func (b *BranchManager) isWorktreeRegistered(porcelainOutput, syncDir string) bo
 // actual git directory path (e.g. .git/worktrees/<name>).
 func (b *BranchManager) resolveWorktreeGitDir(syncDir string) string {
 	gitFilePath := filepath.Join(syncDir, ".git")
-	data, err := os.ReadFile(gitFilePath) //nolint:gosec // G304 - path from git worktree metadata
+	data, err := os.ReadFile(gitFilePath) // #nosec G304 -- gitFilePath is syncDir/.git, a known internal git metadata path
 	if err != nil {
 		return ""
 	}
@@ -337,7 +337,7 @@ func (b *BranchManager) removeSyncWorktree(syncDir string) {
 	}
 
 	// Try git worktree remove first
-	cmd := exec.Command("git", "worktree", "remove", "--force", syncDir)
+	cmd := exec.Command("git", "worktree", "remove", "--force", syncDir) // #nosec G204 -- hardcoded "git" binary; syncDir is validated internal path (non-empty, contains .git/.thrum)
 	cmd.Dir = b.repoPath
 	_ = cmd.Run() // Best effort — may fail if not a valid worktree
 

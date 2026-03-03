@@ -233,7 +233,7 @@ func sanitizeUsername(name string) string {
 func gitConfigValue(ctx context.Context, repoPath, key string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "config", "--get", key)
+	cmd := exec.CommandContext(ctx, "git", "config", "--get", key) // #nosec G204 -- hardcoded "git" binary; key is an internal config key constant
 	cmd.Dir = repoPath
 	out, err := cmd.CombinedOutput()
 	if err != nil {

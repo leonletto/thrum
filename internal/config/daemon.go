@@ -94,7 +94,7 @@ const DefaultWSPort = "auto"
 func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 	configPath := filepath.Join(thrumDir, "config.json")
 
-	data, err := os.ReadFile(configPath) //nolint:gosec // G304 - path from internal thrum directory
+	data, err := os.ReadFile(configPath) // #nosec G304 -- configPath is .thrum/config.json, an internal config file
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			cfg := &ThrumConfig{}
@@ -141,7 +141,7 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 
 	// Read existing file to preserve unknown keys
 	existing := make(map[string]any)
-	if data, err := os.ReadFile(configPath); err == nil { //nolint:gosec // G304 - path from internal thrum directory
+	if data, err := os.ReadFile(configPath); err == nil { // #nosec G304 -- configPath is .thrum/config.json, an internal config file
 		_ = json.Unmarshal(data, &existing) // best-effort; overwrite if corrupt
 	}
 

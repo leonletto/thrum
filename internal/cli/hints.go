@@ -7,7 +7,7 @@ import (
 
 var (
 	// Random source for hint rotation (not security-sensitive, just UI hint selection).
-	hintRandom = rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec // G404: non-security random for hint rotation
+	hintRandom = rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404 -- non-security RNG used only for UI hint rotation, not crypto //nolint:gosec
 )
 
 // Hint returns a contextual hint for the given command.

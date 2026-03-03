@@ -23,7 +23,7 @@ type InitOptions struct {
 // Returns (isWorktree, mainRepoRoot, error).
 func IsGitWorktree(repoPath string) (bool, string, error) {
 	// Get the repo toplevel (current working tree root)
-	topLevelCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--show-toplevel")
+	topLevelCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--show-toplevel") // #nosec G204 -- hardcoded "git" binary; all args are fixed git flags
 	topLevelOut, err := topLevelCmd.Output()
 	if err != nil {
 		return false, "", fmt.Errorf("not a git repository")
@@ -31,7 +31,7 @@ func IsGitWorktree(repoPath string) (bool, string, error) {
 	topLevel := strings.TrimSpace(string(topLevelOut))
 
 	// Get the common git dir (shared across all worktrees)
-	commonDirCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-common-dir")
+	commonDirCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-common-dir") // #nosec G204 -- hardcoded "git" binary; all args are fixed git flags
 	commonDirOut, err := commonDirCmd.Output()
 	if err != nil {
 		return false, "", nil //nolint:nilerr // can't determine, assume not a worktree
@@ -45,7 +45,7 @@ func IsGitWorktree(repoPath string) (bool, string, error) {
 	commonDir = filepath.Clean(commonDir)
 
 	// Get the git dir for this working tree
-	gitDirCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-dir")
+	gitDirCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-dir") // #nosec G204 -- hardcoded "git" binary; all args are fixed git flags
 	gitDirOut, err := gitDirCmd.Output()
 	if err != nil {
 		return false, "", nil //nolint:nilerr // can't determine, assume not a worktree
@@ -90,7 +90,7 @@ func Init(opts InitOptions) error {
 		if retErr != nil && !thrumDirExisted {
 			// Clean up worktree metadata first
 			if syncDir, syncErr := paths.SyncWorktreePath(opts.RepoPath); syncErr == nil {
-				rmCmd := exec.Command("git", "worktree", "remove", "--force", syncDir) //nolint:gosec // syncDir from internal paths
+				rmCmd := exec.Command("git", "worktree", "remove", "--force", syncDir) // #nosec G204 -- syncDir from paths.SyncWorktreePath(), internal path construction
 				rmCmd.Dir = opts.RepoPath
 				_ = rmCmd.Run()
 			}
@@ -191,7 +191,7 @@ func updateGitignore(repoPath string) error {
 	var existing []byte
 	var err error
 	if _, statErr := os.Stat(gitignorePath); statErr == nil {
-		existing, err = os.ReadFile(gitignorePath) //nolint:gosec // G304 - path derived from repo root
+		existing, err = os.ReadFile(gitignorePath) // #nosec G304 -- gitignorePath is <repoPath>/.gitignore, derived from the CLI-provided repo root
 		if err != nil {
 			return err
 		}
@@ -225,7 +225,7 @@ func updateGitignore(repoPath string) error {
 	}
 
 	// Append entries
-	f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600) //nolint:gosec // G304 - path derived from repo root
+	f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600) // #nosec G304 -- gitignorePath is <repoPath>/.gitignore, derived from the CLI-provided repo root
 	if err != nil {
 		return err
 	}
@@ -259,7 +259,7 @@ func updateGitignore(repoPath string) error {
 // This avoids any footprint in tracked files like .gitignore.
 func updateGitExclude(repoPath string) error {
 	// Resolve the git dir (handles worktrees correctly)
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-dir")
+	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-dir") // #nosec G204 -- hardcoded "git" binary; all args are fixed git flags
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("resolve git dir: %w", err)
@@ -283,7 +283,7 @@ func updateGitExclude(repoPath string) error {
 	// Read existing exclude file
 	var existing []byte
 	if _, statErr := os.Stat(excludePath); statErr == nil {
-		existing, err = os.ReadFile(excludePath) //nolint:gosec // G304 - git internal path
+		existing, err = os.ReadFile(excludePath) // #nosec G304 -- excludePath is .git/info/exclude, a known git internal path
 		if err != nil {
 			return err
 		}
@@ -313,7 +313,7 @@ func updateGitExclude(repoPath string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600) //nolint:gosec // G304 - git internal path
+	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600) // #nosec G304 -- excludePath is .git/info/exclude, a known git internal path
 	if err != nil {
 		return err
 	}

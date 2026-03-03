@@ -123,7 +123,7 @@ func LoadWithPath(repoPath, flagRole, flagModule string) (*Config, error) {
 
 // loadIdentityFile loads and parses a single identity file.
 func loadIdentityFile(path string) (*IdentityFile, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304 - path from internal identities directory
+	data, err := os.ReadFile(path) // #nosec G304,G703 -- path is .thrum/identities/<name>.json, an internal identity file; not user-controlled input
 	if err != nil {
 		return nil, fmt.Errorf("read identity file: %w", err)
 	}
@@ -222,7 +222,7 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 func detectCurrentWorktree(identitiesDir string) string {
 	// identitiesDir is .thrum/identities/ — go up two levels to get repo root
 	repoRoot := filepath.Dir(filepath.Dir(identitiesDir))
-	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--show-toplevel") //nolint:gosec // G204 - args are constant strings, not user input
+	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--show-toplevel") // #nosec G204 -- repoRoot derived from internal identitiesDir path, not user input
 	out, err := cmd.Output()
 	if err != nil {
 		return ""

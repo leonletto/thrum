@@ -18,7 +18,7 @@ func Git(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	fullArgs := append(gitConfigArgs, args...)
-	cmd := exec.CommandContext(ctx, "git", fullArgs...)
+	cmd := exec.CommandContext(ctx, "git", fullArgs...) // #nosec G204 -- args are internal git subcommands from callers, not user input
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -32,7 +32,7 @@ func GitLong(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	fullArgs := append(gitConfigArgs, args...)
-	cmd := exec.CommandContext(ctx, "git", fullArgs...)
+	cmd := exec.CommandContext(ctx, "git", fullArgs...) // #nosec G204 -- args are internal git subcommands from callers, not user input
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

@@ -57,7 +57,7 @@ func ResolveThrumDir(repoPath string) (string, error) {
 	redirectPath := filepath.Join(localThrumDir, "redirect")
 
 	// Check for redirect file
-	data, err := os.ReadFile(redirectPath) //nolint:gosec // G304 - path from .thrum/redirect, internal config
+	data, err := os.ReadFile(redirectPath) // #nosec G304 -- redirectPath is .thrum/redirect, a known internal config file
 	if err != nil {
 		if os.IsNotExist(err) {
 			// No redirect — this is the main worktree, use local .thrum/
@@ -78,7 +78,7 @@ func ResolveThrumDir(repoPath string) (string, error) {
 	}
 
 	// Validate target directory exists
-	info, err := os.Stat(target)
+	info, err := os.Stat(target) // #nosec G703 -- target is validated to be an absolute path before this point
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", fmt.Errorf("redirect target does not exist: %s", target)
@@ -91,7 +91,7 @@ func ResolveThrumDir(repoPath string) (string, error) {
 
 	// Guard against redirect chains (only single-hop supported)
 	targetRedirect := filepath.Join(target, "redirect")
-	if _, err := os.Stat(targetRedirect); err == nil {
+	if _, err := os.Stat(targetRedirect); err == nil { // #nosec G703 -- targetRedirect is filepath.Join of validated absolute path + constant "redirect"
 		return "", fmt.Errorf("redirect chain detected: %s points to %s which also has a redirect file; only single-hop redirects are supported", redirectPath, target)
 	}
 
@@ -102,7 +102,7 @@ func ResolveThrumDir(repoPath string) (string, error) {
 // Uses git-common-dir for bare repo and nested worktree support.
 // For regular repos, returns: <git-common-dir>/thrum-sync/a-sync.
 func SyncWorktreePath(repoPath string) (string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-common-dir")
+	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-common-dir") // #nosec G204 -- hardcoded "git" binary; repoPath is an internal path from the caller
 	output, err := cmd.Output()
 	if err != nil {
 		// Fallback for non-git contexts

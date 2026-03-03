@@ -191,7 +191,7 @@ func getGitWorkContext() *WorkContextInfo {
 
 // gitOutput runs a git command and returns trimmed stdout.
 func gitOutput(args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", args...) // #nosec G204 -- hardcoded "git" binary; args are internal git subcommands/flags, not user input
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err

@@ -45,7 +45,7 @@ func WritePIDFileJSON(path string, info PIDInfo) error {
 // Supports both JSON format (new) and plain integer format (old) for backward compatibility.
 func ReadPIDFileJSON(path string) (PIDInfo, error) {
 	// Read file content
-	data, err := os.ReadFile(path) //nolint:gosec // G304 - path from internal var directory
+	data, err := os.ReadFile(path) // #nosec G304 -- path is the internal .thrum/var/daemon.pid file path
 	if err != nil {
 		// Return error without wrapping to preserve os.IsNotExist check
 		return PIDInfo{}, err
@@ -124,7 +124,7 @@ func WritePIDFile(path string) error {
 // ReadPIDFile reads the process ID from the specified file.
 func ReadPIDFile(path string) (int, error) {
 	// Read file content
-	content, err := os.ReadFile(path) //nolint:gosec // G304 - path from internal var directory
+	content, err := os.ReadFile(path) // #nosec G304 -- path is the internal .thrum/var/daemon.pid file path
 	if err != nil {
 		// Return error without wrapping to preserve os.IsNotExist check
 		return 0, err

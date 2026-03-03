@@ -73,14 +73,14 @@ func atomicCopyFile(src, dst string) (int, error) {
 		return 0, err
 	}
 
-	srcFile, err := os.Open(src) //nolint:gosec // G304 - paths from internal thrum dirs
+	srcFile, err := os.Open(src) // #nosec G304 -- src is an internal .thrum JSONL file path
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = srcFile.Close() }()
 
 	tmpPath := dst + ".tmp"
-	tmpFile, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) //nolint:gosec // G304
+	tmpFile, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) // #nosec G304 -- tmpPath is dst+".tmp", derived from the internal backup export destination
 	if err != nil {
 		return 0, err
 	}

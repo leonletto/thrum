@@ -1593,7 +1593,7 @@ func (h *MessageHandler) HandleArchive(ctx context.Context, params json.RawMessa
 
 	// Write JSONL archive file
 	archivePath := filepath.Join(archiveDir, req.Identifier+".jsonl")
-	f, err := os.OpenFile(archivePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // path built from trusted repo root + validated identifier
+	f, err := os.OpenFile(archivePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- archivePath is under .thrum/archive/ with a validated identifier as filename
 	if err != nil {
 		return nil, fmt.Errorf("open archive file: %w", err)
 	}

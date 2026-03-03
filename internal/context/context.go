@@ -24,7 +24,7 @@ func Save(thrumDir, agentName string, content []byte) error {
 	}
 
 	path := filepath.Join(dir, agentName+".md")
-	if err := os.WriteFile(path, content, 0644); err != nil { //nolint:gosec // G306 - markdown files, not secrets
+	if err := os.WriteFile(path, content, 0644); err != nil { //#nosec G306 -- markdown context file, not sensitive data
 		return fmt.Errorf("write context file: %w", err)
 	}
 
@@ -35,7 +35,7 @@ func Save(thrumDir, agentName string, content []byte) error {
 // Returns nil, nil if the context file doesn't exist.
 func Load(thrumDir, agentName string) ([]byte, error) {
 	path := filepath.Join(thrumDir, "context", agentName+".md")
-	data, err := os.ReadFile(path) //nolint:gosec // G304 - path from internal context directory
+	data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/context/<agentName>.md, an internal context file
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -69,7 +69,7 @@ func PreamblePath(thrumDir, agentName string) string {
 // Returns nil, nil if the preamble file doesn't exist.
 func LoadPreamble(thrumDir, agentName string) ([]byte, error) {
 	path := filepath.Join(thrumDir, "context", agentName+"_preamble.md")
-	data, err := os.ReadFile(path) //nolint:gosec // G304 - path from internal context directory
+	data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/context/<agentName>_preamble.md, an internal context file
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -88,7 +88,7 @@ func SavePreamble(thrumDir, agentName string, content []byte) error {
 	}
 
 	path := filepath.Join(dir, agentName+"_preamble.md")
-	if err := os.WriteFile(path, content, 0644); err != nil { //nolint:gosec // G306 - markdown files, not secrets
+	if err := os.WriteFile(path, content, 0644); err != nil { //#nosec G306 -- markdown preamble file, not sensitive data
 		return fmt.Errorf("write preamble file: %w", err)
 	}
 
@@ -134,7 +134,7 @@ type RoleTemplateData struct {
 // with the agent's identity data. Returns nil, nil if no template exists.
 func RenderRoleTemplate(thrumDir, agentName, role string) ([]byte, error) {
 	templatePath := filepath.Join(thrumDir, "role_templates", role+".md")
-	tmplContent, err := os.ReadFile(templatePath) //nolint:gosec // G304 - path from internal thrum directory
+	tmplContent, err := os.ReadFile(templatePath) // #nosec G304 -- templatePath is .thrum/role_templates/<role>.md, an internal directory
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -244,7 +244,7 @@ func buildTemplateData(thrumDir, agentName, role string) *RoleTemplateData {
 
 	// Load the agent's identity file for module/worktree info
 	identityPath := filepath.Join(thrumDir, "identities", agentName+".json")
-	idData, err := os.ReadFile(identityPath) //nolint:gosec // G304 - path from internal thrum directory
+	idData, err := os.ReadFile(identityPath) // #nosec G304 -- identityPath is .thrum/identities/<agentName>.json, an internal directory
 	if err == nil {
 		var id config.IdentityFile
 		if jsonErr := json.Unmarshal(idData, &id); jsonErr == nil {
@@ -293,7 +293,7 @@ func loadAllIdentities(thrumDir string) ([]*config.IdentityFile, error) {
 			continue
 		}
 		path := filepath.Join(identitiesDir, entry.Name())
-		data, err := os.ReadFile(path) //nolint:gosec // G304 - path from internal thrum directory
+		data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/identities/<name>.json from directory listing
 		if err != nil {
 			continue
 		}

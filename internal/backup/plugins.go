@@ -32,7 +32,7 @@ func RunPlugins(plugins []config.PluginConfig, repoPath, backupDir string) ([]Pl
 		// Run plugin command
 		if p.Command != "" {
 			ctx, cancel := context.WithTimeout(context.Background(), pluginTimeout)
-			cmd := exec.CommandContext(ctx, "sh", "-c", p.Command) //nolint:gosec // G204 - user-configured command
+			cmd := exec.CommandContext(ctx, "sh", "-c", p.Command) // #nosec G204 -- p.Command is user-configured backup plugin command; intentional by design
 			cmd.Dir = repoPath
 			var stderr strings.Builder
 			cmd.Stderr = &stderr

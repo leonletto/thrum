@@ -85,7 +85,7 @@ func WritePortFile(path string, port int) error {
 // ReadPortFile reads the port number from the specified file.
 // Returns an error if the file doesn't exist or contains invalid data.
 func ReadPortFile(path string) (int, error) {
-	content, err := os.ReadFile(path) //nolint:gosec // G304 - path from internal var directory
+	content, err := os.ReadFile(path) // #nosec G304 -- path is the internal .thrum/var/ws.port file path
 	if err != nil {
 		// Return error without wrapping to preserve os.IsNotExist check
 		return 0, err

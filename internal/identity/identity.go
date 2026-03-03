@@ -179,7 +179,7 @@ func ParseULID(s string) (time.Time, error) {
 	if ms/1000 > uint64(math.MaxInt64) {
 		return time.Time{}, fmt.Errorf("ULID timestamp %d exceeds int64 range", ms)
 	}
-	return time.Unix(int64(ms/1000), int64(ms%1000)*1e6), nil //nolint:gosec // overflow checked above
+	return time.Unix(int64(ms/1000), int64(ms%1000)*1e6), nil // #nosec G115 -- overflow guarded by ms/1000 > MaxInt64 check above; ms%1000 < 1000 so always fits int64 //nolint:gosec
 }
 
 // ULIDTimestamp extracts the timestamp from a ULID string.
@@ -193,8 +193,8 @@ func ULIDTimestamp(s string) (time.Time, error) {
 	if ms/1000 > uint64(math.MaxInt64) {
 		return time.Time{}, fmt.Errorf("ULID timestamp %d exceeds int64 range", ms)
 	}
-	sec := int64(ms / 1000)      //nolint:gosec // overflow checked above
-	nsec := int64(ms%1000) * 1e6 //nolint:gosec // ms%1000 is always < 1000
+	sec := int64(ms / 1000)      // #nosec G115 -- overflow guarded by ms/1000 > MaxInt64 check above //nolint:gosec
+	nsec := int64(ms%1000) * 1e6 // #nosec G115 -- ms%1000 is always in [0,999], safely fits int64 //nolint:gosec
 
 	return time.Unix(sec, nsec), nil
 }

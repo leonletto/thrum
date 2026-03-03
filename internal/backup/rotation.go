@@ -58,7 +58,7 @@ func CompressCurrentToArchive(currentDir, archivesDir string) (string, error) {
 
 // createZip compresses a directory into a zip file.
 func createZip(srcDir, zipPath string) error {
-	f, err := os.Create(zipPath) //nolint:gosec // G304 - internal path
+	f, err := os.Create(zipPath) // #nosec G304 -- zipPath is an internal backup archive path under the .thrum backup directory
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func createZip(srcDir, zipPath string) error {
 			return err
 		}
 
-		file, err := os.Open(path) //nolint:gosec // G304 - walking internal directory
+		file, err := os.Open(path) // #nosec G304,G122 -- path comes from filepath.Walk over the internal .thrum backup directory; race-prone path is not a concern for internal backup rotation
 		if err != nil {
 			return err
 		}

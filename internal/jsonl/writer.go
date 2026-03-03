@@ -28,7 +28,7 @@ func NewWriter(path string) (*Writer, error) {
 
 	// Create file if it doesn't exist
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600) //nolint:gosec // G304 - path from internal JSONL config
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600) // #nosec G304 -- path is the internal JSONL file path passed to NewWriter
 		if err != nil {
 			return nil, fmt.Errorf("create file: %w", err)
 		}
@@ -55,34 +55,34 @@ func (w *Writer) Append(event any) error {
 
 	// Write to temporary file first (atomic operation)
 	tmpPath := w.path + ".tmp"
-	tmpFile, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600) //nolint:gosec // G304 - path from internal JSONL config
+	tmpFile, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600) // #nosec G304 -- tmpPath is w.path+".tmp", derived from internal JSONL file path
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
 	defer func() { _ = os.Remove(tmpPath) }() // Clean up temp file in case of error
 
 	// Acquire exclusive lock on temp file
-	if err := syscall.Flock(int(tmpFile.Fd()), syscall.LOCK_EX); err != nil {
+	if err := syscall.Flock(int(tmpFile.Fd()), syscall.LOCK_EX); err != nil { // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 		_ = tmpFile.Close()
 		return fmt.Errorf("lock temp file: %w", err)
 	}
 
 	// Write the new line to temp file
 	if _, err := tmpFile.Write(data); err != nil {
-		_ = syscall.Flock(int(tmpFile.Fd()), syscall.LOCK_UN)
+		_ = syscall.Flock(int(tmpFile.Fd()), syscall.LOCK_UN) // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 		_ = tmpFile.Close()
 		return fmt.Errorf("write to temp file: %w", err)
 	}
 
 	// Sync to disk
 	if err := tmpFile.Sync(); err != nil {
-		_ = syscall.Flock(int(tmpFile.Fd()), syscall.LOCK_UN)
+		_ = syscall.Flock(int(tmpFile.Fd()), syscall.LOCK_UN) // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 		_ = tmpFile.Close()
 		return fmt.Errorf("sync temp file: %w", err)
 	}
 
 	// Release lock and close temp file
-	_ = syscall.Flock(int(tmpFile.Fd()), syscall.LOCK_UN)
+	_ = syscall.Flock(int(tmpFile.Fd()), syscall.LOCK_UN) // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 	if err := tmpFile.Close(); err != nil {
 		return fmt.Errorf("close temp file: %w", err)
 	}
@@ -95,13 +95,13 @@ func (w *Writer) Append(event any) error {
 	defer func() { _ = mainFile.Close() }()
 
 	// Acquire exclusive lock on main file
-	if err := syscall.Flock(int(mainFile.Fd()), syscall.LOCK_EX); err != nil {
+	if err := syscall.Flock(int(mainFile.Fd()), syscall.LOCK_EX); err != nil { // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 		return fmt.Errorf("lock main file: %w", err)
 	}
-	defer func() { _ = syscall.Flock(int(mainFile.Fd()), syscall.LOCK_UN) }()
+	defer func() { _ = syscall.Flock(int(mainFile.Fd()), syscall.LOCK_UN) }() // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 
 	// Read temp file and append to main
-	tmpData, err := os.ReadFile(tmpPath) //nolint:gosec // G304 - path from internal JSONL config
+	tmpData, err := os.ReadFile(tmpPath) // #nosec G304 -- tmpPath is w.path+".tmp", derived from internal JSONL file path
 	if err != nil {
 		return fmt.Errorf("read temp file: %w", err)
 	}
@@ -145,10 +145,10 @@ func (r *Reader) ReadAll() ([]json.RawMessage, error) {
 	defer func() { _ = file.Close() }()
 
 	// Acquire shared lock for reading
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH); err != nil {
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH); err != nil { // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 		return nil, fmt.Errorf("lock file: %w", err)
 	}
-	defer func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }()
+	defer func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }() // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 
 	var messages []json.RawMessage
 	scanner := bufio.NewScanner(file)
@@ -187,10 +187,10 @@ func (r *Reader) Stream(ctx context.Context) <-chan json.RawMessage {
 		defer func() { _ = file.Close() }()
 
 		// Acquire shared lock for reading
-		if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH); err != nil {
+		if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH); err != nil { // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 			return
 		}
-		defer func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }()
+		defer func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }() // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 
 		scanner := bufio.NewScanner(file)
 

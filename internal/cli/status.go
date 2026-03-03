@@ -249,7 +249,7 @@ func ReadWebSocketPort(repoPath string) int {
 		return 0
 	}
 	portPath := filepath.Join(thrumDir, "var", "ws.port")
-	content, err := os.ReadFile(portPath) //nolint:gosec // G304 - path derived from repo root
+	content, err := os.ReadFile(portPath) // #nosec G304 -- portPath is .thrum/var/ws.port, derived from the internal thrum directory
 	if err != nil {
 		return 0
 	}

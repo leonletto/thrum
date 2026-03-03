@@ -154,14 +154,14 @@ func (m *Merger) MergeAll(ctx context.Context) (*MergeResult, error) {
 			if archiveErr == nil {
 				// Copy from extracted temp directory
 				remotePath := filepath.Join(remoteTmpDir, "messages", remoteFile)
-				data, readErr := os.ReadFile(remotePath) //nolint:gosec // G304 - path from internal temp directory
+				data, readErr := os.ReadFile(remotePath) // #nosec G304 -- path constructed from internal temp directory during sync
 				if readErr != nil {
 					return nil, fmt.Errorf("read extracted remote file %s: %w", remoteFile, readErr)
 				}
 				if mkErr := os.MkdirAll(filepath.Dir(localPath), 0750); mkErr != nil {
 					return nil, fmt.Errorf("create messages dir: %w", mkErr)
 				}
-				if writeErr := os.WriteFile(localPath, data, 0600); writeErr != nil {
+				if writeErr := os.WriteFile(localPath, data, 0600); writeErr != nil { // #nosec G703 -- localPath is constructed from internal temp directory during sync; not user-controlled
 					return nil, fmt.Errorf("write local file %s: %w", remoteFile, writeErr)
 				}
 			} else {
@@ -203,7 +203,7 @@ func (m *Merger) extractRemoteFiles(ctx context.Context) (string, error) {
 	gitCmd := exec.CommandContext(ctx, "git", "archive", "origin/"+SyncBranchName, "--", "messages/", "events.jsonl")
 	gitCmd.Dir = m.syncDir
 
-	tarCmd := exec.CommandContext(ctx, "tar", "-xf", "-", "-C", tmpDir) //nolint:gosec // tmpDir from os.MkdirTemp
+	tarCmd := exec.CommandContext(ctx, "tar", "-xf", "-", "-C", tmpDir) // #nosec G204 -- tmpDir from os.MkdirTemp, not user input
 	tarCmd.Stdin, err = gitCmd.StdoutPipe()
 	if err != nil {
 		_ = os.RemoveAll(tmpDir)
@@ -421,7 +421,7 @@ func (m *Merger) readRemoteFile(ctx context.Context, remotePath string) ([]*Even
 func (m *Merger) writeEventsToFile(path string, events []*Event) error {
 	// Create temporary file for atomic write
 	tmpPath := path + ".merge.tmp"
-	f, err := os.Create(tmpPath) //nolint:gosec // G304 - path from internal JSONL config
+	f, err := os.Create(tmpPath) // #nosec G304 -- tmpPath is derived from internal JSONL file path during merge
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}

@@ -38,11 +38,11 @@ func getWidthFromIOCTL() int {
 
 	ws := &winsize{}
 	retCode, _, _ := syscall.Syscall(syscall.SYS_IOCTL,
-		uintptr(syscall.Stdout),
+		uintptr(syscall.Stdout), // #nosec G115 -- syscall.Stdout is the constant 1; int->uintptr conversion cannot overflow
 		uintptr(syscall.TIOCGWINSZ),
-		uintptr(unsafe.Pointer(ws))) //nolint:gosec // G103: unsafe required for IOCTL syscall to get terminal dimensions
+		uintptr(unsafe.Pointer(ws))) // #nosec G103 -- unsafe.Pointer required for IOCTL syscall to pass winsize struct to kernel; standard Unix pattern //nolint:gosec
 
-	if int(retCode) == -1 {
+	if int(retCode) == -1 { // #nosec G115 -- uintptr->int conversion is intentional sign-extension to check for syscall error return (-1)
 		return 0
 	}
 

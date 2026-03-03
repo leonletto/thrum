@@ -126,12 +126,12 @@ func (r *ClientRegistry) BroadcastAll(notification any) {
 }
 
 // sendTo marshals the notification and writes it to conn.
-// sessionID is only used for unregistering on send failure; it may be empty.
+// SessionID is only used for unregistering on send failure; it may be empty.
 func (r *ClientRegistry) sendTo(conn *Connection, sessionID string, notification any) error {
 	// Send JSON-RPC notification (no id field, no response expected).
 	// Extract inner params to avoid double-wrapping when notification
 	// is already a {method, params} map from buildNotification().
-	var params any = notification
+	var params = notification
 	if m, ok := notification.(map[string]any); ok {
 		if inner, ok := m["params"]; ok {
 			params = inner

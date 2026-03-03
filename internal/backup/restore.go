@@ -238,7 +238,7 @@ func importTable(db *sql.DB, table, jsonlPath string) error {
 		return fmt.Errorf("get columns for %s: %w", table, err)
 	}
 
-	f, err := os.Open(jsonlPath) //nolint:gosec // G304 - internal path
+	f, err := os.Open(jsonlPath) // #nosec G304 -- jsonlPath is an internal JSONL file path within the backup archive
 	if err != nil {
 		return err
 	}
@@ -284,7 +284,7 @@ func importTable(db *sql.DB, table, jsonlPath string) error {
 			continue
 		}
 
-		query := fmt.Sprintf(`INSERT OR IGNORE INTO "%s" (%s) VALUES (%s)`,
+		query := fmt.Sprintf(`INSERT OR IGNORE INTO "%s" (%s) VALUES (%s)`, //#nosec G201 -- table from hardcoded localOnlyTables; columns validated against DB schema allowlist and quote-escaped; values use ? placeholders
 			table, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
 
 		if _, err := tx.Exec(query, values...); err != nil {
@@ -353,7 +353,7 @@ func extractZip(zipPath, destDir string) error {
 			return err
 		}
 
-		outFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode()) //nolint:gosec // G304
+		outFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode()) // #nosec G304 -- destPath is validated against the backup destination directory before extraction
 		if err != nil {
 			_ = rc.Close()
 			return err

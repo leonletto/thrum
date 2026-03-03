@@ -549,7 +549,7 @@ Examples:
 
 // isInteractive returns true if stdin is a terminal (not piped/redirected).
 func isInteractive() bool {
-	return term.IsTerminal(int(os.Stdin.Fd()))
+	return term.IsTerminal(int(os.Stdin.Fd())) // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 }
 
 func configGroupCmd() *cobra.Command {
@@ -3116,7 +3116,7 @@ Examples:
 
 			var content []byte
 			if flagFile != "" {
-				content, err = os.ReadFile(flagFile) //nolint:gosec // G304 - user-specified file path from CLI flag
+				content, err = os.ReadFile(flagFile) // #nosec G304 -- flagFile is user-specified via CLI flag; this is a CLI tool, user controls the path
 				if err != nil {
 					return fmt.Errorf("read context file: %w", err)
 				}
@@ -3337,7 +3337,7 @@ Examples:
 
 			if flagFile != "" {
 				// Set preamble from file
-				data, err := os.ReadFile(flagFile) //nolint:gosec // G304 - user-specified file path
+				data, err := os.ReadFile(flagFile) // #nosec G304 -- flagFile is user-specified via CLI flag; this is a CLI tool, user controls the path
 				if err != nil {
 					return fmt.Errorf("read preamble file: %w", err)
 				}
@@ -3568,17 +3568,17 @@ Examples:
 			}
 
 			destPath := filepath.Join(syncContextDir, agentID+".md")
-			if err := os.WriteFile(destPath, content, 0644); err != nil { //nolint:gosec // G306 - markdown file
+			if err := os.WriteFile(destPath, content, 0644); err != nil { //#nosec G306 -- markdown context file synced to git worktree, not sensitive data
 				return fmt.Errorf("write context to sync worktree: %w", err)
 			}
 
 			// Stage and commit in sync worktree
-			stageCmd := exec.Command("git", "-C", syncDir, "add", filepath.Join("context", agentID+".md")) //nolint:gosec // G204 - internal path construction
+			stageCmd := exec.Command("git", "-C", syncDir, "add", filepath.Join("context", agentID+".md")) // #nosec G204 -- syncDir and agentID are internal values, not user input
 			if out, err := stageCmd.CombinedOutput(); err != nil {
 				return fmt.Errorf("stage context file: %s: %w", string(out), err)
 			}
 
-			commitCmd := exec.Command("git", "-C", syncDir, "-c", "user.name=Thrum", "-c", "user.email=thrum@local", "commit", "--no-verify", "-m", fmt.Sprintf("context: sync %s", agentID), "--allow-empty") //nolint:gosec // G204 - internal path construction
+			commitCmd := exec.Command("git", "-C", syncDir, "-c", "user.name=Thrum", "-c", "user.email=thrum@local", "commit", "--no-verify", "-m", fmt.Sprintf("context: sync %s", agentID), "--allow-empty") // #nosec G204 -- syncDir is internal path; agentID is validated identity name
 			if out, err := commitCmd.CombinedOutput(); err != nil {
 				// "nothing to commit" is OK
 				if !strings.Contains(string(out), "nothing to commit") {
@@ -3587,14 +3587,14 @@ Examples:
 			}
 
 			// Push (skip in local-only mode - check for remote)
-			remoteCmd := exec.Command("git", "-C", syncDir, "remote", "get-url", "origin") //nolint:gosec // G204 - internal path construction
+			remoteCmd := exec.Command("git", "-C", syncDir, "remote", "get-url", "origin") // #nosec G204 -- syncDir is internal path, not user input
 			if _, remoteErr := remoteCmd.Output(); remoteErr != nil {
 				// No remote configured is not an error — local-only sync is valid
 				fmt.Printf("Context synced locally for %s (no remote configured).\n", agentID)
 				return nil //nolint:nilerr // intentional: no remote means local-only mode, not a failure
 			}
 
-			pushCmd := exec.Command("git", "-C", syncDir, "push", "origin", "a-sync") //nolint:gosec // G204 - internal path construction
+			pushCmd := exec.Command("git", "-C", syncDir, "push", "origin", "a-sync") // #nosec G204 -- syncDir is internal path, hardcoded branch name
 			if out, err := pushCmd.CombinedOutput(); err != nil {
 				return fmt.Errorf("push context: %s: %w", string(out), err)
 			}
@@ -3612,7 +3612,7 @@ Examples:
 // readContextFile reads a context file from the thrum directory.
 func readContextFile(thrumDir, agentName string) ([]byte, error) {
 	path := filepath.Join(thrumDir, "context", agentName+".md")
-	data, err := os.ReadFile(path) //nolint:gosec // G304 - path from internal context directory
+	data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/context/<agentName>.md, an internal context file
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -3853,7 +3853,7 @@ Examples:
 				// Bootstrap context files
 				// Create empty context file if it doesn't already exist
 				ctxPath := agentcontext.ContextPath(thrumDir, savedName)
-				if _, statErr := os.Stat(ctxPath); os.IsNotExist(statErr) {
+				if _, statErr := os.Stat(ctxPath); os.IsNotExist(statErr) { // #nosec G703 -- ctxPath is from agentcontext.ContextPath(), an internal .thrum directory path
 					if err := agentcontext.Save(thrumDir, savedName, []byte("")); err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: failed to create context file: %v\n", err)
 					}
@@ -4866,7 +4866,7 @@ Examples:
 func applyRolePreamble(thrumDir, agentName, role, preambleFile string) error {
 	if preambleFile != "" {
 		// --preamble-file takes precedence over everything
-		customContent, err := os.ReadFile(preambleFile) //nolint:gosec // G304 - user-provided flag path
+		customContent, err := os.ReadFile(preambleFile) // #nosec G304 -- preambleFile is user-specified via --preamble-file CLI flag; this is a CLI tool, user controls the path
 		if err != nil {
 			return fmt.Errorf("failed to read preamble file %q: %w", preambleFile, err)
 		}
@@ -5177,7 +5177,7 @@ func runBackupRestore(dirOverride, archivePath string, skipConfirm bool) error {
 		var answer string
 		_, _ = fmt.Scanln(&answer)
 		if answer != "y" && answer != "Y" && answer != "yes" {
-			fmt.Println("Restore cancelled.")
+			fmt.Println("Restore canceled.")
 			return nil
 		}
 	}

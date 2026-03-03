@@ -49,7 +49,7 @@ func WriteManifest(dir string, m *Manifest) error {
 
 // ReadManifest reads a manifest.json from the given directory.
 func ReadManifest(dir string) (*Manifest, error) {
-	data, err := os.ReadFile(filepath.Join(dir, "manifest.json")) //nolint:gosec // G304
+	data, err := os.ReadFile(filepath.Join(dir, "manifest.json")) // #nosec G304 -- dir is a known backup directory path, manifest.json is a fixed filename
 	if err != nil {
 		return nil, err
 	}

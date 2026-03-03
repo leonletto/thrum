@@ -703,7 +703,7 @@ func BackfillEventID(thrumDir string) error {
 // backfillEventIDInFile backfills event_id in a single JSONL file.
 func backfillEventIDInFile(filePath string) error {
 	// Read all events
-	file, err := os.Open(filePath) //nolint:gosec // G304 - path from internal JSONL config
+	file, err := os.Open(filePath) // #nosec G304 -- filePath is an internal JSONL file path from the .thrum directory
 	if err != nil {
 		return fmt.Errorf("open file: %w", err)
 	}
@@ -771,7 +771,7 @@ func backfillEventIDInFile(filePath string) error {
 
 	// Write back to file atomically
 	tmpPath := filePath + ".backfill.tmp"
-	tmpFile, err := os.Create(tmpPath) //nolint:gosec // G304 - path from internal JSONL config
+	tmpFile, err := os.Create(tmpPath) // #nosec G304 -- tmpPath is filePath+".backfill.tmp", derived from internal JSONL path
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
@@ -884,7 +884,7 @@ func MigrateJSONLSharding(thrumDir string) error {
 	}
 
 	// Read all events from monolithic file
-	file, err := os.Open(oldPath) //nolint:gosec // G304 - path from internal JSONL config
+	file, err := os.Open(oldPath) // #nosec G304 -- oldPath is the internal .thrum/messages.jsonl path
 	if err != nil {
 		return fmt.Errorf("open messages.jsonl: %w", err)
 	}
@@ -1018,7 +1018,7 @@ func ExtractAgentName(agentID string) string {
 // writeJSONLFile writes events to a JSONL file atomically.
 func writeJSONLFile(path string, events []map[string]any) error {
 	tmpPath := path + ".tmp"
-	tmpFile, err := os.Create(tmpPath) //nolint:gosec // G304 - path from internal JSONL config
+	tmpFile, err := os.Create(tmpPath) // #nosec G304 -- tmpPath derived from internal JSONL file path
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
