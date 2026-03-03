@@ -59,8 +59,8 @@ thrum inbox --unread
 thrum reply &lt;msg-id&gt; &quot;Here&#39;s my update&quot;</code></pre>
 <blockquote>
 <p><strong>Note:</strong> Use agent names (e.g., <code>@coord_main</code>), not role names (e.g.,
-<code>@coordinator</code>). Sending to a role fans out to ALL agents with that role.
-Run <code>thrum team</code> to see agent names.</p>
+<code>@coordinator</code>). Sending to a role fans out to ALL agents with that role. Run
+<code>thrum team</code> to see agent names.</p>
 </blockquote>
 <h2>Common Workflows</h2>
 <h3>Planner-Implementer Coordination</h3>
@@ -153,7 +153,9 @@ content</li>
 </ol>
 <p><strong>Recommended approach:</strong> Use <code>thrum wait</code> which blocks until a message arrives
 or times out. This is more efficient than polling loops with sleep intervals.
-Use <code>--after -1s</code> to include messages sent up to 1 second ago (<code>--after</code> negative value = &quot;N ago&quot;). Omit <code>--after</code> to receive only messages that arrive after the wait starts.</p>
+Use <code>--after -1s</code> to include messages sent up to 1 second ago (<code>--after</code>
+negative value = &quot;N ago&quot;). Omit <code>--after</code> to receive only messages that arrive
+after the wait starts.</p>
 <h3>Return Format</h3>
 <p>When messages are received:</p>
 <pre><code>MESSAGES_RECEIVED

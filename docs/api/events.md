@@ -1,3 +1,4 @@
+
 ## Event Reference
 
 This document provides detailed documentation for all events emitted by the

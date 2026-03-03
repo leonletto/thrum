@@ -7,7 +7,7 @@ a self-contained template set with its own CLAUDE.md explaining usage.
 
 | Name               | Folder                                       | Description                                                                                                                                            |
 | ------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Agent Dev Workflow | [`agent-dev-workflow/`](agent-dev-workflow/) | Three-phase workflow (Plan → Prepare → Implement) for feature development with AI agents using Beads for task tracking and git worktrees for isolation |
+| Agent Dev Workflow | [`agent-dev-workflow/`](agent-dev-workflow/) | Four-phase skill pipeline (Design → Plan → Setup → Implement) for feature development with AI agents using Beads for task tracking and git worktrees for isolation |
 
 ## How to Use
 
@@ -35,14 +35,16 @@ Template sets typically include:
 
 ## Agent Dev Workflow
 
-The `agent-dev-workflow/` template set implements a proven three-phase process:
+The `agent-dev-workflow/` template set implements a four-phase skill pipeline:
 
-1. **Plan** — Brainstorm, write design specs, create Beads epics and tasks with
-   detailed descriptions
-2. **Prepare** — Set up isolated git worktrees with shared issue tracking via
-   Beads redirects
-3. **Implement** — Execute tasks autonomously with support for resuming after
-   context loss
+1. **Design** — Explore codebase, brainstorm approaches, write design spec
+   interactively (brainstorming skill)
+2. **Plan** — Structure the design into phased implementation steps with task-ID
+   anchors (writing-plans skill)
+3. **Setup** — Decompose plan into Beads epics/tasks, select worktrees, generate
+   filled implementation prompts (project-setup skill)
+4. **Implement** — Execute tasks autonomously with support for resuming after
+   context loss (implementation-agent.md template)
 
 This workflow is designed for:
 

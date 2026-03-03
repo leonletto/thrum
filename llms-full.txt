@@ -1298,15 +1298,16 @@ Unknown event types are silently ignored (forward compatibility).
     message-listener.md           Background message polling agent (Haiku model)
     README.md                     Installation and usage instructions
 
-  toolkit/templates/              Multi-agent workflow templates
-    planning-agent.md             Phase 1: brainstorm, design spec, task decomposition
-    implementation-agent.md       Phase 3: task-by-task execution with quality gates
-    worktree-setup.md             Phase 2: git worktree and beads configuration
-    CLAUDE.md                     Overview of the 3-phase plan/prepare/implement workflow
+  toolkit/templates/agent-dev-workflow/   Four-phase skill pipeline templates
+    implementation-agent.md       Active: prompt template filled by project-setup, given to agents
+    philosophy-template.md        Active: reusable anti-patterns template for implementation standards
+    planning-agent.md             Reference: superseded by brainstorming + writing-plans skills
+    worktree-setup.md             Reference: superseded by project-setup Phase 3
+    CLAUDE.md                     Overview of the 4-phase Design/Plan/Setup/Implement workflow
     README.md                     Template customization guide
 
   Install agents:  cp toolkit/agents/thrum-agent.md toolkit/agents/message-listener.md your-project/.claude/agents/
-  Install templates: cp toolkit/templates/*.md your-project/.claude/agents/
+  Install templates: cp toolkit/templates/agent-dev-workflow/*.md your-project/docs/templates/
 
 ## Beads + Thrum Integration
 

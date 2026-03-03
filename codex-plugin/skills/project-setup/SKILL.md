@@ -4,7 +4,7 @@ description:
   Use when converting a plan file (from writing-plans skill) into beads epics,
   tasks, implementation prompts, and worktrees — before any coding begins
 # source: claude-plugin/skills/project-setup/SKILL.md (condensed for codex)
-# last-synced: 2026-03-01
+# last-synced: 2026-03-03
 ---
 
 # Project Setup
@@ -64,12 +64,32 @@ If any are missing, ask the user (prefer multiple choice when possible).
 ## Phase 1: Understand the Plan
 
 Read the plan file and the design doc it references. Identify major phases,
-components, data flow, and interfaces. Use sub-agents to explore the codebase in
-parallel — scan for existing patterns, check `bd list` / `bd ready` /
-`bd blocked` for related work.
+components, data flow, and interfaces.
+
+### The Two-Artifact System
+
+This skill produces two complementary artifacts per task:
+
+| Artifact | Contains | Authoritative For |
+|----------|----------|-------------------|
+| **Beads task** | Acceptance criteria, deps, status | What must be true to close the task |
+| **Plan file section** | Step-by-step code, file paths, verify commands | How to implement the task |
+
+Both are required. Agents read `bd show {TASK_ID}` first (what must be true),
+then search the plan file for the matching `## Task: {BEAD_ID}` section (how to
+get there).
+
+Use sub-agents to explore the codebase in parallel — scan for existing patterns,
+check `bd list` / `bd ready` / `bd blocked` for related work.
 
 Ask the user focused questions (prefer multiple choice) about anything the plan
 leaves ambiguous — constraints, scope boundaries, patterns to follow.
+
+### Check for Implementation Philosophy Doc
+
+Check if the project has a philosophy doc defining anti-patterns and red flags.
+If not found, offer to create one from
+`toolkit/templates/agent-dev-workflow/philosophy-template.md`.
 
 ## Phase 2: Decompose into Epics & Tasks
 
@@ -143,6 +163,17 @@ Before proceeding to Phase 3:
 - [ ] No circular dependencies (`bd blocked` should be clean)
 - [ ] Each epic can be assigned to one worktree/branch
 - [ ] Total scope is realistic (flag if > 20 tasks per epic)
+
+### Verify Plan File Anchors
+
+After creating all tasks, verify the plan file has a `## Task: {BEAD_ID}` anchor
+for each task. Agents grep for their section instead of reading entire plan
+files.
+
+### Detect Cross-Epic Dependencies
+
+Scan `bd blocked` for tasks blocked by tasks in other epics. Record the
+cross-epic dependency map — it feeds Phase 4 prompt generation.
 
 ## Phase 3: Select Worktrees & Agents
 
@@ -259,6 +290,10 @@ These values feed into Phase 4 placeholder resolution.
 
 ## Phase 4: Generate Implementation Prompts
 
+**CRITICAL: You MUST generate prompts yourself. Do NOT delegate prompt
+generation to sub-agents.** Sub-agents skip sections, leave template metadata,
+and produce prompts that confuse the implementation agent.
+
 For each epic/worktree assignment, generate a filled prompt file.
 
 ### Step 1: Read the template
@@ -284,10 +319,12 @@ worktree-related values come from the Phase 3 assignments:
 | `{{PROJECT_ROOT}}`     | Absolute path to the project root                  |
 | `{{DESIGN_DOC}}`       | **Absolute path** to the design spec               |
 | `{{REFERENCE_CODE}}`   | Relevant reference code paths                      |
-| `{{QUALITY_COMMANDS}}` | Test/lint commands                                 |
+| `{{QUALITY_COMMANDS}}` | Test/lint commands — **scoped to packages this epic modifies** |
 | `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                  |
 | `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                |
 | `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input) |
+| `{{ANTI_PATTERNS}}`    | Generated from design doc + philosophy doc         |
+| `{{CROSS_EPIC_DEPS}}`  | From cross-epic dependency map (or "No cross-epic dependencies.") |
 
 **IMPORTANT — Absolute paths for gitignored files:** `{{DESIGN_DOC}}`,
 `{{PLAN_FILE}}`, and the saved prompt path (`dev-docs/prompts/`) are typically
@@ -296,8 +333,10 @@ worktrees only share committed content. Always use absolute paths (e.g.,
 `/Users/you/project/dev-docs/plans/file.md`, not `dev-docs/plans/file.md`). This
 also applies to beads task descriptions.
 
-**Do not omit, reorganize, or summarize any section of the template.** The
-output must contain every section from the original with placeholders replaced.
+**Strip template meta-sections** (`## Purpose`, `## Inputs Required`) — these
+are template documentation, not agent instructions. **Keep all behavioral
+sections** (Sub-Agent Strategy, all 4 Phases, Resume Quick Reference) with
+placeholders replaced.
 
 ### Step 3: Prepend feature-specific context
 
@@ -354,6 +393,12 @@ again.
 
 **Generating prompts before worktree setup:** Prompts embed the worktree path,
 branch, and agent name — confirm these in Phase 3 first.
+
+**Delegating prompt generation to sub-agents:** Always generate prompts yourself
+in the main context.
+
+**Leaving template meta-sections in filled prompts:** Strip `## Purpose` and
+`## Inputs Required` — they are template documentation, not agent instructions.
 
 **Using relative paths for gitignored files:** Plan files, design docs, and
 prompts live in gitignored directories. Always use absolute paths.

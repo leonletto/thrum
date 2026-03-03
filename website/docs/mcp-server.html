@@ -49,8 +49,8 @@ receive messages using native MCP tools instead of shelling out to CLI commands.
 It runs as a long-lived child process (<code>thrum mcp serve</code>) communicating over
 stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for
 message operations and via WebSocket for real-time push notifications.</p>
-<p>The server provides 11 MCP tools: 4 for core messaging operations, 6 for
-group management, and 1 deprecated broadcast tool.</p>
+<p>The server provides 11 MCP tools: 4 for core messaging operations, 6 for group
+management, and 1 deprecated broadcast tool.</p>
 <p>The primary motivation is eliminating polling overhead. Without MCP, agents must
 periodically call <code>thrum inbox</code> (burning tokens and context). With MCP, a cheap
 background sub-agent blocks on <code>wait_for_message</code> and wakes the main agent
@@ -97,7 +97,8 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <code>identity.GenerateAgentID(repoID, role, module, name)</code></li>
 <li>Create MCP server with the official Go SDK
 (<code>github.com/modelcontextprotocol/go-sdk/mcp</code>)</li>
-<li>Register all 11 tool handlers (4 core messaging + 6 group management + 1 deprecated)</li>
+<li>Register all 11 tool handlers (4 core messaging + 6 group management + 1
+deprecated)</li>
 <li>Initialize WebSocket waiter (best-effort -- reads port from
 <code>.thrum/var/ws.port</code>)<ul>
 <li>Connect to <code>ws://localhost:{port}/ws</code></li>
@@ -832,12 +833,13 @@ roles to individual agent IDs.</p>
 </tr>
 </tbody></table>
 <p><strong>Daemon RPC:</strong> <code>group.info</code> (without expand) or <code>group.members</code> (with expand)</p>
-<h3>broadcast_message <em>(Deprecated)</em></h3>
+<h3>broadcast*message *(Deprecated)_</h3>
 <blockquote>
 <p><strong>Deprecated:</strong> Use <code>send_message(to=&quot;@everyone&quot;, content=&quot;...&quot;)</code> instead.
 This tool is registered but deprecated and may be removed in a future release.</p>
 </blockquote>
-<p>Broadcast a message to all agents. Equivalent to <code>send_message</code> with <code>to=&quot;@everyone&quot;</code>.</p>
+<p>Broadcast a message to all agents. Equivalent to <code>send_message</code> with
+<code>to=&quot;@everyone&quot;</code>.</p>
 <p><strong>Input:</strong></p>
 <table>
 <thead>
