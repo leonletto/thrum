@@ -390,6 +390,48 @@
     "lastUpdated": ""
   },
   {
+    "path": "strategies/sub-agent-strategy.html",
+    "title": "Sub-Agent Strategy",
+    "description": "When and how to delegate work to sub-agents for context efficiency",
+    "category": "strategies",
+    "order": 1,
+    "tags": [
+      "agents",
+      "sub-agents",
+      "delegation",
+      "parallelization"
+    ],
+    "lastUpdated": "2026-03-03"
+  },
+  {
+    "path": "strategies/thrum-registration.html",
+    "title": "Thrum Registration",
+    "description": "How to register with Thrum at session start and communicate with other agents",
+    "category": "strategies",
+    "order": 2,
+    "tags": [
+      "registration",
+      "messaging",
+      "thrum",
+      "coordination"
+    ],
+    "lastUpdated": "2026-03-03"
+  },
+  {
+    "path": "strategies/resume-after-context-loss.html",
+    "title": "Resume After Context Loss",
+    "description": "How to recover and pick up work after compaction, a new session, or a crash",
+    "category": "strategies",
+    "order": 3,
+    "tags": [
+      "resume",
+      "context",
+      "recovery",
+      "compaction"
+    ],
+    "lastUpdated": "2026-03-03"
+  },
+  {
     "path": "sync.html",
     "title": "Sync Protocol",
     "description": "Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design",
