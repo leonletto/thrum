@@ -326,6 +326,13 @@ worktree-related values come from the Phase 3 assignments:
 | `{{ANTI_PATTERNS}}`    | Generated from design doc + philosophy doc                        |
 | `{{CROSS_EPIC_DEPS}}`  | From cross-epic dependency map (or "No cross-epic dependencies.") |
 
+**Strategy file references.** For thrum-enabled projects, replace inline
+strategy sections with read-directives: `## Sub-Agent Strategy` →
+`.thrum/strategies/sub-agent-strategy.md`, `## MANDATORY: Register Before Any
+Work` → `.thrum/strategies/thrum-registration.md`, `## Resume Quick Reference`
+→ `.thrum/strategies/resume-after-context-loss.md`. For non-thrum projects (no
+`.thrum/` directory), keep sections inline.
+
 **IMPORTANT — Absolute paths for gitignored files:** `{{DESIGN_DOC}}`,
 `{{PLAN_FILE}}`, and the saved prompt path (`dev-docs/prompts/`) are typically
 gitignored. Agents in worktrees cannot resolve relative paths to these files —
