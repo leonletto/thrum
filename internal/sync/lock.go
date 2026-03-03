@@ -21,7 +21,7 @@ func acquireLock(lockPath string) (*Lock, error) {
 	}
 
 	// Open or create lock file
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600) //nolint:gosec // G304 - path from internal var directory
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600) // #nosec G304 -- lockPath is from internal .thrum/var directory
 	if err != nil {
 		return nil, fmt.Errorf("open lock file: %w", err)
 	}

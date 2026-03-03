@@ -107,7 +107,7 @@ func migrationNeeded(repoPath, thrumDir string) (bool, []string) {
 	// Check for files tracked by git
 	trackedFiles := []string{".thrum/events.jsonl", ".thrum/messages.jsonl", ".thrum/messages/"}
 	for _, f := range trackedFiles {
-		cmd := exec.Command("git", "ls-files", f) //nolint:gosec // f from hardcoded trackedFiles list
+		cmd := exec.Command("git", "ls-files", f) // #nosec G204 -- f comes from hardcoded trackedFiles slice, not user input
 		cmd.Dir = repoPath
 		output, err := cmd.Output()
 		if err == nil && strings.TrimSpace(string(output)) != "" {
@@ -183,12 +183,12 @@ func copyDataToSync(thrumDir, syncDir string) ([]string, error) {
 	// Copy events.jsonl
 	eventsPath := filepath.Join(thrumDir, "events.jsonl")
 	if _, err := os.Stat(eventsPath); err == nil {
-		data, err := os.ReadFile(eventsPath) //nolint:gosec // G304 - path from internal .thrum directory
+		data, err := os.ReadFile(eventsPath) // #nosec G304 -- eventsPath is .thrum/events.jsonl, an internal data file
 		if err != nil {
 			return nil, fmt.Errorf("reading events.jsonl: %w", err)
 		}
 		dst := filepath.Join(syncDir, "events.jsonl")
-		if err := os.WriteFile(dst, data, 0600); err != nil {
+		if err := os.WriteFile(dst, data, 0600); err != nil { // #nosec G703 -- dst is filepath.Join of internal syncDir + constant filename
 			return nil, fmt.Errorf("writing events.jsonl to sync: %w", err)
 		}
 		copied = append(copied, ".thrum/events.jsonl -> sync worktree/events.jsonl")
@@ -197,12 +197,12 @@ func copyDataToSync(thrumDir, syncDir string) ([]string, error) {
 	// Copy messages.jsonl (monolithic file)
 	messagesPath := filepath.Join(thrumDir, "messages.jsonl")
 	if _, err := os.Stat(messagesPath); err == nil {
-		data, err := os.ReadFile(messagesPath) //nolint:gosec // G304 - path from internal .thrum directory
+		data, err := os.ReadFile(messagesPath) // #nosec G304 -- messagesPath is .thrum/messages.jsonl, an internal data file
 		if err != nil {
 			return nil, fmt.Errorf("reading messages.jsonl: %w", err)
 		}
 		dst := filepath.Join(syncDir, "messages.jsonl")
-		if err := os.WriteFile(dst, data, 0600); err != nil {
+		if err := os.WriteFile(dst, data, 0600); err != nil { // #nosec G703 -- dst is filepath.Join of internal syncDir + constant filename
 			return nil, fmt.Errorf("writing messages.jsonl to sync: %w", err)
 		}
 		copied = append(copied, ".thrum/messages.jsonl -> sync worktree/messages.jsonl")
@@ -220,12 +220,12 @@ func copyDataToSync(thrumDir, syncDir string) ([]string, error) {
 				continue
 			}
 			srcPath := filepath.Join(messagesDir, e.Name())
-			data, err := os.ReadFile(srcPath) //nolint:gosec // G304 - path from internal .thrum/messages directory
+			data, err := os.ReadFile(srcPath) // #nosec G304 -- srcPath is .thrum/messages/<file>.jsonl from directory listing
 			if err != nil {
 				return nil, fmt.Errorf("reading %s: %w", e.Name(), err)
 			}
 			dstPath := filepath.Join(syncMessagesDir, e.Name())
-			if err := os.WriteFile(dstPath, data, 0600); err != nil {
+			if err := os.WriteFile(dstPath, data, 0600); err != nil { // #nosec G703 -- dstPath is filepath.Join of internal sync dir + directory-listed .jsonl filename
 				return nil, fmt.Errorf("writing %s to sync: %w", e.Name(), err)
 			}
 			copied = append(copied, fmt.Sprintf(".thrum/messages/%s -> sync worktree/messages/%s", e.Name(), e.Name()))
@@ -299,7 +299,7 @@ func removeFromMainTracking(repoPath string) []string {
 func migrateGitignore(repoPath string) (bool, error) {
 	gitignorePath := filepath.Join(repoPath, ".gitignore")
 
-	data, err := os.ReadFile(gitignorePath) //nolint:gosec // G304 - path derived from repo root
+	data, err := os.ReadFile(gitignorePath) // #nosec G304 -- gitignorePath is <repoPath>/.gitignore, derived from the CLI-provided repo root
 	if err != nil {
 		if os.IsNotExist(err) {
 			// No .gitignore — use the standard updateGitignore from init
@@ -353,7 +353,7 @@ func migrateGitignore(repoPath string) (bool, error) {
 	}
 
 	result := strings.Join(newLines, "\n")
-	if err := os.WriteFile(gitignorePath, []byte(result), 0600); err != nil {
+	if err := os.WriteFile(gitignorePath, []byte(result), 0600); err != nil { // #nosec G703 -- gitignorePath is .gitignore in the user's repo directory, an expected write target for this CLI tool
 		return false, err
 	}
 
@@ -365,7 +365,7 @@ func migrateGitignore(repoPath string) (bool, error) {
 func cleanGitattributes(repoPath string) (bool, error) {
 	gitattrsPath := filepath.Join(repoPath, ".gitattributes")
 
-	data, err := os.ReadFile(gitattrsPath) //nolint:gosec // G304 - path derived from repo root
+	data, err := os.ReadFile(gitattrsPath) // #nosec G304 -- gitattrsPath is <repoPath>/.gitattributes, derived from the CLI-provided repo root
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil // No .gitattributes, nothing to clean
@@ -446,7 +446,7 @@ func MigrateSyncWorktreeLocation(repoPath, thrumDir string) error {
 	fmt.Fprintf(os.Stderr, "Migrating sync worktree from %s to .git/thrum-sync/...\n", oldSyncDir)
 
 	// Remove old worktree via git
-	cmd := exec.Command("git", "worktree", "remove", "--force", oldSyncDir) //nolint:gosec // oldSyncDir from internal path construction
+	cmd := exec.Command("git", "worktree", "remove", "--force", oldSyncDir) // #nosec G204 -- oldSyncDir is constructed from internal config paths, not user input
 	cmd.Dir = repoPath
 	if err := cmd.Run(); err != nil {
 		// Fallback: manual removal + prune

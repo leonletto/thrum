@@ -68,7 +68,7 @@ func DaemonStart(repoPath string, localOnly bool) error {
 	if localOnly {
 		args = append(args, "--local")
 	}
-	cmd := exec.Command(executable, args...) //nolint:gosec // executable from os.Executable(), repoPath validated above
+	cmd := exec.Command(executable, args...) // #nosec G204 -- executable from os.Executable(); repoPath is validated internal config, not raw user input
 
 	// Detach from current process - daemon runs independently
 	cmd.Stdout = nil
@@ -235,8 +235,8 @@ func DaemonRestart(repoPath string, localOnly bool) error {
 
 	// Preserve the previous WebSocket port so the UI reconnects to the same URL
 	if prevPort > 0 {
-		os.Setenv("THRUM_WS_PORT", fmt.Sprintf("%d", prevPort)) //nolint:errcheck,gosec
-		defer os.Unsetenv("THRUM_WS_PORT")                      //nolint:errcheck,gosec
+		_ = os.Setenv("THRUM_WS_PORT", fmt.Sprintf("%d", prevPort)) // #nosec G104 -- best-effort port preservation
+		defer func() { _ = os.Unsetenv("THRUM_WS_PORT") }()         // #nosec G104 -- best-effort cleanup
 	}
 
 	// Start daemon

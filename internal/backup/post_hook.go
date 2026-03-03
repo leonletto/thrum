@@ -25,7 +25,7 @@ func RunPostBackup(command, repoPath, backupDir, repoName, currentDir string) *P
 	ctx, cancel := context.WithTimeout(context.Background(), postHookTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", command) //nolint:gosec // G204 - user-configured command
+	cmd := exec.CommandContext(ctx, "sh", "-c", command) // #nosec G204 -- user-configured post-backup hook command; intentional shell execution of user-defined hook
 	cmd.Dir = repoPath
 	var stderr strings.Builder
 	cmd.Stderr = &stderr

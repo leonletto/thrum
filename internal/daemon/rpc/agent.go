@@ -919,7 +919,7 @@ func (h *AgentHandler) HandleCleanup(ctx context.Context, params json.RawMessage
 		}
 
 		// Read identity file to get worktree and branch info
-		identityData, err := os.ReadFile(identityPath) //nolint:gosec // G304 - path from internal identities directory
+		identityData, err := os.ReadFile(identityPath) // #nosec G304 -- identityPath is under .thrum/identities/, an internal directory
 		if err != nil {
 			continue // Skip if can't read
 		}

@@ -270,7 +270,7 @@ gosec-check:
 		echo "gosec not found. Installing $(GOSEC_VERSION)..."; \
 		go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION); \
 	fi
-	gosec -exclude=G103,G115,G204,G304,G306,G404 -exclude-dir=.ref -exclude-dir=third_party -exclude-dir=builtin -exclude-dir=examples -exclude-dir=output ./...
+	gosec -exclude-dir=.ref -exclude-dir=third_party -exclude-dir=builtin -exclude-dir=examples -exclude-dir=output ./...
 
 vulncheck:
 	@echo "Running govulncheck..."

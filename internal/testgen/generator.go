@@ -266,7 +266,7 @@ func generateGroups(rng *rand.Rand, agents []agentInfo, n int) []groupInfo {
 
 // Generate creates a complete .thrum directory at outputDir.
 func Generate(outputDir string, cfg Config) error {
-	rng := rand.New(rand.NewSource(cfg.Seed)) //nolint:gosec // intentional use of weak random for deterministic test data
+	rng := rand.New(rand.NewSource(cfg.Seed)) // #nosec G404 -- intentional weak RNG for deterministic test data generation; no security context //nolint:gosec
 	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	// Create directory structure
@@ -380,7 +380,7 @@ func writeContextFiles(outputDir string, agents []agentInfo) error {
 
 func writeJSONLEvents(outputDir string, agents []agentInfo, sessions []sessionInfo, messages []messageInfo, groups []groupInfo, baseTime time.Time) error {
 	// events.jsonl — agent register, session start/end, group create/member.add
-	eventsFile, err := os.Create(filepath.Join(outputDir, "events.jsonl")) //nolint:gosec // controlled path in test data generation
+	eventsFile, err := os.Create(filepath.Join(outputDir, "events.jsonl")) // #nosec G304 -- path built from controlled outputDir in test data generation
 	if err != nil {
 		return fmt.Errorf("create events.jsonl: %w", err)
 	}
@@ -488,7 +488,7 @@ func writeJSONLEvents(outputDir string, agents []agentInfo, sessions []sessionIn
 	for _, msg := range messages {
 		enc, ok := messageWriters[msg.AgentID]
 		if !ok {
-			f, err := os.Create(filepath.Join(outputDir, "messages", msg.AgentID+".jsonl")) //nolint:gosec // controlled path in test data generation
+			f, err := os.Create(filepath.Join(outputDir, "messages", msg.AgentID+".jsonl")) // #nosec G304 -- path built from controlled outputDir in test data generation
 			if err != nil {
 				return fmt.Errorf("create message file for %s: %w", msg.AgentID, err)
 			}
@@ -703,7 +703,7 @@ func CompressToTarGz(sourceDir, outputPath string) error {
 		return fmt.Errorf("create output dir: %w", err)
 	}
 
-	outFile, err := os.Create(outputPath) //nolint:gosec // controlled path in test data generation
+	outFile, err := os.Create(outputPath) // #nosec G304 -- path is the caller-provided output path, controlled by test data generation
 	if err != nil {
 		return fmt.Errorf("create output: %w", err)
 	}
@@ -740,7 +740,7 @@ func CompressToTarGz(sourceDir, outputPath string) error {
 			return nil
 		}
 
-		f, err := os.Open(path) //nolint:gosec // controlled path in test data generation
+		f, err := os.Open(path) // #nosec G304,G122 -- path comes from filepath.Walk over controlled sourceDir in test data generation; race-prone path is not a concern for internal test data
 		if err != nil {
 			return err
 		}

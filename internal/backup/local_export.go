@@ -44,7 +44,7 @@ func ExportLocalTables(db *sql.DB, backupDir string) (LocalExportResult, error) 
 // exportTable exports all rows from a table as JSONL using dynamic column scanning.
 func exportTable(db *sql.DB, table, outPath string) (int, error) {
 	// Use quoted table name to prevent injection (table names come from our constant list)
-	rows, err := db.Query(`SELECT * FROM "` + table + `"`) //nolint:gosec // table from hardcoded list
+	rows, err := db.Query(`SELECT * FROM "` + table + `"`) //#nosec G202 -- table from hardcoded localOnlyTables constant, not user input
 	if err != nil {
 		return 0, fmt.Errorf("query %s: %w", table, err)
 	}
@@ -56,7 +56,7 @@ func exportTable(db *sql.DB, table, outPath string) (int, error) {
 	}
 
 	tmpPath := outPath + ".tmp"
-	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) //nolint:gosec // G304
+	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) // #nosec G304 -- tmpPath is outPath+".tmp", derived from the internal backup export path
 	if err != nil {
 		return 0, err
 	}

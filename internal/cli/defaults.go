@@ -42,7 +42,7 @@ func AutoDisplay(role, module string) string {
 
 // GitTopLevel returns the git toplevel directory, or empty string on error.
 func GitTopLevel(repoPath string) string {
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--show-toplevel")
+	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--show-toplevel") // #nosec G204 -- hardcoded "git" binary; all args are fixed git flags
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -67,7 +67,7 @@ func GetRepoName(repoPath string) string {
 // GetCurrentBranch returns the current git branch.
 // Falls back to "main" if not in a git repo.
 func GetCurrentBranch(repoPath string) string {
-	cmd := exec.Command("git", "-C", repoPath, "branch", "--show-current")
+	cmd := exec.Command("git", "-C", repoPath, "branch", "--show-current") // #nosec G204 -- hardcoded "git" binary; all args are fixed git flags
 	out, err := cmd.Output()
 	if err != nil {
 		return "main"
@@ -82,7 +82,7 @@ func GetCurrentBranch(repoPath string) string {
 // GetRepoID returns the repo ID from git remote origin URL.
 // Returns empty string if no remote or not a git repo.
 func GetRepoID(repoPath string) string {
-	cmd := exec.Command("git", "-C", repoPath, "remote", "get-url", "origin")
+	cmd := exec.Command("git", "-C", repoPath, "remote", "get-url", "origin") // #nosec G204 -- hardcoded "git" binary; all args are fixed git flags
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
