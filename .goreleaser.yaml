@@ -49,6 +49,7 @@ changelog:
       - "^test:"
       - "^chore:"
       - "^ci:"
+      - "^bd:"
       - Merge pull request
       - Merge branch
 
