@@ -6,6 +6,20 @@ Guide an agent through implementing an epic's tasks in a designated worktree.
 Supports both cold-start and resume scenarios. The agent works through beads
 tasks in order, runs quality gates, and pushes completed work.
 
+## CRITICAL: Prompt Generation Rules
+
+When filling this template to create an implementation prompt:
+
+1. **Every section is mandatory unless explicitly marked optional.** Do not
+   summarize, paraphrase, or abbreviate sections — copy them verbatim and fill
+   in the `{{PLACEHOLDERS}}`. Sections marked `IMPORTANT` must appear in the
+   output prompt word-for-word.
+2. **The Sub-Agent Strategy section (below) must be included in full.** It
+   contains the agent selection table, parallelization criteria, and verifier
+   pattern. These are operational directives, not background context. Omitting
+   them degrades agent performance by removing their ability to delegate and
+   parallelize work.
+
 ## Inputs Required
 
 - `{{EPIC_ID}}` — The beads epic ID to implement
