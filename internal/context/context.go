@@ -141,6 +141,14 @@ func DefaultPreamble() []byte {
 **Who's online:** ` + "`thrum agent list --context`" + `
 **Save context:** ` + "`thrum context save`" + `
 **Wait for messages:** ` + "`thrum wait --after -1s --timeout 5m`" + ` (` + "`--after -1s`" + ` = include messages sent up to 1s ago)
+
+## Agent Strategies
+
+Read these strategy files for operational patterns. They are in ` + "`.thrum/strategies/`" + `:
+
+- ` + "`.thrum/strategies/sub-agent-strategy.md`" + ` — When and how to delegate work to sub-agents
+- ` + "`.thrum/strategies/thrum-registration.md`" + ` — Registration, messaging, and coordination patterns
+- ` + "`.thrum/strategies/resume-after-context-loss.md`" + ` — How to resume work after compaction or session restart
 `)
 }
 

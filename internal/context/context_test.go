@@ -311,7 +311,13 @@ func TestDefaultPreambleContent(t *testing.T) {
 		t.Fatal("DefaultPreamble should not be empty")
 	}
 	s := string(content)
-	for _, keyword := range []string{"thrum inbox", "thrum send", "thrum reply", "thrum status", "thrum context save"} {
+	for _, keyword := range []string{
+		"thrum inbox", "thrum send", "thrum reply", "thrum status",
+		"thrum context save",
+		".thrum/strategies/sub-agent-strategy.md",
+		".thrum/strategies/thrum-registration.md",
+		".thrum/strategies/resume-after-context-loss.md",
+	} {
 		if !strings.Contains(s, keyword) {
 			t.Errorf("DefaultPreamble missing keyword %q", keyword)
 		}
