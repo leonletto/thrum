@@ -100,12 +100,13 @@ func DefaultPreamble() []byte {
 	return []byte(`## Thrum Quick Reference
 
 **Check messages:** ` + "`thrum inbox --unread`" + `
-**Send message:** ` + "`thrum send \"message\" --to @role`" + `
+**Send to agent:** ` + "`thrum send \"message\" --to @<agent_name>`" + ` (use ` + "`thrum team`" + ` to find names)
+**Send to group:** ` + "`thrum send \"message\" --to @<role>`" + ` (fans out to ALL agents with that role)
 **Reply:** ` + "`thrum reply <MSG_ID> \"response\"`" + `
 **Status:** ` + "`thrum status`" + `
 **Who's online:** ` + "`thrum agent list --context`" + `
 **Save context:** ` + "`thrum context save`" + `
-**Wait for messages:** ` + "`thrum wait --after -30s --timeout 5m`" + ` (` + "`--after -30s`" + ` = include messages sent up to 30s ago)
+**Wait for messages:** ` + "`thrum wait --after -1s --timeout 5m`" + ` (` + "`--after -1s`" + ` = include messages sent up to 1s ago)
 `)
 }
 
