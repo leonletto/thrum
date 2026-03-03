@@ -47,8 +47,8 @@ digraph when_to_use {
 ## Inputs
 
 Primary input: **plan file path** (output of writing-plans, e.g.
-`dev-docs/plans/2026-02-21-feature-plan.md`). The plan references the design doc
-— both are read in Phase 1.
+`dev-docs/plans/2026-02-21-feature-plan.md`). The plan references the design doc —
+both are read in Phase 1.
 
 Also needed from CLAUDE.md or conversation context:
 
@@ -63,6 +63,23 @@ If any are missing, ask the user (prefer multiple choice when possible).
 
 Read the plan file and the design doc it references. Identify major phases,
 components, data flow, and interfaces.
+
+### The Two-Artifact System
+
+This skill produces two complementary artifacts per task:
+
+| Artifact | Contains | Authoritative For |
+|----------|----------|-------------------|
+| **Beads task** | Acceptance criteria, deps, status | What must be true to close the task |
+| **Plan file section** | Step-by-step code, file paths, verify commands | How to implement the task |
+
+Both are required. Agents read `bd show {TASK_ID}` first (what must be true),
+then search the plan file for the matching `## Task: {BEAD_ID}` section (how to
+get there).
+
+**If the plan file lacks code for a task, the task description must be detailed
+enough to stand alone.** Flag any plan tasks with vague or missing
+implementation code during this phase.
 
 Use sub-agents to explore the codebase in parallel:
 
@@ -84,6 +101,30 @@ After agents complete, read the output files. Check `bd list` / `bd ready` /
 
 Ask the user focused questions (prefer multiple choice) about anything the plan
 leaves ambiguous — constraints, scope boundaries, patterns to follow.
+
+### Check for Implementation Philosophy Doc
+
+After reading the plan and design doc, check if the project has an
+implementation philosophy doc — a file defining anti-patterns, red flags, and
+non-negotiable criteria:
+
+1. Check if the design doc references a philosophy doc (look for "philosophy",
+   "anti-patterns", "implementation standards" keywords)
+2. Search for existing files:
+   ```bash
+   find . -name "*philosophy*" -o -name "*anti-pattern*" -o -name "*implementation-standards*" | head
+   ```
+3. **If found:** Read it and extract the key anti-patterns. These will be
+   injected into each epic's prompt in Phase 4.
+4. **If not found:** Offer to create one from the template:
+   ```
+   toolkit/templates/agent-dev-workflow/philosophy-template.md
+   ```
+   Use `AskUserQuestion` to ask whether to create it now or skip.
+
+This is the project's "rules of engagement" for implementation agents. Without
+it, agents can only verify "tests pass" — they can't verify architectural
+compliance.
 
 ## Phase 2: Decompose into Epics & Tasks
 
@@ -210,6 +251,47 @@ Before proceeding to Phase 3:
 - [ ] Each epic can be assigned to one worktree/branch
 - [ ] Total scope is realistic (flag if > 20 tasks per epic)
 
+### Verify Plan File Anchors
+
+After creating all tasks, verify the plan file has a searchable anchor for each
+task. Implementation agents find their code by searching for:
+
+```text
+## Task: {BEAD_ID} — {Title}
+```
+
+For each created task, grep the plan file:
+
+```bash
+grep "## Task:" {{PLAN_FILE}} | head -20
+```
+
+Cross-reference against the created bead IDs. If any task lacks a matching
+anchor, add it to the plan file at the corresponding section. This ensures
+agents can search for their section instead of reading the entire (potentially
+large) file.
+
+### Detect Cross-Epic Dependencies
+
+After setting all dependencies, scan for tasks that depend on tasks in OTHER
+epics:
+
+```bash
+bd blocked
+```
+
+For each cross-epic dependency (where the blocker is in a different epic than
+the blocked task), record:
+
+| Blocked Task | Blocked By | Blocker's Epic |
+|-------------|------------|----------------|
+
+Save this map — it feeds Phase 4, where each implementation prompt will include
+its epic's cross-epic dependencies so agents know exactly which external tasks
+to check before starting blocked work.
+
+If no cross-epic dependencies exist, note that and move on.
+
 ## Phase 3: Select Worktrees & Agents
 
 **This phase is an interactive decision gate.** You MUST ask the user which
@@ -238,22 +320,20 @@ the options from the gathered state:
 
 **Option types to present:**
 
-| Scenario                                    | Option label                        |
-| ------------------------------------------- | ----------------------------------- |
-| Existing idle worktree with related branch  | "Reuse `<path>` (`<branch>`)"       |
-| Existing idle worktree, unrelated branch    | "Reuse `<path>`, create new branch" |
-| No suitable worktree exists                 | "Create new worktree"               |
-| Work is small enough for the current branch | "Use current worktree (`<branch>`)" |
+| Scenario                                           | Option label                          |
+| -------------------------------------------------- | ------------------------------------- |
+| Existing idle worktree with related branch         | "Reuse `<path>` (`<branch>`)"        |
+| Existing idle worktree, unrelated branch           | "Reuse `<path>`, create new branch"  |
+| No suitable worktree exists                        | "Create new worktree"                |
+| Work is small enough for the current branch        | "Use current worktree (`<branch>`)"  |
 
 Include in each option's description:
-
 - The worktree path and current branch
 - Whether it's clean or has uncommitted changes
 - Whether it has an existing agent registered
 - Its status from CLAUDE.md (active/idle/merged)
 
 **For "Create new worktree"**, suggest:
-
 - Path: `~/.workspaces/{repo}/{feature}` (from CLAUDE.md convention)
 - Branch: `feature/{feature-name}` (from `thrum-dev`)
 
@@ -379,13 +459,20 @@ success, it's fine.
 
 At the end of this phase, you should have a confirmed assignment for each epic:
 
-| Epic        | Worktree Path | Branch     | Agent Name     |
-| ----------- | ------------- | ---------- | -------------- |
-| `<epic-id>` | `<path>`      | `<branch>` | `<agent-name>` |
+| Epic | Worktree Path | Branch | Agent Name |
+|------|---------------|--------|------------|
+| `<epic-id>` | `<path>` | `<branch>` | `<agent-name>` |
 
 These values feed directly into the `{{PLACEHOLDER}}` resolution in Phase 4.
 
 ## Phase 4: Generate Implementation Prompts
+
+**CRITICAL: You MUST generate prompts yourself. Do NOT delegate prompt
+generation to sub-agents.** Sub-agents take shortcuts — they skip sections,
+leave template metadata in the output, fail to strip meta-sections, and produce
+prompts that confuse the implementation agent. The prompt is the most important
+artifact this skill produces. It defines how the implementation agent behaves
+for the entire epic. Treat it with the same care as writing code.
 
 For each epic/worktree assignment, generate a filled prompt file.
 
@@ -398,24 +485,47 @@ Read toolkit/templates/agent-dev-workflow/implementation-agent.md
 This is the **source template**. Do not work from memory — read the actual file
 every time.
 
+### Step 1.5: Generate Anti-Patterns for Each Epic
+
+For each epic's prompt, generate the `{{ANTI_PATTERNS}}` content:
+
+1. Read the design doc's **Key Decisions** section — extract decisions that
+   constrain implementation (e.g., "full page reload, not HTMX", "real service
+   calls, not hardcoded")
+2. Read the philosophy doc's **Anti-Patterns** and **Red Flags** sections
+   (identified in Phase 1)
+3. Generate 3-5 epic-specific rules and red flags:
+   - State what MUST happen (positive requirement)
+   - State what MUST NOT happen (anti-pattern)
+   - Make rules grep-able where possible (e.g., "grep for `display:none`")
+4. Present the generated anti-patterns to the user for approval via
+   `AskUserQuestion` before injecting into the prompt
+
+**Why this matters:** The verifier sub-agent pattern in the implementation
+template uses these red flags to check each task. Generic "tests pass"
+verification misses architectural violations that pass tests but violate design
+decisions.
+
 ### Step 2: Resolve all placeholders
 
-Perform literal find-and-replace on every `{{PLACEHOLDER}}` in the template. All
-worktree-related values come from the Phase 3 assignments:
+Perform literal find-and-replace on every `{{PLACEHOLDER}}` in the template.
+All worktree-related values come from the Phase 3 assignments:
 
-| Placeholder            | Source                                                   |
-| ---------------------- | -------------------------------------------------------- |
-| `{{EPIC_ID}}`          | Beads epic ID from Phase 2                               |
-| `{{EPIC_TITLE}}`       | Epic title (used in commit messages)                     |
-| `{{WORKTREE_PATH}}`    | **From Phase 3 worktree assignment**                     |
-| `{{BRANCH_NAME}}`      | **From Phase 3 worktree assignment**                     |
-| `{{PROJECT_ROOT}}`     | Absolute path to the project root                        |
-| `{{DESIGN_DOC}}`       | **Absolute path** to the design spec                     |
+| Placeholder            | Source                                              |
+| ---------------------- | --------------------------------------------------- |
+| `{{EPIC_ID}}`          | Beads epic ID from Phase 2                          |
+| `{{EPIC_TITLE}}`       | Epic title (used in commit messages)                |
+| `{{WORKTREE_PATH}}`    | **From Phase 3 worktree assignment**                |
+| `{{BRANCH_NAME}}`      | **From Phase 3 worktree assignment**                |
+| `{{PROJECT_ROOT}}`     | Absolute path to the project root                   |
+| `{{DESIGN_DOC}}`       | **Absolute path** to the design spec                |
 | `{{REFERENCE_CODE}}`   | Relevant reference code paths (relative OK if committed) |
-| `{{QUALITY_COMMANDS}}` | Test/lint commands                                       |
-| `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                        |
-| `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                      |
-| `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)       |
+| `{{QUALITY_COMMANDS}}` | Test/lint commands — **scoped to packages this epic modifies**. Avoid full-suite commands (e.g., `go test ./...`) that hit pre-existing failures. Example: `go build ./... && go test ./internal/processing/localstore/ -v` |
+| `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                   |
+| `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                 |
+| `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)  |
+| `{{ANTI_PATTERNS}}`    | Generated in Step 1.5 from design doc + philosophy doc    |
+| `{{CROSS_EPIC_DEPS}}`  | From Phase 2 cross-epic dependency map. If no cross-epic deps, replace with "No cross-epic dependencies." |
 
 **IMPORTANT — Absolute paths for gitignored files:** `{{DESIGN_DOC}}`,
 `{{PLAN_FILE}}`, and the saved prompt path (`dev-docs/prompts/`) are typically
@@ -423,13 +533,20 @@ gitignored. Agents in worktrees cannot resolve relative paths to these files
 because worktrees only share committed content. Always resolve these to absolute
 paths (e.g., `/Users/you/project/dev-docs/plans/file.md`, not
 `dev-docs/plans/file.md`). This also applies to beads task descriptions — any
-reference to a plan or design doc in a task description must be an absolute
-path.
+reference to a plan or design doc in a task description must be an absolute path.
 
-**Do not omit, reorganize, or summarize any section of the template.** The
-output must contain every section from the original — Sub-Agent Strategy, all 4
-Phases, Resume Quick Reference, etc. — with placeholders replaced by resolved
-values.
+**Strip template meta-sections.** The following sections exist to document the
+template itself and MUST NOT appear in the filled prompt:
+
+- `## Purpose` — template description, not agent instructions
+- `## Inputs Required` — placeholder documentation for the coordinator, not the
+  agent. Including this section confuses agents with `{{PLACEHOLDER}}`
+  descriptions alongside already-resolved values.
+
+**Keep all behavioral sections.** The output must contain every behavioral
+section from the template — Sub-Agent Strategy, all 4 Phases, Resume Quick
+Reference, etc. — with placeholders replaced by resolved values. Do not omit,
+reorganize, or summarize behavioral sections.
 
 ### Step 3: Prepend feature-specific context
 
@@ -451,20 +568,20 @@ architecture notes specific to this feature:
 ## Worktree Setup
 
 <!-- If worktree was already created in Phase 3, note that here: -->
-
-Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`. Agent
-`{{AGENT_NAME}}` registered.
+Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`.
+Agent `{{AGENT_NAME}}` registered.
 
 <!-- If worktree needs to be created by the implementation agent: -->
-
 ./scripts/setup-worktree-thrum.sh {{WORKTREE_PATH}} {{BRANCH_NAME}} \
  --identity {{AGENT_NAME}} --role implementer --base thrum-dev
 
 ---
 
-## Implementation Agent Template
-
-<!-- PASTE THE ENTIRE filled template below this line — every section, verbatim -->
+<!-- PASTE the filled template below this line.
+     STRIP the "## Purpose" and "## Inputs Required" sections — those are
+     template meta-documentation, not agent instructions.
+     START from "## Sub-Agent Strategy" through "## Resume Quick Reference".
+     All behavioral sections must be present with placeholders resolved. -->
 ```
 
 ### Step 4: Save and commit
@@ -492,8 +609,8 @@ work they can't finish. Always run `bd blocked` to verify.
 Check `git worktree list` and `bd list --status=in_progress` for idle worktrees
 before proposing new ones. Never silently assign worktrees.
 
-**Wrong base branch:** The setup script defaults `--base` to `main`. Always pass
-`--base thrum-dev` explicitly since features branch from `thrum-dev`.
+**Wrong base branch:** The setup script defaults `--base` to `main`. Always
+pass `--base thrum-dev` explicitly since features branch from `thrum-dev`.
 
 **Generating prompts before worktree setup:** Prompts embed the worktree path,
 branch, and agent name. These must be confirmed in Phase 3 before generating
@@ -502,6 +619,19 @@ prompts in Phase 4.
 **Skipping the plan file:** This skill reads the plan file (from writing-plans)
 as primary input. If you only have a design doc, use writing-plans first to
 produce the plan.
+
+**Delegating prompt generation to sub-agents:** The filled implementation prompt
+is the most critical artifact. Sub-agents take shortcuts: they leave template
+meta-sections (`## Inputs Required`, `## Purpose`) in the output, skip
+behavioral sections, fail to properly resolve placeholders, and produce prompts
+that confuse the implementation agent. Always generate prompts yourself in the
+main context.
+
+**Leaving template meta-sections in filled prompts:** The `## Purpose` and
+`## Inputs Required` sections are documentation ABOUT the template, not
+instructions FOR the agent. Strip them. If they appear in the filled prompt,
+agents see `{{PLACEHOLDER}}` descriptions alongside already-resolved values,
+which is confusing and wasteful of context.
 
 **Using relative paths for gitignored files:** Plan files, design docs, and
 prompts live in gitignored directories (`dev-docs/`, `docs/plans/`). Agents in

@@ -13,8 +13,10 @@ tasks in order, runs quality gates, and pushes completed work.
 - `{{BRANCH_NAME}}` — Git branch for this work (e.g., `feature/auth`)
 - `{{DESIGN_DOC}}` — **Absolute path** to the design spec (if applicable)
 - `{{REFERENCE_CODE}}` — Paths to reference implementations (if any)
-- `{{QUALITY_COMMANDS}}` — Commands for test/lint (e.g.,
-  `make test && make lint`)
+- `{{QUALITY_COMMANDS}}` — Commands for test/lint, **scoped to packages this
+  epic modifies** (e.g., `go test ./internal/processing/localstore/` not
+  `go test ./...`). Scoping avoids false failures from pre-existing issues in
+  unrelated packages.
 - `{{COVERAGE_TARGET}}` — Minimum coverage threshold (e.g., >80%)
 - `{{AGENT_NAME}}` — Unique name for this agent (e.g., `impl-daemon`,
   `impl-cli`)
@@ -22,6 +24,13 @@ tasks in order, runs quality gates, and pushes completed work.
   e.g., `coord_main`). Use for direct messages, not the role name.
 - `{{PLAN_FILE}}` — **Absolute path** to the implementation plan file
 - `{{PROJECT_ROOT}}` — Absolute path to the project root
+- `{{ANTI_PATTERNS}}` — Epic-specific implementation standards: non-negotiable
+  rules and red flags extracted from the design doc and philosophy doc. Injected
+  by project-setup Phase 4. If empty, the generic verifier pattern still applies
+  but without domain-specific checks.
+- `{{CROSS_EPIC_DEPS}}` — Cross-epic dependency table showing which tasks in
+  this epic are blocked by tasks in other epics. Injected by project-setup
+  Phase 4. If empty (no cross-epic deps), this section is omitted.
 
 **Why absolute paths?** Design docs, plan files, and prompts typically live in
 gitignored directories (`dev-docs/`, `docs/plans/`). Worktrees only share
@@ -63,6 +72,8 @@ cross-cutting decisions.
 you can continue other work while they run.
 
 ### When to Parallelize vs. Work Sequentially
+
+**IMPORTANT** always add this to the prompt as well.
 
 **Parallel** (sub-agents):
 
@@ -110,8 +121,8 @@ of `thrum quickstart`. If it fails, check that the daemon is running with
 
 **Finding agent names:** Run `thrum team` to see all active agents and their
 names. Always send to agent names (e.g., `--to @coord_main`), not role names
-(e.g., `--to @coordinator`). Sending to a role fans out to ALL agents with that
-role.
+(e.g., `--to @coordinator`). Sending to a role fans out to ALL agents with
+that role.
 
 **Use the message listener** — Spawn a background listener to get async
 notifications. Re-arm it every time it returns (both MESSAGES_RECEIVED and
@@ -192,6 +203,30 @@ If reference code exists, explore it: `{{REFERENCE_CODE}}`
 **CRITICAL: DO NOT redo completed work.** Trust the beads status and git
 history. Pick up from exactly where the previous session stopped.
 
+### Step 5: Check Cross-Epic Dependencies
+
+{{CROSS_EPIC_DEPS}}
+
+<!-- When filled by project-setup, this section contains a table of tasks
+in this epic that are blocked by tasks in OTHER epics, with bd show
+commands to check their status. If no cross-epic deps exist, this section
+says "No cross-epic dependencies." -->
+
+---
+
+## Implementation Standards
+
+{{ANTI_PATTERNS}}
+
+<!-- When filled by project-setup, this section contains:
+- 3-5 non-negotiable rules specific to this epic
+- Red flags to grep for during verification
+- BAD vs GOOD code examples where applicable
+
+The verifier sub-agent pattern (see Sub-Agent Strategy) checks these rules
+after each task completion. Without domain-specific checks, verification
+is limited to "tests pass" which misses architectural violations. -->
+
 ---
 
 ## Phase 2: Implement Tasks
@@ -213,10 +248,19 @@ bd show {{TASK_ID}}
 ```
 
 The task description is the **source of truth** for what to build. It contains
-file paths, signatures, code examples, and acceptance criteria. Follow it
-precisely.
+acceptance criteria that must be satisfied before closing the task.
 
-Also read the full implementation code from the plan file: `{{PLAN_FILE}}`
+For detailed implementation code, search the plan file for the matching task
+section:
+
+```bash
+grep -n "## Task: {{TASK_ID}}" {{PLAN_FILE}}
+```
+
+Read ONLY that section (from the matching heading to the next `## Task:` heading
+or end of file), not the entire plan file. Plan files can be large (50KB+) and
+reading the whole file exhausts context. The plan file provides step-by-step
+code; the beads task provides completion criteria. Use both.
 
 #### 3. Implement the Task
 
@@ -443,7 +487,10 @@ bd show {{EPIC_ID}}
 bd close {{EPIC_ID}} --reason="All tasks implemented and verified"
 ```
 
-### Step 3: Merge to Main
+### Step 3: Push Branch & Notify Coordinator
+
+Do NOT merge to main yourself. Push your branch and notify the coordinator
+for code review and merge:
 
 ```bash
 # Ensure branch is up to date with main
@@ -456,25 +503,20 @@ git rebase origin/main
 # Run quality gates one final time after rebase
 {{QUALITY_COMMANDS}}
 
-# Merge into main
-cd {{PROJECT_ROOT}}
-git checkout main
-git merge {{BRANCH_NAME}}
+# Push the branch (NOT main)
+git push origin {{BRANCH_NAME}}
+
+# Notify the coordinator
+thrum send "{{EPIC_ID}} complete. Branch {{BRANCH_NAME}} pushed, all tests passing. Ready for review/merge." --to @{{COORDINATOR_NAME}}
 ```
 
-### Step 4: Push
+The coordinator handles code review and merge to main. This ensures review gates
+are not bypassed and cross-epic integration is verified.
 
-```bash
-git push origin main
-```
+> **For solo-agent workflows:** If no coordinator exists, override this step to
+> merge directly to main after running the full quality gate.
 
-### Step 5: Report Completion via Thrum
-
-```bash
-thrum send "Completed {{EPIC_ID}}. All tasks done, tests passing, merged to main." --to @{{COORDINATOR_NAME}}
-```
-
-### Step 6: Clean Up (Only If Instructed)
+### Step 4: Clean Up (Only If Instructed)
 
 ```bash
 # Remove the worktree if no longer needed

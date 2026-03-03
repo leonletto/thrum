@@ -293,6 +293,35 @@ structure above:
 **Code rule:** Prefer complete code over pseudocode. "Add validation" is not a
 step — `if err := validate(input); err != nil { return fmt.Errorf(...) }` is.
 
+### Plan File Task Anchors
+
+When the plan file contains implementation code for tasks, each task section
+MUST use a searchable anchor heading:
+
+```text
+## Task: {BEAD_ID} — {Title}
+```
+
+Example:
+
+```text
+## Task: 02ny.1 — ListIntegrationData() store method + tests
+## Task: yw63.5 — Build role switcher panel
+```
+
+This format lets implementation agents `grep` for their specific task section
+instead of reading the entire plan file. Large plan files (50KB+) exhaust agent
+context when read in full. The `writing-plans` skill enforces this format; this
+reference documents the convention.
+
+**Verification:** After creating tasks, grep the plan file for each bead ID:
+
+```bash
+grep "## Task:" {{PLAN_FILE}} | head -20
+```
+
+Every created task should have a matching anchor.
+
 ### Step 4: Set Dependencies Between Epics
 
 Map the dependency DAG:
