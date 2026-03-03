@@ -505,3 +505,41 @@ func TestBootstrapPreambleFileNotFound(t *testing.T) {
 		t.Errorf("expected IsNotExist error, got: %v", err)
 	}
 }
+
+func TestWriteStrategies(t *testing.T) {
+	thrumDir := t.TempDir()
+
+	err := WriteStrategies(thrumDir)
+	if err != nil {
+		t.Fatalf("WriteStrategies failed: %v", err)
+	}
+
+	// Verify all strategy files were written
+	for _, name := range []string{
+		"sub-agent-strategy.md",
+		"thrum-registration.md",
+		"resume-after-context-loss.md",
+	} {
+		path := filepath.Join(thrumDir, "strategies", name)
+		data, err := os.ReadFile(path) //nolint:gosec // G304 - test helper reading temp file
+		if err != nil {
+			t.Errorf("strategy file %s not found: %v", name, err)
+			continue
+		}
+		if len(data) == 0 {
+			t.Errorf("strategy file %s is empty", name)
+		}
+	}
+}
+
+func TestWriteStrategiesIdempotent(t *testing.T) {
+	thrumDir := t.TempDir()
+
+	// Write twice — should not error
+	if err := WriteStrategies(thrumDir); err != nil {
+		t.Fatalf("first WriteStrategies failed: %v", err)
+	}
+	if err := WriteStrategies(thrumDir); err != nil {
+		t.Fatalf("second WriteStrategies failed: %v", err)
+	}
+}
