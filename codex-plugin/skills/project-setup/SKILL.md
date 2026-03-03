@@ -70,10 +70,10 @@ components, data flow, and interfaces.
 
 This skill produces two complementary artifacts per task:
 
-| Artifact | Contains | Authoritative For |
-|----------|----------|-------------------|
-| **Beads task** | Acceptance criteria, deps, status | What must be true to close the task |
-| **Plan file section** | Step-by-step code, file paths, verify commands | How to implement the task |
+| Artifact              | Contains                                       | Authoritative For                   |
+| --------------------- | ---------------------------------------------- | ----------------------------------- |
+| **Beads task**        | Acceptance criteria, deps, status              | What must be true to close the task |
+| **Plan file section** | Step-by-step code, file paths, verify commands | How to implement the task           |
 
 Both are required. Agents read `bd show {TASK_ID}` first (what must be true),
 then search the plan file for the matching `## Task: {BEAD_ID}` section (how to
@@ -218,7 +218,7 @@ For agent names, suggest a name derived from the feature (e.g.,
 
 ### Step 3: Set Up the Chosen Worktree
 
-#### For reused worktrees:
+#### For reused worktrees
 
 ```bash
 cd <worktree-path>
@@ -246,7 +246,7 @@ thrum quickstart --name <agent-name> --role implementer \
   --module <branch> --intent "Implementing <epic-id>"
 ```
 
-#### For new worktrees:
+#### For new worktrees
 
 ```bash
 # From the project root — MUST pass --base thrum-dev
@@ -258,7 +258,7 @@ thrum quickstart --name <agent-name> --role implementer \
 The setup script handles: branch creation, worktree creation, thrum redirect,
 beads redirect, and `thrum quickstart` registration.
 
-#### For current worktree (small fixes):
+#### For current worktree (small fixes)
 
 ```bash
 bd where && bd ready    # Verify beads
@@ -310,20 +310,20 @@ every time.
 Perform literal find-and-replace on every `{{PLACEHOLDER}}` in the template. All
 worktree-related values come from the Phase 3 assignments:
 
-| Placeholder            | Source                                             |
-| ---------------------- | -------------------------------------------------- |
-| `{{EPIC_ID}}`          | Beads epic ID from Phase 2                         |
-| `{{EPIC_TITLE}}`       | Epic title (used in commit messages)               |
-| `{{WORKTREE_PATH}}`    | **From Phase 3 worktree assignment**               |
-| `{{BRANCH_NAME}}`      | **From Phase 3 worktree assignment**               |
-| `{{PROJECT_ROOT}}`     | Absolute path to the project root                  |
-| `{{DESIGN_DOC}}`       | **Absolute path** to the design spec               |
-| `{{REFERENCE_CODE}}`   | Relevant reference code paths                      |
-| `{{QUALITY_COMMANDS}}` | Test/lint commands — **scoped to packages this epic modifies** |
-| `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                  |
-| `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                |
-| `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input) |
-| `{{ANTI_PATTERNS}}`    | Generated from design doc + philosophy doc         |
+| Placeholder            | Source                                                            |
+| ---------------------- | ----------------------------------------------------------------- |
+| `{{EPIC_ID}}`          | Beads epic ID from Phase 2                                        |
+| `{{EPIC_TITLE}}`       | Epic title (used in commit messages)                              |
+| `{{WORKTREE_PATH}}`    | **From Phase 3 worktree assignment**                              |
+| `{{BRANCH_NAME}}`      | **From Phase 3 worktree assignment**                              |
+| `{{PROJECT_ROOT}}`     | Absolute path to the project root                                 |
+| `{{DESIGN_DOC}}`       | **Absolute path** to the design spec                              |
+| `{{REFERENCE_CODE}}`   | Relevant reference code paths                                     |
+| `{{QUALITY_COMMANDS}}` | Test/lint commands — **scoped to packages this epic modifies**    |
+| `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                                 |
+| `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                               |
+| `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)                |
+| `{{ANTI_PATTERNS}}`    | Generated from design doc + philosophy doc                        |
 | `{{CROSS_EPIC_DEPS}}`  | From cross-epic dependency map (or "No cross-epic dependencies.") |
 
 **IMPORTANT — Absolute paths for gitignored files:** `{{DESIGN_DOC}}`,
