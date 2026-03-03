@@ -55,6 +55,23 @@ Produces:
 - Filled implementation prompts at `dev-docs/prompts/{feature}.md`
 - Ready worktrees with thrum and beads redirects configured
 
+### Two-Artifact System
+
+Implementation agents work from two complementary artifacts per task:
+
+| Artifact | Contains | Authoritative For | Maintained By |
+|----------|----------|-------------------|---------------|
+| Design doc | Architecture, key decisions, what exists vs what to build | WHY decisions were made | brainstorming skill |
+| Plan file | Step-by-step code with task-ID anchors | HOW to implement each task | writing-plans skill |
+| Beads task | Acceptance criteria, deps, status | WHAT must be true to close | project-setup skill |
+| Philosophy doc | Anti-patterns, red flags, BAD/GOOD examples | Rules agents must not violate | Project-specific |
+| Filled prompt | Epic-specific overrides, scoped quality commands, cross-epic deps | Agent's operating instructions | project-setup skill |
+
+Agents read `bd show {TASK_ID}` first (what to achieve), then search the plan
+file for `## Task: {BEAD_ID}` (how to get there). The philosophy doc defines
+what they must NOT do. The filled prompt customizes the generic template for
+their specific epic.
+
 ### implementation-agent.md
 
 Not a skill, but the template that project-setup fills in. The resulting filled
@@ -95,6 +112,7 @@ workflow.
 | `planning-agent.md`       | Reference | Full planning template — superseded by brainstorming + writing-plans + project-setup skills |
 | `worktree-setup.md`       | Reference | Worktree creation docs — superseded by project-setup Phase 4 + using-git-worktrees skill    |
 | `implementation-agent.md` | Active    | Prompt template filled by project-setup skill, given to implementation agents               |
+| `philosophy-template.md` | Active    | Reusable anti-patterns template — used by project-setup Phase 1 when project lacks a philosophy doc |
 
 ---
 
@@ -145,16 +163,21 @@ the skill.
 
 ## Source of Truth Hierarchy
 
-| What                               | Lives In                                  | Used By                                |
-| ---------------------------------- | ----------------------------------------- | -------------------------------------- |
-| Design decisions                   | Design doc (`dev-docs/plans/*-design.md`) | brainstorming, writing-plans           |
-| Phased implementation steps        | Plan file (`dev-docs/plans/*-plan.md`)    | project-setup skill                    |
-| Task details & acceptance criteria | Beads task descriptions                   | Implementation agent                   |
-| Epic structure & dependencies      | Beads epic + `bd dep` relationships       | All agents                             |
-| Implementation progress            | Beads task status + git commit history    | Implementation agent (orient phase)    |
-| Feature-specific instructions      | Prompt (`dev-docs/prompts/{feature}.md`)  | Implementation agent (session start)   |
-| Session state & decisions          | Context (`.thrum/context/{name}.md`)      | Implementation agent (current session) |
-| Code                               | Git worktree                              | Implementation agent                   |
+| What                               | Lives In                                 | Used By                                |
+| ---------------------------------- | ---------------------------------------- | -------------------------------------- |
+| Design decisions                   | Design doc (`dev-docs/plans/*-design.md`)    | brainstorming, writing-plans           |
+| Phased implementation steps        | Plan file (`dev-docs/plans/*-plan.md`)       | project-setup skill                    |
+| Task details & acceptance criteria | Beads task descriptions                  | Implementation agent                   |
+| Epic structure & dependencies      | Beads epic + `bd dep` relationships      | All agents                             |
+| Implementation progress            | Beads task status + git commit history   | Implementation agent (orient phase)    |
+| Feature-specific instructions      | Prompt (`dev-docs/prompts/{feature}.md`) | Implementation agent (session start)   |
+| Session state & decisions          | Context (`.thrum/context/{name}.md`)     | Implementation agent (current session) |
+| Code                               | Git worktree                             | Implementation agent                   |
+
+**Plan file convention:** Task sections in plan files MUST use the anchor format
+`## Task: {BEAD_ID} — Title`. Implementation agents search for their bead ID
+(`grep "## Task: {ID}" plan-file.md`) rather than reading the entire file. This
+prevents context exhaustion on large plan files (50KB+).
 
 The templates themselves are guides for how to use these sources — they don't
 duplicate the content.
