@@ -1,8 +1,9 @@
 # Implementation Philosophy
 
 > **For all agents:** This document governs how features are built. Read this
-> BEFORE any plan file or task descriptions. When in doubt, ask: "[your project's
-> guiding question — e.g., 'Am I wiring a real service, or faking it?']"
+> BEFORE any plan file or task descriptions. When in doubt, ask: "[your > >
+> project's > guiding question — e.g., 'Am I wiring a real service, or faking >
+> > it?']"
 >
 > **Fill this template** for your project. The pre-filled examples below are
 > universal defaults — adapt, replace, or extend them for your domain.
@@ -14,19 +15,20 @@
 1. [Criterion 1 — e.g., Handler calls real service method, not hardcoded data]
 2. [Criterion 2 — e.g., Template renders from service response, not inline HTML]
 3. [Criterion 3 — e.g., Changing underlying data changes rendered output]
-4. [Criterion 4 — e.g., Access control uses real permission checks, not client-side hiding]
+4. [Criterion 4 — e.g., Access control uses real permission checks, not
+   client-side hiding]
 5. The verification step in the task description passes
 
 ## Decision Framework
 
 When implementing any requirement, follow this decision tree:
 
-| Question | Action |
-|----------|--------|
-| Does a backend service already exist? | Wire it. Do not rewrite. |
-| Does the service exist but need extension? | Extend the service, then wire. |
-| Is this purely new capability? | Build minimal service first, then UI. |
-| Is this seed data / configuration? | Load into real stores, not hardcoded. |
+| Question                                   | Action                                |
+| ------------------------------------------ | ------------------------------------- |
+| Does a backend service already exist?      | Wire it. Do not rewrite.              |
+| Does the service exist but need extension? | Extend the service, then wire.        |
+| Is this purely new capability?             | Build minimal service first, then UI. |
+| Is this seed data / configuration?         | Load into real stores, not hardcoded. |
 
 ## Anti-Patterns
 
@@ -37,7 +39,7 @@ When implementing any requirement, follow this decision tree:
 
 ### 1. Hardcoded data in handlers
 
-```
+```go
 // BAD — handler returns static data, ignoring the service layer
 func handleList(w http.ResponseWriter, r *http.Request) {
     items := []Item{{Name: "hardcoded-1"}, {Name: "hardcoded-2"}}
@@ -60,7 +62,9 @@ creates a false sense of completion.
 ```html
 <!-- BAD — server renders everything, JS/CSS hides unauthorized items -->
 <button id="admin-action" style="display:none">Delete</button>
-<script>if (userRole === 'admin') show('admin-action')</script>
+<script>
+  if (userRole === "admin") show("admin-action");
+</script>
 
 <!-- GOOD — server only renders items the user can access -->
 {{if .Permissions.CanDelete}}
@@ -89,7 +93,7 @@ actually work, and you won't know until production.
 
 ### 4. [Project-specific anti-pattern]
 
-```
+```text
 // BAD
 // GOOD
 ```
@@ -98,7 +102,7 @@ actually work, and you won't know until production.
 
 ### 5. [Project-specific anti-pattern]
 
-```
+```text
 // BAD
 // GOOD
 ```
@@ -109,19 +113,20 @@ actually work, and you won't know until production.
 
 Not everything needs to be production-grade. These simplifications are OK:
 
-| Simplification | Why It's OK | Boundary (when to stop) |
-|---------------|-------------|-------------------------|
-| SQLite instead of Postgres | Same SQL interface, simpler setup | When concurrent write throughput matters |
-| Cached/mock external APIs | Deterministic tests, no network deps | When testing real API behavior changes |
-| Static seed data | Reproducible demos and tests | When data must reflect real user input |
-| [Project-specific] | [Rationale] | [Boundary] |
+| Simplification             | Why It's OK                          | Boundary (when to stop)                  |
+| -------------------------- | ------------------------------------ | ---------------------------------------- |
+| SQLite instead of Postgres | Same SQL interface, simpler setup    | When concurrent write throughput matters |
+| Cached/mock external APIs  | Deterministic tests, no network deps | When testing real API behavior changes   |
+| Static seed data           | Reproducible demos and tests         | When data must reflect real user input   |
+| [Project-specific]         | [Rationale]                          | [Boundary]                               |
 
 ## Red Flags
 
 If you see any of these in your code, **STOP and fix before continuing:**
 
 - [ ] Literal data structures returned from handlers (not from a store/service)
-- [ ] Inline HTML generation (`fmt.Fprintf`, string concatenation) instead of templates
+- [ ] Inline HTML generation (`fmt.Fprintf`, string concatenation) instead of
+      templates
 - [ ] Missing error handling on service/store calls
 - [ ] TODO/FIXME comments left in committed code
 - [ ] [Project-specific red flag]
@@ -133,8 +138,10 @@ If you see any of these in your code, **STOP and fix before continuing:**
 ### Before You Start a Task
 
 - [ ] Read the design doc referenced in your prompt
-- [ ] Read the task description (`bd show {TASK_ID}`) — it's your source of truth
-- [ ] Search the plan file for your task's implementation code (`grep "## Task: {BEAD_ID}" plan-file.md`)
+- [ ] Read the task description (`bd show {TASK_ID}`) — it's your source of
+      truth
+- [ ] Search the plan file for your task's implementation code
+      (`grep "## Task: {BEAD_ID}" plan-file.md`)
 - [ ] Identify which existing services to wire (do not reimplement)
 - [ ] Review the anti-patterns above — know what NOT to do
 

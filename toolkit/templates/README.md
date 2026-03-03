@@ -5,8 +5,8 @@ a self-contained template set with its own CLAUDE.md explaining usage.
 
 ## Available Template Sets
 
-| Name               | Folder                                       | Description                                                                                                                                            |
-| ------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Name               | Folder                                       | Description                                                                                                                                                        |
+| ------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Agent Dev Workflow | [`agent-dev-workflow/`](agent-dev-workflow/) | Four-phase skill pipeline (Design → Plan → Setup → Implement) for feature development with AI agents using Beads for task tracking and git worktrees for isolation |
 
 ## How to Use

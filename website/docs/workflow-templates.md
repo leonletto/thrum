@@ -50,21 +50,21 @@ resume after context loss.
 
 Implementation agents work from two complementary artifacts per task:
 
-| Artifact | Contains | Authoritative For |
-|----------|----------|-------------------|
-| **Beads task** | Acceptance criteria, deps, status | What must be true to close the task |
-| **Plan file section** | Step-by-step code, file paths, verify commands | How to implement the task |
+| Artifact              | Contains                                       | Authoritative For                   |
+| --------------------- | ---------------------------------------------- | ----------------------------------- |
+| **Beads task**        | Acceptance criteria, deps, status              | What must be true to close the task |
+| **Plan file section** | Step-by-step code, file paths, verify commands | How to implement the task           |
 
 Agents read `bd show {TASK_ID}` first (what to achieve), then search the plan
 file for `## Task: {BEAD_ID}` (how to get there).
 
 Additional context layers:
 
-| Artifact | Purpose |
-|----------|---------|
-| **Design doc** | Architecture decisions — WHY things are built a certain way |
-| **Philosophy doc** | Anti-patterns and red flags — what agents must NOT do |
-| **Filled prompt** | Epic-specific overrides, scoped quality commands, cross-epic deps |
+| Artifact           | Purpose                                                           |
+| ------------------ | ----------------------------------------------------------------- |
+| **Design doc**     | Architecture decisions — WHY things are built a certain way       |
+| **Philosophy doc** | Anti-patterns and red flags — what agents must NOT do             |
+| **Filled prompt**  | Epic-specific overrides, scoped quality commands, cross-epic deps |
 
 ## Install the templates
 
@@ -79,13 +79,13 @@ session.
 
 ## Template files
 
-| Template                  | Status    | Purpose                                                                                     |
-| ------------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| `implementation-agent.md` | Active    | Prompt template filled by project-setup skill, given to implementation agents               |
+| Template                  | Status    | Purpose                                                                                       |
+| ------------------------- | --------- | --------------------------------------------------------------------------------------------- |
+| `implementation-agent.md` | Active    | Prompt template filled by project-setup skill, given to implementation agents                 |
 | `philosophy-template.md`  | Active    | Reusable anti-patterns template — used by project-setup when a project lacks a philosophy doc |
-| `planning-agent.md`       | Reference | Full planning template — superseded by brainstorming + writing-plans + project-setup skills |
-| `worktree-setup.md`       | Reference | Worktree creation docs — superseded by project-setup Phase 3 + using-git-worktrees skill   |
-| `CLAUDE.md`               | Reference | Overview of the workflow and how templates fit together                                     |
+| `planning-agent.md`       | Reference | Full planning template — superseded by brainstorming + writing-plans + project-setup skills   |
+| `worktree-setup.md`       | Reference | Worktree creation docs — superseded by project-setup Phase 3 + using-git-worktrees skill      |
+| `CLAUDE.md`               | Reference | Overview of the workflow and how templates fit together                                       |
 
 ## Customize the placeholders
 
