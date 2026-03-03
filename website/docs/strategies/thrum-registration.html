@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Thrum Registration — Thrum</title>
+<meta name="description" content="How to register with Thrum at session start and communicate with other agents">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#strategies/thrum-registration.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; strategies &rsaquo; Thrum Registration
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a> | <a href="../overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="../architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="../context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="../cli.html">CLI Reference</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>strategies</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <strong>Thrum Registration</strong> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>uncategorized</strong>: <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
+<h2>Thrum Registration</h2>
+<p>This is an operational strategy that agents receive via <code>.thrum/strategies/</code>. It
+describes the mandatory registration process at session start and how to
+communicate correctly with other agents.</p>
+<p><strong>STOP. Register before doing any other work.</strong> Do not skip this step.</p>
+<h3>Registration Commands</h3>
+<pre><code>thrum quickstart --role implementer --module &lt;branch-name&gt; --intent &quot;What you are working on&quot;
+thrum inbox --unread
+thrum send &quot;Starting work on &lt;task&gt;&quot; --to @&lt;coordinator-name&gt;</code></pre>
+<p>Replace the placeholders with values appropriate for your session:</p>
+<ul>
+<li><code>--role</code> — your function: <code>implementer</code>, <code>coordinator</code>, <code>reviewer</code>, <code>planner</code>, <code>tester</code></li>
+<li><code>--module</code> — the branch or area of work (e.g., the current git branch name)</li>
+<li><code>--intent</code> — a brief description of what you are doing right now</li>
+</ul>
+<p><strong>Verify registration succeeded</strong> — you must see your agent name in the output
+of <code>thrum quickstart</code>. If it fails, check that the daemon is running:</p>
+<pre><code>thrum daemon status</code></pre>
+<h3>Finding Agent Names</h3>
+<p>Run <code>thrum team</code> to see all active agents and their names before sending any
+messages. Agent names look like <code>coord_main</code>, <code>impl_feature_a</code>, etc.</p>
+<pre><code>thrum team</code></pre>
+<h3>@name vs @role Addressing</h3>
+<p><strong>This is critical.</strong> The two addressing modes behave very differently:</p>
+<table>
+<thead>
+<tr>
+<th>Address form</th>
+<th>Behavior</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--to @name</code></td>
+<td>Direct message to one specific agent</td>
+<td><code>--to @coord_main</code></td>
+</tr>
+<tr>
+<td><code>--to @role</code></td>
+<td>Group fanout — ALL agents with that role receive</td>
+<td><code>--to @coordinator</code></td>
+</tr>
+<tr>
+<td><code>--to @everyone</code></td>
+<td>Broadcast to all active agents</td>
+<td><code>--to @everyone</code></td>
+</tr>
+</tbody></table>
+<p>Always use agent names for direct communication. Only use role addressing when
+you intentionally want every agent with that role to receive the message.</p>
+<h3>Message Listener Pattern</h3>
+<p>Spawn a background listener so you receive async notifications without polling:</p>
+<pre><code>thrum wait --timeout 15m --after -1s --json</code></pre>
+<p>Re-arm the listener every time it returns — both when messages arrive and when
+it times out. This keeps you reachable throughout your session.</p>
+<h3>Completion and Blocker Messages</h3>
+<p>When your work is complete:</p>
+<pre><code>thrum send &quot;Completed &lt;task&gt;. All tasks done, tests passing.&quot; --to @&lt;coordinator-name&gt;</code></pre>
+<p>If you hit a blocker:</p>
+<pre><code>thrum send &quot;Blocked on &lt;task-id&gt;: &lt;description of blocker&gt;&quot; --to @&lt;coordinator-name&gt;</code></pre>
+<h3>Inbox Management</h3>
+<p>Check your inbox at session start and periodically during work:</p>
+<pre><code>thrum inbox --unread        # show unread messages only
+thrum message read --all    # mark all messages as read
+thrum reply &lt;MSG_ID&gt; &quot;...&quot;  # reply to a specific message</code></pre>
+
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#strategies/thrum-registration.html')}</script>
+</body>
+</html>

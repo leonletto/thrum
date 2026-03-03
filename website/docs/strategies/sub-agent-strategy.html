@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sub-Agent Strategy — Thrum</title>
+<meta name="description" content="When and how to delegate work to sub-agents for context efficiency">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#strategies/sub-agent-strategy.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; strategies &rsaquo; Sub-Agent Strategy
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a> | <a href="../overview.html">Technical Overview</a><br>
+<strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="../architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="../context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="../cli.html">CLI Reference</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>strategies</strong>: <strong>Sub-Agent Strategy</strong> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>uncategorized</strong>: <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
+<h2>Sub-Agent Strategy</h2>
+<p>This is an operational strategy that agents receive via <code>.thrum/strategies/</code>. It
+describes when and how to delegate work to sub-agents to maximize parallelism
+and keep your main context focused.</p>
+<p>Delegate research, independent tasks, and verification to sub-agents. Your main
+context should focus on task coordination, dependency management, and
+cross-cutting decisions.</p>
+<h3>Principles</h3>
+<ol>
+<li><strong>Parallelize independent tasks</strong> — When multiple unblocked tasks touch
+different files/packages, implement them simultaneously via sub-agents</li>
+<li><strong>Delegate research</strong> — Spawn sub-agents to explore unfamiliar code before
+implementing, rather than reading it into your context</li>
+<li><strong>Verify in background</strong> — Run tests and lint via background sub-agents while
+you continue with the next task</li>
+<li><strong>Focused prompts</strong> — Give each sub-agent the full task description, worktree
+path, quality commands, and expected deliverables</li>
+</ol>
+<h3>Agent Selection</h3>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Agent Type</th>
+<th>Model</th>
+<th>Background?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Implement a complex task</td>
+<td><code>general-purpose</code></td>
+<td>sonnet</td>
+<td>no*</td>
+</tr>
+<tr>
+<td>Implement a simple task</td>
+<td><code>general-purpose</code></td>
+<td>haiku</td>
+<td>no*</td>
+</tr>
+<tr>
+<td>Explore unfamiliar code</td>
+<td><code>Explore</code></td>
+<td>sonnet</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Run tests / lint</td>
+<td><code>general-purpose</code></td>
+<td>haiku</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Review implementation</td>
+<td><code>feature-dev:code-reviewer</code></td>
+<td>sonnet</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Doc updates / config tweaks</td>
+<td><code>general-purpose</code></td>
+<td>haiku</td>
+<td>yes</td>
+</tr>
+</tbody></table>
+<p>*Use foreground when you need the result before proceeding. Use background when
+you can continue other work while they run.</p>
+<h3>When to Parallelize vs. Work Sequentially</h3>
+<p><strong>Parallel</strong> (sub-agents):</p>
+<ul>
+<li>Tasks touching different files/packages with no shared state</li>
+<li>Independent verification (tests, lint, coverage)</li>
+<li>Research into multiple unrelated code areas</li>
+<li>Doc/config updates alongside implementation</li>
+</ul>
+<p><strong>Sequential</strong> (direct work):</p>
+<ul>
+<li>Tasks modifying shared files or depending on prior task output</li>
+<li>Tasks requiring deep context from current session&#39;s changes</li>
+<li>Tasks needing judgment calls mid-implementation</li>
+<li>Single remaining task (no parallelism benefit)</li>
+</ul>
+<h3>Verifier Sub-Agent Pattern</h3>
+<p>After completing a task, spawn a background sub-agent to independently verify:</p>
+<ul>
+<li>Run the test suite and confirm all pass</li>
+<li>Review implementation against the task description</li>
+<li>Check code follows project conventions</li>
+<li>Confirm acceptance criteria are met</li>
+</ul>
+<p>This lets you start the next task immediately while verification runs in
+parallel.</p>
+<h3>Sub-Agent Prompt Guidelines</h3>
+<p>When writing prompts for sub-agents:</p>
+<ul>
+<li>Include the full task description with acceptance criteria</li>
+<li>Specify the absolute worktree path (sub-agents cannot resolve relative paths)</li>
+<li>Provide the exact quality commands to run (<code>make test</code>, <code>make lint</code>, etc.)</li>
+<li>State the expected deliverables explicitly</li>
+<li>Sub-agents cannot access MCP tools — they fall back to Bash</li>
+<li>Sub-agents cannot see CLAUDE.md or project <code>.agents/</code> files unless you include the content in the prompt</li>
+</ul>
+
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#strategies/sub-agent-strategy.html')}</script>
+</body>
+</html>
