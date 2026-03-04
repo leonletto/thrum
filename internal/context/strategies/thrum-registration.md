@@ -34,16 +34,20 @@ thrum team
 
 ## @name vs @role Addressing
 
-**This is critical.** The two addressing modes behave very differently:
+**Default to @name. Only use @role when you intentionally want group fanout.**
+
+Run `thrum team` to find agent names, then send to `--to @<agent_name>`. This
+is the correct way to message a specific agent.
 
 | Address form    | Behavior                                          | Example                     |
 | --------------- | ------------------------------------------------- | --------------------------- |
-| `--to @name`    | Direct message to one specific agent              | `--to @coord_main`          |
+| `--to @name`    | Direct message to one specific agent (DEFAULT)    | `--to @coord_main`          |
 | `--to @role`    | Group fanout — ALL agents with that role receive  | `--to @coordinator`         |
 | `--to @everyone`| Broadcast to all active agents                    | `--to @everyone`            |
 
-Always use agent names for direct communication. Only use role addressing when
-you intentionally want every agent with that role to receive the message.
+**WARNING:** Sending `--to @coordinator` does NOT send to one coordinator — it
+sends to ALL agents with the coordinator role. This is almost never what you
+want. Use the agent name instead.
 
 ## Message Listener Pattern
 

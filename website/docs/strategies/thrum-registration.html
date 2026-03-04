@@ -62,7 +62,9 @@ of <code>thrum quickstart</code>. If it fails, check that the daemon is running:
 messages. Agent names look like <code>coord_main</code>, <code>impl_feature_a</code>, etc.</p>
 <pre><code>thrum team</code></pre>
 <h3>@name vs @role Addressing</h3>
-<p><strong>This is critical.</strong> The two addressing modes behave very differently:</p>
+<p><strong>Default to @name. Only use @role when you intentionally want group fanout.</strong></p>
+<p>Run <code>thrum team</code> to find agent names, then send to <code>--to @&lt;agent_name&gt;</code>. This
+is the correct way to message a specific agent.</p>
 <table>
 <thead>
 <tr>
@@ -73,7 +75,7 @@ messages. Agent names look like <code>coord_main</code>, <code>impl_feature_a</c
 </thead>
 <tbody><tr>
 <td><code>--to @name</code></td>
-<td>Direct message to one specific agent</td>
+<td>Direct message to one specific agent (DEFAULT)</td>
 <td><code>--to @coord_main</code></td>
 </tr>
 <tr>
@@ -87,8 +89,9 @@ messages. Agent names look like <code>coord_main</code>, <code>impl_feature_a</c
 <td><code>--to @everyone</code></td>
 </tr>
 </tbody></table>
-<p>Always use agent names for direct communication. Only use role addressing when
-you intentionally want every agent with that role to receive the message.</p>
+<p><strong>WARNING:</strong> Sending <code>--to @coordinator</code> does NOT send to one coordinator — it
+sends to ALL agents with the coordinator role. This is almost never what you
+want. Use the agent name instead.</p>
 <h3>Message Listener Pattern</h3>
 <p>Spawn a background listener so you receive async notifications without polling:</p>
 <pre><code>thrum wait --timeout 15m --after -1s --json</code></pre>

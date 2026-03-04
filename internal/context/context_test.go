@@ -313,7 +313,8 @@ func TestDefaultPreambleContent(t *testing.T) {
 	s := string(content)
 	for _, keyword := range []string{
 		"thrum inbox", "thrum send", "thrum reply", "thrum status",
-		"thrum context save",
+		"thrum team", "thrum context save",
+		"Do NOT send to @role",
 		".thrum/strategies/sub-agent-strategy.md",
 		".thrum/strategies/thrum-registration.md",
 		".thrum/strategies/resume-after-context-loss.md",
