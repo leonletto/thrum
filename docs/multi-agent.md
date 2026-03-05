@@ -143,7 +143,6 @@ mcp__thrum__add_group_member(group="backend", member_type="role", member_value="
 mcp__thrum__send_message(to="@backend", content="API changes merged")
 ```
 
----
 
 ## Runtime Presets
 
@@ -255,7 +254,6 @@ Add custom runtime presets via `~/.config/thrum/runtimes.json` (XDG-aware):
 
 Custom runtimes appear alongside built-in presets in `thrum runtime list`.
 
----
 
 ## Context Prime
 
@@ -271,7 +269,6 @@ thrum context prime --json # Structured JSON for LLM consumption
 See [Context Management](/docs/context.html) for full documentation including
 output format, graceful degradation behavior, and use cases.
 
----
 
 ## Multi-Worktree Coordination
 
@@ -368,7 +365,6 @@ THRUM_NAME=furiosa thrum send "Implementation complete"
 THRUM_NAME=reviewer thrum send "LGTM, approved"
 ```
 
----
 
 ## Coordination Tools
 
@@ -439,7 +435,6 @@ thrum wait --mention @reviewer --timeout 5m
 - `1` -- timeout (no messages)
 - `2` -- error
 
----
 
 ## Complete Workflows
 
@@ -524,7 +519,6 @@ thrum inbox --unread
 thrum send "Auth complete, 15 tests passing" --to @coord_main
 ```
 
----
 
 ## Best Practices
 
