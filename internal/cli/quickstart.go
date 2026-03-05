@@ -85,10 +85,11 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 
 	// Step 1: Register agent
 	regOpts := AgentRegisterOptions{
-		Name:    opts.Name,
-		Role:    opts.Role,
-		Module:  opts.Module,
-		Display: opts.Display,
+		Name:       opts.Name,
+		Role:       opts.Role,
+		Module:     opts.Module,
+		Display:    opts.Display,
+		ReRegister: opts.ReRegister,
 	}
 
 	regResult, err := AgentRegister(client, regOpts)

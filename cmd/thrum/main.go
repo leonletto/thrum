@@ -347,6 +347,21 @@ Examples:
 			agentRoleResolved := agentRole
 			agentModuleResolved := agentModule
 
+			// Pre-populate from existing identity if no flags provided
+			if agentNameResolved == "" || agentRoleResolved == "" || agentModuleResolved == "" {
+				if existing, _, err := config.LoadIdentityWithPath(flagRepo); err == nil && existing != nil {
+					if agentNameResolved == "" {
+						agentNameResolved = existing.Agent.Name
+					}
+					if agentRoleResolved == "" {
+						agentRoleResolved = existing.Agent.Role
+					}
+					if agentModuleResolved == "" {
+						agentModuleResolved = existing.Agent.Module
+					}
+				}
+			}
+
 			if isInteractive() && !flagQuiet {
 				reader := bufio.NewReader(os.Stdin)
 
@@ -486,15 +501,25 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
+			// If re-initializing with the same agent name, treat as re-registration
+			// to avoid name/role conflict errors from HandleRegister
+			reRegister := false
+			if existing, _, loadErr := config.LoadIdentityWithPath(flagRepo); loadErr == nil && existing != nil {
+				if existing.Agent.Name == agentNameResolved {
+					reRegister = true
+				}
+			}
+
 			qsOpts := cli.QuickstartOptions{
-				Name:     agentNameResolved,
-				Role:     agentRoleResolved,
-				Module:   agentModuleResolved,
-				Display:  cli.AutoDisplay(agentRoleResolved, agentModuleResolved),
-				Intent:   intent,
-				RepoPath: flagRepo,
-				NoInit:   true,
-				Force:    true,
+				Name:       agentNameResolved,
+				Role:       agentRoleResolved,
+				Module:     agentModuleResolved,
+				Display:    cli.AutoDisplay(agentRoleResolved, agentModuleResolved),
+				Intent:     intent,
+				RepoPath:   flagRepo,
+				NoInit:     true,
+				Force:      true,
+				ReRegister: reRegister,
 			}
 			qsResult, err := cli.Quickstart(client, qsOpts)
 			if err != nil {
@@ -515,6 +540,13 @@ Examples:
 				}
 				if qsResult.Intent != nil {
 					fmt.Println("✓ Intent set")
+				}
+			}
+
+			// Step 9b: Refresh preamble if --force (brings preamble up to date with binary version)
+			if force {
+				if err := applyRolePreamble(thrumDir, agentNameResolved, agentRoleResolved, "", true); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to refresh preamble: %v\n", err)
 				}
 			}
 
@@ -1842,7 +1874,7 @@ The agent identity is determined from:
 				}
 
 				// Apply preamble: role template > default (no --preamble-file for register)
-				if err := applyRolePreamble(thrumDir, savedName, flagRole, ""); err != nil {
+				if err := applyRolePreamble(thrumDir, savedName, flagRole, "", false); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to apply preamble: %v\n", err)
 				}
 			}
@@ -3860,7 +3892,7 @@ Examples:
 				}
 
 				// Apply preamble: --preamble-file > role template > default
-				if err := applyRolePreamble(thrumDir, savedName, flagRole, preambleFile); err != nil {
+				if err := applyRolePreamble(thrumDir, savedName, flagRole, preambleFile, false); err != nil {
 					return err
 				}
 			}
@@ -4863,7 +4895,7 @@ Examples:
 
 // applyRolePreamble applies the preamble for an agent using the priority:
 // preambleFile > role template > default. Called from both quickstart and agent register.
-func applyRolePreamble(thrumDir, agentName, role, preambleFile string) error {
+func applyRolePreamble(thrumDir, agentName, role, preambleFile string, force bool) error {
 	if preambleFile != "" {
 		// --preamble-file takes precedence over everything
 		customContent, err := os.ReadFile(preambleFile) // #nosec G304 -- preambleFile is user-specified via --preamble-file CLI flag; this is a CLI tool, user controls the path
@@ -4890,8 +4922,15 @@ func applyRolePreamble(thrumDir, agentName, role, preambleFile string) error {
 	}
 
 	// Fall back to default preamble
-	if err := agentcontext.EnsurePreamble(thrumDir, agentName); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
+	if force {
+		// Force mode: always overwrite with current default
+		if err := agentcontext.SavePreamble(thrumDir, agentName, agentcontext.DefaultPreamble()); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save preamble: %v\n", err)
+		}
+	} else {
+		if err := agentcontext.EnsurePreamble(thrumDir, agentName); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
+		}
 	}
 	return nil
 }
