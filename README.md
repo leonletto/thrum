@@ -86,8 +86,8 @@ don't need to clone this repo into your project.
   `.thrum/redirect`
 
 **v0.5.3 highlights:** Scheduled automatic backups, pinned agent identity for
-worktrees (THRUM_HOME/THRUM_AGENT_ID), embedded strategy files, and
-role-based preamble templates and project setup pipeline.
+worktrees (THRUM_HOME/THRUM_AGENT_ID), embedded strategy files, and role-based
+preamble templates and project setup pipeline.
 
 ## Installation
 

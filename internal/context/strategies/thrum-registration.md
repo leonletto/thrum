@@ -12,7 +12,8 @@ thrum send "Starting work on <task>" --to @<coordinator-name>
 
 Replace the placeholders with values appropriate for your session:
 
-- `--role` — your function: `implementer`, `coordinator`, `reviewer`, `planner`, `tester`
+- `--role` — your function: `implementer`, `coordinator`, `reviewer`, `planner`,
+  `tester`
 - `--module` — the branch or area of work (e.g., the current git branch name)
 - `--intent` — a brief description of what you are doing right now
 
@@ -36,14 +37,14 @@ thrum team
 
 **Default to @name. Only use @role when you intentionally want group fanout.**
 
-Run `thrum team` to find agent names, then send to `--to @<agent_name>`. This
-is the correct way to message a specific agent.
+Run `thrum team` to find agent names, then send to `--to @<agent_name>`. This is
+the correct way to message a specific agent.
 
-| Address form    | Behavior                                          | Example                     |
-| --------------- | ------------------------------------------------- | --------------------------- |
-| `--to @name`    | Direct message to one specific agent (DEFAULT)    | `--to @coord_main`          |
-| `--to @role`    | Group fanout — ALL agents with that role receive  | `--to @coordinator`         |
-| `--to @everyone`| Broadcast to all active agents                    | `--to @everyone`            |
+| Address form     | Behavior                                         | Example             |
+| ---------------- | ------------------------------------------------ | ------------------- |
+| `--to @name`     | Direct message to one specific agent (DEFAULT)   | `--to @coord_main`  |
+| `--to @role`     | Group fanout — ALL agents with that role receive | `--to @coordinator` |
+| `--to @everyone` | Broadcast to all active agents                   | `--to @everyone`    |
 
 **WARNING:** Sending `--to @coordinator` does NOT send to one coordinator — it
 sends to ALL agents with the coordinator role. This is almost never what you

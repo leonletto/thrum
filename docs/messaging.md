@@ -1,4 +1,3 @@
-
 ## Thrum Messaging System
 
 ## Overview

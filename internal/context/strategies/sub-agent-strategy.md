@@ -66,4 +66,5 @@ When writing prompts for sub-agents:
 - Provide the exact quality commands to run (`make test`, `make lint`, etc.)
 - State the expected deliverables explicitly
 - Sub-agents cannot access MCP tools — they fall back to Bash
-- Sub-agents cannot see CLAUDE.md or project `.agents/` files unless you include the content in the prompt
+- Sub-agents cannot see CLAUDE.md or project `.agents/` files unless you include
+  the content in the prompt

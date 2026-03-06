@@ -534,11 +534,11 @@ worktree-related values come from the Phase 3 assignments:
 | `{{CROSS_EPIC_DEPS}}`  | From Phase 2 cross-epic dependency map. If no cross-epic deps, replace with "No cross-epic dependencies."                                                                                                                   |
 
 **Strategy file references.** When generating the filled prompt for a
-thrum-enabled project, replace the inline `## Sub-Agent Strategy` section with
-a read-directive pointing to `.thrum/strategies/sub-agent-strategy.md`. This
-reduces the prompt by ~60 lines while ensuring the strategy is always
-up-to-date with the installed thrum version. The implementation agent reads the
-file at runtime.
+thrum-enabled project, replace the inline `## Sub-Agent Strategy` section with a
+read-directive pointing to `.thrum/strategies/sub-agent-strategy.md`. This
+reduces the prompt by ~60 lines while ensuring the strategy is always up-to-date
+with the installed thrum version. The implementation agent reads the file at
+runtime.
 
 Similarly, the `## MANDATORY: Register Before Any Work` section can reference
 `.thrum/strategies/thrum-registration.md`, and the `## Resume Quick Reference`

@@ -28,9 +28,9 @@ these pins.
 - **Scheduled automatic backups** — `thrum backup schedule [interval|off]` with
   `--dir` flag; daemon runs a `BackupScheduler` goroutine at the configured
   interval
-- **Embedded strategy files** — three strategy reference files
-  (sub-agent, registration, resume-after-context-loss) embedded in the binary
-  and written to `.thrum/strategies/` during `thrum init`
+- **Embedded strategy files** — three strategy reference files (sub-agent,
+  registration, resume-after-context-loss) embedded in the binary and written to
+  `.thrum/strategies/` during `thrum init`
 - **Strategy read-directives** in `DefaultPreamble` — agents are pointed to
   `.thrum/strategies/` for operational patterns
 - **`CLAUDE_ENV_FILE` integration** — startup script persists `THRUM_HOME`,

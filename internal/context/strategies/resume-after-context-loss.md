@@ -35,8 +35,8 @@ Read beads status and git history to determine exactly where work stopped. Then:
 
 - If a task is `in_progress` in beads and has uncommitted changes: review the
   diff, decide whether to complete or reset, then continue
-- If a task is `in_progress` but git shows it is fully committed: close the
-  task in beads and move to the next
+- If a task is `in_progress` but git shows it is fully committed: close the task
+  in beads and move to the next
 - If all visible tasks are `completed`: verify nothing was missed, then proceed
   to the next unblocked task or wrap up
 

@@ -1,4 +1,3 @@
-
 ## Technical Overview
 
 > **New here?** Start with [Why Thrum Exists](philosophy.md) for the philosophy
