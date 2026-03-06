@@ -64,6 +64,9 @@ func Overview(client *Client, callerAgentID ...string) (*OverviewResult, error) 
 			"page_size":    0,
 			"exclude_self": true,
 		}
+		if len(callerAgentID) > 0 && callerAgentID[0] != "" {
+			inboxParams["caller_agent_id"] = callerAgentID[0]
+		}
 		if whoami.AgentID != "" {
 			inboxParams["for_agent"] = whoami.AgentID
 		}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/runtime"
 )
 
@@ -69,14 +70,17 @@ func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 
 	// Resolve repo path and detect runtime
 	if cwd, err := os.Getwd(); err == nil {
-		ctx.RepoPath = cwd
-		ctx.Runtime = runtime.DetectRuntime(cwd)
+		ctx.RepoPath = paths.EffectiveRepoPath(cwd)
+		ctx.Runtime = runtime.DetectRuntime(ctx.RepoPath)
 	}
 
 	// 1. Agent identity (pass caller ID for correct worktree resolution)
-	whoami, err := AgentWhoami(client, callerAgentID...)
-	if err == nil {
-		ctx.Identity = whoami
+	var whoami *WhoamiResult
+	if len(callerAgentID) > 0 && callerAgentID[0] != "" {
+		whoami, err := AgentWhoami(client, callerAgentID...)
+		if err == nil {
+			ctx.Identity = whoami
+		}
 	}
 
 	// 2. Session info (derived from whoami)
@@ -109,23 +113,25 @@ func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 	}
 
 	// 4. Unread messages (pass caller ID for correct inbox filtering)
-	inboxOpts := InboxOptions{PageSize: 10}
 	if len(callerAgentID) > 0 && callerAgentID[0] != "" {
-		inboxOpts.CallerAgentID = callerAgentID[0]
-	}
-	inbox, err := Inbox(client, inboxOpts)
-	if err == nil {
-		info := &MessagesInfo{
-			Total:  inbox.Total,
-			Unread: inbox.Unread,
+		inboxOpts := InboxOptions{
+			PageSize:      10,
+			CallerAgentID: callerAgentID[0],
 		}
-		// Include up to 5 most recent messages
-		limit := 5
-		if len(inbox.Messages) < limit {
-			limit = len(inbox.Messages)
+		inbox, err := Inbox(client, inboxOpts)
+		if err == nil {
+			info := &MessagesInfo{
+				Total:  inbox.Total,
+				Unread: inbox.Unread,
+			}
+			// Include up to 5 most recent messages
+			limit := 5
+			if len(inbox.Messages) < limit {
+				limit = len(inbox.Messages)
+			}
+			info.Recent = inbox.Messages[:limit]
+			ctx.Messages = info
 		}
-		info.Recent = inbox.Messages[:limit]
-		ctx.Messages = info
 	}
 
 	// 5. Git work context

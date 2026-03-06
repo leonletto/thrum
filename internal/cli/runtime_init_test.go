@@ -74,10 +74,13 @@ func TestRenderTemplate(t *testing.T) {
 			runtime:  "shared",
 			template: "startup.sh.tmpl",
 			contains: []string{
-				"thrum daemon",
-				"thrum quickstart",
-				"thrum whoami",
+				`thrum --repo "$THRUM_HOME" daemon status`,
+				`thrum --repo "$THRUM_HOME" quickstart`,
+				`thrum --repo "$THRUM_HOME" whoami`,
 				"THRUM_NAME",
+				"THRUM_HOME",
+				"THRUM_AGENT_ID",
+				`thrum --repo "$THRUM_HOME"`,
 			},
 		},
 		{

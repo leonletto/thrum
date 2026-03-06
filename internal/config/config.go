@@ -55,6 +55,7 @@ func Load(flagRole, flagModule string) (*Config, error) {
 
 // LoadWithPath loads configuration from a specific repo path.
 func LoadWithPath(repoPath, flagRole, flagModule string) (*Config, error) {
+	repoPath = paths.EffectiveRepoPath(repoPath)
 	cfg := &Config{}
 
 	// Get THRUM_NAME env var for identity selection
@@ -233,6 +234,7 @@ func detectCurrentWorktree(identitiesDir string) string {
 // LoadIdentityWithPath loads the identity file and returns both the parsed identity
 // and the relative file path. Useful for commands that need to display which file was loaded.
 func LoadIdentityWithPath(repoPath string) (*IdentityFile, string, error) {
+	repoPath = paths.EffectiveRepoPath(repoPath)
 	thrumName := os.Getenv("THRUM_NAME")
 	identitiesDir := filepath.Join(repoPath, ".thrum", "identities")
 
