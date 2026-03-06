@@ -77,8 +77,9 @@ func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 	// 1. Agent identity (pass caller ID for correct worktree resolution)
 	var whoami *WhoamiResult
 	if len(callerAgentID) > 0 && callerAgentID[0] != "" {
-		whoami, err := AgentWhoami(client, callerAgentID...)
+		w, err := AgentWhoami(client, callerAgentID...)
 		if err == nil {
+			whoami = w
 			ctx.Identity = whoami
 		}
 	}
