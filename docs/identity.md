@@ -146,6 +146,8 @@ export THRUM_NAME=furiosa          # Select identity file (highest priority)
 export THRUM_ROLE=implementer      # Override role
 export THRUM_MODULE=auth           # Override module
 export THRUM_DISPLAY="Auth Agent"  # Override display name
+export THRUM_HOME=/path/to/repo    # Pin repo path for all commands
+export THRUM_AGENT_ID=furiosa      # Pin caller identity for daemon RPC
 ```
 
 `THRUM_NAME` environment variable takes highest priority in identity resolution,
@@ -160,6 +162,17 @@ errors are not silently ignored.
 
 `THRUM_ROLE` and `THRUM_MODULE` override the role and module from any identity
 file but do not affect which file is loaded.
+
+`THRUM_HOME` overrides the repository path used by all thrum commands, regardless
+of the current working directory. This is especially useful in multi-worktree
+setups: agents that `cd` into a different worktree still resolve the correct
+daemon socket and config. Set by `thrum-startup.sh` automatically to prevent
+identity drift.
+
+`THRUM_AGENT_ID` overrides identity resolution for daemon RPC calls, bypassing
+identity file lookup entirely. When set, commands like `thrum status`,
+`thrum prime`, and `thrum overview` use this pinned agent ID directly. Useful
+when scripting or when the identity file is unavailable.
 
 Use environment variables when:
 

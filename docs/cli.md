@@ -71,6 +71,7 @@ messaging system for AI agent coordination.
 | `thrum backup restore`     | Restore from latest backup or a specific archive     |
 | `thrum backup plugin list` | List configured backup plugins                       |
 | `thrum backup plugin add`  | Add a backup plugin (or use a built-in preset)       |
+| `thrum backup schedule`    | Configure automatic backup schedule                  |
 | `thrum mcp serve`          | Start MCP stdio server for agent messaging           |
 
 ## Global Flags
@@ -1560,6 +1561,40 @@ Remove a configured backup plugin by name.
 ```text
 thrum backup plugin remove --name NAME
 ```
+
+### thrum backup schedule
+
+View or configure the automatic backup schedule. The daemon runs a backup at the
+configured interval when it is running.
+
+```text
+thrum backup schedule [interval|off] [flags]
+```
+
+| Flag      | Description            | Default |
+| --------- | ---------------------- | ------- |
+| `--dir`   | Set backup directory   |         |
+
+Examples:
+
+```text
+# Show current schedule
+$ thrum backup schedule
+
+# Back up every 24 hours
+$ thrum backup schedule 24h
+
+# Set 8-hour interval and override backup directory
+$ thrum backup schedule 8h --dir dev-docs/backup
+
+# Disable scheduled backups
+$ thrum backup schedule off
+```
+
+Notes:
+
+- Daemon must be restarted for schedule changes to take effect
+- Intervals use Go duration format: `24h`, `12h`, `6h30m`, `168h` (1 week)
 
 ## MCP Server
 

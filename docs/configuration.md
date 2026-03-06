@@ -182,6 +182,16 @@ configuration. For day-to-day use, edit `config.json`.
 | `THRUM_NAME`          | Agent identity selection | `THRUM_NAME=alice`        |
 | `THRUM_ROLE`          | Agent role               | `THRUM_ROLE=planner`      |
 | `THRUM_MODULE`        | Agent module             | `THRUM_MODULE=backend`    |
+| `THRUM_HOME`          | Repo path for all commands | `THRUM_HOME=/path/to/repo` |
+| `THRUM_AGENT_ID`      | Caller identity for daemon RPC | `THRUM_AGENT_ID=alice` |
+
+`THRUM_HOME` pins all thrum commands to the specified repo path regardless of
+the current working directory. This is set automatically by `thrum-startup.sh`
+to prevent identity drift when an agent `cd`s into a different worktree.
+
+`THRUM_AGENT_ID` pins the caller identity for daemon RPC calls, bypassing
+identity file lookup. When set, commands like `thrum status`, `thrum prime`, and
+`thrum overview` use this agent ID directly.
 
 ## Runtime Templates
 

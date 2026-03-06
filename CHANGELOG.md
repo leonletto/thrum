@@ -6,6 +6,65 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-03-06
+
+### Scheduled Backups
+
+The daemon can now run automatic backups on a configurable interval. Configure
+via CLI (`thrum backup schedule 24h`) or `.thrum/config.json`. Backups include
+all thrum data plus third-party plugins (e.g., Beads) in a single archive with
+GFS rotation.
+
+### Pinned Agent Identity for Worktrees
+
+Agents working in worktrees no longer silently drift to the daemon's default
+identity. Three new environment variables (`THRUM_HOME`, `THRUM_AGENT_ID`,
+`THRUM_NAME`) pin CLI commands to a specific repository and agent, even when the
+shell cds into a different worktree. The startup script and daemon both respect
+these pins.
+
+### Added
+
+- **Scheduled automatic backups** — `thrum backup schedule [interval|off]` with
+  `--dir` flag; daemon runs a `BackupScheduler` goroutine at the configured
+  interval
+- **Embedded strategy files** — three strategy reference files
+  (sub-agent, registration, resume-after-context-loss) embedded in the binary
+  and written to `.thrum/strategies/` during `thrum init`
+- **Strategy read-directives** in `DefaultPreamble` — agents are pointed to
+  `.thrum/strategies/` for operational patterns
+- **`CLAUDE_ENV_FILE` integration** — startup script persists `THRUM_HOME`,
+  `THRUM_AGENT_ID`, and other env vars into Claude Code's session environment
+  for SessionStart hooks
+- **Strategies documentation** — new website category with three strategy pages
+
+### Changed
+
+- **Startup script** (`scripts/thrum-startup.sh` and template) now exports
+  `THRUM_HOME`, `THRUM_AGENT_ID`, and binds all thrum commands to the home repo
+  via `--repo "$THRUM_HOME"`
+- **`runDaemon()`** creates identities directory in the local checkout instead
+  of the shared redirect target, matching the `IdentitiesDir()` contract
+- **`DefaultPreamble`** prioritizes `@name` over `@role` for send instructions,
+  preventing accidental group fanout
+- **`resolveLocalAgentID()`** checks `THRUM_AGENT_ID` env var before config file
+  lookup; errors now surface with a helpful registration hint
+
+### Fixed
+
+- **Variable shadowing in `prime.go`** — `whoami` inside an `if` block was
+  shadowed by `:=`, causing `ctx.Session` to never populate; `thrum prime`
+  always showed "Session: none"
+- **Identity drift in `status`, `overview`, `prime`, and subscriptions** — these
+  commands now pass `caller_agent_id` to the daemon instead of relying on
+  daemon-side resolution
+- **`DefaultSocketPath`** applies `EffectiveRepoPath` before redirect resolution
+  so worktree agents connect to the correct daemon
+- **`thrum init --force`** now refreshes the preamble, pre-populates identity
+  fields, and fixes role conflict on re-init
+- **Preamble `--after` flag** corrected from `-30s` to `-1s` (prevents stale
+  message replay)
+
 ## [0.5.0] - 2026-02-23
 
 ### Big Update to the UI
