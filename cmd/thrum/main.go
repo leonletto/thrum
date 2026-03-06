@@ -4805,6 +4805,37 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	// Set lock file for SIGKILL resilience
 	lifecycle.SetLockFile(lockFile)
 
+	// Start scheduled backup if configured
+	if thrumCfg.Backup.Schedule != "" {
+		backupInterval, parseErr := time.ParseDuration(thrumCfg.Backup.Schedule)
+		if parseErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: invalid backup schedule %q: %v\n", thrumCfg.Backup.Schedule, parseErr)
+		} else if backupInterval > 0 {
+			backupDir := thrumCfg.Backup.Dir
+			if backupDir == "" {
+				backupDir = filepath.Join(thrumDir, "backup")
+			}
+			repoName := cli.GetRepoName(absPath)
+			scheduler := backup.NewBackupScheduler(backupInterval, func() backup.BackupOptions {
+				syncDirForBackup, _ := paths.SyncWorktreePath(absPath)
+				return backup.BackupOptions{
+					BackupDir:    backupDir,
+					RepoName:     repoName,
+					SyncDir:      syncDirForBackup,
+					ThrumDir:     thrumDir,
+					DBPath:       filepath.Join(thrumDir, "var", "messages.db"),
+					ThrumVersion: Version,
+					Retention:    &thrumCfg.Backup.Retention,
+					Plugins:      thrumCfg.Backup.Plugins,
+					PostBackup:   thrumCfg.Backup.PostBackup,
+					RepoPath:     absPath,
+				}
+			})
+			go scheduler.Start(ctx)
+			fmt.Fprintf(os.Stderr, "  Backup:      every %s\n", backupInterval)
+		}
+	}
+
 	return lifecycle.Run(ctx)
 }
 
@@ -5010,8 +5041,127 @@ func backupCmd() *cobra.Command {
 	cmd.AddCommand(restoreCmd)
 
 	cmd.AddCommand(pluginCmd())
+	cmd.AddCommand(scheduleCmd())
 
 	return cmd
+}
+
+func scheduleCmd() *cobra.Command {
+	var flagScheduleDir string
+
+	cmd := &cobra.Command{
+		Use:   "schedule [interval|off]",
+		Short: "Configure automatic backup schedule",
+		Long: `View or set the automatic backup schedule. The daemon runs backups at the
+configured interval when running.
+
+Examples:
+  thrum backup schedule            Show current schedule
+  thrum backup schedule 24h        Back up every 24 hours
+  thrum backup schedule 12h        Back up every 12 hours
+  thrum backup schedule 6h         Back up every 6 hours
+  thrum backup schedule 30m        Back up every 30 minutes
+  thrum backup schedule off        Disable scheduled backups
+  thrum backup schedule 24h --dir /path/to/backups
+
+Intervals use Go duration format: "24h", "12h", "6h30m", "168h" (1 week).
+
+The schedule is stored in .thrum/config.json under backup.schedule. The daemon
+must be restarted for schedule changes to take effect.
+
+Third-party backup plugins can be configured manually in .thrum/config.json:
+
+  {
+    "backup": {
+      "schedule": "24h",
+      "plugins": [
+        {"name": "beads", "command": "bd backup --force", "include": [".beads/backup/*"]}
+      ],
+      "post_backup": "echo backup done"
+    }
+  }
+
+Use 'thrum backup plugin add' to manage plugins via CLI.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runBackupSchedule(args, flagScheduleDir)
+		},
+	}
+
+	cmd.Flags().StringVar(&flagScheduleDir, "dir", "", "Set backup directory")
+
+	return cmd
+}
+
+func runBackupSchedule(args []string, dirOverride string) error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	// Show mode: no args
+	if len(args) == 0 {
+		if cfg.Backup.Schedule == "" {
+			fmt.Println("Backup schedule: disabled")
+		} else {
+			fmt.Printf("Backup schedule: every %s\n", cfg.Backup.Schedule)
+		}
+		backupDir := cfg.Backup.Dir
+		if backupDir == "" {
+			backupDir = filepath.Join(thrumDir, "backup")
+		}
+		fmt.Printf("Backup directory: %s\n", backupDir)
+
+		// Show last backup time from manifest
+		repoName := cli.GetRepoName(flagRepo)
+		manifestPath := filepath.Join(backupDir, repoName, "current", "manifest.json")
+		if data, readErr := os.ReadFile(filepath.Clean(manifestPath)); readErr == nil {
+			var manifest map[string]any
+			if json.Unmarshal(data, &manifest) == nil {
+				if ts, ok := manifest["timestamp"].(string); ok {
+					fmt.Printf("Last backup: %s\n", ts)
+				}
+			}
+		}
+
+		fmt.Println("\nRestart the daemon for schedule changes to take effect.")
+		return nil
+	}
+
+	// Set mode
+	interval := args[0]
+	if interval == "off" || interval == "disable" || interval == "none" {
+		cfg.Backup.Schedule = ""
+		fmt.Println("Backup schedule: disabled")
+	} else {
+		// Validate it's a valid Go duration
+		d, parseErr := time.ParseDuration(interval)
+		if parseErr != nil {
+			return fmt.Errorf("invalid interval %q: use Go duration format (e.g., 24h, 12h, 6h30m): %w", interval, parseErr)
+		}
+		if d <= 0 {
+			return fmt.Errorf("interval must be positive, got %s", d)
+		}
+		cfg.Backup.Schedule = interval
+		fmt.Printf("Backup schedule: every %s\n", interval)
+	}
+
+	if dirOverride != "" {
+		cfg.Backup.Dir = dirOverride
+		fmt.Printf("Backup directory: %s\n", dirOverride)
+	}
+
+	if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+
+	fmt.Println("\nRestart the daemon for schedule changes to take effect.")
+	return nil
 }
 
 func runBackupCreate(dirOverride string) error {

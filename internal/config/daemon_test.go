@@ -358,6 +358,62 @@ func TestSaveThrumConfig_OmitsDefaultBackup(t *testing.T) {
 	}
 }
 
+func TestSaveThrumConfig_BackupScheduleRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.ThrumConfig{
+		Daemon: config.DaemonConfig{LocalOnly: true},
+		Backup: config.BackupConfig{
+			Schedule: "24h",
+			Dir:      "/tmp/scheduled-backups",
+		},
+	}
+
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	loaded, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if loaded.Backup.Schedule != "24h" {
+		t.Errorf("expected schedule=24h, got %q", loaded.Backup.Schedule)
+	}
+	if loaded.Backup.Dir != "/tmp/scheduled-backups" {
+		t.Errorf("expected dir=/tmp/scheduled-backups, got %q", loaded.Backup.Dir)
+	}
+
+	// Verify schedule alone triggers backup section in JSON
+	data, err := os.ReadFile(filepath.Join(tmpDir, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := raw["backup"]; !exists {
+		t.Error("expected backup section to be written when schedule is set")
+	}
+}
+
+func TestLoadThrumConfig_ScheduleFromJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	data := `{"backup": {"schedule": "12h"}}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Backup.Schedule != "12h" {
+		t.Errorf("expected schedule=12h, got %q", cfg.Backup.Schedule)
+	}
+}
+
 func TestSaveThrumConfig_PreservesUnknownKeys(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")

@@ -29,6 +29,7 @@ type DaemonConfig struct {
 // BackupConfig holds backup-related settings.
 type BackupConfig struct {
 	Dir        string          `json:"dir,omitempty"`
+	Schedule   string          `json:"schedule,omitempty"` // Go duration: "24h", "12h", "6h"; empty = disabled
 	Retention  RetentionConfig `json:"retention"`
 	Plugins    []PluginConfig  `json:"plugins,omitempty"`
 	PostBackup string          `json:"post_backup,omitempty"`
@@ -169,7 +170,7 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 	isDefaultRetention := cfg.Backup.Retention.RetentionDaily() == DefaultRetentionDaily &&
 		cfg.Backup.Retention.RetentionWeekly() == DefaultRetentionWeekly &&
 		cfg.Backup.Retention.RetentionMonthly() == DefaultRetentionMonthly
-	if cfg.Backup.Dir != "" || len(cfg.Backup.Plugins) > 0 || cfg.Backup.PostBackup != "" || !isDefaultRetention {
+	if cfg.Backup.Dir != "" || cfg.Backup.Schedule != "" || len(cfg.Backup.Plugins) > 0 || cfg.Backup.PostBackup != "" || !isDefaultRetention {
 		backupBytes, err := json.Marshal(cfg.Backup)
 		if err != nil {
 			return err
