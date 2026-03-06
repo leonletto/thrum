@@ -1,3 +1,4 @@
+
 ## Thrum CLI Reference
 
 Complete reference for the `thrum` command-line interface -- a Git-backed
@@ -1548,9 +1549,9 @@ thrum backup plugin add [flags]
 
 Example:
 
-```text
-$ thrum backup plugin add --preset beads
-$ thrum backup plugin add --name myplugin --command "bd backup --force" --include ".beads/backup/*.jsonl"
+```bash
+thrum backup plugin add --preset beads
+thrum backup plugin add --name myplugin --command "bd backup --force" --include ".beads/backup/*.jsonl"
 ```
 
 ### thrum backup plugin remove
