@@ -559,5 +559,6 @@ shell-outs.
 5. **Check sync status** if messages aren't appearing
 6. **Use `--json` flag** for scripting and automation
 7. **Back up your data** regularly: `thrum backup`
+8. **Enable automatic backups**: `thrum backup schedule 24h`
 
 Happy collaborating!

@@ -556,6 +556,17 @@ thrum backup schedule                          # Show current schedule
 thrum backup schedule 24h                      # Back up every 24 hours
 thrum backup schedule 8h --dir dev-docs/backup # Set interval + directory
 thrum backup schedule off                      # Disable scheduled backups
+```
+
+`backup schedule` flags:
+
+```
+--dir string   Set backup directory
+```
+
+Note: Daemon must be restarted for schedule changes to take effect.
+
+```bash
 thrum backup restore                           # Restore from latest backup
 thrum backup restore archive.zip               # Restore from specific archive
 thrum backup restore --yes                     # Skip confirmation
