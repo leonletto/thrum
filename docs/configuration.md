@@ -18,6 +18,7 @@ Located at `.thrum/config.json` in your repository:
   },
   "backup": {
     "dir": "/path/to/backups",
+    "schedule": "24h",
     "retention": {
       "daily": 5,
       "weekly": 4,
@@ -26,9 +27,9 @@ Located at `.thrum/config.json` in your repository:
     "post_backup": "aws s3 sync /path/to/backups s3://my-bucket/thrum",
     "plugins": [
       {
-        "name": "my-plugin",
-        "command": "/usr/local/bin/my-backup-plugin",
-        "include": ["messages", "agents"]
+        "name": "beads",
+        "command": "bd backup --force",
+        "include": [".beads/backup/*"]
       }
     ]
   }
@@ -75,7 +76,18 @@ from `config.json` if you are using all defaults.
 Directory where backup archives are written.
 
 - **Type:** string (path)
-- **Default:** none (backup disabled when `dir` is not set)
+- **Default:** `.thrum/backup` (relative to repo root)
+
+### `backup.schedule`
+
+Automatic backup interval. The daemon runs a backup at this interval when
+running. Use `thrum backup schedule` to configure via CLI.
+
+- **Type:** string (Go duration format)
+- **Default:** none (scheduled backups disabled)
+- **Examples:** `"24h"`, `"12h"`, `"8h"`, `"168h"` (1 week)
+- **CLI:** `thrum backup schedule 24h` / `thrum backup schedule off`
+- **Note:** Daemon must be restarted after changing the schedule
 
 ### `backup.retention.daily`
 
@@ -118,8 +130,12 @@ following fields:
 | Field     | Type             | Description                               |
 | --------- | ---------------- | ----------------------------------------- |
 | `name`    | string           | Unique plugin identifier                  |
-| `command` | string           | Absolute path to the plugin executable    |
-| `include` | array of strings | Data categories the plugin should receive |
+| `command` | string           | Shell command to run before collecting files |
+| `include` | array of strings | Glob patterns for files to collect into the backup |
+
+Use `thrum backup plugin add --preset beads` to add the built-in Beads preset,
+or define custom plugins manually. The command runs from the repo root before
+file collection; include patterns are evaluated after the command completes.
 
 Example:
 
@@ -127,6 +143,7 @@ Example:
 {
   "backup": {
     "dir": "~/.thrum-backups",
+    "schedule": "24h",
     "retention": {
       "daily": 7,
       "weekly": 4,
@@ -135,9 +152,9 @@ Example:
     "post_backup": "rsync -a ~/.thrum-backups/ backup-host:/thrum/",
     "plugins": [
       {
-        "name": "s3-uploader",
-        "command": "/usr/local/bin/thrum-s3",
-        "include": ["messages", "agents", "sessions"]
+        "name": "beads",
+        "command": "bd backup --force",
+        "include": [".beads/backup/*"]
       }
     ]
   }
