@@ -48,6 +48,20 @@ export THRUM_ROLE="$AGENT_ROLE"
 export THRUM_MODULE="$AGENT_MODULE"
 export THRUM_INTENT="$AGENT_INTENT"
 
+# Persist env vars into Claude Code's session environment.
+# CLAUDE_ENV_FILE is provided by SessionStart hooks — vars written here survive
+# into subsequent Bash tool calls. Without this, exports die with the subprocess.
+if [ -n "$CLAUDE_ENV_FILE" ]; then
+  cat >> "$CLAUDE_ENV_FILE" <<ENVEOF
+export THRUM_HOME=$THRUM_HOME
+export THRUM_NAME=$THRUM_NAME
+export THRUM_AGENT_ID=$THRUM_AGENT_ID
+export THRUM_ROLE=$THRUM_ROLE
+export THRUM_MODULE=$THRUM_MODULE
+export THRUM_INTENT=$THRUM_INTENT
+ENVEOF
+fi
+
 # 3. Register agent (reuses existing identity)
 thrum --repo "$THRUM_HOME" quickstart \
   --name "$AGENT_NAME" \

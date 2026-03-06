@@ -81,6 +81,7 @@ func TestRenderTemplate(t *testing.T) {
 				"THRUM_HOME",
 				"THRUM_AGENT_ID",
 				`thrum --repo "$THRUM_HOME"`,
+				"CLAUDE_ENV_FILE",
 			},
 		},
 		{
