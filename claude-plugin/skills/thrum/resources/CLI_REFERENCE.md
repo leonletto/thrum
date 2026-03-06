@@ -552,6 +552,10 @@ thrum backup                                   # Snapshot all thrum data
 thrum backup --dir /path/to/backup             # Override backup directory
 thrum backup status                            # Show last backup info
 thrum backup config                            # Show effective backup config
+thrum backup schedule                          # Show current schedule
+thrum backup schedule 24h                      # Back up every 24 hours
+thrum backup schedule 8h --dir dev-docs/backup # Set interval + directory
+thrum backup schedule off                      # Disable scheduled backups
 thrum backup restore                           # Restore from latest backup
 thrum backup restore archive.zip               # Restore from specific archive
 thrum backup restore --yes                     # Skip confirmation
