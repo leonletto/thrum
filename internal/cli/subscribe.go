@@ -75,9 +75,10 @@ func Subscribe(client *Client, opts SubscribeOptions) (*SubscribeResponse, error
 }
 
 // Unsubscribe removes a subscription.
-func Unsubscribe(client *Client, subscriptionID int) (*UnsubscribeResponse, error) {
+func Unsubscribe(client *Client, subscriptionID int, callerAgentID string) (*UnsubscribeResponse, error) {
 	req := UnsubscribeRequest{
 		SubscriptionID: subscriptionID,
+		CallerAgentID:  callerAgentID,
 	}
 
 	var result UnsubscribeResponse

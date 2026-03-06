@@ -82,6 +82,10 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	// Resolve flagRepo to the nearest parent containing .thrum/ (git-style traversal).
 	// Skip for "init" which creates .thrum/ and doesn't need it to exist.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if !cmd.Flags().Changed("repo") {
+			flagRepo = paths.EffectiveRepoPath(flagRepo)
+		}
+
 		// Don't traverse for init — it creates .thrum/
 		if cmd.Name() == "init" {
 			return nil
@@ -1302,7 +1306,10 @@ The daemon must be running to check status.`,
 			}
 			defer func() { _ = client.Close() }()
 
-			agentID, _ := resolveLocalAgentID()
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
 			result, err := cli.Status(client, agentID)
 			if err != nil {
 				return err
@@ -2899,6 +2906,10 @@ Examples:
 			scope, _ := cmd.Flags().GetString("scope")
 			mention, _ := cmd.Flags().GetString("mention")
 			all, _ := cmd.Flags().GetBool("all")
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
 
 			// Validate mutually exclusive options
 			optionsSet := 0
@@ -2947,6 +2958,7 @@ Examples:
 
 			// Set all flag
 			opts.All = all
+			opts.CallerAgentID = agentID
 
 			result, err := cli.Subscribe(client, opts)
 			if err != nil {
@@ -2987,13 +2999,18 @@ Use 'thrum subscriptions' to list your active subscriptions.`,
 				return fmt.Errorf("invalid subscription ID: %s", args[0])
 			}
 
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("failed to connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.Unsubscribe(client, subscriptionID)
+			result, err := cli.Unsubscribe(client, subscriptionID, agentID)
 			if err != nil {
 				return err
 			}
@@ -3438,7 +3455,10 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
-			agentID, _ := resolveLocalAgentID()
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
 			result := cli.ContextPrime(client, agentID)
 
 			if flagJSON {
@@ -3942,7 +3962,10 @@ Examples:
 			}
 			defer func() { _ = client.Close() }()
 
-			agentID, _ := resolveLocalAgentID()
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
 			result, err := cli.Overview(client, agentID)
 			if err != nil {
 				return err
@@ -4204,6 +4227,10 @@ func getClient() (*cli.Client, error) {
 // This is used to pass caller identity to the daemon, which may be running in a
 // different worktree (via .thrum/redirect). Returns empty string if resolution fails.
 func resolveLocalAgentID() (string, error) {
+	if agentID := strings.TrimSpace(os.Getenv("THRUM_AGENT_ID")); agentID != "" {
+		return agentID, nil
+	}
+
 	cfg, err := config.LoadWithPath(flagRepo, flagRole, flagModule)
 	if err != nil {
 		return "", err
@@ -4256,8 +4283,8 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		return fmt.Errorf("failed to create var directory: %w", err)
 	}
 
-	// Ensure identities directory exists
-	identitiesDir := filepath.Join(thrumDir, "identities")
+	// Ensure identities directory exists in the local checkout, not the shared redirect target.
+	identitiesDir := filepath.Join(absPath, ".thrum", "identities")
 	if err := os.MkdirAll(identitiesDir, 0750); err != nil {
 		return fmt.Errorf("failed to create identities directory: %w", err)
 	}

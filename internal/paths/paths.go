@@ -17,6 +17,16 @@ const (
 	syncWorktreeDir = "thrum-sync"
 )
 
+// EffectiveRepoPath returns the bound repo path for the current process.
+// THRUM_HOME pins Thrum commands to a specific checkout even when the shell cwd
+// moves into another worktree.
+func EffectiveRepoPath(repoPath string) string {
+	if home := strings.TrimSpace(os.Getenv("THRUM_HOME")); home != "" {
+		return home
+	}
+	return repoPath
+}
+
 // FindThrumRoot walks up from startPath looking for a directory containing .thrum/.
 // This mimics how git traverses parent directories to find .git/.
 // Returns the directory containing .thrum/, or an error if none is found.

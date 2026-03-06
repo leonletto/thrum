@@ -202,6 +202,61 @@ func TestLoad_ThrumNameEnvVar_SelectsSpecificIdentity(t *testing.T) {
 	}
 }
 
+func TestLoadWithPath_UsesThrumHome(t *testing.T) {
+	mainRepo := t.TempDir()
+	worktreeRepo := t.TempDir()
+
+	mainIdentity := &config.IdentityFile{
+		Version: 1,
+		RepoID:  "r_MAIN123",
+		Agent: config.AgentConfig{
+			Kind:    "agent",
+			Name:    "coordinator_main",
+			Role:    "coordinator",
+			Module:  "testing",
+			Display: "Coordinator",
+		},
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := config.SaveIdentityFile(filepath.Join(mainRepo, ".thrum"), mainIdentity); err != nil {
+		t.Fatalf("save main identity: %v", err)
+	}
+
+	worktreeIdentity := &config.IdentityFile{
+		Version: 1,
+		RepoID:  "r_WORK123",
+		Agent: config.AgentConfig{
+			Kind:    "agent",
+			Name:    "implementer_testing",
+			Role:    "implementer",
+			Module:  "testing",
+			Display: "Implementer",
+		},
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := config.SaveIdentityFile(filepath.Join(worktreeRepo, ".thrum"), worktreeIdentity); err != nil {
+		t.Fatalf("save worktree identity: %v", err)
+	}
+
+	t.Setenv("THRUM_HOME", mainRepo)
+	t.Setenv("THRUM_NAME", "coordinator_main")
+
+	cfg, err := config.LoadWithPath(worktreeRepo, "", "")
+	if err != nil {
+		t.Fatalf("LoadWithPath() failed: %v", err)
+	}
+
+	if cfg.RepoID != "r_MAIN123" {
+		t.Errorf("RepoID = %q, want r_MAIN123", cfg.RepoID)
+	}
+	if cfg.Agent.Name != "coordinator_main" {
+		t.Errorf("Agent.Name = %q, want coordinator_main", cfg.Agent.Name)
+	}
+	if cfg.Agent.Role != "coordinator" {
+		t.Errorf("Agent.Role = %q, want coordinator", cfg.Agent.Role)
+	}
+}
+
 func TestLoad_ThrumNameEnvVar_ErrorOnNonexistent(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")

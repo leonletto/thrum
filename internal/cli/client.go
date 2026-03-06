@@ -124,6 +124,7 @@ func (c *Client) Close() error {
 // It follows .thrum/redirect files so feature worktrees connect to the
 // daemon running in the main worktree.
 func DefaultSocketPath(repoPath string) string {
+	repoPath = paths.EffectiveRepoPath(repoPath)
 	thrumDir, err := paths.ResolveThrumDir(repoPath)
 	if err != nil {
 		// Fall back to local path if redirect fails

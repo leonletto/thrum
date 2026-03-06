@@ -248,6 +248,17 @@ func TestDefaultSocketPath(t *testing.T) {
 	}
 }
 
+func TestDefaultSocketPath_UsesThrumHome(t *testing.T) {
+	homeRepo := t.TempDir()
+	t.Setenv("THRUM_HOME", homeRepo)
+
+	got := DefaultSocketPath("/tmp/other-repo")
+	want := filepath.Join(homeRepo, ".thrum", "var", "thrum.sock")
+	if got != want {
+		t.Errorf("DefaultSocketPath() = %q, want %q", got, want)
+	}
+}
+
 func TestClient_Close(t *testing.T) {
 	daemon, socketPath := newMockDaemon(t)
 	defer daemon.stop()

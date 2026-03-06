@@ -125,7 +125,7 @@ func TestUnsubscribe(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	// Call Unsubscribe
-	result, err := Unsubscribe(client, 42)
+	result, err := Unsubscribe(client, 42, "coordinator_main")
 	if err != nil {
 		t.Fatalf("Unsubscribe() error = %v", err)
 	}
