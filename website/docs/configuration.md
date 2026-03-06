@@ -138,10 +138,10 @@ offloading archives to cloud storage or triggering external notifications.
 List of third-party backup plugin definitions. Each plugin is an object with the
 following fields:
 
-| Field     | Type             | Description                               |
-| --------- | ---------------- | ----------------------------------------- |
-| `name`    | string           | Unique plugin identifier                  |
-| `command` | string           | Shell command to run before collecting files |
+| Field     | Type             | Description                                        |
+| --------- | ---------------- | -------------------------------------------------- |
+| `name`    | string           | Unique plugin identifier                           |
+| `command` | string           | Shell command to run before collecting files       |
 | `include` | array of strings | Glob patterns for files to collect into the backup |
 
 Use `thrum backup plugin add --preset beads` to add the built-in Beads preset,
@@ -185,16 +185,16 @@ configuration. For day-to-day use, edit `config.json`.
 
 ### Environment Variable Reference
 
-| Variable              | Overrides                | Example                   |
-| --------------------- | ------------------------ | ------------------------- |
-| `THRUM_LOCAL`         | `daemon.local_only`      | `THRUM_LOCAL=false`       |
-| `THRUM_SYNC_INTERVAL` | `daemon.sync_interval`   | `THRUM_SYNC_INTERVAL=120` |
-| `THRUM_WS_PORT`       | `daemon.ws_port`         | `THRUM_WS_PORT=9999`      |
-| `THRUM_NAME`          | Agent identity selection | `THRUM_NAME=alice`        |
-| `THRUM_ROLE`          | Agent role               | `THRUM_ROLE=planner`      |
-| `THRUM_MODULE`        | Agent module             | `THRUM_MODULE=backend`    |
-| `THRUM_HOME`          | Repo path for all commands | `THRUM_HOME=/path/to/repo` |
-| `THRUM_AGENT_ID`      | Caller identity for daemon RPC | `THRUM_AGENT_ID=alice` |
+| Variable              | Overrides                      | Example                    |
+| --------------------- | ------------------------------ | -------------------------- |
+| `THRUM_LOCAL`         | `daemon.local_only`            | `THRUM_LOCAL=false`        |
+| `THRUM_SYNC_INTERVAL` | `daemon.sync_interval`         | `THRUM_SYNC_INTERVAL=120`  |
+| `THRUM_WS_PORT`       | `daemon.ws_port`               | `THRUM_WS_PORT=9999`       |
+| `THRUM_NAME`          | Agent identity selection       | `THRUM_NAME=alice`         |
+| `THRUM_ROLE`          | Agent role                     | `THRUM_ROLE=planner`       |
+| `THRUM_MODULE`        | Agent module                   | `THRUM_MODULE=backend`     |
+| `THRUM_HOME`          | Repo path for all commands     | `THRUM_HOME=/path/to/repo` |
+| `THRUM_AGENT_ID`      | Caller identity for daemon RPC | `THRUM_AGENT_ID=alice`     |
 
 `THRUM_HOME` pins all thrum commands to the specified repo path regardless of
 the current working directory. This is set automatically by `thrum-startup.sh`

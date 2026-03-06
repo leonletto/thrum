@@ -328,9 +328,10 @@ worktree-related values come from the Phase 3 assignments:
 
 **Strategy file references.** For thrum-enabled projects, replace inline
 strategy sections with read-directives: `## Sub-Agent Strategy` →
-`.thrum/strategies/sub-agent-strategy.md`, `## MANDATORY: Register Before Any
-Work` → `.thrum/strategies/thrum-registration.md`, `## Resume Quick Reference`
-→ `.thrum/strategies/resume-after-context-loss.md`. For non-thrum projects (no
+`.thrum/strategies/sub-agent-strategy.md`,
+`## MANDATORY: Register Before Any Work` →
+`.thrum/strategies/thrum-registration.md`, `## Resume Quick Reference` →
+`.thrum/strategies/resume-after-context-loss.md`. For non-thrum projects (no
 `.thrum/` directory), keep sections inline.
 
 **IMPORTANT — Absolute paths for gitignored files:** `{{DESIGN_DOC}}`,

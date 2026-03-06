@@ -9,12 +9,12 @@ import (
 // BackupScheduler runs periodic backups on a configurable interval.
 // It follows the same pattern as daemon.PeriodicSyncScheduler.
 type BackupScheduler struct {
-	interval time.Duration
+	interval  time.Duration
 	buildOpts func() BackupOptions
 }
 
 // NewBackupScheduler creates a scheduler that calls RunBackup at the given interval.
-// buildOpts is called on each tick to construct fresh BackupOptions (allows
+// BuildOpts is called on each tick to construct fresh BackupOptions (allows
 // dynamic config reload in the future).
 func NewBackupScheduler(interval time.Duration, buildOpts func() BackupOptions) *BackupScheduler {
 	return &BackupScheduler{

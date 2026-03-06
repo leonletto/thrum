@@ -1,4 +1,3 @@
-
 ## Recommended Tools
 
 A curated list of tools and integrations that complement Thrum for AI agent

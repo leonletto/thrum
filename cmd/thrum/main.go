@@ -4970,7 +4970,7 @@ func applyRolePreamble(thrumDir, agentName, role, preambleFile string, force boo
 
 	rendered, renderErr := agentcontext.RenderRoleTemplate(thrumDir, agentName, role)
 	if renderErr != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to render role template for %q: %v (using default)\n", role, renderErr)
+		fmt.Fprintf(os.Stderr, "Warning: failed to render role template for %q: %v (using default)\n", role, renderErr) // #nosec G705 -- stderr diagnostic, not web output
 	} else if rendered != nil {
 		// Role template found — use it as the preamble
 		if err := agentcontext.SavePreamble(thrumDir, agentName, rendered); err != nil {

@@ -1,4 +1,3 @@
-
 ## Thrum CLI Reference
 
 Complete reference for the `thrum` command-line interface -- a Git-backed
@@ -1571,9 +1570,9 @@ configured interval when it is running.
 thrum backup schedule [interval|off] [flags]
 ```
 
-| Flag      | Description            | Default |
-| --------- | ---------------------- | ------- |
-| `--dir`   | Set backup directory   |         |
+| Flag    | Description          | Default |
+| ------- | -------------------- | ------- |
+| `--dir` | Set backup directory |         |
 
 Examples:
 

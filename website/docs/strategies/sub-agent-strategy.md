@@ -1,6 +1,7 @@
 ---
 title: "Sub-Agent Strategy"
-description: "When and how to delegate work to sub-agents for context efficiency"
+description:
+  "When and how to delegate work to sub-agents for context efficiency"
 category: "strategies"
 order: 1
 tags: ["agents", "sub-agents", "delegation", "parallelization"]
@@ -79,4 +80,5 @@ When writing prompts for sub-agents:
 - Provide the exact quality commands to run (`make test`, `make lint`, etc.)
 - State the expected deliverables explicitly
 - Sub-agents cannot access MCP tools — they fall back to Bash
-- Sub-agents cannot see CLAUDE.md or project `.agents/` files unless you include the content in the prompt
+- Sub-agents cannot see CLAUDE.md or project `.agents/` files unless you include
+  the content in the prompt

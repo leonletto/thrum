@@ -174,11 +174,11 @@ errors are not silently ignored.
 `THRUM_ROLE` and `THRUM_MODULE` override the role and module from any identity
 file but do not affect which file is loaded.
 
-`THRUM_HOME` overrides the repository path used by all thrum commands, regardless
-of the current working directory. This is especially useful in multi-worktree
-setups: agents that `cd` into a different worktree still resolve the correct
-daemon socket and config. Set by `thrum-startup.sh` automatically to prevent
-identity drift.
+`THRUM_HOME` overrides the repository path used by all thrum commands,
+regardless of the current working directory. This is especially useful in
+multi-worktree setups: agents that `cd` into a different worktree still resolve
+the correct daemon socket and config. Set by `thrum-startup.sh` automatically to
+prevent identity drift.
 
 `THRUM_AGENT_ID` overrides identity resolution for daemon RPC calls, bypassing
 identity file lookup entirely. When set, commands like `thrum status`,

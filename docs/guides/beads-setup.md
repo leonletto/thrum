@@ -1,4 +1,3 @@
-
 ## Beads Setup Guide
 
 [Beads](https://github.com/leonletto/beads) is a git-backed, dependency-aware
