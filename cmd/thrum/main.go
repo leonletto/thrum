@@ -869,10 +869,18 @@ func sentCmd() *cobra.Command {
 		Use:   "sent",
 		Short: "List messages you sent",
 		Long: `List messages authored by the current agent, including recipient snapshots
-and durable read state.`,
+and durable read state.
+
+Like inbox, sent supports filtering and pagination. Use 'thrum sent show <id>'
+to inspect one sent message with full recipient state.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			to, _ := cmd.Flags().GetString("to")
+			unread, _ := cmd.Flags().GetBool("unread")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 			page, _ := cmd.Flags().GetInt("page")
+			if cmd.Flags().Changed("limit") {
+				pageSize, _ = cmd.Flags().GetInt("limit")
+			}
 
 			agentID, err := resolveLocalAgentID()
 			if err != nil {
@@ -885,7 +893,13 @@ and durable read state.`,
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.MessageOutbox(client, agentID, pageSize, page)
+			result, err := cli.MessageOutbox(client, cli.OutboxOptions{
+				CallerAgentID: agentID,
+				To:            to,
+				Unread:        unread,
+				PageSize:      pageSize,
+				Page:          page,
+			})
 			if err != nil {
 				return err
 			}
@@ -902,7 +916,45 @@ and durable read state.`,
 	}
 
 	cmd.Flags().Int("page-size", 10, "Results per page")
+	cmd.Flags().Int("limit", 0, "Alias for --page-size")
 	cmd.Flags().Int("page", 1, "Page number")
+	cmd.Flags().String("to", "", "Only sent messages addressed to this audience or recipient (format: @agent, @role, @group, @everyone)")
+	cmd.Flags().Bool("unread", false, "Only sent messages with at least one unread recipient")
+
+	showCmd := &cobra.Command{
+		Use:   "show MSG_ID",
+		Short: "Show details for one sent message",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.MessageGet(client, args[0])
+			if err != nil {
+				return err
+			}
+			if result.Message.Author.AgentID != agentID {
+				return fmt.Errorf("message %s was not authored by the current agent", args[0])
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatMessageGet(result))
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(showCmd)
 	return cmd
 }
 

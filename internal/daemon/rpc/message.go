@@ -163,6 +163,8 @@ type MessageRecipientState struct {
 // OutboxRequest lists messages authored by the current agent with receipt details.
 type OutboxRequest struct {
 	CallerAgentID string `json:"caller_agent_id,omitempty"`
+	To            string `json:"to,omitempty"`
+	Unread        bool   `json:"unread,omitempty"`
 	PageSize      int    `json:"page_size,omitempty"`
 	Page          int    `json:"page,omitempty"`
 }
@@ -967,29 +969,121 @@ func (h *MessageHandler) HandleOutbox(ctx context.Context, params json.RawMessag
 		return nil, fmt.Errorf("caller_agent_id is required")
 	}
 
-	listReq := ListMessagesRequest{
-		AuthorID:  authorID,
-		PageSize:  pageSize,
-		Page:      page,
-		SortBy:    "created_at",
-		SortOrder: "desc",
-	}
-	listParams, err := json.Marshal(listReq)
-	if err != nil {
-		return nil, fmt.Errorf("marshal outbox list request: %w", err)
+	fromClause := ` FROM messages m
+		LEFT JOIN message_refs reply_ref ON reply_ref.message_id = m.message_id AND reply_ref.ref_type = 'reply_to'`
+	whereClause := ` WHERE m.agent_id = ?`
+	args := []any{authorID}
+
+	if req.To != "" {
+		target := normalizeAudienceTarget(req.To)
+		switch target {
+		case "":
+			return nil, fmt.Errorf("invalid to filter")
+		case "everyone":
+			whereClause += ` AND (
+				EXISTS (
+					SELECT 1 FROM message_refs mr
+					WHERE mr.message_id = m.message_id AND mr.ref_type = 'group' AND mr.ref_value = 'everyone'
+				) OR (
+					NOT EXISTS (SELECT 1 FROM message_refs mr WHERE mr.message_id = m.message_id AND mr.ref_type IN ('mention', 'group')) AND
+					NOT EXISTS (SELECT 1 FROM message_scopes ms WHERE ms.message_id = m.message_id AND ms.scope_type = 'group')
+				)
+			)`
+		default:
+			whereClause += ` AND (
+				EXISTS (
+					SELECT 1 FROM message_deliveries md
+					WHERE md.message_id = m.message_id AND md.recipient_agent_id = ?
+				) OR EXISTS (
+					SELECT 1 FROM message_refs mr
+					WHERE mr.message_id = m.message_id AND mr.ref_type = 'mention' AND mr.ref_value = ?
+				) OR EXISTS (
+					SELECT 1 FROM message_refs mr
+					WHERE mr.message_id = m.message_id AND mr.ref_type = 'group' AND mr.ref_value = ?
+				) OR EXISTS (
+					SELECT 1 FROM message_scopes ms
+					WHERE ms.message_id = m.message_id AND ms.scope_type = 'group' AND ms.scope_value = ?
+				)
+			)`
+			args = append(args, target, target, target, target)
+		}
 	}
 
-	rawResp, err := h.HandleList(ctx, listParams)
-	if err != nil {
-		return nil, err
-	}
-	listResp, ok := rawResp.(*ListMessagesResponse)
-	if !ok {
-		return nil, fmt.Errorf("unexpected outbox response type %T", rawResp)
+	if req.Unread {
+		whereClause += ` AND EXISTS (
+			SELECT 1 FROM message_deliveries md
+			WHERE md.message_id = m.message_id AND md.read_at IS NULL
+		)`
 	}
 
-	messageIDs := make([]string, 0, len(listResp.Messages))
-	for _, msg := range listResp.Messages {
+	h.state.RLock()
+	defer h.state.RUnlock()
+
+	var total int
+	countQuery := `SELECT COUNT(*)` + fromClause + whereClause
+	if err := h.state.DB().QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("count outbox messages: %w", err)
+	}
+
+	offset := (page - 1) * pageSize
+	rowsQuery := `SELECT m.message_id, m.thread_id, m.agent_id, m.created_at, m.updated_at,
+	                     m.body_format, m.body_content, m.body_structured, m.deleted,
+	                     0 as is_read,
+	                     reply_ref.ref_value as reply_to` +
+		fromClause +
+		whereClause +
+		`
+		  ORDER BY m.created_at DESC
+		  LIMIT ? OFFSET ?`
+	queryArgs := append(append([]any{}, args...), pageSize, offset)
+
+	rows, err := h.state.DB().QueryContext(ctx, rowsQuery, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("query outbox messages: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	messages := []MessageSummary{}
+	for rows.Next() {
+		var msg MessageSummary
+		var threadID sql.NullString
+		var updatedAt sql.NullString
+		var bodyStructured sql.NullString
+		var deletedInt int
+		var replyTo sql.NullString
+		if err := rows.Scan(
+			&msg.MessageID,
+			&threadID,
+			&msg.AgentID,
+			&msg.CreatedAt,
+			&updatedAt,
+			&msg.Body.Format,
+			&msg.Body.Content,
+			&bodyStructured,
+			&deletedInt,
+			&msg.IsRead,
+			&replyTo,
+		); err != nil {
+			return nil, fmt.Errorf("scan outbox message: %w", err)
+		}
+		if threadID.Valid {
+			msg.ThreadID = threadID.String
+		}
+		msg.Deleted = deletedInt == 1
+		if replyTo.Valid {
+			msg.ReplyTo = replyTo.String
+		}
+		if bodyStructured.Valid {
+			msg.Body.Structured = bodyStructured.String
+		}
+		messages = append(messages, msg)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate outbox messages: %w", err)
+	}
+
+	messageIDs := make([]string, 0, len(messages))
+	for _, msg := range messages {
 		messageIDs = append(messageIDs, msg.MessageID)
 	}
 	recipientsByMessage, err := h.loadRecipientsForMessages(ctx, messageIDs)
@@ -997,8 +1091,8 @@ func (h *MessageHandler) HandleOutbox(ctx context.Context, params json.RawMessag
 		return nil, fmt.Errorf("load outbox recipients: %w", err)
 	}
 
-	for i := range listResp.Messages {
-		msg := &listResp.Messages[i]
+	for i := range messages {
+		msg := &messages[i]
 		audiences, err := h.loadMessageAudiences(ctx, msg.MessageID)
 		if err != nil {
 			return nil, fmt.Errorf("load outbox audiences: %w", err)
@@ -1013,11 +1107,11 @@ func (h *MessageHandler) HandleOutbox(ctx context.Context, params json.RawMessag
 	}
 
 	return &OutboxResponse{
-		Messages:   listResp.Messages,
-		Total:      listResp.Total,
-		Page:       listResp.Page,
-		PageSize:   listResp.PageSize,
-		TotalPages: listResp.TotalPages,
+		Messages:   messages,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages(total, pageSize),
 	}, nil
 }
 
@@ -1404,6 +1498,22 @@ func extractAudiences(refs []types.Ref, scopes []types.Scope) []MessageAudience 
 		audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
 	}
 	return dedupeAudiences(audiences)
+}
+
+func normalizeAudienceTarget(target string) string {
+	target = strings.TrimSpace(target)
+	target = strings.TrimPrefix(target, "@")
+	return strings.ToLower(target)
+}
+
+func totalPages(total, pageSize int) int {
+	if pageSize <= 0 {
+		return 0
+	}
+	if total == 0 {
+		return 0
+	}
+	return (total + pageSize - 1) / pageSize
 }
 
 func dedupeAudiences(audiences []MessageAudience) []MessageAudience {
