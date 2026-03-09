@@ -24,6 +24,8 @@ thrum send "msg" --to @everyone          Broadcast to all agents
 thrum reply <msg-id> "response"          Reply (same audience)
 thrum inbox                              List messages (unread first)
 thrum inbox --unread                     Unread only
+thrum sent                               List messages you sent
+thrum sent --unread                      Sent messages with unread recipients
 thrum wait                               Block until message arrives (30s timeout)
 thrum wait --timeout 120s                Custom timeout (duration)
 ```

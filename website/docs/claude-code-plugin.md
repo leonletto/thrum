@@ -110,6 +110,7 @@ All commands live under the `/thrum:` namespace.
 | `/thrum:quickstart`     | Register agent and start session (interactive or with flags) |
 | `/thrum:send`           | Send direct, group, or broadcast messages                    |
 | `/thrum:inbox`          | Check message inbox (all or unread only)                     |
+| `thrum sent`            | Review sent messages with resolved recipients and receipts   |
 | `/thrum:reply`          | Reply to a message (inherits original audience)              |
 | `/thrum:wait`           | Block until a message arrives (background listener use)      |
 | `/thrum:team`           | Show active team members with roles and intents              |

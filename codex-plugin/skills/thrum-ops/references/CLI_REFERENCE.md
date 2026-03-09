@@ -70,6 +70,10 @@ thrum inbox --mentions                         # Only messages mentioning you
 thrum inbox --scope type:value                 # Filter by scope
 thrum inbox --page 2 --page-size 20            # Pagination
 thrum inbox --limit N                          # Alias for --page-size
+thrum sent                                     # Show sent items with receipts
+thrum sent --unread                            # Only messages with unread recipients
+thrum sent --to @agent                         # Filter by recipient or audience
+thrum sent show <message-id>                   # Full recipient detail for one message
 ```
 
 Flags:
