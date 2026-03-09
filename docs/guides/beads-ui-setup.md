@@ -1,3 +1,4 @@
+
 ## Beads UI Setup Guide
 
 [Beads UI](https://github.com/mantoni/beads-ui) is a local web interface for the
@@ -17,9 +18,9 @@ visibility. Running `bd list` in a terminal works, but Beads UI provides:
 - **Issue detail** — Edit titles, descriptions, priorities, dependencies, and
   comments directly in the browser
 
-The UI watches the Beads SQLite database for changes and pushes updates over
-WebSocket. When an agent runs `bd close <id>`, the card moves to Done in your
-browser instantly.
+The UI calls `bd` commands under the hood and watches the database for changes,
+pushing updates over WebSocket. When an agent runs `bd close <id>`, the card
+moves to Done in your browser instantly.
 
 ### Installation
 
@@ -44,7 +45,10 @@ bdui start --open
 ```
 
 The UI is now running at `http://localhost:3000`. It auto-detects the nearest
-`.beads/*.db` file by walking up from the current directory.
+`.beads/` directory by walking up from the current directory.
+
+> **Tip:** If you've just initialized beads or changed the database, run
+> `bdui restart` to pick up the new state.
 
 ### Views
 
@@ -109,6 +113,18 @@ bdui list
 ```
 
 Each instance watches its own project's Beads database independently.
+
+### Worktree Support
+
+Beads UI works from git worktrees that have a `.beads/redirect` file pointing to
+the main repo's `.beads/` directory. The redirect is followed automatically — no
+extra configuration needed.
+
+### Sandbox Mode
+
+Beads UI runs `bd` commands with `--sandbox` by default, which skips
+auto-push/pull overhead for faster responses. To disable this (e.g., if you need
+real-time sync), set `BDUI_BD_SANDBOX=0`.
 
 ### Typical Developer Workflow
 
