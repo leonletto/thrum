@@ -801,6 +801,12 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("delete message reads for agent: %w", err)
 	}
 	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_deliveries WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.Name)
+	if err != nil {
+		h.state.Unlock()
+		return nil, fmt.Errorf("delete message deliveries for agent: %w", err)
+	}
+	_, err = h.state.DB().ExecContext(ctx,
 		"DELETE FROM message_refs WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.Name)
 	if err != nil {
 		h.state.Unlock()

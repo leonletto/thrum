@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -37,11 +38,13 @@ type SendRequest struct {
 
 // SendResponse represents the response from message.send RPC.
 type SendResponse struct {
-	MessageID  string   `json:"message_id"`
-	ThreadID   string   `json:"thread_id,omitempty"`
-	CreatedAt  string   `json:"created_at"`
-	ResolvedTo int      `json:"resolved_to"`        // count of resolved mentions
-	Warnings   []string `json:"warnings,omitempty"` // informational warnings
+	MessageID  string                  `json:"message_id"`
+	ThreadID   string                  `json:"thread_id,omitempty"`
+	CreatedAt  string                  `json:"created_at"`
+	ResolvedTo int                     `json:"resolved_to"`        // count of resolved mentions
+	Warnings   []string                `json:"warnings,omitempty"` // informational warnings
+	Audiences  []MessageAudience       `json:"audiences,omitempty"`
+	Recipients []MessageRecipientState `json:"recipients,omitempty"`
 }
 
 // GetMessageRequest represents the request for message.get RPC.
@@ -56,17 +59,19 @@ type GetMessageResponse struct {
 
 // MessageDetail represents detailed information about a message.
 type MessageDetail struct {
-	MessageID string            `json:"message_id"`
-	ThreadID  string            `json:"thread_id,omitempty"`
-	ReplyTo   string            `json:"reply_to,omitempty"`
-	Author    AuthorInfo        `json:"author"`
-	Body      types.MessageBody `json:"body"`
-	Scopes    []types.Scope     `json:"scopes"`
-	Refs      []types.Ref       `json:"refs"`
-	Metadata  MessageMetadata   `json:"metadata"`
-	CreatedAt string            `json:"created_at"`
-	UpdatedAt string            `json:"updated_at,omitempty"`
-	Deleted   bool              `json:"deleted"`
+	MessageID  string                  `json:"message_id"`
+	ThreadID   string                  `json:"thread_id,omitempty"`
+	ReplyTo    string                  `json:"reply_to,omitempty"`
+	Author     AuthorInfo              `json:"author"`
+	Body       types.MessageBody       `json:"body"`
+	Scopes     []types.Scope           `json:"scopes"`
+	Refs       []types.Ref             `json:"refs"`
+	Metadata   MessageMetadata         `json:"metadata"`
+	CreatedAt  string                  `json:"created_at"`
+	UpdatedAt  string                  `json:"updated_at,omitempty"`
+	Deleted    bool                    `json:"deleted"`
+	Audiences  []MessageAudience       `json:"audiences,omitempty"`
+	Recipients []MessageRecipientState `json:"recipients,omitempty"`
 }
 
 // AuthorInfo represents information about the message author.
@@ -128,14 +133,47 @@ type ListMessagesResponse struct {
 
 // MessageSummary represents a summary of a message for listing.
 type MessageSummary struct {
-	MessageID string            `json:"message_id"`
-	ThreadID  string            `json:"thread_id,omitempty"`
-	ReplyTo   string            `json:"reply_to,omitempty"`
-	AgentID   string            `json:"agent_id"`
-	Body      types.MessageBody `json:"body"`
-	CreatedAt string            `json:"created_at"`
-	Deleted   bool              `json:"deleted"`
-	IsRead    bool              `json:"is_read"` // Computed from message_reads (session_id OR agent_id match)
+	MessageID  string                  `json:"message_id"`
+	ThreadID   string                  `json:"thread_id,omitempty"`
+	ReplyTo    string                  `json:"reply_to,omitempty"`
+	AgentID    string                  `json:"agent_id"`
+	Body       types.MessageBody       `json:"body"`
+	CreatedAt  string                  `json:"created_at"`
+	Deleted    bool                    `json:"deleted"`
+	IsRead     bool                    `json:"is_read"` // Computed from durable message delivery receipts for this agent
+	Audiences  []MessageAudience       `json:"audiences,omitempty"`
+	Recipients []MessageRecipientState `json:"recipients,omitempty"`
+	ReadCount  int                     `json:"read_count,omitempty"`
+}
+
+// MessageAudience describes a send-time audience on a message.
+type MessageAudience struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+// MessageRecipientState tracks durable receipt state for one resolved recipient.
+type MessageRecipientState struct {
+	AgentID     string `json:"agent_id"`
+	DeliveredAt string `json:"delivered_at,omitempty"`
+	SeenAt      string `json:"seen_at,omitempty"`
+	ReadAt      string `json:"read_at,omitempty"`
+}
+
+// OutboxRequest lists messages authored by the current agent with receipt details.
+type OutboxRequest struct {
+	CallerAgentID string `json:"caller_agent_id,omitempty"`
+	PageSize      int    `json:"page_size,omitempty"`
+	Page          int    `json:"page,omitempty"`
+}
+
+// OutboxResponse returns sent messages with recipient/receipt details.
+type OutboxResponse struct {
+	Messages   []MessageSummary `json:"messages"`
+	Total      int              `json:"total"`
+	Page       int              `json:"page"`
+	PageSize   int              `json:"page_size"`
+	TotalPages int              `json:"total_pages"`
 }
 
 // DeleteMessageRequest represents the request for message.delete RPC.
@@ -315,6 +353,8 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	resolvedTo := 0
 	var warnings []string
 	var unknownRecipients []string
+	var audiences []MessageAudience
+	recipientSet := make(map[string]struct{})
 	for _, mention := range req.Mentions {
 		// Remove @ prefix if present
 		role := mention
@@ -333,24 +373,42 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 			scopes = append(scopes, types.Scope{Type: "group", Value: role})
 			// Also store audit ref for queryability
 			refs = append(refs, types.Ref{Type: "group", Value: role})
+			audiences = append(audiences, MessageAudience{Type: "group", Value: role})
 			resolvedTo++
 			// Warn sender that this resolved to a group, not an individual
 			if role != "everyone" {
 				warnings = append(warnings, fmt.Sprintf("@%s resolved to a group, not an individual agent", role))
 			}
+			members, err := h.groupResolver.ExpandMembers(ctx, role)
+			if err != nil {
+				return nil, fmt.Errorf("expand group %q: %w", role, err)
+			}
+			for _, recipientAgentID := range members {
+				if recipientAgentID == agentID {
+					continue
+				}
+				recipientSet[recipientAgentID] = struct{}{}
+			}
 		} else {
 			// Not a group — validate against agents table (by agent_id or role)
-			var agentCount int
-			err := h.state.DB().QueryRowContext(ctx,
-				`SELECT COUNT(*) FROM agents WHERE agent_id = ? OR role = ?`,
-				role, role,
-			).Scan(&agentCount)
+			matchedAgents, err := h.queryAgentsByRecipient(ctx, role)
 			if err != nil {
 				return nil, fmt.Errorf("validate recipient %q: %w", role, err)
 			}
-			if agentCount > 0 {
+			if len(matchedAgents) > 0 {
 				// Known agent or role — treat as regular mention (push model)
 				refs = append(refs, types.Ref{Type: "mention", Value: role})
+				audienceType := "agent"
+				if !(len(matchedAgents) == 1 && matchedAgents[0] == role) {
+					audienceType = "role"
+				}
+				audiences = append(audiences, MessageAudience{Type: audienceType, Value: role})
+				for _, recipientAgentID := range matchedAgents {
+					if recipientAgentID == agentID {
+						continue
+					}
+					recipientSet[recipientAgentID] = struct{}{}
+				}
 				resolvedTo++
 			} else {
 				// Unknown recipient
@@ -364,6 +422,24 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("unknown recipients: %s — no matching agent, role, or group found",
 			strings.Join(unknownRecipients, ", "))
 	}
+
+	// Messages without an explicit audience remain broadcast/general messages.
+	if len(req.Mentions) == 0 {
+		audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
+		allAgents, err := h.queryAllOtherAgents(ctx, agentID)
+		if err != nil {
+			return nil, fmt.Errorf("resolve broadcast recipients: %w", err)
+		}
+		for _, recipientAgentID := range allAgents {
+			recipientSet[recipientAgentID] = struct{}{}
+		}
+	}
+
+	recipients := make([]string, 0, len(recipientSet))
+	for recipientAgentID := range recipientSet {
+		recipients = append(recipients, recipientAgentID)
+	}
+	sort.Strings(recipients)
 
 	// Handle reply_to: validate parent, auto-thread, add reply_to ref
 	var threadID string
@@ -405,6 +481,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		},
 		Scopes:     scopes,
 		Refs:       refs,
+		Recipients: recipients,
 		AuthoredBy: authoredBy,
 		Disclosed:  disclosed,
 	}
@@ -455,6 +532,8 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 		CreatedAt:  now,
 		ResolvedTo: resolvedTo,
 		Warnings:   warnings,
+		Audiences:  audiences,
+		Recipients: buildDeliveredRecipients(recipients, now),
 	}, nil
 }
 
@@ -566,6 +645,13 @@ func (h *MessageHandler) HandleGet(ctx context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("iterate refs: %w", err)
 	}
 
+	msg.Audiences = extractAudiences(msg.Refs, msg.Scopes)
+	recipients, err := h.loadRecipientsForMessages(ctx, []string{req.MessageID})
+	if err != nil {
+		return nil, fmt.Errorf("query message recipients: %w", err)
+	}
+	msg.Recipients = recipients[req.MessageID]
+
 	return &GetMessageResponse{Message: msg}, nil
 }
 
@@ -622,7 +708,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	if currentAgentID != "" {
 		selectCols = `SELECT m.message_id, m.thread_id, m.agent_id, m.created_at, m.updated_at,
 		                     m.body_format, m.body_content, m.body_structured, m.deleted,
-		                     CASE WHEN EXISTS(SELECT 1 FROM message_reads WHERE message_id = m.message_id AND agent_id = ?) THEN 1 ELSE 0 END as is_read,
+		                     CASE WHEN EXISTS(SELECT 1 FROM message_deliveries md WHERE md.message_id = m.message_id AND md.recipient_agent_id = ? AND md.read_at IS NOT NULL) THEN 1 ELSE 0 END as is_read,
 		                     reply_ref.ref_value as reply_to`
 	} else {
 		selectCols = `SELECT m.message_id, m.thread_id, m.agent_id, m.created_at, m.updated_at,
@@ -704,7 +790,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		}
 	}
 	if unreadAgentID != "" {
-		query += " AND m.message_id NOT IN (SELECT mrd.message_id FROM message_reads mrd WHERE mrd.agent_id = ?)"
+		query += " AND m.message_id NOT IN (SELECT md.message_id FROM message_deliveries md WHERE md.recipient_agent_id = ? AND md.read_at IS NOT NULL)"
 		args = append(args, unreadAgentID)
 	}
 
@@ -759,7 +845,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		countArgs = append(countArgs, mentionRole)
 	}
 	if unreadAgentID != "" {
-		countQuery += " AND m.message_id NOT IN (SELECT mrd.message_id FROM message_reads mrd WHERE mrd.agent_id = ?)"
+		countQuery += " AND m.message_id NOT IN (SELECT md.message_id FROM message_deliveries md WHERE md.recipient_agent_id = ? AND md.read_at IS NOT NULL)"
 		countArgs = append(countArgs, unreadAgentID)
 	}
 	if req.CreatedAfter != "" {
@@ -845,7 +931,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 			unreadQuery += " AND m.agent_id != ?"
 			unreadArgs = append(unreadArgs, excludeAgentID)
 		}
-		unreadQuery += " AND m.message_id NOT IN (SELECT mrd2.message_id FROM message_reads mrd2 WHERE mrd2.agent_id = ?)"
+		unreadQuery += " AND m.message_id NOT IN (SELECT md2.message_id FROM message_deliveries md2 WHERE md2.recipient_agent_id = ? AND md2.read_at IS NOT NULL)"
 		unreadArgs = append(unreadArgs, currentAgentID)
 		_ = h.state.DB().QueryRowContext(ctx, unreadQuery, unreadArgs...).Scan(&unread)
 	}
@@ -857,6 +943,81 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		Page:       page,
 		PageSize:   pageSize,
 		TotalPages: totalPages,
+	}, nil
+}
+
+// HandleOutbox handles the message.outbox RPC method.
+func (h *MessageHandler) HandleOutbox(ctx context.Context, params json.RawMessage) (any, error) {
+	var req OutboxRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	pageSize := req.PageSize
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	page := req.Page
+	if page <= 0 {
+		page = 1
+	}
+
+	authorID := h.resolveAgentOnly(req.CallerAgentID)
+	if authorID == "" {
+		return nil, fmt.Errorf("caller_agent_id is required")
+	}
+
+	listReq := ListMessagesRequest{
+		AuthorID:  authorID,
+		PageSize:  pageSize,
+		Page:      page,
+		SortBy:    "created_at",
+		SortOrder: "desc",
+	}
+	listParams, err := json.Marshal(listReq)
+	if err != nil {
+		return nil, fmt.Errorf("marshal outbox list request: %w", err)
+	}
+
+	rawResp, err := h.HandleList(ctx, listParams)
+	if err != nil {
+		return nil, err
+	}
+	listResp, ok := rawResp.(*ListMessagesResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected outbox response type %T", rawResp)
+	}
+
+	messageIDs := make([]string, 0, len(listResp.Messages))
+	for _, msg := range listResp.Messages {
+		messageIDs = append(messageIDs, msg.MessageID)
+	}
+	recipientsByMessage, err := h.loadRecipientsForMessages(ctx, messageIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load outbox recipients: %w", err)
+	}
+
+	for i := range listResp.Messages {
+		msg := &listResp.Messages[i]
+		audiences, err := h.loadMessageAudiences(ctx, msg.MessageID)
+		if err != nil {
+			return nil, fmt.Errorf("load outbox audiences: %w", err)
+		}
+		msg.Audiences = audiences
+		msg.Recipients = recipientsByMessage[msg.MessageID]
+		for _, recipient := range msg.Recipients {
+			if recipient.ReadAt != "" {
+				msg.ReadCount++
+			}
+		}
+	}
+
+	return &OutboxResponse{
+		Messages:   listResp.Messages,
+		Total:      listResp.Total,
+		Page:       listResp.Page,
+		PageSize:   listResp.PageSize,
+		TotalPages: listResp.TotalPages,
 	}, nil
 }
 
@@ -1171,6 +1332,178 @@ func buildForAgentValues(forAgent, _ string) []string {
 	return values
 }
 
+func (h *MessageHandler) queryAgentsByRecipient(ctx context.Context, recipient string) ([]string, error) {
+	rows, err := h.state.DB().QueryContext(ctx,
+		`SELECT DISTINCT agent_id FROM agents WHERE agent_id = ? OR role = ? ORDER BY agent_id`,
+		recipient, recipient,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var agentIDs []string
+	for rows.Next() {
+		var agentID string
+		if err := rows.Scan(&agentID); err != nil {
+			return nil, err
+		}
+		agentIDs = append(agentIDs, agentID)
+	}
+	return agentIDs, rows.Err()
+}
+
+func (h *MessageHandler) queryAllOtherAgents(ctx context.Context, excludeAgentID string) ([]string, error) {
+	rows, err := h.state.DB().QueryContext(ctx,
+		`SELECT DISTINCT agent_id FROM agents WHERE agent_id != ? ORDER BY agent_id`,
+		excludeAgentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var agentIDs []string
+	for rows.Next() {
+		var agentID string
+		if err := rows.Scan(&agentID); err != nil {
+			return nil, err
+		}
+		agentIDs = append(agentIDs, agentID)
+	}
+	return agentIDs, rows.Err()
+}
+
+func buildDeliveredRecipients(agentIDs []string, deliveredAt string) []MessageRecipientState {
+	recipients := make([]MessageRecipientState, 0, len(agentIDs))
+	for _, agentID := range agentIDs {
+		recipients = append(recipients, MessageRecipientState{
+			AgentID:     agentID,
+			DeliveredAt: deliveredAt,
+		})
+	}
+	return recipients
+}
+
+func extractAudiences(refs []types.Ref, scopes []types.Scope) []MessageAudience {
+	audiences := make([]MessageAudience, 0, len(refs)+len(scopes))
+	for _, ref := range refs {
+		switch ref.Type {
+		case "mention":
+			audiences = append(audiences, MessageAudience{Type: "mention", Value: ref.Value})
+		case "group":
+			audiences = append(audiences, MessageAudience{Type: "group", Value: ref.Value})
+		}
+	}
+	for _, scope := range scopes {
+		if scope.Type == "group" {
+			audiences = append(audiences, MessageAudience{Type: "group", Value: scope.Value})
+		}
+	}
+	if len(audiences) == 0 {
+		audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
+	}
+	return dedupeAudiences(audiences)
+}
+
+func dedupeAudiences(audiences []MessageAudience) []MessageAudience {
+	seen := make(map[string]struct{}, len(audiences))
+	out := make([]MessageAudience, 0, len(audiences))
+	for _, audience := range audiences {
+		key := audience.Type + ":" + audience.Value
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, audience)
+	}
+	return out
+}
+
+func (h *MessageHandler) loadMessageAudiences(ctx context.Context, messageID string) ([]MessageAudience, error) {
+	refs := []types.Ref{}
+	refRows, err := h.state.DB().QueryContext(ctx, `SELECT ref_type, ref_value FROM message_refs WHERE message_id = ?`, messageID)
+	if err != nil {
+		return nil, err
+	}
+	for refRows.Next() {
+		var ref types.Ref
+		if err := refRows.Scan(&ref.Type, &ref.Value); err != nil {
+			_ = refRows.Close()
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	if err := refRows.Err(); err != nil {
+		_ = refRows.Close()
+		return nil, err
+	}
+	_ = refRows.Close()
+
+	scopes := []types.Scope{}
+	scopeRows, err := h.state.DB().QueryContext(ctx, `SELECT scope_type, scope_value FROM message_scopes WHERE message_id = ?`, messageID)
+	if err != nil {
+		return nil, err
+	}
+	for scopeRows.Next() {
+		var scope types.Scope
+		if err := scopeRows.Scan(&scope.Type, &scope.Value); err != nil {
+			_ = scopeRows.Close()
+			return nil, err
+		}
+		scopes = append(scopes, scope)
+	}
+	if err := scopeRows.Err(); err != nil {
+		_ = scopeRows.Close()
+		return nil, err
+	}
+	_ = scopeRows.Close()
+
+	return extractAudiences(refs, scopes), nil
+}
+
+func (h *MessageHandler) loadRecipientsForMessages(ctx context.Context, messageIDs []string) (map[string][]MessageRecipientState, error) {
+	result := make(map[string][]MessageRecipientState)
+	if len(messageIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(messageIDs))
+	args := make([]any, 0, len(messageIDs))
+	for i, messageID := range messageIDs {
+		placeholders[i] = "?"
+		args = append(args, messageID)
+	}
+
+	query := `SELECT message_id, recipient_agent_id, delivered_at, seen_at, read_at
+		FROM message_deliveries
+		WHERE message_id IN (` + strings.Join(placeholders, ",") + `)
+		ORDER BY message_id, recipient_agent_id`
+	rows, err := h.state.DB().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var messageID string
+		var recipient MessageRecipientState
+		var seenAt, readAt sql.NullString
+		if err := rows.Scan(&messageID, &recipient.AgentID, &recipient.DeliveredAt, &seenAt, &readAt); err != nil {
+			return nil, err
+		}
+		if seenAt.Valid {
+			recipient.SeenAt = seenAt.String
+		}
+		if readAt.Valid {
+			recipient.ReadAt = readAt.String
+		}
+		result[messageID] = append(result[messageID], recipient)
+	}
+
+	return result, rows.Err()
+}
+
 // resolveAgentAndSession returns the current agent ID and session ID.
 func (h *MessageHandler) resolveAgentAndSession(callerAgentID string) (agentID string, sessionID string, err error) {
 	if callerAgentID != "" {
@@ -1279,6 +1612,7 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	markedCount := 0
 	alsoReadBy := make(map[string][]string)
 	affectedThreads := make(map[string]bool)
+	var receiptEvents []types.MessageReceiptEvent
 
 	// Begin transaction for batch insert
 	h.state.Lock()
@@ -1308,8 +1642,8 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 			affectedThreads[msgThreadID.String] = true
 		}
 
-		// Query existing reads for this message to detect collaboration
-		rows, err := tx.Query("SELECT DISTINCT agent_id FROM message_reads WHERE message_id = ? AND agent_id != ?", messageID, agentID)
+		// Query existing durable reads for this message to detect collaboration
+		rows, err := tx.Query("SELECT DISTINCT recipient_agent_id FROM message_deliveries WHERE message_id = ? AND recipient_agent_id != ? AND read_at IS NOT NULL", messageID, agentID)
 		if err != nil {
 			return nil, fmt.Errorf("query existing reads: %w", err)
 		}
@@ -1340,6 +1674,14 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 			return nil, fmt.Errorf("insert message_read: %w", err)
 		}
 
+		receiptEvents = append(receiptEvents, types.MessageReceiptEvent{
+			Type:        "message.receipt",
+			Timestamp:   now,
+			MessageID:   messageID,
+			AgentID:     agentID,
+			SessionID:   sessionID,
+			ReceiptType: "read",
+		})
 		markedCount++
 	}
 
@@ -1350,6 +1692,13 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 
 	// Unlock state before emitting events
 	h.state.Unlock()
+
+	for _, event := range receiptEvents {
+		if err := h.state.WriteEvent(ctx, event); err != nil {
+			h.state.Lock()
+			return nil, fmt.Errorf("write message.receipt event: %w", err)
+		}
+	}
 
 	// Emit thread.updated for each affected thread
 	for threadID := range affectedThreads {
@@ -1373,7 +1722,7 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 // emitThreadUpdated emits a thread.updated event for real-time WebSocket notifications.
 func (h *MessageHandler) emitThreadUpdated(_ context.Context, threadID string) error {
 	// Get current agent and session for unread count
-	agentID, sessionID, err := h.resolveAgentAndSession("")
+	agentID, _, err := h.resolveAgentAndSession("")
 	if err != nil {
 		// If we can't resolve agent/session, just skip emitting (best-effort)
 		return nil
@@ -1386,7 +1735,7 @@ func (h *MessageHandler) emitThreadUpdated(_ context.Context, threadID string) e
 	query := `SELECT
 	    COUNT(DISTINCT m.message_id) as message_count,
 	    COUNT(DISTINCT CASE
-	        WHEN mr.message_id IS NULL AND m.deleted = 0 THEN m.message_id
+	        WHEN md.message_id IS NULL AND m.deleted = 0 THEN m.message_id
 	        END) as unread_count,
 	    COALESCE(MAX(m.created_at), '') as last_activity,
 	    (SELECT agent_id FROM messages
@@ -1397,15 +1746,15 @@ func (h *MessageHandler) emitThreadUpdated(_ context.Context, threadID string) e
 	     WHERE thread_id = ? AND deleted = 0
 	     ORDER BY created_at DESC LIMIT 1) as preview
 	FROM messages m
-	LEFT JOIN message_reads mr ON m.message_id = mr.message_id
-	    AND (mr.session_id = ? OR mr.agent_id = ?)
+	LEFT JOIN message_deliveries md ON m.message_id = md.message_id
+	    AND md.recipient_agent_id = ? AND md.read_at IS NOT NULL
 	WHERE m.thread_id = ? AND m.deleted = 0`
 
 	var messageCount, unreadCount int
 	var lastActivity string
 	var lastSender, preview sql.NullString
 
-	err = h.state.DB().QueryRowContext(context.Background(), query, threadID, threadID, sessionID, agentID, threadID).Scan(
+	err = h.state.DB().QueryRowContext(context.Background(), query, threadID, threadID, agentID, threadID).Scan(
 		&messageCount,
 		&unreadCount,
 		&lastActivity,
@@ -1644,6 +1993,10 @@ func (h *MessageHandler) HandleArchive(ctx context.Context, params json.RawMessa
 			_ = tx.Rollback()
 			return nil, fmt.Errorf("delete reads for %s: %w", msgID, err)
 		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM message_deliveries WHERE message_id = ?`, msgID); err != nil {
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("delete deliveries for %s: %w", msgID, err)
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM message_edits WHERE message_id = ?`, msgID); err != nil {
 			_ = tx.Rollback()
 			return nil, fmt.Errorf("delete edits for %s: %w", msgID, err)
@@ -1722,7 +2075,7 @@ func (h *MessageHandler) HandleDeleteByScope(ctx context.Context, params json.Ra
 	inClause := strings.Join(placeholders, ",")
 
 	// Delete from related tables first
-	for _, table := range []string{"message_edits", "message_reads", "message_refs", "message_scopes"} {
+	for _, table := range []string{"message_edits", "message_reads", "message_deliveries", "message_refs", "message_scopes"} {
 		_, err = h.state.DB().ExecContext(ctx,
 			fmt.Sprintf("DELETE FROM %s WHERE message_id IN (%s)", table, inClause),
 			args...)
@@ -1787,6 +2140,12 @@ func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.Ra
 		"DELETE FROM message_reads WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
 	if err != nil {
 		return nil, fmt.Errorf("delete message reads: %w", err)
+	}
+
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM message_deliveries WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)", req.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delete message deliveries: %w", err)
 	}
 
 	_, err = h.state.DB().ExecContext(ctx,

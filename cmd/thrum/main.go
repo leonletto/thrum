@@ -107,6 +107,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(sendCmd())
 	rootCmd.AddCommand(replyCmd())
 	rootCmd.AddCommand(inboxCmd())
+	rootCmd.AddCommand(sentCmd())
 	rootCmd.AddCommand(statusCmd())
 	rootCmd.AddCommand(whoamiCmd())
 	rootCmd.AddCommand(versionCmd())
@@ -828,6 +829,20 @@ The daemon must be running and you must have an active session.`,
 					fmt.Printf("  Thread: %s\n", result.ThreadID)
 				}
 				fmt.Printf("  Created: %s\n", result.CreatedAt)
+				if len(result.Audiences) > 0 {
+					parts := make([]string, len(result.Audiences))
+					for i, audience := range result.Audiences {
+						parts[i] = audience.Type + ":" + audience.Value
+					}
+					fmt.Printf("  To: %s\n", strings.Join(parts, ", "))
+				}
+				if len(result.Recipients) > 0 {
+					names := make([]string, len(result.Recipients))
+					for i, recipient := range result.Recipients {
+						names[i] = recipient.AgentID
+					}
+					fmt.Printf("  Recipients: %s\n", strings.Join(names, ", "))
+				}
 				for _, w := range result.Warnings {
 					fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 				}
@@ -846,6 +861,48 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().Bool("everyone", false, "Send to all agents (alias for --to @everyone)")
 	cmd.Flags().BoolP("broadcast", "b", false, "Send to all agents (alias for --to @everyone)")
 
+	return cmd
+}
+
+func sentCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "sent",
+		Short: "List messages you sent",
+		Long: `List messages authored by the current agent, including recipient snapshots
+and durable read state.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pageSize, _ := cmd.Flags().GetInt("page-size")
+			page, _ := cmd.Flags().GetInt("page")
+
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.MessageOutbox(client, agentID, pageSize, page)
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+			} else if !flagQuiet {
+				fmt.Print(cli.FormatOutbox(result))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().Int("page-size", 10, "Results per page")
+	cmd.Flags().Int("page", 1, "Page number")
 	return cmd
 }
 
@@ -4432,6 +4489,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)
 	server.RegisterHandler("message.list", messageHandler.HandleList)
+	server.RegisterHandler("message.outbox", messageHandler.HandleOutbox)
 	server.RegisterHandler("message.delete", messageHandler.HandleDelete)
 	server.RegisterHandler("message.edit", messageHandler.HandleEdit)
 	server.RegisterHandler("message.markRead", messageHandler.HandleMarkRead)
@@ -4645,6 +4703,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsRegistry.Register("message.send", websocket.Handler(messageHandler.HandleSend))
 	wsRegistry.Register("message.get", websocket.Handler(messageHandler.HandleGet))
 	wsRegistry.Register("message.list", websocket.Handler(messageHandler.HandleList))
+	wsRegistry.Register("message.outbox", websocket.Handler(messageHandler.HandleOutbox))
 	wsRegistry.Register("message.delete", websocket.Handler(messageHandler.HandleDelete))
 	wsRegistry.Register("message.edit", websocket.Handler(messageHandler.HandleEdit))
 	wsRegistry.Register("message.markRead", websocket.Handler(messageHandler.HandleMarkRead))
