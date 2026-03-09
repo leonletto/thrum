@@ -45,6 +45,7 @@ var commandHints = map[string][]string{
 	},
 	"send": {
 		"Tip: Check inbox with 'thrum inbox'",
+		"Tip: Verify delivery with 'thrum sent --unread'",
 		"Tip: Send to specific agent with '--mention @role'",
 		"Tip: Add context with '--scope module:name'",
 	},
