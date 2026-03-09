@@ -70,11 +70,10 @@ time it returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
 
 ### 4. Communicate
 
-thrum send "message" --to @name        # Direct message
-thrum send "message" --to @everyone    # Broadcast to all
-thrum inbox --unread                   # Check for new messages
-thrum sent --unread                    # Check sent items and receipts
-thrum reply <msg-id> "response"        # Reply (creates a reply-to reference)
+thrum send "message" --to @name # Direct message thrum send "message" --to
+@everyone # Broadcast to all thrum inbox --unread # Check for new messages thrum
+sent --unread # Check sent items and receipts thrum reply <msg-id> "response" #
+Reply (creates a reply-to reference)
 
 ## MCP Tools (11 total)
 
@@ -101,8 +100,7 @@ thrum reply <msg-id> "response"        # Reply (creates a reply-to reference)
 # Start
 
 thrum quickstart --name <name> --role <role> --module <module> --intent "<desc>"
-thrum inbox --unread
-thrum sent --unread
+thrum inbox --unread thrum sent --unread
 
 # During work
 

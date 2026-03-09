@@ -23,7 +23,8 @@ management.
 ## Operational loop
 
 1. Bootstrap identity/session (`thrum quickstart ...` or `thrum session start`).
-2. Triage with `thrum overview`, `thrum inbox --unread`, and `thrum sent --unread`.
+2. Triage with `thrum overview`, `thrum inbox --unread`, and
+   `thrum sent --unread`.
 3. Act with `send`, `reply`, `group`, `team` as needed.
 4. Persist context using update/load context flow.
 5. Verify daemon and sync health before handoff.
