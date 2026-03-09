@@ -86,9 +86,9 @@ don't need to clone this repo into your project.
 - **Multi-Worktree** — Each git worktree gets its own agent identity via
   `.thrum/redirect`
 
-**v0.5.3 highlights:** Scheduled automatic backups, pinned agent identity for
-worktrees (THRUM_HOME/THRUM_AGENT_ID), embedded strategy files, and role-based
-preamble templates and project setup pipeline.
+**v0.5.4 highlights:** `thrum sent` command with durable message deliveries and
+recipient read receipts, group-aware `thrum wait`, and delivery confirmation on
+send.
 
 ## Installation
 
