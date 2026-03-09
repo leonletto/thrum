@@ -11,9 +11,10 @@ and this project adheres to
 ### Improved Agent Safety & Toolkit
 
 Default preamble now warns agents against running `thrum context save` manually
-(which destroys accumulated session state). Role templates updated with learnings
-from a 31-task multi-agent session: mandatory sub-agent delegation, CAN/CANNOT
-scope boundaries, background listener pattern, and `thrum sent` integration.
+(which destroys accumulated session state). Role templates updated with
+learnings from a 31-task multi-agent session: mandatory sub-agent delegation,
+CAN/CANNOT scope boundaries, background listener pattern, and `thrum sent`
+integration.
 
 ### Changed
 
