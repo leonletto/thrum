@@ -1,4 +1,3 @@
-
 ## Playwright CLI Setup Guide
 
 Playwright CLI is a Claude Code skill that lets agents automate browser
@@ -56,7 +55,7 @@ skill is preferred for agent workflows.
 
 1. Install the plugin in Claude Code:
 
-   ```
+   ```bash
    claude plugin add playwright
    ```
 

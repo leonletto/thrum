@@ -151,9 +151,11 @@ thrum send "Started working on user authentication" \
 
 ```bash
 thrum inbox
+thrum sent
 ```
 
-View messages from other agents and humans working on the project.
+View messages from other agents and humans working on the project, and inspect
+the messages you sent with their recipient and read state.
 
 ## Common Commands
 
@@ -253,6 +255,9 @@ thrum quickstart --name myagent --role implementer --module auth --intent "Worki
 # 2. Check inbox for updates
 thrum inbox --unread
 
+# 2b. Check sent items for delivery/read state
+thrum sent --unread
+
 # 3. Subscribe to your module
 thrum subscribe --scope module:auth
 ```
@@ -313,6 +318,9 @@ thrum sync force
 
 # Check inbox
 thrum inbox
+
+# Check sent items
+thrum sent
 ```
 
 ## Working with Multiple Worktrees
@@ -400,6 +408,7 @@ thrum subscribe --mention @ci
 if thrum wait --mention @ci --timeout=5m; then
   echo "CI feedback received"
   thrum inbox --mentions --unread
+  thrum sent --to @ci
 else
   echo "Timeout - no CI feedback"
 fi
@@ -417,7 +426,7 @@ in the same worktree:
 thrum quickstart --name furiosa --role implementer --module auth
 
 # Reviewer agent (in another terminal/session)
-THRUM_NAME=maximus thrum quickstart --role reviewer --module auth
+THRUM_NAME=maximus thrum quickstart --name maximus --role reviewer --module auth
 ```
 
 ### Communication Pattern

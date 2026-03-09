@@ -266,7 +266,7 @@ func (h *GroupHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 			}
 			inClause := strings.Join(placeholders, ",")
 
-			for _, table := range []string{"message_edits", "message_reads", "message_refs", "message_scopes"} {
+			for _, table := range []string{"message_edits", "message_reads", "message_deliveries", "message_refs", "message_scopes"} {
 				if _, err := h.state.DB().ExecContext(ctx,
 					fmt.Sprintf("DELETE FROM %s WHERE message_id IN (%s)", table, inClause),
 					args...); err != nil {

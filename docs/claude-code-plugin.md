@@ -1,4 +1,3 @@
-
 ## Claude Code Plugin
 
 > See also: [Quickstart Guide](quickstart.md) for basic Thrum setup,
@@ -99,6 +98,7 @@ All commands live under the `/thrum:` namespace.
 | `/thrum:quickstart`     | Register agent and start session (interactive or with flags) |
 | `/thrum:send`           | Send direct, group, or broadcast messages                    |
 | `/thrum:inbox`          | Check message inbox (all or unread only)                     |
+| `thrum sent`            | Review sent messages with resolved recipients and receipts   |
 | `/thrum:reply`          | Reply to a message (inherits original audience)              |
 | `/thrum:wait`           | Block until a message arrives (background listener use)      |
 | `/thrum:team`           | Show active team members with roles and intents              |
@@ -118,7 +118,7 @@ All commands live under the `/thrum:` namespace.
 Prompts for role, module, and intent — or pass flags directly:
 
 ```bash
-thrum quickstart --role implementer --module auth --intent "Building login flow"
+thrum quickstart --name implementer_auth --role implementer --module auth --intent "Building login flow"
 ```
 
 **Send a message:**
@@ -249,25 +249,21 @@ plugins.
 
 ## Troubleshooting
 
-**"Thrum not initialized" on session start**
+### "Thrum not initialized" on session start
 
 Run `thrum init && thrum daemon start` in your repository root.
 
-**No context injected after plugin install**
+### No context injected after plugin install
 
 Verify the plugin is loaded: check that `/thrum:prime` is available as a slash
 command. If not, reinstall the plugin.
 
-**Messages not arriving**
+### Messages not arriving
 
 Check daemon status with `thrum daemon status`. The daemon must be running for
 messaging to work. Start it with `thrum daemon start`.
 
-**Identity conflicts in multi-worktree setups**
+### Identity conflicts in multi-worktree setups
 
 Set `THRUM_NAME` environment variable to give each worktree a unique agent name.
 See [Identity System](identity.md) for details.
-
-```
-
-```

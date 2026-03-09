@@ -22,11 +22,27 @@ type SendOptions struct {
 
 // SendResult contains the result of sending a message.
 type SendResult struct {
-	MessageID  string   `json:"message_id"`
-	ThreadID   string   `json:"thread_id,omitempty"`
-	CreatedAt  string   `json:"created_at"`
-	ResolvedTo int      `json:"resolved_to"`
-	Warnings   []string `json:"warnings,omitempty"`
+	MessageID  string           `json:"message_id"`
+	ThreadID   string           `json:"thread_id,omitempty"`
+	CreatedAt  string           `json:"created_at"`
+	ResolvedTo int              `json:"resolved_to"`
+	Warnings   []string         `json:"warnings,omitempty"`
+	Audiences  []Audience       `json:"audiences,omitempty"`
+	Recipients []RecipientState `json:"recipients,omitempty"`
+}
+
+// Audience describes a send-time audience on a message.
+type Audience struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+// RecipientState tracks durable delivery/read state for a recipient.
+type RecipientState struct {
+	AgentID     string `json:"agent_id"`
+	DeliveredAt string `json:"delivered_at,omitempty"`
+	SeenAt      string `json:"seen_at,omitempty"`
+	ReadAt      string `json:"read_at,omitempty"`
 }
 
 // Send sends a message via the daemon.

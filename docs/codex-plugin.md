@@ -1,4 +1,3 @@
-
 ## Codex Plugin
 
 > See also: [Quickstart Guide](quickstart.md) for base Thrum setup,
@@ -15,7 +14,7 @@ Thrum integration is packaged as a **Codex skill bundle** in
 The bundle is split into focused skills:
 
 - `thrum-core` — durable messaging, groups, identity, worktree boundaries
-- `thrum-ops` — quickstart/inbox/wait/context/daemon/sync operational flows
+- `thrum-ops` — quickstart/inbox/sent/wait/context/daemon/sync operational flows
 - `thrum-role-config` — generate or update `.thrum/role_templates`
 - `project-setup` — turn design docs into Beads epics/tasks before coding
 
@@ -74,8 +73,9 @@ message/reply workflows.
 
 ### Session operations and triage
 
-When you need to bootstrap sessions, triage unread messages, or verify daemon
-health, `thrum-ops` provides operational workflows and command references.
+When you need to bootstrap sessions, triage unread messages, verify delivery on
+messages you authored, or check daemon health, `thrum-ops` provides operational
+workflows and command references.
 
 ### Role template generation
 
@@ -97,18 +97,18 @@ cp -R codex-plugin/skills/project-setup "${CODEX_HOME:-$HOME/.codex}/skills/"
 
 ## Troubleshooting
 
-**Skills do not appear in Codex**
+### Skills do not appear in Codex
 
 - Confirm install destination: `echo "${CODEX_HOME:-$HOME/.codex}/skills"`
 - Re-run `./codex-plugin/scripts/install-skills.sh --force`
 - Restart Codex
 
-**Skill updates are not reflected**
+### Skill updates are not reflected
 
 - Run `./codex-plugin/scripts/sync-skills.sh`
 - Restart Codex after sync
 
-**Thrum commands fail inside skill workflows**
+### Thrum commands fail inside skill workflows
 
 - Check daemon status: `thrum daemon status`
 - Verify identity/session: `thrum whoami && thrum session start`

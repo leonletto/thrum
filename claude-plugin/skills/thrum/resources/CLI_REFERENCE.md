@@ -36,7 +36,7 @@ thrum send <message> --to @name --structured '{"key":"value"}'
 
 Flags:
 
-```
+```text
 --to string           Direct recipient (format: @role or @name)
 --everyone            Send to all agents (alias for --to @everyone)
 -b, --broadcast       Send to all agents (alias for --to @everyone)
@@ -56,7 +56,7 @@ thrum reply <msg-id> <response> --format plain
 
 Flags:
 
-```
+```text
 --format string   Message format: markdown, plain, json (default "markdown")
 ```
 
@@ -70,11 +70,15 @@ thrum inbox --mentions                         # Only messages mentioning you
 thrum inbox --scope type:value                 # Filter by scope
 thrum inbox --page 2 --page-size 20            # Pagination
 thrum inbox --limit N                          # Alias for --page-size
+thrum sent                                     # Show sent items with receipts
+thrum sent --unread                            # Only messages with unread recipients
+thrum sent --to @agent                         # Filter by recipient or audience
+thrum sent show <message-id>                   # Full recipient detail for one message
 ```
 
 Flags:
 
-```
+```text
 -a, --all           Show all messages (disable auto-filtering)
 --unread            Only unread messages
 --mentions          Only messages mentioning me
@@ -101,7 +105,7 @@ thrum wait --after -5m --json                  # Include messages sent up to 5m 
 
 Flags:
 
-```
+```text
 --timeout string   Max wait time with unit (e.g., 30s, 5m) (default "30s")
 --after string     Relative time offset for filtering messages:
                      Negative (e.g., -30s, -5m): include messages sent up to N ago
@@ -127,7 +131,7 @@ thrum message read --all                       # Mark all as read
 
 Subcommand flags:
 
-```
+```text
 # message delete
 --force   Confirm deletion (required)
 
@@ -145,16 +149,16 @@ Bootstrap a full session in one command: detect runtime, generate config,
 register, start, set intent.
 
 ```bash
-thrum quickstart --role implementer --module auth
-thrum quickstart --role reviewer --module auth --intent "Reviewing PR #42"
+thrum quickstart --name implementer_auth --role implementer --module auth
+thrum quickstart --name reviewer_auth --role reviewer --module auth --intent "Reviewing PR #42"
 thrum quickstart --name alice --role impl --module auth --runtime codex
-thrum quickstart --role planner --module core --no-init
-thrum quickstart --role tester --module api --dry-run
+thrum quickstart --name planner_core --role planner_core --module core --no-init
+thrum quickstart --name tester_api --role tester --module api --dry-run
 ```
 
 Flags:
 
-```
+```text
 --role string            Agent role (or THRUM_ROLE env var)
 --module string          Agent module (or THRUM_MODULE env var)
 --name string            Human-readable agent name (defaults to role_hash)
@@ -178,7 +182,7 @@ thrum agent register --re-register             # Re-register same agent
 
 Flags:
 
-```
+```text
 --role string      Agent role (or THRUM_ROLE env var)
 --module string    Agent module (or THRUM_MODULE env var)
 --name string      Human-readable agent name (defaults to role_hash)
@@ -199,7 +203,7 @@ thrum agent list --json
 
 Flags:
 
-```
+```text
 --context         Show work context (branch, commits, intent)
 --role string     Filter by role
 --module string   Filter by module
@@ -216,7 +220,7 @@ thrum agent context --file auth.go             # Filter by changed file
 
 Flags:
 
-```
+```text
 --agent string    Filter by agent role
 --branch string   Filter by branch
 --file string     Filter by changed file
@@ -250,7 +254,7 @@ thrum session heartbeat --add-ref pr:123 --remove-scope module:old
 
 Flags:
 
-```
+```text
 --add-scope strings      Add scope (repeatable, format: type:value)
 --remove-scope strings   Remove scope (repeatable, format: type:value)
 --add-ref strings        Add ref (repeatable, format: type:value)
@@ -275,7 +279,7 @@ thrum session end --session-id <id>
 
 Flags:
 
-```
+```text
 --reason string       End reason: normal|crash (default "normal")
 --session-id string   Session ID to end (defaults to current session)
 ```
@@ -291,7 +295,7 @@ thrum agent cleanup --threshold 60             # Custom staleness threshold (day
 
 Flags:
 
-```
+```text
 --dry-run         List orphans without deleting
 --force           Delete all orphans without prompting
 --threshold int   Days since last seen to consider agent stale (default 30)
@@ -306,7 +310,7 @@ thrum agent delete coordinator_1B9K --force
 
 Flags:
 
-```
+```text
 --force   Skip confirmation prompt
 ```
 
@@ -329,7 +333,7 @@ thrum session list --json
 
 Flags:
 
-```
+```text
 --active         Show only active sessions
 --agent string   Filter by agent ID
 ```
@@ -351,7 +355,7 @@ thrum team --json
 
 Flags:
 
-```
+```text
 --all   Include offline agents
 ```
 
@@ -390,7 +394,7 @@ thrum group remove <group> --role reviewer     # Remove role-based member
 
 Subcommand flags:
 
-```
+```text
 # group create
 --description string   Group description
 
@@ -430,7 +434,7 @@ thrum context update                           # Delegates to /update-context sk
 
 `context show` flags:
 
-```
+```text
 --agent string    Override agent name
 --raw             Raw output with file boundary markers, no header
 --no-preamble     Exclude preamble from output
@@ -438,14 +442,14 @@ thrum context update                           # Delegates to /update-context sk
 
 `context save` flags:
 
-```
+```text
 --agent string   Override agent name
 --file string    Read context from file (default: stdin)
 ```
 
 `context preamble` flags:
 
-```
+```text
 --agent string   Override agent name
 --file string    Set preamble from file
 --init           Create or reset to default preamble
@@ -453,7 +457,7 @@ thrum context update                           # Delegates to /update-context sk
 
 `context clear` / `context sync` flags:
 
-```
+```text
 --agent string   Override agent name
 ```
 
@@ -472,7 +476,7 @@ thrum daemon start --local                     # Local-only mode (no git push/fe
 
 The `--local` flag is available on all daemon subcommands:
 
-```
+```text
 --local   Local-only mode: skip git push/fetch in sync loop
 ```
 
@@ -495,7 +499,7 @@ thrum init --agent-role implementer --agent-module auth --agent-name alice
 
 Flags:
 
-```
+```text
 --runtime string        Generate runtime-specific configs: claude|codex|cursor|gemini|cli-only|all
 --stealth               Use .git/info/exclude instead of .gitignore (zero footprint)
 --force                 Force reinitialization / overwrite existing files
@@ -519,13 +523,13 @@ thrum setup claude-md --apply --force          # Overwrite existing Thrum sectio
 
 `setup worktree` flags:
 
-```
+```text
 --main-repo string   Path to the main repository (where daemon runs) (default ".")
 ```
 
 `setup claude-md` flags:
 
-```
+```text
 --apply   Append to CLAUDE.md (create if missing)
 --force   Overwrite existing Thrum section
 ```
@@ -560,7 +564,7 @@ thrum backup schedule off                      # Disable scheduled backups
 
 `backup schedule` flags:
 
-```
+```text
 --dir string   Set backup directory
 ```
 
@@ -578,13 +582,13 @@ thrum backup plugin remove --name myplugin
 
 `backup` flags (inherited by all subcommands):
 
-```
+```text
 --dir string   Override backup directory
 ```
 
 `backup plugin add` flags:
 
-```
+```text
 --preset string     Use built-in preset: beads, beads-rust
 --name string       Plugin name
 --command string    Command to run before collecting files
@@ -593,7 +597,7 @@ thrum backup plugin remove --name myplugin
 
 `backup restore` flags:
 
-```
+```text
 --yes   Skip confirmation prompt
 ```
 
@@ -623,7 +627,7 @@ thrum unsubscribe <subscription-id>            # Remove a subscription
 
 `subscribe` flags:
 
-```
+```text
 --scope string     Subscribe to scope (format: type:value)
 --mention string   Subscribe to mentions of role
 --all              Subscribe to all messages
@@ -656,7 +660,7 @@ thrum roles deploy --dry-run                   # Preview changes without writing
 
 `roles deploy` flags:
 
-```
+```text
 --agent string   Deploy for a specific agent only
 --dry-run        Preview changes without writing files
 ```
@@ -672,7 +676,7 @@ thrum mcp serve --agent-id alice               # Override agent identity
 
 `mcp serve` flags:
 
-```
+```text
 --agent-id string   Override agent identity (selects .thrum/identities/{name}.json)
 ```
 

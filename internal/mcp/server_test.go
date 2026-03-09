@@ -43,6 +43,10 @@ func createTestIdentity(t *testing.T, repoPath, name, role, module string) {
 }
 
 func TestNewServer(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
+	t.Setenv("THRUM_ROLE", "")
+	t.Setenv("THRUM_MODULE", "")
 	repoPath := t.TempDir()
 	createTestIdentity(t, repoPath, "testbot", "implementer", "core")
 
@@ -69,6 +73,8 @@ func TestNewServer(t *testing.T) {
 }
 
 func TestNewServerWithVersion(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	repoPath := t.TempDir()
 	createTestIdentity(t, repoPath, "testbot", "reviewer", "api")
 
@@ -83,6 +89,8 @@ func TestNewServerWithVersion(t *testing.T) {
 }
 
 func TestNewServerNoIdentity(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	repoPath := t.TempDir()
 
 	_, err := NewServer(repoPath)
@@ -92,6 +100,8 @@ func TestNewServerNoIdentity(t *testing.T) {
 }
 
 func TestNewServerMultipleIdentities(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	repoPath := t.TempDir()
 	createTestIdentity(t, repoPath, "alice", "implementer", "core")
 	createTestIdentity(t, repoPath, "bob", "reviewer", "api")
@@ -114,6 +124,8 @@ func TestNewServerMultipleIdentities(t *testing.T) {
 }
 
 func TestNewServerSocketPath(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	repoPath := t.TempDir()
 	createTestIdentity(t, repoPath, "testbot", "implementer", "core")
 
@@ -130,6 +142,8 @@ func TestNewServerSocketPath(t *testing.T) {
 }
 
 func TestNewDaemonClient(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	repoPath := t.TempDir()
 	createTestIdentity(t, repoPath, "testbot", "implementer", "core")
 

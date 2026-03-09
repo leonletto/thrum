@@ -1,4 +1,3 @@
-
 ## Thrum Daemon Architecture
 
 > **See also:** [System Overview](overview.md) for how the daemon fits into the
@@ -664,7 +663,3 @@ rm .thrum/var/thrum.pid
 - Design document: `dev-docs/2026-02-03-thrum-design.md`
 - RPC API reference: `docs/rpc-api.md`
 - Development guide: `docs/development.md`
-
-```
-
-```

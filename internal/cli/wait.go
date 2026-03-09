@@ -134,12 +134,10 @@ func Wait(socketPath string, opts WaitOptions) (*Message, error) {
 			if opts.CallerAgentID != "" {
 				listParams["caller_agent_id"] = opts.CallerAgentID
 			}
-			// Only apply for_agent / for_agent_role when no explicit scope or
-			// mention filter is active. When scope or mention is provided those
-			// filters are the primary constraint; AND-ing them with for_agent
-			// causes scoped messages (not directly @-mentioned) to be silently
-			// filtered out, making --scope and --mention always time out.
-			if scope == nil && opts.Mention == "" {
+			// Always apply addressed-to-me filtering unless a scope filter is
+			// active. When combined with --mention, the server ORs the two
+			// clauses so direct replies still wake the listener.
+			if scope == nil {
 				if opts.ForAgent != "" {
 					listParams["for_agent"] = opts.ForAgent
 				}

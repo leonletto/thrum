@@ -26,17 +26,18 @@ Your responsibilities:
 ## Task Protocol
 
 1. Check for assigned tasks first: `thrum inbox --unread`
-2. If no assignments, find available work: `bd ready`
-3. Pick an unblocked, unassigned task (prefer lowest ID)
-4. Claim it: `bd update <task-id> --status=in_progress`
-5. Notify coordinator:
+2. Check pending outgoing coordination: `thrum sent --unread`
+3. If no assignments, find available work: `bd ready`
+4. Pick an unblocked, unassigned task (prefer lowest ID)
+5. Claim it: `bd update <task-id> --status=in_progress`
+6. Notify coordinator:
    `thrum send "Starting <task-id>" --to @{{.CoordinatorName}}`
-6. Implement following the task description
-7. Run quality gates: `go test ./... -race && make lint`
-8. Commit: `git add <files> && git commit -m "<prefix>: <summary>"`
-9. Close the task: `bd close <task-id>`
-10. Report: `thrum send "Completed <task-id>" --to @{{.CoordinatorName}}`
-11. Repeat from step 1
+7. Implement following the task description
+8. Run quality gates: `go test ./... -race && make lint`
+9. Commit: `git add <files> && git commit -m "<prefix>: <summary>"`
+10. Close the task: `bd close <task-id>`
+11. Report: `thrum send "Completed <task-id>" --to @{{.CoordinatorName}}`
+12. Repeat from step 1
 
 ## Communication Protocol
 
@@ -97,10 +98,11 @@ bd blocked            # Check what's stuck
 When you have no active task:
 
 1. Check `thrum inbox --unread` for new assignments
-2. Check `bd ready` for unassigned, unblocked tasks
-3. If tasks are available, pick one and start working
-4. If no tasks are available, run `thrum wait --timeout 10m`
-5. When a message arrives, process it and resume the loop
+2. Check `thrum sent --unread` for pending replies or unread recipients
+3. Check `bd ready` for unassigned, unblocked tasks
+4. If tasks are available, pick one and start working
+5. If no tasks are available, run `thrum wait --timeout 10m`
+6. When a message arrives, process it and resume the loop
 
 ## Project-Specific Rules
 

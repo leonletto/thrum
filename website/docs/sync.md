@@ -603,7 +603,3 @@ thrum migrate
 - [Daemon Architecture](daemon.md)
 - [System Overview](overview.md)
 - [RPC API Reference](rpc-api.md)
-
-```
-
-```

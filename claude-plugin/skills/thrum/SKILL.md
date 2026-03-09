@@ -4,7 +4,7 @@ description: >
   Multi-agent coordination via messaging, groups, and shared context. Use when
   agents need to communicate, delegate work, or coordinate across worktrees.
 allowed-tools: "Bash(thrum:*)"
-version: "0.5.3"
+version: "0.5.4"
 author: "Leon Letto <https://github.com/leonletto>"
 license: "MIT"
 ---
@@ -24,6 +24,8 @@ thrum send "msg" --to @everyone          Broadcast to all agents
 thrum reply <msg-id> "response"          Reply (same audience)
 thrum inbox                              List messages (unread first)
 thrum inbox --unread                     Unread only
+thrum sent                               List messages you sent
+thrum sent --unread                      Sent messages with unread recipients
 thrum wait                               Block until message arrives (30s timeout)
 thrum wait --timeout 120s                Custom timeout (duration)
 ```
@@ -31,7 +33,7 @@ thrum wait --timeout 120s                Custom timeout (duration)
 ### Agents
 
 ```bash
-thrum quickstart --role R --module M --intent "..."   Register + start session
+thrum quickstart --name <agent-name> --role R --module M --intent "..."   Register + start session
 thrum whoami                                          Show identity
 thrum status                                          Agent + daemon status
 thrum team                                            List active agents

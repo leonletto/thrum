@@ -1,4 +1,3 @@
-
 ## Thrum Development Guide
 
 This guide explains how to set up and work with the Thrum codebase.
@@ -389,16 +388,16 @@ func (h *MyMethodHandler) Handle(ctx context.Context, params json.RawMessage) (a
 }
 ```
 
-2. Add tests in `internal/daemon/rpc/mymethod_test.go`
+1. Add tests in `internal/daemon/rpc/mymethod_test.go`
 
-3. Register in daemon startup (in `cmd/thrum/main.go`):
+1. Register in daemon startup (in `cmd/thrum/main.go`):
 
 ```go
 myMethodHandler := rpc.NewMyMethodHandler()
 server.RegisterHandler("mymethod", myMethodHandler.Handle)
 ```
 
-4. Update documentation in `docs/rpc-api.md`
+1. Update documentation in `docs/rpc-api.md`
 
 ## Environment Variables
 
@@ -879,7 +878,3 @@ Or build the UI first: `make build-ui`
 - **Workflow Templates**: `docs/workflow-templates.md` (structured feature
   development with AI agents)
 - **Agent Reference**: `llms.txt` (concise) and `llms-full.txt` (detailed)
-
-```
-
-```

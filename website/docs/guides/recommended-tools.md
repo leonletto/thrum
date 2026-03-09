@@ -52,7 +52,7 @@ A typical multi-agent workflow using all three:
 4. **Playwright CLI** lets agents capture browser context or verify web UI
    changes
 
-```
+```text
 Developer                 Agents                    Tools
     │                        │                        │
     ├─ Opens beads-ui ──────►│                        │

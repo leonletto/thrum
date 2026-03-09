@@ -24,6 +24,7 @@ messaging system for AI agent coordination.
 | `thrum send`               | Send a message (direct or broadcast)                 |
 | `thrum reply`              | Reply to a message                                   |
 | `thrum inbox`              | List messages in your inbox                          |
+| `thrum sent`               | List messages you sent with receipt status           |
 | `thrum message get`        | Get a single message with full details               |
 | `thrum message edit`       | Edit a message (full replacement)                    |
 | `thrum message delete`     | Delete a message                                     |
@@ -232,7 +233,7 @@ is already registered, it re-registers automatically. Supports agent naming via
 the `--name` flag or `THRUM_NAME` environment variable.
 
 ```text
-thrum quickstart --role ROLE --module MODULE [flags]
+thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]
 ```
 
 | Flag        | Description                                                   | Default |
@@ -249,7 +250,7 @@ The `THRUM_NAME` environment variable takes priority over the `--name` flag.
 Example:
 
 ```text
-$ thrum quickstart --role implementer --module auth --intent "Fixing token refresh"
+$ thrum quickstart --name implementer_auth --role implementer --module auth --intent "Fixing token refresh"
 ✓ Registered as @implementer (implementer_35HV62T9B9)
 ✓ Session started: ses_01HXF2A9...
 ✓ Intent set: Fixing token refresh
@@ -450,6 +451,26 @@ $ thrum inbox --unread
 │ LGTM on the auth changes. Ready to merge.               │
 └──────────────────────────────────────────────────────────┘
 Showing 1-2 of 12 messages (5 unread)
+```
+
+### thrum sent
+
+List messages you authored, including resolved recipients and durable
+delivery/read state.
+
+```text
+thrum sent [flags]
+thrum sent show MSG_ID
+```
+
+Common examples:
+
+```text
+thrum sent
+thrum sent --unread
+thrum sent --to @implementer_api
+thrum sent --to @backend-team
+thrum sent show msg_01HXE8Z7
 ```
 
 ### thrum message get

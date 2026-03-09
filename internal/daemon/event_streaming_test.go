@@ -102,7 +102,8 @@ func TestEventStreamingIntegration(t *testing.T) {
 
 	// Send a message
 	sendReq := rpc.SendRequest{
-		Content: "Test message for event streaming",
+		CallerAgentID: agentID,
+		Content:       "Test message for event streaming",
 		Scopes: []types.Scope{
 			{Type: "task", Value: "thrum-ukr"},
 		},
@@ -346,7 +347,8 @@ func TestEventStreamingWithSubscriptionFiltering(t *testing.T) {
 
 	// Send message with matching scope (task:thrum-ukr)
 	sendReq1 := rpc.SendRequest{
-		Content: "Message with matching scope",
+		CallerAgentID: senderID,
+		Content:       "Message with matching scope",
 		Scopes: []types.Scope{
 			{Type: "task", Value: "thrum-ukr"},
 		},
@@ -362,7 +364,8 @@ func TestEventStreamingWithSubscriptionFiltering(t *testing.T) {
 
 	// Send message with different scope (task:other)
 	sendReq2 := rpc.SendRequest{
-		Content: "Message with different scope",
+		CallerAgentID: senderID,
+		Content:       "Message with different scope",
 		Scopes: []types.Scope{
 			{Type: "task", Value: "other"},
 		},

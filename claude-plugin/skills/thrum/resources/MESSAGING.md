@@ -6,8 +6,9 @@
 2. **Deliver** — Daemon writes to recipient's inbox (JSONL in
    `.git/thrum-sync/`)
 3. **Receive** — `thrum inbox` or `thrum wait` (blocking)
-4. **Read** — Auto-marked read when displayed via `thrum inbox`
-5. **Reply** — `thrum reply <msg-id> "response"` (same audience)
+4. **Verify sent state** — `thrum sent` or `thrum sent show <msg-id>`
+5. **Read** — Auto-marked read when displayed via `thrum inbox`
+6. **Reply** — `thrum reply <msg-id> "response"` (same audience)
 
 ## Addressing
 

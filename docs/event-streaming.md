@@ -1,4 +1,3 @@
-
 ## Event Streaming
 
 ## Overview
@@ -286,7 +285,3 @@ go test ./internal/websocket/...
 - WebSocket Server: `internal/websocket/server.go`
 - WebSocket Client Registry: `internal/websocket/registry.go`
 - Unix Socket Client Registry: `internal/daemon/notify.go`
-
-```
-
-```

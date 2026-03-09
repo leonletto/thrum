@@ -23,6 +23,7 @@ type MessageCreateEvent struct {
 	Body         MessageBody `json:"body"`
 	Scopes       []Scope     `json:"scopes,omitempty"`
 	Refs         []Ref       `json:"refs,omitempty"`
+	Recipients   []string    `json:"recipients,omitempty"`  // Snapshot of resolved recipient agent IDs
 	AuthoredBy   string      `json:"authored_by,omitempty"` // Actual author if impersonating
 	Disclosed    bool        `json:"disclosed,omitempty"`   // Show [via user:X] in UI
 }
@@ -66,6 +67,19 @@ type MessageDeleteEvent struct {
 	OriginDaemon string `json:"origin_daemon,omitempty"`
 	MessageID    string `json:"message_id"`
 	Reason       string `json:"reason,omitempty"`
+}
+
+// MessageReceiptEvent represents durable recipient receipt state for a message.
+type MessageReceiptEvent struct {
+	Type         string `json:"type"`
+	Timestamp    string `json:"timestamp"`
+	EventID      string `json:"event_id"`
+	Version      int    `json:"v"`
+	OriginDaemon string `json:"origin_daemon,omitempty"`
+	MessageID    string `json:"message_id"`
+	AgentID      string `json:"agent_id"`
+	SessionID    string `json:"session_id,omitempty"`
+	ReceiptType  string `json:"receipt_type"` // "seen" or "read"
 }
 
 // ThreadUpdatedEvent represents a thread.updated event (real-time notification, not persisted).

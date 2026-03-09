@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 13
+const CurrentVersion = 14
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -174,6 +174,17 @@ func createTables(tx *sql.Tx) error {
 			FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
 		)`,
 
+		// Durable message delivery/receipt state (synced via events)
+		`CREATE TABLE IF NOT EXISTS message_deliveries (
+			message_id          TEXT NOT NULL,
+			recipient_agent_id  TEXT NOT NULL,
+			delivered_at        TEXT NOT NULL,
+			seen_at             TEXT,
+			read_at             TEXT,
+			PRIMARY KEY (message_id, recipient_agent_id),
+			FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
+		)`,
+
 		// Message edits table (for edit history tracking)
 		`CREATE TABLE IF NOT EXISTS message_edits (
 			id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -303,6 +314,8 @@ func createIndexes(tx *sql.Tx) error {
 		// Message reads indexes
 		"CREATE INDEX IF NOT EXISTS idx_message_reads_agent ON message_reads(agent_id, message_id)",
 		"CREATE INDEX IF NOT EXISTS idx_message_reads_message ON message_reads(message_id)",
+		"CREATE INDEX IF NOT EXISTS idx_message_deliveries_recipient ON message_deliveries(recipient_agent_id, message_id)",
+		"CREATE INDEX IF NOT EXISTS idx_message_deliveries_read ON message_deliveries(recipient_agent_id, read_at)",
 
 		// Group indexes
 		"CREATE INDEX IF NOT EXISTS idx_groups_name ON groups(name)",
@@ -640,6 +653,32 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		// Note: SQLite doesn't support ALTER COLUMN to add NOT NULL or DEFAULT
 		// to existing columns. New databases get the correct constraints from
 		// createTables(). Existing databases have NULLs backfilled above.
+	}
+
+	// Migration from version 13 to 14: Add durable message delivery state
+	if startVersion < 14 && endVersion >= 14 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS message_deliveries (
+				message_id          TEXT NOT NULL,
+				recipient_agent_id  TEXT NOT NULL,
+				delivered_at        TEXT NOT NULL,
+				seen_at             TEXT,
+				read_at             TEXT,
+				PRIMARY KEY (message_id, recipient_agent_id),
+				FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("create message_deliveries table: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_message_deliveries_recipient ON message_deliveries(recipient_agent_id, message_id)`)
+		if err != nil {
+			return fmt.Errorf("create idx_message_deliveries_recipient: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_message_deliveries_read ON message_deliveries(recipient_agent_id, read_at)`)
+		if err != nil {
+			return fmt.Errorf("create idx_message_deliveries_read: %w", err)
+		}
 	}
 
 	// Update schema version

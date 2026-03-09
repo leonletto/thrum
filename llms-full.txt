@@ -1,4 +1,4 @@
-# Thrum v0.5.3 -- Complete Agent Reference
+# Thrum v0.5.4 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
 
@@ -201,8 +201,10 @@ All commands accept:
 
 ### thrum quickstart
 
-  Usage:    thrum quickstart --role ROLE --module MODULE [flags]
+  Usage:    thrum quickstart --name <agent-name> --role ROLE --module MODULE [flags]
   Flags:    --name STRING         Human-readable agent name (optional, defaults to role_hash)
+            --role STRING         Agent role (or THRUM_ROLE env var)
+            --module STRING       Agent module (or THRUM_MODULE env var)
             --display STRING      Display name for the agent
             --intent STRING       Initial work intent
             --runtime STRING      Runtime preset (claude, codex, cursor, gemini, auggie, cli-only)
@@ -287,6 +289,19 @@ All commands accept:
             Auto-marks displayed messages as read (unless --unread).
   Requires: Daemon running, active session.
   Output:   Paginated message list with sender, content preview, timestamps.
+
+### thrum sent
+
+  Usage:    thrum sent [flags]
+            thrum sent show MSG_ID
+  Flags:    --to @agent|@role|@group|@everyone  Filter by recipient or audience
+            --unread                            Only messages with unread recipients
+            --page-size N, --limit N           Results per page
+            --page N                           Page number
+  Action:   Lists messages you authored, including resolved recipients and
+            durable delivery/read state.
+  Requires: Daemon running, active session.
+  Output:   Paginated sent message list with recipients and receipt status.
 
 ### thrum wait
 
@@ -965,20 +980,21 @@ Unknown event types are silently ignored (forward compatibility).
 ### Multi-agent project coordination
 
   # Agent 1: Planner
-  thrum quickstart --role planner --module core --intent "Planning sprint"
+  thrum quickstart --name <agent-name> --role planner --module core --intent "Planning sprint"
   thrum send "Sprint plan: @implementer handles auth, @reviewer reviews" \
     --scope module:core --mention @implementer --mention @reviewer
 
   # Agent 2: Implementer
-  thrum quickstart --role implementer --module auth --intent "Building auth flow"
+  thrum quickstart --name <agent-name> --role implementer --module auth --intent "Building auth flow"
   thrum subscribe --scope module:auth
   thrum subscribe --mention @implementer
   thrum inbox --mentions
+  thrum sent --to @planner --unread
   thrum reply msg_01HXE... "Acknowledged, starting on auth module"
   thrum agent set-intent "Implementing OAuth2 flow"
 
   # Agent 3: Reviewer
-  thrum quickstart --role reviewer --module auth
+  thrum quickstart --name <agent-name> --role reviewer --module auth
   thrum subscribe --mention @reviewer
   thrum wait --mention @reviewer --timeout 10m
 
@@ -987,28 +1003,29 @@ Unknown event types are silently ignored (forward compatibility).
   # Machine A (has remote configured)
   thrum init
   thrum daemon start
-  thrum quickstart --role agent-a --module backend
+  thrum quickstart --name <agent-name> --role agent-a --module backend
   thrum send "Backend API ready" --scope module:backend
 
   # Machine B (same remote)
   thrum init
   thrum daemon start
-  thrum quickstart --role agent-b --module frontend
+  thrum quickstart --name <agent-name> --role agent-b --module frontend
   # After sync (auto every 60s, or force):
   thrum sync force
   thrum inbox
+  thrum sent
   # Sees message from agent-a
 
 ### Cross-machine messaging via Tailscale
 
   # Machine A
   thrum init && thrum daemon start
-  thrum quickstart --role agent-a --module backend
+  thrum quickstart --name <agent-name> --role agent-a --module backend
   thrum peer add           # Displays pairing code, e.g., 4821
 
   # Machine B (same Tailscale network)
   thrum init && thrum daemon start
-  thrum quickstart --role agent-b --module frontend
+  thrum quickstart --name <agent-name> --role agent-b --module frontend
   thrum peer join 100.x.y.z  # Enter code 4821
   # Direct sync established, no Git remote needed
 
@@ -1100,7 +1117,7 @@ Unknown event types are silently ignored (forward compatibility).
   thrum init --runtime claude
 
   # Quickstart with runtime
-  thrum quickstart --role impl --module auth --runtime codex
+  thrum quickstart --name <agent-name> --role impl --module auth --runtime codex
 
   # Set default runtime for the repo
   thrum runtime set-default claude

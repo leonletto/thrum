@@ -1,4 +1,3 @@
-
 ## Tailscale Sync
 
 > See also: [Tailscale Security](tailscale-security.md) for the security model,
@@ -395,7 +394,3 @@ periodic_sync: starting with interval=5m0s, recent_threshold=2m0s
   integration
 - [Sync Protocol](sync.md) -- Git-based synchronization details
 - [CLI Reference](cli.md) -- Complete command documentation
-
-```
-
-```

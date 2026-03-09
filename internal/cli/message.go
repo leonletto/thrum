@@ -16,16 +16,18 @@ type MessageGetResponse struct {
 
 // MessageDetail represents detailed information about a message.
 type MessageDetail struct {
-	MessageID string            `json:"message_id"`
-	ThreadID  string            `json:"thread_id,omitempty"`
-	Author    AuthorInfo        `json:"author"`
-	Body      types.MessageBody `json:"body"`
-	Scopes    []types.Scope     `json:"scopes"`
-	Refs      []types.Ref       `json:"refs"`
-	Metadata  MessageMetadata   `json:"metadata"`
-	CreatedAt string            `json:"created_at"`
-	UpdatedAt string            `json:"updated_at,omitempty"`
-	Deleted   bool              `json:"deleted"`
+	MessageID  string            `json:"message_id"`
+	ThreadID   string            `json:"thread_id,omitempty"`
+	Author     AuthorInfo        `json:"author"`
+	Body       types.MessageBody `json:"body"`
+	Scopes     []types.Scope     `json:"scopes"`
+	Refs       []types.Ref       `json:"refs"`
+	Metadata   MessageMetadata   `json:"metadata"`
+	CreatedAt  string            `json:"created_at"`
+	UpdatedAt  string            `json:"updated_at,omitempty"`
+	Deleted    bool              `json:"deleted"`
+	Audiences  []Audience        `json:"audiences,omitempty"`
+	Recipients []RecipientState  `json:"recipients,omitempty"`
 }
 
 // AuthorInfo represents the message author.
@@ -84,6 +86,28 @@ func FormatMessageGet(resp *MessageGetResponse) string {
 
 	if msg.UpdatedAt != "" {
 		fmt.Fprintf(&out, "  Edited:  %s\n", formatRelativeTime(msg.UpdatedAt))
+	}
+
+	if len(msg.Audiences) > 0 {
+		audiences := make([]string, len(msg.Audiences))
+		for i, audience := range msg.Audiences {
+			audiences[i] = audience.Type + ":" + audience.Value
+		}
+		fmt.Fprintf(&out, "  To:      %s\n", strings.Join(audiences, ", "))
+	}
+
+	if len(msg.Recipients) > 0 {
+		out.WriteString("  Recipients:\n")
+		for _, recipient := range msg.Recipients {
+			status := "delivered"
+			switch {
+			case recipient.ReadAt != "":
+				status = "read"
+			case recipient.SeenAt != "":
+				status = "seen"
+			}
+			fmt.Fprintf(&out, "    - %s (%s)\n", extractAgentName(recipient.AgentID), status)
+		}
 	}
 
 	if msg.Deleted {
@@ -175,6 +199,107 @@ func FormatMarkRead(resp *MarkReadResponse) string {
 		return "✓ Marked 1 message as read\n"
 	}
 	return fmt.Sprintf("✓ Marked %d messages as read\n", resp.MarkedCount)
+}
+
+// --- Outbox / Sent items ---
+
+// OutboxResult contains sent messages for the current agent.
+type OutboxResult struct {
+	Messages   []OutboxMessage `json:"messages"`
+	Total      int             `json:"total"`
+	Page       int             `json:"page"`
+	PageSize   int             `json:"page_size"`
+	TotalPages int             `json:"total_pages"`
+}
+
+// OutboxMessage is a sent message with receipt details.
+type OutboxMessage struct {
+	MessageID  string            `json:"message_id"`
+	ThreadID   string            `json:"thread_id,omitempty"`
+	ReplyTo    string            `json:"reply_to,omitempty"`
+	AgentID    string            `json:"agent_id"`
+	Body       types.MessageBody `json:"body"`
+	CreatedAt  string            `json:"created_at"`
+	Deleted    bool              `json:"deleted"`
+	Audiences  []Audience        `json:"audiences,omitempty"`
+	Recipients []RecipientState  `json:"recipients,omitempty"`
+	ReadCount  int               `json:"read_count,omitempty"`
+}
+
+// OutboxOptions controls sent-item listing.
+type OutboxOptions struct {
+	CallerAgentID string
+	To            string
+	Unread        bool
+	PageSize      int
+	Page          int
+}
+
+// MessageOutbox lists sent messages for the caller.
+func MessageOutbox(client *Client, opts OutboxOptions) (*OutboxResult, error) {
+	req := map[string]any{
+		"caller_agent_id": opts.CallerAgentID,
+	}
+	if opts.To != "" {
+		req["to"] = opts.To
+	}
+	if opts.Unread {
+		req["unread"] = true
+	}
+	if opts.PageSize > 0 {
+		req["page_size"] = opts.PageSize
+	}
+	if opts.Page > 0 {
+		req["page"] = opts.Page
+	}
+
+	var resp OutboxResult
+	if err := client.Call("message.outbox", req, &resp); err != nil {
+		return nil, fmt.Errorf("message.outbox RPC failed: %w", err)
+	}
+	return &resp, nil
+}
+
+// FormatOutbox formats sent messages as a compact list.
+func FormatOutbox(resp *OutboxResult) string {
+	if len(resp.Messages) == 0 {
+		return "No sent messages.\n"
+	}
+
+	var out strings.Builder
+	for _, msg := range resp.Messages {
+		audienceParts := make([]string, len(msg.Audiences))
+		for i, audience := range msg.Audiences {
+			audienceParts[i] = audience.Type + ":" + audience.Value
+		}
+		readCount := msg.ReadCount
+		totalRecipients := len(msg.Recipients)
+		fmt.Fprintf(&out, "%s  %s  to %s  %d/%d read\n",
+			msg.MessageID,
+			formatRelativeTime(msg.CreatedAt),
+			strings.Join(audienceParts, ", "),
+			readCount,
+			totalRecipients,
+		)
+		if msg.Body.Content != "" {
+			fmt.Fprintf(&out, "  %s\n", msg.Body.Content)
+		}
+		if totalRecipients > 0 {
+			names := make([]string, len(msg.Recipients))
+			for i, recipient := range msg.Recipients {
+				status := "delivered"
+				switch {
+				case recipient.ReadAt != "":
+					status = "read"
+				case recipient.SeenAt != "":
+					status = "seen"
+				}
+				names[i] = fmt.Sprintf("%s(%s)", extractAgentName(recipient.AgentID), status)
+			}
+			fmt.Fprintf(&out, "  Recipients: %s\n", strings.Join(names, ", "))
+		}
+	}
+	return out.String()
 }
 
 // --- Reply ---

@@ -10,11 +10,11 @@ Each worktree agent uses a unique identity via `THRUM_NAME`:
 ```bash
 # In main worktree (/path/to/repo)
 export THRUM_NAME=main_coordinator
-thrum quickstart --role coordinator --module main --intent "Coordinating releases"
+thrum quickstart --name coordinator_main --role coordinator --module main --intent "Coordinating releases"
 
 # In feature worktree (~/.workspaces/repo/feature)
 export THRUM_NAME=feature_impl
-thrum quickstart --role implementer --module feature --intent "Feature implementation"
+thrum quickstart --name implementer_feature --role implementer --module feature --intent "Feature implementation"
 ```
 
 ## Shared Daemon
@@ -39,6 +39,7 @@ thrum send "Feature branch ready for integration" --to @feature_impl
 
 # From feature worktree
 thrum inbox    # Sees message from @main_coordinator
+thrum sent     # Verifies what this worktree sent and who read it
 thrum reply <msg-id> "Integration tests passing, ready to merge"
 ```
 

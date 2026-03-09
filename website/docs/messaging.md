@@ -27,6 +27,7 @@ replying to, and managing messages.
 | `thrum send MESSAGE`      | Send a message (with optional `--to`, `--scope`, `--ref`, `--mention`) |
 | `thrum reply MSG_ID TEXT` | Reply to a message, creating a reply-to reference                      |
 | `thrum inbox`             | List messages with read/unread indicators                              |
+| `thrum sent`              | List messages you sent with recipient read status                      |
 | `thrum message read`      | Mark messages as read (single, multiple, or --all)                     |
 
 ### Message Subcommands
@@ -96,6 +97,7 @@ Agents can then filter their inbox to only messages that mention them:
 
 ```bash
 thrum inbox --mentions
+thrum sent --unread
 ```
 
 This queries for messages where a `mention` ref matches the current agent's
@@ -132,6 +134,9 @@ thrum send "Auth module complete, all tests passing" \
 
 # Reviewer checks inbox for messages directed at them
 thrum inbox --mentions
+
+# Implementer verifies the outgoing message recipients and receipts
+thrum sent --to @reviewer
 
 # Reviewer replies to the message
 thrum reply msg_01HXE... "Looks good, merging now"
@@ -728,7 +733,3 @@ shard.
 - RPC API Reference: `docs/rpc-api.md`
 - Daemon Architecture: `docs/daemon.md`
 - Development Guide: `docs/development.md`
-
-```
-
-```

@@ -6,8 +6,9 @@
 2. **Deliver** — Daemon writes to recipient's inbox (JSONL in
    `.git/thrum-sync/`)
 3. **Receive** — `thrum inbox` or `thrum wait` (blocking)
-4. **Read** — Auto-marked read when displayed via `thrum inbox`
-5. **Reply** — `thrum reply <msg-id> "response"` (same audience)
+4. **Verify sent state** — `thrum sent` or `thrum sent show <msg-id>`
+5. **Read** — Auto-marked read when displayed via `thrum inbox`
+6. **Reply** — `thrum reply <msg-id> "response"` (same audience)
 
 ## Addressing
 
@@ -64,7 +65,7 @@ For multi-worktree setups, set `THRUM_NAME` env var to distinguish agents:
 
 ```bash
 export THRUM_NAME=feature_agent
-thrum quickstart --role impl --module feature --intent "Feature work"
+thrum quickstart --name feature_agent --role impl --module feature --intent "Feature work"
 ```
 
 ## Unified Workflow: Thrum + Beads
