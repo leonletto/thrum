@@ -18,6 +18,7 @@ needed -- all sync operations happen within the worktree.
   thrum quickstart --name <agent-name> --role planner --module auth        # Register + start session
   thrum send "Starting work on auth module"            # Send a message
   thrum inbox                                          # Check messages
+  thrum sent                                           # Check sent items and receipts
 
 ## Global Flags
 
@@ -82,6 +83,10 @@ All commands accept these flags:
   thrum inbox [--scope type:value] [--mentions] [--unread] [--all|-a] [--page-size N] [--limit N] [--page N]
     List messages in your inbox. Auto-filters to messages addressed to you + broadcasts.
     Use --all to disable auto-filtering and show everything.
+
+  thrum sent [--to @agent|@role|@group|@everyone] [--unread] [--page-size N] [--limit N] [--page N]
+    List messages you sent, including resolved recipients and durable read state.
+    Use 'thrum sent show <message-id>' for full recipient details on one message.
 
   thrum wait [--timeout DURATION] [--scope type:value] [--mention @role] [--after OFFSET]
     Block until a matching message arrives.
@@ -305,6 +310,7 @@ All commands accept these flags:
 ### Check inbox and reply
 
   thrum inbox --unread
+  thrum sent --unread
   thrum reply msg_01HXE... "Looks good, merging now"
 
 ### Coordinate on shared files

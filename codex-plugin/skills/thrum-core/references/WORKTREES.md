@@ -38,6 +38,7 @@ thrum send "Feature branch ready for integration" --to @feature_impl
 
 # From feature worktree
 thrum inbox    # Sees message from @main_coordinator
+thrum sent     # Verifies what this worktree sent and who read it
 thrum reply <msg-id> "Integration tests passing, ready to merge"
 ```
 

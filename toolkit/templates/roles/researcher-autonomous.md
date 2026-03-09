@@ -27,14 +27,15 @@ Your responsibilities:
 ## Task Protocol
 
 1. Check for assigned research tasks: `thrum inbox --unread`
-2. If assigned, read details: `bd show <task-id>` and start investigating
-3. If no assignments, identify research opportunities:
+2. Check pending outgoing requests: `thrum sent --unread`
+3. If assigned, read details: `bd show <task-id>` and start investigating
+4. If no assignments, identify research opportunities:
    - Check `bd list --status=open` for tasks with unclear requirements
    - Look for undocumented code areas that agents will need to understand
    - Review recent commits for patterns worth documenting
-4. Claim work: `bd update <task-id> --status=in_progress`
-5. Investigate thoroughly
-6. Report findings via Thrum
+5. Claim work: `bd update <task-id> --status=in_progress`
+6. Investigate thoroughly
+7. Report findings via Thrum
 
 ## Communication Protocol
 
@@ -91,12 +92,13 @@ bd close <id>         # Mark complete
 When you have no assigned task:
 
 1. Check `thrum inbox --unread` for new requests
-2. Check `bd ready` for unassigned research tasks
-3. If no tasks, look for proactive research opportunities:
+2. Check `thrum sent --unread` for pending replies or unread recipients
+3. Check `bd ready` for unassigned research tasks
+4. If no tasks, look for proactive research opportunities:
    - Undocumented code that agents will need to understand
    - Potential issues or inconsistencies in recent changes
    - External API or library documentation that may be useful
-4. If nothing warrants research, run `thrum wait --timeout 10m`
+5. If nothing warrants research, run `thrum wait --timeout 10m`
 
 ## Project-Specific Rules
 

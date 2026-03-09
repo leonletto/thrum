@@ -56,6 +56,8 @@ thrum send "msg" --to @everyone          # Broadcast to all
 thrum reply <msg-id> "response"          # Reply (implicit thread)
 thrum inbox                              # View inbox (excludes own messages)
 thrum inbox --unread                     # Unread only
+thrum sent                               # View sent messages and receipts
+thrum sent --to @name                    # Verify one recipient or audience
 thrum wait                               # Block until message arrives (30s)
 thrum wait --timeout 120s                # Custom timeout (must include unit)
 thrum message read --all                 # Mark all as read

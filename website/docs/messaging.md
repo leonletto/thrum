@@ -96,6 +96,7 @@ Agents can then filter their inbox to only messages that mention them:
 
 ```bash
 thrum inbox --mentions
+thrum sent --unread
 ```
 
 This queries for messages where a `mention` ref matches the current agent's
@@ -132,6 +133,9 @@ thrum send "Auth module complete, all tests passing" \
 
 # Reviewer checks inbox for messages directed at them
 thrum inbox --mentions
+
+# Implementer verifies the outgoing message recipients and receipts
+thrum sent --to @reviewer
 
 # Reviewer replies to the message
 thrum reply msg_01HXE... "Looks good, merging now"

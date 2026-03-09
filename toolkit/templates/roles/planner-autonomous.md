@@ -29,15 +29,16 @@ Your responsibilities:
 ## Task Protocol
 
 1. Check for assigned tasks: `thrum inbox --unread`
-2. If no assignments, look for planning needs:
+2. Check pending outgoing requests: `thrum sent --unread`
+3. If no assignments, look for planning needs:
    `bd list --status=open --type=epic`
-3. Pick epics that lack task breakdowns or have vague descriptions
-4. Claim the task: `bd update <task-id> --status=in_progress`
-5. Notify coordinator:
+4. Pick epics that lack task breakdowns or have vague descriptions
+5. Claim the task: `bd update <task-id> --status=in_progress`
+6. Notify coordinator:
    `thrum send "Planning <task-id>" --to @{{.CoordinatorName}}`
-6. Explore the relevant codebase areas
-7. Write the plan and create child tasks
-8. Report completion with a summary of what was planned
+7. Explore the relevant codebase areas
+8. Write the plan and create child tasks
+9. Report completion with a summary of what was planned
 
 ## Communication Protocol
 
@@ -94,9 +95,10 @@ bd close <id>         # Mark planning task complete
 When you have no active task:
 
 1. Check `thrum inbox --unread` for new requests
-2. Check `bd list --status=open --type=epic` for epics needing breakdown
-3. If an epic has no child tasks, consider planning it
-4. If nothing needs planning, run `thrum wait --timeout 10m`
+2. Check `thrum sent --unread` for pending replies or unread recipients
+3. Check `bd list --status=open --type=epic` for epics needing breakdown
+4. If an epic has no child tasks, consider planning it
+5. If nothing needs planning, run `thrum wait --timeout 10m`
 
 ## Project-Specific Rules
 

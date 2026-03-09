@@ -290,6 +290,19 @@ All commands accept:
   Requires: Daemon running, active session.
   Output:   Paginated message list with sender, content preview, timestamps.
 
+### thrum sent
+
+  Usage:    thrum sent [flags]
+            thrum sent show MSG_ID
+  Flags:    --to @agent|@role|@group|@everyone  Filter by recipient or audience
+            --unread                            Only messages with unread recipients
+            --page-size N, --limit N           Results per page
+            --page N                           Page number
+  Action:   Lists messages you authored, including resolved recipients and
+            durable delivery/read state.
+  Requires: Daemon running, active session.
+  Output:   Paginated sent message list with recipients and receipt status.
+
 ### thrum wait
 
   Usage:    thrum wait [flags]
@@ -976,6 +989,7 @@ Unknown event types are silently ignored (forward compatibility).
   thrum subscribe --scope module:auth
   thrum subscribe --mention @implementer
   thrum inbox --mentions
+  thrum sent --to @planner --unread
   thrum reply msg_01HXE... "Acknowledged, starting on auth module"
   thrum agent set-intent "Implementing OAuth2 flow"
 
@@ -999,6 +1013,7 @@ Unknown event types are silently ignored (forward compatibility).
   # After sync (auto every 60s, or force):
   thrum sync force
   thrum inbox
+  thrum sent
   # Sees message from agent-a
 
 ### Cross-machine messaging via Tailscale

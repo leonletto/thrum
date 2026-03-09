@@ -37,6 +37,7 @@ listenerResult = TaskOutput(listener_id)
 if "MESSAGES_RECEIVED" in result:
     # Read full messages
     thrum inbox --unread
+    thrum sent --unread
 
     # Re-arm listener
     Task(subagent_type="message-listener", ...)

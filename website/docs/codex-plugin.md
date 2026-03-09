@@ -25,7 +25,7 @@ Thrum integration is packaged as a **Codex skill bundle** in
 The bundle is split into focused skills:
 
 - `thrum-core` — durable messaging, groups, identity, worktree boundaries
-- `thrum-ops` — quickstart/inbox/wait/context/daemon/sync operational flows
+- `thrum-ops` — quickstart/inbox/sent/wait/context/daemon/sync operational flows
 - `thrum-role-config` — generate or update `.thrum/role_templates`
 - `project-setup` — turn design docs into Beads epics/tasks before coding
 
@@ -84,8 +84,9 @@ message/reply workflows.
 
 ### Session operations and triage
 
-When you need to bootstrap sessions, triage unread messages, or verify daemon
-health, `thrum-ops` provides operational workflows and command references.
+When you need to bootstrap sessions, triage unread messages, verify delivery on
+messages you authored, or check daemon health, `thrum-ops` provides
+operational workflows and command references.
 
 ### Role template generation
 

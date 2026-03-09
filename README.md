@@ -30,6 +30,7 @@ thrum daemon start
 thrum quickstart --name myagent --role planner --module auth
 thrum send "Starting work on auth module"
 thrum inbox
+thrum sent
 ```
 
 **Note:** Thrum is a CLI tool you install once and use across repositories. You
@@ -130,6 +131,7 @@ make install    # Builds UI + Go binary → ~/.local/bin/thrum
 | `thrum quickstart --name NAME --role ROLE` | Register agent and start session            |
 | `thrum send "message" --to @name`          | Send a message to an agent                  |
 | `thrum inbox`                              | View messages (read/unread indicators)      |
+| `thrum sent`                               | Review messages you sent and their receipts |
 | `thrum reply MSG_ID "response"`            | Reply to a message                          |
 | `thrum who-has FILE`                       | Check which agents are editing a file       |
 | `thrum overview`                           | Combined status, team, inbox, and sync view |

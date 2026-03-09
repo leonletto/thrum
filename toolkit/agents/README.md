@@ -40,7 +40,7 @@ worktrees. Use this when:
 - Sending messages to teams via groups
 - Broadcasting status updates to the team
 
-Key commands: `thrum quickstart`, `thrum send`, `thrum inbox`, `thrum group`,
+Key commands: `thrum quickstart`, `thrum send`, `thrum inbox`, `thrum sent`, `thrum group`,
 `thrum status`
 
 ### `message-listener.md`
