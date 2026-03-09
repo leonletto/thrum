@@ -90,8 +90,13 @@ agent runs four phases:
    point. Works identically for fresh starts and resumes after context loss.
 2. **Implement** — Claims the first available task, reads its description,
    builds, tests, commits, closes the task. Repeats until all tasks are done.
-3. **Verify** — Runs full quality gates after all tasks complete.
-4. **Land** — Closes the epic, merges to main, pushes.
+3. **Self-Review Gate** — Runs quality gates, then enters a code review loop
+   (max 3 rounds) using `feature-dev:code-reviewer` with the
+   `receiving-code-review` skill for rigorous finding verification. After the
+   review passes, runs a scope check against the plan and design docs to catch
+   missing requirements. Fixes are looped back through review. This catches both
+   quality issues and coverage gaps before the coordinator reviews.
+4. **Complete & Land** — Closes the epic, pushes branch, notifies coordinator.
 
 See `implementation-agent.md` for the full prompt and all details.
 
