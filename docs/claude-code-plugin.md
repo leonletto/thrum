@@ -118,7 +118,7 @@ All commands live under the `/thrum:` namespace.
 Prompts for role, module, and intent — or pass flags directly:
 
 ```bash
-thrum quickstart --role implementer --module auth --intent "Building login flow"
+thrum quickstart --name implementer_auth --role implementer --module auth --intent "Building login flow"
 ```
 
 **Send a message:**

@@ -9,7 +9,7 @@ If arguments are provided, use them. Otherwise ask the user for role, module,
 and intent.
 
 ```bash
-thrum quickstart --role <role> --module <module> --intent "<description>"
+thrum quickstart --name <agent-name> --role <role> --module <module> --intent "<description>"
 ```
 
 Common roles: `implementer`, `planner`, `reviewer`, `tester`, `coordinator`.

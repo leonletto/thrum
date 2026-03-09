@@ -64,7 +64,7 @@ For multi-worktree setups, set `THRUM_NAME` env var to distinguish agents:
 
 ```bash
 export THRUM_NAME=feature_agent
-thrum quickstart --role impl --module feature --intent "Feature work"
+thrum quickstart --name feature_agent --role impl --module feature --intent "Feature work"
 ```
 
 ## Unified Workflow: Thrum + Beads

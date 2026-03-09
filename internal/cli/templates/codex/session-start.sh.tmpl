@@ -8,6 +8,7 @@ thrum daemon start || true
 
 # Register agent (reuses existing identity if one exists)
 thrum quickstart \
+  --name "{{.AgentName}}" \
   --role "$THRUM_ROLE" \
   --module "$THRUM_MODULE" \
   --json

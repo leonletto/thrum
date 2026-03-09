@@ -417,7 +417,7 @@ in the same worktree:
 thrum quickstart --name furiosa --role implementer --module auth
 
 # Reviewer agent (in another terminal/session)
-THRUM_NAME=maximus thrum quickstart --role reviewer --module auth
+THRUM_NAME=maximus thrum quickstart --name maximus --role reviewer --module auth
 ```
 
 ### Communication Pattern

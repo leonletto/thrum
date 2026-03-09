@@ -19,7 +19,7 @@ communication patterns, idle behavior, and efficiency rules.
 
 ## How It Works
 
-When an agent registers via `thrum quickstart --role implementer`, the system
+When an agent registers via `thrum quickstart --name impl_auth --role implementer`, the system
 checks for `.thrum/role_templates/implementer.md`. If found, it renders the
 template with the agent's identity data and saves it as the agent's preamble.
 

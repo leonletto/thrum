@@ -31,7 +31,7 @@ management.
 ## Command baseline
 
 ```bash
-thrum quickstart --role <role> --module <module> --intent "<intent>"
+thrum quickstart --name <agent-name> --role <role> --module <module> --intent "<intent>"
 thrum overview
 thrum inbox --unread
 thrum wait --timeout 120s
@@ -74,7 +74,7 @@ Common roles: `coordinator`, `implementer`, `planner`, `reviewer`, `tester`.
 
 ```bash
 # Full registration
-thrum quickstart --role implementer --module <branch> --intent "Implementing <epic>"
+thrum quickstart --name <agent-name> --role implementer --module <branch> --intent "Implementing <epic>"
 
 # Just update intent
 thrum session set-intent "Now working on X"

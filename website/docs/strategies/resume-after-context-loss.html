@@ -46,7 +46,7 @@ such as compaction, a new session start, or a crash.</p>
 <p>If you are resuming after context loss (compaction, new session, crash, etc.),
 follow this sequence exactly. Do not skip steps.</p>
 <h3>Step 1: Re-Register with Thrum (Mandatory)</h3>
-<pre><code>thrum quickstart --role &lt;your-role&gt; --module &lt;branch-name&gt; --intent &quot;Resuming &lt;task-or-epic&gt;&quot;
+<pre><code>thrum quickstart --name &lt;agent-name&gt; --role &lt;your-role&gt; --module &lt;branch-name&gt; --intent &quot;Resuming &lt;task-or-epic&gt;&quot;
 thrum inbox --unread</code></pre>
 <p>You must re-register even if you were registered in the previous session.
 Registration is per-session and does not persist across context loss.</p>

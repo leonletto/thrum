@@ -1466,7 +1466,7 @@ Examples:
 				}
 				identitiesDir := filepath.Join(thrumDir, "identities")
 				if _, statErr := os.Stat(identitiesDir); os.IsNotExist(statErr) {
-					return fmt.Errorf("no agent identities registered\n  Run 'thrum quickstart --role <role> --module <module>' to register")
+					return fmt.Errorf("no agent identities registered\n  Run 'thrum quickstart --name <agent-name> --role <role> --module <module>' to register")
 				}
 				return err
 			}
@@ -3863,11 +3863,11 @@ session start → set intent. If the agent is already registered, it
 re-registers automatically.
 
 Examples:
-  thrum quickstart --role implementer --module auth
-  thrum quickstart --role reviewer --module auth --intent "Reviewing PR #42"
+  thrum quickstart --name implementer_auth --role implementer --module auth
+  thrum quickstart --name reviewer_auth --role reviewer --module auth --intent "Reviewing PR #42"
   thrum quickstart --name alice --role impl --module auth --runtime codex
   thrum quickstart --name bob --role tester --module api --dry-run
-  thrum quickstart --role planner --module core --no-init`,
+  thrum quickstart --name planner_core --role planner --module core --no-init`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, _ := cmd.Flags().GetString("name")
 			display, _ := cmd.Flags().GetString("display")

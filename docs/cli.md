@@ -225,7 +225,7 @@ is already registered, it re-registers automatically. Supports agent naming via
 the `--name` flag or `THRUM_NAME` environment variable.
 
 ```text
-thrum quickstart --role ROLE --module MODULE [flags]
+thrum quickstart --name <agent-name> --role ROLE --module MODULE [flags]
 ```
 
 | Flag        | Description                                                   | Default |
@@ -242,7 +242,7 @@ The `THRUM_NAME` environment variable takes priority over the `--name` flag.
 Example:
 
 ```text
-$ thrum quickstart --role implementer --module auth --intent "Fixing token refresh"
+$ thrum quickstart --name implementer_auth --role implementer --module auth --intent "Fixing token refresh"
 ✓ Registered as @implementer (implementer_35HV62T9B9)
 ✓ Session started: ses_01HXF2A9...
 ✓ Intent set: Fixing token refresh

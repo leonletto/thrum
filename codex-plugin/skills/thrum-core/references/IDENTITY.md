@@ -5,7 +5,7 @@
 Every agent must register before sending or receiving messages.
 
 ```bash
-thrum quickstart --role <role> --module <module> --intent "<description>"
+thrum quickstart --name <agent-name> --role <role> --module <module> --intent "<description>"
 ```
 
 This registers the agent, starts a session, and sets the work intent.
@@ -31,11 +31,11 @@ When working across multiple worktrees, use `THRUM_NAME` to distinguish agents:
 ```bash
 # Main worktree
 export THRUM_NAME=main_agent
-thrum quickstart --role coordinator --module main --intent "Main branch work"
+thrum quickstart --name coordinator_main --role coordinator --module main --intent "Main branch work"
 
 # Feature worktree
 export THRUM_NAME=feature_agent
-thrum quickstart --role implementer --module feature --intent "Feature branch work"
+thrum quickstart --name implementer_feature --role implementer --module feature --intent "Feature branch work"
 ```
 
 Both agents share the same daemon and can message each other.

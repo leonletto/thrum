@@ -145,11 +145,11 @@ Bootstrap a full session in one command: detect runtime, generate config,
 register, start, set intent.
 
 ```bash
-thrum quickstart --role implementer --module auth
-thrum quickstart --role reviewer --module auth --intent "Reviewing PR #42"
+thrum quickstart --name implementer_auth --role implementer --module auth
+thrum quickstart --name reviewer_auth --role reviewer --module auth --intent "Reviewing PR #42"
 thrum quickstart --name alice --role impl --module auth --runtime codex
-thrum quickstart --role planner --module core --no-init
-thrum quickstart --role tester --module api --dry-run
+thrum quickstart --name planner_core --role planner_core --module core --no-init
+thrum quickstart --name tester_api --role tester --module api --dry-run
 ```
 
 Flags:

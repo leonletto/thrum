@@ -44,8 +44,9 @@ correctly and `thrum inbox` won't know who you are.
 
 ## 6. Vague Intents
 
-**Wrong:** `thrum quickstart --intent "Working on stuff"` **Right:**
-`thrum quickstart --intent "Implementing JWT auth for login endpoint (bd-123)"`
+**Wrong:** `thrum quickstart --name <agent-name> --role <role> --module <module> --intent "Working on stuff"` 
+**Right:**
+`thrum quickstart --name <agent-name> --role <role> --module <module> --intent "Implementing JWT auth for login endpoint (bd-123)"`
 
 Specific intents help other agents understand what you're doing via
 `thrum team`.

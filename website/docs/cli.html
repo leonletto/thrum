@@ -498,7 +498,7 @@ detects what needs migration and skips steps that are already done.</p>
 <p>Register, start a session, and set an initial intent in one step. If the agent
 is already registered, it re-registers automatically. Supports agent naming via
 the <code>--name</code> flag or <code>THRUM_NAME</code> environment variable.</p>
-<pre><code>thrum quickstart --role ROLE --module MODULE [flags]</code></pre>
+<pre><code>thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -527,7 +527,7 @@ the <code>--name</code> flag or <code>THRUM_NAME</code> environment variable.</p
 vars).</p>
 <p>The <code>THRUM_NAME</code> environment variable takes priority over the <code>--name</code> flag.</p>
 <p>Example:</p>
-<pre><code>$ thrum quickstart --role implementer --module auth --intent &quot;Fixing token refresh&quot;
+<pre><code>$ thrum quickstart --name implementer_auth --role implementer --module auth --intent &quot;Fixing token refresh&quot;
 ✓ Registered as @implementer (implementer_35HV62T9B9)
 ✓ Session started: ses_01HXF2A9...
 ✓ Intent set: Fixing token refresh
