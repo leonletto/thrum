@@ -1,4 +1,3 @@
-
 ## Thrum Quickstart Guide
 
 Get up and running with Thrum in 5 minutes.

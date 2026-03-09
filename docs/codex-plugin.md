@@ -1,4 +1,3 @@
-
 ## Codex Plugin
 
 > See also: [Quickstart Guide](quickstart.md) for base Thrum setup,
