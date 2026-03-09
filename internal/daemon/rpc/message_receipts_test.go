@@ -154,3 +154,62 @@ func TestHandleMarkReadWritesDurableReceiptsAndOutbox(t *testing.T) {
 		t.Fatalf("expected outbox recipient read state, got %#v", outboxResp.Messages[0].Recipients)
 	}
 }
+
+func TestHandleOutboxFiltersByAudienceAndUnread(t *testing.T) {
+	st := setupReceiptTestState(t)
+	senderID := registerAndStartAgent(t, st, "coordinator_main", "coordinator")
+	apiID := registerAndStartAgent(t, st, "implementer_api", "implementer")
+	registerAndStartAgent(t, st, "implementer_ui_main", "implementer_ui")
+
+	handler := NewMessageHandler(st)
+
+	sendToAPI, _ := json.Marshal(SendRequest{
+		Content:       "API task",
+		Mentions:      []string{"@implementer_api"},
+		CallerAgentID: senderID,
+	})
+	respAPI, err := handler.HandleSend(context.Background(), sendToAPI)
+	if err != nil {
+		t.Fatalf("send API message: %v", err)
+	}
+	apiMsgID := respAPI.(*SendResponse).MessageID
+
+	sendToUI, _ := json.Marshal(SendRequest{
+		Content:       "UI task",
+		Mentions:      []string{"@implementer_ui_main"},
+		CallerAgentID: senderID,
+	})
+	respUI, err := handler.HandleSend(context.Background(), sendToUI)
+	if err != nil {
+		t.Fatalf("send UI message: %v", err)
+	}
+	uiMsgID := respUI.(*SendResponse).MessageID
+
+	markAPIRead, _ := json.Marshal(MarkReadRequest{
+		MessageIDs:    []string{apiMsgID},
+		CallerAgentID: apiID,
+	})
+	if _, err := handler.HandleMarkRead(context.Background(), markAPIRead); err != nil {
+		t.Fatalf("mark API message read: %v", err)
+	}
+
+	filteredParams, _ := json.Marshal(OutboxRequest{
+		CallerAgentID: senderID,
+		To:            "@implementer_ui_main",
+		Unread:        true,
+	})
+	filteredRaw, err := handler.HandleOutbox(context.Background(), filteredParams)
+	if err != nil {
+		t.Fatalf("HandleOutbox filtered failed: %v", err)
+	}
+	filtered := filteredRaw.(*OutboxResponse)
+	if len(filtered.Messages) != 1 {
+		t.Fatalf("expected 1 filtered message, got %d", len(filtered.Messages))
+	}
+	if filtered.Messages[0].MessageID != uiMsgID {
+		t.Fatalf("expected message %s, got %s", uiMsgID, filtered.Messages[0].MessageID)
+	}
+	if filtered.Messages[0].ReadCount != 0 {
+		t.Fatalf("expected unread filtered message to have read_count=0, got %d", filtered.Messages[0].ReadCount)
+	}
+}

@@ -226,16 +226,31 @@ type OutboxMessage struct {
 	ReadCount  int               `json:"read_count,omitempty"`
 }
 
+// OutboxOptions controls sent-item listing.
+type OutboxOptions struct {
+	CallerAgentID string
+	To            string
+	Unread        bool
+	PageSize      int
+	Page          int
+}
+
 // MessageOutbox lists sent messages for the caller.
-func MessageOutbox(client *Client, callerAgentID string, pageSize, page int) (*OutboxResult, error) {
+func MessageOutbox(client *Client, opts OutboxOptions) (*OutboxResult, error) {
 	req := map[string]any{
-		"caller_agent_id": callerAgentID,
+		"caller_agent_id": opts.CallerAgentID,
 	}
-	if pageSize > 0 {
-		req["page_size"] = pageSize
+	if opts.To != "" {
+		req["to"] = opts.To
 	}
-	if page > 0 {
-		req["page"] = page
+	if opts.Unread {
+		req["unread"] = true
+	}
+	if opts.PageSize > 0 {
+		req["page_size"] = opts.PageSize
+	}
+	if opts.Page > 0 {
+		req["page"] = opts.Page
 	}
 
 	var resp OutboxResult

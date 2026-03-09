@@ -213,6 +213,80 @@ func TestFormatMarkRead(t *testing.T) {
 	}
 }
 
+func TestMessageOutbox(t *testing.T) {
+	mockResponse := map[string]any{
+		"messages":    []map[string]any{},
+		"total":       0,
+		"page":        1,
+		"page_size":   10,
+		"total_pages": 0,
+	}
+
+	daemon, socketPath := newMockDaemon(t)
+	defer daemon.stop()
+
+	daemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		var request map[string]any
+		if err := decoder.Decode(&request); err != nil {
+			return
+		}
+
+		if request["method"] != "message.outbox" {
+			t.Errorf("Expected method 'message.outbox', got %v", request["method"])
+		}
+
+		params, ok := request["params"].(map[string]any)
+		if !ok {
+			t.Fatal("params should be map[string]any")
+		}
+		if params["caller_agent_id"] != "agent:coordinator:ABC123" {
+			t.Errorf("caller_agent_id = %v", params["caller_agent_id"])
+		}
+		if params["to"] != "@implementer" {
+			t.Errorf("to = %v", params["to"])
+		}
+		if params["unread"] != true {
+			t.Errorf("unread = %v", params["unread"])
+		}
+		if params["page_size"] != float64(5) {
+			t.Errorf("page_size = %v", params["page_size"])
+		}
+		if params["page"] != float64(2) {
+			t.Errorf("page = %v", params["page"])
+		}
+
+		response := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request["id"],
+			"result":  mockResponse,
+		}
+		_ = encoder.Encode(response)
+	})
+
+	<-daemon.Ready()
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := MessageOutbox(client, OutboxOptions{
+		CallerAgentID: "agent:coordinator:ABC123",
+		To:            "@implementer",
+		Unread:        true,
+		PageSize:      5,
+		Page:          2,
+	}); err != nil {
+		t.Fatalf("MessageOutbox() error = %v", err)
+	}
+}
+
 func TestMessageEdit(t *testing.T) {
 	daemon, socketPath := newMockDaemon(t)
 	defer daemon.stop()
