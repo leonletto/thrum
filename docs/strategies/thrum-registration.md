@@ -12,6 +12,7 @@ communicate correctly with other agents.
 ```bash
 thrum quickstart --name <agent-name> --role implementer --module <branch-name> --intent "What you are working on"
 thrum inbox --unread
+thrum sent --unread
 thrum send "Starting work on <task>" --to @<coordinator-name>
 ```
 
@@ -86,6 +87,7 @@ Check your inbox at session start and periodically during work:
 
 ```bash
 thrum inbox --unread        # show unread messages only
+thrum sent --unread         # show sent messages still unread by someone
 thrum message read --all    # mark all messages as read
 thrum reply <MSG_ID> "..."  # reply to a specific message
 ```

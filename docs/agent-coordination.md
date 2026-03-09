@@ -25,6 +25,7 @@ Shell commands for basic messaging. Works everywhere.
 ```bash
 thrum send "Starting work on task X" --to @coord_main
 thrum inbox --unread
+thrum sent --unread
 thrum reply <msg-id> "Here's my update"
 ```
 
@@ -53,6 +54,7 @@ thrum send "Please implement build script (task thrum-235d.3). \
 
 # Check for updates
 thrum inbox
+thrum sent --to @impl1
 ```
 
 **Implementer:**
@@ -64,6 +66,9 @@ thrum quickstart --name impl1 --role implementer --module website \
 
 # Check inbox for assignments
 thrum inbox --unread
+
+# Check sent items after responding
+thrum sent --to @planner1
 
 # Acknowledge and work
 thrum reply <msg-id> "Claimed task. Starting implementation."
