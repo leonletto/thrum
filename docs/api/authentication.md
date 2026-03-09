@@ -685,7 +685,3 @@ ws.on("message", (data: string) => {
   documentation
 - [WebSocket API](./websocket.md) - Full API reference
 - [Event Reference](./events.md) - Event types and payloads
-
-```
-
-```

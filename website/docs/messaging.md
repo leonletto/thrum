@@ -733,7 +733,3 @@ shard.
 - RPC API Reference: `docs/rpc-api.md`
 - Daemon Architecture: `docs/daemon.md`
 - Development Guide: `docs/development.md`
-
-```
-
-```

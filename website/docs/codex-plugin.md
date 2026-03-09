@@ -108,18 +108,18 @@ cp -R codex-plugin/skills/project-setup "${CODEX_HOME:-$HOME/.codex}/skills/"
 
 ## Troubleshooting
 
-**Skills do not appear in Codex**
+### Skills do not appear in Codex
 
 - Confirm install destination: `echo "${CODEX_HOME:-$HOME/.codex}/skills"`
 - Re-run `./codex-plugin/scripts/install-skills.sh --force`
 - Restart Codex
 
-**Skill updates are not reflected**
+### Skill updates are not reflected
 
 - Run `./codex-plugin/scripts/sync-skills.sh`
 - Restart Codex after sync
 
-**Thrum commands fail inside skill workflows**
+### Thrum commands fail inside skill workflows
 
 - Check daemon status: `thrum daemon status`
 - Verify identity/session: `thrum whoami && thrum session start`

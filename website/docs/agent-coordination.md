@@ -423,7 +423,3 @@ bd list --status=in_progress
 - [Messaging System](messaging.md) -- message structure and scopes
 - [Quickstart Guide](quickstart.md) -- getting started in 5 minutes
 - [Identity System](identity.md) -- agent names and registration
-
-```
-
-```

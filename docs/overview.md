@@ -594,7 +594,3 @@ Thrum's daemon is the foundation that enables:
 The CLI, Web UI, and MCP server are all thin clients that communicate through
 the daemon. This architecture ensures consistency, enables real-time updates,
 and provides a single point for synchronization and coordination.
-
-```
-
-```
