@@ -139,7 +139,7 @@ func DefaultPreamble() []byte {
 **Reply:** ` + "`thrum reply <MSG_ID> \"response\"`" + `
 **Status:** ` + "`thrum status`" + `
 **Who's online:** ` + "`thrum team`" + `
-**Save context:** ` + "`thrum context save`" + `
+**Save context:** Use ` + "`/thrum:update-context`" + ` skill. **NEVER run ` + "`thrum context save`" + ` manually** — it overwrites accumulated session state.
 **Wait for messages:** ` + "`thrum wait --after -1s --timeout 5m`" + ` (` + "`--after -1s`" + ` = include messages sent up to 1s ago)
 
 ## Agent Strategies

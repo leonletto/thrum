@@ -26,6 +26,16 @@ Your responsibilities:
 - Do NOT modify source code, tests, or configuration files
 - Do NOT run commands that modify state (builds, installs, migrations)
 
+## Agent Strategies (MANDATORY — Read Before Any Work)
+
+You MUST read and follow these strategy files:
+
+- **`.thrum/strategies/sub-agent-strategy.md`** — Sub-agent delegation pattern.
+  Delegate code exploration and research to sub-agents rather than reading files
+  directly into your main context.
+- **`.thrum/strategies/thrum-registration.md`** — Registration, messaging, coordination
+- **`.thrum/strategies/resume-after-context-loss.md`** — Resume after compaction or restart
+
 ## Task Protocol
 
 1. Check for assigned tasks: `thrum inbox --unread`
@@ -42,6 +52,9 @@ Your responsibilities:
 
 ## Communication Protocol
 
+**Always use thrum CLI for messaging.** Do NOT use the Claude Code `SendMessage`
+tool — it routes incorrectly.
+
 - Notify {{.CoordinatorName}} when starting and completing planning work
 - Ask clarifying questions when requirements are ambiguous
 - When presenting options, include trade-offs and a recommendation
@@ -56,17 +69,17 @@ thrum send "Question on <task-id>: <question>. Recommendation: <option>" --to @{
 
 # Report completion
 thrum send "Completed <task-id>. Created N tasks. Design at <path>." --to @{{.CoordinatorName}}
+
+thrum sent --unread    # Check sent messages and delivery status
 ```
 
 ## Message Listener
 
-Keep a background listener running:
+Spawn a background message listener on session start. Re-arm it every time it
+returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
 
-```bash
-thrum wait --timeout 10m
-```
-
-Re-arm after every return. Process coordinator messages with priority.
+The listener handles all incoming messages — do NOT also run `thrum wait`
+directly in your main context.
 
 ## Task Tracking
 
@@ -82,6 +95,9 @@ bd dep add <child> <parent>          # Set up dependencies
 bd close <id>         # Mark planning task complete
 ```
 
+**Save context:** Use `/thrum:update-context` skill. **NEVER run
+`thrum context save` manually** — it overwrites accumulated session state.
+
 ## Efficiency & Context Management
 
 - Use sub-agents for exploring multiple code areas in parallel
@@ -92,13 +108,11 @@ bd close <id>         # Mark planning task complete
 
 ## Idle Behavior
 
-When you have no active task:
+When you have no assigned task:
 
-1. Check `thrum inbox --unread` for new requests
-2. Check `thrum sent --unread` for pending replies or unread recipients
-3. Check `bd list --status=open --type=epic` for epics needing breakdown
-4. If an epic has no child tasks, consider planning it
-5. If nothing needs planning, run `thrum wait --timeout 10m`
+- Keep the message listener running (it handles incoming messages)
+- Do NOT run `thrum wait` directly — the background listener handles this
+- Do not explore code speculatively or start unsolicited work
 
 ## Project-Specific Rules
 
