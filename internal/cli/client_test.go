@@ -216,6 +216,7 @@ func TestClient_Call_Error(t *testing.T) {
 }
 
 func TestDefaultSocketPath(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
 	tests := []struct {
 		name     string
 		repoPath string

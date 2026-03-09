@@ -11,13 +11,13 @@ description: >
 > (`/thrum:*` commands, `thrum prime`). This file covers routing rules and
 > gotchas not duplicated elsewhere.
 >
-> Full messaging docs: https://leonletto.github.io/thrum/docs/messaging.html
+> Full messaging docs: <https://leonletto.github.io/thrum/docs/messaging.html>
 
 ## Agent Registration
 
 ```bash
 # Register at session start (idempotent — safe to re-run)
-thrum quickstart --role <role> --module <module> --intent "<description>"
+thrum quickstart --name <agent-name> --role <role> --module <module> --intent "<description>"
 
 # Common roles: coordinator, implementer, reviewer, planner, tester
 # Name must differ from role (registration rejects name==role)
@@ -56,6 +56,8 @@ thrum send "msg" --to @everyone          # Broadcast to all
 thrum reply <msg-id> "response"          # Reply (implicit thread)
 thrum inbox                              # View inbox (excludes own messages)
 thrum inbox --unread                     # Unread only
+thrum sent                               # View sent messages and receipts
+thrum sent --to @name                    # Verify one recipient or audience
 thrum wait                               # Block until message arrives (30s)
 thrum wait --timeout 120s                # Custom timeout (must include unit)
 thrum message read --all                 # Mark all as read

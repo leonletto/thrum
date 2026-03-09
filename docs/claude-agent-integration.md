@@ -1,4 +1,3 @@
-
 ## Claude Code Agent Integration
 
 Thrum ships two Claude Code agent definitions for multi-agent coordination.
@@ -65,7 +64,8 @@ time it returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
 
 thrum send "message" --to @name # Direct message thrum send "message" --to
 @everyone # Broadcast to all thrum inbox --unread # Check for new messages thrum
-reply <msg-id> "response" # Reply (creates a reply-to reference)
+sent --unread # Check sent items and receipts thrum reply <msg-id> "response" #
+Reply (creates a reply-to reference)
 
 ## MCP Tools (11 total)
 
@@ -92,7 +92,7 @@ reply <msg-id> "response" # Reply (creates a reply-to reference)
 # Start
 
 thrum quickstart --name <name> --role <role> --module <module> --intent "<desc>"
-thrum inbox --unread
+thrum inbox --unread thrum sent --unread
 
 # During work
 

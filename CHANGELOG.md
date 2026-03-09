@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-03-09
+
+### Sent Command & Durable Deliveries
+
+New `thrum sent` command lets agents review messages they sent and see which
+recipients have read them. Message delivery is now durable — every `send`
+records recipient snapshots in SQLite, and `mark-read` updates durable read
+receipts. The send response now shows exactly who the message was delivered to,
+eliminating guesswork about routing.
+
+### Added
+
+- **`thrum sent`** — list messages you sent with recipient read status
+- **`thrum sent --unread`** — filter to messages with unread recipients
+- **`thrum sent --to @agent`** — filter by recipient or audience
+- **`thrum sent show MSG_ID`** — full recipient detail for one message
+- **Durable message deliveries** — `message_deliveries` table tracks every
+  recipient with `delivered_at` and `read_at` timestamps
+- **Send confirmation** — `SendResponse` now includes `audiences` and
+  `recipients` fields showing resolved delivery targets
+- **`thrum sent --unread`** in DefaultPreamble, strategies, and prime output
+
+### Fixed
+
+- **`thrum wait`** now wakes for direct reply mentions and group messages where
+  the agent is a member
+- **Wait filters** aligned with inbox delivery rules for consistent behavior
+- **Startup script** properly quotes values in `CLAUDE_ENV_FILE` heredoc
+
 ## [0.5.3] - 2026-03-06
 
 ### Scheduled Backups

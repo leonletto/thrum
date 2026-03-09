@@ -20,8 +20,9 @@ follow this sequence exactly. Do not skip steps.
 ### Step 1: Re-Register with Thrum (Mandatory)
 
 ```bash
-thrum quickstart --role <your-role> --module <branch-name> --intent "Resuming <task-or-epic>"
+thrum quickstart --name <agent-name> --role <your-role> --module <branch-name> --intent "Resuming <task-or-epic>"
 thrum inbox --unread
+thrum sent --unread
 ```
 
 You must re-register even if you were registered in the previous session.

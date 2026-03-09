@@ -106,19 +106,21 @@ func (w *Waiter) setup() error {
 		return fmt.Errorf("agent.register: %w", err)
 	}
 
-	// 2. Subscribe to mentions for this agent's role
-	subParams := map[string]any{
-		"mention_role": w.agentRole,
-	}
-	if w.agentID != "" {
-		subParams["caller_agent_id"] = w.agentID
-	}
-	_, err = w.wsRPC("subscribe", subParams)
-	if err != nil {
-		// Subscription may already exist from a previous MCP serve in the same
-		// daemon session — treat "already exists" as non-fatal.
-		if !isAlreadyExistsError(err) {
-			return fmt.Errorf("subscribe: %w", err)
+	// 2. Subscribe to direct name/agent mentions and role mentions so the waiter
+	// wakes for the same mention patterns inbox polling can see.
+	for _, mentionTarget := range mentionSubscriptionTargets(w.agentID, w.agentRole) {
+		subParams := map[string]any{
+			"mention_role": mentionTarget,
+		}
+		if w.agentID != "" {
+			subParams["caller_agent_id"] = w.agentID
+		}
+		if _, err = w.wsRPC("subscribe", subParams); err != nil {
+			// Subscription may already exist from a previous MCP serve in the same
+			// daemon session — treat "already exists" as non-fatal.
+			if !isAlreadyExistsError(err) {
+				return fmt.Errorf("subscribe mention %q: %w", mentionTarget, err)
+			}
 		}
 	}
 
@@ -139,6 +141,12 @@ func (w *Waiter) setup() error {
 		}
 	}
 
+	// 4. Subscribe to all groups that currently include this agent so
+	// group-addressed messages wake the listener just like inbox polling does.
+	if err := w.subscribeCurrentGroups(); err != nil {
+		return fmt.Errorf("subscribe current groups: %w", err)
+	}
+
 	return nil
 }
 
@@ -146,6 +154,74 @@ func (w *Waiter) setup() error {
 func isAlreadyExistsError(err error) bool {
 	return err != nil && (err.Error() == "subscribe: subscription already exists" ||
 		err.Error() == "RPC error -32000: subscribe: subscription already exists")
+}
+
+func (w *Waiter) subscribeCurrentGroups() error {
+	if w.agentID == "" {
+		return nil
+	}
+
+	client, err := cli.NewClient(w.socketPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	groupList, err := cli.GroupList(client, cli.GroupListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, group := range groupList.Groups {
+		members, err := cli.GroupMembers(client, cli.GroupMembersOptions{
+			Name:   group.Name,
+			Expand: true,
+		})
+		if err != nil {
+			return err
+		}
+		if !containsAgent(members.Expanded, w.agentID) {
+			continue
+		}
+
+		params := map[string]any{
+			"scope": map[string]any{
+				"type":  "group",
+				"value": group.Name,
+			},
+			"caller_agent_id": w.agentID,
+		}
+		if _, err := w.wsRPC("subscribe", params); err != nil && !isAlreadyExistsError(err) {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func containsAgent(agentIDs []string, target string) bool {
+	for _, agentID := range agentIDs {
+		if agentID == target {
+			return true
+		}
+	}
+	return false
+}
+
+func mentionSubscriptionTargets(agentID, agentRole string) []string {
+	seen := make(map[string]struct{}, 2)
+	targets := make([]string, 0, 2)
+	for _, target := range []string{agentID, agentRole} {
+		if target == "" {
+			continue
+		}
+		if _, ok := seen[target]; ok {
+			continue
+		}
+		seen[target] = struct{}{}
+		targets = append(targets, target)
+	}
+	return targets
 }
 
 // wsRPC sends a JSON-RPC request over WebSocket and reads the response.

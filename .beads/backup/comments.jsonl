@@ -1,1 +1,0 @@
-{"author":"Leon Letto","created_at":"2026-03-06T21:51:59Z","id":1,"issue_id":"thrum-1m8","text":"Investigated: Claude SessionStart hooks run as subprocesses so exports do NOT persist. Fix: write to CLAUDE_ENV_FILE (append). Known caveat: open bug 24775 means CLAUDE_ENV_FILE path mismatches on session resume. Implemented CLAUDE_ENV_FILE writes in startup.sh and startup.sh.tmpl."}

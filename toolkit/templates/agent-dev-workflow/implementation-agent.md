@@ -126,6 +126,7 @@ section.
 cd {{WORKTREE_PATH}}
 thrum quickstart --name {{AGENT_NAME}} --role implementer --module {{BRANCH_NAME}} --intent "Implementing {{EPIC_ID}}"
 thrum inbox --unread
+thrum sent --unread
 thrum send "Starting work on {{EPIC_ID}}" --to @{{COORDINATOR_NAME}}
 ```
 

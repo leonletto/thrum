@@ -69,8 +69,9 @@ func TestMessageSend(t *testing.T) {
 
 	t.Run("send basic message", func(t *testing.T) {
 		req := SendRequest{
-			Content: "Hello, world!",
-			Format:  "markdown",
+			Content:       "Hello, world!",
+			Format:        "markdown",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -119,7 +120,8 @@ func TestMessageSend(t *testing.T) {
 
 	t.Run("send message without thread has no thread_id", func(t *testing.T) {
 		req := SendRequest{
-			Content: "Message without explicit thread",
+			Content:       "Message without explicit thread",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -146,6 +148,7 @@ func TestMessageSend(t *testing.T) {
 				{Type: "repo", Value: "github.com/user/repo"},
 				{Type: "file", Value: "src/main.go"},
 			},
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -195,6 +198,7 @@ func TestMessageSend(t *testing.T) {
 				{Type: "issue", Value: "beads-123"},
 				{Type: "commit", Value: "abc123def"},
 			},
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -245,8 +249,9 @@ func TestMessageSend(t *testing.T) {
 		}
 
 		req := SendRequest{
-			Content:    "Message with structured data",
-			Structured: structuredData,
+			Content:       "Message with structured data",
+			Structured:    structuredData,
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -288,7 +293,8 @@ func TestMessageSend(t *testing.T) {
 
 	t.Run("send message with default format", func(t *testing.T) {
 		req := SendRequest{
-			Content: "Message without format",
+			Content:       "Message without format",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -317,7 +323,8 @@ func TestMessageSend(t *testing.T) {
 
 	t.Run("validation - empty content", func(t *testing.T) {
 		req := SendRequest{
-			Content: "",
+			Content:       "",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -332,8 +339,9 @@ func TestMessageSend(t *testing.T) {
 
 	t.Run("validation - invalid format", func(t *testing.T) {
 		req := SendRequest{
-			Content: "Test",
-			Format:  "invalid",
+			Content:       "Test",
+			Format:        "invalid",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -357,7 +365,8 @@ func TestMessageSend(t *testing.T) {
 
 		// Try to send message without active session
 		req := SendRequest{
-			Content: "Message without session",
+			Content:       "Message without session",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -423,6 +432,7 @@ func TestMessageGet(t *testing.T) {
 		Refs: []types.Ref{
 			{Type: "issue", Value: "beads-456"},
 		},
+		CallerAgentID: agentID,
 	}
 	sendParams, _ := json.Marshal(sendReq)
 	sendResp, err := handler.HandleSend(context.Background(), sendParams)
@@ -491,7 +501,7 @@ func TestMessageGet(t *testing.T) {
 
 	t.Run("get message with thread (via reply auto-threading)", func(t *testing.T) {
 		// Send root message, then reply to create auto-thread
-		rootReq := SendRequest{Content: "Root message for thread test"}
+		rootReq := SendRequest{Content: "Root message for thread test", CallerAgentID: agentID}
 		rootParams, _ := json.Marshal(rootReq)
 		rootResp, err := handler.HandleSend(context.Background(), rootParams)
 		if err != nil {
@@ -500,8 +510,9 @@ func TestMessageGet(t *testing.T) {
 		rootID := rootResp.(*SendResponse).MessageID
 
 		sendReq := SendRequest{
-			Content: "Message in thread (reply)",
-			ReplyTo: rootID,
+			Content:       "Message in thread (reply)",
+			ReplyTo:       rootID,
+			CallerAgentID: agentID,
 		}
 		sendParams, _ := json.Marshal(sendReq)
 		sendResp, err := handler.HandleSend(context.Background(), sendParams)
@@ -538,7 +549,7 @@ func TestMessageGet(t *testing.T) {
 
 	t.Run("get deleted message", func(t *testing.T) {
 		// Create and delete a message
-		sendReq := SendRequest{Content: "Message to delete"}
+		sendReq := SendRequest{Content: "Message to delete", CallerAgentID: agentID}
 		sendParams, _ := json.Marshal(sendReq)
 		sendResp, err := handler.HandleSend(context.Background(), sendParams)
 		if err != nil {
@@ -654,9 +665,10 @@ func TestMessageList(t *testing.T) {
 
 	// Send root message (will become thread root via reply)
 	rootReq := SendRequest{
-		Content: "Root message for thread",
-		Scopes:  []types.Scope{{Type: "repo", Value: "github.com/test/repo"}},
-		Refs:    []types.Ref{{Type: "issue", Value: "beads-123"}},
+		Content:       "Root message for thread",
+		Scopes:        []types.Scope{{Type: "repo", Value: "github.com/test/repo"}},
+		Refs:          []types.Ref{{Type: "issue", Value: "beads-123"}},
+		CallerAgentID: agentID,
 	}
 	rootParams, _ := json.Marshal(rootReq)
 	rootResp, err := handler.HandleSend(context.Background(), rootParams)
@@ -667,8 +679,9 @@ func TestMessageList(t *testing.T) {
 
 	// Message 2: standalone message (no thread)
 	msg2Req := SendRequest{
-		Content: "Message 2",
-		Scopes:  []types.Scope{{Type: "file", Value: "src/main.go"}},
+		Content:       "Message 2",
+		Scopes:        []types.Scope{{Type: "file", Value: "src/main.go"}},
+		CallerAgentID: agentID,
 	}
 	msg2Params, _ := json.Marshal(msg2Req)
 	_, err = handler.HandleSend(context.Background(), msg2Params)
@@ -678,10 +691,11 @@ func TestMessageList(t *testing.T) {
 
 	// Message 3: reply to root (creates thread via auto-threading)
 	msg3Req := SendRequest{
-		Content: "Message 3",
-		ReplyTo: rootID,
-		Scopes:  []types.Scope{{Type: "repo", Value: "github.com/test/repo"}},
-		Refs:    []types.Ref{{Type: "commit", Value: "abc123"}},
+		Content:       "Message 3",
+		ReplyTo:       rootID,
+		Scopes:        []types.Scope{{Type: "repo", Value: "github.com/test/repo"}},
+		Refs:          []types.Ref{{Type: "commit", Value: "abc123"}},
+		CallerAgentID: agentID,
 	}
 	msg3Params, _ := json.Marshal(msg3Req)
 	msg3Resp, err := handler.HandleSend(context.Background(), msg3Params)
@@ -964,7 +978,7 @@ func TestMessageDelete(t *testing.T) {
 	handler := NewMessageHandler(st)
 
 	// Create a test message
-	sendReq := SendRequest{Content: "Test message to delete"}
+	sendReq := SendRequest{Content: "Test message to delete", CallerAgentID: agentID}
 	sendParams, _ := json.Marshal(sendReq)
 	sendResp, err := handler.HandleSend(context.Background(), sendParams)
 	if err != nil {
@@ -1048,7 +1062,7 @@ func TestMessageDelete(t *testing.T) {
 
 	t.Run("delete without reason", func(t *testing.T) {
 		// Create another message
-		sendReq := SendRequest{Content: "Another message"}
+		sendReq := SendRequest{Content: "Another message", CallerAgentID: agentID}
 		sendParams, _ := json.Marshal(sendReq)
 		sendResp, err := handler.HandleSend(context.Background(), sendParams)
 		if err != nil {
@@ -1143,7 +1157,7 @@ func TestMessageEdit(t *testing.T) {
 	handler := NewMessageHandler(st)
 
 	// Create a test message
-	sendReq := SendRequest{Content: "Original content"}
+	sendReq := SendRequest{Content: "Original content", CallerAgentID: agentID}
 	sendParams, _ := json.Marshal(sendReq)
 	sendResp, err := handler.HandleSend(context.Background(), sendParams)
 	if err != nil {
@@ -1157,8 +1171,9 @@ func TestMessageEdit(t *testing.T) {
 
 	t.Run("edit content only", func(t *testing.T) {
 		req := EditRequest{
-			MessageID: messageID,
-			Content:   "Updated content",
+			MessageID:     messageID,
+			Content:       "Updated content",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1206,8 +1221,9 @@ func TestMessageEdit(t *testing.T) {
 		}
 
 		req := EditRequest{
-			MessageID:  messageID,
-			Structured: structured,
+			MessageID:     messageID,
+			Structured:    structured,
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1253,9 +1269,10 @@ func TestMessageEdit(t *testing.T) {
 		structured := map[string]any{"priority": "high"}
 
 		req := EditRequest{
-			MessageID:  messageID,
-			Content:    "New content with structured",
-			Structured: structured,
+			MessageID:     messageID,
+			Content:       "New content with structured",
+			Structured:    structured,
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1291,7 +1308,7 @@ func TestMessageEdit(t *testing.T) {
 
 	t.Run("cannot edit deleted message", func(t *testing.T) {
 		// Create and delete a message
-		sendReq := SendRequest{Content: "Message to delete"}
+		sendReq := SendRequest{Content: "Message to delete", CallerAgentID: agentID}
 		sendParams, _ := json.Marshal(sendReq)
 		sendResp, err := handler.HandleSend(context.Background(), sendParams)
 		if err != nil {
@@ -1312,8 +1329,9 @@ func TestMessageEdit(t *testing.T) {
 
 		// Try to edit deleted message
 		req := EditRequest{
-			MessageID: msgID,
-			Content:   "Trying to edit deleted",
+			MessageID:     msgID,
+			Content:       "Trying to edit deleted",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1348,8 +1366,9 @@ func TestMessageEdit(t *testing.T) {
 
 		// Try to edit original message (created by first agent)
 		req := EditRequest{
-			MessageID: messageID,
-			Content:   "Unauthorized edit attempt",
+			MessageID:     messageID,
+			Content:       "Unauthorized edit attempt",
+			CallerAgentID: otherAgentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1368,8 +1387,9 @@ func TestMessageEdit(t *testing.T) {
 
 	t.Run("validation - empty message_id", func(t *testing.T) {
 		req := EditRequest{
-			MessageID: "",
-			Content:   "Some content",
+			MessageID:     "",
+			Content:       "Some content",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1392,6 +1412,7 @@ func TestMessageEdit(t *testing.T) {
 			Refs: []types.Ref{
 				{Type: "issue", Value: "beads-123"},
 			},
+			CallerAgentID: agentID,
 		}
 		sendParams, _ := json.Marshal(sendReq)
 		sendResp, err := handler.HandleSend(context.Background(), sendParams)
@@ -1406,8 +1427,9 @@ func TestMessageEdit(t *testing.T) {
 
 		// Edit it
 		req := EditRequest{
-			MessageID: msgID,
-			Content:   "Edited message with metadata",
+			MessageID:     msgID,
+			Content:       "Edited message with metadata",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 		resp, err := handler.HandleEdit(context.Background(), params)
@@ -1437,7 +1459,8 @@ func TestMessageEdit(t *testing.T) {
 
 	t.Run("validation - no content or structured", func(t *testing.T) {
 		req := EditRequest{
-			MessageID: messageID,
+			MessageID:     messageID,
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1452,8 +1475,9 @@ func TestMessageEdit(t *testing.T) {
 
 	t.Run("edit non-existent message", func(t *testing.T) {
 		req := EditRequest{
-			MessageID: "msg_NONEXISTENT",
-			Content:   "Trying to edit non-existent",
+			MessageID:     "msg_NONEXISTENT",
+			Content:       "Trying to edit non-existent",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1522,8 +1546,9 @@ func TestMessageMarkRead(t *testing.T) {
 	var messageIDs []string
 	for i := 0; i < 3; i++ {
 		req := SendRequest{
-			Content: fmt.Sprintf("Test message %d", i+1),
-			Format:  "markdown",
+			Content:       fmt.Sprintf("Test message %d", i+1),
+			Format:        "markdown",
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 		resp, err := handler.HandleSend(context.Background(), params)
@@ -1539,7 +1564,8 @@ func TestMessageMarkRead(t *testing.T) {
 
 	t.Run("mark single message as read", func(t *testing.T) {
 		req := MarkReadRequest{
-			MessageIDs: []string{messageIDs[0]},
+			MessageIDs:    []string{messageIDs[0]},
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1571,7 +1597,8 @@ func TestMessageMarkRead(t *testing.T) {
 
 	t.Run("mark multiple messages as read (batch)", func(t *testing.T) {
 		req := MarkReadRequest{
-			MessageIDs: []string{messageIDs[1], messageIDs[2]},
+			MessageIDs:    []string{messageIDs[1], messageIDs[2]},
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1605,7 +1632,8 @@ func TestMessageMarkRead(t *testing.T) {
 	t.Run("idempotent - marking already-read message updates timestamp", func(t *testing.T) {
 		// Mark message again
 		req := MarkReadRequest{
-			MessageIDs: []string{messageIDs[0]},
+			MessageIDs:    []string{messageIDs[0]},
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1661,7 +1689,8 @@ func TestMessageMarkRead(t *testing.T) {
 
 		// Second agent marks the same message as read
 		req := MarkReadRequest{
-			MessageIDs: []string{messageIDs[0]},
+			MessageIDs:    []string{messageIDs[0]},
+			CallerAgentID: agent2ID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1711,7 +1740,8 @@ func TestMessageMarkRead(t *testing.T) {
 
 	t.Run("skip non-existent message IDs", func(t *testing.T) {
 		req := MarkReadRequest{
-			MessageIDs: []string{messageIDs[1], "msg_NONEXISTENT", messageIDs[2]},
+			MessageIDs:    []string{messageIDs[1], "msg_NONEXISTENT", messageIDs[2]},
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1732,7 +1762,8 @@ func TestMessageMarkRead(t *testing.T) {
 
 	t.Run("validation - empty message_ids", func(t *testing.T) {
 		req := MarkReadRequest{
-			MessageIDs: []string{},
+			MessageIDs:    []string{},
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 
@@ -1762,7 +1793,7 @@ func TestMessageMarkRead(t *testing.T) {
 		session3ID := sessionStartResp3.SessionID
 
 		// Create a new message
-		sendReq := SendRequest{Content: "Multi-session test"}
+		sendReq := SendRequest{Content: "Multi-session test", CallerAgentID: agentID}
 		sendParams, _ := json.Marshal(sendReq)
 		sendResp, err := handler.HandleSend(context.Background(), sendParams)
 		if err != nil {
@@ -1776,7 +1807,8 @@ func TestMessageMarkRead(t *testing.T) {
 
 		// Mark as read from first session (simulate by querying active session)
 		req := MarkReadRequest{
-			MessageIDs: []string{newMsgID},
+			MessageIDs:    []string{newMsgID},
+			CallerAgentID: agentID,
 		}
 		params, _ := json.Marshal(req)
 

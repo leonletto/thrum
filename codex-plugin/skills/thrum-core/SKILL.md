@@ -50,6 +50,7 @@ thrum team
 thrum send "<message>" --to @<agent-or-group>
 thrum reply <msg-id> "<response>"
 thrum inbox --unread
+thrum sent --unread
 thrum who-has <path>
 ```
 

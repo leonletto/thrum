@@ -77,6 +77,11 @@ func TestLoad_FlagsOverrideEnv(t *testing.T) {
 }
 
 func TestLoad_FromIdentityFile(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
+	t.Setenv("THRUM_ROLE", "")
+	t.Setenv("THRUM_MODULE", "")
+	t.Setenv("THRUM_DISPLAY", "")
 	// Create temp directory
 	tmpDir := t.TempDir()
 	t.Chdir(tmpDir)
@@ -124,6 +129,8 @@ func TestLoad_FromIdentityFile(t *testing.T) {
 }
 
 func TestLoad_MissingRequired(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	// No identity file in temp dir
 	tmpDir := t.TempDir()
 	t.Chdir(tmpDir)
@@ -135,6 +142,7 @@ func TestLoad_MissingRequired(t *testing.T) {
 }
 
 func TestLoad_ThrumNameEnvVar_SelectsSpecificIdentity(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
 	// Create temp directory with multiple identity files
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
@@ -287,6 +295,7 @@ func TestLoad_ThrumNameEnvVar_ErrorOnNonexistent(t *testing.T) {
 }
 
 func TestLoad_MultipleIdentities_ErrorWithoutThrumName(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
 	// Create temp directory with multiple identity files
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
@@ -451,6 +460,8 @@ func TestSaveIdentityFile(t *testing.T) {
 }
 
 func TestLoad_WorktreeFiltering_SingleMatch(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	// Create a temp git worktree
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
@@ -518,6 +529,8 @@ func TestLoad_WorktreeFiltering_SingleMatch(t *testing.T) {
 }
 
 func TestLoad_WorktreeFiltering_MultipleMatches_MostRecentWins(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
@@ -589,6 +602,8 @@ func TestLoad_WorktreeFiltering_MultipleMatches_MostRecentWins(t *testing.T) {
 }
 
 func TestLoad_WorktreeFiltering_NoMatches(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
@@ -648,6 +663,8 @@ func TestLoad_WorktreeFiltering_NoMatches(t *testing.T) {
 }
 
 func TestLoad_WorktreeFiltering_NotInGitRepo(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	// Create temp directory WITHOUT git init
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
@@ -703,6 +720,7 @@ func TestLoad_WorktreeFiltering_NotInGitRepo(t *testing.T) {
 }
 
 func TestLoad_WorktreeFiltering_ThrumNameBypassesWorktreeFilter(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
@@ -765,6 +783,8 @@ func TestLoad_WorktreeFiltering_ThrumNameBypassesWorktreeFilter(t *testing.T) {
 }
 
 func TestLoad_RedirectedWorktree_NoIdentities_Errors(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	// Simulate a redirected worktree with no local identities.
 	// LoadWithPath should error instead of silently falling through to env vars.
 	tmpDir := t.TempDir()
@@ -811,6 +831,8 @@ func runGitCmd(t *testing.T, dir string, args ...string) {
 }
 
 func TestIdentityFileV3Fields(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750)
@@ -852,6 +874,8 @@ func TestIdentityFileV3Fields(t *testing.T) {
 }
 
 func TestIdentityFileV1Compat(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	tmpDir := t.TempDir()
 	identitiesDir := filepath.Join(tmpDir, ".thrum", "identities")
 	os.MkdirAll(identitiesDir, 0750)
@@ -872,6 +896,8 @@ func TestIdentityFileV1Compat(t *testing.T) {
 }
 
 func TestIdentityV1RoundTrip(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	tmpDir := t.TempDir()
 	identitiesDir := filepath.Join(tmpDir, ".thrum", "identities")
 	os.MkdirAll(identitiesDir, 0750)
@@ -916,6 +942,8 @@ func TestIdentityV1RoundTrip(t *testing.T) {
 }
 
 func TestSaveIdentityFile_BumpsVersionTo3(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 

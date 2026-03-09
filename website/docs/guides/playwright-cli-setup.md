@@ -67,7 +67,7 @@ skill is preferred for agent workflows.
 
 1. Install the plugin in Claude Code:
 
-   ```
+   ```bash
    claude plugin add playwright
    ```
 

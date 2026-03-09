@@ -107,6 +107,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(sendCmd())
 	rootCmd.AddCommand(replyCmd())
 	rootCmd.AddCommand(inboxCmd())
+	rootCmd.AddCommand(sentCmd())
 	rootCmd.AddCommand(statusCmd())
 	rootCmd.AddCommand(whoamiCmd())
 	rootCmd.AddCommand(versionCmd())
@@ -828,6 +829,20 @@ The daemon must be running and you must have an active session.`,
 					fmt.Printf("  Thread: %s\n", result.ThreadID)
 				}
 				fmt.Printf("  Created: %s\n", result.CreatedAt)
+				if len(result.Audiences) > 0 {
+					parts := make([]string, len(result.Audiences))
+					for i, audience := range result.Audiences {
+						parts[i] = audience.Type + ":" + audience.Value
+					}
+					fmt.Printf("  To: %s\n", strings.Join(parts, ", "))
+				}
+				if len(result.Recipients) > 0 {
+					names := make([]string, len(result.Recipients))
+					for i, recipient := range result.Recipients {
+						names[i] = recipient.AgentID
+					}
+					fmt.Printf("  Recipients: %s\n", strings.Join(names, ", "))
+				}
 				for _, w := range result.Warnings {
 					fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 				}
@@ -846,6 +861,100 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().Bool("everyone", false, "Send to all agents (alias for --to @everyone)")
 	cmd.Flags().BoolP("broadcast", "b", false, "Send to all agents (alias for --to @everyone)")
 
+	return cmd
+}
+
+func sentCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "sent",
+		Short: "List messages you sent",
+		Long: `List messages authored by the current agent, including recipient snapshots
+and durable read state.
+
+Like inbox, sent supports filtering and pagination. Use 'thrum sent show <id>'
+to inspect one sent message with full recipient state.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			to, _ := cmd.Flags().GetString("to")
+			unread, _ := cmd.Flags().GetBool("unread")
+			pageSize, _ := cmd.Flags().GetInt("page-size")
+			page, _ := cmd.Flags().GetInt("page")
+			if cmd.Flags().Changed("limit") {
+				pageSize, _ = cmd.Flags().GetInt("limit")
+			}
+
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.MessageOutbox(client, cli.OutboxOptions{
+				CallerAgentID: agentID,
+				To:            to,
+				Unread:        unread,
+				PageSize:      pageSize,
+				Page:          page,
+			})
+			if err != nil {
+				return err
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+			} else if !flagQuiet {
+				fmt.Print(cli.FormatOutbox(result))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().Int("page-size", 10, "Results per page")
+	cmd.Flags().Int("limit", 0, "Alias for --page-size")
+	cmd.Flags().Int("page", 1, "Page number")
+	cmd.Flags().String("to", "", "Only sent messages addressed to this audience or recipient (format: @agent, @role, @group, @everyone)")
+	cmd.Flags().Bool("unread", false, "Only sent messages with at least one unread recipient")
+
+	showCmd := &cobra.Command{
+		Use:   "show MSG_ID",
+		Short: "Show details for one sent message",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentID, err := resolveLocalAgentID()
+			if err != nil {
+				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.MessageGet(client, args[0])
+			if err != nil {
+				return err
+			}
+			if result.Message.Author.AgentID != agentID {
+				return fmt.Errorf("message %s was not authored by the current agent", args[0])
+			}
+
+			if flagJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				fmt.Print(cli.FormatMessageGet(result))
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(showCmd)
 	return cmd
 }
 
@@ -1357,7 +1466,7 @@ Examples:
 				}
 				identitiesDir := filepath.Join(thrumDir, "identities")
 				if _, statErr := os.Stat(identitiesDir); os.IsNotExist(statErr) {
-					return fmt.Errorf("no agent identities registered\n  Run 'thrum quickstart --role <role> --module <module>' to register")
+					return fmt.Errorf("no agent identities registered\n  Run 'thrum quickstart --name <agent-name> --role <role> --module <module>' to register")
 				}
 				return err
 			}
@@ -3754,11 +3863,11 @@ session start → set intent. If the agent is already registered, it
 re-registers automatically.
 
 Examples:
-  thrum quickstart --role implementer --module auth
-  thrum quickstart --role reviewer --module auth --intent "Reviewing PR #42"
+  thrum quickstart --name implementer_auth --role implementer --module auth
+  thrum quickstart --name reviewer_auth --role reviewer --module auth --intent "Reviewing PR #42"
   thrum quickstart --name alice --role impl --module auth --runtime codex
   thrum quickstart --name bob --role tester --module api --dry-run
-  thrum quickstart --role planner --module core --no-init`,
+  thrum quickstart --name planner_core --role planner --module core --no-init`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, _ := cmd.Flags().GetString("name")
 			display, _ := cmd.Flags().GetString("display")
@@ -4432,6 +4541,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)
 	server.RegisterHandler("message.list", messageHandler.HandleList)
+	server.RegisterHandler("message.outbox", messageHandler.HandleOutbox)
 	server.RegisterHandler("message.delete", messageHandler.HandleDelete)
 	server.RegisterHandler("message.edit", messageHandler.HandleEdit)
 	server.RegisterHandler("message.markRead", messageHandler.HandleMarkRead)
@@ -4645,6 +4755,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsRegistry.Register("message.send", websocket.Handler(messageHandler.HandleSend))
 	wsRegistry.Register("message.get", websocket.Handler(messageHandler.HandleGet))
 	wsRegistry.Register("message.list", websocket.Handler(messageHandler.HandleList))
+	wsRegistry.Register("message.outbox", websocket.Handler(messageHandler.HandleOutbox))
 	wsRegistry.Register("message.delete", websocket.Handler(messageHandler.HandleDelete))
 	wsRegistry.Register("message.edit", websocket.Handler(messageHandler.HandleEdit))
 	wsRegistry.Register("message.markRead", websocket.Handler(messageHandler.HandleMarkRead))

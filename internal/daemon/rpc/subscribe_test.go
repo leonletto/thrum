@@ -66,9 +66,12 @@ func TestSubscribe(t *testing.T) {
 			handler := NewSubscriptionHandler(st)
 
 			// Create agent and session first
-			testSessionID := setupAgentAndSession(t, st, repoID)
+			testSessionID, testAgentID := setupAgentAndSession(t, st, repoID)
 			t.Setenv("THRUM_ROLE", "test-role")
 			t.Setenv("THRUM_MODULE", "test-module")
+
+			// Inject CallerAgentID into the request
+			tt.request.CallerAgentID = testAgentID
 
 			// Call subscribe
 			params, _ := json.Marshal(tt.request)
@@ -118,13 +121,14 @@ func TestUnsubscribe(t *testing.T) {
 	handler := NewSubscriptionHandler(st)
 
 	// Setup agent and session
-	testSessionID := setupAgentAndSession(t, st, repoID)
+	testSessionID, testAgentID := setupAgentAndSession(t, st, repoID)
 	t.Setenv("THRUM_ROLE", "test-role")
 	t.Setenv("THRUM_MODULE", "test-module")
 
 	// Create a subscription first
 	subscribeReq := SubscribeRequest{
-		Scope: &types.Scope{Type: "module", Value: "auth"},
+		Scope:         &types.Scope{Type: "module", Value: "auth"},
+		CallerAgentID: testAgentID,
 	}
 	params, _ := json.Marshal(subscribeReq)
 	ctx := context.Background()
@@ -142,6 +146,7 @@ func TestUnsubscribe(t *testing.T) {
 	// Test unsubscribe
 	unsubscribeReq := UnsubscribeRequest{
 		SubscriptionID: subscriptionID,
+		CallerAgentID:  testAgentID,
 	}
 	params, _ = json.Marshal(unsubscribeReq)
 	resp, err = handler.HandleUnsubscribe(ctx, params)
@@ -192,7 +197,7 @@ func TestList(t *testing.T) {
 	handler := NewSubscriptionHandler(st)
 
 	// Setup agent and session
-	_ = setupAgentAndSession(t, st, repoID) // sessionID not used in this test
+	_, testAgentID := setupAgentAndSession(t, st, repoID)
 	t.Setenv("THRUM_ROLE", "test-role")
 	t.Setenv("THRUM_MODULE", "test-module")
 
@@ -200,9 +205,9 @@ func TestList(t *testing.T) {
 
 	// Create multiple subscriptions
 	subscriptions := []SubscribeRequest{
-		{Scope: &types.Scope{Type: "module", Value: "auth"}},
-		{MentionRole: stringPtr("reviewer")},
-		{All: true},
+		{Scope: &types.Scope{Type: "module", Value: "auth"}, CallerAgentID: testAgentID},
+		{MentionRole: stringPtr("reviewer"), CallerAgentID: testAgentID},
+		{All: true, CallerAgentID: testAgentID},
 	}
 
 	for _, sub := range subscriptions {
@@ -214,7 +219,7 @@ func TestList(t *testing.T) {
 	}
 
 	// List subscriptions
-	listReq := ListSubscriptionsRequest{}
+	listReq := ListSubscriptionsRequest{CallerAgentID: testAgentID}
 	params, _ := json.Marshal(listReq)
 	resp, err := handler.HandleList(ctx, params)
 	if err != nil {
@@ -259,9 +264,9 @@ func stringPtr(s string) *string {
 	return &s
 }
 
-func setupAgentAndSession(t *testing.T, st *state.State, repoID string) string {
+func setupAgentAndSession(t *testing.T, st *state.State, repoID string) (sessionID string, agentID string) {
 	// Register agent - use identity.GenerateAgentID to match what getCurrentSession does
-	agentID := identity.GenerateAgentID(repoID, "test-role", "test-module", "")
+	agentID = identity.GenerateAgentID(repoID, "test-role", "test-module", "")
 	agentEvent := types.AgentRegisterEvent{
 		Type:      "agent.register",
 		Timestamp: "2026-01-01T00:00:00Z",
@@ -278,7 +283,7 @@ func setupAgentAndSession(t *testing.T, st *state.State, repoID string) string {
 	st.Unlock()
 
 	// Start session
-	sessionID := "ses_test_001"
+	sessionID = "ses_test_001"
 	sessionEvent := types.AgentSessionStartEvent{
 		Type:      "agent.session.start",
 		Timestamp: "2026-01-01T00:01:00Z",
@@ -292,6 +297,5 @@ func setupAgentAndSession(t *testing.T, st *state.State, repoID string) string {
 	}
 	st.Unlock()
 
-	_ = agentID // agentID not used by callers
-	return sessionID
+	return sessionID, agentID
 }

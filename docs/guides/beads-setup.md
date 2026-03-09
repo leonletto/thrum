@@ -1,4 +1,3 @@
-
 ## Beads Setup Guide
 
 [Beads](https://github.com/leonletto/beads) is a git-backed, dependency-aware
@@ -104,6 +103,7 @@ The standard agent workflow combines both tools:
 ```bash
 # 1. Agent starts — check for assigned work
 thrum inbox --unread
+thrum sent --unread
 bd ready
 
 # 2. Claim a task and announce it

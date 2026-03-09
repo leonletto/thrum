@@ -42,14 +42,14 @@ because everything is committed to version control.
 
 ## What Each Tool Covers
 
-| Aspect                | Beads                                          | Thrum                                           |
-| --------------------- | ---------------------------------------------- | ----------------------------------------------- |
-| **Purpose**           | Task tracking and dependency management        | Agent messaging and coordination                |
-| **Primary Use**       | Persistent work state across sessions          | Communication across agents and sessions        |
-| **Key Commands**      | `bd create`, `bd ready`, `bd close`, `bd show` | `thrum send`, `thrum inbox`, `thrum agent list` |
-| **Recovery Scenario** | "What tasks am I responsible for?"             | "What messages did I miss while offline?"       |
-| **State Storage**     | `.beads/` directory in Git                     | `.thrum/` directory in Git                      |
-| **Daemon**            | None (purely CLI)                              | Optional daemon for real-time notifications     |
+| Aspect                | Beads                                          | Thrum                                                         |
+| --------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
+| **Purpose**           | Task tracking and dependency management        | Agent messaging and coordination                              |
+| **Primary Use**       | Persistent work state across sessions          | Communication across agents and sessions                      |
+| **Key Commands**      | `bd create`, `bd ready`, `bd close`, `bd show` | `thrum send`, `thrum inbox`, `thrum sent`, `thrum agent list` |
+| **Recovery Scenario** | "What tasks am I responsible for?"             | "What messages did I miss while offline?"                     |
+| **State Storage**     | `.beads/` directory in Git                     | `.thrum/` directory in Git                                    |
+| **Daemon**            | None (purely CLI)                              | Optional daemon for real-time notifications                   |
 
 Beads answers: **What should I work on?** Thrum answers: **What did others tell
 me?**
@@ -69,6 +69,9 @@ $ bd ready --assigned-to @implementer_ui
 $ thrum inbox --unread
 From: @planner
 Message: "Search UI should use the MiniSearch interface we built in thrum-c3d4"
+
+# Check sent acknowledgements or receipts
+$ thrum sent --unread
 
 # Claim the task
 $ bd update thrum-a1b2 -s in_progress
@@ -95,6 +98,9 @@ $ thrum inbox --unread
 From: @planner
 Message: "Yes, dark mode required. See design tokens in styles/theme.css"
 
+# Verify your last status message was delivered
+$ thrum sent --to @planner
+
 # Continue work with full context recovered
 ```
 
@@ -106,6 +112,9 @@ $ bd close thrum-a1b2 --comment "Implemented with dark mode support"
 
 # Notify coordinator
 $ thrum send "Search UI complete (thrum-a1b2). Ready for integration." --to @planner
+
+# Confirm coordinator received it
+$ thrum sent --to @planner
 ```
 
 ### Session 4: New agent picks up follow-up work
@@ -118,7 +127,7 @@ $ bd ready
 - thrum-e5f6: Integrate search UI into main app (depends on thrum-a1b2)
 
 # Check message history for context
-$ thrum inbox --from @implementer_ui
+$ thrum inbox
 From: @implementer_ui
 Message: "Search UI complete (thrum-a1b2). Ready for integration."
 

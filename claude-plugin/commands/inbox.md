@@ -9,4 +9,5 @@ List messages in your inbox. Messages are auto-marked as read when displayed.
 thrum inbox                  # All recent messages
 thrum inbox --unread         # Unread only
 thrum inbox --json           # Machine-readable
+thrum sent --unread          # Check sent items with unread recipients
 ```

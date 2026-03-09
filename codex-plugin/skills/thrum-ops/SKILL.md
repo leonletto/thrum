@@ -23,7 +23,8 @@ management.
 ## Operational loop
 
 1. Bootstrap identity/session (`thrum quickstart ...` or `thrum session start`).
-2. Triage with `thrum overview` and `thrum inbox --unread`.
+2. Triage with `thrum overview`, `thrum inbox --unread`, and
+   `thrum sent --unread`.
 3. Act with `send`, `reply`, `group`, `team` as needed.
 4. Persist context using update/load context flow.
 5. Verify daemon and sync health before handoff.
@@ -31,9 +32,10 @@ management.
 ## Command baseline
 
 ```bash
-thrum quickstart --role <role> --module <module> --intent "<intent>"
+thrum quickstart --name <agent-name> --role <role> --module <module> --intent "<intent>"
 thrum overview
 thrum inbox --unread
+thrum sent --unread
 thrum wait --timeout 120s
 thrum context show
 thrum sync status
@@ -74,7 +76,7 @@ Common roles: `coordinator`, `implementer`, `planner`, `reviewer`, `tester`.
 
 ```bash
 # Full registration
-thrum quickstart --role implementer --module <branch> --intent "Implementing <epic>"
+thrum quickstart --name <agent-name> --role implementer --module <branch> --intent "Implementing <epic>"
 
 # Just update intent
 thrum session set-intent "Now working on X"

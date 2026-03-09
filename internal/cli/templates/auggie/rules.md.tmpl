@@ -11,7 +11,7 @@ This project uses Thrum for multi-agent coordination.
 
 Register your agent before starting work:
 ```bash
-thrum quickstart --role {{.AgentRole}} --module {{.AgentModule}} --json
+thrum quickstart --name {{.AgentName}} --role {{.AgentRole}} --module {{.AgentModule}} --json
 ```
 
 If an identity already exists, quickstart will reuse it automatically.
@@ -20,6 +20,7 @@ If an identity already exists, quickstart will reuse it automatically.
 
 - **Send:** `thrum send "message" --to @agent --json`
 - **Inbox:** `thrum inbox --unread --json`
+- **Sent:** `thrum sent --unread --json`
 - **Wait:** `thrum wait --timeout 5m --json`
 - **Agents:** `thrum agent list --json`
 - **Status:** `thrum status --json`

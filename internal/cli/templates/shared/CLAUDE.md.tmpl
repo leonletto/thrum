@@ -16,6 +16,7 @@ Common roles: `coordinator`, `implementer`, `reviewer`, `planner`, `tester`
 ## During Work
 
 - **Check inbox** before starting and periodically: `thrum inbox --unread`
+- **Check sent items** after delegating or replying: `thrum sent --unread`
 - **Send status updates** when starting/finishing significant work:
   `thrum send "Starting task X" --to @coordinator`
 - **Reply to messages**: `thrum reply <MSG_ID> "your response"`
@@ -38,6 +39,7 @@ When working with other agents:
 4. **Wait for response** (blocking):
    `thrum wait --timeout 5m --mention @<your-role>`
 5. **Check for messages** (non-blocking): `thrum inbox --unread`
+6. **Verify outgoing delivery/read state**: `thrum sent --to @coordinator`
 
 ## MCP Messaging Protocol
 
