@@ -1,3 +1,4 @@
+
 ## Sync Protocol
 
 The sync protocol keeps message logs synchronized across repository clones using
