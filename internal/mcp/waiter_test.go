@@ -208,3 +208,51 @@ func TestDeriveAgentStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestMentionSubscriptionTargets(t *testing.T) {
+	tests := []struct {
+		name      string
+		agentID   string
+		agentRole string
+		want      []string
+	}{
+		{
+			name:      "named agent includes name and role",
+			agentID:   "coordinator_main",
+			agentRole: "coordinator",
+			want:      []string{"coordinator_main", "coordinator"},
+		},
+		{
+			name:      "unnamed agent includes id and role",
+			agentID:   "implementer_ABC123DEF4",
+			agentRole: "implementer",
+			want:      []string{"implementer_ABC123DEF4", "implementer"},
+		},
+		{
+			name:      "dedupes identical values",
+			agentID:   "reviewer",
+			agentRole: "reviewer",
+			want:      []string{"reviewer"},
+		},
+		{
+			name:      "role only",
+			agentID:   "",
+			agentRole: "tester",
+			want:      []string{"tester"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mentionSubscriptionTargets(tt.agentID, tt.agentRole)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Fatalf("got %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}
