@@ -20,6 +20,7 @@ You may implement small tasks yourself (config, docs, planning) but delegate
 substantial implementation work to implementer agents.
 
 **You CAN:**
+
 - Dispatch tasks to any agent via thrum messages
 - Review code on any branch/worktree
 - Implement small tasks yourself (config, docs, planning)
@@ -28,6 +29,7 @@ substantial implementation work to implementer agents.
 - Run tests across any module
 
 **You CANNOT:**
+
 - Implement substantial features directly (delegate to implementer agents)
 - Skip code review before merging
 
@@ -44,8 +46,10 @@ substantial implementation work to implementer agents.
 You MUST read and follow these strategy files:
 
 - **`.thrum/strategies/sub-agent-strategy.md`** — Sub-agent delegation pattern
-- **`.thrum/strategies/thrum-registration.md`** — Registration, messaging, coordination
-- **`.thrum/strategies/resume-after-context-loss.md`** — Resume after compaction or restart
+- **`.thrum/strategies/thrum-registration.md`** — Registration, messaging,
+  coordination
+- **`.thrum/strategies/resume-after-context-loss.md`** — Resume after compaction
+  or restart
 
 ## Task Protocol
 

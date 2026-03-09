@@ -31,8 +31,10 @@ You MUST read and follow these strategy files:
 - **`.thrum/strategies/sub-agent-strategy.md`** — Sub-agent delegation pattern.
   Delegate code exploration and research to sub-agents rather than reading files
   directly into your main context.
-- **`.thrum/strategies/thrum-registration.md`** — Registration, messaging, coordination
-- **`.thrum/strategies/resume-after-context-loss.md`** — Resume after compaction or restart
+- **`.thrum/strategies/thrum-registration.md`** — Registration, messaging,
+  coordination
+- **`.thrum/strategies/resume-after-context-loss.md`** — Resume after compaction
+  or restart
 
 ## Task Protocol
 

@@ -42,13 +42,39 @@ digraph when_to_use {
 
 - No design doc exists yet — use brainstorming skill first
 - No plan file exists yet — use writing-plans skill first
-- Tasks already exist in beads — go straight to creating the implementation prompt closely following the template (implementation-agent.md)
+- Tasks already exist in beads — go straight to creating the implementation
+  prompt closely following the template (implementation-agent.md)
+
+## Prerequisites
+
+Before starting, verify beads is installed:
+
+```bash
+bd version
+```
+
+If `bd` is not found, stop and tell the user:
+
+> project-setup requires beads (`bd`) for task tracking with dependencies.
+> Install it:
+>
+> ```bash
+> brew install dolt                    # required dependency
+> brew install steveyegge/beads/bd     # beads CLI
+> bd init                              # initialize in your repo
+> ```
+>
+> See the [beads repo](https://github.com/steveyegge/beads) for alternative
+> install methods. Requires dolt v1.81.8+ and bd v0.59.0+.
+
+Do not proceed without beads. Do not fall back to markdown task lists or
+TodoWrite.
 
 ## Inputs
 
 Primary input: **plan file path** (output of writing-plans, e.g.
-`dev-docs/plans/2026-02-21-feature-plan.md`). The plan references the design doc —
-both are read in Phase 1.
+`dev-docs/plans/2026-02-21-feature-plan.md`). The plan references the design doc
+— both are read in Phase 1.
 
 Also needed from CLAUDE.md or conversation context:
 
@@ -68,10 +94,10 @@ components, data flow, and interfaces.
 
 This skill produces two complementary artifacts per task:
 
-| Artifact | Contains | Authoritative For |
-|----------|----------|-------------------|
-| **Beads task** | Acceptance criteria, deps, status | What must be true to close the task |
-| **Plan file section** | Step-by-step code, file paths, verify commands | How to implement the task |
+| Artifact              | Contains                                       | Authoritative For                   |
+| --------------------- | ---------------------------------------------- | ----------------------------------- |
+| **Beads task**        | Acceptance criteria, deps, status              | What must be true to close the task |
+| **Plan file section** | Step-by-step code, file paths, verify commands | How to implement the task           |
 
 Both are required. Agents read `bd show {TASK_ID}` first (what must be true),
 then search the plan file for the matching `## Task: {BEAD_ID}` section (how to
@@ -116,11 +142,9 @@ non-negotiable criteria:
    ```
 3. **If found:** Read it and extract the key anti-patterns. These will be
    injected into each epic's prompt in Phase 4.
-4. **If not found:** Offer to create one from the template:
-   ```
-   toolkit/templates/agent-dev-workflow/philosophy-template.md
-   ```
-   Use `AskUserQuestion` to ask whether to create it now or skip.
+4. **If not found:** Offer to create one from the `philosophy-template.md` file
+   in this skill's `resources/` directory. Use `AskUserQuestion` to ask whether
+   to create it now or skip.
 
 This is the project's "rules of engagement" for implementation agents. Without
 it, agents can only verify "tests pass" — they can't verify architectural
@@ -243,8 +267,8 @@ minutes). If a task has more than 5 steps, split it.
 ### Ensure Refactoring Epic Exists
 
 Implementation agents log DRY/refactoring opportunities they discover during
-feature work. These go into a persistent **refactoring epic** in beads. Check
-if one exists; if not, create it:
+feature work. These go into a persistent **refactoring epic** in beads. Check if
+one exists; if not, create it:
 
 ```bash
 # Search for existing refactoring epic
@@ -312,7 +336,7 @@ For each cross-epic dependency (where the blocker is in a different epic than
 the blocked task), record:
 
 | Blocked Task | Blocked By | Blocker's Epic |
-|-------------|------------|----------------|
+| ------------ | ---------- | -------------- |
 
 Save this map — it feeds Phase 4, where each implementation prompt will include
 its epic's cross-epic dependencies so agents know exactly which external tasks
@@ -348,20 +372,22 @@ the options from the gathered state:
 
 **Option types to present:**
 
-| Scenario                                           | Option label                          |
-| -------------------------------------------------- | ------------------------------------- |
-| Existing idle worktree with related branch         | "Reuse `<path>` (`<branch>`)"        |
-| Existing idle worktree, unrelated branch           | "Reuse `<path>`, create new branch"  |
-| No suitable worktree exists                        | "Create new worktree"                |
-| Work is small enough for the current branch        | "Use current worktree (`<branch>`)"  |
+| Scenario                                    | Option label                        |
+| ------------------------------------------- | ----------------------------------- |
+| Existing idle worktree with related branch  | "Reuse `<path>` (`<branch>`)"       |
+| Existing idle worktree, unrelated branch    | "Reuse `<path>`, create new branch" |
+| No suitable worktree exists                 | "Create new worktree"               |
+| Work is small enough for the current branch | "Use current worktree (`<branch>`)" |
 
 Include in each option's description:
+
 - The worktree path and current branch
 - Whether it's clean or has uncommitted changes
 - Whether it has an existing agent registered
 - Its status from CLAUDE.md (active/idle/merged)
 
 **For "Create new worktree"**, suggest:
+
 - Path: `~/.workspaces/{repo}/{feature}` (from CLAUDE.md convention)
 - Branch: `feature/{feature-name}` (from `thrum-dev`)
 
@@ -487,9 +513,9 @@ success, it's fine.
 
 At the end of this phase, you should have a confirmed assignment for each epic:
 
-| Epic | Worktree Path | Branch | Agent Name |
-|------|---------------|--------|------------|
-| `<epic-id>` | `<path>` | `<branch>` | `<agent-name>` |
+| Epic        | Worktree Path | Branch     | Agent Name     |
+| ----------- | ------------- | ---------- | -------------- |
+| `<epic-id>` | `<path>`      | `<branch>` | `<agent-name>` |
 
 These values feed directly into the `{{PLACEHOLDER}}` resolution in Phase 4.
 
@@ -506,9 +532,8 @@ For each epic/worktree assignment, generate a filled prompt file.
 
 ### Step 1: Read the template
 
-```text
-Read toolkit/templates/agent-dev-workflow/implementation-agent.md
-```
+Read the `implementation-agent.md` file from this skill's `resources/`
+directory.
 
 This is the **source template**. Do not work from memory — read the actual file
 every time.
@@ -536,24 +561,24 @@ decisions.
 
 ### Step 2: Resolve all placeholders
 
-Perform literal find-and-replace on every `{{PLACEHOLDER}}` in the template.
-All worktree-related values come from the Phase 3 assignments:
+Perform literal find-and-replace on every `{{PLACEHOLDER}}` in the template. All
+worktree-related values come from the Phase 3 assignments:
 
-| Placeholder            | Source                                              |
-| ---------------------- | --------------------------------------------------- |
-| `{{EPIC_ID}}`          | Beads epic ID from Phase 2                          |
-| `{{EPIC_TITLE}}`       | Epic title (used in commit messages)                |
-| `{{WORKTREE_PATH}}`    | **From Phase 3 worktree assignment**                |
-| `{{BRANCH_NAME}}`      | **From Phase 3 worktree assignment**                |
-| `{{PROJECT_ROOT}}`     | Absolute path to the project root                   |
-| `{{DESIGN_DOC}}`       | **Absolute path** to the design spec                |
-| `{{REFERENCE_CODE}}`   | Relevant reference code paths (relative OK if committed) |
+| Placeholder            | Source                                                                                                                                                                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{{EPIC_ID}}`          | Beads epic ID from Phase 2                                                                                                                                                                                                  |
+| `{{EPIC_TITLE}}`       | Epic title (used in commit messages)                                                                                                                                                                                        |
+| `{{WORKTREE_PATH}}`    | **From Phase 3 worktree assignment**                                                                                                                                                                                        |
+| `{{BRANCH_NAME}}`      | **From Phase 3 worktree assignment**                                                                                                                                                                                        |
+| `{{PROJECT_ROOT}}`     | Absolute path to the project root                                                                                                                                                                                           |
+| `{{DESIGN_DOC}}`       | **Absolute path** to the design spec                                                                                                                                                                                        |
+| `{{REFERENCE_CODE}}`   | Relevant reference code paths (relative OK if committed)                                                                                                                                                                    |
 | `{{QUALITY_COMMANDS}}` | Test/lint commands — **scoped to packages this epic modifies**. Avoid full-suite commands (e.g., `go test ./...`) that hit pre-existing failures. Example: `go build ./... && go test ./internal/processing/localstore/ -v` |
-| `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                   |
-| `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                 |
-| `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)  |
-| `{{ANTI_PATTERNS}}`    | Generated in Step 1.5 from design doc + philosophy doc    |
-| `{{CROSS_EPIC_DEPS}}`  | From Phase 2 cross-epic dependency map. If no cross-epic deps, replace with "No cross-epic dependencies." |
+| `{{COVERAGE_TARGET}}`  | Coverage threshold (e.g., `>80%`)                                                                                                                                                                                           |
+| `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                                                                                                                                                                                         |
+| `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)                                                                                                                                                                          |
+| `{{ANTI_PATTERNS}}`    | Generated in Step 1.5 from design doc + philosophy doc                                                                                                                                                                      |
+| `{{CROSS_EPIC_DEPS}}`  | From Phase 2 cross-epic dependency map. If no cross-epic deps, replace with "No cross-epic dependencies."                                                                                                                   |
 
 **IMPORTANT — Absolute paths for gitignored files:** `{{DESIGN_DOC}}`,
 `{{PLAN_FILE}}`, and the saved prompt path (`dev-docs/prompts/`) are typically
@@ -561,7 +586,8 @@ gitignored. Agents in worktrees cannot resolve relative paths to these files
 because worktrees only share committed content. Always resolve these to absolute
 paths (e.g., `/Users/you/project/dev-docs/plans/file.md`, not
 `dev-docs/plans/file.md`). This also applies to beads task descriptions — any
-reference to a plan or design doc in a task description must be an absolute path.
+reference to a plan or design doc in a task description must be an absolute
+path.
 
 **Strip template meta-sections.** The following sections exist to document the
 template itself and MUST NOT appear in the filled prompt:
@@ -602,10 +628,12 @@ architecture notes specific to this feature:
 ## Worktree Setup
 
 <!-- If worktree was already created in Phase 3, note that here: -->
-Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`.
-Agent `{{AGENT_NAME}}` registered.
+
+Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`. Agent
+`{{AGENT_NAME}}` registered.
 
 <!-- If worktree needs to be created by the implementation agent: -->
+
 ./scripts/setup-worktree-thrum.sh {{WORKTREE_PATH}} {{BRANCH_NAME}} \
  --identity {{AGENT_NAME}} --role implementer --base thrum-dev
 
@@ -643,8 +671,8 @@ work they can't finish. Always run `bd blocked` to verify.
 Check `git worktree list` and `bd list --status=in_progress` for idle worktrees
 before proposing new ones. Never silently assign worktrees.
 
-**Wrong base branch:** The setup script defaults `--base` to `main`. Always
-pass `--base thrum-dev` explicitly since features branch from `thrum-dev`.
+**Wrong base branch:** The setup script defaults `--base` to `main`. Always pass
+`--base thrum-dev` explicitly since features branch from `thrum-dev`.
 
 **Generating prompts before worktree setup:** Prompts embed the worktree path,
 branch, and agent name. These must be confirmed in Phase 3 before generating
