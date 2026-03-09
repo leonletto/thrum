@@ -340,6 +340,8 @@ func TestAgentList(t *testing.T) {
 }
 
 func TestAgentWhoami(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 

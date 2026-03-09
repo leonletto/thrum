@@ -67,10 +67,9 @@ func TestMessageDeleteByScope(t *testing.T) {
 		// Send two messages with group scope "backend"
 		for i := 0; i < 2; i++ {
 			req := SendRequest{
-				Content: "Backend message",
-				Scopes: []types.Scope{
-					{Type: "group", Value: "backend"},
-				},
+				Content:       "Backend message",
+				Scopes:        []types.Scope{{Type: "group", Value: "backend"}},
+				CallerAgentID: agentID,
 			}
 			params, _ := json.Marshal(req)
 			_, err := handler.HandleSend(context.Background(), params)
@@ -166,6 +165,7 @@ func TestMessageDeleteByScope(t *testing.T) {
 			Refs: []types.Ref{
 				{Type: "issue", Value: "beads-999"},
 			},
+			CallerAgentID: agentID,
 		}
 		sendParams, _ := json.Marshal(sendReq)
 		sendResp, err := handler.HandleSend(context.Background(), sendParams)
@@ -180,7 +180,8 @@ func TestMessageDeleteByScope(t *testing.T) {
 
 		// Mark it as read to populate message_reads
 		markReadReq := MarkReadRequest{
-			MessageIDs: []string{msgID},
+			MessageIDs:    []string{msgID},
+			CallerAgentID: agentID,
 		}
 		markReadParams, _ := json.Marshal(markReadReq)
 		_, err = handler.HandleMarkRead(context.Background(), markReadParams)
@@ -244,10 +245,9 @@ func TestMessageDeleteByScope(t *testing.T) {
 	t.Run("messages without matching scope are NOT deleted", func(t *testing.T) {
 		// Send one message with the target scope
 		targetReq := SendRequest{
-			Content: "Target message",
-			Scopes: []types.Scope{
-				{Type: "group", Value: "to-delete"},
-			},
+			Content:       "Target message",
+			Scopes:        []types.Scope{{Type: "group", Value: "to-delete"}},
+			CallerAgentID: agentID,
 		}
 		targetParams, _ := json.Marshal(targetReq)
 		_, err := handler.HandleSend(context.Background(), targetParams)
@@ -257,10 +257,9 @@ func TestMessageDeleteByScope(t *testing.T) {
 
 		// Send another message with a different scope
 		otherReq := SendRequest{
-			Content: "Other message",
-			Scopes: []types.Scope{
-				{Type: "group", Value: "keep-me"},
-			},
+			Content:       "Other message",
+			Scopes:        []types.Scope{{Type: "group", Value: "keep-me"}},
+			CallerAgentID: agentID,
 		}
 		otherParams, _ := json.Marshal(otherReq)
 		otherSendResp, err := handler.HandleSend(context.Background(), otherParams)

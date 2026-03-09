@@ -15,6 +15,8 @@ import (
 func setupFilterTest(t *testing.T) (handler *MessageHandler, agentID string, cleanup func()) {
 	t.Helper()
 
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {

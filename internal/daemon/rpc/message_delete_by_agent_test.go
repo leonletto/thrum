@@ -51,7 +51,7 @@ func TestMessageDeleteByAgent(t *testing.T) {
 	t.Run("delete all messages for an agent", func(t *testing.T) {
 		// Send 3 messages from the agent
 		for i := 0; i < 3; i++ {
-			sendReq := SendRequest{Content: "Test message to delete by agent"}
+			sendReq := SendRequest{Content: "Test message to delete by agent", CallerAgentID: agentID}
 			sendParams, _ := json.Marshal(sendReq)
 			_, err := handler.HandleSend(context.Background(), sendParams)
 			if err != nil {
@@ -157,14 +157,15 @@ func TestMessageDeleteByAgent(t *testing.T) {
 
 		// Send a message with a scope
 		sendReq := SendRequest{
-			Content: "Message with scope",
-			Scopes:  []types.Scope{{Type: "group", Value: "backend"}},
+			Content:       "Message with scope",
+			Scopes:        []types.Scope{{Type: "group", Value: "backend"}},
+			CallerAgentID: agent3ID,
 		}
 		sendParams, _ := json.Marshal(sendReq)
 		respRaw, err := handler.HandleSend(context.Background(), sendParams)
 		if err != nil {
 			// If send with scope fails, send a plain message
-			sendReq2 := SendRequest{Content: "Message for related records test"}
+			sendReq2 := SendRequest{Content: "Message for related records test", CallerAgentID: agent3ID}
 			sendParams2, _ := json.Marshal(sendReq2)
 			respRaw, err = handler.HandleSend(context.Background(), sendParams2)
 			if err != nil {

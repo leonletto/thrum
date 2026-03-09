@@ -48,9 +48,9 @@ func setupReplyTest(t *testing.T) (*MessageHandler, *state.State, string) {
 	return handler, st, agentID
 }
 
-func sendTestMessage(t *testing.T, handler *MessageHandler, content string) string {
+func sendTestMessage(t *testing.T, handler *MessageHandler, content string, agentID string) string {
 	t.Helper()
-	params, _ := json.Marshal(SendRequest{Content: content})
+	params, _ := json.Marshal(SendRequest{Content: content, CallerAgentID: agentID})
 	resp, err := handler.HandleSend(context.Background(), params)
 	if err != nil {
 		t.Fatalf("send message: %v", err)
@@ -59,15 +59,16 @@ func sendTestMessage(t *testing.T, handler *MessageHandler, content string) stri
 }
 
 func TestReplyTo_RefCreated(t *testing.T) {
-	handler, st, _ := setupReplyTest(t)
+	handler, st, agentID := setupReplyTest(t)
 
 	// Send parent message
-	parentID := sendTestMessage(t, handler, "Parent message")
+	parentID := sendTestMessage(t, handler, "Parent message", agentID)
 
 	// Send reply
 	replyParams, _ := json.Marshal(SendRequest{
-		Content: "This is a reply",
-		ReplyTo: parentID,
+		Content:       "This is a reply",
+		ReplyTo:       parentID,
+		CallerAgentID: agentID,
 	})
 	resp, err := handler.HandleSend(context.Background(), replyParams)
 	if err != nil {
@@ -90,11 +91,12 @@ func TestReplyTo_RefCreated(t *testing.T) {
 }
 
 func TestReplyTo_InvalidParent(t *testing.T) {
-	handler, _, _ := setupReplyTest(t)
+	handler, _, agentID := setupReplyTest(t)
 
 	params, _ := json.Marshal(SendRequest{
-		Content: "Reply to nothing",
-		ReplyTo: "msg_nonexistent",
+		Content:       "Reply to nothing",
+		ReplyTo:       "msg_nonexistent",
+		CallerAgentID: agentID,
 	})
 	_, err := handler.HandleSend(context.Background(), params)
 	if err == nil {
@@ -106,9 +108,9 @@ func TestReplyTo_InvalidParent(t *testing.T) {
 }
 
 func TestReplyTo_NoReplyTo_BackwardCompat(t *testing.T) {
-	handler, st, _ := setupReplyTest(t)
+	handler, st, agentID := setupReplyTest(t)
 
-	msgID := sendTestMessage(t, handler, "Regular message")
+	msgID := sendTestMessage(t, handler, "Regular message", agentID)
 
 	// Verify no reply_to ref exists
 	var count int
@@ -125,10 +127,10 @@ func TestReplyTo_NoReplyTo_BackwardCompat(t *testing.T) {
 }
 
 func TestReplyTo_GetReturnsReplyTo(t *testing.T) {
-	handler, _, _ := setupReplyTest(t)
+	handler, _, agentID := setupReplyTest(t)
 
-	parentID := sendTestMessage(t, handler, "Parent")
-	replyParams, _ := json.Marshal(SendRequest{Content: "Reply", ReplyTo: parentID})
+	parentID := sendTestMessage(t, handler, "Parent", agentID)
+	replyParams, _ := json.Marshal(SendRequest{Content: "Reply", ReplyTo: parentID, CallerAgentID: agentID})
 	resp, err := handler.HandleSend(context.Background(), replyParams)
 	if err != nil {
 		t.Fatalf("send reply: %v", err)
@@ -148,10 +150,10 @@ func TestReplyTo_GetReturnsReplyTo(t *testing.T) {
 }
 
 func TestReplyTo_ListReturnsReplyTo(t *testing.T) {
-	handler, _, _ := setupReplyTest(t)
+	handler, _, agentID := setupReplyTest(t)
 
-	parentID := sendTestMessage(t, handler, "Parent for list")
-	replyParams, _ := json.Marshal(SendRequest{Content: "Reply for list", ReplyTo: parentID})
+	parentID := sendTestMessage(t, handler, "Parent for list", agentID)
+	replyParams, _ := json.Marshal(SendRequest{Content: "Reply for list", ReplyTo: parentID, CallerAgentID: agentID})
 	if _, err := handler.HandleSend(context.Background(), replyParams); err != nil {
 		t.Fatalf("send reply: %v", err)
 	}
@@ -192,15 +194,16 @@ func TestReplyTo_ListReturnsReplyTo(t *testing.T) {
 }
 
 func TestAutoThreadOnReply(t *testing.T) {
-	handler, st, _ := setupReplyTest(t)
+	handler, st, agentID := setupReplyTest(t)
 
 	// Send root message (no thread_id)
-	rootID := sendTestMessage(t, handler, "Root message")
+	rootID := sendTestMessage(t, handler, "Root message", agentID)
 
 	// Send a reply to it
 	replyParams, _ := json.Marshal(SendRequest{
-		Content: "Reply to root",
-		ReplyTo: rootID,
+		Content:       "Reply to root",
+		ReplyTo:       rootID,
+		CallerAgentID: agentID,
 	})
 	replyResp, err := handler.HandleSend(context.Background(), replyParams)
 	if err != nil {
@@ -239,13 +242,13 @@ func TestAutoThreadOnReply(t *testing.T) {
 }
 
 func TestAutoThreadJoinsExistingThread(t *testing.T) {
-	handler, st, _ := setupReplyTest(t)
+	handler, st, agentID := setupReplyTest(t)
 
 	// Send root message
-	rootID := sendTestMessage(t, handler, "Root message")
+	rootID := sendTestMessage(t, handler, "Root message", agentID)
 
 	// First reply — creates a new thread
-	reply1Params, _ := json.Marshal(SendRequest{Content: "First reply", ReplyTo: rootID})
+	reply1Params, _ := json.Marshal(SendRequest{Content: "First reply", ReplyTo: rootID, CallerAgentID: agentID})
 	reply1Resp, err := handler.HandleSend(context.Background(), reply1Params)
 	if err != nil {
 		t.Fatalf("send first reply: %v", err)
@@ -258,7 +261,7 @@ func TestAutoThreadJoinsExistingThread(t *testing.T) {
 	}
 
 	// Second reply to the same root
-	reply2Params, _ := json.Marshal(SendRequest{Content: "Second reply", ReplyTo: rootID})
+	reply2Params, _ := json.Marshal(SendRequest{Content: "Second reply", ReplyTo: rootID, CallerAgentID: agentID})
 	reply2Resp, err := handler.HandleSend(context.Background(), reply2Params)
 	if err != nil {
 		t.Fatalf("send second reply: %v", err)
@@ -280,12 +283,12 @@ func TestAutoThreadJoinsExistingThread(t *testing.T) {
 }
 
 func TestAutoThreadDeepChain(t *testing.T) {
-	handler, st, _ := setupReplyTest(t)
+	handler, st, agentID := setupReplyTest(t)
 
 	// A -> B (reply to A) -> C (reply to B)
-	aID := sendTestMessage(t, handler, "Message A")
+	aID := sendTestMessage(t, handler, "Message A", agentID)
 
-	bParams, _ := json.Marshal(SendRequest{Content: "Message B", ReplyTo: aID})
+	bParams, _ := json.Marshal(SendRequest{Content: "Message B", ReplyTo: aID, CallerAgentID: agentID})
 	bResp, err := handler.HandleSend(context.Background(), bParams)
 	if err != nil {
 		t.Fatalf("send B: %v", err)
@@ -293,7 +296,7 @@ func TestAutoThreadDeepChain(t *testing.T) {
 	bID := bResp.(*SendResponse).MessageID
 	threadID := bResp.(*SendResponse).ThreadID
 
-	cParams, _ := json.Marshal(SendRequest{Content: "Message C", ReplyTo: bID})
+	cParams, _ := json.Marshal(SendRequest{Content: "Message C", ReplyTo: bID, CallerAgentID: agentID})
 	cResp, err := handler.HandleSend(context.Background(), cParams)
 	if err != nil {
 		t.Fatalf("send C: %v", err)
