@@ -458,6 +458,9 @@ thrum send "PR #42 ready for review: JWT auth implementation" \
 # 3. Reviewers check their inbox
 thrum inbox --mentions
 
+# 3b. Implementer verifies the review request recipients
+thrum sent --to @reviewers
+
 # 4. Reviewer responds
 thrum reply msg_01HXE... "Reviewed. LGTM with minor comments on error handling."
 ```
@@ -489,6 +492,7 @@ thrum context prime
 
 # Check for urgent messages
 thrum inbox --unread
+thrum sent --unread
 
 # Resume work based on recovered context
 thrum agent set-intent "Resuming JWT implementation after compaction"
@@ -521,6 +525,7 @@ thrum send "Both features shipping in v0.4" --to @backend
 cd ~/.workspaces/repo/auth
 export THRUM_NAME=furiosa
 thrum inbox --unread
+thrum sent --to @coord_main
 thrum send "Auth complete, 15 tests passing" --to @coord_main
 ```
 

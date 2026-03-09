@@ -7,6 +7,7 @@
 ```bash
 thrum quickstart --name <agent-name> --role implementer --module <branch-name> --intent "What you are working on"
 thrum inbox --unread
+thrum sent --unread
 thrum send "Starting work on <task>" --to @<coordinator-name>
 ```
 
