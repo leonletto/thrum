@@ -1,4 +1,3 @@
-
 ## Multi-Agent Support
 
 > See also: [Why Thrum Exists](philosophy.md) for the philosophy behind

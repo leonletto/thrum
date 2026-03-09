@@ -55,22 +55,22 @@ cd your-project
 bd init
 ```
 
-`bd init` v0.59.0+ defaults to a **Dolt backend** (not SQLite) running in
-server mode. It spawns a background `dolt sql-server` process and auto-restarts
-it on each `bd` command if it's not running.
+`bd init` v0.59.0+ defaults to a **Dolt backend** (not SQLite) running in server
+mode. It spawns a background `dolt sql-server` process and auto-restarts it on
+each `bd` command if it's not running.
 
 The `.beads/` directory it creates:
 
-| Path                    | Purpose                                          |
-| ----------------------- | ------------------------------------------------ |
-| `config.yaml`           | Team-level config (committed to git)             |
-| `metadata.json`         | Local state: backend, mode, database name (gitignored) |
-| `.gitignore`            | Ignores lock files, pid files, dolt internals    |
-| `interactions.jsonl`    | Interaction log                                  |
-| `README.md`             | Quick reference                                  |
-| `dolt/config.yaml`      | Dolt server config                               |
-| `dolt/<reponame>/`      | Dolt database (synced via `refs/dolt/data`)      |
-| `dolt-server.pid/port/log` | Server process files (gitignored)             |
+| Path                       | Purpose                                                |
+| -------------------------- | ------------------------------------------------------ |
+| `config.yaml`              | Team-level config (committed to git)                   |
+| `metadata.json`            | Local state: backend, mode, database name (gitignored) |
+| `.gitignore`               | Ignores lock files, pid files, dolt internals          |
+| `interactions.jsonl`       | Interaction log                                        |
+| `README.md`                | Quick reference                                        |
+| `dolt/config.yaml`         | Dolt server config                                     |
+| `dolt/<reponame>/`         | Dolt database (synced via `refs/dolt/data`)            |
+| `dolt-server.pid/port/log` | Server process files (gitignored)                      |
 
 `bd init` also creates `AGENTS.md` in the repo root with agent instructions.
 
@@ -119,8 +119,8 @@ bd stats
 
 ### Dolt Sync Setup
 
-Beads uses `refs/dolt/data` to sync task state via your Git remote — no
-separate database server needed.
+Beads uses `refs/dolt/data` to sync task state via your Git remote — no separate
+database server needed.
 
 ```bash
 # Add remote (using your existing git remote)
@@ -130,8 +130,8 @@ bd dolt remote add origin "file:///path/to/your/repo/.git"
 bd dolt remote add origin "git+ssh://git@github.com/org/repo.git"
 ```
 
-On a fresh repo with no prior `refs/dolt/data`, the auto-push after
-`remote add` succeeds without `--force`.
+On a fresh repo with no prior `refs/dolt/data`, the auto-push after `remote add`
+succeeds without `--force`.
 
 **Daily sync workflow:**
 
@@ -228,32 +228,32 @@ context compaction.
 
 ### Common Errors and Fixes
 
-**"no store available" on `bd dolt push` or `bd dolt commit`**
-Bug in bd v0.55.4. Upgrade: `brew upgrade beads` (must be 0.59.0+).
+**"no store available" on `bd dolt push` or `bd dolt commit`** Bug in bd
+v0.55.4. Upgrade: `brew upgrade beads` (must be 0.59.0+).
 
-**"no common ancestor" on push**
-Stale `refs/dolt/data` from a previous database. Clear it and retry:
+**"no common ancestor" on push** Stale `refs/dolt/data` from a previous
+database. Clear it and retry:
 
 ```bash
 git update-ref -d refs/dolt/data
 ```
 
-**"cannot merge with uncommitted changes" on pull**
-Run `bd dolt commit` before `bd dolt pull`.
+**"cannot merge with uncommitted changes" on pull** Run `bd dolt commit` before
+`bd dolt pull`.
 
-**"fatal: Unable to read current working directory"**
-The dolt server's CWD no longer exists. Restart it:
+**"fatal: Unable to read current working directory"** The dolt server's CWD no
+longer exists. Restart it:
 
 ```bash
 pkill -f "dolt sql-server"
 bd list   # auto-restarts
 ```
 
-**brew / dolt / bd not found over SSH**
-Homebrew on ARM64 Mac installs to `/opt/homebrew/bin`, not in the default SSH
-PATH. Use a login shell: `ssh host 'bash -lc "bd version"'`
+**brew / dolt / bd not found over SSH** Homebrew on ARM64 Mac installs to
+`/opt/homebrew/bin`, not in the default SSH PATH. Use a login shell:
+`ssh host 'bash -lc "bd version"'`
 
-**Stale LOCK files after crash**
+### Stale LOCK files after crash
 
 ```bash
 bd doctor --fix --yes
@@ -261,34 +261,33 @@ bd doctor --fix --yes
 rm .beads/dolt/<reponame>/.dolt/noms/LOCK
 ```
 
-**Journal corruption from mixed CLI/server access**
-Caused by running raw `dolt` CLI while the server is running. Prevention: always
-use `bd dolt ...` commands. Recovery: stop the server, delete the journal, and
-restart.
+**Journal corruption from mixed CLI/server access** Caused by running raw `dolt`
+CLI while the server is running. Prevention: always use `bd dolt ...` commands.
+Recovery: stop the server, delete the journal, and restart.
 
 ### Commands Reference
 
-| Command                                          | Purpose                                      |
-| ------------------------------------------------ | -------------------------------------------- |
-| `bd ready`                                       | Tasks with no blockers                       |
-| `bd list`                                        | All open issues                              |
-| `bd list --status=in_progress`                   | Active work                                  |
-| `bd blocked`                                     | Blocked issues with reasons                  |
-| `bd show <id>`                                   | Full issue detail                            |
-| `bd stats`                                       | Project health overview                      |
+| Command                                            | Purpose                                    |
+| -------------------------------------------------- | ------------------------------------------ |
+| `bd ready`                                         | Tasks with no blockers                     |
+| `bd list`                                          | All open issues                            |
+| `bd list --status=in_progress`                     | Active work                                |
+| `bd blocked`                                       | Blocked issues with reasons                |
+| `bd show <id>`                                     | Full issue detail                          |
+| `bd stats`                                         | Project health overview                    |
 | `bd create --title="..." --type=task --priority=2` | Create an issue                            |
-| `bd update <id> --status=in_progress`            | Claim work                                   |
-| `bd close <id>`                                  | Mark complete                                |
-| `bd dep <blocker> --blocks <blocked>`            | Blocker must close before blocked is ready   |
-| `bd dep tree <epic-id>`                          | Show dependency graph                        |
-| `bd epic status <epic-id>`                       | Progress on epic children                    |
-| `bd comments add <id> "msg"`                     | Add comment (subcommand before ID)           |
-| `bd search "query"`                              | Search issues by text                        |
-| `bd dolt commit`                                 | Commit working set changes                   |
-| `bd dolt push`                                   | Push to remote                               |
-| `bd dolt pull`                                   | Pull from remote (commit first)              |
-| `bd doctor`                                      | Health check                                 |
-| `bd doctor --fix --yes`                          | Auto-fix stale locks and metadata            |
+| `bd update <id> --status=in_progress`              | Claim work                                 |
+| `bd close <id>`                                    | Mark complete                              |
+| `bd dep <blocker> --blocks <blocked>`              | Blocker must close before blocked is ready |
+| `bd dep tree <epic-id>`                            | Show dependency graph                      |
+| `bd epic status <epic-id>`                         | Progress on epic children                  |
+| `bd comments add <id> "msg"`                       | Add comment (subcommand before ID)         |
+| `bd search "query"`                                | Search issues by text                      |
+| `bd dolt commit`                                   | Commit working set changes                 |
+| `bd dolt push`                                     | Push to remote                             |
+| `bd dolt pull`                                     | Pull from remote (commit first)            |
+| `bd doctor`                                        | Health check                               |
+| `bd doctor --fix --yes`                            | Auto-fix stale locks and metadata          |
 
 **Comments syntax note:** The correct syntax is `bd comments add <id> "msg"` —
 subcommand comes before the issue ID.

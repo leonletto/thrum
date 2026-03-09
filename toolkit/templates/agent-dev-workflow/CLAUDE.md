@@ -59,13 +59,13 @@ Produces:
 
 Implementation agents work from two complementary artifacts per task:
 
-| Artifact | Contains | Authoritative For | Maintained By |
-|----------|----------|-------------------|---------------|
-| Design doc | Architecture, key decisions, what exists vs what to build | WHY decisions were made | brainstorming skill |
-| Plan file | Step-by-step code with task-ID anchors | HOW to implement each task | writing-plans skill |
-| Beads task | Acceptance criteria, deps, status | WHAT must be true to close | project-setup skill |
-| Philosophy doc | Anti-patterns, red flags, BAD/GOOD examples | Rules agents must not violate | Project-specific |
-| Filled prompt | Epic-specific overrides, scoped quality commands, cross-epic deps | Agent's operating instructions | project-setup skill |
+| Artifact       | Contains                                                          | Authoritative For              | Maintained By       |
+| -------------- | ----------------------------------------------------------------- | ------------------------------ | ------------------- |
+| Design doc     | Architecture, key decisions, what exists vs what to build         | WHY decisions were made        | brainstorming skill |
+| Plan file      | Step-by-step code with task-ID anchors                            | HOW to implement each task     | writing-plans skill |
+| Beads task     | Acceptance criteria, deps, status                                 | WHAT must be true to close     | project-setup skill |
+| Philosophy doc | Anti-patterns, red flags, BAD/GOOD examples                       | Rules agents must not violate  | Project-specific    |
+| Filled prompt  | Epic-specific overrides, scoped quality commands, cross-epic deps | Agent's operating instructions | project-setup skill |
 
 Agents read `bd show {TASK_ID}` first (what to achieve), then search the plan
 file for `## Task: {BEAD_ID}` (how to get there). The philosophy doc defines
@@ -94,8 +94,8 @@ agent runs four phases:
    (max 3 rounds) using `feature-dev:code-reviewer` with the
    `receiving-code-review` skill for rigorous finding verification. After the
    review passes, runs a scope check against the plan and design docs to catch
-   missing requirements. Fixes are looped back through review. This catches
-   both quality issues and coverage gaps before the coordinator reviews.
+   missing requirements. Fixes are looped back through review. This catches both
+   quality issues and coverage gaps before the coordinator reviews.
 4. **Complete & Land** — Closes the epic, pushes branch, notifies coordinator.
 
 See `implementation-agent.md` for the full prompt and all details.
@@ -112,12 +112,12 @@ All templates live in `toolkit/templates/agent-dev-workflow/`. They can be used
 directly for customization or when the skill pipeline does not fit your
 workflow.
 
-| Template                  | Status    | Purpose                                                                                     |
-| ------------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| `planning-agent.md`       | Reference | Full planning template — superseded by brainstorming + writing-plans + project-setup skills |
-| `worktree-setup.md`       | Reference | Worktree creation docs — superseded by project-setup Phase 4 + using-git-worktrees skill    |
-| `implementation-agent.md` | Active    | Prompt template filled by project-setup skill, given to implementation agents               |
-| `philosophy-template.md` | Active    | Reusable anti-patterns template — used by project-setup Phase 1 when project lacks a philosophy doc |
+| Template                  | Status    | Purpose                                                                                             |
+| ------------------------- | --------- | --------------------------------------------------------------------------------------------------- |
+| `planning-agent.md`       | Reference | Full planning template — superseded by brainstorming + writing-plans + project-setup skills         |
+| `worktree-setup.md`       | Reference | Worktree creation docs — superseded by project-setup Phase 4 + using-git-worktrees skill            |
+| `implementation-agent.md` | Active    | Prompt template filled by project-setup skill, given to implementation agents                       |
+| `philosophy-template.md`  | Active    | Reusable anti-patterns template — used by project-setup Phase 1 when project lacks a philosophy doc |
 
 ---
 
@@ -168,16 +168,16 @@ the skill.
 
 ## Source of Truth Hierarchy
 
-| What                               | Lives In                                 | Used By                                |
-| ---------------------------------- | ---------------------------------------- | -------------------------------------- |
-| Design decisions                   | Design doc (`dev-docs/plans/*-design.md`)    | brainstorming, writing-plans           |
-| Phased implementation steps        | Plan file (`dev-docs/plans/*-plan.md`)       | project-setup skill                    |
-| Task details & acceptance criteria | Beads task descriptions                  | Implementation agent                   |
-| Epic structure & dependencies      | Beads epic + `bd dep` relationships      | All agents                             |
-| Implementation progress            | Beads task status + git commit history   | Implementation agent (orient phase)    |
-| Feature-specific instructions      | Prompt (`dev-docs/prompts/{feature}.md`) | Implementation agent (session start)   |
-| Session state & decisions          | Context (`.thrum/context/{name}.md`)     | Implementation agent (current session) |
-| Code                               | Git worktree                             | Implementation agent                   |
+| What                               | Lives In                                  | Used By                                |
+| ---------------------------------- | ----------------------------------------- | -------------------------------------- |
+| Design decisions                   | Design doc (`dev-docs/plans/*-design.md`) | brainstorming, writing-plans           |
+| Phased implementation steps        | Plan file (`dev-docs/plans/*-plan.md`)    | project-setup skill                    |
+| Task details & acceptance criteria | Beads task descriptions                   | Implementation agent                   |
+| Epic structure & dependencies      | Beads epic + `bd dep` relationships       | All agents                             |
+| Implementation progress            | Beads task status + git commit history    | Implementation agent (orient phase)    |
+| Feature-specific instructions      | Prompt (`dev-docs/prompts/{feature}.md`)  | Implementation agent (session start)   |
+| Session state & decisions          | Context (`.thrum/context/{name}.md`)      | Implementation agent (current session) |
+| Code                               | Git worktree                              | Implementation agent                   |
 
 **Plan file convention:** Task sections in plan files MUST use the anchor format
 `## Task: {BEAD_ID} — Title`. Implementation agents search for their bead ID

@@ -1192,9 +1192,10 @@ $ echo "Working on auth module" | thrum context save
 ```
 
 **Agent safety note:** Agents should use the `/thrum:update-context` skill
-instead of running `thrum context save` directly. The skill composes a structured
-context (decisions, next steps, work-in-progress) before saving, whereas running
-the command manually with arbitrary input can overwrite accumulated session state.
+instead of running `thrum context save` directly. The skill composes a
+structured context (decisions, next steps, work-in-progress) before saving,
+whereas running the command manually with arbitrary input can overwrite
+accumulated session state.
 
 ### thrum context show
 

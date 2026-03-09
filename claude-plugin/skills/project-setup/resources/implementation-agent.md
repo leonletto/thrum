@@ -25,9 +25,9 @@ When filling this template to create an implementation prompt:
    parallelize work.
 3. **Strip ALL meta-instructions.** Lines and blocks marked with
    `<!-- STRIP ... -->` comments, and any text that addresses "the coordinator"
-   or "when filling this template", must be removed from the filled prompt.
-   The implementation agent should never see instructions about how to fill
-   the template — only instructions about how to implement the epic.
+   or "when filling this template", must be removed from the filled prompt. The
+   implementation agent should never see instructions about how to fill the
+   template — only instructions about how to implement the epic.
 
 ## Inputs Required
 
@@ -146,8 +146,8 @@ of `thrum quickstart`. If it fails, check that the daemon is running with
 
 **Finding agent names:** Run `thrum team` to see all active agents and their
 names. Always send to agent names (e.g., `--to @coord_main`), not role names
-(e.g., `--to @coordinator`). Sending to a role fans out to ALL agents with
-that role.
+(e.g., `--to @coordinator`). Sending to a role fans out to ALL agents with that
+role.
 
 **Use the message listener** — Spawn a background listener to get async
 notifications. Re-arm it every time it returns (both MESSAGES_RECEIVED and
@@ -409,9 +409,9 @@ pattern.
 ### Logging Refactoring Opportunities
 
 During implementation you will often discover code that could be improved —
-duplicated patterns, hardcoded values that should be shared, missed abstractions,
-or DRY violations. **Do not fix these inline** (scope creep) and **do not lose
-them** (they're valuable).
+duplicated patterns, hardcoded values that should be shared, missed
+abstractions, or DRY violations. **Do not fix these inline** (scope creep) and
+**do not lose them** (they're valuable).
 
 Instead, log them to the project's persistent **refactoring epic** in beads:
 
@@ -446,6 +446,7 @@ reviews and prioritizes these periodically. This keeps your scope tight while
 ensuring good ideas aren't lost.
 
 **Examples of what to log:**
+
 - Two handlers with nearly identical pagination logic → extract shared helper
 - Hardcoded demo values that should come from seed data
 - Multiple packages importing the same 5-line utility pattern
@@ -590,17 +591,19 @@ follow its response pattern:
 4. **MEDIUM** findings — use judgment, but default to fixing.
 5. **LOW** findings — fix if trivial, otherwise note and move on.
 6. Commit fixes:
+
    ```bash
    git add <fixed-files>
    git commit -m "fix: address review findings for {{EPIC_ID}}"
    ```
+
 7. **Re-run the code-reviewer** on the new diff (`BASE_SHA` = previous
-   `HEAD_SHA`, `HEAD_SHA` = new HEAD). Repeat until the reviewer returns
-   "Ready to merge: Yes" with no Critical or Important issues remaining.
+   `HEAD_SHA`, `HEAD_SHA` = new HEAD). Repeat until the reviewer returns "Ready
+   to merge: Yes" with no Critical or Important issues remaining.
 
 **Maximum iterations:** 3 review rounds. If issues persist after 3 rounds,
-proceed to Step 3 and note the unresolved findings in your completion message
-to the coordinator. Do not loop indefinitely.
+proceed to Step 3 and note the unresolved findings in your completion message to
+the coordinator. Do not loop indefinitely.
 
 ### Step 3: Scope Check
 
@@ -684,8 +687,8 @@ bd close {{EPIC_ID}} --reason="All tasks implemented and verified"
 
 ### Step 2: Push Branch & Notify Coordinator
 
-Do NOT merge to main yourself. Push your branch and notify the coordinator
-for code review and merge:
+Do NOT merge to main yourself. Push your branch and notify the coordinator for
+code review and merge:
 
 ```bash
 # Ensure branch is up to date with main
