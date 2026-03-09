@@ -10,7 +10,7 @@ communicate correctly with other agents.
 ### Registration Commands
 
 ```bash
-thrum quickstart --role implementer --module <branch-name> --intent "What you are working on"
+thrum quickstart --name <agent-name> --role implementer --module <branch-name> --intent "What you are working on"
 thrum inbox --unread
 thrum send "Starting work on <task>" --to @<coordinator-name>
 ```

@@ -5,7 +5,7 @@
 Every agent must register before sending or receiving messages.
 
 ```bash
-thrum quickstart --role <role> --module <module> --intent "<description>"
+thrum quickstart --name <agent-name> --role <role> --module <module> --intent "<description>"
 ```
 
 This registers the agent, starts a session, and sets the work intent.

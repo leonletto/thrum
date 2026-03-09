@@ -17,7 +17,7 @@ description: >
 
 ```bash
 # Register at session start (idempotent — safe to re-run)
-thrum quickstart --role <role> --module <module> --intent "<description>"
+thrum quickstart --name <agent-name> --role <role> --module <module> --intent "<description>"
 
 # Common roles: coordinator, implementer, reviewer, planner, tester
 # Name must differ from role (registration rejects name==role)

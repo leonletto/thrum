@@ -31,7 +31,7 @@ thrum wait --timeout 120s                Custom timeout (duration)
 ### Agents
 
 ```bash
-thrum quickstart --role R --module M --intent "..."   Register + start session
+thrum quickstart --name <agent-name> --role R --module M --intent "..."   Register + start session
 thrum whoami                                          Show identity
 thrum status                                          Agent + daemon status
 thrum team                                            List active agents

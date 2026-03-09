@@ -15,7 +15,7 @@ needed -- all sync operations happen within the worktree.
 
   thrum init                                          # Set up .thrum/ in repo
   thrum daemon start                                  # Start background daemon
-  thrum quickstart --role planner --module auth        # Register + start session
+  thrum quickstart --name <agent-name> --role planner --module auth        # Register + start session
   thrum send "Starting work on auth module"            # Send a message
   thrum inbox                                          # Check messages
 
@@ -48,7 +48,7 @@ All commands accept these flags:
   thrum migrate [--repo PATH]
     Migrate old-layout repos (JSONL on main branch) to worktree architecture.
 
-  thrum quickstart --role ROLE --module MODULE [--name NAME] [--display NAME] [--intent TEXT] [--runtime PRESET] [--dry-run] [--force] [--no-init] [--preamble-file PATH]
+  thrum quickstart --name <agent-name> --role ROLE --module MODULE [--display NAME] [--intent TEXT] [--runtime PRESET] [--dry-run] [--force] [--no-init] [--preamble-file PATH]
     Register agent, start session, generate runtime config, and set intent in one step.
     Runtime presets: claude, codex, cursor, gemini, auggie, cli-only.
 
@@ -288,7 +288,7 @@ All commands accept these flags:
 
   thrum init
   thrum daemon start
-  thrum quickstart --role implementer --module auth --intent "Building auth flow"
+  thrum quickstart --name <agent-name> --role implementer --module auth --intent "Building auth flow"
 
 ### Send a message to a teammate
 
