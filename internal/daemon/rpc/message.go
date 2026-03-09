@@ -778,10 +778,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 			mentionRole = cfg.Agent.Role
 		}
 	}
-	if mentionRole != "" {
-		query += " AND m.message_id IN (SELECT mr_m.message_id FROM message_refs mr_m WHERE mr_m.ref_type = 'mention' AND mr_m.ref_value = ?)"
-		args = append(args, mentionRole)
-	}
+	mentionClause, mentionArgs := buildMentionFilterClause(mentionRole)
 
 	// Unread filter: explicit UnreadForAgent takes priority, falls back to config when Unread=true
 	unreadAgentID := req.UnreadForAgent
@@ -791,24 +788,37 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 			unreadAgentID = agentID
 		}
 	}
-	if unreadAgentID != "" {
-		query += " AND m.message_id NOT IN (SELECT md.message_id FROM message_deliveries md WHERE md.recipient_agent_id = ? AND md.read_at IS NOT NULL)"
-		args = append(args, unreadAgentID)
-	}
 
 	// Time filter: only return messages created after a given timestamp
+	createdAfterClause := ""
+	var createdAfterArgs []any
 	if req.CreatedAfter != "" {
-		query += " AND m.created_at > ?"
-		args = append(args, req.CreatedAfter)
+		createdAfterClause = " AND m.created_at > ?"
+		createdAfterArgs = append(createdAfterArgs, req.CreatedAfter)
 	}
 
 	// For-agent filter: show messages mentioning me + messages scoped to my groups + old broadcasts (backward compat)
 	forAgentValues := buildForAgentValues(req.ForAgent, req.ForAgentRole)
 	forAgentClause, forAgentArgs := buildForAgentClause(forAgentValues, req.ForAgent, req.ForAgentRole)
-	if forAgentClause != "" {
+
+	switch {
+	case mentionClause != "" && forAgentClause != "":
+		query += combineFilterClauses(mentionClause, forAgentClause)
+		args = append(args, mentionArgs...)
+		args = append(args, forAgentArgs...)
+	case mentionClause != "":
+		query += mentionClause
+		args = append(args, mentionArgs...)
+	case forAgentClause != "":
 		query += forAgentClause
 		args = append(args, forAgentArgs...)
 	}
+	if unreadAgentID != "" {
+		query += " AND m.message_id NOT IN (SELECT md.message_id FROM message_deliveries md WHERE md.recipient_agent_id = ? AND md.read_at IS NOT NULL)"
+		args = append(args, unreadAgentID)
+	}
+	query += createdAfterClause
+	args = append(args, createdAfterArgs...)
 
 	// Add sorting — cluster replies with parents when using inbox (for_agent) mode,
 	// but respect explicit sort_order when provided (e.g., wait uses desc for newest-first)
@@ -842,22 +852,24 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		countQuery += " AND mr.ref_type = ? AND mr.ref_value = ?"
 		countArgs = append(countArgs, req.Ref.Type, req.Ref.Value)
 	}
-	if mentionRole != "" {
-		countQuery += " AND m.message_id IN (SELECT mr_m.message_id FROM message_refs mr_m WHERE mr_m.ref_type = 'mention' AND mr_m.ref_value = ?)"
-		countArgs = append(countArgs, mentionRole)
+	switch {
+	case mentionClause != "" && forAgentClause != "":
+		countQuery += combineFilterClauses(mentionClause, forAgentClause)
+		countArgs = append(countArgs, mentionArgs...)
+		countArgs = append(countArgs, forAgentArgs...)
+	case mentionClause != "":
+		countQuery += mentionClause
+		countArgs = append(countArgs, mentionArgs...)
+	case forAgentClause != "":
+		countQuery += forAgentClause
+		countArgs = append(countArgs, forAgentArgs...)
 	}
 	if unreadAgentID != "" {
 		countQuery += " AND m.message_id NOT IN (SELECT md.message_id FROM message_deliveries md WHERE md.recipient_agent_id = ? AND md.read_at IS NOT NULL)"
 		countArgs = append(countArgs, unreadAgentID)
 	}
-	if req.CreatedAfter != "" {
-		countQuery += " AND m.created_at > ?"
-		countArgs = append(countArgs, req.CreatedAfter)
-	}
-	if forAgentClause != "" {
-		countQuery += forAgentClause
-		countArgs = append(countArgs, forAgentArgs...)
-	}
+	countQuery += createdAfterClause
+	countArgs = append(countArgs, createdAfterArgs...)
 
 	var total int
 	if err := h.state.DB().QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
@@ -1403,6 +1415,19 @@ func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string)
 
 	clause := " AND (" + mentionSubquery + " OR " + groupSubquery + " OR " + broadcastSubquery + ")"
 	return clause, args
+}
+
+func buildMentionFilterClause(mentionRole string) (string, []any) {
+	if mentionRole == "" {
+		return "", nil
+	}
+	return " AND m.message_id IN (SELECT mr_m.message_id FROM message_refs mr_m WHERE mr_m.ref_type = 'mention' AND mr_m.ref_value = ?)", []any{mentionRole}
+}
+
+func combineFilterClauses(left, right string) string {
+	left = strings.TrimPrefix(left, " AND ")
+	right = strings.TrimPrefix(right, " AND ")
+	return " AND ((" + left + ") OR (" + right + "))"
 }
 
 // buildForAgentValues returns the unique set of values to match against mention refs
