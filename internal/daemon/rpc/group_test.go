@@ -449,6 +449,8 @@ func TestGroupDelete_NonExistent(t *testing.T) {
 func setupGroupTestWithMessages(t *testing.T) (*GroupHandler, *MessageHandler, *state.State, func()) {
 	t.Helper()
 
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {

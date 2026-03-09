@@ -224,7 +224,8 @@ func TestImpersonation_MessageCreateEventFields(t *testing.T) {
 
 	// Send normal message (no impersonation)
 	sendReq := SendRequest{
-		Content: "Normal message without impersonation",
+		Content:       "Normal message without impersonation",
+		CallerAgentID: agentID,
 	}
 	sendReqJSON, err := json.Marshal(sendReq)
 	if err != nil {

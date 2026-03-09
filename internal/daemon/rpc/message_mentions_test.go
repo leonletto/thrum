@@ -82,9 +82,10 @@ func TestMessageSend_WithMentions(t *testing.T) {
 
 	// Send message with mentions
 	req := SendRequest{
-		Content:  "Hey @reviewer, please check this code",
-		Format:   "markdown",
-		Mentions: []string{"@reviewer", "implementer"}, // Mix of @-prefixed and non-prefixed
+		Content:       "Hey @reviewer, please check this code",
+		Format:        "markdown",
+		Mentions:      []string{"@reviewer", "implementer"}, // Mix of @-prefixed and non-prefixed
+		CallerAgentID: agentID,
 	}
 	params, _ := json.Marshal(req)
 
