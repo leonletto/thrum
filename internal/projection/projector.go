@@ -39,6 +39,8 @@ func (p *Projector) Apply(ctx context.Context, event json.RawMessage) error {
 		return p.applyMessageEdit(ctx, event)
 	case "message.delete":
 		return p.applyMessageDelete(ctx, event)
+	case "message.receipt":
+		return p.applyMessageReceipt(ctx, event)
 	case "agent.register":
 		return p.applyAgentRegister(ctx, event)
 	case "agent.session.start":
@@ -209,6 +211,18 @@ func (p *Projector) applyMessageCreate(ctx context.Context, data json.RawMessage
 		}
 	}
 
+	// Insert durable recipient snapshot
+	for _, recipientAgentID := range event.Recipients {
+		_, err = tx.Exec(`
+			INSERT OR IGNORE INTO message_deliveries (
+				message_id, recipient_agent_id, delivered_at
+			) VALUES (?, ?, ?)
+		`, event.MessageID, recipientAgentID, event.Timestamp)
+		if err != nil {
+			return fmt.Errorf("insert message delivery: %w", err)
+		}
+	}
+
 	return tx.Commit()
 }
 
@@ -292,6 +306,53 @@ func (p *Projector) applyMessageDelete(ctx context.Context, data json.RawMessage
 	}
 
 	return nil
+}
+
+func (p *Projector) applyMessageReceipt(ctx context.Context, data json.RawMessage) error {
+	var event types.MessageReceiptEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		return fmt.Errorf("unmarshal message.receipt: %w", err)
+	}
+
+	tx, err := p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Ensure a delivery row exists even for pre-v14 messages that are marked read later.
+	_, err = tx.Exec(`
+		INSERT OR IGNORE INTO message_deliveries (
+			message_id, recipient_agent_id, delivered_at
+		)
+		VALUES (?, ?, ?)
+	`, event.MessageID, event.AgentID, event.Timestamp)
+	if err != nil {
+		return fmt.Errorf("ensure message delivery: %w", err)
+	}
+
+	switch event.ReceiptType {
+	case "seen":
+		_, err = tx.Exec(`
+			UPDATE message_deliveries
+			SET seen_at = COALESCE(seen_at, ?)
+			WHERE message_id = ? AND recipient_agent_id = ?
+		`, event.Timestamp, event.MessageID, event.AgentID)
+	case "read":
+		_, err = tx.Exec(`
+			UPDATE message_deliveries
+			SET seen_at = COALESCE(seen_at, ?),
+			    read_at = COALESCE(read_at, ?)
+			WHERE message_id = ? AND recipient_agent_id = ?
+		`, event.Timestamp, event.Timestamp, event.MessageID, event.AgentID)
+	default:
+		return fmt.Errorf("unknown receipt_type %q", event.ReceiptType)
+	}
+	if err != nil {
+		return fmt.Errorf("update message delivery receipt: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 func (p *Projector) applyAgentRegister(ctx context.Context, data json.RawMessage) error {

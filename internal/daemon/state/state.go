@@ -282,7 +282,7 @@ func (s *State) resolveAgentForMessage(ctx context.Context, event map[string]any
 		}
 		return agentIDToName(agentID), nil
 
-	case "message.edit", "message.delete":
+	case "message.edit", "message.delete", "message.receipt":
 		// For edits/deletes, look up the original author from SQLite
 		messageID, ok := event["message_id"].(string)
 		if !ok || messageID == "" {
