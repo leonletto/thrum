@@ -578,7 +578,3 @@ When a notification can't be sent (client disconnected):
 - Broadcaster: `internal/daemon/broadcaster.go`
 - Unix Socket Client Registry: `internal/daemon/notify.go`
 - WebSocket Client Registry: `internal/websocket/registry.go`
-
-```
-
-```

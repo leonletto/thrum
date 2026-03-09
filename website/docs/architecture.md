@@ -119,16 +119,16 @@ cfg, err := config.LoadWithPath(repoPath, flagRole, flagModule)
 
 ### ID Formats
 
-| Type                   | Format                          | Example                  |
-| ---------------------- | ------------------------------- | ------------------------ |
-| **Repo ID**            | `r_` + base32(sha256(url))[:12] | `r_7K2Q1X9M3P0B`         |
-| **Agent ID (named)**   | name directly                   | `furiosa`                |
-| **Agent ID (unnamed)** | role + `_` + base32(hash)[:10]  | `implementer_9F2K3M1Q8Z` |
-| **User ID**            | `user:` + username              | `user:leon`              |
-| **Session ID**         | `ses_` + ulid()                 | `ses_01HXF2A9Y1Q0P8...`  |
-| **Session Token**      | `tok_` + ulid()                 | `tok_01HXF2A9Y1Q0P8...`  |
-| **Message ID**         | `msg_` + ulid()                 | `msg_01HXF2A9Y1Q0P8...`  |
-| **Event ID**           | `evt_` + ulid()                 | `evt_01HXF2A9Y1Q0P8...`  |
+| Type                   | Format                            | Example                  |
+| ---------------------- | --------------------------------- | ------------------------ |
+| **Repo ID**            | `r_` + base32(sha256(url))\[:12\] | `r_7K2Q1X9M3P0B`         |
+| **Agent ID (named)**   | name directly                     | `furiosa`                |
+| **Agent ID (unnamed)** | role + `_` + base32(hash)\[:10\]  | `implementer_9F2K3M1Q8Z` |
+| **User ID**            | `user:` + username                | `user:leon`              |
+| **Session ID**         | `ses_` + ulid()                   | `ses_01HXF2A9Y1Q0P8...`  |
+| **Session Token**      | `tok_` + ulid()                   | `tok_01HXF2A9Y1Q0P8...`  |
+| **Message ID**         | `msg_` + ulid()                   | `msg_01HXF2A9Y1Q0P8...`  |
+| **Event ID**           | `evt_` + ulid()                   | `evt_01HXF2A9Y1Q0P8...`  |
 
 ### Deterministic IDs
 
@@ -516,7 +516,3 @@ Plugin restore commands run after the core restore.
 - Sharding design: `dev-docs/2026-02-06-jsonl-sharding-and-agent-naming.md`
 - Daemon architecture: `docs/daemon.md`
 - Sync protocol: `docs/sync.md`
-
-```
-
-```

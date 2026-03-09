@@ -250,25 +250,21 @@ plugins.
 
 ## Troubleshooting
 
-**"Thrum not initialized" on session start**
+### "Thrum not initialized" on session start
 
 Run `thrum init && thrum daemon start` in your repository root.
 
-**No context injected after plugin install**
+### No context injected after plugin install
 
 Verify the plugin is loaded: check that `/thrum:prime` is available as a slash
 command. If not, reinstall the plugin.
 
-**Messages not arriving**
+### Messages not arriving
 
 Check daemon status with `thrum daemon status`. The daemon must be running for
 messaging to work. Start it with `thrum daemon start`.
 
-**Identity conflicts in multi-worktree setups**
+### Identity conflicts in multi-worktree setups
 
 Set `THRUM_NAME` environment variable to give each worktree a unique agent name.
 See [Identity System](identity.md) for details.
-
-```
-
-```

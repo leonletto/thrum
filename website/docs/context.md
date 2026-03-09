@@ -711,7 +711,3 @@ machines. Local notes and WIP context can stay local.
 - [CLI Reference](cli.md) - All CLI commands
 - [RPC API Reference](rpc-api.md) - Complete RPC method documentation
 - [Agent Coordination](agent-coordination.md) - Multi-agent workflows
-
-```
-
-```

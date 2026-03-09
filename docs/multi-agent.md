@@ -574,7 +574,3 @@ thrum send "Auth complete, 15 tests passing" --to @coord_main
 - [MCP Server](mcp-server.md) -- MCP tools for AI agent integration
 - [Context Management](context.md) -- Per-agent context storage and preambles
 - [CLI Reference](cli.md) -- Complete command documentation
-
-```
-
-```

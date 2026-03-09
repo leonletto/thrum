@@ -11,7 +11,7 @@ description: >
 > (`/thrum:*` commands, `thrum prime`). This file covers routing rules and
 > gotchas not duplicated elsewhere.
 >
-> Full messaging docs: https://leonletto.github.io/thrum/docs/messaging.html
+> Full messaging docs: <https://leonletto.github.io/thrum/docs/messaging.html>
 
 ## Agent Registration
 
