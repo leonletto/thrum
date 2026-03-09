@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2026-03-09
+
+### Improved Agent Safety & Toolkit
+
+Default preamble now warns agents against running `thrum context save` manually
+(which destroys accumulated session state). Role templates updated with learnings
+from a 31-task multi-agent session: mandatory sub-agent delegation, CAN/CANNOT
+scope boundaries, background listener pattern, and `thrum sent` integration.
+
+### Changed
+
+- **DefaultPreamble** — "Save context" line now directs agents to use
+  `/thrum:update-context` skill instead of manual `thrum context save`
+- **Role templates (all 8)** — added context save warning, background message
+  listener pattern, `thrum sent --unread`, SendMessage tool warning, fixed idle
+  behavior to use listener instead of direct `thrum wait`
+- **Coordinator templates** — added CAN/CANNOT authority lists, strategy file
+  references
+- **Implementer templates** — added CAN/CANNOT scope lists, mandatory sub-agent
+  delegation, 5-step task protocol (strict variant)
+- **Planner/Researcher templates** — added exploration-focused strategy
+  references
+- **project-setup skill** — now self-contained in plugin with
+  `resources/implementation-agent.md` and `resources/philosophy-template.md`;
+  added beads prerequisite check with correct install instructions
+  (`steveyegge/beads/bd`)
+- **Beads setup guide** — rewritten for Dolt backend (v0.59.0+), correct repo
+  attribution (steveyegge/beads), dolt prerequisite, sync setup, common errors
+- **Beads UI setup guide** — updated for Dolt backend, added worktree support
+  and sandbox mode sections
+- **Context docs** — added agent safety note to `thrum context save` in CLI and
+  context documentation
+
 ## [0.5.4] - 2026-03-09
 
 ### Sent Command & Durable Deliveries

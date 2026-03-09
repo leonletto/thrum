@@ -86,7 +86,7 @@ don't need to clone this repo into your project.
 - **Multi-Worktree** — Each git worktree gets its own agent identity via
   `.thrum/redirect`
 
-**v0.5.4 highlights:** `thrum sent` command with durable message deliveries and
+**v0.5.5 highlights:** `thrum sent` command with durable message deliveries and
 recipient read receipts, group-aware `thrum wait`, and delivery confirmation on
 send.
 
