@@ -90,12 +90,12 @@ directly or replace it with `thrum context preamble --file custom.md`.
 ```markdown
 ## Thrum Quick Reference
 
-**Check messages:** `thrum inbox --unread` **Check sent items:** `thrum sent --unread` **Send message:**
-`thrum send "message" --to @role` **Reply:** `thrum reply <MSG_ID> "response"`
-**Status:** `thrum status` **Who's online:** `thrum agent list --context` **Save
-context:** `thrum context save` **Wait for messages:**
-`thrum wait --after -30s --timeout 5m` (`--after -30s` = include messages sent
-up to 30s ago)
+**Check messages:** `thrum inbox --unread` **Check sent items:**
+`thrum sent --unread` **Send message:** `thrum send "message" --to @role`
+**Reply:** `thrum reply <MSG_ID> "response"` **Status:** `thrum status` **Who's
+online:** `thrum agent list --context` **Save context:** `thrum context save`
+**Wait for messages:** `thrum wait --after -30s --timeout 5m` (`--after -30s` =
+include messages sent up to 30s ago)
 ```
 
 **Customization examples:**

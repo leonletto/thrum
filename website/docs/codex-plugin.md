@@ -85,8 +85,8 @@ message/reply workflows.
 ### Session operations and triage
 
 When you need to bootstrap sessions, triage unread messages, verify delivery on
-messages you authored, or check daemon health, `thrum-ops` provides
-operational workflows and command references.
+messages you authored, or check daemon health, `thrum-ops` provides operational
+workflows and command references.
 
 ### Role template generation
 

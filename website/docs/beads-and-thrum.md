@@ -42,14 +42,14 @@ because everything is committed to version control.
 
 ## What Each Tool Covers
 
-| Aspect                | Beads                                          | Thrum                                           |
-| --------------------- | ---------------------------------------------- | ----------------------------------------------- |
-| **Purpose**           | Task tracking and dependency management        | Agent messaging and coordination                |
-| **Primary Use**       | Persistent work state across sessions          | Communication across agents and sessions        |
+| Aspect                | Beads                                          | Thrum                                                         |
+| --------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
+| **Purpose**           | Task tracking and dependency management        | Agent messaging and coordination                              |
+| **Primary Use**       | Persistent work state across sessions          | Communication across agents and sessions                      |
 | **Key Commands**      | `bd create`, `bd ready`, `bd close`, `bd show` | `thrum send`, `thrum inbox`, `thrum sent`, `thrum agent list` |
-| **Recovery Scenario** | "What tasks am I responsible for?"             | "What messages did I miss while offline?"       |
-| **State Storage**     | `.beads/` directory in Git                     | `.thrum/` directory in Git                      |
-| **Daemon**            | None (purely CLI)                              | Optional daemon for real-time notifications     |
+| **Recovery Scenario** | "What tasks am I responsible for?"             | "What messages did I miss while offline?"                     |
+| **State Storage**     | `.beads/` directory in Git                     | `.thrum/` directory in Git                                    |
+| **Daemon**            | None (purely CLI)                              | Optional daemon for real-time notifications                   |
 
 Beads answers: **What should I work on?** Thrum answers: **What did others tell
 me?**
