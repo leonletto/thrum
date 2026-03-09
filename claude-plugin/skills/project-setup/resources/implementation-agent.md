@@ -1,0 +1,746 @@
+# Implementation Agent Template
+
+## Purpose
+
+Guide an agent through implementing an epic's tasks in a designated worktree.
+Supports both cold-start and resume scenarios. The agent works through beads
+tasks in order, runs quality gates, and pushes completed work.
+
+## CRITICAL: Prompt Generation Rules
+
+<!-- STRIP THIS SECTION — it is for the coordinator filling the template, not
+     for the implementation agent. project-setup must remove it along with
+     ## Purpose and ## Inputs Required. -->
+
+When filling this template to create an implementation prompt:
+
+1. **Every section is mandatory unless explicitly marked optional.** Do not
+   summarize, paraphrase, or abbreviate sections — copy them verbatim and fill
+   in the `{{PLACEHOLDERS}}`. Sections marked `IMPORTANT` must appear in the
+   output prompt word-for-word.
+2. **The Sub-Agent Strategy section (below) must be included in full.** It
+   contains the agent selection table, parallelization criteria, and verifier
+   pattern. These are operational directives, not background context. Omitting
+   them degrades agent performance by removing their ability to delegate and
+   parallelize work.
+3. **Strip ALL meta-instructions.** Lines and blocks marked with
+   `<!-- STRIP ... -->` comments, and any text that addresses "the coordinator"
+   or "when filling this template", must be removed from the filled prompt.
+   The implementation agent should never see instructions about how to fill
+   the template — only instructions about how to implement the epic.
+
+## Inputs Required
+
+- `{{EPIC_ID}}` — The beads epic ID to implement
+- `{{WORKTREE_PATH}}` — Absolute path to the working worktree
+- `{{BRANCH_NAME}}` — Git branch for this work (e.g., `feature/auth`)
+- `{{DESIGN_DOC}}` — **Absolute path** to the design spec (if applicable)
+- `{{REFERENCE_CODE}}` — Paths to reference implementations (if any)
+- `{{QUALITY_COMMANDS}}` — Commands for test/lint, **scoped to packages this
+  epic modifies** (e.g., `go test ./internal/processing/localstore/` not
+  `go test ./...`). Scoping avoids false failures from pre-existing issues in
+  unrelated packages.
+- `{{COVERAGE_TARGET}}` — Minimum coverage threshold (e.g., >80%)
+- `{{AGENT_NAME}}` — Unique name for this agent (e.g., `impl-daemon`,
+  `impl-cli`)
+- `{{COORDINATOR_NAME}}` — Agent name of the coordinator (from `thrum team`,
+  e.g., `coord_main`). Use for direct messages, not the role name.
+- `{{PLAN_FILE}}` — **Absolute path** to the implementation plan file
+- `{{PROJECT_ROOT}}` — Absolute path to the project root
+- `{{ANTI_PATTERNS}}` — Epic-specific implementation standards: non-negotiable
+  rules and red flags extracted from the design doc and philosophy doc. Injected
+  by project-setup Phase 4. If empty, the generic verifier pattern still applies
+  but without domain-specific checks.
+- `{{CROSS_EPIC_DEPS}}` — Cross-epic dependency table showing which tasks in
+  this epic are blocked by tasks in other epics. Injected by project-setup
+  Phase 4. If empty (no cross-epic deps), this section is omitted.
+
+**Why absolute paths?** Design docs, plan files, and prompts typically live in
+gitignored directories (`dev-docs/`, `docs/plans/`). Worktrees only share
+committed files, so agents in worktrees cannot resolve relative paths to these
+files. All `{{DESIGN_DOC}}`, `{{PLAN_FILE}}`, and prompt references must be
+absolute paths (e.g., `/Users/you/project/dev-docs/plans/file.md`).
+
+---
+
+## Sub-Agent Strategy
+
+Delegate research, independent tasks, and verification to sub-agents. Your main
+context should focus on task coordination, dependency management, and
+cross-cutting decisions.
+
+### Principles
+
+1. **Parallelize independent tasks** — When multiple unblocked tasks touch
+   different files/packages, implement them simultaneously via sub-agents
+2. **Delegate research** — Spawn sub-agents to explore unfamiliar code before
+   implementing, rather than reading it into your context
+3. **Verify in background** — Run tests and lint via background sub-agents while
+   you continue with the next task
+4. **Focused prompts** — Give each sub-agent the full task description, worktree
+   path, quality commands, and expected deliverables
+
+### Agent Selection
+
+| Task                        | Agent Type                  | Model  | Background? |
+| --------------------------- | --------------------------- | ------ | ----------- |
+| Implement a complex task    | `general-purpose`           | sonnet | no\*        |
+| Implement a simple task     | `general-purpose`           | haiku  | no\*        |
+| Explore unfamiliar code     | `Explore`                   | sonnet | yes         |
+| Run tests / lint            | `general-purpose`           | haiku  | yes         |
+| Review implementation       | `feature-dev:code-reviewer` | sonnet | no          |
+| Doc updates / config tweaks | `general-purpose`           | haiku  | yes         |
+
+\*Use foreground when you need the result before proceeding. Use background when
+you can continue other work while they run.
+
+### When to Parallelize vs. Work Sequentially
+
+<!-- STRIP: The line below was a meta-instruction to the coordinator. It has been
+     removed. The content itself (parallel vs sequential criteria) is an
+     operational directive for the implementation agent and must stay. -->
+
+**Parallel** (sub-agents):
+
+- Tasks touching different files/packages with no shared state
+- Independent verification (tests, lint, coverage)
+- Research into multiple unrelated code areas
+- Doc/config updates alongside implementation
+
+**Sequential** (direct work):
+
+- Tasks modifying shared files or depending on prior task output
+- Tasks requiring deep context from current session's changes
+- Tasks needing judgment calls mid-implementation
+- Single remaining task (no parallelism benefit)
+
+### Verifier Sub-Agent Pattern (Per-Task)
+
+After completing a task, optionally spawn a background sub-agent to verify:
+
+- Run the test suite and confirm all pass
+- Review implementation against the task description
+- Confirm acceptance criteria are met
+
+This lets you start the next task immediately while verification runs in
+parallel. This is a lightweight per-task check — the full code review happens in
+**Phase 3: Self-Review Gate** after all tasks are complete.
+
+---
+
+## MANDATORY: Register Before Any Work
+
+**STOP. Run these commands before doing anything else.** Do not skip this
+section.
+
+```bash
+cd {{WORKTREE_PATH}}
+thrum quickstart --name {{AGENT_NAME}} --role implementer --module {{BRANCH_NAME}} --intent "Implementing {{EPIC_ID}}"
+thrum inbox --unread
+thrum send "Starting work on {{EPIC_ID}}" --to @{{COORDINATOR_NAME}}
+```
+
+**Verify registration succeeded** — you must see your agent name in the output
+of `thrum quickstart`. If it fails, check that the daemon is running with
+`thrum daemon status`.
+
+**Finding agent names:** Run `thrum team` to see all active agents and their
+names. Always send to agent names (e.g., `--to @coord_main`), not role names
+(e.g., `--to @coordinator`). Sending to a role fans out to ALL agents with
+that role.
+
+**Use the message listener** — Spawn a background listener to get async
+notifications. Re-arm it every time it returns (both MESSAGES_RECEIVED and
+NO_MESSAGES_TIMEOUT).
+
+When your work is complete (Phase 4), send a completion message:
+
+```bash
+thrum send "Completed {{EPIC_ID}}. All tasks done, tests passing." --to @{{COORDINATOR_NAME}}
+```
+
+If you hit a blocker from another agent's work, escalate:
+
+```bash
+thrum send "Blocked on {{TASK_ID}} by {{BLOCKER_ID}}" --to @{{COORDINATOR_NAME}}
+```
+
+---
+
+## Phase 1: Orient
+
+Whether starting fresh or resuming after context loss, always begin here. This
+phase is idempotent — running it multiple times is safe and expected.
+
+### Step 1: Check Epic & Task Status
+
+```bash
+# Navigate to worktree
+cd {{WORKTREE_PATH}}
+
+# Check epic status — see which tasks are done, in_progress, or pending
+bd show {{EPIC_ID}}
+
+# Check for any in-progress tasks (may be from a prior session)
+bd list --status=in_progress
+
+# Check completed tasks
+bd list --status=completed
+```
+
+### Step 2: Check Git State
+
+```bash
+# Verify you're on the right branch
+git branch --show-current
+
+# Check for uncommitted work from a prior session
+git status
+
+# Review recent commits to understand what's been done
+git --no-pager log --oneline -10
+
+# Pull latest changes (if remote tracking is set up)
+git pull --rebase
+```
+
+### Step 3: Explore Existing Code
+
+Use `auggie-mcp codebase-retrieval` to understand what already exists:
+
+1. Check which files/packages have been created
+2. Review existing implementations for patterns to follow
+3. Identify the current state of any in-progress tasks
+
+If a design doc exists, read it: `{{DESIGN_DOC}}`
+
+If reference code exists, explore it: `{{REFERENCE_CODE}}`
+
+### Step 4: Determine Starting Point
+
+- If **all tasks are complete**: Skip to Phase 3 (Verify Quality) then Phase 4
+  (Complete)
+- If **a task is `in_progress`**: Review its state — check what's partially
+  implemented, check git diff, then continue from where it left off
+- If **tasks are pending**: Start with the first unblocked pending task (lowest
+  dependency order)
+
+**CRITICAL: DO NOT redo completed work.** Trust the beads status and git
+history. Pick up from exactly where the previous session stopped.
+
+### Step 5: Check Cross-Epic Dependencies
+
+{{CROSS_EPIC_DEPS}}
+
+<!-- STRIP: This comment is for project-setup. When filling, replace
+     {{CROSS_EPIC_DEPS}} with either a dependency table or
+     "No cross-epic dependencies." Then remove this comment. -->
+
+---
+
+## Implementation Standards
+
+{{ANTI_PATTERNS}}
+
+<!-- STRIP: Replace {{ANTI_PATTERNS}} with the generated anti-patterns content
+     (3-5 rules + red flags). Then remove this comment. The self-review gate
+     in Phase 3 passes these to the code-reviewer sub-agent. -->
+
+---
+
+## Phase 2: Implement Tasks
+
+### Task Execution Loop
+
+For each task (in dependency order, foundations first):
+
+#### 1. Claim the Task
+
+```bash
+bd update {{TASK_ID}} --status=in_progress
+```
+
+#### 2. Read the Task Details
+
+```bash
+bd show {{TASK_ID}}
+```
+
+The task description is the **source of truth** for what to build. It contains
+acceptance criteria that must be satisfied before closing the task.
+
+For detailed implementation code, search the plan file for the matching task
+section:
+
+```bash
+grep -n "## Task: {{TASK_ID}}" {{PLAN_FILE}}
+```
+
+Read ONLY that section (from the matching heading to the next `## Task:` heading
+or end of file), not the entire plan file. Plan files can be large (50KB+) and
+reading the whole file exhausts context. The plan file provides step-by-step
+code; the beads task provides completion criteria. Use both.
+
+#### 3. Implement the Task
+
+- Follow the task description
+- Write tests alongside implementation (TDD when appropriate)
+- Follow existing code patterns and conventions in the codebase
+- Reference `{{DESIGN_DOC}}` for architectural context when needed
+
+#### 4. Verify the Task
+
+```bash
+# Run project quality gates
+{{QUALITY_COMMANDS}}
+```
+
+All tests must pass before proceeding. If tests fail, fix them before moving on.
+Do not skip failing tests or mark them as known failures without explicit
+instruction.
+
+#### 5. Commit the Work
+
+```bash
+git add <specific-files>
+git commit -m "{{EPIC_TITLE}}: <concise task description>"
+```
+
+Commit after each task, not in bulk at the end. Use descriptive commit messages
+that explain what was built.
+
+#### 6. Close the Task
+
+```bash
+bd close {{TASK_ID}}
+```
+
+#### 7. Move to Next Task
+
+Repeat from step 1 with the next unblocked pending task.
+
+If multiple tasks are complete, close them in batch:
+
+```bash
+bd close {{TASK_ID_1}} {{TASK_ID_2}} {{TASK_ID_3}}
+```
+
+---
+
+### Parallel Task Implementation
+
+When multiple tasks are unblocked and independent, implement them
+simultaneously. This is the biggest context and time win.
+
+#### Identify Parallelizable Tasks
+
+After completing a task, check for unblocked work:
+
+```bash
+bd show {{EPIC_ID}}  # Which tasks are pending and unblocked?
+```
+
+Tasks are parallelizable when they touch different files/packages and don't
+depend on each other's output.
+
+#### Launch Pattern
+
+Give each sub-agent everything it needs to work autonomously:
+
+```text
+# Launched in ONE message for parallel execution
+Task(subagent_type="general-purpose", model="sonnet",
+  prompt="Implement a task in {{WORKTREE_PATH}} on branch {{BRANCH_NAME}}.
+
+  ## Task Details
+  <paste full bd show output for task A>
+
+  ## Instructions
+  1. Read the task description — it is the source of truth
+  2. Implement following existing code patterns
+  3. Run tests: {{QUALITY_COMMANDS}}
+  4. Commit: git commit -m '{{EPIC_TITLE}}: <task summary>'
+  5. Return: what was built, test results, commit hash")
+
+Task(subagent_type="general-purpose", model="sonnet",
+  prompt="Implement a task in {{WORKTREE_PATH}} ...
+
+  ## Task Details
+  <paste full bd show output for task B>
+  ...")
+```
+
+#### After Sub-Agents Complete
+
+1. Review reported results (commit hashes, test output)
+2. Check for conflicts: `git --no-pager log --oneline -5`
+3. Close completed tasks: `bd close {{TASK_A}} {{TASK_B}}`
+4. Run unified quality gate: `{{QUALITY_COMMANDS}}`
+5. Check for newly unblocked tasks — repeat if more are available
+
+#### Guardrails
+
+- **2-3 concurrent sub-agents** is the sweet spot. More adds coordination
+  overhead without proportional speedup.
+- **Partition by file/package** to avoid git conflicts. If two tasks touch the
+  same file, run them sequentially.
+- **Always run a final unified test pass** after parallel work — concurrent
+  sub-agents may miss interaction bugs.
+
+---
+
+### Tool Usage
+
+#### auggie-mcp (Code Retrieval)
+
+Use `auggie-mcp codebase-retrieval` for exploring existing code. It's
+context-efficient — prefer it over reading files manually when you need to
+understand how existing code works, find patterns, or explore unfamiliar
+packages.
+
+#### Subagents
+
+See the **Sub-Agent Strategy** section at the top of this template for full
+guidance on agent selection, parallel vs. sequential decisions, and the verifier
+pattern.
+
+---
+
+### Logging Refactoring Opportunities
+
+During implementation you will often discover code that could be improved —
+duplicated patterns, hardcoded values that should be shared, missed abstractions,
+or DRY violations. **Do not fix these inline** (scope creep) and **do not lose
+them** (they're valuable).
+
+Instead, log them to the project's persistent **refactoring epic** in beads:
+
+#### 1. Find the Refactoring Epic
+
+```bash
+bd list --type=epic | grep -i refactor
+```
+
+If no refactoring epic exists, create one:
+
+```bash
+bd create "Refactoring & DRY Opportunities" --type=epic --priority=3 \
+  --description="Persistent backlog for refactoring, DRY improvements, and code organization opportunities discovered during feature work. Tasks are added by implementation agents as they encounter opportunities. Reviewed and prioritized by the coordinator periodically."
+```
+
+#### 2. Log the Opportunity
+
+```bash
+bd create "Refactor: <short description>" --type=task --parent=<refactoring-epic-id> --priority=3 \
+  --description="**Discovered during:** {{EPIC_ID}}
+**Files:** <file paths>
+**Opportunity:** <what could be improved — duplicated code, hardcoded values, missed abstraction>
+**Suggested approach:** <how to fix it>
+**Effort estimate:** small/medium/large"
+```
+
+#### 3. Continue With Your Assigned Work
+
+Do not implement the refactoring — just log it and move on. The coordinator
+reviews and prioritizes these periodically. This keeps your scope tight while
+ensuring good ideas aren't lost.
+
+**Examples of what to log:**
+- Two handlers with nearly identical pagination logic → extract shared helper
+- Hardcoded demo values that should come from seed data
+- Multiple packages importing the same 5-line utility pattern
+- An interface that's grown too large and should be split
+- A notification store duplicated across two packages (should be unified)
+
+---
+
+### Handling Blockers
+
+If a task is blocked:
+
+1. Check what's blocking it: `bd show {{BLOCKER_ID}}`
+2. If the blocker is another task **within your epic**, work on the blocker
+   first
+3. If the blocker is **external** (different epic, different agent), skip the
+   blocked task and work on the next unblocked one
+4. Document the blocker:
+   `bd update {{TASK_ID}} --notes="Blocked by {{BLOCKER_ID}}: <reason>"`
+5. **Notify via Thrum** so the coordinator or blocking agent is aware:
+
+```bash
+# Ask the blocking agent for help
+# NOTE: --mention @implementer is a message filter tag, not a delivery address.
+# The message is delivered to @{{COORDINATOR_NAME}}; the mention tag lets implementers
+# filter for messages that mention their role. To address a specific agent directly,
+# use --to @<agent-name> instead.
+thrum send "Blocked on {{TASK_ID}} — waiting for {{BLOCKER_ID}}. Can you prioritize?" --mention @implementer
+
+# Or escalate to the coordinator
+thrum send "Blocked on {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @{{COORDINATOR_NAME}}
+```
+
+### Communicating During Work
+
+Use Thrum to stay coordinated:
+
+```bash
+# Report progress on significant milestones
+thrum send "Completed task {{TASK_ID}}, moving to next" --to @{{COORDINATOR_NAME}}
+
+# Ask for input when you need a decision
+thrum send "Need input: should X use approach A or B? Context: ..." --to @{{COORDINATOR_NAME}}
+
+# If you realize your work affects another agent's files
+# NOTE: --mention @implementer is a filter tag, not a delivery address.
+# This tags the message so implementers can filter for it; delivery goes to @everyone by default.
+# Use --to @<agent-name> to target a specific agent.
+thrum send "Heads up: I'm modifying internal/daemon/rpc.go which may overlap with your work" --mention @implementer
+
+# Update your intent when switching tasks
+thrum agent set-intent "Working on {{TASK_ID}}: <description>"
+```
+
+---
+
+## Phase 3: Self-Review Gate (MANDATORY)
+
+**You MUST complete this phase before claiming the epic is done.** Do not skip
+or abbreviate it. The purpose is to catch issues before the coordinator reviews,
+reducing back-and-forth rounds.
+
+### Step 1: Run Quality Gates
+
+```bash
+cd {{WORKTREE_PATH}}
+
+# Run all tests
+{{QUALITY_COMMANDS}}
+
+# Check coverage if applicable
+# Target: {{COVERAGE_TARGET}}
+```
+
+Fix any failures before proceeding. Do not submit broken code for review.
+
+### Step 2: Code Review Loop
+
+Compute the diff range for the full epic:
+
+```bash
+BASE_SHA=$(git merge-base HEAD main)
+HEAD_SHA=$(git rev-parse HEAD)
+```
+
+Spawn a `feature-dev:code-reviewer` sub-agent in **foreground** (you need the
+results before proceeding). The reviewer is a separate agent — you cannot
+influence its findings.
+
+```text
+Agent(subagent_type="feature-dev:code-reviewer", model="sonnet",
+  prompt="Review the implementation on branch {{BRANCH_NAME}} in
+  {{WORKTREE_PATH}}.
+
+  ## What to Review
+
+  Run `git --no-pager diff {BASE_SHA}...{HEAD_SHA}` to see all changes.
+  Run `bd show {{EPIC_ID}}` to see the epic and task descriptions.
+
+  ## Review Criteria
+
+  ### 1. Code Quality
+  - Security: XSS, RBAC bypass, SQL injection, command injection
+  - Error handling: no swallowed errors, proper HTTP status codes
+  - Go idioms: proper error returns, no bare panics, correct defer usage
+  - No dead code, no commented-out code, no TODO items left behind
+
+  ### 2. Implementation Standards (Anti-Patterns)
+
+  {{ANTI_PATTERNS}}
+
+  Check every changed file against these rules. Grep for the red flags listed.
+  Each violation is a finding.
+
+  ### 3. Task Acceptance Criteria
+
+  For each task in the epic, verify the acceptance criteria in the task
+  description are met by the implementation. Run `bd show <task_id>` for each
+  task and cross-reference against the code changes.
+
+  ## Output Format
+
+  Return a numbered list of findings. For each finding:
+  - File path and line number
+  - Severity: CRITICAL / HIGH / MEDIUM / LOW
+  - What's wrong
+  - How to fix it
+
+  End with: 'Ready to merge: Yes/No'
+
+  If no issues found, return: 'Ready to merge: Yes — no issues found.'")
+```
+
+**When the review comes back**, invoke `superpowers:receiving-code-review` and
+follow its response pattern:
+
+1. **READ** the full review without reacting
+2. **VERIFY** each finding against the codebase — is it actually valid? Check
+   the file and line number. The reviewer can be wrong.
+3. **FIX** Critical and Important issues. Push back with reasoning if a finding
+   is incorrect — do not blindly implement wrong suggestions.
+4. **MEDIUM** findings — use judgment, but default to fixing.
+5. **LOW** findings — fix if trivial, otherwise note and move on.
+6. Commit fixes:
+   ```bash
+   git add <fixed-files>
+   git commit -m "fix: address review findings for {{EPIC_ID}}"
+   ```
+7. **Re-run the code-reviewer** on the new diff (`BASE_SHA` = previous
+   `HEAD_SHA`, `HEAD_SHA` = new HEAD). Repeat until the reviewer returns
+   "Ready to merge: Yes" with no Critical or Important issues remaining.
+
+**Maximum iterations:** 3 review rounds. If issues persist after 3 rounds,
+proceed to Step 3 and note the unresolved findings in your completion message
+to the coordinator. Do not loop indefinitely.
+
+### Step 3: Scope Check
+
+After the code review passes, verify that the implementation covers everything
+specified in the plan and design documents.
+
+Spawn a `general-purpose` sub-agent in **foreground**:
+
+```text
+Agent(subagent_type="general-purpose", model="sonnet",
+  prompt="Cross-reference the implementation against the plan and design docs.
+
+  ## Documents to Read
+  - Plan file: {{PLAN_FILE}}
+  - Design doc: {{DESIGN_DOC}}
+  - Epic status: run `bd show {{EPIC_ID}}`
+
+  ## Instructions
+  1. Read both documents fully
+  2. Read the implemented source files (use `git --no-pager diff main...HEAD`
+     to find changed files, then read each one)
+  3. Produce a gap report: for every requirement, interface, behavior, config
+     option, or edge case specified in either document, check whether the code
+     implements it
+  4. List only MISSING items — things specified in the docs but absent from
+     the code
+
+  ## Output Format
+  If gaps exist, return a numbered list. For each gap:
+  - Document reference (which doc, which section)
+  - What's missing
+  - Severity: CRITICAL (core requirement) / IMPORTANT (specified behavior) /
+    MINOR (nice-to-have detail)
+
+  If no gaps: return 'SCOPE COMPLETE — all requirements covered.'")
+```
+
+**When the scope check returns:**
+
+- **If gaps exist:** For each CRITICAL or IMPORTANT gap, implement it using the
+  same TDD cycle from Phase 2 (write test → implement → verify). Commit each
+  fix: `git commit -m "feat: cover missing scope — <description>"`. After all
+  gaps are filled, return to **Step 2** (Code Review Loop) to review the new
+  code. MINOR gaps may be noted but do not block.
+- **If no gaps:** Proceed to Step 4.
+
+**Maximum iterations:** 2 scope check rounds. If gaps persist after 2 rounds,
+note them in the completion message to the coordinator.
+
+### Step 4: Final Verification
+
+Run `{{QUALITY_COMMANDS}}` one final time. Review fixes and scope additions can
+introduce regressions — do not skip this.
+
+**If tests fail:** Fix failures before proceeding.
+
+### Verification Checklist
+
+Before proceeding to Phase 4, confirm:
+
+- [ ] All tasks in the epic are closed: `bd show {{EPIC_ID}}`
+- [ ] All tests pass: `{{QUALITY_COMMANDS}}`
+- [ ] Code review returned "Ready to merge: Yes"
+- [ ] Scope check returned "SCOPE COMPLETE" (or only MINOR gaps remain)
+- [ ] Commit history is clean and descriptive:
+      `git --no-pager log --oneline -20`
+
+---
+
+## Phase 4: Complete & Land
+
+### Step 1: Close the Epic
+
+```bash
+# Verify all tasks are closed
+bd show {{EPIC_ID}}
+
+# Close the epic
+bd close {{EPIC_ID}} --reason="All tasks implemented and verified"
+```
+
+### Step 2: Push Branch & Notify Coordinator
+
+Do NOT merge to main yourself. Push your branch and notify the coordinator
+for code review and merge:
+
+```bash
+# Ensure branch is up to date with main
+git fetch origin main
+git rebase origin/main
+
+# If conflicts arise, resolve them, then:
+# git rebase --continue
+
+# Run quality gates one final time after rebase
+{{QUALITY_COMMANDS}}
+
+# Push the branch (NOT main)
+git push origin {{BRANCH_NAME}}
+
+# Notify the coordinator
+thrum send "{{EPIC_ID}} complete. Branch {{BRANCH_NAME}} pushed, all tests passing. Ready for review/merge." --to @{{COORDINATOR_NAME}}
+```
+
+The coordinator handles code review and merge to main. This ensures review gates
+are not bypassed and cross-epic integration is verified.
+
+> **For solo-agent workflows:** If no coordinator exists, override this step to
+> merge directly to main after running the full quality gate.
+
+### Step 3: Clean Up (Only If Instructed)
+
+```bash
+# Remove the worktree if no longer needed
+git worktree remove {{WORKTREE_PATH}}
+
+# Delete the feature branch
+git branch -d {{BRANCH_NAME}}
+```
+
+Only clean up if explicitly instructed. The user may want to keep the worktree
+for future work.
+
+---
+
+## Resume Quick Reference
+
+If you're resuming after context loss (compaction, new session, etc.), here's
+the minimal sequence:
+
+```bash
+# 1. Re-register with Thrum (MANDATORY — do this first)
+cd {{WORKTREE_PATH}}
+thrum quickstart --name {{AGENT_NAME}} --role implementer --module {{BRANCH_NAME}} --intent "Resuming {{EPIC_ID}}"
+thrum inbox --unread
+
+# 2. Orient from beads and git
+bd show {{EPIC_ID}}                    # What's done?
+bd list --status=in_progress           # Anything mid-flight?
+git --no-pager log --oneline -10       # What was committed?
+git status                             # Any uncommitted work?
+# Then pick up from the first incomplete task — DO NOT redo completed work
+```
