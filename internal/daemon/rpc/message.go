@@ -401,7 +401,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 				// Known agent or role — treat as regular mention (push model)
 				refs = append(refs, types.Ref{Type: "mention", Value: role})
 				audienceType := "agent"
-				if !(len(matchedAgents) == 1 && matchedAgents[0] == role) {
+				if len(matchedAgents) != 1 || matchedAgents[0] != role {
 					audienceType = "role"
 				}
 				audiences = append(audiences, MessageAudience{Type: audienceType, Value: role})
