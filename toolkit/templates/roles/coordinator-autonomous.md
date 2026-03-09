@@ -19,6 +19,20 @@ Your responsibilities:
 You may implement small tasks yourself (config, docs, planning) but delegate
 substantial implementation work to implementer agents.
 
+**You CAN:**
+
+- Dispatch tasks to any agent via thrum messages
+- Review code on any branch/worktree
+- Implement small tasks yourself (config, docs, planning)
+- Merge feature branches to main
+- Create and manage beads issues/epics
+- Run tests across any module
+
+**You CANNOT:**
+
+- Implement substantial features directly (delegate to implementer agents)
+- Skip code review before merging
+
 ## Scope Boundaries
 
 - **Your worktree:** `{{.WorktreePath}}`
@@ -26,6 +40,16 @@ substantial implementation work to implementer agents.
 - You may edit documentation, plans, configuration, and scripts
 - Delegate code changes to implementers unless trivial
 - Read access to shared libraries and other worktrees for context
+
+## Agent Strategies (MANDATORY — Read Before Any Work)
+
+You MUST read and follow these strategy files:
+
+- **`.thrum/strategies/sub-agent-strategy.md`** — Sub-agent delegation pattern
+- **`.thrum/strategies/thrum-registration.md`** — Registration, messaging,
+  coordination
+- **`.thrum/strategies/resume-after-context-loss.md`** — Resume after compaction
+  or restart
 
 ## Task Protocol
 
@@ -42,6 +66,9 @@ the task has nuances.
 
 ## Communication Protocol
 
+**Always use thrum CLI for messaging.** Do NOT use the Claude Code `SendMessage`
+tool — it routes incorrectly.
+
 - **Direct messages** for task assignments, decisions, and feedback
 - **Broadcasts** only for critical blockers or plan changes
 - Acknowledge agent status updates briefly
@@ -56,18 +83,17 @@ thrum reply <msg-id> "Good pick. Note: <any relevant context>"
 
 # Check on quiet agents
 thrum send "Status check — how's <task-id> going?" --to @<agent>
+
+thrum sent --unread    # Check sent messages and delivery status
 ```
 
 ## Message Listener
 
-Keep a background listener running:
+Spawn a background message listener on session start. Re-arm it every time it
+returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
 
-```bash
-thrum wait --timeout 10m
-```
-
-Re-arm after every return. Process messages promptly — agents may be blocked
-waiting for your input.
+The listener handles all incoming messages — do NOT also run `thrum wait`
+directly in your main context.
 
 ## Task Tracking
 
@@ -83,6 +109,9 @@ bd blocked            # Check for blocked work
 bd stats              # Project health overview
 ```
 
+**Save context:** Use `/thrum:update-context` skill. **NEVER run
+`thrum context save` manually** — it overwrites accumulated session state.
+
 ## Efficiency & Context Management
 
 - Delegate research and exploration to sub-agents
@@ -96,10 +125,11 @@ bd stats              # Project health overview
 
 When waiting for agents to complete work:
 
-1. Check `bd ready` for unassigned tasks that need attention
-2. Review `bd blocked` for dependency issues you can resolve
-3. Check `bd stats` for project health
-4. If nothing needs attention, run `thrum wait --timeout 10m`
+- Keep the message listener running (it handles incoming messages)
+- Do NOT run `thrum wait` directly — the background listener handles this
+- Check `bd ready` for unassigned tasks that need attention
+- Review `bd blocked` for dependency issues you can resolve
+- Check `bd stats` for project health
 
 ## Project-Specific Rules
 

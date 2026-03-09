@@ -42,7 +42,33 @@ digraph when_to_use {
 
 - No design doc exists yet — use brainstorming skill first
 - No plan file exists yet — use writing-plans skill first
-- Tasks already exist in beads — go straight to implementation
+- Tasks already exist in beads — go straight to creating the implementation
+  prompt closely following the template (implementation-agent.md)
+
+## Prerequisites
+
+Before starting, verify beads is installed:
+
+```bash
+bd version
+```
+
+If `bd` is not found, stop and tell the user:
+
+> project-setup requires beads (`bd`) for task tracking with dependencies.
+> Install it:
+>
+> ```bash
+> brew install dolt                    # required dependency
+> brew install steveyegge/beads/bd     # beads CLI
+> bd init                              # initialize in your repo
+> ```
+>
+> See the [beads repo](https://github.com/steveyegge/beads) for alternative
+> install methods. Requires dolt v1.81.8+ and bd v0.59.0+.
+
+Do not proceed without beads. Do not fall back to markdown task lists or
+TodoWrite.
 
 ## Inputs
 
@@ -111,20 +137,14 @@ non-negotiable criteria:
 1. Check if the design doc references a philosophy doc (look for "philosophy",
    "anti-patterns", "implementation standards" keywords)
 2. Search for existing files:
-
    ```bash
    find . -name "*philosophy*" -o -name "*anti-pattern*" -o -name "*implementation-standards*" | head
    ```
-
 3. **If found:** Read it and extract the key anti-patterns. These will be
    injected into each epic's prompt in Phase 4.
-4. **If not found:** Offer to create one from the template:
-
-   ```text
-   toolkit/templates/agent-dev-workflow/philosophy-template.md
-   ```
-
-   Use `AskUserQuestion` to ask whether to create it now or skip.
+4. **If not found:** Offer to create one from the `philosophy-template.md` file
+   in this skill's `resources/` directory. Use `AskUserQuestion` to ask whether
+   to create it now or skip.
 
 This is the project's "rules of engagement" for implementation agents. Without
 it, agents can only verify "tests pass" — they can't verify architectural
@@ -244,6 +264,34 @@ git commit -m "feat(module): add specific feature"
 **Granularity:** Each task should be completable in one focused session (30-90
 minutes). If a task has more than 5 steps, split it.
 
+### Ensure Refactoring Epic Exists
+
+Implementation agents log DRY/refactoring opportunities they discover during
+feature work. These go into a persistent **refactoring epic** in beads. Check if
+one exists; if not, create it:
+
+```bash
+# Search for existing refactoring epic
+bd list --type=epic | grep -i refactor
+```
+
+If found, note the epic ID — it will be referenced in the implementation
+template's "Logging Refactoring Opportunities" section.
+
+If not found, create one:
+
+```bash
+bd create "Refactoring & DRY Opportunities" --type=epic --priority=3 \
+  --description="Persistent backlog for refactoring, DRY improvements, and code
+organization opportunities discovered during feature work. Tasks are added by
+implementation agents as they encounter opportunities. Reviewed and prioritized
+by the coordinator periodically."
+```
+
+This epic is **project-wide and long-lived** — it persists across feature epics.
+Do not close it when closing feature epics. Implementation agents find it via
+`bd list --type=epic | grep -i refactor` and add tasks under it.
+
 ### Verify Setup
 
 Before proceeding to Phase 3:
@@ -350,7 +398,7 @@ description (e.g., `impl_{feature}`). The user can override.
 
 Based on the user's choice, execute the appropriate setup:
 
-#### For reused worktrees
+#### For reused worktrees:
 
 ```bash
 cd <worktree-path>
@@ -380,7 +428,7 @@ thrum quickstart --name <agent-name> --role implementer \
   --module <branch-name> --intent "Implementing <epic-id>"
 ```
 
-#### For new worktrees
+#### For new worktrees:
 
 ```bash
 # From the project root — MUST pass --base thrum-dev
@@ -392,7 +440,7 @@ thrum quickstart --name <agent-name> --role implementer \
 The setup script handles: branch creation, worktree creation, thrum redirect,
 beads redirect, and `thrum quickstart` registration.
 
-#### For current worktree (small fixes)
+#### For current worktree (small fixes):
 
 ```bash
 # Just register the agent
@@ -484,9 +532,8 @@ For each epic/worktree assignment, generate a filled prompt file.
 
 ### Step 1: Read the template
 
-```text
-Read toolkit/templates/agent-dev-workflow/implementation-agent.md
-```
+Read the `implementation-agent.md` file from this skill's `resources/`
+directory.
 
 This is the **source template**. Do not work from memory — read the actual file
 every time.
@@ -533,20 +580,6 @@ worktree-related values come from the Phase 3 assignments:
 | `{{ANTI_PATTERNS}}`    | Generated in Step 1.5 from design doc + philosophy doc                                                                                                                                                                      |
 | `{{CROSS_EPIC_DEPS}}`  | From Phase 2 cross-epic dependency map. If no cross-epic deps, replace with "No cross-epic dependencies."                                                                                                                   |
 
-**Strategy file references.** When generating the filled prompt for a
-thrum-enabled project, replace the inline `## Sub-Agent Strategy` section with a
-read-directive pointing to `.thrum/strategies/sub-agent-strategy.md`. This
-reduces the prompt by ~60 lines while ensuring the strategy is always up-to-date
-with the installed thrum version. The implementation agent reads the file at
-runtime.
-
-Similarly, the `## MANDATORY: Register Before Any Work` section can reference
-`.thrum/strategies/thrum-registration.md`, and the `## Resume Quick Reference`
-can reference `.thrum/strategies/resume-after-context-loss.md`.
-
-For non-thrum projects (no `.thrum/` directory), keep the sections inline as
-they appear in the template.
-
 **IMPORTANT — Absolute paths for gitignored files:** `{{DESIGN_DOC}}`,
 `{{PLAN_FILE}}`, and the saved prompt path (`dev-docs/prompts/`) are typically
 gitignored. Agents in worktrees cannot resolve relative paths to these files
@@ -560,14 +593,20 @@ path.
 template itself and MUST NOT appear in the filled prompt:
 
 - `## Purpose` — template description, not agent instructions
+- `## CRITICAL: Prompt Generation Rules` — instructions for the coordinator
+  filling the template, not for the implementation agent
 - `## Inputs Required` — placeholder documentation for the coordinator, not the
   agent. Including this section confuses agents with `{{PLACEHOLDER}}`
   descriptions alongside already-resolved values.
+- Any `<!-- STRIP ... -->` HTML comment blocks — these are meta-instructions
+  that must be removed along with any text they annotate
+- Any lines that address "the coordinator" or say "when filling this template"
 
 **Keep all behavioral sections.** The output must contain every behavioral
-section from the template — Sub-Agent Strategy, all 4 Phases, Resume Quick
-Reference, etc. — with placeholders replaced by resolved values. Do not omit,
-reorganize, or summarize behavioral sections.
+section from the template — Sub-Agent Strategy, all 4 Phases (including the new
+Phase 3: Self-Review Gate), Resume Quick Reference, etc. — with placeholders
+replaced by resolved values. Do not omit, reorganize, or summarize behavioral
+sections.
 
 ### Step 3: Prepend feature-specific context
 

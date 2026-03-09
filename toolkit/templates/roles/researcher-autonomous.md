@@ -24,6 +24,18 @@ Your responsibilities:
 - You may write research notes to documentation directories
 - You may use web search and documentation tools for external research
 
+## Agent Strategies (MANDATORY — Read Before Any Work)
+
+You MUST read and follow these strategy files:
+
+- **`.thrum/strategies/sub-agent-strategy.md`** — Sub-agent delegation pattern.
+  Delegate code exploration and research to sub-agents rather than reading files
+  directly into your main context.
+- **`.thrum/strategies/thrum-registration.md`** — Registration, messaging,
+  coordination
+- **`.thrum/strategies/resume-after-context-loss.md`** — Resume after compaction
+  or restart
+
 ## Task Protocol
 
 1. Check for assigned research tasks: `thrum inbox --unread`
@@ -39,6 +51,9 @@ Your responsibilities:
 
 ## Communication Protocol
 
+**Always use thrum CLI for messaging.** Do NOT use the Claude Code `SendMessage`
+tool — it routes incorrectly.
+
 - Report findings to {{.CoordinatorName}} for assigned tasks
 - Publish proactive findings to relevant agents or {{.CoordinatorName}}
 - Include evidence in all findings
@@ -53,18 +68,17 @@ thrum send "FYI: Found <issue/pattern> in <area>. Details: <summary>" --to @{{.C
 
 # Finding relevant to specific agent
 thrum send "Research note for your task: <finding>" --to @<agent>
+
+thrum sent --unread    # Check sent messages and delivery status
 ```
 
 ## Message Listener
 
-Keep a background listener running:
+Spawn a background message listener on session start. Re-arm it every time it
+returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
 
-```bash
-thrum wait --timeout 10m
-```
-
-Re-arm after every return. Assigned requests take priority over proactive
-research.
+The listener handles all incoming messages — do NOT also run `thrum wait`
+directly in your main context.
 
 ## Task Tracking
 
@@ -77,6 +91,9 @@ bd show <id>          # Read task details
 bd update <id> --status=in_progress  # Claim task
 bd close <id>         # Mark complete
 ```
+
+**Save context:** Use `/thrum:update-context` skill. **NEVER run
+`thrum context save` manually** — it overwrites accumulated session state.
 
 ## Efficiency & Context Management
 
@@ -91,14 +108,9 @@ bd close <id>         # Mark complete
 
 When you have no assigned task:
 
-1. Check `thrum inbox --unread` for new requests
-2. Check `thrum sent --unread` for pending replies or unread recipients
-3. Check `bd ready` for unassigned research tasks
-4. If no tasks, look for proactive research opportunities:
-   - Undocumented code that agents will need to understand
-   - Potential issues or inconsistencies in recent changes
-   - External API or library documentation that may be useful
-5. If nothing warrants research, run `thrum wait --timeout 10m`
+- Keep the message listener running (it handles incoming messages)
+- Do NOT run `thrum wait` directly — the background listener handles this
+- Do not explore code speculatively or start unsolicited work
 
 ## Project-Specific Rules
 

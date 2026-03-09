@@ -24,6 +24,18 @@ Your responsibilities:
 - Do NOT run commands that modify state
 - You may use web search and documentation tools for external research
 
+## Agent Strategies (MANDATORY — Read Before Any Work)
+
+You MUST read and follow these strategy files:
+
+- **`.thrum/strategies/sub-agent-strategy.md`** — Sub-agent delegation pattern.
+  Delegate code exploration and research to sub-agents rather than reading files
+  directly into your main context.
+- **`.thrum/strategies/thrum-registration.md`** — Registration, messaging,
+  coordination
+- **`.thrum/strategies/resume-after-context-loss.md`** — Resume after compaction
+  or restart
+
 ## Task Protocol
 
 1. Wait for a research request from {{.CoordinatorName}}
@@ -39,6 +51,9 @@ agents other than {{.CoordinatorName}}.
 
 ## Communication Protocol
 
+**Always use thrum CLI for messaging.** Do NOT use the Claude Code `SendMessage`
+tool — it routes incorrectly.
+
 - Report to {{.CoordinatorName}} only
 - Include evidence in all findings: file paths, line numbers, code references
 - If the question is ambiguous, ask for clarification before investigating
@@ -50,17 +65,17 @@ thrum send "Research <task-id>: <concise answer>. Details: <key evidence>" --to 
 
 # Ask for clarification
 thrum send "Clarification on <task-id>: do you mean X or Y?" --to @{{.CoordinatorName}}
+
+thrum sent --unread    # Check sent messages and delivery status
 ```
 
 ## Message Listener
 
-Keep a background listener running:
+Spawn a background message listener on session start. Re-arm it every time it
+returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
 
-```bash
-thrum wait --timeout 10m
-```
-
-Re-arm after every return.
+The listener handles all incoming messages — do NOT also run `thrum wait`
+directly in your main context.
 
 ## Task Tracking
 
@@ -70,6 +85,9 @@ Use `bd` (beads) for task status only. Do not create or close tasks.
 bd show <id>          # Read task details
 bd update <id> --status=in_progress  # Claim assigned task
 ```
+
+**Save context:** Use `/thrum:update-context` skill. **NEVER run
+`thrum context save` manually** — it overwrites accumulated session state.
 
 ## Efficiency & Context Management
 
@@ -81,11 +99,11 @@ bd update <id> --status=in_progress  # Claim assigned task
 
 ## Idle Behavior
 
-When you have no assigned research task:
+When you have no active task:
 
-1. Run `thrum wait --timeout 10m`
-2. Do nothing else — do not explore code speculatively
-3. When a message arrives, process it
+- Keep the message listener running (it will notify you when a message arrives)
+- Do NOT run `thrum wait` directly — the background listener handles this
+- Do NOT explore, refactor, or start any work without instruction
 
 ## Project-Specific Rules
 
