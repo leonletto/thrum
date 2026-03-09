@@ -1,4 +1,3 @@
-
 ## MCP Server
 
 > **See also:** [Daemon Architecture](daemon.md) for the underlying daemon the
@@ -430,7 +429,7 @@ roles to individual agent IDs.
 
 **Daemon RPC:** `group.info` (without expand) or `group.members` (with expand)
 
-### broadcast\_message (Deprecated)
+### broadcast_message (Deprecated)
 
 > **Deprecated:** Use `send_message(to="@everyone", content="...")` instead.
 > This tool is registered but deprecated and may be removed in a future release.
