@@ -132,6 +132,78 @@ func TestMessageListMentionRoleFilter(t *testing.T) {
 	})
 }
 
+func TestMessageListMentionOrDirectReplyForWaitParity(t *testing.T) {
+	st := setupReceiptTestState(t)
+	senderID := registerAndStartAgent(t, st, "coordinator_main", "coordinator")
+	receiverID := registerAndStartAgent(t, st, "implementer_api", "implementer")
+
+	handler := NewMessageHandler(st)
+	ctx := context.Background()
+
+	// Initial direct message to establish the conversation.
+	initialParams, _ := json.Marshal(SendRequest{
+		Content:       "ping-1",
+		Mentions:      []string{"@implementer_api"},
+		CallerAgentID: senderID,
+	})
+	if _, err := handler.HandleSend(ctx, initialParams); err != nil {
+		t.Fatalf("send initial message: %v", err)
+	}
+
+	// Receiver sends a fresh direct message back to the sender.
+	freshParams, _ := json.Marshal(SendRequest{
+		Content:       "pong-1",
+		Mentions:      []string{"@coordinator_main"},
+		CallerAgentID: receiverID,
+	})
+	freshRespRaw, err := handler.HandleSend(ctx, freshParams)
+	if err != nil {
+		t.Fatalf("send fresh direct message: %v", err)
+	}
+	freshResp := freshRespRaw.(*SendResponse)
+
+	// Sender replies using the same audience-copy semantics as cli.Reply:
+	// include the receiver's direct name and the sender's own name.
+	replyParams, _ := json.Marshal(SendRequest{
+		Content:       "pong-2",
+		Mentions:      []string{"@implementer_api", "@coordinator_main"},
+		ReplyTo:       freshResp.MessageID,
+		CallerAgentID: senderID,
+	})
+	replyRespRaw, err := handler.HandleSend(ctx, replyParams)
+	if err != nil {
+		t.Fatalf("send reply: %v", err)
+	}
+	replyResp := replyRespRaw.(*SendResponse)
+
+	listReq := ListMessagesRequest{
+		ThreadID:      replyResp.ThreadID,
+		MentionRole:   "implementer",
+		ForAgent:      receiverID,
+		ForAgentRole:  "implementer",
+		ExcludeSelf:   true,
+		CallerAgentID: receiverID,
+		PageSize:      20,
+		SortOrder:     "asc",
+	}
+	listParams, _ := json.Marshal(listReq)
+	listRespRaw, err := handler.HandleList(ctx, listParams)
+	if err != nil {
+		t.Fatalf("HandleList: %v", err)
+	}
+	listResp := listRespRaw.(*ListMessagesResponse)
+
+	if len(listResp.Messages) != 1 {
+		t.Fatalf("expected exactly one visible reply in thread, got %d messages: %#v", len(listResp.Messages), listResp.Messages)
+	}
+	if listResp.Messages[0].MessageID != replyResp.MessageID {
+		t.Fatalf("expected reply message %s, got %s", replyResp.MessageID, listResp.Messages[0].MessageID)
+	}
+	if listResp.Messages[0].ReplyTo != freshResp.MessageID {
+		t.Fatalf("expected reply_to=%s, got %s", freshResp.MessageID, listResp.Messages[0].ReplyTo)
+	}
+}
+
 func TestMessageListUnreadFilter(t *testing.T) {
 	handler, agentID, cleanup := setupFilterTest(t)
 	defer cleanup()
