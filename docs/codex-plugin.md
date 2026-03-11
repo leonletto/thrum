@@ -1,3 +1,4 @@
+
 ## Codex Plugin
 
 > See also: [Quickstart Guide](quickstart.md) for base Thrum setup,
@@ -33,9 +34,22 @@ thrum quickstart --name myagent --role implementer --module auth
 
 ## Installation
 
-From the Thrum repository root:
+### From GitHub
+
+Clone the Thrum repository and run the install script:
 
 ```bash
+git clone https://github.com/leonletto/thrum.git
+cd thrum
+./codex-plugin/scripts/install-skills.sh
+```
+
+### From Local Clone
+
+If you already have the Thrum repository cloned locally:
+
+```bash
+cd /path/to/thrum
 ./codex-plugin/scripts/install-skills.sh
 ```
 

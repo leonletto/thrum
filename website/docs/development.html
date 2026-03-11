@@ -450,7 +450,7 @@ func (h *MyMethodHandler) Handle(ctx context.Context, params json.RawMessage) (a
 
     return result, nil
 }</code></pre>
-<ol start="2">
+<ol>
 <li><p>Add tests in <code>internal/daemon/rpc/mymethod_test.go</code></p>
 </li>
 <li><p>Register in daemon startup (in <code>cmd/thrum/main.go</code>):</p>
@@ -458,7 +458,7 @@ func (h *MyMethodHandler) Handle(ctx context.Context, params json.RawMessage) (a
 </ol>
 <pre><code>myMethodHandler := rpc.NewMyMethodHandler()
 server.RegisterHandler(&quot;mymethod&quot;, myMethodHandler.Handle)</code></pre>
-<ol start="4">
+<ol>
 <li>Update documentation in <code>docs/rpc-api.md</code></li>
 </ol>
 <h2>Environment Variables</h2>
@@ -880,7 +880,6 @@ file:</p>
 development with AI agents)</li>
 <li><strong>Agent Reference</strong>: <code>llms.txt</code> (concise) and <code>llms-full.txt</code> (detailed)</li>
 </ul>
-<pre><code></code></pre>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#development.html')}</script>

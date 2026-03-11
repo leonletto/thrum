@@ -69,6 +69,10 @@ replying to, and managing messages.</p>
 <td>List messages with read/unread indicators</td>
 </tr>
 <tr>
+<td><code>thrum sent</code></td>
+<td>List messages you sent with recipient read status</td>
+</tr>
+<tr>
 <td><code>thrum message read</code></td>
 <td>Mark messages as read (single, multiple, or --all)</td>
 </tr>
@@ -165,7 +169,8 @@ mentions list), Thrum stores them as refs with type <code>mention</code> and the
 as the value:</p>
 <pre><code>{ &quot;type&quot;: &quot;mention&quot;, &quot;value&quot;: &quot;reviewer&quot; }</code></pre>
 <p>Agents can then filter their inbox to only messages that mention them:</p>
-<pre><code>thrum inbox --mentions</code></pre>
+<pre><code>thrum inbox --mentions
+thrum sent --unread</code></pre>
 <p>This queries for messages where a <code>mention</code> ref matches the current agent&#39;s
 role.</p>
 <h3>Name vs Role Routing (v0.4.5+)</h3>
@@ -210,6 +215,9 @@ thrum send &quot;Auth module complete, all tests passing&quot; \
 
 # Reviewer checks inbox for messages directed at them
 thrum inbox --mentions
+
+# Implementer verifies the outgoing message recipients and receipts
+thrum sent --to @reviewer
 
 # Reviewer replies to the message
 thrum reply msg_01HXE... &quot;Looks good, merging now&quot;</code></pre>
@@ -776,7 +784,6 @@ shard.</p>
 <li>Daemon Architecture: <code>docs/daemon.md</code></li>
 <li>Development Guide: <code>docs/development.md</code></li>
 </ul>
-<pre><code></code></pre>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#messaging.html')}</script>
