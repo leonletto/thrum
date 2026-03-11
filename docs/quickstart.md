@@ -1,3 +1,4 @@
+
 ## Thrum Quickstart Guide
 
 Get up and running with Thrum in 5 minutes.
@@ -42,6 +43,32 @@ persistence. See [Agent Context Management](context.md) for details.
 
 ## Installation
 
+### Install Script (recommended)
+
+Downloads the latest release binary with SHA-256 checksum verification. Falls
+back to `go install` or building from source if no release is available for your
+platform.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+```
+
+### Homebrew
+
+```bash
+brew install leonletto/tap/thrum
+```
+
+### Go Install
+
+```bash
+go install github.com/leonletto/thrum/cmd/thrum@latest
+```
+
+Note: `go install` builds the Go binary only — the embedded Web UI SPA is not
+included. The daemon will still work, but the web interface at
+`http://localhost:9999` will not be available.
+
 ### From Source
 
 ```bash
@@ -49,16 +76,6 @@ git clone https://github.com/leonletto/thrum.git
 cd thrum
 make install  # Builds UI + Go binary, installs to ~/.local/bin
 ```
-
-### Or Build Go Binary Only
-
-```bash
-go build -o thrum ./cmd/thrum
-```
-
-Note: Building without `make install` will not include the embedded Web UI SPA.
-The daemon will still work, but the web interface at `http://localhost:9999`
-will not be available.
 
 ## Quick Start
 
@@ -86,7 +103,32 @@ need a separate `thrum daemon start` step for first-time setup.
 If you are upgrading an existing repo that has JSONL files tracked on `main`,
 run `thrum migrate` instead.
 
-### 2. Generate CLAUDE.md Coordination Instructions
+### 2. Install the Plugin (Claude Code or Codex)
+
+If you use Claude Code or Codex, install the plugin right after initialization
+so agents get automatic context injection and slash commands.
+
+**Claude Code:**
+
+```bash
+claude plugin marketplace add https://github.com/leonletto/thrum
+claude plugin install thrum
+```
+
+See [Claude Code Plugin](claude-code-plugin.md) for details on what the plugin
+provides (slash commands, hooks, resource docs).
+
+**Codex:**
+
+```bash
+git clone https://github.com/leonletto/thrum.git
+cd thrum
+./codex-plugin/scripts/install-skills.sh
+```
+
+See [Codex Plugin](codex-plugin.md) for the full skill bundle reference.
+
+### 3. Generate CLAUDE.md Coordination Instructions
 
 For Claude Code and other AI agents, generate Thrum coordination instructions:
 
@@ -98,7 +140,7 @@ This appends agent coordination instructions to your CLAUDE.md file (creates it
 if missing). Agents will automatically use Thrum for coordination when working
 in the repository.
 
-### 3. Register Your Agent and Start a Session
+### 4. Register Your Agent and Start a Session
 
 The fastest way is the quickstart command, which registers, starts a session,
 and sets your intent in one step:
@@ -128,7 +170,7 @@ thrum agent register
 
 Priority: `THRUM_NAME` env var > `--name` flag > solo-agent auto-select.
 
-### 5. Send Your First Message
+### 6. Send Your First Message
 
 ```bash
 thrum send "Started working on user authentication" \
@@ -136,7 +178,7 @@ thrum send "Started working on user authentication" \
   --ref issue:beads-123
 ```
 
-### 6. Check Your Inbox
+### 7. Check Your Inbox
 
 ```bash
 thrum inbox

@@ -57,6 +57,7 @@ complete tools reference.</p>
 <p>Shell commands for basic messaging. Works everywhere.</p>
 <pre><code>thrum send &quot;Starting work on task X&quot; --to @coord_main
 thrum inbox --unread
+thrum sent --unread
 thrum reply &lt;msg-id&gt; &quot;Here&#39;s my update&quot;</code></pre>
 <blockquote>
 <p><strong>Note:</strong> Use agent names (e.g., <code>@coord_main</code>), not role names (e.g.,
@@ -78,7 +79,8 @@ thrum send &quot;Please implement build script (task thrum-235d.3). \
   --to @impl1
 
 # Check for updates
-thrum inbox</code></pre>
+thrum inbox
+thrum sent --to @impl1</code></pre>
 <p><strong>Implementer:</strong></p>
 <pre><code># Register
 thrum quickstart --name impl1 --role implementer --module website \
@@ -86,6 +88,9 @@ thrum quickstart --name impl1 --role implementer --module website \
 
 # Check inbox for assignments
 thrum inbox --unread
+
+# Check sent items after responding
+thrum sent --to @planner1
 
 # Acknowledge and work
 thrum reply &lt;msg-id&gt; &quot;Claimed task. Starting implementation.&quot;
@@ -405,7 +410,6 @@ coordination</li>
 <li><a href="quickstart.html">Quickstart Guide</a> -- getting started in 5 minutes</li>
 <li><a href="identity.html">Identity System</a> -- agent names and registration</li>
 </ul>
-<pre><code></code></pre>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#agent-coordination.html')}</script>

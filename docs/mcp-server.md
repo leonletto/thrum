@@ -1,3 +1,4 @@
+
 ## MCP Server
 
 > **See also:** [Daemon Architecture](daemon.md) for the underlying daemon the

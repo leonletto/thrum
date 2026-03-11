@@ -87,6 +87,10 @@ messaging system for AI agent coordination.</p>
 <td>List messages in your inbox</td>
 </tr>
 <tr>
+<td><code>thrum sent</code></td>
+<td>List messages you sent with receipt status</td>
+</tr>
+<tr>
 <td><code>thrum message get</code></td>
 <td>Get a single message with full details</td>
 </tr>
@@ -301,6 +305,10 @@ messaging system for AI agent coordination.</p>
 <tr>
 <td><code>thrum backup plugin add</code></td>
 <td>Add a backup plugin (or use a built-in preset)</td>
+</tr>
+<tr>
+<td><code>thrum backup schedule</code></td>
+<td>Configure automatic backup schedule</td>
 </tr>
 <tr>
 <td><code>thrum mcp serve</code></td>
@@ -757,6 +765,17 @@ are automatically marked as read (unless filtering with <code>--unread</code>).<
 │ LGTM on the auth changes. Ready to merge.               │
 └──────────────────────────────────────────────────────────┘
 Showing 1-2 of 12 messages (5 unread)</code></pre>
+<h3>thrum sent</h3>
+<p>List messages you authored, including resolved recipients and durable
+delivery/read state.</p>
+<pre><code>thrum sent [flags]
+thrum sent show MSG_ID</code></pre>
+<p>Common examples:</p>
+<pre><code>thrum sent
+thrum sent --unread
+thrum sent --to @implementer_api
+thrum sent --to @backend-team
+thrum sent show msg_01HXE8Z7</code></pre>
 <h3>thrum message get</h3>
 <p>Get a single message with full details. The message is automatically marked as
 read.</p>
@@ -1397,6 +1416,11 @@ $ thrum ping planner
 # Save from stdin
 $ echo &quot;Working on auth module&quot; | thrum context save
 ✓ Context saved for furiosa (24 bytes)</code></pre>
+<p><strong>Agent safety note:</strong> Agents should use the <code>/thrum:update-context</code> skill
+instead of running <code>thrum context save</code> directly. The skill composes a
+structured context (decisions, next steps, work-in-progress) before saving,
+whereas running the command manually with arbitrary input can overwrite
+accumulated session state.</p>
 <h3>thrum context show</h3>
 <p>Display the saved context for the current agent.</p>
 <pre><code>thrum context show [flags]</code></pre>
@@ -1755,11 +1779,46 @@ $ thrum backup restore .thrum/backup/my-repo/2026-02-15T10:00:00Z.zip --yes</cod
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum backup plugin add --preset beads
-$ thrum backup plugin add --name myplugin --command &quot;bd backup --force&quot; --include &quot;.beads/backup/*.jsonl&quot;</code></pre>
+<pre><code>thrum backup plugin add --preset beads
+thrum backup plugin add --name myplugin --command &quot;bd backup --force&quot; --include &quot;.beads/backup/*.jsonl&quot;</code></pre>
 <h3>thrum backup plugin remove</h3>
 <p>Remove a configured backup plugin by name.</p>
 <pre><code>thrum backup plugin remove --name NAME</code></pre>
+<h3>thrum backup schedule</h3>
+<p>View or configure the automatic backup schedule. The daemon runs a backup at the
+configured interval when it is running.</p>
+<pre><code>thrum backup schedule [interval|off] [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--dir</code></td>
+<td>Set backup directory</td>
+<td></td>
+</tr>
+</tbody></table>
+<p>Examples:</p>
+<pre><code># Show current schedule
+$ thrum backup schedule
+
+# Back up every 24 hours
+$ thrum backup schedule 24h
+
+# Set 8-hour interval and override backup directory
+$ thrum backup schedule 8h --dir dev-docs/backup
+
+# Disable scheduled backups
+$ thrum backup schedule off</code></pre>
+<p>Notes:</p>
+<ul>
+<li>Daemon must be restarted for schedule changes to take effect</li>
+<li>Intervals use Go duration format: <code>24h</code>, <code>12h</code>, <code>6h30m</code>, <code>168h</code> (1 week)</li>
+</ul>
 <h2>MCP Server</h2>
 <h3>thrum mcp serve</h3>
 <p>Start an MCP (Model Context Protocol) server on stdin/stdout for native
