@@ -83,7 +83,7 @@ because everything is committed to version control.</p>
 <tr>
 <td><strong>Key Commands</strong></td>
 <td><code>bd create</code>, <code>bd ready</code>, <code>bd close</code>, <code>bd show</code></td>
-<td><code>thrum send</code>, <code>thrum inbox</code>, <code>thrum agent list</code></td>
+<td><code>thrum send</code>, <code>thrum inbox</code>, <code>thrum sent</code>, <code>thrum agent list</code></td>
 </tr>
 <tr>
 <td><strong>Recovery Scenario</strong></td>
@@ -115,6 +115,9 @@ $ thrum inbox --unread
 From: @planner
 Message: &quot;Search UI should use the MiniSearch interface we built in thrum-c3d4&quot;
 
+# Check sent acknowledgements or receipts
+$ thrum sent --unread
+
 # Claim the task
 $ bd update thrum-a1b2 -s in_progress
 
@@ -135,13 +138,19 @@ $ thrum inbox --unread
 From: @planner
 Message: &quot;Yes, dark mode required. See design tokens in styles/theme.css&quot;
 
+# Verify your last status message was delivered
+$ thrum sent --to @planner
+
 # Continue work with full context recovered</code></pre>
 <h3>Session 3: Finishing up</h3>
 <pre><code># Mark task complete
 $ bd close thrum-a1b2 --comment &quot;Implemented with dark mode support&quot;
 
 # Notify coordinator
-$ thrum send &quot;Search UI complete (thrum-a1b2). Ready for integration.&quot; --to @planner</code></pre>
+$ thrum send &quot;Search UI complete (thrum-a1b2). Ready for integration.&quot; --to @planner
+
+# Confirm coordinator received it
+$ thrum sent --to @planner</code></pre>
 <h3>Session 4: New agent picks up follow-up work</h3>
 <p>A different agent needs to build on this work.</p>
 <pre><code># Discover what&#39;s ready to work on
@@ -149,7 +158,7 @@ $ bd ready
 - thrum-e5f6: Integrate search UI into main app (depends on thrum-a1b2)
 
 # Check message history for context
-$ thrum inbox --from @implementer_ui
+$ thrum inbox
 From: @implementer_ui
 Message: &quot;Search UI complete (thrum-a1b2). Ready for integration.&quot;
 

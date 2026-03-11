@@ -47,10 +47,12 @@ communicate correctly with other agents.</p>
 <h3>Registration Commands</h3>
 <pre><code>thrum quickstart --name &lt;agent-name&gt; --role implementer --module &lt;branch-name&gt; --intent &quot;What you are working on&quot;
 thrum inbox --unread
+thrum sent --unread
 thrum send &quot;Starting work on &lt;task&gt;&quot; --to @&lt;coordinator-name&gt;</code></pre>
 <p>Replace the placeholders with values appropriate for your session:</p>
 <ul>
-<li><code>--role</code> — your function: <code>implementer</code>, <code>coordinator</code>, <code>reviewer</code>, <code>planner</code>, <code>tester</code></li>
+<li><code>--role</code> — your function: <code>implementer</code>, <code>coordinator</code>, <code>reviewer</code>, <code>planner</code>,
+<code>tester</code></li>
 <li><code>--module</code> — the branch or area of work (e.g., the current git branch name)</li>
 <li><code>--intent</code> — a brief description of what you are doing right now</li>
 </ul>
@@ -63,8 +65,8 @@ messages. Agent names look like <code>coord_main</code>, <code>impl_feature_a</c
 <pre><code>thrum team</code></pre>
 <h3>@name vs @role Addressing</h3>
 <p><strong>Default to @name. Only use @role when you intentionally want group fanout.</strong></p>
-<p>Run <code>thrum team</code> to find agent names, then send to <code>--to @&lt;agent_name&gt;</code>. This
-is the correct way to message a specific agent.</p>
+<p>Run <code>thrum team</code> to find agent names, then send to <code>--to @&lt;agent_name&gt;</code>. This is
+the correct way to message a specific agent.</p>
 <table>
 <thead>
 <tr>
@@ -105,6 +107,7 @@ it times out. This keeps you reachable throughout your session.</p>
 <h3>Inbox Management</h3>
 <p>Check your inbox at session start and periodically during work:</p>
 <pre><code>thrum inbox --unread        # show unread messages only
+thrum sent --unread         # show sent messages still unread by someone
 thrum message read --all    # mark all messages as read
 thrum reply &lt;MSG_ID&gt; &quot;...&quot;  # reply to a specific message</code></pre>
 

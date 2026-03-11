@@ -124,6 +124,10 @@ and unread messages in the session preamble.</p>
 <td>Check message inbox (all or unread only)</td>
 </tr>
 <tr>
+<td><code>thrum sent</code></td>
+<td>Review sent messages with resolved recipients and receipts</td>
+</tr>
+<tr>
 <td><code>/thrum:reply</code></td>
 <td>Reply to a message (inherits original audience)</td>
 </tr>
@@ -308,18 +312,17 @@ template.</p>
 work and are available in <code>toolkit/agents/</code> for environments that don&#39;t support
 plugins.</p>
 <h2>Troubleshooting</h2>
-<p><strong>&quot;Thrum not initialized&quot; on session start</strong></p>
+<h3>&quot;Thrum not initialized&quot; on session start</h3>
 <p>Run <code>thrum init &amp;&amp; thrum daemon start</code> in your repository root.</p>
-<p><strong>No context injected after plugin install</strong></p>
+<h3>No context injected after plugin install</h3>
 <p>Verify the plugin is loaded: check that <code>/thrum:prime</code> is available as a slash
 command. If not, reinstall the plugin.</p>
-<p><strong>Messages not arriving</strong></p>
+<h3>Messages not arriving</h3>
 <p>Check daemon status with <code>thrum daemon status</code>. The daemon must be running for
 messaging to work. Start it with <code>thrum daemon start</code>.</p>
-<p><strong>Identity conflicts in multi-worktree setups</strong></p>
+<h3>Identity conflicts in multi-worktree setups</h3>
 <p>Set <code>THRUM_NAME</code> environment variable to give each worktree a unique agent name.
 See <a href="identity.html">Identity System</a> for details.</p>
-<pre><code></code></pre>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#claude-code-plugin.html')}</script>

@@ -477,7 +477,7 @@
       "agents",
       "guide"
     ],
-    "lastUpdated": "2026-02-27"
+    "lastUpdated": "2026-03-09"
   },
   {
     "path": "guides/beads-ui-setup.html",
@@ -493,7 +493,7 @@
       "web-ui",
       "guide"
     ],
-    "lastUpdated": "2026-02-27"
+    "lastUpdated": "2026-03-09"
   },
   {
     "path": "guides/playwright-cli-setup.html",
