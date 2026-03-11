@@ -143,7 +143,9 @@ identity file.</p>
 <pre><code>export THRUM_NAME=furiosa          # Select identity file (highest priority)
 export THRUM_ROLE=implementer      # Override role
 export THRUM_MODULE=auth           # Override module
-export THRUM_DISPLAY=&quot;Auth Agent&quot;  # Override display name</code></pre>
+export THRUM_DISPLAY=&quot;Auth Agent&quot;  # Override display name
+export THRUM_HOME=/path/to/repo    # Pin repo path for all commands
+export THRUM_AGENT_ID=furiosa      # Pin caller identity for daemon RPC</code></pre>
 <p><code>THRUM_NAME</code> environment variable takes highest priority in identity resolution,
 overriding the <code>--agent-id</code> flag and identity file auto-selection. It is the
 primary way to select which identity file to load, especially in multi-agent
@@ -154,6 +156,15 @@ loading <strong>fails</strong> rather than falling back to env vars. This ensure
 errors are not silently ignored.</p>
 <p><code>THRUM_ROLE</code> and <code>THRUM_MODULE</code> override the role and module from any identity
 file but do not affect which file is loaded.</p>
+<p><code>THRUM_HOME</code> overrides the repository path used by all thrum commands,
+regardless of the current working directory. This is especially useful in
+multi-worktree setups: agents that <code>cd</code> into a different worktree still resolve
+the correct daemon socket and config. Set by <code>thrum-startup.sh</code> automatically to
+prevent identity drift.</p>
+<p><code>THRUM_AGENT_ID</code> overrides identity resolution for daemon RPC calls, bypassing
+identity file lookup entirely. When set, commands like <code>thrum status</code>,
+<code>thrum prime</code>, and <code>thrum overview</code> use this pinned agent ID directly. Useful
+when scripting or when the identity file is unavailable.</p>
 <p>Use environment variables when:</p>
 <ul>
 <li>Running in CI/CD pipelines</li>
@@ -619,7 +630,6 @@ validation functions</li>
 handlers</li>
 <li>MCP Server: <code>internal/mcp/server.go</code> - MCP identity loading</li>
 </ul>
-<pre><code></code></pre>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#identity.html')}</script>

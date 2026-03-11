@@ -53,6 +53,7 @@ config.json when you want to change something.</p>
   },
   &quot;backup&quot;: {
     &quot;dir&quot;: &quot;/path/to/backups&quot;,
+    &quot;schedule&quot;: &quot;24h&quot;,
     &quot;retention&quot;: {
       &quot;daily&quot;: 5,
       &quot;weekly&quot;: 4,
@@ -61,9 +62,9 @@ config.json when you want to change something.</p>
     &quot;post_backup&quot;: &quot;aws s3 sync /path/to/backups s3://my-bucket/thrum&quot;,
     &quot;plugins&quot;: [
       {
-        &quot;name&quot;: &quot;my-plugin&quot;,
-        &quot;command&quot;: &quot;/usr/local/bin/my-backup-plugin&quot;,
-        &quot;include&quot;: [&quot;messages&quot;, &quot;agents&quot;]
+        &quot;name&quot;: &quot;beads&quot;,
+        &quot;command&quot;: &quot;bd backup --force&quot;,
+        &quot;include&quot;: [&quot;.beads/backup/*&quot;]
       }
     ]
   }
@@ -100,7 +101,17 @@ from <code>config.json</code> if you are using all defaults.</p>
 <p>Directory where backup archives are written.</p>
 <ul>
 <li><strong>Type:</strong> string (path)</li>
-<li><strong>Default:</strong> none (backup disabled when <code>dir</code> is not set)</li>
+<li><strong>Default:</strong> <code>.thrum/backup</code> (relative to repo root)</li>
+</ul>
+<h3><code>backup.schedule</code></h3>
+<p>Automatic backup interval. The daemon runs a backup at this interval when
+running. Use <code>thrum backup schedule</code> to configure via CLI.</p>
+<ul>
+<li><strong>Type:</strong> string (Go duration format)</li>
+<li><strong>Default:</strong> none (scheduled backups disabled)</li>
+<li><strong>Examples:</strong> <code>&quot;24h&quot;</code>, <code>&quot;12h&quot;</code>, <code>&quot;8h&quot;</code>, <code>&quot;168h&quot;</code> (1 week)</li>
+<li><strong>CLI:</strong> <code>thrum backup schedule 24h</code> / <code>thrum backup schedule off</code></li>
+<li><strong>Note:</strong> Daemon must be restarted after changing the schedule</li>
 </ul>
 <h3><code>backup.retention.daily</code></h3>
 <p>Number of daily backup archives to retain.</p>
@@ -150,18 +161,22 @@ following fields:</p>
 <tr>
 <td><code>command</code></td>
 <td>string</td>
-<td>Absolute path to the plugin executable</td>
+<td>Shell command to run before collecting files</td>
 </tr>
 <tr>
 <td><code>include</code></td>
 <td>array of strings</td>
-<td>Data categories the plugin should receive</td>
+<td>Glob patterns for files to collect into the backup</td>
 </tr>
 </tbody></table>
+<p>Use <code>thrum backup plugin add --preset beads</code> to add the built-in Beads preset,
+or define custom plugins manually. The command runs from the repo root before
+file collection; include patterns are evaluated after the command completes.</p>
 <p>Example:</p>
 <pre><code>{
   &quot;backup&quot;: {
     &quot;dir&quot;: &quot;~/.thrum-backups&quot;,
+    &quot;schedule&quot;: &quot;24h&quot;,
     &quot;retention&quot;: {
       &quot;daily&quot;: 7,
       &quot;weekly&quot;: 4,
@@ -170,9 +185,9 @@ following fields:</p>
     &quot;post_backup&quot;: &quot;rsync -a ~/.thrum-backups/ backup-host:/thrum/&quot;,
     &quot;plugins&quot;: [
       {
-        &quot;name&quot;: &quot;s3-uploader&quot;,
-        &quot;command&quot;: &quot;/usr/local/bin/thrum-s3&quot;,
-        &quot;include&quot;: [&quot;messages&quot;, &quot;agents&quot;, &quot;sessions&quot;]
+        &quot;name&quot;: &quot;beads&quot;,
+        &quot;command&quot;: &quot;bd backup --force&quot;,
+        &quot;include&quot;: [&quot;.beads/backup/*&quot;]
       }
     ]
   }
@@ -221,7 +236,23 @@ configuration. For day-to-day use, edit <code>config.json</code>.</p>
 <td>Agent module</td>
 <td><code>THRUM_MODULE=backend</code></td>
 </tr>
+<tr>
+<td><code>THRUM_HOME</code></td>
+<td>Repo path for all commands</td>
+<td><code>THRUM_HOME=/path/to/repo</code></td>
+</tr>
+<tr>
+<td><code>THRUM_AGENT_ID</code></td>
+<td>Caller identity for daemon RPC</td>
+<td><code>THRUM_AGENT_ID=alice</code></td>
+</tr>
 </tbody></table>
+<p><code>THRUM_HOME</code> pins all thrum commands to the specified repo path regardless of
+the current working directory. This is set automatically by <code>thrum-startup.sh</code>
+to prevent identity drift when an agent <code>cd</code>s into a different worktree.</p>
+<p><code>THRUM_AGENT_ID</code> pins the caller identity for daemon RPC calls, bypassing
+identity file lookup. When set, commands like <code>thrum status</code>, <code>thrum prime</code>, and
+<code>thrum overview</code> use this agent ID directly.</p>
 <h2>Runtime Templates</h2>
 <p>During <code>thrum init</code>, Thrum can generate configuration files for various AI
 coding runtimes:</p>
