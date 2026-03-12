@@ -11,7 +11,7 @@ Task(
   subagent_type="message-listener",
   model="haiku",
   run_in_background=true,
-  prompt="Listen for Thrum messages. HEARTBEAT_CMD=cd /path/to/repo && scripts/thrum-startup.sh --listener-heartbeat WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -1s --json"
+  prompt="Listen for Thrum messages.\nSTEP_1: cd /path/to/repo && scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: cd /path/to/repo && thrum wait --timeout 8m --after -1s --json"
 )
 ```
 
