@@ -1,6 +1,6 @@
 #!/bin/bash
 # Stop hook: check for unread thrum messages before allowing the agent to stop.
-# If unread messages exist, block the stop and feed them to Claude.
+# If unread messages exist, block the stop and direct the agent to check inbox.
 # If no unread messages, exit 0 to let Claude stop normally.
 #
 # This is an instant check (no blocking wait) — runs in <1s per turn.
@@ -29,8 +29,7 @@ existing=$(cd "$PROJECT_DIR" && thrum inbox --unread --json 2>/dev/null)
 if [ $? -eq 0 ] && [ -n "$existing" ]; then
   msg_count=$(echo "$existing" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('messages',[])))" 2>/dev/null || echo "0")
   if [ "$msg_count" -gt 0 ]; then
-    echo "Thrum: $msg_count unread message(s) found. Process them and respond appropriately:" >&2
-    echo "$existing" >&2
+    echo "ACTION REQUIRED: You have $msg_count unread message(s). Run \`thrum inbox --unread\` now to read and respond to them." >&2
     exit 2
   fi
 fi
