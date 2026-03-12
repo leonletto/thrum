@@ -127,6 +127,15 @@ setup_worktree() {
     mkdir -p "$wt_path/.thrum"
     echo "$MAIN_THRUM_ABS" > "$wt_path/.thrum/redirect"
     echo "  Thrum: redirect → $MAIN_THRUM_ABS"
+
+    # Copy .claude/settings.json if it exists in main repo but not in worktree
+    # This file is gitignored, so each worktree needs its own copy for hooks
+    # (e.g., SessionStart → thrum-startup.sh) to run.
+    if [[ -f "$MAIN_REPO/.claude/settings.json" && ! -f "$wt_path/.claude/settings.json" ]]; then
+        mkdir -p "$wt_path/.claude"
+        cp "$MAIN_REPO/.claude/settings.json" "$wt_path/.claude/settings.json"
+        echo "  Claude: copied .claude/settings.json"
+    fi
 }
 
 # --- setup_beads function ---
