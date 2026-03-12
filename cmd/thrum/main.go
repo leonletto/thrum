@@ -1598,16 +1598,15 @@ Exit codes:
 				return err
 			}
 
-			actionMsg := "ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them."
 			if flagJSON {
 				out := map[string]string{
 					"status": "received",
-					"action": actionMsg,
+					"action": "ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them.",
 				}
 				output, _ := json.MarshalIndent(out, "", "  ")
 				fmt.Println(string(output))
 			} else if !flagQuiet {
-				fmt.Println(actionMsg)
+				fmt.Println("MESSAGES_RECEIVED")
 			}
 
 			return nil
