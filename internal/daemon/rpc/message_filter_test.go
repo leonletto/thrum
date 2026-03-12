@@ -338,6 +338,58 @@ func TestMessageListCombinedFilters(t *testing.T) {
 	})
 }
 
+// TestMessageListUnreadCountMatchesForAgentFilter verifies that the unread count
+// applies the same for_agent filter as the messages query. Before the fix, the
+// unread count was computed globally (ignoring for_agent), so an agent would see
+// unread=1 with messages=[] — causing false wake-ups in the stop hook.
+func TestMessageListUnreadCountMatchesForAgentFilter(t *testing.T) {
+	handler, reviewerAgentID, cleanup := setupFilterTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Send a message mentioning @ops (NOT addressed to @reviewer)
+	sendReq := SendRequest{
+		Content:  "Message for ops only",
+		Mentions: []string{"@ops"},
+	}
+	params, _ := json.Marshal(sendReq)
+	if _, err := handler.HandleSend(ctx, params); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	// Query inbox as reviewer with for_agent filter (mimics `thrum inbox --unread --json`)
+	listReq := ListMessagesRequest{
+		ExcludeSelf:   true,
+		CallerAgentID: reviewerAgentID,
+		ForAgent:      reviewerAgentID,
+		ForAgentRole:  "reviewer",
+		Unread:        true,
+		PageSize:      10,
+	}
+	listParams, _ := json.Marshal(listReq)
+	resp, err := handler.HandleList(ctx, listParams)
+	if err != nil {
+		t.Fatalf("HandleList: %v", err)
+	}
+
+	listResp, ok := resp.(*ListMessagesResponse)
+	if !ok {
+		t.Fatalf("expected *ListMessagesResponse, got %T", resp)
+	}
+
+	// Both should be 0 — the message was for @ops, not @reviewer
+	if listResp.Total != 0 {
+		t.Errorf("expected 0 total messages for reviewer, got %d", listResp.Total)
+	}
+	if listResp.Unread != 0 {
+		t.Errorf("expected 0 unread for reviewer (for_agent filter should apply to unread count), got %d", listResp.Unread)
+	}
+	if len(listResp.Messages) != 0 {
+		t.Errorf("expected 0 messages for reviewer, got %d", len(listResp.Messages))
+	}
+}
+
 // TestMessageListUnreadCountWithoutSession verifies that the unread count is
 // computed correctly even when the caller has no active session. This is the
 // fix for thrum-pwaa: ContextPrime calls Inbox during startup before a session
