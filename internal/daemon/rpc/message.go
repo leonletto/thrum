@@ -932,7 +932,8 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("iterate messages: %w", err)
 	}
 
-	// Calculate unread count
+	// Calculate unread count — must apply the same filters as the messages query
+	// so the count matches the visible message set (for_agent, mention, scope, etc.).
 	unread := 0
 	if currentAgentID != "" {
 		unreadQuery := "SELECT COUNT(*) FROM messages m" + joins + " WHERE 1=1"
@@ -945,6 +946,28 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 			unreadQuery += " AND m.agent_id != ?"
 			unreadArgs = append(unreadArgs, excludeAgentID)
 		}
+		if req.Scope != nil {
+			unreadQuery += " AND ms.scope_type = ? AND ms.scope_value = ?"
+			unreadArgs = append(unreadArgs, req.Scope.Type, req.Scope.Value)
+		}
+		if req.Ref != nil {
+			unreadQuery += " AND mr.ref_type = ? AND mr.ref_value = ?"
+			unreadArgs = append(unreadArgs, req.Ref.Type, req.Ref.Value)
+		}
+		switch {
+		case mentionClause != "" && forAgentClause != "":
+			unreadQuery += combineFilterClauses(mentionClause, forAgentClause)
+			unreadArgs = append(unreadArgs, mentionArgs...)
+			unreadArgs = append(unreadArgs, forAgentArgs...)
+		case mentionClause != "":
+			unreadQuery += mentionClause
+			unreadArgs = append(unreadArgs, mentionArgs...)
+		case forAgentClause != "":
+			unreadQuery += forAgentClause
+			unreadArgs = append(unreadArgs, forAgentArgs...)
+		}
+		unreadQuery += createdAfterClause
+		unreadArgs = append(unreadArgs, createdAfterArgs...)
 		unreadQuery += " AND m.message_id NOT IN (SELECT md2.message_id FROM message_deliveries md2 WHERE md2.recipient_agent_id = ? AND md2.read_at IS NOT NULL)"
 		unreadArgs = append(unreadArgs, currentAgentID)
 		_ = h.state.DB().QueryRowContext(ctx, unreadQuery, unreadArgs...).Scan(&unread)
