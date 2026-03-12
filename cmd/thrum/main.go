@@ -1587,7 +1587,7 @@ Exit codes:
 				socketPath = cli.DefaultSocketPath(flagRepo)
 			}
 
-			message, err := cli.Wait(socketPath, opts)
+			_, err = cli.Wait(socketPath, opts)
 			if err != nil {
 				if err.Error() == "timeout waiting for message" {
 					if !flagQuiet {
@@ -1598,15 +1598,16 @@ Exit codes:
 				return err
 			}
 
+			actionMsg := "ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them."
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(message, "", "  ")
+				out := map[string]string{
+					"status": "received",
+					"action": actionMsg,
+				}
+				output, _ := json.MarshalIndent(out, "", "  ")
 				fmt.Println(string(output))
 			} else if !flagQuiet {
-				// Brief message summary
-				agentName := extractAgentName(message.AgentID)
-				fmt.Printf("✓ Message received: %s from %s\n", message.MessageID, agentName)
-				fmt.Printf("  %s\n", message.Body.Content)
+				fmt.Println(actionMsg)
 			}
 
 			return nil
@@ -1619,11 +1620,6 @@ Exit codes:
 	cmd.Flags().String("after", "", "Only return messages after this relative time (e.g., -30s, -5m, +60s)")
 
 	return cmd
-}
-
-// extractAgentName is a helper to extract agent name from ID for display.
-func extractAgentName(agentID string) string {
-	return identity.ExtractDisplayName(agentID)
 }
 
 func daemonCmd() *cobra.Command {
