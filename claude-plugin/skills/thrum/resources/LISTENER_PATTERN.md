@@ -55,9 +55,23 @@ different session, the hook tells Claude to restart the listener.
 | `--after -1s`   | Include messages sent up to 1s ago (prevents stale replay; negative = "N ago") |
 | `--json`        | Machine-readable output                                                        |
 
+## Handling Listener Results
+
+When the listener returns a message, **always drain the full inbox** before
+responding. `thrum wait` returns only the first message it sees, but more may
+have arrived at the same time:
+
+```bash
+thrum inbox --unread          # Check for ALL unread, not just the one returned
+# Process each message, then re-arm the listener
+```
+
+Never assume the single message from the listener is the only unread message.
+
 ## Key Rules
 
 - **Return immediately** when messages arrive (don't wait for more)
+- **Drain inbox after listener fires** — check `thrum inbox --unread` for all pending
 - **Read-only** — the listener never sends messages
 - **Heartbeat before each wait** — keeps the Stop hook informed
 - **Cost-efficient** — runs on Haiku, blocks instead of polling
