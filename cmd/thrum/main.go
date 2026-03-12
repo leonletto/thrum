@@ -1344,7 +1344,8 @@ The daemon must be running and you must have an active session.`,
 			}
 
 			// Auto mark-as-read: mark all displayed messages as read
-			if len(result.Messages) > 0 {
+			// Skip when --unread is set so agents can peek without consuming messages.
+			if !unread && len(result.Messages) > 0 {
 				ids := make([]string, len(result.Messages))
 				for i, m := range result.Messages {
 					ids[i] = m.MessageID
