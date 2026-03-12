@@ -1,8 +1,8 @@
 # Listener Pattern: Background Message Monitoring
 
 The message-listener is a background sub-agent that blocks on `thrum wait` and
-returns when messages arrive. Runs on Haiku for cost efficiency
-(~$0.00003/cycle).
+returns when messages arrive. It updates a heartbeat in the agent's identity file
+so the Stop hook can detect if the listener dies and prompt a restart.
 
 ## Quick Start
 
@@ -11,7 +11,7 @@ Task(
   subagent_type="message-listener",
   model="haiku",
   run_in_background=true,
-  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -1s --json"
+  prompt="Listen for Thrum messages. REPO_DIR=/path/to/repo WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -1s --json"
 )
 ```
 
@@ -21,65 +21,44 @@ Replace `/path/to/repo` with the actual repo path. When using the Thrum plugin,
 ## How It Works
 
 1. **Spawn** — Launch as background Task with `run_in_background: true`
-2. **Block** — Listener runs `thrum wait` which blocks until message or timeout
-3. **Return** — Returns `MESSAGES_RECEIVED` (with message data) or
-   `NO_MESSAGES_TIMEOUT`
-4. **Re-arm** — After processing, spawn a new listener to continue monitoring
+2. **Heartbeat** — Listener calls `scripts/thrum-startup.sh --listener-heartbeat`
+   to update its heartbeat in the identity file
+3. **Block** — Listener runs `thrum wait --timeout 8m` which blocks until
+   message or timeout (stays under Bash 600s limit)
+4. **Return or loop** — If message received, output JSON and stop. If timeout,
+   go back to step 2.
 
-The listener loops internally (up to 6 cycles of 15 min each = ~90 min max).
+The listener loops internally (up to 10 cycles of 8 min each = ~80 min max).
 
-## Processing Messages
+## Heartbeat Mechanism
 
-```text
-# When listener returns, check result
-listenerResult = TaskOutput(listener_id)
+The listener updates `.thrum/identities/<agent>.json` with a `listener` key:
 
-if "MESSAGES_RECEIVED" in result:
-    # Read full messages
-    thrum inbox --unread
-    thrum sent --unread
-
-    # Re-arm listener
-    Task(subagent_type="message-listener", ...)
-else:
-    # Timeout, no messages — re-arm if still working
-    Task(subagent_type="message-listener", ...)
+```json
+{
+  "listener": {
+    "agent_id": "coordinator_main",
+    "session_id": "ses_...",
+    "heartbeat": "2026-03-12T20:19:00Z"
+  }
+}
 ```
+
+The Stop hook reads this heartbeat. If it's missing, stale (>10 min), or from a
+different session, the hook tells Claude to restart the listener.
 
 ## Wait Command Flags
 
-| Flag                | Purpose                                                                        |
-| ------------------- | ------------------------------------------------------------------------------ |
-| `--timeout 15m`     | Block up to 15 minutes per cycle                                               |
-| `--after -1s`       | Include messages sent up to 1s ago (prevents stale replay; negative = "N ago") |
-| `--json`            | Machine-readable output                                                        |
-| `--mention @<role>` | Only messages that mention the specified role                                  |
-
-## Return Format
-
-Messages received:
-
-```text
-MESSAGES_RECEIVED
----
-FROM: @coordinator
-CONTENT: Please review PR #42
-TIMESTAMP: 2026-02-13T10:30:00Z
----
-RE-ARM: This listener has stopped. Spawn a new message-listener agent to continue listening.
-```
-
-Timeout:
-
-```text
-NO_MESSAGES_TIMEOUT
-RE-ARM: This listener has stopped. Spawn a new message-listener agent to continue listening.
-```
+| Flag            | Purpose                                                                        |
+| --------------- | ------------------------------------------------------------------------------ |
+| `--timeout 8m`  | Block up to 8 min per cycle (under Bash 600s limit)                            |
+| `--after -1s`   | Include messages sent up to 1s ago (prevents stale replay; negative = "N ago") |
+| `--json`        | Machine-readable output                                                        |
 
 ## Key Rules
 
-- **Always re-arm** after processing results
 - **Return immediately** when messages arrive (don't wait for more)
 - **Read-only** — the listener never sends messages
+- **Heartbeat before each wait** — keeps the Stop hook informed
 - **Cost-efficient** — runs on Haiku, blocks instead of polling
 - Listener uses CLI only (`Bash` tool), not MCP tools

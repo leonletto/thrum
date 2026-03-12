@@ -135,7 +135,7 @@ func DefaultPreamble() []byte {
 
 **Check messages:** ` + "`thrum inbox --unread`" + `
 **Check sent status:** ` + "`thrum sent --unread`" + ` (messages with unread recipients)
-**Send message:** ` + "`thrum send \"message\" --to @<agent_name>`" + ` — run ` + "`thrum team`" + ` first to find names. Do NOT send to @role unless you need ALL agents with that role.
+**Send message:** ` + "`thrum send \"message\" --to @<agent_name>`" + ` — ALWAYS use the specific agent name (e.g., ` + "`@coordinator_main`" + `), NEVER the role (e.g., ` + "`@coordinator`" + `). Role names fan out to ALL agents with that role. Run ` + "`thrum team`" + ` to find exact names.
 **Reply:** ` + "`thrum reply <MSG_ID> \"response\"`" + `
 **Status:** ` + "`thrum status`" + `
 **Who's online:** ` + "`thrum team`" + `
