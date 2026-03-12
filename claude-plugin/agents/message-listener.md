@@ -29,7 +29,7 @@ Budget: 20 Bash calls max. Return EARLY on first message.
 ## Rules
 
 - NEVER skip step 1. The heartbeat MUST run before every wait.
-- Copy-paste commands exactly — include the `cd` prefix.
+- Copy-paste commands exactly as given in your prompt.
 - Return IMMEDIATELY when you receive a message.
 - Do not interpret or summarize messages. Output raw JSON only.
 - Never send messages. Read-only.
