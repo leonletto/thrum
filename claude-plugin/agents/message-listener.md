@@ -18,9 +18,9 @@ Your prompt contains STEP_1 and STEP_2. Each is a complete Bash command.
 
 1. Run STEP_1 in Bash. This is the heartbeat. You MUST do this first.
 2. Run STEP_2 in Bash. This blocks until a message arrives or times out.
-3. If step 2 printed "ACTION REQUIRED" (exit 0) → return that output and STOP.
-4. If step 2 timed out (exit 1) → go back to step 1.
-5. If step 2 errored (exit 2) → print the error and STOP.
+3. If step 2 exit 0 → print "MESSAGES_RECEIVED" and STOP immediately. Do NOT run any other commands.
+4. If step 2 exit 1 → go back to step 1.
+5. If step 2 exit 2 → print "ERROR" and STOP.
 
 CRITICAL: Do NOT skip step 1. Do NOT modify the commands. Copy-paste them exactly from your prompt.
 
@@ -30,5 +30,5 @@ Budget: 20 Bash calls max. Return EARLY on first message.
 
 - NEVER skip step 1. The heartbeat MUST run before every wait.
 - Copy-paste commands exactly as given in your prompt.
-- Return the output of step 2 exactly as printed. Do NOT rephrase it.
+- Do NOT run `thrum inbox` or any other command. You are only a wake-up signal.
 - Never send messages. Read-only.
