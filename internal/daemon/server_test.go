@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestServerStartStop(t *testing.T) {
@@ -285,6 +286,71 @@ func TestServerHandlerError(t *testing.T) {
 
 	if resp.Error.Message != "intentional error" {
 		t.Fatalf("unexpected error message: %s", resp.Error.Message)
+	}
+}
+
+func TestServerStopClosesActiveConnections(t *testing.T) {
+	// Use a short socket path to avoid macOS Unix socket length limits
+	socketPath := filepath.Join(os.TempDir(), fmt.Sprintf("thrum-stop-%d.sock", time.Now().UnixNano()%100000))
+	_ = os.Remove(socketPath)
+	t.Cleanup(func() { _ = os.Remove(socketPath) })
+
+	server := NewServer(socketPath)
+	ctx := context.Background()
+
+	server.RegisterHandler("slow_method", func(ctx context.Context, params json.RawMessage) (any, error) {
+		return map[string]string{"status": "ok"}, nil
+	})
+
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+
+	// Wait for server to be ready
+	waitForSocketReady(t, socketPath)
+
+	// Establish a connection (simulates thrum wait's long-lived connection)
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Verify the connection works
+	request := map[string]any{
+		"jsonrpc": "2.0",
+		"method":  "slow_method",
+		"params":  map[string]any{},
+		"id":      1,
+	}
+	requestJSON, _ := json.Marshal(request)
+	requestJSON = append(requestJSON, '\n')
+
+	if _, err := conn.Write(requestJSON); err != nil {
+		t.Fatalf("failed to write request: %v", err)
+	}
+	response := make([]byte, 4096)
+	if _, err := conn.Read(response); err != nil {
+		t.Fatalf("failed to read response: %v", err)
+	}
+
+	// Stop the server — this should force-close our connection
+	stopDone := make(chan error, 1)
+	go func() {
+		stopDone <- server.Stop()
+	}()
+
+	// The connection should break immediately (not after 5-minute read timeout).
+	// Set a generous deadline — the point is it should NOT take 5 minutes.
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, readErr := conn.Read(response)
+	if readErr == nil {
+		t.Fatal("expected read error after Stop(), but read succeeded")
+	}
+
+	// Wait for Stop to complete
+	if err := <-stopDone; err != nil {
+		t.Fatalf("Stop() returned error: %v", err)
 	}
 }
 
