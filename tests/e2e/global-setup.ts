@@ -112,6 +112,9 @@ function createBareRemote(): void {
 }
 
 export default async function globalSetup(): Promise<void> {
+  // Clear THRUM_HOME so tests use the temp test repos, not the developer's repo
+  delete process.env.THRUM_HOME;
+
   // Step 1: Build in source repo
   run('make', ['build-ui'], 'Building UI');
   run('make', ['build-go'], 'Building Go binary');
