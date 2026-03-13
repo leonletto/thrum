@@ -1903,8 +1903,8 @@ func agentCmd() *cobra.Command {
 		Long: `Register this agent with the specified role and module.
 
 The agent identity is determined from:
-1. THRUM_NAME env var (highest priority - overrides --name flag)
-2. --name flag
+1. --name flag (highest priority)
+2. THRUM_NAME env var (default when --name is not provided)
 3. Environment variables (THRUM_ROLE, THRUM_MODULE for role/module)
 4. Identity file in .thrum/identities/ directory`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1918,8 +1918,8 @@ The agent identity is determined from:
 				return fmt.Errorf("role and module are required (use --role and --module flags or THRUM_ROLE and THRUM_MODULE env vars)")
 			}
 
-			// Priority: THRUM_NAME env var > --name flag
-			if envName := os.Getenv("THRUM_NAME"); envName != "" {
+			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.
+			if envName := os.Getenv("THRUM_NAME"); envName != "" && !cmd.Flags().Changed("name") {
 				name = envName
 			}
 
@@ -3877,8 +3877,8 @@ Examples:
 				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, auggie, cli-only", runtimeFlag)
 			}
 
-			// Priority: THRUM_NAME env var > --name flag
-			if envName := os.Getenv("THRUM_NAME"); envName != "" {
+			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.
+			if envName := os.Getenv("THRUM_NAME"); envName != "" && !cmd.Flags().Changed("name") {
 				name = envName
 			}
 

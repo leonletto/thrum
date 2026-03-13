@@ -112,8 +112,15 @@ function createBareRemote(): void {
 }
 
 export default async function globalSetup(): Promise<void> {
-  // Clear THRUM_HOME so tests use the temp test repos, not the developer's repo
+  // Clear all thrum env vars so tests use the temp test repos and identities,
+  // not the developer's session state. THRUM_NAME is especially critical —
+  // it overrides --name in quickstartCmd, causing identity file name mismatches.
   delete process.env.THRUM_HOME;
+  delete process.env.THRUM_NAME;
+  delete process.env.THRUM_ROLE;
+  delete process.env.THRUM_MODULE;
+  delete process.env.THRUM_AGENT_ID;
+  delete process.env.THRUM_INTENT;
 
   // Step 1: Build in source repo
   run('make', ['build-ui'], 'Building UI');
