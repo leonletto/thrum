@@ -135,13 +135,13 @@ project-specific commands, adjust priorities, or include custom context.
 For the agent file format, see
 [Claude Code agent documentation](https://docs.anthropic.com/claude-code).
 
-## See also
+## Next Steps
 
-- [Claude Code Plugin](claude-code-plugin.md) — Recommended: plugin with slash
-  commands and hooks
-- [Codex Plugin](codex-plugin.md) — Codex skill bundle for Thrum coordination
-  and operations
-- [Quickstart](quickstart.md) — Get started with Thrum in 5 minutes
-- [Agent Coordination](agent-coordination.md) — Multi-agent messaging patterns
-- [Workflow Templates](../toolkit/templates/) — Complete planning and
-  implementation workflows
+- [Claude Code Plugin](claude-code-plugin.md) — the recommended approach:
+  install the plugin to get 10 slash commands and automatic hooks instead
+- [Codex Plugin](codex-plugin.md) — the Codex skill bundle for users who prefer
+  skill-guided CLI workflows
+- [Agent Coordination](agent-coordination.md) — multi-agent messaging patterns
+  that these agent definitions enable
+- [Workflow Templates](workflow-templates.md) — pre-built skill pipelines for
+  the full research → plan → implement cycle

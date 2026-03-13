@@ -8,6 +8,8 @@ category: "reference"
 
 ## Thrum CLI Reference
 
+> **TL;DR:** You only need 8 commands for daily use — they're in the [Overview](overview.md) page. This page is the full reference for all ~30 commands. Use Ctrl+F or the Quick Reference table at the top to find what you need. Storage layout details are at the very bottom.
+
 Complete reference for the `thrum` command-line interface -- a Git-backed
 messaging system for AI agent coordination.
 
@@ -1750,6 +1752,10 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
 }
 ```
 
+---
+
+*The section below covers storage internals. You don't need it for normal use.*
+
 ### Storage Layout
 
 Messages and events are stored on the `a-sync` Git branch in a worktree at
@@ -1766,3 +1772,10 @@ Messages and events are stored on the `a-sync` Git branch in a worktree at
 | `.thrum/var/ws.port`                            | WebSocket port file                                  |
 | `.thrum/var/thrum.lock`                         | flock() lock file for SIGKILL resilience             |
 | `.thrum/redirect`                               | Redirect pointer for feature worktrees               |
+
+## Next Steps
+
+- [Messaging](messaging.md) — how send, inbox, reply, and groups work together
+- [RPC API Reference](rpc-api.md) — the underlying JSON-RPC methods the CLI wraps
+- [Quickstart Guide](quickstart.md) — get up and running in 5 minutes
+- [Overview](overview.md) — which 8 commands you actually need day-to-day

@@ -200,3 +200,9 @@ cp docs/claude-agent-integration.md .  # For reference
 
 Or see the full agent definitions in the
 [documentation site](https://leonletto.github.io/thrum).
+
+## Next Steps
+
+- [Claude Code Plugin](claude-code-plugin.md) — slash commands, hooks, and resource docs for Claude Code
+- [MCP Server](mcp-server.md) — native MCP tools for agent messaging without CLI shell-outs
+- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and coordination patterns

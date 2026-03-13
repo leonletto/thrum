@@ -59,3 +59,14 @@ Read beads status and git history to determine exactly where work stopped. Then:
 **Key principle: DO NOT redo completed work.** Trust beads task status and git
 commit history. If a task is closed in beads and committed in git, it is done —
 do not re-implement it.
+
+## Next Steps
+
+- [Thrum Registration](thrum-registration.md) — the registration protocol that
+  Step 1 above depends on
+- [Context Management](../context.md) — save context before session end so
+  resumption is faster after a loss event
+- [Beads and Thrum](../beads-and-thrum.md) — how task tracking and messaging
+  work together to make context recovery possible
+- [Agent Coordination](../agent-coordination.md) — the full session template
+  including start, during, and end-of-session protocols

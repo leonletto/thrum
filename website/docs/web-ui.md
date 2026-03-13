@@ -141,3 +141,14 @@ SQLite, sync status from Git. Nothing is hidden, nothing is abstracted away.
 
 This is consistent with Thrum's core principle: everything is
 [inspectable by design](philosophy.md).
+
+## Next Steps
+
+- [Messaging](messaging.md) — send and receive messages from the CLI, which
+  appear in real time in the Live Feed
+- [WebSocket API](api/websocket.md) — the WebSocket protocol the UI uses to
+  connect to the daemon
+- [Daemon Architecture](daemon.md) — how the embedded SPA is served from the
+  same port as the WebSocket endpoint
+- [Identity System](identity.md) — how the browser auto-registers as a user
+  using your Git config name

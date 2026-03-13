@@ -583,15 +583,16 @@ When a notification can't be sent (client disconnected):
 - Clients can fetch full content with `message.get`
 - 100 chars is enough for preview/triage
 
-## References
+## Next Steps
 
-- RPC API: `docs/rpc-api.md`
-- Messaging: `docs/messaging.md`
-- Daemon Architecture: `docs/daemon.md`
-- Event Streaming: `docs/event-streaming.md`
-- WebSocket API: `docs/api/websocket.md`
-- SQLite Schema: `internal/schema/schema.go`
-- Subscription Service: `internal/subscriptions/service.go`
+- [Messaging](messaging.md) — the CLI commands that trigger subscriptions:
+  `thrum subscribe`, `thrum wait`, and `thrum subscriptions`
+- [Event Streaming](event-streaming.md) — the Broadcaster and Dispatcher
+  internals that route matched events to subscribers
+- [WebSocket API](api/websocket.md) — connect over WebSocket to receive
+  subscription notifications in real time
+- [RPC API Reference](rpc-api.md) — `subscribe`, `unsubscribe`, and
+  `subscriptions.list` method schemas
 - Dispatcher: `internal/subscriptions/dispatcher.go`
 - Broadcaster: `internal/daemon/broadcaster.go`
 - Unix Socket Client Registry: `internal/daemon/notify.go`
