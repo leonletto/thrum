@@ -44,7 +44,7 @@ Groups let you send messages to collections of agents without addressing each
 one individually. Groups can contain specific agents or all agents with a role.
 
 For the full group commands reference, see
-[Messaging — Groups](/docs/messaging.html#groups).
+[Messaging — Groups](messaging.md#groups).
 
 ### Auto-Created Groups
 
@@ -144,7 +144,7 @@ Output:
 ### MCP Group Tools
 
 When using the MCP server (`thrum mcp serve`), groups are managed via native MCP
-tools. See [MCP Server](/docs/mcp-server.html) for the complete tools reference.
+tools. See [MCP Server](mcp-server.md) for the complete tools reference.
 
 Example MCP usage:
 
@@ -279,7 +279,7 @@ thrum context prime        # Human-readable summary
 thrum context prime --json # Structured JSON for LLM consumption
 ```
 
-See [Context Management](/docs/context.html) for full documentation including
+See [Context Management](context.md) for full documentation including
 output format, graceful degradation behavior, and use cases.
 
 ---
@@ -573,16 +573,9 @@ thrum send "Auth complete, 15 tests passing" --to @coord_main
 - **Set clear intents** so other agents can see what you are working on via
   `thrum agent list --context`
 
-## See Also
+## Next Steps
 
-- [Tailscale Sync](tailscale-sync.md) -- Cross-machine sync via Tailscale with
-  Ed25519 signing and peer discovery
-- [Agent Coordination](agent-coordination.md) -- Workflow patterns and Beads
-  integration
-- [Identity System](identity.md) -- Agent naming, registration, and conflict
-  resolution
-- [Messaging System](messaging.md) -- Message structure, threads, scopes, and
-  refs
-- [MCP Server](mcp-server.md) -- MCP tools for AI agent integration
-- [Context Management](context.md) -- Per-agent context storage and preambles
-- [CLI Reference](cli.md) -- Complete command documentation
+- [Agent Coordination](agent-coordination.md) — workflow patterns and Beads integration for multi-agent teams
+- [Identity System](identity.md) — agent naming, registration, and per-worktree identity files
+- [Messaging](messaging.md) — full send/receive/reply reference including scopes, mentions, and groups
+- [Coordinate Two Agents](guides/coordinate-two-agents.md) — step-by-step walkthrough of the most common setup

@@ -1,0 +1,210 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580 440" width="580" height="440" role="img" aria-label="Thrum architecture diagram">
+  <title>Thrum Architecture</title>
+  <defs>
+    <style>
+      /* Shared */
+      .arch-text {
+        font-family: 'IBM Plex Mono', 'Courier New', monospace;
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .arch-label {
+        font-family: 'IBM Plex Mono', 'Courier New', monospace;
+        font-size: 10px;
+        font-weight: 400;
+        fill: #94a3b8;
+      }
+      .arch-arrow-text {
+        font-family: 'IBM Plex Mono', 'Courier New', monospace;
+        font-size: 9px;
+        font-weight: 400;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+      }
+
+      /* Client boxes (top row) — cyan */
+      .box-client rect {
+        fill: rgba(56, 189, 248, 0.08);
+        stroke: rgba(56, 189, 248, 0.35);
+        stroke-width: 1;
+        rx: 4;
+      }
+      .box-client text { fill: #38bdf8; }
+
+      /* Daemon box — green */
+      .box-daemon rect {
+        fill: rgba(16, 185, 129, 0.08);
+        stroke: rgba(16, 185, 129, 0.4);
+        stroke-width: 1.5;
+      }
+      .box-daemon text { fill: #10b981; }
+
+      /* Storage boxes (bottom row) — amber */
+      .box-storage rect {
+        fill: rgba(251, 191, 36, 0.07);
+        stroke: rgba(251, 191, 36, 0.28);
+        stroke-width: 1;
+      }
+      .box-storage text { fill: #fbbf24; }
+
+      /* Remote box — violet */
+      .box-remote rect {
+        fill: rgba(167, 139, 250, 0.07);
+        stroke: rgba(167, 139, 250, 0.3);
+        stroke-width: 1;
+      }
+      .box-remote text { fill: #a78bfa; }
+
+      /* Connector lines and arrow labels */
+      .connector {
+        stroke: #334155;
+        stroke-width: 1;
+        fill: none;
+        stroke-dasharray: none;
+      }
+      .arrow-label { fill: #64748b; }
+
+      /* ── Light mode overrides (applied via CSS on the page) ── */
+      /* These selectors only work when the SVG is inlined in the HTML. */
+      html[data-theme="light"] .box-client rect {
+        fill: rgba(8, 145, 178, 0.08);
+        stroke: rgba(8, 145, 178, 0.35);
+      }
+      html[data-theme="light"] .box-client text { fill: #0e7490; }
+
+      html[data-theme="light"] .box-daemon rect {
+        fill: rgba(16, 185, 129, 0.1);
+        stroke: rgba(16, 185, 129, 0.4);
+      }
+      html[data-theme="light"] .box-daemon text { fill: #047857; }
+
+      html[data-theme="light"] .box-storage rect {
+        fill: rgba(217, 119, 6, 0.08);
+        stroke: rgba(217, 119, 6, 0.28);
+      }
+      html[data-theme="light"] .box-storage text { fill: #b45309; }
+
+      html[data-theme="light"] .box-remote rect {
+        fill: rgba(109, 40, 217, 0.07);
+        stroke: rgba(109, 40, 217, 0.25);
+      }
+      html[data-theme="light"] .box-remote text { fill: #6d28d9; }
+
+      html[data-theme="light"] .connector { stroke: #94a3b8; }
+      html[data-theme="light"] .arrow-label { fill: #64748b; }
+    </style>
+
+    <!-- Arrowhead marker -->
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#334155"/>
+    </marker>
+    <marker id="arrowhead-light" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════════════
+       ROW 1: Clients — CLI | Web UI | MCP Server
+       ═══════════════════════════════════════════════════ -->
+
+  <!-- CLI -->
+  <g class="box-client">
+    <rect x="28" y="20" width="140" height="44" rx="4"/>
+    <text class="arch-text" x="98" y="46" text-anchor="middle">CLI</text>
+  </g>
+
+  <!-- Web UI -->
+  <g class="box-client">
+    <rect x="220" y="20" width="140" height="44" rx="4"/>
+    <text class="arch-text" x="290" y="46" text-anchor="middle">Web UI</text>
+  </g>
+
+  <!-- MCP Server -->
+  <g class="box-client">
+    <rect x="412" y="20" width="140" height="44" rx="4"/>
+    <text class="arch-text" x="482" y="46" text-anchor="middle">MCP Server</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════
+       CONNECTOR: Row 1 → Daemon
+       ═══════════════════════════════════════════════════ -->
+
+  <!-- Vertical drops from each client box down to the horizontal bar -->
+  <line class="connector" x1="98"  y1="64" x2="98"  y2="110"/>
+  <line class="connector" x1="290" y1="64" x2="290" y2="110"/>
+  <line class="connector" x1="482" y1="64" x2="482" y2="110"/>
+
+  <!-- Horizontal bar -->
+  <line class="connector" x1="98" y1="110" x2="482" y2="110"/>
+
+  <!-- Single drop to daemon -->
+  <line class="connector" x1="290" y1="110" x2="290" y2="134" marker-end="url(#arrowhead)"/>
+
+  <!-- Arrow label -->
+  <text class="arch-arrow-text arrow-label" x="290" y="126" text-anchor="middle">JSON-RPC / WebSocket</text>
+
+  <!-- ═══════════════════════════════════════════════════
+       ROW 2: Thrum Daemon (:9999)
+       ═══════════════════════════════════════════════════ -->
+  <g class="box-daemon">
+    <rect x="155" y="136" width="270" height="52" rx="4"/>
+    <text class="arch-text" x="290" y="158" text-anchor="middle" font-size="13" font-weight="600">Thrum Daemon</text>
+    <text class="arch-label" x="290" y="177" text-anchor="middle">:9999</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════
+       CONNECTOR: Daemon → Storage
+       ═══════════════════════════════════════════════════ -->
+  <line class="connector" x1="290" y1="188" x2="290" y2="215" marker-end="url(#arrowhead)"/>
+  <text class="arch-arrow-text arrow-label" x="290" y="209" text-anchor="middle">Read / Write</text>
+
+  <!-- ═══════════════════════════════════════════════════
+       ROW 3: Storage — JSONL Logs | SQLite | Git Sync
+       ═══════════════════════════════════════════════════ -->
+
+  <!-- JSONL Logs -->
+  <g class="box-storage">
+    <rect x="28" y="218" width="155" height="44" rx="4"/>
+    <text class="arch-text" x="110" y="244" text-anchor="middle">JSONL Logs</text>
+  </g>
+
+  <!-- SQLite -->
+  <g class="box-storage">
+    <rect x="213" y="218" width="155" height="44" rx="4"/>
+    <text class="arch-text" x="290" y="244" text-anchor="middle">SQLite Index</text>
+  </g>
+
+  <!-- Git Sync -->
+  <g class="box-storage">
+    <rect x="398" y="218" width="155" height="44" rx="4"/>
+    <text class="arch-text" x="475" y="244" text-anchor="middle">Git Sync</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════
+       CONNECTOR: Storage → Remote
+       ═══════════════════════════════════════════════════ -->
+
+  <!-- Vertical rises from storage boxes to horizontal bar -->
+  <line class="connector" x1="110" y1="262" x2="110" y2="310"/>
+  <line class="connector" x1="290" y1="262" x2="290" y2="310"/>
+  <line class="connector" x1="475" y1="262" x2="475" y2="310"/>
+
+  <!-- Horizontal bar -->
+  <line class="connector" x1="110" y1="310" x2="475" y2="310"/>
+
+  <!-- Single drop to Remote -->
+  <line class="connector" x1="290" y1="310" x2="290" y2="334" marker-end="url(#arrowhead)"/>
+
+  <!-- Arrow label -->
+  <text class="arch-arrow-text arrow-label" x="290" y="326" text-anchor="middle">Git Push / Pull</text>
+
+  <!-- ═══════════════════════════════════════════════════
+       ROW 4: Remote (a-sync branch)
+       ═══════════════════════════════════════════════════ -->
+  <g class="box-remote">
+    <rect x="155" y="336" width="270" height="52" rx="4"/>
+    <text class="arch-text" x="290" y="358" text-anchor="middle" font-size="12" font-weight="500">Remote</text>
+    <text class="arch-label" x="290" y="377" text-anchor="middle">a-sync branch</text>
+  </g>
+
+</svg>

@@ -8,8 +8,8 @@ category: "guides"
 
 ## Tailscale Sync Security
 
-> See also: [Tailscale Sync](tailscale-sync.md) for setup, architecture, and CLI
-> commands.
+> **See first:** [Tailscale Sync](tailscale-sync.md) for setup, architecture,
+> and CLI commands. This page covers the security model only.
 
 Security model for the Tailscale-based sync protocol.
 
@@ -199,3 +199,14 @@ Three incorrect codes were entered.
 
 **Fix**: Run `thrum peer add` again on Machine A to start a fresh session with a
 new code.
+
+## Next Steps
+
+- [Tailscale Sync](tailscale-sync.md) — setup guide, pairing walkthrough, CLI
+  commands, and configuration reference
+- [Sync Protocol](sync.md) — how Git-based sync works as an alternative to
+  Tailscale for async workflows
+- [Configuration](configuration.md) — daemon settings including local-only mode
+  and sync interval
+- [WebSocket API](api/websocket.md) — the transport layer that Tailscale
+  encrypts for remote WebSocket connections

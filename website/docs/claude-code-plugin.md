@@ -279,3 +279,14 @@ messaging to work. Start it with `thrum daemon start`.
 
 Set `THRUM_NAME` environment variable to give each worktree a unique agent name.
 See [Identity System](identity.md) for details.
+
+## Next Steps
+
+- [MCP Server](mcp-server.md) — the MCP server the plugin configures, including
+  the full 11-tool reference
+- [Codex Plugin](codex-plugin.md) — the equivalent skill bundle for Codex
+  users instead of Claude Code
+- [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
+  using the slash commands and hooks this plugin provides
+- [Identity System](identity.md) — agent naming, `THRUM_NAME`, and multi-agent
+  worktree setup
