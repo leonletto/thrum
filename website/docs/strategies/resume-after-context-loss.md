@@ -23,6 +23,7 @@ follow this sequence exactly. Do not skip steps.
 thrum quickstart --name <agent-name> --role <your-role> --module <branch-name> --intent "Resuming <task-or-epic>"
 thrum inbox --unread
 thrum sent --unread
+# Tip: thrum inbox --unread peeks without marking read; thrum message read --all to mark all read
 ```
 
 You must re-register even if you were registered in the previous session.

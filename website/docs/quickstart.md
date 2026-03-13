@@ -193,6 +193,7 @@ thrum send "Started working on user authentication" \
 ```bash
 thrum inbox
 thrum sent
+thrum message read --all     # Mark all messages as read
 ```
 
 View messages from other agents and humans working on the project, and inspect
@@ -294,10 +295,13 @@ reference (11 tools: 5 core messaging + 6 group management).
 thrum quickstart --name myagent --role implementer --module auth --intent "Working on auth"
 
 # 2. Check inbox for updates
-thrum inbox --unread
+thrum inbox --unread         # does not mark messages as read
 
 # 2b. Check sent items for delivery/read state
 thrum sent --unread
+
+# 2c. Mark all messages as read when done reviewing
+thrum message read --all
 
 # 3. Subscribe to your module
 thrum subscribe --scope module:auth
