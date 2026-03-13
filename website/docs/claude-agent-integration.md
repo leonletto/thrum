@@ -33,7 +33,7 @@ agents via Thrum messaging.
 ---
 name: thrum-agent
 description: >
-  Thrum multi-agent coordination guide. Git-backed messaging for AI agents to
+  Thrum multi-agent coordination guide. Persistent messaging for AI agents to
   communicate across sessions, worktrees, and machines. Covers MCP server
   integration, message-listener pattern, CLI usage, and Beads integration.
 ---
@@ -42,8 +42,8 @@ description: >
 
 ## Overview
 
-Thrum is a Git-backed messaging system that enables AI agents and humans to
-communicate persistently across sessions, worktrees, and machines. It uses Git
+Thrum is a messaging system that enables AI agents and humans to communicate
+persistently across sessions, worktrees, and machines. It uses Git
 as the synchronization layer, ensuring all messages survive context window
 limits, session restarts, and machine boundaries.
 

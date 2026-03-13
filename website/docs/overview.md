@@ -11,8 +11,8 @@ last_updated: "2026-03-13"
 
 > **TL;DR:** Thrum has ~30 commands but you only need 8 for daily use. The tables below break down which commands are for you, which are for agents, and which are one-time setup. Start here, then drill into the reference pages when you need details.
 
-Thrum is a Git-backed messaging system for coordinating AI agents across
-sessions, worktrees, and machines. It provides:
+Thrum is a messaging system for coordinating AI agents across sessions,
+worktrees, and machines. It provides:
 
 - **Persistent messaging** that survives session boundaries
 - **Automatic synchronization** via Git — no extra servers
