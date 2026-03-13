@@ -428,7 +428,7 @@ func (w *Waiter) WaitForMessage(ctx context.Context, timeout int) (*WaitForMessa
 	}
 }
 
-// fetchAndMark fetches the full message via RPC and marks it as read.
+// fetchAndMark fetches the full message via RPC.
 func (w *Waiter) fetchAndMark(messageID string) (*MessageInfo, error) {
 	client, err := cli.NewClient(w.socketPath)
 	if err != nil {
@@ -446,16 +446,6 @@ func (w *Waiter) fetchAndMark(messageID string) (*MessageInfo, error) {
 		From:      getResp.Message.Author.AgentID,
 		Content:   getResp.Message.Body.Content,
 		Timestamp: getResp.Message.CreatedAt,
-	}
-
-	// Mark as read (best-effort, new client)
-	markClient, err := cli.NewClient(w.socketPath)
-	if err == nil {
-		_ = markClient.Call("message.markRead", rpc.MarkReadRequest{
-			MessageIDs:    []string{messageID},
-			CallerAgentID: w.agentID,
-		}, nil)
-		_ = markClient.Close()
 	}
 
 	return msg, nil
