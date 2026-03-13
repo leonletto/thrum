@@ -108,12 +108,6 @@ and sets your intent in one step:</p>
 thrum session start</code></pre>
 <p>Agent names must be lowercase alphanumeric with underscores (<code>[a-z0-9_]+</code>).
 Reserved names: <code>daemon</code>, <code>system</code>, <code>thrum</code>, <code>all</code>, <code>broadcast</code>.</p>
-<p>You can also set identity via environment variables:</p>
-<pre><code>export THRUM_NAME=myagent     # Agent name (highest priority)
-export THRUM_ROLE=implementer
-export THRUM_MODULE=auth
-thrum agent register</code></pre>
-<p>Priority: <code>THRUM_NAME</code> env var &gt; <code>--name</code> flag &gt; solo-agent auto-select.</p>
 <h3>5. Send Your First Message</h3>
 <pre><code>thrum send &quot;Started working on user authentication&quot; \
   --scope module:auth \
