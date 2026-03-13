@@ -38,6 +38,8 @@ export function useMarkAsRead() {
       return wsClient.call<MarkAsReadResponse>('message.markRead', request);
     },
     onSuccess: (_data, messageIds) => {
+      // Invalidate message list queries (inbox, groups) to refresh unread counts
+      queryClient.invalidateQueries({ queryKey: ['messages', 'list'] });
       // Invalidate thread queries to refresh unread counts
       queryClient.invalidateQueries({ queryKey: ['threads'] });
 
