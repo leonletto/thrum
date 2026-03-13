@@ -137,17 +137,6 @@ thrum session start
 Agent names must be lowercase alphanumeric with underscores (`[a-z0-9_]+`).
 Reserved names: `daemon`, `system`, `thrum`, `all`, `broadcast`.
 
-You can also set identity via environment variables:
-
-```bash
-export THRUM_NAME=myagent     # Agent name (highest priority)
-export THRUM_ROLE=implementer
-export THRUM_MODULE=auth
-thrum agent register
-```
-
-Priority: `THRUM_NAME` env var > `--name` flag > solo-agent auto-select.
-
 ### 5. Send Your First Message
 
 ```bash
