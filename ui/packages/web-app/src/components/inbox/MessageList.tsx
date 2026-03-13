@@ -18,6 +18,8 @@ interface MessageListProps {
   currentUserId?: string;
   onReply?: (messageId: string, senderName: string) => void;
   onMarkAsRead?: (messageIds: string[]) => void;
+  /** Agent ID to use as the caller when marking messages as read (impersonation). */
+  callerAgentId?: string;
   // Pagination props
   totalCount?: number;
   hasMore?: boolean;
@@ -161,6 +163,7 @@ export function MessageList({
   currentUserId,
   onReply,
   onMarkAsRead,
+  callerAgentId,
   totalCount,
   hasMore,
   onLoadMore,
@@ -174,7 +177,10 @@ export function MessageList({
     if (onMarkAsRead) {
       onMarkAsRead(ids);
     } else {
-      markAsReadMutation.mutate(ids);
+      markAsReadMutation.mutate({
+        messageIds: ids,
+        ...(callerAgentId && { callerAgentId }),
+      });
     }
   };
 

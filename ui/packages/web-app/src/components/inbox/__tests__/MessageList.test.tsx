@@ -236,7 +236,7 @@ describe('MessageList', () => {
     expect(messageEl).not.toBeNull();
     await user.click(messageEl!);
 
-    expect(mockMarkAsReadMutate).toHaveBeenCalledWith(['unread-1']);
+    expect(mockMarkAsReadMutate).toHaveBeenCalledWith({ messageIds: ['unread-1'] });
   });
 
   // Extra: does not call markAsRead when all messages are already read

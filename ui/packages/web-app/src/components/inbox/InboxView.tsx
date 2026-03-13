@@ -109,7 +109,10 @@ export function InboxView({ identityId, selectedMessageId, onClearSelectedMessag
       .filter(m => m.is_read === false)
       .map(m => m.message_id);
     if (unreadIds.length > 0) {
-      markAsRead.mutate(unreadIds);
+      markAsRead.mutate({
+        messageIds: unreadIds,
+        ...(isImpersonating && { callerAgentId: sendingAs }),
+      });
     }
   };
 
@@ -153,6 +156,7 @@ export function InboxView({ identityId, selectedMessageId, onClearSelectedMessag
         isLoading={isLoading}
         currentUserId={currentUser?.user_id}
         onReply={handleReply}
+        callerAgentId={isImpersonating ? sendingAs : undefined}
         totalCount={total}
         hasMore={hasMore}
         onLoadMore={loadMore}
