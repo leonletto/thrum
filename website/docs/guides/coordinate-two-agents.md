@@ -21,7 +21,7 @@ This walkthrough goes from zero to two agents talking to each other.
 
 - A git repo with `thrum init` already done
 - Two terminals open (or two worktrees — the pattern is the same)
-- Thrum daemon running: `thrum daemon start`
+- Thrum daemon running (`thrum init` starts it automatically)
 
 ### Register Both Agents
 

@@ -59,7 +59,7 @@
     <div class="container">
       <div class="hero-badge">
         <span class="status-dot online"></span>
-        Git-backed agent coordination
+        Agent coordination through messaging
       </div>
       <h1 class="hero-title">thrum</h1>
       <p class="hero-subtitle">
@@ -71,7 +71,7 @@
         <a href="docs.html" class="btn btn-outline">Read the Docs</a>
       </div>
       <div class="hero-install">
-        <code>go install github.com/leonletto/thrum@latest</code>
+        <code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh</code>
       </div>
     </div>
   </section>
@@ -193,13 +193,10 @@
             <span class="code-header-dot"></span>
             <span class="code-header-title">terminal</span>
           </div>
-<pre><code><span class="c-comment"># Initialize in any git repo</span>
+<pre><code><span class="c-comment"># Initialize in any git repo (starts the daemon automatically)</span>
 <span class="c-prompt">$</span> thrum init
 <span class="c-output">✓ Initialized .thrum/ in /my-project</span>
-
-<span class="c-comment"># Start the daemon</span>
-<span class="c-prompt">$</span> thrum daemon start
-<span class="c-output">✓ Daemon listening on :9999</span>
+<span class="c-output">✓ Daemon started on :9999</span>
 
 <span class="c-comment"># Register and send</span>
 <span class="c-prompt">$</span> thrum quickstart --name planner_core --role planner --module core
@@ -214,23 +211,20 @@
             <span class="code-header-dot"></span>
             <span class="code-header-dot"></span>
             <span class="code-header-dot"></span>
-            <span class="code-header-title">claude code (MCP)</span>
+            <span class="code-header-title">claude code (CLI)</span>
           </div>
-<pre><code><span class="c-comment">// Claude Code agents use native MCP tools</span>
-<span class="c-comment">// No shell needed — direct daemon RPC</span>
+<pre><code><span class="c-comment"># Agents use the same CLI commands</span>
+<span class="c-prompt">$</span> thrum send <span class="c-string">"Tests passing, PR ready"</span> --to @planner
+<span class="c-output">✓ Message sent: msg_01KJ...</span>
 
-mcp__thrum__send_message(
-  to: <span class="c-string">"@planner"</span>,
-  content: <span class="c-string">"Tests passing, PR ready"</span>,
-  priority: <span class="c-string">"high"</span>
-)
+<span class="c-prompt">$</span> thrum inbox --unread
+<span class="c-output">● msg_01KH...  @planner  2m ago</span>
+<span class="c-output">  Starting feature work</span>
 
-mcp__thrum__check_messages()
-<span class="c-comment">// → 2 unread from @planner</span>
-
-mcp__thrum__list_agents()
-<span class="c-comment">// → planner_core (online)</span>
-<span class="c-comment">// → implementer_api (idle)</span></code></pre>
+<span class="c-prompt">$</span> thrum team
+<span class="c-output">AGENT            ROLE          STATUS</span>
+<span class="c-output">planner_core     planner       online</span>
+<span class="c-output">implementer_api  implementer   idle</span></code></pre>
         </div>
       </div>
     </div>

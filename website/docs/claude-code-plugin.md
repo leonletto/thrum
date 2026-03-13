@@ -59,7 +59,6 @@ steps:
 
 ```bash
 thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
-thrum daemon start               # Start the daemon separately
 ```
 
 Verify the daemon is running:
@@ -263,7 +262,7 @@ plugins.
 
 ### "Thrum not initialized" on session start
 
-Run `thrum init && thrum daemon start` in your repository root.
+Run `thrum init` in your repository root (it starts the daemon automatically).
 
 ### No context injected after plugin install
 
