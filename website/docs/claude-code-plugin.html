@@ -78,8 +78,7 @@ thrum init</code></pre>
 generates CLAUDE.md coordination instructions, starts the daemon, registers your
 agent, and starts a session. For manual control, you can still run individual
 steps:</p>
-<pre><code>thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
-thrum daemon start               # Start the daemon separately</code></pre>
+<pre><code>thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions</code></pre>
 <p>Verify the daemon is running:</p>
 <pre><code>thrum daemon status</code></pre>
 <h2>Installation</h2>
@@ -313,7 +312,7 @@ work and are available in <code>toolkit/agents/</code> for environments that don
 plugins.</p>
 <h2>Troubleshooting</h2>
 <h3>&quot;Thrum not initialized&quot; on session start</h3>
-<p>Run <code>thrum init &amp;&amp; thrum daemon start</code> in your repository root.</p>
+<p>Run <code>thrum init</code> in your repository root (it starts the daemon automatically).</p>
 <h3>No context injected after plugin install</h3>
 <p>Verify the plugin is loaded: check that <code>/thrum:prime</code> is available as a slash
 command. If not, reinstall the plugin.</p>

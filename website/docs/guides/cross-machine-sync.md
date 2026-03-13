@@ -23,7 +23,7 @@ machines exchanging messages.
   for testing)
 - A shared remote configured on both (`git remote -v` to verify)
 - Thrum initialized: `thrum init` done on both clones
-- Thrum daemon running on both: `thrum daemon start`
+- Thrum daemon running on both (`thrum init` starts it automatically)
 
 ### Enable Sync
 

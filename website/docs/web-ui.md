@@ -20,12 +20,8 @@ connects over WebSocket on the same port the daemon already listens on (default
 
 ## Opening the UI
 
-The daemon starts automatically when you run `thrum init` (since v0.4.5). If you
-need to restart it explicitly:
-
-```bash
-thrum daemon start
-```
+The daemon starts automatically when you run `thrum init` (since v0.4.5). If it's
+not running, restart it with `thrum daemon start`.
 
 Open your browser to `http://localhost:9999` (or whatever port you configured).
 

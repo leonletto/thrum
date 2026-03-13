@@ -353,9 +353,8 @@ Feature worktrees share the main worktree's daemon and message store via a
 redirect file. Use `thrum setup` to configure a feature worktree:
 
 ```bash
-# Main worktree (already initialized)
+# Main worktree (already initialized — daemon running from thrum init)
 cd ~/project
-thrum daemon start
 
 # Feature worktree -- set up redirect to main
 cd ~/project-features/auth
