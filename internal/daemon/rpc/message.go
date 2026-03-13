@@ -1400,9 +1400,10 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 }
 
 // buildForAgentClause builds the SQL WHERE clause for the for-agent inbox filter.
-// It combines two conditions with OR:
+// It combines three conditions with OR:
 // 1. Messages with mention refs matching the agent (direct mentions)
 // 2. Messages scoped to groups the agent belongs to (group membership)
+// 3. Broadcast messages (no mention refs, no group refs, no group scopes)
 func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string) (string, []any) {
 	if len(forAgentValues) == 0 {
 		return "", nil
@@ -1452,7 +1453,15 @@ func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string)
 	)`
 	args = append(args, agentVal, roleVal)
 
-	clause := " AND (" + mentionSubquery + " OR " + groupSubquery + ")"
+	// Part 3: broadcast messages — no mention refs, no group refs, no group scopes.
+	// These are unaddressed messages (e.g., sent with --to @everyone) that have no
+	// targeting information and should be visible to every agent's inbox.
+	broadcastSubquery := `(
+		NOT EXISTS (SELECT 1 FROM message_refs mr_bc WHERE mr_bc.message_id = m.message_id AND mr_bc.ref_type IN ('mention', 'group'))
+		AND NOT EXISTS (SELECT 1 FROM message_scopes ms_bc WHERE ms_bc.message_id = m.message_id AND ms_bc.scope_type = 'group')
+	)`
+
+	clause := " AND (" + mentionSubquery + " OR " + groupSubquery + " OR " + broadcastSubquery + ")"
 	return clause, args
 }
 
