@@ -1592,7 +1592,7 @@ Exit codes:
 			if err != nil {
 				if err.Error() == "timeout waiting for message" {
 					if !flagQuiet {
-						fmt.Fprintln(os.Stderr, "Timeout: no matching messages received")
+						fmt.Fprintln(os.Stderr, "NO_MESSAGES_TIMEOUT — re-run thrum wait to continue listening")
 					}
 					os.Exit(1)
 				}
