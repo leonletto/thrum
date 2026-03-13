@@ -10,8 +10,8 @@ category: "reference"
 
 > **TL;DR:** You only need 8 commands for daily use — they're in the [Overview](overview.md) page. This page is the full reference for all ~30 commands. Use Ctrl+F or the Quick Reference table at the top to find what you need. Storage layout details are at the very bottom.
 
-Complete reference for the `thrum` command-line interface -- a Git-backed
-messaging system for AI agent coordination.
+Complete reference for the `thrum` command-line interface — a messaging system
+for AI agent coordination.
 
 ## Quick Reference
 

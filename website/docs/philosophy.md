@@ -1,8 +1,8 @@
 ---
 title: "Philosophy"
 description:
-  "Why Thrum exists — a Git-backed messaging system designed for human-centric
-  AI agent coordination, not another orchestration engine"
+  "Why Thrum exists — a messaging system designed for human-centric AI agent
+  coordination, not another orchestration engine"
 category: "overview"
 order: 0
 tags: ["philosophy", "vision", "human-centric", "workflow"]
