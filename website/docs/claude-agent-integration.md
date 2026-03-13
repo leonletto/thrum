@@ -101,6 +101,7 @@ Reply (creates a reply-to reference)
 
 thrum quickstart --name <name> --role <role> --module <module> --intent "<desc>"
 thrum inbox --unread thrum sent --unread
+thrum message read --all  # Mark all messages as read after reviewing
 
 # During work
 

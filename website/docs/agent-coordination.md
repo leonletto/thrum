@@ -37,6 +37,7 @@ Shell commands for basic messaging. Works everywhere.
 thrum send "Starting work on task X" --to @coord_main
 thrum inbox --unread
 thrum sent --unread
+thrum message read --all       # Mark all messages as read
 thrum reply <msg-id> "Here's my update"
 ```
 

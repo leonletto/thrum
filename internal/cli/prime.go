@@ -297,8 +297,10 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 	// Quick command reference
 	out.WriteString("\nCommands:\n")
 	out.WriteString("  thrum send \"msg\" --to @name    Send direct message\n")
-	out.WriteString("  thrum inbox                    Check messages\n")
+	out.WriteString("  thrum inbox                    Check messages (auto-marks read)\n")
+	out.WriteString("  thrum inbox --unread           Peek without marking read\n")
 	out.WriteString("  thrum sent                     Sent messages & receipts\n")
+	out.WriteString("  thrum message read --all       Mark all messages as read\n")
 	out.WriteString("  thrum reply <id> \"msg\"         Reply to message\n")
 	out.WriteString("  thrum send \"msg\" --to @everyone Broadcast to all\n")
 	out.WriteString("  thrum status                   Agent/daemon status\n")

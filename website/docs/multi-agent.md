@@ -504,6 +504,7 @@ thrum context prime
 # Check for urgent messages
 thrum inbox --unread
 thrum sent --unread
+thrum message read --all       # Mark all messages as read
 
 # Resume work based on recovered context
 thrum agent set-intent "Resuming JWT implementation after compaction"

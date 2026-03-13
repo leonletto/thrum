@@ -73,6 +73,9 @@ Message: "Search UI should use the MiniSearch interface we built in thrum-c3d4"
 # Check sent acknowledgements or receipts
 $ thrum sent --unread
 
+# Mark messages as read after reviewing
+$ thrum message read --all
+
 # Claim the task
 $ bd update thrum-a1b2 -s in_progress
 
