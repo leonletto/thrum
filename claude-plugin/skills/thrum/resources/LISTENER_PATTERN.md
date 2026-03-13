@@ -11,7 +11,7 @@ Task(
   subagent_type="message-listener",
   model="haiku",
   run_in_background=true,
-  prompt="Listen for Thrum messages.\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -1s"
+  prompt="Listen for Thrum messages.\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -15s"
 )
 ```
 
@@ -52,7 +52,7 @@ different session, the hook tells Claude to restart the listener.
 | Flag            | Purpose                                                                        |
 | --------------- | ------------------------------------------------------------------------------ |
 | `--timeout 8m`  | Block up to 8 min per cycle (under Bash 600s limit)                            |
-| `--after -1s`   | Include messages sent up to 1s ago (prevents stale replay; negative = "N ago") |
+| `--after -15s`  | Include messages sent up to 15s ago (covers re-arm gap between listener cycles) |
 | `--json`        | Machine-readable output (not used by listener)                                 |
 
 ## Key Rules

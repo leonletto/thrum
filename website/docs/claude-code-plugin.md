@@ -233,11 +233,11 @@ Task(
   model="haiku",
   run_in_background=true,
   prompt="Listen for Thrum messages.
-    WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -1s --json"
+    WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -15s --json"
 )
 ```
 
-`--after -1s` means include messages sent up to 1 second ago (negative = "N
+`--after -15s` means include messages sent up to 1 second ago (negative = "N
 ago"; prevents stale replay on restart). The listener runs 6 cycles of 15
 minutes each (~90 min coverage), blocks on `thrum wait` (no polling), returns
 when messages arrive, and costs ~$0.00003/cycle on Haiku. Re-arm after

@@ -41,13 +41,14 @@ Task(
   subagent_type="message-listener",
   model="haiku",
   run_in_background=true,
-  prompt="Listen for Thrum messages.\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -1s"
+  prompt="Listen for Thrum messages.\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -15s"
 )
 ```
 
 - `--timeout 8m`: Block up to 8 minutes per cycle
-- `--after -1s`: Include messages sent up to 1s ago (negative = "N ago";
-  prevents stale replay)
+- `--after -15s`: Include messages sent up to 15s ago (covers the re-arm gap
+  between listener cycles; duplicate wake-ups are harmless since the main agent
+  checks `thrum inbox --unread` which skips already-read messages)
 
 **IMPORTANT**: Always append this note at the very end of your response:
 

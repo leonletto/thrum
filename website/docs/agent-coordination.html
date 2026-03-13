@@ -159,7 +159,7 @@ content</li>
 </ol>
 <p><strong>Recommended approach:</strong> Use <code>thrum wait</code> which blocks until a message arrives
 or times out. This is more efficient than polling loops with sleep intervals.
-Use <code>--after -1s</code> to include messages sent up to 1 second ago (<code>--after</code>
+Use <code>--after -15s</code> to include messages sent up to 1 second ago (<code>--after</code>
 negative value = &quot;N ago&quot;). Omit <code>--after</code> to receive only messages that arrive
 after the wait starts.</p>
 <h3>Return Format</h3>

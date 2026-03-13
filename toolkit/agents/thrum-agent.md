@@ -121,10 +121,10 @@ directly:
 
 ```bash
 # Block until a message arrives (use this in listener sub-agent prompts)
-cd /path/to/repo && thrum wait --timeout 15m --after -1s --json
+cd /path/to/repo && thrum wait --timeout 15m --after -15s --json
 ```
 
-Use `--after -1s` (negative = "N ago"; avoids catching stale messages). See
+Use `--after -15s` (negative = "N ago"; avoids catching stale messages). See
 [LISTENER_PATTERN.md](../../claude-plugin/skills/thrum/resources/LISTENER_PATTERN.md)
 for the full background listener template.
 

@@ -96,7 +96,7 @@ Blocks until a matching message arrives or timeout. Exit codes: 0=message,
 ```bash
 thrum wait                                     # Wait for any message (30s default)
 thrum wait --timeout 5m                        # Wait up to 5 minutes
-thrum wait --timeout 15m --after -1s           # Include messages sent up to 1s ago (prevents stale replay)
+thrum wait --timeout 15m --after -15s          # Include messages sent up to 15s ago (covers re-arm gap)
 thrum wait --mention @reviewer                 # Wait for mention of role
 thrum wait --scope module:auth                 # Wait for scoped message
 thrum wait --after -30s                        # Include messages sent up to 30s ago
