@@ -548,11 +548,9 @@ Examples:
 				}
 			}
 
-			// Step 9b: Refresh preamble if --force (brings preamble up to date with binary version)
-			if force {
-				if err := applyRolePreamble(thrumDir, agentNameResolved, agentRoleResolved, "", true); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to refresh preamble: %v\n", err)
-				}
+			// Step 9b: Ensure preamble exists; --force overwrites with current version
+			if err := applyRolePreamble(thrumDir, agentNameResolved, agentRoleResolved, "", force); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to refresh preamble: %v\n", err)
 			}
 
 			// Step 10: Show whoami-style output
@@ -4019,6 +4017,13 @@ Examples:
 				// Apply preamble: --preamble-file > role template > default
 				if err := applyRolePreamble(thrumDir, savedName, flagRole, preambleFile, false); err != nil {
 					return err
+				}
+			} else if name != "" && !dryRun {
+				// Daemon unreachable or registration skipped — still ensure preamble exists.
+				// EnsurePreamble is a no-op when the file already exists, so this is always safe.
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+				if err := applyRolePreamble(thrumDir, name, flagRole, preambleFile, false); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to ensure preamble: %v\n", err)
 				}
 			}
 
