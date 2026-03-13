@@ -103,7 +103,7 @@ cycles.</p>
 </ul>
 <p><strong>Key capabilities:</strong></p>
 <ul>
-<li>Blocking wait via <code>thrum wait --timeout 15m</code> (6 cycles max, filters by agent
+<li>Blocking wait via <code>thrum wait --timeout 8m</code> (6 cycles max, filters by agent
 identity)</li>
 <li>Immediate return on message arrival</li>
 <li>Time-based filtering with <code>--after</code> flag (negative value = &quot;N ago&quot;; e.g.,
@@ -120,11 +120,11 @@ Task({
   model: &quot;haiku&quot;,
   run_in_background: true,
   prompt:
-    &quot;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 15m --after -15s --json&quot;,
+    &quot;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 8m --after -15s --json&quot;,
 });</code></pre>
 <p><strong>Wait command flags:</strong></p>
 <ul>
-<li><code>--timeout 15m</code> — Block up to 15 minutes per cycle</li>
+<li><code>--timeout 8m</code> — Block up to 8 minutes per cycle</li>
 <li><code>--after -15s</code> — Include messages sent up to 1 second ago (negative = &quot;N ago&quot;;
 prevents stale replay)</li>
 <li><code>--json</code> — Machine-readable output</li>

@@ -91,7 +91,7 @@ cycles.
 
 **Key capabilities:**
 
-- Blocking wait via `thrum wait --timeout 15m` (6 cycles max, filters by agent
+- Blocking wait via `thrum wait --timeout 8m` (6 cycles max, filters by agent
   identity)
 - Immediate return on message arrival
 - Time-based filtering with `--after` flag (negative value = "N ago"; e.g.,
@@ -112,13 +112,13 @@ Task({
   model: "haiku",
   run_in_background: true,
   prompt:
-    "Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -15s --json",
+    "Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -15s --json",
 });
 ```
 
 **Wait command flags:**
 
-- `--timeout 15m` — Block up to 15 minutes per cycle
+- `--timeout 8m` — Block up to 8 minutes per cycle
 - `--after -15s` — Include messages sent up to 1 second ago (negative = "N ago";
   prevents stale replay)
 - `--json` — Machine-readable output

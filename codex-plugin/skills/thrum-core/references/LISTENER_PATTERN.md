@@ -11,7 +11,7 @@ Task(
   subagent_type="message-listener",
   model="haiku",
   run_in_background=true,
-  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -15s --json"
+  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -15s --json"
 )
 ```
 
@@ -26,7 +26,7 @@ Replace `/path/to/repo` with the actual repo path. When using the Thrum plugin,
    `NO_MESSAGES_TIMEOUT`
 4. **Re-arm** — After processing, spawn a new listener to continue monitoring
 
-The listener loops internally (up to 6 cycles of 15 min each = ~90 min max).
+The listener loops internally (up to 10 cycles of 8 min each = ~80 min max).
 
 ## Processing Messages
 
@@ -50,7 +50,7 @@ else:
 
 | Flag                | Purpose                                                                        |
 | ------------------- | ------------------------------------------------------------------------------ |
-| `--timeout 15m`     | Block up to 15 minutes per cycle                                               |
+| `--timeout 8m`     | Block up to 8 minutes per cycle                                               |
 | `--after -15s`       | Include messages sent up to 1s ago (negative = "N ago"; prevents stale replay) |
 | `--json`            | Machine-readable output                                                        |
 | `--mention @<role>` | Only messages that mention the specified role                                  |

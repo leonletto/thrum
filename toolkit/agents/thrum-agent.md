@@ -121,7 +121,7 @@ directly:
 
 ```bash
 # Block until a message arrives (use this in listener sub-agent prompts)
-cd /path/to/repo && thrum wait --timeout 15m --after -15s --json
+cd /path/to/repo && thrum wait --timeout 8m --after -15s --json
 ```
 
 Use `--after -15s` (negative = "N ago"; avoids catching stale messages). See
