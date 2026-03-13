@@ -31,16 +31,6 @@ curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/instal
 brew install leonletto/tap/thrum
 ```
 
-### Go Install
-
-```bash
-go install github.com/leonletto/thrum/cmd/thrum@latest
-```
-
-Note: `go install` builds the Go binary only — the embedded Web UI SPA is not
-included. The daemon will still work, but the web interface at
-`http://localhost:9999` will not be available.
-
 ### From Source
 
 ```bash

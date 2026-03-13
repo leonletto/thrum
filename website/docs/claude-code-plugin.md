@@ -40,12 +40,10 @@ disclosure resource docs. It replaces the manual agent definition approach
 Before installing the plugin, you need Thrum installed and initialized:
 
 ```bash
-# Install thrum (Go 1.26+)
-go install github.com/leonletto/thrum@latest
-
-# Or build from source
-git clone https://github.com/leonletto/thrum.git
-cd thrum && make install
+# Install thrum
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+# Or: brew install leonletto/tap/thrum
+# Or: git clone https://github.com/leonletto/thrum.git && cd thrum && make install
 
 # Initialize in your repository (v0.4.5+: init does full setup)
 cd /path/to/your/repo
