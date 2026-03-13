@@ -96,7 +96,7 @@ sends to ALL agents with the coordinator role. This is almost never what you
 want. Use the agent name instead.</p>
 <h3>Message Listener Pattern</h3>
 <p>Spawn a background listener so you receive async notifications without polling:</p>
-<pre><code>thrum wait --timeout 15m --after -15s --json</code></pre>
+<pre><code>thrum wait --timeout 8m --after -15s --json</code></pre>
 <p>Re-arm the listener every time it returns — both when messages arrive and when
 it times out. This keeps you reachable throughout your session.</p>
 <h3>Completion and Blocker Messages</h3>
