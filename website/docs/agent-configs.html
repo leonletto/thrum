@@ -120,12 +120,12 @@ Task({
   model: &quot;haiku&quot;,
   run_in_background: true,
   prompt:
-    &quot;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 15m --after -1s --json&quot;,
+    &quot;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 15m --after -15s --json&quot;,
 });</code></pre>
 <p><strong>Wait command flags:</strong></p>
 <ul>
 <li><code>--timeout 15m</code> — Block up to 15 minutes per cycle</li>
-<li><code>--after -1s</code> — Include messages sent up to 1 second ago (negative = &quot;N ago&quot;;
+<li><code>--after -15s</code> — Include messages sent up to 1 second ago (negative = &quot;N ago&quot;;
 prevents stale replay)</li>
 <li><code>--json</code> — Machine-readable output</li>
 </ul>

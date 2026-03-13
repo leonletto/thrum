@@ -70,7 +70,7 @@ want. Use the agent name instead.
 Spawn a background listener so you receive async notifications without polling:
 
 ```bash
-thrum wait --timeout 15m --after -1s --json
+thrum wait --timeout 15m --after -15s --json
 ```
 
 Re-arm the listener every time it returns — both when messages arrive and when

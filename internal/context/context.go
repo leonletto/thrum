@@ -140,7 +140,7 @@ func DefaultPreamble() []byte {
 **Status:** ` + "`thrum status`" + `
 **Who's online:** ` + "`thrum team`" + `
 **Save context:** Use ` + "`/thrum:update-context`" + ` skill. **NEVER run ` + "`thrum context save`" + ` manually** — it overwrites accumulated session state.
-**Wait for messages:** ` + "`thrum wait --after -1s --timeout 5m`" + ` (` + "`--after -1s`" + ` = include messages sent up to 1s ago)
+**Wait for messages:** ` + "`thrum wait --after -15s --timeout 5m`" + ` (` + "`--after -15s`" + ` = include messages sent up to 15s ago, covers re-arm gap)
 
 ## Agent Strategies
 

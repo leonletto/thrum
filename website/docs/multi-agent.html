@@ -427,8 +427,8 @@ flag; use subscriptions if you need a firehose.</p>
 <pre><code># Wait for any message addressed to this agent
 thrum wait --timeout 5m
 
-# Include messages sent up to 1s ago (--after -1s = &quot;1 second ago&quot;; negative = &quot;N ago&quot;)
-thrum wait --after -1s --timeout 5m --json
+# Include messages sent up to 1s ago (--after -15s = &quot;1 second ago&quot;; negative = &quot;N ago&quot;)
+thrum wait --after -15s --timeout 5m --json
 
 # Wait for mentions of your role
 thrum wait --mention @reviewer --timeout 5m</code></pre>
