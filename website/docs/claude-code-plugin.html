@@ -64,12 +64,10 @@ identity, worktrees, and anti-patterns</li>
 </ul>
 <h2>Prerequisites</h2>
 <p>Before installing the plugin, you need Thrum installed and initialized:</p>
-<pre><code># Install thrum (Go 1.26+)
-go install github.com/leonletto/thrum@latest
-
-# Or build from source
-git clone https://github.com/leonletto/thrum.git
-cd thrum &amp;&amp; make install
+<pre><code># Install thrum
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+# Or: brew install leonletto/tap/thrum
+# Or: git clone https://github.com/leonletto/thrum.git &amp;&amp; cd thrum &amp;&amp; make install
 
 # Initialize in your repository (v0.4.5+: init does full setup)
 cd /path/to/your/repo
