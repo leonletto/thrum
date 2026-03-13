@@ -155,6 +155,7 @@ export type MessageListResponse = z.infer<typeof MessageListResponseSchema>;
 
 export const MarkAsReadRequestSchema = z.object({
   message_ids: z.array(z.string()),
+  caller_agent_id: z.string().optional(),
 });
 
 export type MarkAsReadRequest = z.infer<typeof MarkAsReadRequestSchema>;
