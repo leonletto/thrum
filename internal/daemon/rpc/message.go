@@ -705,12 +705,26 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		currentAgentID = h.resolveAgentOnly(req.CallerAgentID)
 	}
 
+	// Determine which identity to use for the is_read correlated subquery.
+	// Priority: explicit currentAgentID > for_agent values > none (default 0).
+	forAgentValues := buildForAgentValues(req.ForAgent, req.ForAgentRole)
+	var isReadAgentValues []string
+	if currentAgentID != "" {
+		isReadAgentValues = []string{currentAgentID}
+	} else if len(forAgentValues) > 0 {
+		isReadAgentValues = forAgentValues
+	}
+
 	// Build query — include is_read status via correlated subquery when agent is known
 	var selectCols string
-	if currentAgentID != "" {
+	if len(isReadAgentValues) > 0 {
+		placeholders := make([]string, len(isReadAgentValues))
+		for i := range isReadAgentValues {
+			placeholders[i] = "?"
+		}
 		selectCols = `SELECT m.message_id, m.thread_id, m.agent_id, m.created_at, m.updated_at,
 		                     m.body_format, m.body_content, m.body_structured, m.deleted,
-		                     CASE WHEN EXISTS(SELECT 1 FROM message_deliveries md WHERE md.message_id = m.message_id AND md.recipient_agent_id = ? AND md.read_at IS NOT NULL) THEN 1 ELSE 0 END as is_read,
+		                     CASE WHEN EXISTS(SELECT 1 FROM message_deliveries md WHERE md.message_id = m.message_id AND md.recipient_agent_id IN (` + strings.Join(placeholders, ",") + `) AND md.read_at IS NOT NULL) THEN 1 ELSE 0 END as is_read,
 		                     reply_ref.ref_value as reply_to`
 	} else {
 		selectCols = `SELECT m.message_id, m.thread_id, m.agent_id, m.created_at, m.updated_at,
@@ -733,10 +747,10 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	query += joins + " WHERE 1=1"
 
 	// Build WHERE clauses and args
-	// correlated subquery for is_read needs agentID as the first arg
+	// correlated subquery for is_read needs agent values as the first args
 	args := []any{}
-	if currentAgentID != "" {
-		args = append(args, currentAgentID)
+	for _, v := range isReadAgentValues {
+		args = append(args, v)
 	}
 
 	if req.ThreadID != "" {
@@ -797,8 +811,8 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		createdAfterArgs = append(createdAfterArgs, req.CreatedAfter)
 	}
 
-	// For-agent filter: show messages mentioning me + messages scoped to my groups + old broadcasts (backward compat)
-	forAgentValues := buildForAgentValues(req.ForAgent, req.ForAgentRole)
+	// For-agent filter: show messages mentioning me + messages scoped to my groups
+	// (forAgentValues already computed above for is_read)
 	forAgentClause, forAgentArgs := buildForAgentClause(forAgentValues, req.ForAgent, req.ForAgentRole)
 
 	switch {
@@ -1408,18 +1422,9 @@ func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string)
 	}
 
 	// Part 2: group membership subquery (flat groups only)
-	// Messages scoped to groups the agent belongs to (via agent name, role, or wildcard)
-	groupSubquery := `m.message_id IN (
-		SELECT ms_g.message_id FROM message_scopes ms_g
-		WHERE ms_g.scope_type = 'group'
-		AND ms_g.scope_value IN (
-			SELECT g.name FROM groups g
-			JOIN group_members gm ON g.group_id = gm.group_id
-			WHERE (gm.member_type = 'agent' AND gm.member_value = ?)
-			   OR (gm.member_type = 'role' AND (gm.member_value = ? OR gm.member_value = '*'))
-		)
-	)`
-	// Use forAgent for agent match, forAgentRole for role match
+	// Messages scoped to groups the agent belongs to (via agent name or role).
+	// Only include the wildcard role match ('*') when the caller has an explicit role —
+	// human users (no role) should not match role-wildcard groups like @everyone.
 	agentVal := forAgent
 	if agentVal == "" {
 		agentVal = forAgentRole
@@ -1428,6 +1433,23 @@ func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string)
 	if roleVal == "" {
 		roleVal = forAgent
 	}
+
+	var roleCondition string
+	if forAgentRole != "" {
+		roleCondition = "(gm.member_type = 'role' AND (gm.member_value = ? OR gm.member_value = '*'))"
+	} else {
+		roleCondition = "(gm.member_type = 'role' AND gm.member_value = ?)"
+	}
+	groupSubquery := `m.message_id IN (
+		SELECT ms_g.message_id FROM message_scopes ms_g
+		WHERE ms_g.scope_type = 'group'
+		AND ms_g.scope_value IN (
+			SELECT g.name FROM groups g
+			JOIN group_members gm ON g.group_id = gm.group_id
+			WHERE (gm.member_type = 'agent' AND gm.member_value = ?)
+			   OR ` + roleCondition + `
+		)
+	)`
 	args = append(args, agentVal, roleVal)
 
 	clause := " AND (" + mentionSubquery + " OR " + groupSubquery + ")"
