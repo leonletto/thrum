@@ -25,7 +25,7 @@ func verifyBinary(check BinaryCheck) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Millisecond)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, binPath, check.VerifyArgs...)
+	cmd := exec.CommandContext(ctx, binPath, check.VerifyArgs...) //#nosec G204 -- binPath comes from hardcoded agent registry, not user input
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return false
