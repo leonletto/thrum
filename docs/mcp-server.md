@@ -1,8 +1,10 @@
 
 ## MCP Server
 
-> **TL;DR:** The MCP server lets AI agents use Thrum through native MCP tools instead of CLI shell-outs. Start with `thrum mcp serve`. It provides 4 core messaging tools plus 6 group management tools — no polling, no wasted tokens.
-
+> **TL;DR:** The MCP server lets AI agents use Thrum through native MCP tools
+> instead of CLI shell-outs. Start with `thrum mcp serve`. It provides 4 core
+> messaging tools plus 6 group management tools — no polling, no wasted tokens.
+>
 > **See also:** [Daemon Architecture](daemon.md) for the underlying daemon the
 > MCP server connects to, [Identity](identity.md) for agent identity resolution.
 
