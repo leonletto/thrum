@@ -6,43 +6,95 @@ import (
 	"slices"
 )
 
-// DetectRuntime identifies the active AI coding runtime by checking file markers
+// DetectedAgent describes an agent found during detection.
+type DetectedAgent struct {
+	Name   string `json:"name"`
+	Tier   string `json:"tier"`   // "repo", "env", or "binary"
+	Source string `json:"source"` // what triggered the detection
+}
+
+// DetectAgents runs 3-tier detection and returns all found agents,
+// deduplicated by name with the highest-tier match winning.
+func DetectAgents(repoPath string) []DetectedAgent {
+	return detectAgents(repoPath, true)
+}
+
+// detectAgents is the internal detection engine.
+// When includeBinary is true, tier-3 binary scanning is performed.
+func detectAgents(repoPath string, includeBinary bool) []DetectedAgent {
+	seen := make(map[string]bool)
+	var results []DetectedAgent
+
+	agents := BuiltinAgents()
+
+	// Tier 1: Repo markers
+	for _, agent := range agents {
+		for _, marker := range agent.RepoMarkers {
+			if seen[agent.Name] {
+				break
+			}
+			path := filepath.Join(repoPath, marker)
+			if _, err := os.Stat(path); err == nil {
+				results = append(results, DetectedAgent{
+					Name:   agent.Name,
+					Tier:   "repo",
+					Source: "found " + marker,
+				})
+				seen[agent.Name] = true
+				break
+			}
+		}
+	}
+
+	// Tier 2: Environment variables
+	for _, agent := range agents {
+		if seen[agent.Name] {
+			continue
+		}
+		for _, envVar := range agent.EnvVars {
+			if os.Getenv(envVar) != "" {
+				results = append(results, DetectedAgent{
+					Name:   agent.Name,
+					Tier:   "env",
+					Source: "env " + envVar,
+				})
+				seen[agent.Name] = true
+				break
+			}
+		}
+	}
+
+	// Tier 3: Binary scan with verification
+	if includeBinary {
+		for _, agent := range agents {
+			if seen[agent.Name] {
+				continue
+			}
+			for _, bin := range agent.Binaries {
+				if verifyBinary(bin) {
+					results = append(results, DetectedAgent{
+						Name:   agent.Name,
+						Tier:   "binary",
+						Source: "binary " + bin.Name,
+					})
+					seen[agent.Name] = true
+					break
+				}
+			}
+		}
+	}
+
+	return results
+}
+
+// DetectRuntime identifies the active AI coding runtime by checking repo markers
 // and environment variables. Returns "cli-only" if no runtime is detected.
+// Uses tier-1 and tier-2 detection only (no binary scan).
 func DetectRuntime(repoPath string) string {
-	// Check file markers first (more reliable than env vars)
-	fileChecks := []struct {
-		marker string
-		name   string
-	}{
-		{".claude/settings.json", "claude"},
-		{".claude", "claude"},
-		{".codex", "codex"},
-		{".cursorrules", "cursor"},
-		{".augment", "auggie"},
+	results := detectAgents(repoPath, false)
+	if len(results) > 0 {
+		return results[0].Name
 	}
-	for _, c := range fileChecks {
-		path := filepath.Join(repoPath, c.marker)
-		if _, err := os.Stat(path); err == nil {
-			return c.name
-		}
-	}
-
-	// Check environment variables
-	envChecks := []struct {
-		envVar string
-		name   string
-	}{
-		{"CLAUDE_SESSION_ID", "claude"},
-		{"CURSOR_SESSION", "cursor"},
-		{"GEMINI_CLI", "gemini"},
-		{"AUGMENT_AGENT", "auggie"},
-	}
-	for _, c := range envChecks {
-		if os.Getenv(c.envVar) != "" {
-			return c.name
-		}
-	}
-
 	return "cli-only"
 }
 
@@ -52,60 +104,17 @@ type DetectedRuntime struct {
 	Source string // e.g. "found .claude/settings.json", "env CLAUDE_SESSION_ID"
 }
 
-// DetectAllRuntimes returns all detected runtimes (file markers + env vars).
-// Results are deduplicated by name, with file-based detection taking priority.
+// DetectAllRuntimes returns all detected runtimes for backward compatibility.
+// Uses tier-1 and tier-2 detection only (no binary scan).
 func DetectAllRuntimes(repoPath string) []DetectedRuntime {
-	seen := make(map[string]bool)
+	agents := detectAgents(repoPath, false)
 	var results []DetectedRuntime
-
-	// Check file markers first (more reliable than env vars)
-	fileChecks := []struct {
-		marker string
-		name   string
-	}{
-		{".claude/settings.json", "claude"},
-		{".claude", "claude"},
-		{".codex", "codex"},
-		{".cursorrules", "cursor"},
-		{".augment", "auggie"},
+	for _, a := range agents {
+		results = append(results, DetectedRuntime{
+			Name:   a.Name,
+			Source: a.Source,
+		})
 	}
-	for _, c := range fileChecks {
-		if seen[c.name] {
-			continue
-		}
-		path := filepath.Join(repoPath, c.marker)
-		if _, err := os.Stat(path); err == nil {
-			results = append(results, DetectedRuntime{
-				Name:   c.name,
-				Source: "found " + c.marker,
-			})
-			seen[c.name] = true
-		}
-	}
-
-	// Check environment variables
-	envChecks := []struct {
-		envVar string
-		name   string
-	}{
-		{"CLAUDE_SESSION_ID", "claude"},
-		{"CURSOR_SESSION", "cursor"},
-		{"GEMINI_CLI", "gemini"},
-		{"AUGMENT_AGENT", "auggie"},
-	}
-	for _, c := range envChecks {
-		if seen[c.name] {
-			continue
-		}
-		if os.Getenv(c.envVar) != "" {
-			results = append(results, DetectedRuntime{
-				Name:   c.name,
-				Source: "env " + c.envVar,
-			})
-			seen[c.name] = true
-		}
-	}
-
 	return results
 }
 
