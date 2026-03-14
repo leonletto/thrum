@@ -32,12 +32,17 @@ export function useMarkAsRead() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (messageIds: string[]) => {
+    mutationFn: async (params: { messageIds: string[]; callerAgentId?: string }) => {
       await ensureConnected();
-      const request: MarkAsReadRequest = { message_ids: messageIds };
+      const request: MarkAsReadRequest = {
+        message_ids: params.messageIds,
+        ...(params.callerAgentId && { caller_agent_id: params.callerAgentId }),
+      };
       return wsClient.call<MarkAsReadResponse>('message.markRead', request);
     },
-    onSuccess: (_data, messageIds) => {
+    onSuccess: (_data, params) => {
+      // Invalidate message list queries (inbox, groups) to refresh unread counts
+      queryClient.invalidateQueries({ queryKey: ['messages', 'list'] });
       // Invalidate thread queries to refresh unread counts
       queryClient.invalidateQueries({ queryKey: ['threads'] });
 
@@ -54,7 +59,7 @@ export function useMarkAsRead() {
           return {
             ...threadData,
             messages: threadData.messages.map((msg) =>
-              messageIds.includes(msg.message_id)
+              params.messageIds.includes(msg.message_id)
                 ? { ...msg, is_read: true }
                 : msg
             ),

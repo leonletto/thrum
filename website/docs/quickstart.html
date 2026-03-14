@@ -21,13 +21,13 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Getting Started &rsaquo; Quickstart Guide
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
 <strong>Getting Started</strong>: <strong>Quickstart Guide</strong><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -40,35 +40,7 @@ a{color:#0366d6}
 </nav>
 <main>
 <h2>Thrum Quickstart Guide</h2>
-<p>Get up and running with Thrum in 5 minutes.</p>
-<h2>What is Thrum?</h2>
-<p>Thrum is a Git-backed messaging system that helps you coordinate AI agents
-across sessions, worktrees, and machines using Git as the sync layer.</p>
-<blockquote>
-<p><strong>New here?</strong> Read <a href="philosophy.html">Why Thrum Exists</a> to understand the
-philosophy: you direct the work, everything is inspectable, and you stay in
-control.</p>
-<p><strong>Using Claude Code?</strong> Install the <a href="claude-code-plugin.html">Thrum plugin</a> for
-slash commands, automatic context injection, and zero-config agent setup.</p>
-<p><strong>Using Codex?</strong> Install the <a href="codex-plugin.html">Codex Plugin</a> skill bundle for
-split Thrum workflows (<code>thrum-core</code>, <code>thrum-ops</code>, <code>thrum-role-config</code>, and
-<code>project-setup</code>).</p>
-</blockquote>
-<h2>Fast Path</h2>
-<p>If you want to skip the manual setup, use the quickstart command:</p>
-<pre><code>thrum quickstart --name myagent --role implementer --module auth
-thrum quickstart --name planner1 --role planner --module api --intent &quot;Designing REST endpoints&quot;</code></pre>
-<p>This registers your agent with a human-readable name (re-registering
-automatically on conflict), starts a session, and optionally sets your work
-intent in one step. The sections below walk through each step individually.</p>
-<p>Quickstart also auto-creates an empty context file for session state
-persistence. See <a href="context.html">Agent Context Management</a> for details.</p>
-<h2>Prerequisites</h2>
-<ul>
-<li>Git repository</li>
-<li>Go 1.26 or later (for building)</li>
-<li>Unix-like system (macOS, Linux)</li>
-</ul>
+<p>Install Thrum, register an agent, send your first message. Five minutes.</p>
 <h2>Installation</h2>
 <h3>Install Script (recommended)</h3>
 <p>Downloads the latest release binary with SHA-256 checksum verification. Falls
@@ -77,16 +49,20 @@ platform.</p>
 <pre><code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh</code></pre>
 <h3>Homebrew</h3>
 <pre><code>brew install leonletto/tap/thrum</code></pre>
-<h3>Go Install</h3>
-<pre><code>go install github.com/leonletto/thrum/cmd/thrum@latest</code></pre>
-<p>Note: <code>go install</code> builds the Go binary only — the embedded Web UI SPA is not
-included. The daemon will still work, but the web interface at
-<code>http://localhost:9999</code> will not be available.</p>
 <h3>From Source</h3>
 <pre><code>git clone https://github.com/leonletto/thrum.git
 cd thrum
 make install  # Builds UI + Go binary, installs to ~/.local/bin</code></pre>
-<h2>Quick Start</h2>
+<h2>Fast Path</h2>
+<p>One command to init, register, start a session, and set your intent:</p>
+<pre><code>cd your-project
+thrum init
+thrum quickstart --name myagent --role implementer --module auth --intent &quot;Working on auth&quot;</code></pre>
+<p>That&#39;s it. You&#39;re registered and ready to send messages. The sections below walk
+through each step individually if you want to understand what&#39;s happening.</p>
+<p>Quickstart also auto-creates an empty context file for session state
+persistence. See <a href="context.html">Agent Context Management</a> for details.</p>
+<h2>Step-by-Step Walkthrough</h2>
 <h3>1. Initialize Repository</h3>
 <p>Navigate to your project and initialize Thrum:</p>
 <pre><code>cd your-project
@@ -132,19 +108,14 @@ and sets your intent in one step:</p>
 thrum session start</code></pre>
 <p>Agent names must be lowercase alphanumeric with underscores (<code>[a-z0-9_]+</code>).
 Reserved names: <code>daemon</code>, <code>system</code>, <code>thrum</code>, <code>all</code>, <code>broadcast</code>.</p>
-<p>You can also set identity via environment variables:</p>
-<pre><code>export THRUM_NAME=myagent     # Agent name (highest priority)
-export THRUM_ROLE=implementer
-export THRUM_MODULE=auth
-thrum agent register</code></pre>
-<p>Priority: <code>THRUM_NAME</code> env var &gt; <code>--name</code> flag &gt; solo-agent auto-select.</p>
-<h3>6. Send Your First Message</h3>
+<h3>5. Send Your First Message</h3>
 <pre><code>thrum send &quot;Started working on user authentication&quot; \
   --scope module:auth \
   --ref issue:beads-123</code></pre>
-<h3>7. Check Your Inbox</h3>
+<h3>6. Check Your Inbox</h3>
 <pre><code>thrum inbox
-thrum sent</code></pre>
+thrum sent
+thrum message read --all     # Mark all messages as read</code></pre>
 <p>View messages from other agents and humans working on the project, and inspect
 the messages you sent with their recipient and read state.</p>
 <h2>Common Commands</h2>
@@ -200,7 +171,7 @@ thrum agent cleanup --force</code></pre>
 <p>Start an MCP server for native tool-based messaging (e.g., from Claude Code):</p>
 <pre><code>thrum mcp serve
 thrum mcp serve --agent-id myagent  # Override agent identity</code></pre>
-<p>See <a href="/docs/mcp-server.html">MCP Server</a> for configuration and the complete tools
+<p>See <a href="mcp-server.html">MCP Server</a> for configuration and the complete tools
 reference (11 tools: 5 core messaging + 6 group management).</p>
 <h2>Typical Workflow</h2>
 <h3>Morning: Start Work</h3>
@@ -209,10 +180,13 @@ reference (11 tools: 5 core messaging + 6 group management).</p>
 thrum quickstart --name myagent --role implementer --module auth --intent &quot;Working on auth&quot;
 
 # 2. Check inbox for updates
-thrum inbox --unread
+thrum inbox --unread         # does not mark messages as read
 
 # 2b. Check sent items for delivery/read state
 thrum sent --unread
+
+# 2c. Mark all messages as read when done reviewing
+thrum message read --all
 
 # 3. Subscribe to your module
 thrum subscribe --scope module:auth</code></pre>
@@ -238,7 +212,8 @@ thrum status</code></pre>
 cross-machine sync, set <code>local_only: false</code> in <code>.thrum/config.json</code> or run
 <code>THRUM_LOCAL=false thrum daemon start</code>.</p>
 </blockquote>
-<p>Thrum uses Git for synchronization:</p>
+<p>Thrum uses Git for synchronization. No cloud service, no opaque API — just
+push and pull on the <code>a-sync</code> branch.</p>
 <h3>On Machine A</h3>
 <pre><code># Make changes, send messages
 thrum send &quot;Completed feature X&quot;
@@ -263,9 +238,8 @@ thrum sent</code></pre>
 <h2>Working with Multiple Worktrees</h2>
 <p>Feature worktrees share the main worktree&#39;s daemon and message store via a
 redirect file. Use <code>thrum setup</code> to configure a feature worktree:</p>
-<pre><code># Main worktree (already initialized)
+<pre><code># Main worktree (already initialized — daemon running from thrum init)
 cd ~/project
-thrum daemon start
 
 # Feature worktree -- set up redirect to main
 cd ~/project-features/auth
@@ -299,64 +273,6 @@ appropriate redirect files. They skip worktrees that are already configured.</p>
 .beads/redirect    → /path/to/main/repo/.beads</code></pre>
 <p>This ensures all worktrees share the same daemon, message store, and issue
 tracker. The scripts are idempotent — run them as many times as you need.</p>
-<h2>Automation with Hooks</h2>
-<h3>Git Post-Commit Hook</h3>
-<pre><code>#!/bin/bash
-# .git/hooks/post-commit
-
-thrum send &quot;Committed: $(git log -1 --pretty=%B)&quot; \
-  --scope repo:$(basename $(git rev-parse --show-toplevel)) \
-  --ref commit:$(git rev-parse SHORT HEAD)</code></pre>
-<h3>Wait for Notifications</h3>
-<pre><code>#!/bin/bash
-# Wait for CI results
-
-thrum subscribe --mention @ci
-
-if thrum wait --mention @ci --timeout=5m; then
-  echo &quot;CI feedback received&quot;
-  thrum inbox --mentions --unread
-  thrum sent --to @ci
-else
-  echo &quot;Timeout - no CI feedback&quot;
-fi</code></pre>
-<h2>Multi-Agent Collaboration</h2>
-<h3>Agent Roles</h3>
-<p>Different agents can have different names and roles. Multiple agents can coexist
-in the same worktree:</p>
-<pre><code># Implementer agent
-thrum quickstart --name furiosa --role implementer --module auth
-
-# Reviewer agent (in another terminal/session)
-THRUM_NAME=maximus thrum quickstart --name maximus --role reviewer --module auth</code></pre>
-<h3>Communication Pattern</h3>
-<pre><code># Implementer: Request review
-thrum send &quot;Auth module ready for review&quot; \
-  --scope module:auth \
-  --mention @reviewer
-
-# Reviewer: Subscribe and wait
-thrum subscribe --mention @reviewer
-thrum wait --mention @reviewer
-
-# Reviewer: Provide feedback
-thrum send &quot;LGTM - looks good to merge&quot; \
-  --scope module:auth \
-  --mention @implementer</code></pre>
-<h2>Configuration</h2>
-<h3>Identity Files</h3>
-<p>Agent identities are stored in <code>.thrum/identities/{name}.json</code> (one JSON file
-per agent, created automatically by <code>thrum agent register</code> or
-<code>thrum quickstart</code>). Multiple agents can coexist in a single worktree, each with
-their own identity file.</p>
-<h3>Environment Variables</h3>
-<p>Add to your shell profile:</p>
-<pre><code># ~/.bashrc or ~/.zshrc
-export THRUM_NAME=myagent       # Selects identity file (highest priority)
-export THRUM_ROLE=implementer
-export THRUM_MODULE=auth</code></pre>
-<p>Priority: <code>THRUM_NAME</code> env var &gt; <code>--name</code> flag &gt; solo-agent auto-select. For
-role/module: CLI flags &gt; Environment variables &gt; Identity file.</p>
 <h2>Troubleshooting</h2>
 <h3>Daemon won&#39;t start</h3>
 <pre><code># Check if already running (shows repo path from JSON PID file)
@@ -386,26 +302,10 @@ thrum agent register --force  # Override
 
 # Or use different role/module
 thrum agent register --role=implementer-2 --module=auth</code></pre>
-<h2>Next Steps</h2>
-<ul>
-<li>Read the <a href="cli.html">CLI Reference</a> for complete command documentation</li>
-<li>Explore the <a href="rpc-api.html">RPC API</a> for programmatic access</li>
-<li>Check <a href="architecture.html">Architecture</a> to understand how Thrum works</li>
-<li>See <a href="development.html">Development Guide</a> to contribute</li>
-</ul>
-<h2>Getting Help</h2>
-<pre><code># Command help
-thrum --help
-thrum send --help
-
-# Check status
-thrum status
-
-# View daemon logs
-# (Daemon logs to stdout when run in foreground)</code></pre>
 <h2>Key Concepts</h2>
 <h3>Messages</h3>
-<p>Persistent communication between agents, stored in Git-tracked JSONL.</p>
+<p>Persistent communication between agents, stored in Git-tracked JSONL. They&#39;re
+just text — <code>cat</code> them, <code>grep</code> them, pipe them through <code>jq</code>.</p>
 <h3>Sessions</h3>
 <p>Work periods tracked per agent. Messages require an active session.</p>
 <h3>Scopes</h3>
@@ -434,7 +334,16 @@ shell-outs.</p>
 <li><strong>Back up your data</strong> regularly: <code>thrum backup</code></li>
 <li><strong>Enable automatic backups</strong>: <code>thrum backup schedule 24h</code></li>
 </ol>
-<p>Happy collaborating!</p>
+<h2>Next Steps</h2>
+<ul>
+<li><a href="philosophy.html">Why Thrum Exists</a> — understand the philosophy behind
+human-directed agent coordination before going deeper</li>
+<li><a href="cli.html">CLI Reference</a> — complete documentation for every command and flag</li>
+<li><a href="messaging.html">Messaging</a> — send and receive messages between agents, including
+scopes, mentions, threads, and groups</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> — practical multi-agent workflows
+with Beads integration and session templates</li>
+</ul>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#quickstart.html')}</script>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Code Review Workflow — Thrum</title>
+<meta name="description" content="Walk through the implement-then-review cycle: one agent writes code on a feature branch, another reviews it, Thrum handles the communication">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/review-workflow.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Code Review Workflow
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <strong>Code Review Workflow</strong> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="../architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="../context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="../cli.html">CLI Reference</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>strategies</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>uncategorized</strong>: <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
+<h2>Code Review Workflow</h2>
+<p>One agent writes the code. Another reviews it. Thrum handles the messages
+between them so you don&#39;t have to relay status manually.</p>
+<p>This is the core pattern from the <a href="../philosophy.html">Philosophy</a> page — you do
+the thinking, the agents do the typing.</p>
+<h3>The Pattern</h3>
+<ol>
+<li>Implementer works on a feature branch (usually in a worktree)</li>
+<li>Implementer notifies reviewer when ready</li>
+<li>Reviewer reads the code, sends feedback</li>
+<li>Implementer addresses feedback and replies</li>
+<li>Reviewer approves, merge happens</li>
+</ol>
+<h3>Set Up</h3>
+<p>Create a worktree for the implementer&#39;s feature branch:</p>
+<pre><code>git worktree add ~/.workspaces/myproject/feature/auth feature/auth
+cd ~/.workspaces/myproject/feature/auth</code></pre>
+<p>Register the implementer in the worktree terminal:</p>
+<pre><code>thrum quickstart --role implementer --module auth --intent &quot;Implementing JWT auth&quot;</code></pre>
+<p>Register the reviewer in the main repo terminal:</p>
+<pre><code>thrum quickstart --role reviewer --module auth --intent &quot;Reviewing feature branches&quot;</code></pre>
+<p>Check both are visible:</p>
+<pre><code>thrum team</code></pre>
+<p>Note the exact agent names — you&#39;ll use them for direct messaging.</p>
+<h3>Implementer Works and Notifies</h3>
+<p>The implementer writes the code, runs tests, commits:</p>
+<pre><code># ... implement the feature ...
+go test ./internal/auth/...
+git commit -m &quot;feat(auth): add JWT middleware&quot;</code></pre>
+<p>Find the reviewer&#39;s name from <code>thrum team</code>, then send:</p>
+<pre><code>thrum send &quot;Auth module complete — JWT middleware and token refresh. All tests passing. Branch: feature/auth&quot; --to @rev_main_1</code></pre>
+<p>Use the actual agent name, not <code>@reviewer</code>. Sending to a role fans out to
+every agent with that role — not what you want here.</p>
+<h3>Reviewer Gets Notified</h3>
+<p>Poll at any time with <code>thrum inbox --unread</code>, or block until a message arrives:</p>
+<pre><code>thrum wait --timeout 30m --mention @rev_main_1</code></pre>
+<p><code>thrum wait</code> returns as soon as a message lands or the timeout expires. Then
+look at the code:</p>
+<pre><code>thrum message read --all
+git fetch origin feature/auth
+git diff main..feature/auth</code></pre>
+<h3>Reviewer Provides Feedback</h3>
+<p>Quick approval:</p>
+<pre><code>thrum reply MSG_ID &quot;LGTM — merge it&quot;</code></pre>
+<p>Detailed feedback:</p>
+<pre><code>thrum reply MSG_ID &quot;Two things:
+1. Token expiry should be configurable, not hardcoded to 24h
+2. Add a test for expired token rejection
+Otherwise looks solid&quot;</code></pre>
+<h3>Implementer Responds</h3>
+<pre><code>thrum inbox --unread
+# ... address the feedback ...
+git commit -m &quot;fix(auth): make token expiry configurable, add expiry test&quot;
+thrum reply REVIEW_MSG_ID &quot;Fixed both — expiry reads from config now, expiry test added and passing&quot;</code></pre>
+<h3>Reviewer Approves and Merge</h3>
+<pre><code>thrum inbox --unread
+thrum reply MSG_ID &quot;Approved. Merge when ready.&quot;</code></pre>
+<p>Implementer merges:</p>
+<pre><code>cd /path/to/main/repo
+git merge --no-ff feature/auth
+git push origin main</code></pre>
+<h3>Using with Beads</h3>
+<p>If you&#39;re tracking work in Beads, the implementer claims tasks before starting
+and closes them when done:</p>
+<pre><code>bd update thrum-abc.1 -s in_progress
+# ... work ...
+bd close thrum-abc.1
+thrum send &quot;Completed thrum-abc.1, ready for review&quot; --to @rev_main_1</code></pre>
+<p>See <a href="../beads-and-thrum.html">Beads and Thrum</a> for how the two tools fit together.</p>
+<h3>Next Steps</h3>
+<ul>
+<li><a href="../agent-coordination.html">Agent Coordination</a> — patterns for larger teams
+and session templates</li>
+<li><a href="../workflow-templates.html">Workflow Templates</a> — pre-built skill pipelines
+for the full research → plan → implement → review cycle</li>
+<li><a href="coordinate-two-agents.html">Coordinate Two Agents</a> — simpler walkthrough for
+the basic send/receive pattern</li>
+</ul>
+
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#guides/review-workflow.html')}</script>
+</body>
+</html>

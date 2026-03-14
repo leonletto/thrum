@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Coordinate Two Agents — Thrum</title>
+<meta name="description" content="Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/coordinate-two-agents.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Coordinate Two Agents
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <strong>Coordinate Two Agents</strong> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="../architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="../context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="../cli.html">CLI Reference</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>strategies</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>uncategorized</strong>: <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
+<h2>Coordinate Two Agents</h2>
+<p>The most common Thrum setup: two agents working on the same project. One
+implements, one reviews. They communicate directly without you relaying
+messages between terminal windows.</p>
+<p>This walkthrough goes from zero to two agents talking to each other.</p>
+<h3>What You Need</h3>
+<ul>
+<li>A git repo with <code>thrum init</code> already done</li>
+<li>Two terminals open (or two worktrees — the pattern is the same)</li>
+<li>Thrum daemon running (<code>thrum init</code> starts it automatically)</li>
+</ul>
+<h3>Register Both Agents</h3>
+<p>In the first terminal, register the implementer:</p>
+<pre><code>thrum quickstart --role implementer --module auth --intent &quot;Implementing auth module&quot;</code></pre>
+<p>Thrum picks a name for you — something like <code>impl_auth_1</code>. Check it:</p>
+<pre><code>thrum whoami</code></pre>
+<p>In the second terminal, register the reviewer:</p>
+<pre><code>thrum quickstart --role reviewer --module auth --intent &quot;Reviewing auth changes&quot;</code></pre>
+<p>This agent gets its own name, like <code>rev_main_1</code>. Check who&#39;s online:</p>
+<pre><code>thrum team</code></pre>
+<p>You should see both agents listed with their roles, intent, and which worktree
+they&#39;re on.</p>
+<h3>Send a Message</h3>
+<p>The implementer finishes a piece of work and wants to notify the reviewer.
+First, find the reviewer&#39;s exact name:</p>
+<pre><code>thrum team</code></pre>
+<p>Then send:</p>
+<pre><code>thrum send &quot;Auth module ready for review — JWT middleware and tests passing&quot; --to @rev_main_1</code></pre>
+<p>Use the actual agent name from <code>thrum team</code>, not the role. Sending <code>--to @reviewer</code> would fan out to every agent with a reviewer role — not what you
+want here.</p>
+<h3>Check Inbox from the Other Agent</h3>
+<p>In the reviewer&#39;s terminal:</p>
+<pre><code>thrum inbox --unread</code></pre>
+<p>The message shows up with its ID, sender, and content. Mark it read:</p>
+<pre><code>thrum message read --all</code></pre>
+<h3>Reply</h3>
+<p>The reviewer looks at the code and replies:</p>
+<pre><code>thrum reply MSG_ID &quot;LGTM, merging now&quot;</code></pre>
+<p>Replace <code>MSG_ID</code> with the actual ID from <code>thrum inbox</code>. Replies thread
+automatically — the implementer sees it in context.</p>
+<p>Back in the implementer&#39;s terminal:</p>
+<pre><code>thrum inbox --unread</code></pre>
+<p>The reply appears. Both agents now have a record of the exchange, persisted
+in git.</p>
+<h3>See What Everyone Is Working On</h3>
+<p>From either terminal:</p>
+<pre><code>thrum team</code></pre>
+<p>Shows each agent&#39;s name, role, intent, and worktree. If you want to know
+which agent has a particular file open:</p>
+<pre><code>thrum who-has internal/auth/jwt.go</code></pre>
+<p>Useful when you&#39;re about to touch a file and want to check if another agent
+is already working on it.</p>
+<h3>Update Your Intent</h3>
+<p>When you move to the next task, update what you&#39;re doing so <code>thrum team</code>
+stays accurate:</p>
+<pre><code>thrum agent set-intent &quot;Writing integration tests for auth flow&quot;</code></pre>
+<p>Agents auto-heartbeat while the daemon is running. When a session ends,
+they become inactive automatically — no explicit cleanup needed.</p>
+<h3>Next Steps</h3>
+<ul>
+<li><a href="../messaging.html">Messaging</a> — full send/receive/reply reference including
+scopes, priorities, and group messaging</li>
+<li><a href="../multi-agent.html">Multi-Agent Support</a> — groups, runtime presets, and
+patterns for larger teams</li>
+<li><a href="review-workflow.html">Review Workflow</a> — a complete implement-then-review
+walkthrough with worktrees</li>
+</ul>
+
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#guides/coordinate-two-agents.html')}</script>
+</body>
+</html>

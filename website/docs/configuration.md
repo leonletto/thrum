@@ -264,3 +264,14 @@ These remain separate for good reasons:
 Note: `daemon`, `backup`, and `runtime` settings _are_ all stored in
 `config.json`. The items above are intentionally kept as separate files because
 they are per-agent or volatile state, not global repository settings.
+
+## Next Steps
+
+- [Daemon Architecture](daemon.md) — how the daemon reads config.json and
+  applies the settings at startup
+- [Sync Protocol](sync.md) — the sync loop behavior controlled by `local_only`
+  and `sync_interval`
+- [Identity System](identity.md) — the identity files that live alongside
+  config.json in `.thrum/`
+- [CLI Reference](cli.md) — `thrum config show` and other configuration-related
+  commands

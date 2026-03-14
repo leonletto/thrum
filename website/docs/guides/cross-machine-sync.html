@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sync Across Machines — Thrum</title>
+<meta name="description" content="Walk through enabling cross-machine sync, sending a message from one machine and receiving it on another, and verifying sync status">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/cross-machine-sync.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Sync Across Machines
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <strong>Sync Across Machines</strong> | <a href="../guides/review-workflow.html">Code Review Workflow</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="../architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="../context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="../cli.html">CLI Reference</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>strategies</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>uncategorized</strong>: <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
+<h2>Sync Across Machines</h2>
+<p>Thrum messages live on a Git branch. That means sync across machines is just
+Git push and pull — no cloud service, no account, no special infrastructure.</p>
+<p>This walkthrough takes you from two separate clones to agents on different
+machines exchanging messages.</p>
+<h3>What You Need</h3>
+<ul>
+<li>The same git repo cloned on two machines (or two separate paths on one machine
+for testing)</li>
+<li>A shared remote configured on both (<code>git remote -v</code> to verify)</li>
+<li>Thrum initialized: <code>thrum init</code> done on both clones</li>
+<li>Thrum daemon running on both (<code>thrum init</code> starts it automatically)</li>
+</ul>
+<h3>Enable Sync</h3>
+<p>By default, Thrum runs in <code>local_only</code> mode — it doesn&#39;t push or pull from the
+remote. Turn that off.</p>
+<p>In your config file (<code>.thrum/config.yaml</code> in the repo root):</p>
+<pre><code>local_only: false</code></pre>
+<p>Or set it via environment variable without touching the file:</p>
+<pre><code>export THRUM_LOCAL_ONLY=false</code></pre>
+<p>Do this on both machines. The daemon picks up the config on next start, or
+restart it now:</p>
+<pre><code>thrum daemon restart</code></pre>
+<h3>Send on Machine A</h3>
+<p>Register an agent and send a message:</p>
+<pre><code>thrum quickstart --role implementer --module api --intent &quot;Working on API changes&quot;
+thrum send &quot;Deploy script updated, ready to test on staging&quot;</code></pre>
+<p>Then push the sync branch manually to make it available immediately:</p>
+<pre><code>thrum sync force</code></pre>
+<p>Without <code>thrum sync force</code>, the daemon syncs automatically every 60 seconds.
+Force sync is useful when you want the other machine to see something right now.</p>
+<h3>Receive on Machine B</h3>
+<p>On the second machine, pull the latest sync branch and check for messages:</p>
+<pre><code>thrum sync force
+thrum inbox --unread</code></pre>
+<p>The message from Machine A appears. The sync works through the <code>a-sync</code> orphan
+branch in your repo — run <code>git log origin/a-sync</code> to see exactly what came in.</p>
+<h3>Automatic Sync</h3>
+<p>You don&#39;t have to run <code>thrum sync force</code> manually. The daemon runs a sync loop
+every 60 seconds when <code>local_only</code> is false.</p>
+<p>Check that it&#39;s running:</p>
+<pre><code>thrum sync status</code></pre>
+<p>You&#39;ll see the last sync time, whether it succeeded, and which remote it&#39;s
+using. If sync is failing, the error shows up here.</p>
+<h3>Verify with Git</h3>
+<p>Thrum sync is transparent. You can inspect it directly:</p>
+<pre><code># See what&#39;s on the sync branch
+git log --oneline origin/a-sync -10
+
+# See message files
+git show origin/a-sync:messages/</code></pre>
+<p>Nothing is hidden. The sync branch is just a regular orphan branch in your
+repo.</p>
+<h3>Optional: Tailscale for Real-Time Sync</h3>
+<p>Git-based sync is great for async workflows — messages arrive within 60 seconds.
+If you need real-time propagation (sub-second delivery across machines), Tailscale
+sync is the answer.</p>
+<p>Tailscale connects your machines over an encrypted WireGuard tunnel and lets
+Thrum daemons push events directly to each other instead of going through Git.</p>
+<p>See <a href="../tailscale-sync.html">Tailscale Sync</a> for setup. It&#39;s a few steps to pair
+the machines, then everything is real-time automatically.</p>
+<h3>Troubleshooting</h3>
+<p><strong>Messages not appearing on the other machine?</strong></p>
+<ol>
+<li>Check sync is enabled: <code>thrum sync status</code> — look for <code>local_only: false</code></li>
+<li>Verify the remote is reachable: <code>git fetch origin</code> — any errors here will
+block sync</li>
+<li>Confirm the <code>a-sync</code> branch exists on the remote:
+<code>git ls-remote origin a-sync</code></li>
+<li>Check the daemon is running on both sides: <code>thrum daemon status</code></li>
+<li>Try a manual sync: <code>thrum sync force</code> and watch for errors</li>
+</ol>
+<p><strong>&quot;local_only mode&quot; in sync status?</strong> Set <code>local_only: false</code> in config or via
+<code>THRUM_LOCAL_ONLY=false</code> and restart the daemon.</p>
+<p><strong>Messages show up on one machine but not the other?</strong> Both machines need to
+be pushing. Check <code>thrum sync status</code> on both — if one shows a sync error,
+fix it there.</p>
+<h3>Next Steps</h3>
+<ul>
+<li><a href="../sync.html">Sync Protocol</a> — architecture detail on how the <code>a-sync</code> branch
+works, JSONL dedup, and conflict-free merging</li>
+<li><a href="../tailscale-sync.html">Tailscale Sync</a> — real-time cross-machine sync without
+polling</li>
+<li><a href="../configuration.html">Configuration</a> — full config reference including
+<code>local_only</code>, sync interval, and remote settings</li>
+</ul>
+
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#guides/cross-machine-sync.html')}</script>
+</body>
+</html>

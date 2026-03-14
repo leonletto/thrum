@@ -107,7 +107,6 @@ func (s *Server) handleCheckMessages(
 
 	// Convert to MCP message format
 	messages := make([]MessageInfo, 0, len(listResp.Messages))
-	messageIDs := make([]string, 0, len(listResp.Messages))
 	for _, msg := range listResp.Messages {
 		messages = append(messages, MessageInfo{
 			MessageID: msg.MessageID,
@@ -115,32 +114,12 @@ func (s *Server) handleCheckMessages(
 			Content:   msg.Body.Content,
 			Timestamp: msg.CreatedAt,
 		})
-		messageIDs = append(messageIDs, msg.MessageID)
 	}
 
-	// Step 2: Mark messages as read (use a new client per-call)
 	remaining := listResp.Total - len(messages)
 	if remaining < 0 {
 		remaining = 0
 	}
-
-	markClient, err := s.newDaemonClient()
-	if err != nil {
-		// Return messages even if we can't mark them read
-		return nil, CheckMessagesOutput{
-			Status:    "messages",
-			Messages:  messages,
-			Remaining: remaining,
-		}, nil
-	}
-	defer func() { _ = markClient.Close() }()
-
-	markReq := rpc.MarkReadRequest{
-		MessageIDs:    messageIDs,
-		CallerAgentID: s.agentID,
-	}
-	var markResp rpc.MarkReadResponse
-	_ = markClient.Call("message.markRead", markReq, &markResp) // best-effort
 
 	return nil, CheckMessagesOutput{
 		Status:    "messages",

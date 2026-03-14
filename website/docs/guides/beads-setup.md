@@ -176,6 +176,7 @@ The standard agent workflow combines both tools:
 # 1. Agent starts — check for assigned work
 thrum inbox --unread
 thrum sent --unread
+thrum message read --all       # Mark all messages as read
 bd ready
 
 # 2. Claim a task and announce it

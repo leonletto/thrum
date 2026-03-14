@@ -91,7 +91,7 @@ function escape(html) {
 
 marked.setOptions({
   renderer: renderer,
-  breaks: true,
+  breaks: false,
   gfm: true
 });
 

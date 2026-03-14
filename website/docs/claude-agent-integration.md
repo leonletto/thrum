@@ -33,7 +33,7 @@ agents via Thrum messaging.
 ---
 name: thrum-agent
 description: >
-  Thrum multi-agent coordination guide. Git-backed messaging for AI agents to
+  Thrum multi-agent coordination guide. Persistent messaging for AI agents to
   communicate across sessions, worktrees, and machines. Covers MCP server
   integration, message-listener pattern, CLI usage, and Beads integration.
 ---
@@ -42,8 +42,8 @@ description: >
 
 ## Overview
 
-Thrum is a Git-backed messaging system that enables AI agents and humans to
-communicate persistently across sessions, worktrees, and machines. It uses Git
+Thrum is a messaging system that enables AI agents and humans to communicate
+persistently across sessions, worktrees, and machines. It uses Git
 as the synchronization layer, ensuring all messages survive context window
 limits, session restarts, and machine boundaries.
 
@@ -101,6 +101,7 @@ Reply (creates a reply-to reference)
 
 thrum quickstart --name <name> --role <role> --module <module> --intent "<desc>"
 thrum inbox --unread thrum sent --unread
+thrum message read --all  # Mark all messages as read after reviewing
 
 # During work
 
@@ -199,3 +200,9 @@ cp docs/claude-agent-integration.md .  # For reference
 
 Or see the full agent definitions in the
 [documentation site](https://leonletto.github.io/thrum).
+
+## Next Steps
+
+- [Claude Code Plugin](claude-code-plugin.md) — slash commands, hooks, and resource docs for Claude Code
+- [MCP Server](mcp-server.md) — native MCP tools for agent messaging without CLI shell-outs
+- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and coordination patterns

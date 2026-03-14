@@ -77,10 +77,10 @@ test.describe('Notifications & Subscriptions', () => {
     // Send from the IMPLEMENTER worktree (different agent identity)
     thrumIn(getImplementerRoot(), ['send', 'Auth module updated for SC-34', '--scope', 'module:auth']);
 
-    // Assert: wait should receive the notification
+    // Assert: wait should receive the notification (plain text outputs MESSAGES_RECEIVED)
     const result = await waitPromise;
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Auth module updated');
+    expect(result.stdout).toContain('MESSAGES_RECEIVED');
   });
 
   test('SC-35: Subscribe to mention notifications', async () => {
@@ -101,7 +101,7 @@ test.describe('Notifications & Subscriptions', () => {
 
     const result = await waitPromise;
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('SC-35');
+    expect(result.stdout).toContain('MESSAGES_RECEIVED');
   });
 
   test('SC-36: Subscribe to all (firehose)', async () => {
@@ -126,7 +126,7 @@ test.describe('Notifications & Subscriptions', () => {
 
     const result = await waitPromise;
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('SC-36');
+    expect(result.stdout).toContain('MESSAGES_RECEIVED');
   });
 
   test('SC-37: Unsubscribe', async () => {

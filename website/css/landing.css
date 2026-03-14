@@ -293,65 +293,130 @@ a.feature-card-link:hover {
 .c-string { color: #fbbf24; }
 
 /* ============================================================================
-   ARCHITECTURE DIAGRAM
+   ARCHITECTURE DIAGRAM (SVG)
    ========================================================================= */
 
 .arch-diagram {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-md);
+  justify-content: center;
   margin-top: var(--space-2xl);
 }
 
-.arch-row {
-  display: flex;
-  gap: var(--space-md);
-  justify-content: center;
-  flex-wrap: wrap;
+/* Responsive SVG: fills container up to its natural 580px width */
+.arch-svg {
+  width: 100%;
+  max-width: 580px;
+  height: auto;
+  display: block;
 }
 
-.arch-box {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 12px 24px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  text-align: center;
-  min-width: 140px;
-}
-
-.arch-agent {
-  background: rgba(56, 189, 248, 0.08);
-  color: var(--primary);
-  border-color: rgba(56, 189, 248, 0.3);
-}
-
-.arch-daemon {
-  background: rgba(16, 185, 129, 0.08);
-  color: var(--success);
-  border-color: rgba(16, 185, 129, 0.3);
-  min-width: 300px;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 16px 24px;
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
-}
-
-.arch-storage {
-  background: rgba(251, 191, 36, 0.06);
-  color: #fbbf24;
-  border-color: rgba(251, 191, 36, 0.2);
-}
-
-.arch-arrow {
-  font-family: var(--font-mono);
+/* ── Shared SVG text styles ── */
+.arch-svg text {
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
   font-size: 11px;
-  color: var(--text-subtle);
-  letter-spacing: 1px;
-  text-transform: uppercase;
+  font-weight: 500;
 }
+
+.arch-svg-arrow-label {
+  font-size: 9px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  fill: var(--text-subtle);
+}
+
+.arch-svg-sub {
+  font-size: 10px !important;
+  font-weight: 400 !important;
+}
+
+.arch-svg-daemon-title {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.arch-svg-remote-title {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+}
+
+/* ── Connector lines ── */
+.arch-svg-line {
+  stroke: var(--text-subtle);
+  stroke-width: 1;
+  opacity: 0.5;
+  fill: none;
+}
+
+.arch-svg-arrowhead {
+  fill: var(--text-subtle);
+  opacity: 0.6;
+}
+
+/* ── Client boxes (cyan) ── */
+.arch-svg-client rect {
+  fill: rgba(56, 189, 248, 0.08);
+  stroke: rgba(56, 189, 248, 0.35);
+  stroke-width: 1;
+}
+.arch-svg-client text { fill: #38bdf8; }
+
+/* ── Daemon box (green) ── */
+.arch-svg-daemon rect {
+  fill: rgba(16, 185, 129, 0.08);
+  stroke: rgba(16, 185, 129, 0.4);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.2));
+}
+.arch-svg-daemon text { fill: #10b981; }
+
+/* ── Storage boxes (amber) ── */
+.arch-svg-storage rect {
+  fill: rgba(251, 191, 36, 0.07);
+  stroke: rgba(251, 191, 36, 0.28);
+  stroke-width: 1;
+}
+.arch-svg-storage text { fill: #fbbf24; }
+
+/* ── Remote box (violet) ── */
+.arch-svg-remote rect {
+  fill: rgba(167, 139, 250, 0.07);
+  stroke: rgba(167, 139, 250, 0.3);
+  stroke-width: 1;
+}
+.arch-svg-remote text { fill: #a78bfa; }
+
+/* ── Light mode overrides ── */
+html[data-theme="light"] .arch-svg-client rect {
+  fill: rgba(8, 145, 178, 0.08);
+  stroke: rgba(8, 145, 178, 0.35);
+}
+html[data-theme="light"] .arch-svg-client text { fill: #0e7490; }
+
+html[data-theme="light"] .arch-svg-daemon rect {
+  fill: rgba(16, 185, 129, 0.1);
+  stroke: rgba(16, 185, 129, 0.4);
+  filter: drop-shadow(0 2px 4px rgba(16, 185, 129, 0.1));
+}
+html[data-theme="light"] .arch-svg-daemon text { fill: #047857; }
+
+html[data-theme="light"] .arch-svg-storage rect {
+  fill: rgba(217, 119, 6, 0.08);
+  stroke: rgba(217, 119, 6, 0.28);
+}
+html[data-theme="light"] .arch-svg-storage text { fill: #b45309; }
+
+html[data-theme="light"] .arch-svg-remote rect {
+  fill: rgba(109, 40, 217, 0.07);
+  stroke: rgba(109, 40, 217, 0.25);
+}
+html[data-theme="light"] .arch-svg-remote text { fill: #6d28d9; }
+
+html[data-theme="light"] .arch-svg-line {
+  stroke: #94a3b8;
+  opacity: 0.6;
+}
+html[data-theme="light"] .arch-svg-arrowhead { fill: #94a3b8; }
 
 /* ============================================================================
    CTA
@@ -499,30 +564,6 @@ html[data-theme="light"] .c-prompt { color: #38bdf8; }
 html[data-theme="light"] .c-output { color: #34d399; }
 html[data-theme="light"] .c-string { color: #fbbf24; }
 
-/* Architecture diagram */
-html[data-theme="light"] .arch-agent {
-  background: rgba(8, 145, 178, 0.1);
-  color: #0e7490;
-  border-color: rgba(8, 145, 178, 0.3);
-}
-
-html[data-theme="light"] .arch-daemon {
-  background: rgba(16, 185, 129, 0.1);
-  color: #047857;
-  border-color: rgba(16, 185, 129, 0.3);
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
-}
-
-html[data-theme="light"] .arch-storage {
-  background: rgba(217, 119, 6, 0.08);
-  color: #b45309;
-  border-color: rgba(217, 119, 6, 0.2);
-}
-
-html[data-theme="light"] .arch-arrow {
-  color: var(--text-muted);
-}
-
 /* Theme toggle button */
 .theme-toggle {
   background: none;
@@ -576,10 +617,6 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
   .code-grid {
     grid-template-columns: 1fr;
-  }
-
-  .arch-daemon {
-    min-width: auto;
   }
 
   .footer-content {

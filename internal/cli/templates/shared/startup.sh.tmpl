@@ -8,6 +8,41 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_THRUM_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
 export THRUM_HOME="${THRUM_HOME:-$DEFAULT_THRUM_HOME}"
 
+# --- Listener heartbeat mode ---
+# Usage: thrum-startup.sh --listener-heartbeat
+# Updates the listener heartbeat in the agent's identity file.
+# Requires THRUM_NAME and THRUM_AGENT_ID to be set (from CLAUDE_ENV_FILE).
+if [ "$1" = "--listener-heartbeat" ]; then
+  AGENT_ID="${THRUM_AGENT_ID:-${THRUM_NAME:-}}"
+  if [ -z "$AGENT_ID" ]; then
+    AGENT_ID=$(thrum --repo "$THRUM_HOME" whoami --json 2>/dev/null | jq -r 'select(.agent_id != null) | .agent_id // empty')
+  fi
+  if [ -z "$AGENT_ID" ]; then
+    echo "Error: Could not determine agent ID" >&2
+    exit 1
+  fi
+
+  IDENT_FILE="$THRUM_HOME/.thrum/identities/${AGENT_ID}.json"
+  if [ ! -f "$IDENT_FILE" ]; then
+    echo "Error: Identity file not found: $IDENT_FILE" >&2
+    exit 1
+  fi
+
+  # Read session_id from identity file
+  SESSION_ID=$(jq -r '.session_id // ""' "$IDENT_FILE" 2>/dev/null || echo "")
+  HEARTBEAT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  # Update identity file with listener heartbeat using jq for safe JSON manipulation
+  jq --arg agent_id "$AGENT_ID" \
+     --arg session_id "$SESSION_ID" \
+     --arg heartbeat "$HEARTBEAT" \
+     '.listener = {agent_id: $agent_id, session_id: $session_id, heartbeat: $heartbeat}' \
+     "$IDENT_FILE" > "${IDENT_FILE}.tmp" && mv "${IDENT_FILE}.tmp" "$IDENT_FILE"
+
+  echo "Listener heartbeat updated: $HEARTBEAT"
+  exit 0
+fi
+
 # 1. Ensure daemon is running
 if ! thrum --repo "$THRUM_HOME" daemon status &>/dev/null; then
   thrum --repo "$THRUM_HOME" daemon start

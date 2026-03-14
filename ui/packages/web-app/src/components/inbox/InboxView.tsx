@@ -4,6 +4,7 @@ import {
   useCurrentUser,
   loadStoredUser,
   useMessageListPaged,
+  useMarkAsRead,
   type MessageScope,
 } from '@thrum/shared-logic';
 import { InboxHeader, type InboxFilter } from './InboxHeader';
@@ -101,6 +102,20 @@ export function InboxView({ identityId, selectedMessageId, onClearSelectedMessag
   // Unread count for badge
   const unreadCount = messages.filter(m => m.is_read === false).length;
 
+  const markAsRead = useMarkAsRead();
+
+  const handleMarkAllRead = () => {
+    const unreadIds = messages
+      .filter(m => m.is_read === false)
+      .map(m => m.message_id);
+    if (unreadIds.length > 0) {
+      markAsRead.mutate({
+        messageIds: unreadIds,
+        callerAgentId: isImpersonating ? sendingAs : (currentUser?.user_id ?? storedUser?.user_id),
+      });
+    }
+  };
+
   const handleReply = (messageId: string, senderName: string) => {
     setReplyTo({ messageId, senderName });
   };
@@ -133,6 +148,7 @@ export function InboxView({ identityId, selectedMessageId, onClearSelectedMessag
         onFilterChange={setFilter}
         onScopeFilterChange={setScopeFilter}
         activeScopeFilter={scopeFilter}
+        onMarkAllRead={handleMarkAllRead}
       />
 
       <MessageList
@@ -140,6 +156,7 @@ export function InboxView({ identityId, selectedMessageId, onClearSelectedMessag
         isLoading={isLoading}
         currentUserId={currentUser?.user_id}
         onReply={handleReply}
+        callerAgentId={isImpersonating ? sendingAs : (currentUser?.user_id ?? storedUser?.user_id)}
         totalCount={total}
         hasMore={hasMore}
         onLoadMore={loadMore}
