@@ -10,6 +10,7 @@ import (
 )
 
 func TestSkillsInstall_EndToEnd_Claude(t *testing.T) {
+	fakeHomeDir(t)
 	tmpDir := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(tmpDir, ".claude"), 0750)
 
@@ -82,6 +83,7 @@ func TestSkillsInstall_EndToEnd_Generic(t *testing.T) {
 }
 
 func TestSkillsInstall_EndToEnd_DryRun(t *testing.T) {
+	fakeHomeDir(t)
 	tmpDir := t.TempDir()
 
 	result, err := InstallSkills(SkillsInstallOptions{
@@ -140,6 +142,7 @@ func TestSkillsInstall_EndToEnd_ForceOverwrite(t *testing.T) {
 }
 
 func TestSkillsInstall_EndToEnd_MultipleAgents(t *testing.T) {
+	fakeHomeDir(t)
 	tmpDir := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(tmpDir, ".claude"), 0750)
 	_ = os.MkdirAll(filepath.Join(tmpDir, ".cursor"), 0750)
