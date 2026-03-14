@@ -81,30 +81,39 @@ need a separate `thrum daemon start` step for first-time setup.
 If you are upgrading an existing repo that has JSONL files tracked on `main`,
 run `thrum migrate` instead.
 
-### 2. Install the Plugin (Claude Code or Codex)
+### 2. Install the Thrum Skill
 
-If you use Claude Code or Codex, install the plugin right after initialization
-so agents get automatic context injection and slash commands.
+Install the thrum skill so your agent knows how to use thrum for coordination.
+This works with Claude Code, Cursor, Codex, Gemini, Augment, and Amp:
 
-**Claude Code:**
+```bash
+thrum init --skills
+```
+
+Thrum auto-detects which agent you're using and installs the skill to the right
+location (e.g., `.claude/skills/thrum/` for Claude Code, `.cursor/skills/thrum/`
+for Cursor). If no agent-specific directory exists, it installs to
+`.agents/skills/thrum/` which all agents check.
+
+You can also target a specific agent:
+
+```bash
+thrum init --skills --runtime cursor    # Install for Cursor specifically
+thrum init --skills --runtime codex     # Install for Codex specifically
+```
+
+**Claude Code full plugin (optional):** If you want the complete experience with
+slash commands, automatic context injection, hooks, and startup scripts, install
+the Claude Code plugin instead:
 
 ```bash
 claude plugin marketplace add https://github.com/leonletto/thrum
 claude plugin install thrum
 ```
 
-See [Claude Code Plugin](claude-code-plugin.md) for details on what the plugin
-provides (slash commands, hooks, resource docs).
-
-**Codex:**
-
-```bash
-git clone https://github.com/leonletto/thrum.git
-cd thrum
-./codex-plugin/scripts/install-skills.sh
-```
-
-See [Codex Plugin](codex-plugin.md) for the full skill bundle reference.
+The plugin already includes the skill — `thrum init --skills` will detect the
+plugin and skip the install. See [Claude Code Plugin](claude-code-plugin.md) for
+details.
 
 ### 3. Generate CLAUDE.md Coordination Instructions
 
