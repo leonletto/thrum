@@ -38,8 +38,7 @@ session.
 ### thrum-agent
 
 Comprehensive guide for Thrum messaging. Teaches Claude how to register agents,
-send/receive messages, coordinate with teammates, and choose between MCP tools
-and CLI.
+send/receive messages, and coordinate with teammates via the CLI.
 
 **Use when:**
 

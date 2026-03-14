@@ -21,17 +21,9 @@ the Beads issue tracker, and session workflow templates.
 
 ## Coordination Methods
 
-Thrum supports two integration methods for agent coordination:
+### CLI (Primary)
 
-### MCP Server (Recommended)
-
-Native tool integration with async message notifications. Best for Claude Code
-agents. See [MCP Server](mcp-server.md) for configuration and the
-complete tools reference.
-
-### CLI (Fallback)
-
-Shell commands for basic messaging. Works everywhere.
+Thrum is CLI-first. Every agent that can run shell commands can use Thrum.
 
 ```bash
 thrum send "Starting work on task X" --to @coord_main
@@ -40,6 +32,11 @@ thrum sent --unread
 thrum message read --all       # Mark all messages as read
 thrum reply <msg-id> "Here's my update"
 ```
+
+### MCP Server (Optional)
+
+For environments that support MCP, Thrum also provides an MCP server with
+native tool integration. See [MCP Server](mcp-server.md) for configuration.
 
 > **Note:** Use agent names (e.g., `@coord_main`), not role names (e.g.,
 > `@coordinator`). Sending to a role fans out to ALL agents with that role. Run
@@ -321,7 +318,7 @@ thrum session end
 ### Do
 
 - **Register at session start** -- always use `thrum quickstart`
-- **Use MCP server when available** -- better than CLI polling
+- **Use CLI commands** -- they work everywhere, including sub-agents
 - **Send status updates** -- keep the team informed
 - **Use @mentions** -- reference agents by name
 - **Include context** -- Beads IDs, file paths, commit hashes
@@ -420,5 +417,5 @@ bd list --status=in_progress
   the `context prime` command for session recovery
 - [Messaging](messaging.md) — full send/receive/reply reference including
   threads, scopes, mentions, and groups
-- [MCP Server](mcp-server.md) — native MCP tools for Claude Code agents,
-  including the efficient message-listener pattern
+- [MCP Server](mcp-server.md) — optional native tool integration for
+  MCP-capable environments

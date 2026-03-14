@@ -48,18 +48,16 @@ the Beads issue tracker, and session workflow templates.</p>
 handing it off — see <a href="philosophy.html">Why Thrum Exists</a>.</p>
 </blockquote>
 <h2>Coordination Methods</h2>
-<p>Thrum supports two integration methods for agent coordination:</p>
-<h3>MCP Server (Recommended)</h3>
-<p>Native tool integration with async message notifications. Best for Claude Code
-agents. See <a href="mcp-server.html">MCP Server</a> for configuration and the
-complete tools reference.</p>
-<h3>CLI (Fallback)</h3>
-<p>Shell commands for basic messaging. Works everywhere.</p>
+<h3>CLI (Primary)</h3>
+<p>Thrum is CLI-first. Every agent that can run shell commands can use Thrum.</p>
 <pre><code>thrum send &quot;Starting work on task X&quot; --to @coord_main
 thrum inbox --unread
 thrum sent --unread
 thrum message read --all       # Mark all messages as read
 thrum reply &lt;msg-id&gt; &quot;Here&#39;s my update&quot;</code></pre>
+<h3>MCP Server (Optional)</h3>
+<p>For environments that support MCP, Thrum also provides an MCP server with
+native tool integration. See <a href="mcp-server.html">MCP Server</a> for configuration.</p>
 <blockquote>
 <p><strong>Note:</strong> Use agent names (e.g., <code>@coord_main</code>), not role names (e.g.,
 <code>@coordinator</code>). Sending to a role fans out to ALL agents with that role. Run
@@ -328,7 +326,7 @@ thrum session end</code></pre>
 <h3>Do</h3>
 <ul>
 <li><strong>Register at session start</strong> -- always use <code>thrum quickstart</code></li>
-<li><strong>Use MCP server when available</strong> -- better than CLI polling</li>
+<li><strong>Use CLI commands</strong> -- they work everywhere, including sub-agents</li>
 <li><strong>Send status updates</strong> -- keep the team informed</li>
 <li><strong>Use @mentions</strong> -- reference agents by name</li>
 <li><strong>Include context</strong> -- Beads IDs, file paths, commit hashes</li>
@@ -406,8 +404,8 @@ the full research → plan → implement → review cycle</li>
 the <code>context prime</code> command for session recovery</li>
 <li><a href="messaging.html">Messaging</a> — full send/receive/reply reference including
 threads, scopes, mentions, and groups</li>
-<li><a href="mcp-server.html">MCP Server</a> — native MCP tools for Claude Code agents,
-including the efficient message-listener pattern</li>
+<li><a href="mcp-server.html">MCP Server</a> — optional native tool integration for
+MCP-capable environments</li>
 </ul>
 
 </main>

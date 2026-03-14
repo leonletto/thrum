@@ -738,8 +738,8 @@ shard.
 
 - [Subscriptions & Notifications](subscriptions.md) — subscribe to scopes and
   mentions so messages arrive as push notifications instead of requiring polling
-- [MCP Server](mcp-server.md) — use native MCP tools instead of CLI shell-outs
-  for more efficient agent-to-agent messaging
+- [MCP Server](mcp-server.md) — optional native tool integration for
+  environments that support MCP
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
   combining Thrum messaging with Beads task tracking
 - [RPC API Reference](rpc-api.md) — full JSON-RPC method reference if you're

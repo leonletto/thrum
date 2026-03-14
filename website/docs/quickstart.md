@@ -461,9 +461,8 @@ embedded Web UI. WebSocket and SPA are served on the same port (default 9999).
 
 ### MCP Server
 
-Stdio-based MCP server (`thrum mcp serve`) for native tool-based agent
-messaging. Enables LLM agents to use Thrum via MCP tools instead of CLI
-shell-outs.
+Optional MCP server (`thrum mcp serve`) for environments that support native
+tool integration. The CLI works everywhere — MCP is an alternative transport.
 
 ## Tips
 
