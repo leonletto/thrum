@@ -93,7 +93,7 @@ func InstallSkills(opts SkillsInstallOptions) (*SkillsInstallResult, error) {
 		if mkErr := os.MkdirAll(filepath.Dir(outPath), 0750); mkErr != nil {
 			return fmt.Errorf("mkdir for %s: %w", outPath, mkErr)
 		}
-		return os.WriteFile(outPath, data, 0644)
+		return os.WriteFile(outPath, data, 0600)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("install skills: %w", err)
