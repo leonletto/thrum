@@ -8,7 +8,11 @@ category: "guides"
 
 ## Thrum Messaging System
 
-> **TL;DR:** Send messages with `thrum send`, check them with `thrum inbox`, reply with `thrum reply`. Messages support scopes, mentions, and groups for targeting specific recipients. The Quick Reference tables below have every command. Implementation details (storage schemas, indexes) are at the bottom — you don't need them for normal use.
+> **TL;DR:** Send messages with `thrum send`, check them with `thrum inbox`,
+> reply with `thrum reply`. Messages support scopes, mentions, and groups for
+> targeting specific recipients. The Quick Reference tables below have every
+> command. Implementation details (storage schemas, indexes) are at the bottom —
+> you don't need them for normal use.
 
 ## Overview
 
@@ -374,11 +378,13 @@ identity has a read record for it.
 
 Several commands mark messages as read automatically:
 
-| Command                    | Behavior                                                       |
-| -------------------------- | -------------------------------------------------------------- |
-| `thrum inbox`              | Marks all displayed messages as read (skipped with `--unread`) |
-| `thrum reply MSG_ID ...`   | Marks the replied-to message as read                           |
-| `thrum message get MSG_ID` | Marks the retrieved message as read                            |
+| Command                    | Behavior                                                  |
+| -------------------------- | --------------------------------------------------------- |
+| `thrum inbox`              | Marks all displayed messages as read                      |
+| `thrum inbox --unread`     | Peeks at unread messages **without** marking them as read |
+| `thrum reply MSG_ID ...`   | Marks the replied-to message as read                      |
+| `thrum message get MSG_ID` | Marks the retrieved message as read                       |
+| `thrum message read --all` | Explicitly marks all unread messages as read              |
 
 All auto mark-as-read operations are best-effort: if they fail, the parent
 command still succeeds.
@@ -595,7 +601,8 @@ These flags are available on all commands:
 
 ---
 
-*The sections below cover storage internals. You don't need these for normal use.*
+_The sections below cover storage internals. You don't need these for normal
+use._
 
 ## Implementation Details
 

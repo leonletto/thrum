@@ -50,8 +50,8 @@ else:
 
 | Flag                | Purpose                                                                        |
 | ------------------- | ------------------------------------------------------------------------------ |
-| `--timeout 8m`     | Block up to 8 minutes per cycle                                               |
-| `--after -15s`       | Include messages sent up to 1s ago (negative = "N ago"; prevents stale replay) |
+| `--timeout 8m`      | Block up to 8 minutes per cycle                                                |
+| `--after -15s`      | Include messages sent up to 1s ago (negative = "N ago"; prevents stale replay) |
 | `--json`            | Machine-readable output                                                        |
 | `--mention @<role>` | Only messages that mention the specified role                                  |
 

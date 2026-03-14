@@ -11,8 +11,11 @@ last_updated: "2026-02-10"
 
 ## Thrum Daemon Architecture
 
-> **TL;DR:** The daemon is the one process everything talks to. Start it with `thrum init` (auto-starts) or `thrum daemon start`. It handles messaging, sync, the web UI, and real-time notifications — all on one port. You rarely interact with it directly.
-
+> **TL;DR:** The daemon is the one process everything talks to. Start it with
+> `thrum init` (auto-starts) or `thrum daemon start`. It handles messaging,
+> sync, the web UI, and real-time notifications — all on one port. You rarely
+> interact with it directly.
+>
 > **See also:** [System Overview](overview.md) for how the daemon fits into the
 > larger Thrum ecosystem.
 
@@ -679,5 +682,5 @@ rm .thrum/var/thrum.pid
   Unix socket and WebSocket
 - [Sync Protocol](sync.md) — how the daemon's sync loop fetches, merges, and
   pushes the `a-sync` branch
-- [Development Guide](development.md) — how to add new RPC handlers and run
-  the daemon test suite
+- [Development Guide](development.md) — how to add new RPC handlers and run the
+  daemon test suite

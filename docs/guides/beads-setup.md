@@ -1,4 +1,3 @@
-
 ## Beads Setup Guide
 
 [Beads](https://github.com/steveyegge/beads) is a Dolt-backed, dependency-aware
@@ -166,6 +165,7 @@ The standard agent workflow combines both tools:
 # 1. Agent starts — check for assigned work
 thrum inbox --unread
 thrum sent --unread
+thrum message read --all       # Mark all messages as read
 bd ready
 
 # 2. Claim a task and announce it
@@ -220,8 +220,8 @@ for the full command reference.
 
 ### CLAUDE.md Configuration
 
-For agents that don't use the plugin (or as a supplement), add these instructions
-to your `CLAUDE.md`:
+For agents that don't use the plugin (or as a supplement), add these
+instructions to your `CLAUDE.md`:
 
 ```markdown
 ## Task Tracking

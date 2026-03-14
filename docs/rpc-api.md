@@ -1,5 +1,9 @@
-
 ## Thrum Daemon RPC API
+
+> **TL;DR:** 26 RPC methods over JSON-RPC 2.0, available on a Unix socket or
+> WebSocket. Most users never need this — the CLI wraps all of it. This
+> reference is for building custom integrations or understanding what's
+> happening under the hood.
 
 ## Overview
 
@@ -1217,6 +1221,17 @@ Common causes:
 - Check method name spelling (case-sensitive)
 - Verify daemon version supports the method
 - See available methods section above
+
+## Next Steps
+
+- [WebSocket API](api/websocket.md) — use these methods over WebSocket for
+  real-time browser and agent connections
+- [Daemon Architecture](daemon.md) — how the daemon registers and dispatches
+  these RPC handlers
+- [Inbox Query Methods](inbox-query-methods.md) — deeper coverage of
+  `message.list` filtering, pagination, and read-state tracking
+- [Event Streaming](event-streaming.md) — push notifications via the `subscribe`
+  method and Broadcaster
 
 ## References
 

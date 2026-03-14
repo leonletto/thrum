@@ -7,6 +7,9 @@ dev-docs/
 # Ignore vendor
 vendor/
 
+# Ignore local-only config (gitignored)
+CLAUDE.md
+
 # Ignore reference repos
 .ref/
 

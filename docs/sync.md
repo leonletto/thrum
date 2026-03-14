@@ -1,4 +1,3 @@
-
 ## Sync Protocol
 
 The sync protocol keeps message logs synchronized across repository clones using
@@ -588,8 +587,12 @@ If your repo still has `.thrum/events.jsonl` or `.thrum/messages/` tracked on
 thrum migrate
 ```
 
-## See Also
+## Next Steps
 
-- [Daemon Architecture](daemon.md)
-- [System Overview](overview.md)
-- [RPC API Reference](rpc-api.md)
+- [Daemon Architecture](daemon.md) — how the daemon's sync loop and sync
+  worktree fit into the overall daemon design
+- [Tailscale Sync](tailscale-sync.md) — real-time cross-machine sync without
+  60-second polling, using direct peer-to-peer push
+- [Configuration](configuration.md) — set `local_only`, sync interval, and other
+  daemon settings
+- [RPC API Reference](rpc-api.md) — `sync.force` and `sync.status` RPC methods

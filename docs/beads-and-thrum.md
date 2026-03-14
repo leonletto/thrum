@@ -1,4 +1,3 @@
-
 ## Beads and Thrum
 
 ## The Context Loss Problem
@@ -62,6 +61,9 @@ Message: "Search UI should use the MiniSearch interface we built in thrum-c3d4"
 
 # Check sent acknowledgements or receipts
 $ thrum sent --unread
+
+# Mark messages as read after reviewing
+$ thrum message read --all
 
 # Claim the task
 $ bd update thrum-a1b2 -s in_progress
@@ -221,9 +223,13 @@ You can also generate a minimal starter block with `bd onboard`, but the block
 above is more comprehensive and covers the epic/dependency patterns that
 sub-agents most commonly get wrong.
 
-## See Also
+## Next Steps
 
-- [Quickstart](./quickstart.md) — Get started with Beads and Thrum in 5 minutes
-- [Agent Coordination](./agent-coordination.md) — Patterns for multi-agent
-  workflows
-- [CLI Reference](./cli.md) — Complete command documentation
+- [Quickstart Guide](quickstart.md) — get Thrum initialized and your first agent
+  registered in 5 minutes
+- [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
+  showing how Beads and Thrum work together in practice
+- [Workflow Templates](workflow-templates.md) — pre-built skill pipelines for
+  the full research → plan → implement cycle using both tools
+- [Beads Setup Guide](guides/beads-setup.md) — install and configure Beads for
+  task tracking alongside Thrum

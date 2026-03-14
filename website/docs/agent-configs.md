@@ -111,16 +111,15 @@ Task({
   model: "haiku",
   run_in_background: true,
   prompt:
-    "Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -15s --json",
+    "Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -15s",
 });
 ```
 
 **Wait command flags:**
 
 - `--timeout 8m` — Block up to 8 minutes per cycle
-- `--after -15s` — Include messages sent up to 1 second ago (negative = "N ago";
-  prevents stale replay)
-- `--json` — Machine-readable output
+- `--after -15s` — Include messages sent up to 15 seconds ago (negative = "N
+  ago"; covers re-arm gap)
 
 The listener uses `thrum wait` which blocks until a message arrives or the
 timeout expires — no polling loops needed. Each cycle is a single Bash call.

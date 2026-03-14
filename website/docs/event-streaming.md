@@ -311,7 +311,7 @@ go test ./internal/websocket/...
   mentions, and understand how the dispatcher matches messages to subscribers
 - [WebSocket API](api/websocket.md) — the WebSocket transport that delivers
   these push notifications to browser and real-time clients
-- [Event Reference](api/events.md) — all event types emitted by the daemon,
-  with full payload schemas
+- [Event Reference](api/events.md) — all event types emitted by the daemon, with
+  full payload schemas
 - [Daemon Architecture](daemon.md) — how the Broadcaster and Dispatcher wire
   into the daemon's startup sequence

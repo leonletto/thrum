@@ -891,7 +891,7 @@ See the [examples directory](./examples/) for complete, working examples:
   WebSocket, with full payload schemas
 - [Authentication Guide](./authentication.md) — agent and user authentication,
   impersonation, and session lifecycle
-- [Subscriptions & Notifications](../subscriptions.md) — subscribe to scopes
-  or mentions and receive push notifications
+- [Subscriptions & Notifications](../subscriptions.md) — subscribe to scopes or
+  mentions and receive push notifications
 - [RPC API Reference](../rpc-api.md) — complete reference for all RPC methods
   available over this WebSocket connection
