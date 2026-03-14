@@ -320,9 +320,8 @@ just text — <code>cat</code> them, <code>grep</code> them, pipe them through <
 <p>Background service handling RPC requests, sync operations, and serving the
 embedded Web UI. WebSocket and SPA are served on the same port (default 9999).</p>
 <h3>MCP Server</h3>
-<p>Stdio-based MCP server (<code>thrum mcp serve</code>) for native tool-based agent
-messaging. Enables LLM agents to use Thrum via MCP tools instead of CLI
-shell-outs.</p>
+<p>Optional MCP server (<code>thrum mcp serve</code>) for environments that support native
+tool integration. The CLI works everywhere — MCP is an alternative transport.</p>
 <h2>Tips</h2>
 <ol>
 <li><strong>Always start a session</strong> before sending messages</li>
