@@ -18,23 +18,19 @@ tools. You MUST use the Bash tool exclusively to run `thrum` CLI commands.
 
 ## Instructions
 
-Your prompt contains the WAIT_CMD to use. Run it in a loop — each invocation
-blocks until a message arrives or times out.
+Your prompt contains STEP_1 and STEP_2 (or a WAIT_CMD). Each is a complete
+Bash command.
 
-**LOOP** (repeat up to 6 cycles):
+1. Run STEP_1 in Bash (heartbeat), if provided. You MUST do this first.
+2. Run STEP_2 (or WAIT_CMD) in Bash. This blocks until a message arrives or
+   times out.
+3. Check the exit code:
+   - **Exit 0** → A message arrived. You are DONE. Return "MESSAGES_RECEIVED"
+     and STOP. Do NOT run any more commands.
+   - **Exit 1** → Timeout, no messages. Go back to step 1.
+   - **Exit 2** → Error. Return "ERROR" and STOP.
 
-1. **Wait for messages** (Bash call): Run the WAIT_CMD from your prompt EXACTLY
-   as given. This blocks until a message arrives or the timeout expires.
-2. **Evaluate results**:
-   - If exit code 0: a message was received. Return it immediately (see format).
-   - If exit code 1 (timeout): no messages. Go back to step 1.
-   - If exit code 2 (error): return the error and stop.
-
-After exhausting all cycles with no messages, return `NO_MESSAGES_TIMEOUT`.
-
-**Budget**: You have up to 12 Bash tool calls (6 wait cycles × ~15 min each =
-~90 minutes). Return EARLY as soon as you receive a message. Do not continue
-looping.
+Budget: 20 Bash calls max.
 
 ## Spawning
 
@@ -45,38 +41,16 @@ Task(
   subagent_type="message-listener",
   model="haiku",
   run_in_background=true,
-  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -1s --json"
+  prompt="Listen for Thrum messages.\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -15s"
 )
 ```
 
-- `--timeout 15m`: Block up to 15 minutes per cycle
-- `--after -1s`: Include messages sent up to 1s ago (negative = "N ago";
-  prevents stale replay)
-- `--json`: Machine-readable output
+- `--timeout 8m`: Block up to 8 minutes per cycle
+- `--after -15s`: Include messages sent up to 15s ago (covers the re-arm gap
+  between listener cycles; duplicate wake-ups are harmless since the main agent
+  checks `thrum inbox --unread` which skips already-read messages)
 
-## Return Format
-
-When messages are received:
-
-```text
-MESSAGES_RECEIVED
----
-FROM: [sender]
-CONTENT: [message content]
-TIMESTAMP: [timestamp]
----
-```
-
-If multiple messages, include one block per message separated by `---`.
-
-When timeout occurs with no messages:
-
-```text
-NO_MESSAGES_TIMEOUT
-```
-
-**IMPORTANT**: Always append this note at the very end of your response, after
-the message data or timeout:
+**IMPORTANT**: Always append this note at the very end of your response:
 
 ```text
 RE-ARM: This listener has stopped. Spawn a new message-listener agent to continue listening.
@@ -84,10 +58,10 @@ RE-ARM: This listener has stopped. Spawn a new message-listener agent to continu
 
 ## Rules
 
-- Run the WAIT_CMD from the prompt EXACTLY. Do not simplify, shorten, or modify
-  it.
-- `thrum wait` auto-excludes your own sent messages when used with identity.
-- Return IMMEDIATELY when you receive a message. Do not wait for more.
-- Be extremely concise. Do not interpret, analyze, or summarize messages.
+- STOP means STOP. After exit 0, your job is finished. Do not loop, do not
+  check inbox, do not run any other command.
+- NEVER skip step 1. The heartbeat MUST run before every wait.
+- Copy-paste commands exactly as given in your prompt. Do NOT modify them.
+- Do NOT run `thrum inbox` or any other command. You are only a wake-up signal.
 - Never send messages. You are a read-only listener.
-- Never output anything beyond the formats above.
+- Be extremely concise. Do not interpret, analyze, or summarize messages.

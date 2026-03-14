@@ -137,6 +137,7 @@ section.
 cd {{WORKTREE_PATH}}
 thrum quickstart --name {{AGENT_NAME}} --role implementer --module {{BRANCH_NAME}} --intent "Implementing {{EPIC_ID}}"
 thrum inbox --unread
+# Tip: thrum inbox --unread peeks without marking read; thrum message read --all to mark all read
 thrum send "Starting work on {{EPIC_ID}}" --to @{{COORDINATOR_NAME}}
 ```
 
@@ -739,6 +740,7 @@ the minimal sequence:
 cd {{WORKTREE_PATH}}
 thrum quickstart --name {{AGENT_NAME}} --role implementer --module {{BRANCH_NAME}} --intent "Resuming {{EPIC_ID}}"
 thrum inbox --unread
+# Tip: thrum inbox --unread peeks without marking read; thrum message read --all to mark all read
 
 # 2. Orient from beads and git
 bd show {{EPIC_ID}}                    # What's done?

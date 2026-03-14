@@ -26,7 +26,7 @@ Thrum supports two integration methods for agent coordination:
 ### MCP Server (Recommended)
 
 Native tool integration with async message notifications. Best for Claude Code
-agents. See [MCP Server](/docs/mcp-server.html) for configuration and the
+agents. See [MCP Server](mcp-server.md) for configuration and the
 complete tools reference.
 
 ### CLI (Fallback)
@@ -37,6 +37,7 @@ Shell commands for basic messaging. Works everywhere.
 thrum send "Starting work on task X" --to @coord_main
 thrum inbox --unread
 thrum sent --unread
+thrum message read --all       # Mark all messages as read
 thrum reply <msg-id> "Here's my update"
 ```
 
@@ -177,7 +178,7 @@ incoming messages and notifies the main agent when they arrive.
 
 **Recommended approach:** Use `thrum wait` which blocks until a message arrives
 or times out. This is more efficient than polling loops with sleep intervals.
-Use `--after -1s` to include messages sent up to 1 second ago (`--after`
+Use `--after -15s` to include messages sent up to 1 second ago (`--after`
 negative value = "N ago"). Omit `--after` to receive only messages that arrive
 after the wait starts.
 
@@ -411,15 +412,13 @@ bd ready
 bd list --status=in_progress
 ```
 
-## See Also
+## Next Steps
 
-- [Workflow Templates](workflow-templates.md) -- three-phase agent development
-  workflows (plan, prepare, implement)
-- [Multi-Agent Support](multi-agent.md) -- groups, runtime presets, and team
-  coordination
-- [Tailscale Sync](tailscale-sync.md) -- cross-machine sync via Tailscale
-- [CLI Reference](cli.md) -- complete command documentation
-- [MCP Server](mcp-server.md) -- MCP tools and message-listener details
-- [Messaging System](messaging.md) -- message structure and scopes
-- [Quickstart Guide](quickstart.md) -- getting started in 5 minutes
-- [Identity System](identity.md) -- agent names and registration
+- [Workflow Templates](workflow-templates.md) — pre-built skill pipelines for
+  the full research → plan → implement → review cycle
+- [Multi-Agent Support](multi-agent.md) — agent groups, runtime presets, and
+  the `context prime` command for session recovery
+- [Messaging](messaging.md) — full send/receive/reply reference including
+  threads, scopes, mentions, and groups
+- [MCP Server](mcp-server.md) — native MCP tools for Claude Code agents,
+  including the efficient message-listener pattern

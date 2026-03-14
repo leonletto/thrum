@@ -22,7 +22,7 @@ export function AgentCard({ agent, active, onClick }: AgentCardProps) {
   const currentUser = useCurrentUser();
   const request = {
     for_agent: agent.agent_id,
-    unread_for_agent: currentUser?.user_id,
+    unread_for_agent: agent.agent_id,
     page_size: 1,
   };
   const { data } = useQuery({

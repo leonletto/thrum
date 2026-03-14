@@ -548,11 +548,9 @@ Examples:
 				}
 			}
 
-			// Step 9b: Refresh preamble if --force (brings preamble up to date with binary version)
-			if force {
-				if err := applyRolePreamble(thrumDir, agentNameResolved, agentRoleResolved, "", true); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to refresh preamble: %v\n", err)
-				}
+			// Step 9b: Ensure preamble exists; --force overwrites with current version
+			if err := applyRolePreamble(thrumDir, agentNameResolved, agentRoleResolved, "", force); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to refresh preamble: %v\n", err)
 			}
 
 			// Step 10: Show whoami-style output
@@ -1344,7 +1342,8 @@ The daemon must be running and you must have an active session.`,
 			}
 
 			// Auto mark-as-read: mark all displayed messages as read
-			if len(result.Messages) > 0 {
+			// Skip when --unread is set so agents can peek without consuming messages.
+			if !unread && len(result.Messages) > 0 {
 				ids := make([]string, len(result.Messages))
 				for i, m := range result.Messages {
 					ids[i] = m.MessageID
@@ -1587,11 +1586,11 @@ Exit codes:
 				socketPath = cli.DefaultSocketPath(flagRepo)
 			}
 
-			message, err := cli.Wait(socketPath, opts)
+			_, err = cli.Wait(socketPath, opts)
 			if err != nil {
 				if err.Error() == "timeout waiting for message" {
 					if !flagQuiet {
-						fmt.Fprintln(os.Stderr, "Timeout: no matching messages received")
+						fmt.Fprintln(os.Stderr, "NO_MESSAGES_TIMEOUT — re-run thrum wait to continue listening")
 					}
 					os.Exit(1)
 				}
@@ -1599,14 +1598,14 @@ Exit codes:
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(message, "", "  ")
+				out := map[string]string{
+					"status": "received",
+					"action": "ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them.",
+				}
+				output, _ := json.MarshalIndent(out, "", "  ")
 				fmt.Println(string(output))
 			} else if !flagQuiet {
-				// Brief message summary
-				agentName := extractAgentName(message.AgentID)
-				fmt.Printf("✓ Message received: %s from %s\n", message.MessageID, agentName)
-				fmt.Printf("  %s\n", message.Body.Content)
+				fmt.Println("MESSAGES_RECEIVED")
 			}
 
 			return nil
@@ -1619,11 +1618,6 @@ Exit codes:
 	cmd.Flags().String("after", "", "Only return messages after this relative time (e.g., -30s, -5m, +60s)")
 
 	return cmd
-}
-
-// extractAgentName is a helper to extract agent name from ID for display.
-func extractAgentName(agentID string) string {
-	return identity.ExtractDisplayName(agentID)
 }
 
 func daemonCmd() *cobra.Command {
@@ -1909,8 +1903,8 @@ func agentCmd() *cobra.Command {
 		Long: `Register this agent with the specified role and module.
 
 The agent identity is determined from:
-1. THRUM_NAME env var (highest priority - overrides --name flag)
-2. --name flag
+1. --name flag (highest priority)
+2. THRUM_NAME env var (default when --name is not provided)
 3. Environment variables (THRUM_ROLE, THRUM_MODULE for role/module)
 4. Identity file in .thrum/identities/ directory`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1924,8 +1918,8 @@ The agent identity is determined from:
 				return fmt.Errorf("role and module are required (use --role and --module flags or THRUM_ROLE and THRUM_MODULE env vars)")
 			}
 
-			// Priority: THRUM_NAME env var > --name flag
-			if envName := os.Getenv("THRUM_NAME"); envName != "" {
+			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.
+			if envName := os.Getenv("THRUM_NAME"); envName != "" && !cmd.Flags().Changed("name") {
 				name = envName
 			}
 
@@ -3883,8 +3877,8 @@ Examples:
 				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, auggie, cli-only", runtimeFlag)
 			}
 
-			// Priority: THRUM_NAME env var > --name flag
-			if envName := os.Getenv("THRUM_NAME"); envName != "" {
+			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.
+			if envName := os.Getenv("THRUM_NAME"); envName != "" && !cmd.Flags().Changed("name") {
 				name = envName
 			}
 
@@ -4023,6 +4017,13 @@ Examples:
 				// Apply preamble: --preamble-file > role template > default
 				if err := applyRolePreamble(thrumDir, savedName, flagRole, preambleFile, false); err != nil {
 					return err
+				}
+			} else if name != "" && !dryRun {
+				// Daemon unreachable or registration skipped — still ensure preamble exists.
+				// EnsurePreamble is a no-op when the file already exists, so this is always safe.
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+				if err := applyRolePreamble(thrumDir, name, flagRole, preambleFile, false); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to ensure preamble: %v\n", err)
 				}
 			}
 

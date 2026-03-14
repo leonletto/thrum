@@ -8,9 +8,8 @@ category: "guides"
 
 ## Tailscale Sync
 
-> See also: [Tailscale Security](tailscale-security.md) for the security model,
-> [Multi-Agent Support](multi-agent.md) for team coordination patterns,
-> [Sync Protocol](sync.md) for Git-based synchronization.
+> **Prerequisites:** Tailscale installed and Thrum v0.4.0+ on all machines.
+> Set `THRUM_TS_ENABLED=true` before starting the daemon.
 
 ## Overview
 
@@ -393,12 +392,13 @@ periodic_sync: starting with interval=5m0s, recent_threshold=2m0s
 - **Batch size** of 1000 events per pull keeps memory bounded during large syncs
 - **Checkpointing** ensures no redundant transfers after restarts
 
-## See Also
+## Next Steps
 
-- [Tailscale Security](tailscale-security.md) -- Security model documentation
-- [Multi-Agent Support](multi-agent.md) -- Groups, runtime presets, and team
-  coordination
-- [Agent Coordination](agent-coordination.md) -- Workflow patterns and Beads
-  integration
-- [Sync Protocol](sync.md) -- Git-based synchronization details
-- [CLI Reference](cli.md) -- Complete command documentation
+- [Tailscale Security](tailscale-security.md) — the full security model:
+  encryption layers, pairing codes, token authentication, and threat analysis
+- [Sync Protocol](sync.md) — how Git-based sync works under the hood, for when
+  Tailscale isn't available or you want async delivery
+- [Multi-Agent Support](multi-agent.md) — coordinate agents across machines
+  once sync is set up
+- [Configuration](configuration.md) — configure sync interval, local-only mode,
+  and other daemon settings

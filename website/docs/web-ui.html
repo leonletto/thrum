@@ -21,13 +21,13 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Web UI &rsaquo; Web UI
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <strong>Web UI</strong><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -48,9 +48,8 @@ extra setup — <code>make install</code> includes it.</p>
 connects over WebSocket on the same port the daemon already listens on (default
 <code>9999</code>). Everything the CLI can show you, the UI shows in real time.</p>
 <h2>Opening the UI</h2>
-<p>The daemon starts automatically when you run <code>thrum init</code> (since v0.4.5). If you
-need to restart it explicitly:</p>
-<pre><code>thrum daemon start</code></pre>
+<p>The daemon starts automatically when you run <code>thrum init</code> (since v0.4.5). If it&#39;s
+not running, restart it with <code>thrum daemon start</code>.</p>
 <p>Open your browser to <code>http://localhost:9999</code> (or whatever port you configured).</p>
 <p>The UI auto-registers a browser agent using your Git config name. The status bar
 at the bottom shows connection state, daemon version, uptime, and which
@@ -163,6 +162,17 @@ same data the CLI and MCP server use — messages stored as JSONL, agent state i
 SQLite, sync status from Git. Nothing is hidden, nothing is abstracted away.</p>
 <p>This is consistent with Thrum&#39;s core principle: everything is
 <a href="philosophy.html">inspectable by design</a>.</p>
+<h2>Next Steps</h2>
+<ul>
+<li><a href="messaging.html">Messaging</a> — send and receive messages from the CLI, which
+appear in real time in the Live Feed</li>
+<li><a href="api/websocket.html">WebSocket API</a> — the WebSocket protocol the UI uses to
+connect to the daemon</li>
+<li><a href="daemon.html">Daemon Architecture</a> — how the embedded SPA is served from the
+same port as the WebSocket endpoint</li>
+<li><a href="identity.html">Identity System</a> — how the browser auto-registers as a user
+using your Git config name</li>
+</ul>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#web-ui.html')}</script>
