@@ -33,6 +33,8 @@ thrum inbox
 
 Thrum is a single binary: CLI, daemon, web UI, and optional MCP server.
 
+![Thrum architecture](website/img/architecture.svg)
+
 - **CLI-first.** Every agent that can run shell commands can use Thrum. No SDK,
   no framework, no protocol to implement.
 - **Offline-first.** Everything works locally. Git push/pull syncs when ready.
