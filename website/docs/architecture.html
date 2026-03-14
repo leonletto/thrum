@@ -40,45 +40,7 @@ a{color:#0366d6}
 </nav>
 <main>
 <h2>System Architecture</h2>
-<pre><code>                    ┌─────────────────────────────────────────────────────────┐
-                    │                     Thrum Daemon                         │
-                    │  (Background service managing coordination &amp; sync)       │
-                    ├─────────────────────────────────────────────────────────┤
-                    │                                                          │
-   ┌────────────┐   │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-   │   CLI      │◄──┼──┤ Unix Socket  │  │  Sync Loop   │  │  WebSocket   │  │
-   │  (thrum)   │   │  │ JSON-RPC 2.0 │  │  (60s)       │  │  + SPA (9999)│  │
-   └────────────┘   │  └──────────────┘  └──────────────┘  └──────────────┘  │
-                    │          │                │               │    │        │
-   ┌────────────┐   │          │                │               │    └──►Web UI
-   │ MCP Server │◄──┼──────────┘                │               │            │
-   │  (stdio)   │   │          │                ▼               │            │
-   └────────────┘   │          │  ┌─────────────────────────────────────┐   │
-                    │          ▼  │         State Management             │   │
-                    │             │  ┌─────────────┐  ┌──────────────┐  │   │
-                    │             │  │  JSONL Logs  │  │   SQLite     │  │   │
-                    │             │  │  (sharded)   │  │  Projection  │  │   │
-                    │             │  └─────────────┘  └──────────────┘  │   │
-                    │             └─────────────────────────────────────┘   │
-                    │                          │                             │
-                    └──────────────────────────┼─────────────────────────────┘
-                                               │
-                    ┌──────────────────────────┼──────────────────────────┐
-                    │                          ▼                          │
-                    │  .git/thrum-sync/a-sync/     .thrum/var/            │
-                    │  ├── events.jsonl            ├── messages.db        │
-                    │  └── messages/               ├── thrum.sock         │
-                    │      └── {agent}.jsonl       ├── thrum.pid (JSON)   │
-                    │                              ├── thrum.lock (flock) │
-                    │                              └── ws.port            │
-                    └──────────────────────────┬──────────────────────────┘
-                                               │ Git sync
-                                               ▼
-                                        ┌─────────────┐
-                                        │   Remote    │
-                                        │  (a-sync    │
-                                        │   branch)   │
-                                        └─────────────┘</code></pre>
+<p><img src="../img/architecture.svg" alt="Thrum architecture: Clients (CLI, Web UI, MCP Server) connect to the Daemon via JSON-RPC/WebSocket, which reads and writes to JSONL Logs, SQLite Index, and Git Sync, which push/pull to the remote a-sync branch"></p>
 <h2>The Daemon: Central Coordinator</h2>
 <p>The daemon is the one process that everything else talks to. Start it once and
 it handles messaging, sync, and state for all your agents — CLI, Web UI, and MCP
