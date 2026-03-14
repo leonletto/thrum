@@ -203,6 +203,78 @@ func TestDetectAllRuntimes_EnvOnly(t *testing.T) {
 	}
 }
 
+func TestDetectAgents_Tier1_RepoMarkers(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".claude"), 0750)
+	_ = os.WriteFile(filepath.Join(tmpDir, ".claude/settings.json"), []byte("{}"), 0600)
+
+	results := DetectAgents(tmpDir)
+	if len(results) == 0 {
+		t.Fatal("expected at least one detected agent")
+	}
+	if results[0].Name != "claude" {
+		t.Errorf("expected claude, got %q", results[0].Name)
+	}
+	if results[0].Tier != "repo" {
+		t.Errorf("expected tier 'repo', got %q", results[0].Tier)
+	}
+}
+
+func TestDetectAgents_Tier2_EnvVars(t *testing.T) {
+	tmpDir := t.TempDir() // no repo markers
+	t.Setenv("GEMINI_CLI", "true")
+
+	results := DetectAgents(tmpDir)
+	found := false
+	for _, r := range results {
+		if r.Name == "gemini" && r.Tier == "env" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected gemini detected via env var")
+	}
+}
+
+func TestDetectAgents_DeduplicatesByName(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".claude"), 0750)
+	_ = os.WriteFile(filepath.Join(tmpDir, ".claude/settings.json"), []byte("{}"), 0600)
+	t.Setenv("CLAUDE_SESSION_ID", "test")
+
+	results := DetectAgents(tmpDir)
+	claudeCount := 0
+	for _, r := range results {
+		if r.Name == "claude" {
+			claudeCount++
+		}
+	}
+	if claudeCount != 1 {
+		t.Errorf("expected claude once, got %d times", claudeCount)
+	}
+	// Repo tier should win
+	for _, r := range results {
+		if r.Name == "claude" && r.Tier != "repo" {
+			t.Errorf("expected repo tier to win, got %q", r.Tier)
+		}
+	}
+}
+
+func TestDetectAgents_MultipleAgents(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".claude"), 0750)
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".cursor"), 0750)
+
+	results := DetectAgents(tmpDir)
+	names := make(map[string]bool)
+	for _, r := range results {
+		names[r.Name] = true
+	}
+	if !names["claude"] || !names["cursor"] {
+		t.Errorf("expected both claude and cursor detected, got %v", names)
+	}
+}
+
 func TestSupportedRuntimes(t *testing.T) {
 	runtimes := SupportedRuntimes()
 	if len(runtimes) < 6 {
