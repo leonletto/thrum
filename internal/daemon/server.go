@@ -26,8 +26,8 @@ type Server struct {
 	shutdown   bool
 	wg         sync.WaitGroup
 	startTime  time.Time
-	connsMu    sync.Mutex             // protects conns
-	conns      map[net.Conn]struct{}  // active client connections
+	connsMu    sync.Mutex            // protects conns
+	conns      map[net.Conn]struct{} // active client connections
 }
 
 // NewServer creates a new RPC server.

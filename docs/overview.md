@@ -1,7 +1,9 @@
-
 ## What Is Thrum?
 
-> **TL;DR:** Thrum has ~30 commands but you only need 8 for daily use. The tables below break down which commands are for you, which are for agents, and which are one-time setup. Start here, then drill into the reference pages when you need details.
+> **TL;DR:** Thrum has ~30 commands but you only need 8 for daily use. The
+> tables below break down which commands are for you, which are for agents, and
+> which are one-time setup. Start here, then drill into the reference pages when
+> you need details.
 
 Thrum is a messaging system for coordinating AI agents across sessions,
 worktrees, and machines. It provides:
@@ -115,33 +117,33 @@ all handled gracefully.
 
 ## Documentation Index
 
-| Document                                    | Description                                     |
-| ------------------------------------------- | ----------------------------------------------- |
-| [Philosophy](philosophy.md)                 | Why Thrum exists and how it thinks about agents |
-| [Quickstart Guide](quickstart.md)           | 5-minute getting started                        |
-| [Architecture](architecture.md)             | Daemon internals, storage, sync, and packages   |
-| [Daemon Architecture](daemon.md)            | Technical daemon internals                      |
-| [RPC API Reference](rpc-api.md)             | All RPC methods                                 |
-| [Sync Protocol](sync.md)                    | Git synchronization details                     |
-| [WebSocket API](api/websocket.md)           | WebSocket-specific docs                         |
-| [Event Streaming](event-streaming.md)       | Notifications and subscriptions                 |
-| [CLI Reference](cli.md)                     | All CLI commands and backup & restore           |
-| [Identity System](identity.md)              | Agent identity and registration                 |
-| [Context Management](context.md)           | Agent context storage and persistence           |
-| [Multi-Agent Support](multi-agent.md)       | Groups, runtime presets, and team coordination  |
-| [Tailscale Sync](tailscale-sync.md)         | Cross-machine sync via Tailscale with security  |
-| [Agent Coordination](agent-coordination.md) | Multi-agent workflows and Beads integration     |
-| [Workflow Templates](workflow-templates.md) | Three-phase agent development templates         |
+| Document                                                 | Description                                                           |
+| -------------------------------------------------------- | --------------------------------------------------------------------- |
+| [Philosophy](philosophy.md)                              | Why Thrum exists and how it thinks about agents                       |
+| [Quickstart Guide](quickstart.md)                        | 5-minute getting started                                              |
+| [Architecture](architecture.md)                          | Daemon internals, storage, sync, and packages                         |
+| [Daemon Architecture](daemon.md)                         | Technical daemon internals                                            |
+| [RPC API Reference](rpc-api.md)                          | All RPC methods                                                       |
+| [Sync Protocol](sync.md)                                 | Git synchronization details                                           |
+| [WebSocket API](api/websocket.md)                        | WebSocket-specific docs                                               |
+| [Event Streaming](event-streaming.md)                    | Notifications and subscriptions                                       |
+| [CLI Reference](cli.md)                                  | All CLI commands and backup & restore                                 |
+| [Identity System](identity.md)                           | Agent identity and registration                                       |
+| [Context Management](context.md)                         | Agent context storage and persistence                                 |
+| [Multi-Agent Support](multi-agent.md)                    | Groups, runtime presets, and team coordination                        |
+| [Tailscale Sync](tailscale-sync.md)                      | Cross-machine sync via Tailscale with security                        |
+| [Agent Coordination](agent-coordination.md)              | Multi-agent workflows and Beads integration                           |
+| [Workflow Templates](workflow-templates.md)              | Three-phase agent development templates                               |
 | [Coordinate Two Agents](guides/coordinate-two-agents.md) | Walk through registering two agents and sending messages between them |
-| [Sync Across Machines](guides/cross-machine-sync.md) | Walk through enabling cross-machine sync via Git |
-| [Code Review Workflow](guides/review-workflow.md) | Walk through the implement-then-review cycle with worktrees |
+| [Sync Across Machines](guides/cross-machine-sync.md)     | Walk through enabling cross-machine sync via Git                      |
+| [Code Review Workflow](guides/review-workflow.md)        | Walk through the implement-then-review cycle with worktrees           |
 
 ## Next Steps
 
 - [Quickstart Guide](quickstart.md) — install Thrum and get your first agent
   running in 5 minutes
-- [Why Thrum Exists](philosophy.md) — the philosophy behind human-directed
-  agent coordination
+- [Why Thrum Exists](philosophy.md) — the philosophy behind human-directed agent
+  coordination
 - [Messaging](messaging.md) — send and receive messages between agents
 - [Agent Coordination](agent-coordination.md) — practical workflows for running
   multiple agents in parallel

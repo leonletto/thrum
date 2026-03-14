@@ -1,4 +1,3 @@
-
 ## Beads Setup Guide
 
 [Beads](https://github.com/steveyegge/beads) is a Dolt-backed, dependency-aware
@@ -221,8 +220,8 @@ for the full command reference.
 
 ### CLAUDE.md Configuration
 
-For agents that don't use the plugin (or as a supplement), add these instructions
-to your `CLAUDE.md`:
+For agents that don't use the plugin (or as a supplement), add these
+instructions to your `CLAUDE.md`:
 
 ```markdown
 ## Task Tracking

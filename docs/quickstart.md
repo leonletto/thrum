@@ -1,4 +1,3 @@
-
 ## Thrum Quickstart Guide
 
 Install Thrum, register an agent, send your first message. Five minutes.
@@ -293,8 +292,8 @@ thrum status
 > cross-machine sync, set `local_only: false` in `.thrum/config.json` or run
 > `THRUM_LOCAL=false thrum daemon start`.
 
-Thrum uses Git for synchronization. No cloud service, no opaque API — just
-push and pull on the `a-sync` branch.
+Thrum uses Git for synchronization. No cloud service, no opaque API — just push
+and pull on the `a-sync` branch.
 
 ### On Machine A
 
@@ -479,7 +478,7 @@ tool integration. The CLI works everywhere — MCP is an alternative transport.
 - [Why Thrum Exists](philosophy.md) — understand the philosophy behind
   human-directed agent coordination before going deeper
 - [CLI Reference](cli.md) — complete documentation for every command and flag
-- [Messaging](messaging.md) — send and receive messages between agents, including
-  scopes, mentions, threads, and groups
+- [Messaging](messaging.md) — send and receive messages between agents,
+  including scopes, mentions, threads, and groups
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
   with Beads integration and session templates

@@ -2,8 +2,8 @@
 name: thrum
 description: >
   Multi-agent coordination via messaging, groups, and shared context. Use when
-  agents need to communicate, delegate work, or coordinate across worktrees
-  and sessions.
+  agents need to communicate, delegate work, or coordinate across worktrees and
+  sessions.
 ---
 
 # Thrum - Git-Backed Agent Messaging
@@ -76,12 +76,12 @@ thrum <cmd> --help                       Detailed command usage
 
 ## Addressing Protocol
 
-| Target               | Routing                                       | When to use                          |
-| -------------------- | --------------------------------------------- | ------------------------------------ |
-| `--to @agent_name`   | **Direct** — routes to the named agent        | Default for all task messages        |
-| `--to @coordinator`  | **Role fanout** — ALL agents with that role   | Only when you want every coordinator |
-| `--to @backend-team` | **Group** — all members of the named group    | Team-wide announcements              |
-| `--to @everyone`     | **Broadcast** — all registered agents         | Critical alerts                      |
+| Target               | Routing                                     | When to use                          |
+| -------------------- | ------------------------------------------- | ------------------------------------ |
+| `--to @agent_name`   | **Direct** — routes to the named agent      | Default for all task messages        |
+| `--to @coordinator`  | **Role fanout** — ALL agents with that role | Only when you want every coordinator |
+| `--to @backend-team` | **Group** — all members of the named group  | Team-wide announcements              |
+| `--to @everyone`     | **Broadcast** — all registered agents       | Critical alerts                      |
 
 **Critical:** `@coordinator` is a role, not an agent name. Use `thrum team` to
 find agent names, then send `--to @<name>` for direct messages.
@@ -98,10 +98,10 @@ See [LISTENER_PATTERN.md](references/LISTENER_PATTERN.md) for setup details.
 
 ## References
 
-| Reference                                                | Content                              |
-| -------------------------------------------------------- | ------------------------------------ |
-| [MESSAGING.md](references/MESSAGING.md)                 | Protocol, addressing, context mgmt   |
-| [LISTENER_PATTERN.md](references/LISTENER_PATTERN.md)   | Background listener setup            |
-| [CLI_REFERENCE.md](references/CLI_REFERENCE.md)         | Complete command syntax reference     |
+| Reference                                             | Content                            |
+| ----------------------------------------------------- | ---------------------------------- |
+| [MESSAGING.md](references/MESSAGING.md)               | Protocol, addressing, context mgmt |
+| [LISTENER_PATTERN.md](references/LISTENER_PATTERN.md) | Background listener setup          |
+| [CLI_REFERENCE.md](references/CLI_REFERENCE.md)       | Complete command syntax reference  |
 
 Run `thrum <command> --help` for any command's full usage.

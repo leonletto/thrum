@@ -17,11 +17,11 @@ coverage per spawn).
 
 ## Wait Command Flags
 
-| Flag            | Purpose                                                                         |
-| --------------- | ------------------------------------------------------------------------------- |
-| `--timeout 8m`  | Block up to 8 min per cycle (keeps within process time limits)                  |
-| `--after -15s`  | Include messages sent up to 15s ago (covers re-arm gap between listener cycles) |
-| `--json`        | Machine-readable output                                                         |
+| Flag           | Purpose                                                                         |
+| -------------- | ------------------------------------------------------------------------------- |
+| `--timeout 8m` | Block up to 8 min per cycle (keeps within process time limits)                  |
+| `--after -15s` | Include messages sent up to 15s ago (covers re-arm gap between listener cycles) |
+| `--json`       | Machine-readable output                                                         |
 
 ## Key Rules
 

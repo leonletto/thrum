@@ -1,4 +1,3 @@
-
 ## Sync Protocol
 
 The sync protocol keeps message logs synchronized across repository clones using
@@ -594,6 +593,6 @@ thrum migrate
   worktree fit into the overall daemon design
 - [Tailscale Sync](tailscale-sync.md) — real-time cross-machine sync without
   60-second polling, using direct peer-to-peer push
-- [Configuration](configuration.md) — set `local_only`, sync interval, and
-  other daemon settings
+- [Configuration](configuration.md) — set `local_only`, sync interval, and other
+  daemon settings
 - [RPC API Reference](rpc-api.md) — `sync.force` and `sync.status` RPC methods

@@ -18,8 +18,8 @@ tools. You MUST use the Bash tool exclusively to run `thrum` CLI commands.
 
 ## Instructions
 
-Your prompt contains STEP_1 and STEP_2 (or a WAIT_CMD). Each is a complete
-Bash command.
+Your prompt contains STEP_1 and STEP_2 (or a WAIT_CMD). Each is a complete Bash
+command.
 
 1. Run STEP_1 in Bash (heartbeat), if provided. You MUST do this first.
 2. Run STEP_2 (or WAIT_CMD) in Bash. This blocks until a message arrives or
@@ -58,8 +58,8 @@ RE-ARM: This listener has stopped. Spawn a new message-listener agent to continu
 
 ## Rules
 
-- STOP means STOP. After exit 0, your job is finished. Do not loop, do not
-  check inbox, do not run any other command.
+- STOP means STOP. After exit 0, your job is finished. Do not loop, do not check
+  inbox, do not run any other command.
 - NEVER skip step 1. The heartbeat MUST run before every wait.
 - Copy-paste commands exactly as given in your prompt. Do NOT modify them.
 - Do NOT run `thrum inbox` or any other command. You are only a wake-up signal.

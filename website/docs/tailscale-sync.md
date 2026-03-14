@@ -8,8 +8,8 @@ category: "guides"
 
 ## Tailscale Sync
 
-> **Prerequisites:** Tailscale installed and Thrum v0.4.0+ on all machines.
-> Set `THRUM_TS_ENABLED=true` before starting the daemon.
+> **Prerequisites:** Tailscale installed and Thrum v0.4.0+ on all machines. Set
+> `THRUM_TS_ENABLED=true` before starting the daemon.
 
 ## Overview
 
@@ -398,7 +398,7 @@ periodic_sync: starting with interval=5m0s, recent_threshold=2m0s
   encryption layers, pairing codes, token authentication, and threat analysis
 - [Sync Protocol](sync.md) — how Git-based sync works under the hood, for when
   Tailscale isn't available or you want async delivery
-- [Multi-Agent Support](multi-agent.md) — coordinate agents across machines
-  once sync is set up
+- [Multi-Agent Support](multi-agent.md) — coordinate agents across machines once
+  sync is set up
 - [Configuration](configuration.md) — configure sync interval, local-only mode,
   and other daemon settings

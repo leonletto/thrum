@@ -885,8 +885,8 @@ Or build the UI first: `make build-ui`
   new RPC handlers or sync features
 - [RPC API Reference](rpc-api.md) — all existing RPC methods as a reference
   point when adding new ones
-- [Security & CI/CD](security-cicd.md) — CI workflows, branch protection,
-  and how documentation is deployed
+- [Security & CI/CD](security-cicd.md) — CI workflows, branch protection, and
+  how documentation is deployed
 
 ## Resources
 

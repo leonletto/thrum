@@ -154,5 +154,5 @@ have agents execute faster than you can type, that's what Thrum is for.
   multiple agents in parallel using the workflow described above
 - [Workflow Templates](workflow-templates.md) — pre-built skill pipelines for
   the full research → plan → implement → review cycle
-- [Beads and Thrum](beads-and-thrum.md) — how task tracking and messaging
-  work together to give agents persistent memory across sessions
+- [Beads and Thrum](beads-and-thrum.md) — how task tracking and messaging work
+  together to give agents persistent memory across sessions

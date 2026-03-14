@@ -1,4 +1,3 @@
-
 ## Codex Plugin
 
 > **Prerequisites:** Thrum installed and initialized (`thrum init`), and Codex
@@ -139,8 +138,8 @@ cp -R codex-plugin/skills/project-setup "${CODEX_HOME:-$HOME/.codex}/skills/"
 
 ## Next Steps
 
-- [Claude Code Plugin](claude-code-plugin.md) — the equivalent plugin for
-  Claude Code users, with slash commands and automatic hooks
+- [Claude Code Plugin](claude-code-plugin.md) — the equivalent plugin for Claude
+  Code users, with slash commands and automatic hooks
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
   that the Codex skills support
 - [Role Templates](role-templates.md) — role-based preamble templates that

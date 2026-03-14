@@ -5,15 +5,23 @@ description:
   seeing what everyone is working on — the most common Thrum use case"
 category: "guides"
 order: 10
-tags: ["coordination", "two-agents", "messaging", "quickstart", "worktree", "how-to"]
+tags:
+  [
+    "coordination",
+    "two-agents",
+    "messaging",
+    "quickstart",
+    "worktree",
+    "how-to",
+  ]
 last_updated: "2026-03-13"
 ---
 
 ## Coordinate Two Agents
 
 The most common Thrum setup: two agents working on the same project. One
-implements, one reviews. They communicate directly without you relaying
-messages between terminal windows.
+implements, one reviews. They communicate directly without you relaying messages
+between terminal windows.
 
 This walkthrough goes from zero to two agents talking to each other.
 
@@ -67,9 +75,9 @@ Then send:
 thrum send "Auth module ready for review — JWT middleware and tests passing" --to @rev_main_1
 ```
 
-Use the actual agent name from `thrum team`, not the role. Sending `--to
-@reviewer` would fan out to every agent with a reviewer role — not what you
-want here.
+Use the actual agent name from `thrum team`, not the role. Sending
+`--to @reviewer` would fan out to every agent with a reviewer role — not what
+you want here.
 
 ### Check Inbox from the Other Agent
 
@@ -102,8 +110,8 @@ Back in the implementer's terminal:
 thrum inbox --unread
 ```
 
-The reply appears. Both agents now have a record of the exchange, persisted
-in git.
+The reply appears. Both agents now have a record of the exchange, persisted in
+git.
 
 ### See What Everyone Is Working On
 
@@ -113,27 +121,27 @@ From either terminal:
 thrum team
 ```
 
-Shows each agent's name, role, intent, and worktree. If you want to know
-which agent has a particular file open:
+Shows each agent's name, role, intent, and worktree. If you want to know which
+agent has a particular file open:
 
 ```bash
 thrum who-has internal/auth/jwt.go
 ```
 
-Useful when you're about to touch a file and want to check if another agent
-is already working on it.
+Useful when you're about to touch a file and want to check if another agent is
+already working on it.
 
 ### Update Your Intent
 
-When you move to the next task, update what you're doing so `thrum team`
-stays accurate:
+When you move to the next task, update what you're doing so `thrum team` stays
+accurate:
 
 ```bash
 thrum agent set-intent "Writing integration tests for auth flow"
 ```
 
-Agents auto-heartbeat while the daemon is running. When a session ends,
-they become inactive automatically — no explicit cleanup needed.
+Agents auto-heartbeat while the daemon is running. When a session ends, they
+become inactive automatically — no explicit cleanup needed.
 
 ### Next Steps
 

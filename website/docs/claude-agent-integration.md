@@ -43,9 +43,9 @@ description: >
 ## Overview
 
 Thrum is a messaging system that enables AI agents and humans to communicate
-persistently across sessions, worktrees, and machines. It uses Git
-as the synchronization layer, ensuring all messages survive context window
-limits, session restarts, and machine boundaries.
+persistently across sessions, worktrees, and machines. It uses Git as the
+synchronization layer, ensuring all messages survive context window limits,
+session restarts, and machine boundaries.
 
 ## Quick Start
 
@@ -100,8 +100,8 @@ Reply (creates a reply-to reference)
 # Start
 
 thrum quickstart --name <name> --role <role> --module <module> --intent "<desc>"
-thrum inbox --unread thrum sent --unread
-thrum message read --all  # Mark all messages as read after reviewing
+thrum inbox --unread thrum sent --unread thrum message read --all # Mark all
+messages as read after reviewing
 
 # During work
 
@@ -203,6 +203,9 @@ Or see the full agent definitions in the
 
 ## Next Steps
 
-- [Claude Code Plugin](claude-code-plugin.md) — slash commands, hooks, and resource docs for Claude Code
-- [MCP Server](mcp-server.md) — optional native tool integration for MCP-capable environments
-- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and coordination patterns
+- [Claude Code Plugin](claude-code-plugin.md) — slash commands, hooks, and
+  resource docs for Claude Code
+- [MCP Server](mcp-server.md) — optional native tool integration for MCP-capable
+  environments
+- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and
+  coordination patterns

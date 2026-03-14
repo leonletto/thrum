@@ -1,8 +1,8 @@
 ---
 title: "Sync Across Machines"
 description:
-  "Walk through enabling cross-machine sync, sending a message from one
-  machine and receiving it on another, and verifying sync status"
+  "Walk through enabling cross-machine sync, sending a message from one machine
+  and receiving it on another, and verifying sync status"
 category: "guides"
 order: 11
 tags: ["sync", "cross-machine", "git", "remote", "tailscale", "how-to"]
@@ -11,8 +11,8 @@ last_updated: "2026-03-13"
 
 ## Sync Across Machines
 
-Thrum messages live on a Git branch. That means sync across machines is just
-Git push and pull — no cloud service, no account, no special infrastructure.
+Thrum messages live on a Git branch. That means sync across machines is just Git
+push and pull — no cloud service, no account, no special infrastructure.
 
 This walkthrough takes you from two separate clones to agents on different
 machines exchanging messages.
@@ -105,14 +105,13 @@ git log --oneline origin/a-sync -10
 git show origin/a-sync:messages/
 ```
 
-Nothing is hidden. The sync branch is just a regular orphan branch in your
-repo.
+Nothing is hidden. The sync branch is just a regular orphan branch in your repo.
 
 ### Optional: Tailscale for Real-Time Sync
 
 Git-based sync is great for async workflows — messages arrive within 60 seconds.
-If you need real-time propagation (sub-second delivery across machines), Tailscale
-sync is the answer.
+If you need real-time propagation (sub-second delivery across machines),
+Tailscale sync is the answer.
 
 Tailscale connects your machines over an encrypted WireGuard tunnel and lets
 Thrum daemons push events directly to each other instead of going through Git.
@@ -135,9 +134,9 @@ the machines, then everything is real-time automatically.
 **"local_only mode" in sync status?** Set `local_only: false` in config or via
 `THRUM_LOCAL_ONLY=false` and restart the daemon.
 
-**Messages show up on one machine but not the other?** Both machines need to
-be pushing. Check `thrum sync status` on both — if one shows a sync error,
-fix it there.
+**Messages show up on one machine but not the other?** Both machines need to be
+pushing. Check `thrum sync status` on both — if one shows a sync error, fix it
+there.
 
 ### Next Steps
 

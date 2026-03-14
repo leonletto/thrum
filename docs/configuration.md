@@ -1,4 +1,3 @@
-
 ## Configuration
 
 Thrum uses `.thrum/config.json` as the single source of truth for user

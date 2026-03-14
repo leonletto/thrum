@@ -1,4 +1,3 @@
-
 ## Agent Coordination
 
 Thrum helps you coordinate multiple AI agents across sessions, worktrees, and
@@ -24,8 +23,8 @@ thrum reply <msg-id> "Here's my update"
 
 ### MCP Server (Optional)
 
-For environments that support MCP, Thrum also provides an MCP server with
-native tool integration. See [MCP Server](mcp-server.md) for configuration.
+For environments that support MCP, Thrum also provides an MCP server with native
+tool integration. See [MCP Server](mcp-server.md) for configuration.
 
 > **Note:** Use agent names (e.g., `@coord_main`), not role names (e.g.,
 > `@coordinator`). Sending to a role fans out to ALL agents with that role. Run
@@ -402,9 +401,9 @@ bd list --status=in_progress
 
 - [Workflow Templates](workflow-templates.md) — pre-built skill pipelines for
   the full research → plan → implement → review cycle
-- [Multi-Agent Support](multi-agent.md) — agent groups, runtime presets, and
-  the `context prime` command for session recovery
+- [Multi-Agent Support](multi-agent.md) — agent groups, runtime presets, and the
+  `context prime` command for session recovery
 - [Messaging](messaging.md) — full send/receive/reply reference including
   threads, scopes, mentions, and groups
-- [MCP Server](mcp-server.md) — optional native tool integration for
-  MCP-capable environments
+- [MCP Server](mcp-server.md) — optional native tool integration for MCP-capable
+  environments
