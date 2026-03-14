@@ -12,7 +12,10 @@ last_updated: "2026-02-08"
 
 ## Agent Identity & Registration
 
-> **TL;DR:** Each agent gets a name, role, and module. Names must be lowercase alphanumeric with underscores. Register with `thrum quickstart --name X --role Y --module Z`. Identity files live in `.thrum/identities/` — one JSON file per agent.
+> **TL;DR:** Each agent gets a name, role, and module. Names must be lowercase
+> alphanumeric with underscores. Register with
+> `thrum quickstart --name X --role Y --module Z`. Identity files live in
+> `.thrum/identities/` — one JSON file per agent.
 
 ## Overview
 
@@ -703,7 +706,7 @@ thrum agent whoami
   accompany each identity file
 - [Multi-Agent Support](multi-agent.md) — running multiple agents in one
   worktree using `THRUM_NAME` and per-agent identity files
-- [CLI Reference](cli.md) — `thrum agent register`, `agent list`, `agent
-  whoami`, and related commands
+- [CLI Reference](cli.md) — `thrum agent register`, `agent list`,
+  `agent whoami`, and related commands
 - [Authentication](api/authentication.md) — how identity maps to API
   authentication for agents and browser users

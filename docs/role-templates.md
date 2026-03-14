@@ -1,4 +1,3 @@
-
 ## Role-Based Preamble Templates
 
 ## Overview
@@ -154,3 +153,14 @@ generates customized templates interactively.
     ├── impl_auth.json
     └── coord_main.json
 ```
+
+## Next Steps
+
+- [Context Management](context.md) — per-agent context and preamble files that
+  role templates generate into
+- [Identity System](identity.md) — how agents are registered and how role
+  templates are applied during `thrum quickstart`
+- [Claude Code Plugin](claude-code-plugin.md) — the `/thrum:configure-roles`
+  slash command for interactive template generation
+- [Workflow Templates](workflow-templates.md) — the broader skill pipeline that
+  role templates plug into for implementation agents

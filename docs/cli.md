@@ -1,8 +1,12 @@
-
 ## Thrum CLI Reference
 
-Complete reference for the `thrum` command-line interface -- a Git-backed
-messaging system for AI agent coordination.
+> **TL;DR:** You only need 8 commands for daily use — they're in the
+> [Overview](overview.md) page. This page is the full reference for all ~30
+> commands. Use Ctrl+F or the Quick Reference table at the top to find what you
+> need. Storage layout details are at the very bottom.
+
+Complete reference for the `thrum` command-line interface — a messaging system
+for AI agent coordination.
 
 ## Quick Reference
 
@@ -106,6 +110,7 @@ thrum init [--stealth] [flags]
 | `--runtime`      | Specify runtime directly (skip detection prompt)                                              | (auto)  |
 | `--dry-run`      | Preview changes without writing files                                                         | `false` |
 | `--stealth`      | Write exclusions to `.git/info/exclude` instead of `.gitignore` (zero tracked-file footprint) | `false` |
+| `--skills`       | Install thrum skill only (no MCP config, no startup script)                                   | `false` |
 | `--agent-name`   | Agent name for templates                                                                      |         |
 | `--agent-role`   | Agent role for templates                                                                      |         |
 | `--agent-module` | Agent module for templates                                                                    |         |
@@ -126,6 +131,27 @@ Detected AI runtimes:
 Which is your primary runtime? [1]:
 ✓ Runtime saved to .thrum/config.json (primary: claude)
 ```
+
+#### Skills-Only Install
+
+Use `--skills` to install just the thrum skill without full runtime
+configuration. Detects your agent automatically and installs to the correct
+skills directory:
+
+```text
+$ thrum init --skills
+Detected: Claude Code (found .claude/settings.json)
+Skill installed to .claude/skills/thrum/
+  SKILL.md
+  references/CLI_REFERENCE.md
+  references/LISTENER_PATTERN.md
+  references/MESSAGING.md
+```
+
+Supported agents: Claude Code, Cursor, Codex, Gemini, Augment, Amp. If the thrum
+Claude plugin is already installed, `--skills` skips the install (use `--force`
+to override). If no agent-specific directory is found, falls back to
+`.agents/skills/thrum/` (the cross-agent standard path).
 
 ### thrum config show
 
@@ -1353,17 +1379,22 @@ thrum wait [flags]
 
 Exit codes: `0` = message received, `1` = timeout, `2` = error.
 
-Example:
+**Output:** `thrum wait` does not print message content. On success it prints an
+action directive telling the caller to check inbox; on timeout it prints a
+timeout notice to stderr.
 
 ```text
-# Include messages sent up to 30s ago (--after -30s = "30 seconds ago")
+# Plain text output (default)
+$ thrum wait --after -30s --timeout=5m
+ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them.
+
+# JSON output
 $ thrum wait --after -30s --timeout=5m --json
-✓ Message received: msg_01HXE8Z7 from @planner
-  We should refactor the sync daemon before adding embeddings.
+{"status": "received", "action": "ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them."}
 
 # Use in scripts (only new messages — no --after means "now")
 if thrum wait --timeout=30s; then
-  echo "New message received"
+  thrum inbox --unread   # read the messages
 else
   echo "Timeout"
 fi
@@ -1743,6 +1774,10 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
 }
 ```
 
+---
+
+_The section below covers storage internals. You don't need it for normal use._
+
 ### Storage Layout
 
 Messages and events are stored on the `a-sync` Git branch in a worktree at
@@ -1759,3 +1794,11 @@ Messages and events are stored on the `a-sync` Git branch in a worktree at
 | `.thrum/var/ws.port`                            | WebSocket port file                                  |
 | `.thrum/var/thrum.lock`                         | flock() lock file for SIGKILL resilience             |
 | `.thrum/redirect`                               | Redirect pointer for feature worktrees               |
+
+## Next Steps
+
+- [Messaging](messaging.md) — how send, inbox, reply, and groups work together
+- [RPC API Reference](rpc-api.md) — the underlying JSON-RPC methods the CLI
+  wraps
+- [Quickstart Guide](quickstart.md) — get up and running in 5 minutes
+- [Overview](overview.md) — which 8 commands you actually need day-to-day

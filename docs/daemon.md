@@ -1,6 +1,10 @@
-
 ## Thrum Daemon Architecture
 
+> **TL;DR:** The daemon is the one process everything talks to. Start it with
+> `thrum init` (auto-starts) or `thrum daemon start`. It handles messaging,
+> sync, the web UI, and real-time notifications — all on one port. You rarely
+> interact with it directly.
+>
 > **See also:** [System Overview](overview.md) for how the daemon fits into the
 > larger Thrum ecosystem.
 
@@ -659,8 +663,13 @@ rm .thrum/var/thrum.pid
 | Local-Only Mode | Disable remote sync for public repos                        | Complete |
 | Backup/Restore  | JSONL export, SQLite snapshot, GFS rotation, plugin hooks   | Complete |
 
-## References
+## Next Steps
 
-- Design document: `dev-docs/2026-02-03-thrum-design.md`
-- RPC API reference: `docs/rpc-api.md`
-- Development guide: `docs/development.md`
+- [Architecture](architecture.md) — the full system architecture showing how
+  daemon, CLI, MCP server, and Web UI fit together
+- [RPC API Reference](rpc-api.md) — every RPC method the daemon exposes over
+  Unix socket and WebSocket
+- [Sync Protocol](sync.md) — how the daemon's sync loop fetches, merges, and
+  pushes the `a-sync` branch
+- [Development Guide](development.md) — how to add new RPC handlers and run the
+  daemon test suite

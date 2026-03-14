@@ -1,4 +1,3 @@
-
 ## Claude Code Agent Integration
 
 Thrum ships two Claude Code agent definitions for multi-agent coordination.
@@ -23,20 +22,22 @@ agents via Thrum messaging.
 <summary>thrum-agent.md</summary>
 
 ```markdown
+---
 name: thrum-agent
 description: >
-  Thrum multi-agent coordination guide. Git-backed messaging for AI agents to
+  Thrum multi-agent coordination guide. Persistent messaging for AI agents to
   communicate across sessions, worktrees, and machines. Covers MCP server
   integration, message-listener pattern, CLI usage, and Beads integration.
+---
 
 # Thrum - Multi-Agent Coordination via Git
 
 ## Overview
 
-Thrum is a Git-backed messaging system that enables AI agents and humans to
-communicate persistently across sessions, worktrees, and machines. It uses Git
-as the synchronization layer, ensuring all messages survive context window
-limits, session restarts, and machine boundaries.
+Thrum is a messaging system that enables AI agents and humans to communicate
+persistently across sessions, worktrees, and machines. It uses Git as the
+synchronization layer, ensuring all messages survive context window limits,
+session restarts, and machine boundaries.
 
 ## Quick Start
 
@@ -91,7 +92,8 @@ Reply (creates a reply-to reference)
 # Start
 
 thrum quickstart --name <name> --role <role> --module <module> --intent "<desc>"
-thrum inbox --unread thrum sent --unread
+thrum inbox --unread thrum sent --unread thrum message read --all # Mark all
+messages as read after reviewing
 
 # During work
 
@@ -118,6 +120,7 @@ when it returns.
 <summary>message-listener.md</summary>
 
 ```markdown
+---
 name: message-listener
 description: >
   Background listener for incoming Thrum messages. Runs on Haiku for cost
@@ -126,6 +129,7 @@ description: >
 model: haiku
 allowed-tools:
   - Bash
+---
 
 You are a background message listener for the Thrum agent messaging system.
 
@@ -159,6 +163,7 @@ When messages received:
 
 FROM: [sender] CONTENT: [message content]
 
+---
 
 When timeout:
 
@@ -187,3 +192,12 @@ cp docs/claude-agent-integration.md .  # For reference
 
 Or see the full agent definitions in the
 [documentation site](https://leonletto.github.io/thrum).
+
+## Next Steps
+
+- [Claude Code Plugin](claude-code-plugin.md) — slash commands, hooks, and
+  resource docs for Claude Code
+- [MCP Server](mcp-server.md) — optional native tool integration for MCP-capable
+  environments
+- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and
+  coordination patterns

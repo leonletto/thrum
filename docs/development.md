@@ -1,4 +1,3 @@
-
 ## Thrum Development Guide
 
 This guide explains how to set up and work with the Thrum codebase.
@@ -866,6 +865,17 @@ Or build the UI first: `make build-ui`
 | [oklog/ulid](https://github.com/oklog/ulid)                    | ULID generation for event IDs |
 | [gorilla/websocket](https://github.com/gorilla/websocket)      | WebSocket server              |
 | [go-sdk (MCP)](https://github.com/modelcontextprotocol/go-sdk) | MCP server SDK                |
+
+## Next Steps
+
+- [Architecture](architecture.md) — the full system design before diving into
+  specific packages
+- [Daemon Architecture](daemon.md) — the daemon's component layout for adding
+  new RPC handlers or sync features
+- [RPC API Reference](rpc-api.md) — all existing RPC methods as a reference
+  point when adding new ones
+- [Security & CI/CD](security-cicd.md) — CI workflows, branch protection, and
+  how documentation is deployed
 
 ## Resources
 

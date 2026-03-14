@@ -281,8 +281,8 @@ See [Identity System](identity.md) for details.
 
 - [MCP Server](mcp-server.md) — the MCP server the plugin configures, including
   the full 11-tool reference
-- [Codex Plugin](codex-plugin.md) — the equivalent skill bundle for Codex
-  users instead of Claude Code
+- [Codex Plugin](codex-plugin.md) — the equivalent skill bundle for Codex users
+  instead of Claude Code
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
   using the slash commands and hooks this plugin provides
 - [Identity System](identity.md) — agent naming, `THRUM_NAME`, and multi-agent

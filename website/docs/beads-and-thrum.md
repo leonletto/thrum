@@ -236,8 +236,8 @@ sub-agents most commonly get wrong.
 
 ## Next Steps
 
-- [Quickstart Guide](quickstart.md) — get Thrum initialized and your first
-  agent registered in 5 minutes
+- [Quickstart Guide](quickstart.md) — get Thrum initialized and your first agent
+  registered in 5 minutes
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
   showing how Beads and Thrum work together in practice
 - [Workflow Templates](workflow-templates.md) — pre-built skill pipelines for

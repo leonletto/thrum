@@ -11,7 +11,10 @@ last_updated: "2026-02-12"
 
 ## Agent Context Management
 
-> **TL;DR:** Context lets agents save notes that survive session restarts and compaction. Save with `thrum context save`, view with `thrum context show`. Files live in `.thrum/context/{agent}.md` — plain Markdown you can read and edit directly.
+> **TL;DR:** Context lets agents save notes that survive session restarts and
+> compaction. Save with `thrum context save`, view with `thrum context show`.
+> Files live in `.thrum/context/{agent}.md` — plain Markdown you can read and
+> edit directly.
 
 ## Overview
 
@@ -92,14 +95,13 @@ directly or replace it with `thrum context preamble --file custom.md`.
 ```markdown
 ## Thrum Quick Reference
 
-**Check messages:** `thrum inbox --unread` (does not mark as read)
-**Mark all read:** `thrum message read --all`
-**Check sent items:**
-`thrum sent --unread` **Send message:** `thrum send "message" --to @role`
-**Reply:** `thrum reply <MSG_ID> "response"` **Status:** `thrum status` **Who's
-online:** `thrum agent list --context` **Save context:** `thrum context save`
-**Wait for messages:** `thrum wait --after -30s --timeout 5m` (`--after -30s` =
-include messages sent up to 30s ago)
+**Check messages:** `thrum inbox --unread` (does not mark as read) **Mark all
+read:** `thrum message read --all` **Check sent items:** `thrum sent --unread`
+**Send message:** `thrum send "message" --to @role` **Reply:**
+`thrum reply <MSG_ID> "response"` **Status:** `thrum status` **Who's online:**
+`thrum agent list --context` **Save context:** `thrum context save` **Wait for
+messages:** `thrum wait --after -30s --timeout 5m` (`--after -30s` = include
+messages sent up to 30s ago)
 ```
 
 **Customization examples:**
