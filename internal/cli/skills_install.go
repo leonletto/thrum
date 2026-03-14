@@ -123,7 +123,7 @@ func FormatSkillsInstall(result *SkillsInstallResult) string {
 	var out strings.Builder
 
 	if result.DryRun {
-		fmt.Fprintf(&out, "Dry run — would install thrum skill for %s:\n", result.Agent)
+		fmt.Fprintf(&out, "Dry run — would install thrum skill to %s/\n", result.InstallPath)
 	} else {
 		fmt.Fprintf(&out, "Skill installed to %s/\n", result.InstallPath)
 	}
