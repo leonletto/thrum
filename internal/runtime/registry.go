@@ -33,7 +33,7 @@ var builtinAgents = []AgentDefinition{
 	{
 		Name:        "cursor",
 		DisplayName: "Cursor Agent",
-		RepoMarkers: []string{".cursor/rules/", ".cursor/"},
+		RepoMarkers: []string{".cursor/rules/", ".cursor/", ".cursorrules"},
 		EnvVars:     []string{"CURSOR_SESSION"},
 		Binaries: []BinaryCheck{
 			{Name: "cursor-agent", VerifyArgs: []string{"--version"}, MatchAny: []string{"cursor"}},
