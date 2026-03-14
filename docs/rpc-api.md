@@ -1,7 +1,9 @@
-
 ## Thrum Daemon RPC API
 
-> **TL;DR:** 26 RPC methods over JSON-RPC 2.0, available on a Unix socket or WebSocket. Most users never need this — the CLI wraps all of it. This reference is for building custom integrations or understanding what's happening under the hood.
+> **TL;DR:** 26 RPC methods over JSON-RPC 2.0, available on a Unix socket or
+> WebSocket. Most users never need this — the CLI wraps all of it. This
+> reference is for building custom integrations or understanding what's
+> happening under the hood.
 
 ## Overview
 
@@ -1228,8 +1230,8 @@ Common causes:
   these RPC handlers
 - [Inbox Query Methods](inbox-query-methods.md) — deeper coverage of
   `message.list` filtering, pagination, and read-state tracking
-- [Event Streaming](event-streaming.md) — push notifications via the
-  `subscribe` method and Broadcaster
+- [Event Streaming](event-streaming.md) — push notifications via the `subscribe`
+  method and Broadcaster
 
 ## References
 

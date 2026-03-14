@@ -1,8 +1,8 @@
 # Listener Pattern: Background Message Monitoring
 
 The message-listener is a background sub-agent that blocks on `thrum wait` and
-returns when messages arrive. It updates a heartbeat in the agent's identity file
-so the Stop hook can detect if the listener dies and prompt a restart.
+returns when messages arrive. It updates a heartbeat in the agent's identity
+file so the Stop hook can detect if the listener dies and prompt a restart.
 
 ## Quick Start
 
@@ -21,8 +21,9 @@ Replace `/path/to/repo` with the actual repo path. When using the Thrum plugin,
 ## How It Works
 
 1. **Spawn** — Launch as background Task with `run_in_background: true`
-2. **Heartbeat** — Listener calls `scripts/thrum-startup.sh --listener-heartbeat`
-   to update its heartbeat in the identity file
+2. **Heartbeat** — Listener calls
+   `scripts/thrum-startup.sh --listener-heartbeat` to update its heartbeat in
+   the identity file
 3. **Block** — Listener runs `thrum wait --timeout 8m` which blocks until
    message or timeout (stays under Bash 600s limit)
 4. **Return or loop** — If message received, output JSON and stop. If timeout,
@@ -49,11 +50,11 @@ different session, the hook tells Claude to restart the listener.
 
 ## Wait Command Flags
 
-| Flag            | Purpose                                                                        |
-| --------------- | ------------------------------------------------------------------------------ |
-| `--timeout 8m`  | Block up to 8 min per cycle (under Bash 600s limit)                            |
-| `--after -15s`  | Include messages sent up to 15s ago (covers re-arm gap between listener cycles) |
-| `--json`        | Machine-readable output (not used by listener)                                 |
+| Flag           | Purpose                                                                         |
+| -------------- | ------------------------------------------------------------------------------- |
+| `--timeout 8m` | Block up to 8 min per cycle (under Bash 600s limit)                             |
+| `--after -15s` | Include messages sent up to 15s ago (covers re-arm gap between listener cycles) |
+| `--json`       | Machine-readable output (not used by listener)                                  |
 
 ## Key Rules
 

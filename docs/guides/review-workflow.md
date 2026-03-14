@@ -1,4 +1,3 @@
-
 ## Code Review Workflow
 
 One agent writes the code. Another reviews it. Thrum handles the messages
@@ -60,8 +59,8 @@ Find the reviewer's name from `thrum team`, then send:
 thrum send "Auth module complete — JWT middleware and token refresh. All tests passing. Branch: feature/auth" --to @rev_main_1
 ```
 
-Use the actual agent name, not `@reviewer`. Sending to a role fans out to
-every agent with that role — not what you want here.
+Use the actual agent name, not `@reviewer`. Sending to a role fans out to every
+agent with that role — not what you want here.
 
 ### Reviewer Gets Notified
 
@@ -137,9 +136,9 @@ See [Beads and Thrum](../beads-and-thrum.md) for how the two tools fit together.
 
 ### Next Steps
 
-- [Agent Coordination](../agent-coordination.md) — patterns for larger teams
-  and session templates
-- [Workflow Templates](../workflow-templates.md) — pre-built skill pipelines
-  for the full research → plan → implement → review cycle
+- [Agent Coordination](../agent-coordination.md) — patterns for larger teams and
+  session templates
+- [Workflow Templates](../workflow-templates.md) — pre-built skill pipelines for
+  the full research → plan → implement → review cycle
 - [Coordinate Two Agents](coordinate-two-agents.md) — simpler walkthrough for
   the basic send/receive pattern

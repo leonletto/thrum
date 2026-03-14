@@ -212,12 +212,12 @@ Thrum uses 3-tier detection to identify which AI platform is running:
 
 **Tier 3 — Binary verification** (falls back to PATH scan):
 
-| Binary    | Verification                     | Detected Runtime |
-| --------- | -------------------------------- | ---------------- |
-| `claude`  | `claude --version` matches output | `claude`         |
-| `codex`   | `codex --version` matches output  | `codex`          |
-| `cursor`  | Binary exists on PATH             | `cursor`         |
-| `gemini`  | Binary exists on PATH             | `gemini`         |
+| Binary   | Verification                      | Detected Runtime |
+| -------- | --------------------------------- | ---------------- |
+| `claude` | `claude --version` matches output | `claude`         |
+| `codex`  | `codex --version` matches output  | `codex`          |
+| `cursor` | Binary exists on PATH             | `cursor`         |
+| `gemini` | Binary exists on PATH             | `gemini`         |
 
 Tiers are checked in order. If no runtime is detected at any tier, Thrum falls
 back to CLI-only mode (no MCP configuration generated).
@@ -289,8 +289,8 @@ thrum context prime        # Human-readable summary
 thrum context prime --json # Structured JSON for LLM consumption
 ```
 
-See [Context Management](context.md) for full documentation including
-output format, graceful degradation behavior, and use cases.
+See [Context Management](context.md) for full documentation including output
+format, graceful degradation behavior, and use cases.
 
 ---
 
@@ -585,7 +585,11 @@ thrum send "Auth complete, 15 tests passing" --to @coord_main
 
 ## Next Steps
 
-- [Agent Coordination](agent-coordination.md) — workflow patterns and Beads integration for multi-agent teams
-- [Identity System](identity.md) — agent naming, registration, and per-worktree identity files
-- [Messaging](messaging.md) — full send/receive/reply reference including scopes, mentions, and groups
-- [Coordinate Two Agents](guides/coordinate-two-agents.md) — step-by-step walkthrough of the most common setup
+- [Agent Coordination](agent-coordination.md) — workflow patterns and Beads
+  integration for multi-agent teams
+- [Identity System](identity.md) — agent naming, registration, and per-worktree
+  identity files
+- [Messaging](messaging.md) — full send/receive/reply reference including
+  scopes, mentions, and groups
+- [Coordinate Two Agents](guides/coordinate-two-agents.md) — step-by-step
+  walkthrough of the most common setup

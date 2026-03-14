@@ -694,5 +694,5 @@ ws.on("message", (data: string) => {
   real-time agent connections
 - [Event Reference](./events.md) — all event types emitted over WebSocket,
   including agent lifecycle and message events
-- [RPC API Reference](../rpc-api.md) — complete reference for all 26 RPC
-  methods available over Unix socket and WebSocket
+- [RPC API Reference](../rpc-api.md) — complete reference for all 26 RPC methods
+  available over Unix socket and WebSocket

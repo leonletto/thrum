@@ -21,10 +21,10 @@ Use the setup script to create worktrees with all required configuration:
 
 ### Critical: `.claude/settings.json`
 
-This file is **gitignored** — each worktree needs its own copy. It registers
-the `SessionStart` hook that runs `scripts/thrum-startup.sh` (agent
-registration, daemon check, env vars). Without it, Claude Code sessions in the
-worktree won't auto-register with Thrum.
+This file is **gitignored** — each worktree needs its own copy. It registers the
+`SessionStart` hook that runs `scripts/thrum-startup.sh` (agent registration,
+daemon check, env vars). Without it, Claude Code sessions in the worktree won't
+auto-register with Thrum.
 
 The setup script copies it automatically from the main repo. If a worktree is
 missing it, either re-run the setup script or copy manually:

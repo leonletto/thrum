@@ -1,4 +1,3 @@
-
 ## Inbox Query RPC Methods
 
 ## Overview
@@ -336,9 +335,9 @@ All methods have comprehensive test coverage in:
 
 - [RPC API Reference](rpc-api.md) — complete reference for all 26 RPC methods
   including the full `message.list` parameter schema
-- [Messaging](messaging.md) — the CLI commands that wrap these RPC methods,
-  with examples for filtering and pagination
+- [Messaging](messaging.md) — the CLI commands that wrap these RPC methods, with
+  examples for filtering and pagination
 - [Daemon Architecture](daemon.md) — how the daemon routes RPC requests from
   CLI, Web UI, and MCP server
-- [WebSocket API](api/websocket.md) — connect directly to use these methods
-  from browser or custom client code
+- [WebSocket API](api/websocket.md) — connect directly to use these methods from
+  browser or custom client code

@@ -40,8 +40,8 @@ Thrum is a single binary: CLI, daemon, web UI, and optional MCP server.
 - **Offline-first.** Everything works locally. Git push/pull syncs when ready.
 - **Zero-conflict.** Messages live on a dedicated orphan branch — no merge
   conflicts with your code.
-- **Inspectable.** Messages are JSONL files. State is a SQLite database. Sync
-  is plain Git. If something goes wrong, you look at files.
+- **Inspectable.** Messages are JSONL files. State is a SQLite database. Sync is
+  plain Git. If something goes wrong, you look at files.
 
 ## What You Can Do
 
@@ -83,21 +83,21 @@ make install    # Builds UI + Go binary → ~/.local/bin/thrum
 
 You only need about 8 commands for daily use:
 
-| Command                                    | What it does                        |
-| ------------------------------------------ | ----------------------------------- |
-| `thrum quickstart --name NAME --role ROLE` | Register agent and start session    |
-| `thrum send "message" --to @name`          | Send a message                      |
-| `thrum inbox`                              | Check your messages                 |
-| `thrum reply MSG_ID "response"`            | Reply to a message                  |
-| `thrum team`                               | See what everyone is working on     |
-| `thrum who-has FILE`                       | Check who's editing a file          |
-| `thrum overview`                           | Status, team, inbox in one view     |
-| `thrum status`                             | Your current state                  |
+| Command                                    | What it does                     |
+| ------------------------------------------ | -------------------------------- |
+| `thrum quickstart --name NAME --role ROLE` | Register agent and start session |
+| `thrum send "message" --to @name`          | Send a message                   |
+| `thrum inbox`                              | Check your messages              |
+| `thrum reply MSG_ID "response"`            | Reply to a message               |
+| `thrum team`                               | See what everyone is working on  |
+| `thrum who-has FILE`                       | Check who's editing a file       |
+| `thrum overview`                           | Status, team, inbox in one view  |
+| `thrum status`                             | Your current state               |
 
 Everything else — agent lifecycle, sessions, subscriptions, groups, context
 management — is infrastructure that agents use programmatically. See the
-[CLI Reference](https://leonletto.github.io/thrum/docs/cli.html) for the
-full list.
+[CLI Reference](https://leonletto.github.io/thrum/docs/cli.html) for the full
+list.
 
 ## Agent Setup
 
@@ -134,15 +134,16 @@ required — just call `thrum` from the command line.
 
 ## Documentation
 
-Full documentation: **[leonletto.github.io/thrum](https://leonletto.github.io/thrum)**
+Full documentation:
+**[leonletto.github.io/thrum](https://leonletto.github.io/thrum)**
 
 - [Overview](https://leonletto.github.io/thrum/docs/overview.html) |
   [Quickstart](https://leonletto.github.io/thrum/docs/quickstart.html) |
   [CLI Reference](https://leonletto.github.io/thrum/docs/cli.html) |
   [Architecture](https://leonletto.github.io/thrum/docs/architecture.html)
 - [Messaging](https://leonletto.github.io/thrum/docs/messaging.html) |
-  [Agent Coordination](https://leonletto.github.io/thrum/docs/agent-coordination.html) |
-  [Multi-Agent](https://leonletto.github.io/thrum/docs/multi-agent.html) |
+  [Agent Coordination](https://leonletto.github.io/thrum/docs/agent-coordination.html)
+  | [Multi-Agent](https://leonletto.github.io/thrum/docs/multi-agent.html) |
   [Sync](https://leonletto.github.io/thrum/docs/sync.html)
 
 ## License

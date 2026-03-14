@@ -129,9 +129,9 @@ Agents register with a human-readable name, role, and module:
 thrum agent register --name furiosa --role=implementer --module=auth
 ```
 
-Agent names follow the pattern `[a-z0-9_]+`. Reserved names: `daemon`,
-`system`, `thrum`, `all`, `broadcast`. Identity resolves in this order:
-`THRUM_NAME` env var > `--name` flag > solo-agent auto-select.
+Agent names follow the pattern `[a-z0-9_]+`. Reserved names: `daemon`, `system`,
+`thrum`, `all`, `broadcast`. Identity resolves in this order: `THRUM_NAME` env
+var > `--name` flag > solo-agent auto-select.
 
 Each agent gets an identity file at `.thrum/identities/{name}.json`. Multiple
 agents can coexist in a single worktree.
@@ -331,15 +331,15 @@ enabling LLM agents to communicate via native MCP tools. It provides 4 core
 messaging tools (`send_message`, `check_messages`, `wait_for_message`,
 `list_agents`) and 6 group management tools.
 
-See [MCP Server](mcp-server.md) for the complete tools reference,
-configuration, and setup instructions.
+See [MCP Server](mcp-server.md) for the complete tools reference, configuration,
+and setup instructions.
 
 ---
 
 ## Foundation Packages
 
-The sections below describe the internal packages that implement the architecture
-above.
+The sections below describe the internal packages that implement the
+architecture above.
 
 ### Package Structure
 
