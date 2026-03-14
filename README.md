@@ -1,6 +1,6 @@
 # Thrum
 
-**Git-backed agent coordination.**
+**Persistent messaging for AI agents.**
 
 [![License](https://img.shields.io/github/license/leonletto/thrum)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/leonletto/thrum?v=2)](https://goreportcard.com/report/github.com/leonletto/thrum)
@@ -8,87 +8,49 @@
 [![Release](https://img.shields.io/github/v/release/leonletto/thrum)](https://github.com/leonletto/thrum/releases)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/leonletto/thrum)](go.mod)
 
-> **Persistent messaging for AI agents.** Across sessions. Across worktrees.
-> Across machines.
-
-Messages are stored in append-only JSONL logs on a dedicated Git orphan branch,
-synced automatically — no branch switching, no merge conflicts, no external
-services required.
+Thrum gives AI agents a way to message each other across sessions, worktrees,
+and machines. You direct the work. The agents coordinate through Thrum. Messages
+persist through context compaction, session restarts, and machine changes —
+nothing gets lost.
 
 ## Quick Start
 
 ```bash
-# Install thrum
+# Install
 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
 
-# Initialize in your project
+# Initialize (starts the daemon automatically)
 cd your-project
 thrum init
-thrum daemon start
 
-# Register and start communicating
+# Register and send your first message
 thrum quickstart --name myagent --role planner --module auth
-thrum send "Starting work on auth module"
+thrum send "Starting work on auth module" --to @implementer
 thrum inbox
-thrum sent
 ```
-
-**Note:** Thrum is a CLI tool you install once and use across repositories. You
-don't need to clone this repo into your project.
 
 ## How It Works
 
-```text
-┌──────────────────────────────────────────────────────────┐
-│                        Thrum                             │
-├──────────────────────────────────────────────────────────┤
-│  CLI (thrum)       │  Daemon           │  Web UI (React) │
-│  - send/inbox      │  - Unix socket    │  - Embedded SPA  │
-│  - agent/session   │  - WebSocket      │  - Live feed     │
-│  - reply           │  - Git sync (60s) │  - Inbox view    │
-│  - coordination    │  - Heartbeat      │  - Agent list    │
-├──────────────────────────────────────────────────────────┤
-│  MCP Server (thrum mcp serve)                            │
-│  - stdio transport for native Claude/agent integration   │
-│  - Tools: send, check, wait, list, broadcast             │
-├──────────────────────────────────────────────────────────┤
-│  Storage                                                 │
-│  - Append-only JSONL (sharded per agent)                 │
-│  - SQLite projection for fast queries                    │
-│  - Git orphan branch (a-sync) for conflict-free sync     │
-│  - ULID event IDs (globally unique, time-sortable)       │
-└──────────────────────────────────────────────────────────┘
-```
+Thrum is a single binary: CLI, daemon, web UI, and optional MCP server.
 
-- **Offline-first.** Works without any network. Git push/pull syncs when ready.
+- **CLI-first.** Every agent that can run shell commands can use Thrum. No SDK,
+  no framework, no protocol to implement.
+- **Offline-first.** Everything works locally. Git push/pull syncs when ready.
 - **Zero-conflict.** Messages live on a dedicated orphan branch — no merge
   conflicts with your code.
-- **Single binary.** CLI, daemon, web UI, and MCP server all ship in one `thrum`
-  binary.
-- **Agent-native.** JSON output (`--json`), MCP server integration,
-  human-readable agent names.
+- **Inspectable.** Messages are JSONL files. State is a SQLite database. Sync
+  is plain Git. If something goes wrong, you look at files.
 
-## Features
+## What You Can Do
 
-- **Messaging** — Send, reply, @mentions
-- **Agent Groups** — Create groups for targeted messaging, built-in `@everyone`
-  group
-- **Agent Coordination** — Register agents, track sessions, set work context,
-  heartbeats
-- **File Coordination** — `thrum who-has <file>` to see which agents are editing
-  what
-- **Web UI** — Real-time dashboard with live feed, inbox, agent list (embedded
-  in binary)
-- **MCP Server** — `thrum mcp serve` for native integration with Claude Code and
-  other MCP clients
-- **Subscriptions** — Subscribe to events, wait for notifications
-- **Git Sync** — Automatic 60-second sync via the daemon, or manual `thrum sync`
-- **Multi-Worktree** — Each git worktree gets its own agent identity via
-  `.thrum/redirect`
-
-**v0.5.5 highlights:** `thrum sent` command with durable message deliveries and
-recipient read receipts, group-aware `thrum wait`, and delivery confirmation on
-send.
+- **Send and receive messages** — `thrum send`, `thrum inbox`, `thrum reply`
+- **See what everyone is working on** — `thrum team`, `thrum who-has`
+- **Coordinate agents across worktrees** — each worktree gets its own identity
+- **Create groups** — `@everyone`, `@reviewers`, or any custom group
+- **Subscribe to events** — get push notifications for scopes and mentions
+- **Monitor in real time** — embedded web UI with live feed, inbox, agent list
+- **Sync across machines** — automatic 60-second Git sync, or Tailscale for
+  real-time
 
 ## Installation
 
@@ -99,14 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/instal
 ```
 
 Downloads the prebuilt binary for your platform with SHA-256 checksum
-verification. Falls back to `go install` or building from source if no release
-is available.
-
-### Go Install
-
-```bash
-go install github.com/leonletto/thrum/cmd/thrum@latest
-```
+verification.
 
 ### Homebrew
 
@@ -122,75 +77,62 @@ cd thrum
 make install    # Builds UI + Go binary → ~/.local/bin/thrum
 ```
 
-## Essential Commands
+## Daily Commands
 
-| Command                                    | Description                                 |
-| ------------------------------------------ | ------------------------------------------- |
-| `thrum init`                               | Initialize Thrum in a repository            |
-| `thrum daemon start`                       | Start the background daemon                 |
-| `thrum quickstart --name NAME --role ROLE` | Register agent and start session            |
-| `thrum send "message" --to @name`          | Send a message to an agent                  |
-| `thrum inbox`                              | View messages (read/unread indicators)      |
-| `thrum sent`                               | Review messages you sent and their receipts |
-| `thrum reply MSG_ID "response"`            | Reply to a message                          |
-| `thrum who-has FILE`                       | Check which agents are editing a file       |
-| `thrum overview`                           | Combined status, team, inbox, and sync view |
-| `thrum mcp serve`                          | Start MCP server for AI agent integration   |
-| `thrum setup claude-md`                    | Preview CLAUDE.md agent instructions        |
-| `thrum setup claude-md --apply`            | Append Thrum section to CLAUDE.md           |
-| `thrum setup claude-md --apply --force`    | Overwrite existing Thrum section            |
+You only need about 8 commands for daily use:
 
-## MCP Server Integration
+| Command                                    | What it does                        |
+| ------------------------------------------ | ----------------------------------- |
+| `thrum quickstart --name NAME --role ROLE` | Register agent and start session    |
+| `thrum send "message" --to @name`          | Send a message                      |
+| `thrum inbox`                              | Check your messages                 |
+| `thrum reply MSG_ID "response"`            | Reply to a message                  |
+| `thrum team`                               | See what everyone is working on     |
+| `thrum who-has FILE`                       | Check who's editing a file          |
+| `thrum overview`                           | Status, team, inbox in one view     |
+| `thrum status`                             | Your current state                  |
 
-Thrum includes an MCP server for native integration with Claude Code and other
-MCP-compatible tools:
+Everything else — agent lifecycle, sessions, subscriptions, groups, context
+management — is infrastructure that agents use programmatically. See the
+[CLI Reference](https://leonletto.github.io/thrum/docs/cli.html) for the
+full list.
 
-```json
-{
-  "mcpServers": {
-    "thrum": {
-      "type": "stdio",
-      "command": "thrum",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
-```
+## Agent Setup
 
-This gives agents direct access to 11 MCP tools: 5 core messaging tools
-(`send_message`, `check_messages`, `wait_for_message`, `list_agents`,
-`broadcast_message`) and 6 group management tools (`create_group`,
-`delete_group`, `add_group_member`, `remove_group_member`, `list_groups`,
-`get_group`).
-
-## Agent Naming
-
-Agents support human-readable names for easy coordination:
+### Claude Code Plugin
 
 ```bash
-thrum quickstart --name furiosa --role implementer --module auth
-thrum send "Need review on auth changes" --to @furiosa
-thrum ping furiosa    # Check if agent is online
+claude plugin marketplace add https://github.com/leonletto/thrum
+claude plugin install thrum
 ```
 
-Names are lowercase alphanumeric with underscores (`[a-z0-9_]+`). Each agent
-gets a persistent identity in `.thrum/identities/{name}.json`.
+The plugin provides slash commands, automatic context injection, and a startup
+script that handles agent registration. See
+[Claude Code Plugin](https://leonletto.github.io/thrum/docs/claude-code-plugin.html).
+
+### CLAUDE.md Integration
+
+```bash
+thrum setup claude-md --apply    # Append coordination instructions to CLAUDE.md
+```
+
+### Any Other Agent
+
+Any agent that can run shell commands works with Thrum. No plugin required —
+just call `thrum` from the command line.
 
 ## Documentation
 
-Full documentation is available at
-**[leonletto.github.io/thrum](https://leonletto.github.io/thrum)**.
+Full documentation: **[leonletto.github.io/thrum](https://leonletto.github.io/thrum)**
 
-- [Overview](https://leonletto.github.io/thrum/docs/overview) |
-  [Quick Start](https://leonletto.github.io/thrum/docs/quickstart) |
-  [CLI Reference](https://leonletto.github.io/thrum/docs/cli) |
-  [Architecture](https://leonletto.github.io/thrum/docs/architecture)
-- [Messaging](https://leonletto.github.io/thrum/docs/messaging) |
-  [Agent Coordination](https://leonletto.github.io/thrum/docs/agent-coordination)
-  | [MCP Server](https://leonletto.github.io/thrum/docs/mcp-server) |
-  [Sync](https://leonletto.github.io/thrum/docs/sync)
-- [Claude Code Agent Integration](docs/claude-agent-integration.md) — Agent
-  definitions for multi-agent coordination
+- [Overview](https://leonletto.github.io/thrum/docs/overview.html) |
+  [Quickstart](https://leonletto.github.io/thrum/docs/quickstart.html) |
+  [CLI Reference](https://leonletto.github.io/thrum/docs/cli.html) |
+  [Architecture](https://leonletto.github.io/thrum/docs/architecture.html)
+- [Messaging](https://leonletto.github.io/thrum/docs/messaging.html) |
+  [Agent Coordination](https://leonletto.github.io/thrum/docs/agent-coordination.html) |
+  [Multi-Agent](https://leonletto.github.io/thrum/docs/multi-agent.html) |
+  [Sync](https://leonletto.github.io/thrum/docs/sync.html)
 
 ## License
 
