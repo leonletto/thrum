@@ -101,27 +101,36 @@ full list.
 
 ## Agent Setup
 
-### Claude Code Plugin
+### Install the Thrum Skill (All Agents)
+
+```bash
+thrum init --skills
+```
+
+Auto-detects your agent (Claude Code, Cursor, Codex, Gemini, Augment, Amp) and
+installs the thrum skill to the right location. If multiple agents are detected,
+you'll be prompted to choose. Works with any agent that supports the `SKILL.md`
+format.
+
+### Claude Code Plugin (Full Integration)
+
+For Claude Code users who want the complete experience — slash commands,
+automatic context injection, hooks, and startup scripts:
 
 ```bash
 claude plugin marketplace add https://github.com/leonletto/thrum
 claude plugin install thrum
 ```
 
-The plugin provides slash commands, automatic context injection, and a startup
-script that handles agent registration. See
+See
 [Claude Code Plugin](https://leonletto.github.io/thrum/docs/claude-code-plugin.html).
+If the plugin is already installed, `thrum init --skills` will detect it and
+skip the install.
 
-### CLAUDE.md Integration
+### Any Agent via CLI
 
-```bash
-thrum setup claude-md --apply    # Append coordination instructions to CLAUDE.md
-```
-
-### Any Other Agent
-
-Any agent that can run shell commands works with Thrum. No plugin required —
-just call `thrum` from the command line.
+Any agent that can run shell commands works with Thrum. No plugin or skill
+required — just call `thrum` from the command line.
 
 ## Documentation
 

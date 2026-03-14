@@ -1,45 +1,7 @@
 
 ## Thrum Quickstart Guide
 
-Get up and running with Thrum in 5 minutes.
-
-## What is Thrum?
-
-Thrum is a Git-backed messaging system that helps you coordinate AI agents
-across sessions, worktrees, and machines using Git as the sync layer.
-
-> **New here?** Read [Why Thrum Exists](philosophy.md) to understand the
-> philosophy: you direct the work, everything is inspectable, and you stay in
-> control.
->
-> **Using Claude Code?** Install the [Thrum plugin](claude-code-plugin.md) for
-> slash commands, automatic context injection, and zero-config agent setup.
->
-> **Using Codex?** Install the [Codex Plugin](codex-plugin.md) skill bundle for
-> split Thrum workflows (`thrum-core`, `thrum-ops`, `thrum-role-config`, and
-> `project-setup`).
-
-## Fast Path
-
-If you want to skip the manual setup, use the quickstart command:
-
-```bash
-thrum quickstart --name myagent --role implementer --module auth
-thrum quickstart --name planner1 --role planner --module api --intent "Designing REST endpoints"
-```
-
-This registers your agent with a human-readable name (re-registering
-automatically on conflict), starts a session, and optionally sets your work
-intent in one step. The sections below walk through each step individually.
-
-Quickstart also auto-creates an empty context file for session state
-persistence. See [Agent Context Management](context.md) for details.
-
-## Prerequisites
-
-- Git repository
-- Go 1.26 or later (for building)
-- Unix-like system (macOS, Linux)
+Install Thrum, register an agent, send your first message. Five minutes.
 
 ## Installation
 
@@ -59,16 +21,6 @@ curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/instal
 brew install leonletto/tap/thrum
 ```
 
-### Go Install
-
-```bash
-go install github.com/leonletto/thrum/cmd/thrum@latest
-```
-
-Note: `go install` builds the Go binary only — the embedded Web UI SPA is not
-included. The daemon will still work, but the web interface at
-`http://localhost:9999` will not be available.
-
 ### From Source
 
 ```bash
@@ -77,7 +29,23 @@ cd thrum
 make install  # Builds UI + Go binary, installs to ~/.local/bin
 ```
 
-## Quick Start
+## Fast Path
+
+One command to init, register, start a session, and set your intent:
+
+```bash
+cd your-project
+thrum init
+thrum quickstart --name myagent --role implementer --module auth --intent "Working on auth"
+```
+
+That's it. You're registered and ready to send messages. The sections below walk
+through each step individually if you want to understand what's happening.
+
+Quickstart also auto-creates an empty context file for session state
+persistence. See [Agent Context Management](context.md) for details.
+
+## Step-by-Step Walkthrough
 
 ### 1. Initialize Repository
 
@@ -103,30 +71,39 @@ need a separate `thrum daemon start` step for first-time setup.
 If you are upgrading an existing repo that has JSONL files tracked on `main`,
 run `thrum migrate` instead.
 
-### 2. Install the Plugin (Claude Code or Codex)
+### 2. Install the Thrum Skill
 
-If you use Claude Code or Codex, install the plugin right after initialization
-so agents get automatic context injection and slash commands.
+Install the thrum skill so your agent knows how to use thrum for coordination.
+This works with Claude Code, Cursor, Codex, Gemini, Augment, and Amp:
 
-**Claude Code:**
+```bash
+thrum init --skills
+```
+
+Thrum auto-detects which agent you're using and installs the skill to the right
+location (e.g., `.claude/skills/thrum/` for Claude Code, `.cursor/skills/thrum/`
+for Cursor). If no agent-specific directory exists, it installs to
+`.agents/skills/thrum/` which all agents check.
+
+You can also target a specific agent:
+
+```bash
+thrum init --skills --runtime cursor    # Install for Cursor specifically
+thrum init --skills --runtime codex     # Install for Codex specifically
+```
+
+**Claude Code full plugin (optional):** If you want the complete experience with
+slash commands, automatic context injection, hooks, and startup scripts, install
+the Claude Code plugin instead:
 
 ```bash
 claude plugin marketplace add https://github.com/leonletto/thrum
 claude plugin install thrum
 ```
 
-See [Claude Code Plugin](claude-code-plugin.md) for details on what the plugin
-provides (slash commands, hooks, resource docs).
-
-**Codex:**
-
-```bash
-git clone https://github.com/leonletto/thrum.git
-cd thrum
-./codex-plugin/scripts/install-skills.sh
-```
-
-See [Codex Plugin](codex-plugin.md) for the full skill bundle reference.
+The plugin already includes the skill — `thrum init --skills` will detect the
+plugin and skip the install. See [Claude Code Plugin](claude-code-plugin.md) for
+details.
 
 ### 3. Generate CLAUDE.md Coordination Instructions
 
@@ -159,18 +136,7 @@ thrum session start
 Agent names must be lowercase alphanumeric with underscores (`[a-z0-9_]+`).
 Reserved names: `daemon`, `system`, `thrum`, `all`, `broadcast`.
 
-You can also set identity via environment variables:
-
-```bash
-export THRUM_NAME=myagent     # Agent name (highest priority)
-export THRUM_ROLE=implementer
-export THRUM_MODULE=auth
-thrum agent register
-```
-
-Priority: `THRUM_NAME` env var > `--name` flag > solo-agent auto-select.
-
-### 6. Send Your First Message
+### 5. Send Your First Message
 
 ```bash
 thrum send "Started working on user authentication" \
@@ -178,11 +144,12 @@ thrum send "Started working on user authentication" \
   --ref issue:beads-123
 ```
 
-### 7. Check Your Inbox
+### 6. Check Your Inbox
 
 ```bash
 thrum inbox
 thrum sent
+thrum message read --all     # Mark all messages as read
 ```
 
 View messages from other agents and humans working on the project, and inspect
@@ -271,7 +238,7 @@ thrum mcp serve
 thrum mcp serve --agent-id myagent  # Override agent identity
 ```
 
-See [MCP Server](/docs/mcp-server.html) for configuration and the complete tools
+See [MCP Server](mcp-server.md) for configuration and the complete tools
 reference (11 tools: 5 core messaging + 6 group management).
 
 ## Typical Workflow
@@ -284,10 +251,13 @@ reference (11 tools: 5 core messaging + 6 group management).
 thrum quickstart --name myagent --role implementer --module auth --intent "Working on auth"
 
 # 2. Check inbox for updates
-thrum inbox --unread
+thrum inbox --unread         # does not mark messages as read
 
 # 2b. Check sent items for delivery/read state
 thrum sent --unread
+
+# 2c. Mark all messages as read when done reviewing
+thrum message read --all
 
 # 3. Subscribe to your module
 thrum subscribe --scope module:auth
@@ -323,7 +293,8 @@ thrum status
 > cross-machine sync, set `local_only: false` in `.thrum/config.json` or run
 > `THRUM_LOCAL=false thrum daemon start`.
 
-Thrum uses Git for synchronization:
+Thrum uses Git for synchronization. No cloud service, no opaque API — just
+push and pull on the `a-sync` branch.
 
 ### On Machine A
 
@@ -360,9 +331,8 @@ Feature worktrees share the main worktree's daemon and message store via a
 redirect file. Use `thrum setup` to configure a feature worktree:
 
 ```bash
-# Main worktree (already initialized)
+# Main worktree (already initialized — daemon running from thrum init)
 cd ~/project
-thrum daemon start
 
 # Feature worktree -- set up redirect to main
 cd ~/project-features/auth
@@ -415,92 +385,6 @@ Each script creates a redirect file pointing to the main repository:
 This ensures all worktrees share the same daemon, message store, and issue
 tracker. The scripts are idempotent — run them as many times as you need.
 
-## Automation with Hooks
-
-### Git Post-Commit Hook
-
-```bash
-#!/bin/bash
-# .git/hooks/post-commit
-
-thrum send "Committed: $(git log -1 --pretty=%B)" \
-  --scope repo:$(basename $(git rev-parse --show-toplevel)) \
-  --ref commit:$(git rev-parse SHORT HEAD)
-```
-
-### Wait for Notifications
-
-```bash
-#!/bin/bash
-# Wait for CI results
-
-thrum subscribe --mention @ci
-
-if thrum wait --mention @ci --timeout=5m; then
-  echo "CI feedback received"
-  thrum inbox --mentions --unread
-  thrum sent --to @ci
-else
-  echo "Timeout - no CI feedback"
-fi
-```
-
-## Multi-Agent Collaboration
-
-### Agent Roles
-
-Different agents can have different names and roles. Multiple agents can coexist
-in the same worktree:
-
-```bash
-# Implementer agent
-thrum quickstart --name furiosa --role implementer --module auth
-
-# Reviewer agent (in another terminal/session)
-THRUM_NAME=maximus thrum quickstart --name maximus --role reviewer --module auth
-```
-
-### Communication Pattern
-
-```bash
-# Implementer: Request review
-thrum send "Auth module ready for review" \
-  --scope module:auth \
-  --mention @reviewer
-
-# Reviewer: Subscribe and wait
-thrum subscribe --mention @reviewer
-thrum wait --mention @reviewer
-
-# Reviewer: Provide feedback
-thrum send "LGTM - looks good to merge" \
-  --scope module:auth \
-  --mention @implementer
-```
-
-## Configuration
-
-### Identity Files
-
-Agent identities are stored in `.thrum/identities/{name}.json` (one JSON file
-per agent, created automatically by `thrum agent register` or
-`thrum quickstart`). Multiple agents can coexist in a single worktree, each with
-their own identity file.
-
-### Environment Variables
-
-Add to your shell profile:
-
-```bash
-# ~/.bashrc or ~/.zshrc
-export THRUM_NAME=myagent       # Selects identity file (highest priority)
-export THRUM_ROLE=implementer
-export THRUM_MODULE=auth
-```
-
-Priority: `THRUM_NAME` env var > `--name` flag > solo-agent auto-select. For
-role/module: CLI flags > Environment variables > Identity file.
-
 ## Troubleshooting
 
 ### Daemon won't start
@@ -544,32 +428,12 @@ thrum agent register --force  # Override
 thrum agent register --role=implementer-2 --module=auth
 ```
 
-## Next Steps
-
-- Read the [CLI Reference](cli.md) for complete command documentation
-- Explore the [RPC API](rpc-api.md) for programmatic access
-- Check [Architecture](architecture.md) to understand how Thrum works
-- See [Development Guide](development.md) to contribute
-
-## Getting Help
-
-```bash
-# Command help
-thrum --help
-thrum send --help
-
-# Check status
-thrum status
-
-# View daemon logs
-# (Daemon logs to stdout when run in foreground)
-```
-
 ## Key Concepts
 
 ### Messages
 
-Persistent communication between agents, stored in Git-tracked JSONL.
+Persistent communication between agents, stored in Git-tracked JSONL. They're
+just text — `cat` them, `grep` them, pipe them through `jq`.
 
 ### Sessions
 
@@ -596,9 +460,8 @@ embedded Web UI. WebSocket and SPA are served on the same port (default 9999).
 
 ### MCP Server
 
-Stdio-based MCP server (`thrum mcp serve`) for native tool-based agent
-messaging. Enables LLM agents to use Thrum via MCP tools instead of CLI
-shell-outs.
+Optional MCP server (`thrum mcp serve`) for environments that support native
+tool integration. The CLI works everywhere — MCP is an alternative transport.
 
 ## Tips
 
@@ -611,4 +474,12 @@ shell-outs.
 7. **Back up your data** regularly: `thrum backup`
 8. **Enable automatic backups**: `thrum backup schedule 24h`
 
-Happy collaborating!
+## Next Steps
+
+- [Why Thrum Exists](philosophy.md) — understand the philosophy behind
+  human-directed agent coordination before going deeper
+- [CLI Reference](cli.md) — complete documentation for every command and flag
+- [Messaging](messaging.md) — send and receive messages between agents, including
+  scopes, mentions, threads, and groups
+- [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
+  with Beads integration and session templates

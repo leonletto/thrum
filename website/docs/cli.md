@@ -115,6 +115,7 @@ thrum init [--stealth] [flags]
 | `--runtime`      | Specify runtime directly (skip detection prompt)                                              | (auto)  |
 | `--dry-run`      | Preview changes without writing files                                                         | `false` |
 | `--stealth`      | Write exclusions to `.git/info/exclude` instead of `.gitignore` (zero tracked-file footprint) | `false` |
+| `--skills`       | Install thrum skill only (no MCP config, no startup script)                                   | `false` |
 | `--agent-name`   | Agent name for templates                                                                      |         |
 | `--agent-role`   | Agent role for templates                                                                      |         |
 | `--agent-module` | Agent module for templates                                                                    |         |
@@ -135,6 +136,27 @@ Detected AI runtimes:
 Which is your primary runtime? [1]:
 ✓ Runtime saved to .thrum/config.json (primary: claude)
 ```
+
+#### Skills-Only Install
+
+Use `--skills` to install just the thrum skill without full runtime
+configuration. Detects your agent automatically and installs to the correct
+skills directory:
+
+```text
+$ thrum init --skills
+Detected: Claude Code (found .claude/settings.json)
+Skill installed to .claude/skills/thrum/
+  SKILL.md
+  references/CLI_REFERENCE.md
+  references/LISTENER_PATTERN.md
+  references/MESSAGING.md
+```
+
+Supported agents: Claude Code, Cursor, Codex, Gemini, Augment, Amp. If the
+thrum Claude plugin is already installed, `--skills` skips the install (use
+`--force` to override). If no agent-specific directory is found, falls back to
+`.agents/skills/thrum/` (the cross-agent standard path).
 
 ### thrum config show
 
