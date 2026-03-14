@@ -118,9 +118,16 @@ func DetectAllRuntimes(repoPath string) []DetectedRuntime {
 	return results
 }
 
-// SupportedRuntimes returns the list of all supported runtime names.
+// SupportedRuntimes returns the list of all supported runtime names,
+// derived from the agent registry plus "cli-only" and "all" meta-values.
 func SupportedRuntimes() []string {
-	return []string{"claude", "codex", "cursor", "gemini", "auggie", "cli-only", "all"}
+	agents := BuiltinAgents()
+	names := make([]string, 0, len(agents)+2)
+	for _, a := range agents {
+		names = append(names, a.Name)
+	}
+	names = append(names, "cli-only", "all")
+	return names
 }
 
 // IsValidRuntime checks whether the given runtime name is valid.
