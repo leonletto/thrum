@@ -166,11 +166,13 @@ command:
 This creates the worktree, sets up thrum and beads redirects, and registers the
 agent identity.
 
-## See also
+## Next Steps
 
-- [Agent Configuration](agent-configs.md) — How to configure agents for
-  autonomous operation
-- [Beads and Thrum Integration](beads-and-thrum.md) — How the workflow uses
-  beads for task tracking and Thrum for coordination
-- [Quick Start](quickstart.md) — Set up Thrum and run your first multi-agent
-  workflow
+- [Agent Coordination](agent-coordination.md) — practical multi-agent patterns
+  and session templates for the workflows the skills produce
+- [Beads and Thrum](beads-and-thrum.md) — how task tracking and messaging work
+  together across the design → implement → review cycle
+- [Claude Code Plugin](claude-code-plugin.md) — the plugin that exposes these
+  skills as slash commands in Claude Code
+- [Role Templates](role-templates.md) — auto-generate agent preambles from role
+  templates for customized behavioral directives

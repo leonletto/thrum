@@ -1377,17 +1377,22 @@ thrum wait [flags]
 
 Exit codes: `0` = message received, `1` = timeout, `2` = error.
 
-Example:
+**Output:** `thrum wait` does not print message content. On success it prints an
+action directive telling the caller to check inbox; on timeout it prints a
+timeout notice to stderr.
 
 ```text
-# Include messages sent up to 30s ago (--after -30s = "30 seconds ago")
+# Plain text output (default)
+$ thrum wait --after -30s --timeout=5m
+ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them.
+
+# JSON output
 $ thrum wait --after -30s --timeout=5m --json
-✓ Message received: msg_01HXE8Z7 from @planner
-  We should refactor the sync daemon before adding embeddings.
+{"status": "received", "action": "ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them."}
 
 # Use in scripts (only new messages — no --after means "now")
 if thrum wait --timeout=30s; then
-  echo "New message received"
+  thrum inbox --unread   # read the messages
 else
   echo "Timeout"
 fi

@@ -1,6 +1,8 @@
 
 ## MCP Server
 
+> **TL;DR:** The MCP server lets AI agents use Thrum through native MCP tools instead of CLI shell-outs. Start with `thrum mcp serve`. It provides 4 core messaging tools plus 6 group management tools — no polling, no wasted tokens.
+
 > **See also:** [Daemon Architecture](daemon.md) for the underlying daemon the
 > MCP server connects to, [Identity](identity.md) for agent identity resolution.
 
@@ -608,6 +610,17 @@ Test coverage includes:
 
 WebSocket integration tests (requiring a running daemon WebSocket) are currently
 deferred.
+
+## Next Steps
+
+- [Claude Code Plugin](claude-code-plugin.md) — install the plugin to get slash
+  commands and automatic MCP configuration without manual setup
+- [Agent Coordination](agent-coordination.md) — practical workflows using MCP
+  tools, including the message-listener pattern for async coordination
+- [Messaging](messaging.md) — the full messaging model that these MCP tools
+  wrap: scopes, mentions, groups, and threading
+- [Daemon Architecture](daemon.md) — the daemon that the MCP server connects to
+  via Unix socket and WebSocket
 
 ### Debugging
 

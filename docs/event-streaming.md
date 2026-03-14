@@ -286,3 +286,14 @@ go test ./internal/websocket/...
 - WebSocket Server: `internal/websocket/server.go`
 - WebSocket Client Registry: `internal/websocket/registry.go`
 - Unix Socket Client Registry: `internal/daemon/notify.go`
+
+## Next Steps
+
+- [Subscriptions & Notifications](subscriptions.md) — subscribe to scopes or
+  mentions, and understand how the dispatcher matches messages to subscribers
+- [WebSocket API](api/websocket.md) — the WebSocket transport that delivers
+  these push notifications to browser and real-time clients
+- [Event Reference](api/events.md) — all event types emitted by the daemon,
+  with full payload schemas
+- [Daemon Architecture](daemon.md) — how the Broadcaster and Dispatcher wire
+  into the daemon's startup sequence

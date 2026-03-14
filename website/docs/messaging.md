@@ -376,9 +376,11 @@ Several commands mark messages as read automatically:
 
 | Command                    | Behavior                                                       |
 | -------------------------- | -------------------------------------------------------------- |
-| `thrum inbox`              | Marks all displayed messages as read (skipped with `--unread`) |
+| `thrum inbox`              | Marks all displayed messages as read                           |
+| `thrum inbox --unread`     | Peeks at unread messages **without** marking them as read      |
 | `thrum reply MSG_ID ...`   | Marks the replied-to message as read                           |
 | `thrum message get MSG_ID` | Marks the retrieved message as read                            |
+| `thrum message read --all` | Explicitly marks all unread messages as read                   |
 
 All auto mark-as-read operations are best-effort: if they fail, the parent
 command still succeeds.

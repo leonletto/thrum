@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - 2026-03-14
+
+### Agent Detection & Skills Installer
+
+New data-driven agent registry with 3-tier detection (environment variables,
+config files, binary verification) replaces hardcoded runtime checks.
+`thrum init --skills` installs agent-agnostic Thrum skills without full runtime
+setup — useful for multi-agent environments where agents just need messaging
+commands.
+
+### Added
+
+- **3-tier agent detection** — registry-driven detection via environment
+  variables (tier 1), config files (tier 2), and binary verification (tier 3)
+- **Data-driven agent registry** — built-in definitions for Claude Code, Codex,
+  Aider, and other runtimes; `SupportedRuntimes` derived from registry
+- **`thrum init --skills`** — lightweight skill installation with agent-aware
+  path resolution; detects existing plugin before installing
+- **Embedded skill content** — agent-agnostic Thrum skill shipped inside the
+  binary for install without network access
+- **Explicit mark-as-read (UI)** — messages require explicit interaction to mark
+  as read; `thrum inbox --unread` no longer marks messages as read
+- **Action directive protocol** — `thrum wait` outputs structured action
+  directives instead of raw message content; stop hook uses directives too
+- **Hybrid message reliability** — stop hook + listener heartbeat file ensures
+  no messages are missed between listener re-arms
+
+### Fixed
+
+- **12 E2E test failures** resolved; `THRUM_HOME` cleared in global-setup for
+  test isolation
+- **UI identity mismatch** — `for_agent` identity used for `is_read` and
+  mark-read; message list query invalidation added to `useMarkAsRead`
+- **Listener hardening** — standardized timeout to 8m, widened `--after` window
+  from -1s to -15s, fixed heartbeat step skipping on Haiku, prevented listener
+  from acting on ACTION REQUIRED directives
+- **Daemon shutdown** — force-close active connections on shutdown
+- **Preamble** recreated when deleted; DefaultPreamble test assertion updated
+- **Inbox unread count** aligned with `for_agent` filter
+
+### Changed
+
+- **README** rewritten to match website voice; SVG architecture diagram added
+- **Branding** — removed "git-backed" from identity language; CLI positioned as
+  primary, MCP as optional
+- **Documentation site** improved for human readers; quickstart simplified;
+  install methods consolidated
+
 ## [0.5.5] - 2026-03-09
 
 ### Improved Agent Safety & Toolkit

@@ -10,12 +10,8 @@ connects over WebSocket on the same port the daemon already listens on (default
 
 ## Opening the UI
 
-The daemon starts automatically when you run `thrum init` (since v0.4.5). If you
-need to restart it explicitly:
-
-```bash
-thrum daemon start
-```
+The daemon starts automatically when you run `thrum init` (since v0.4.5). If it's
+not running, restart it with `thrum daemon start`.
 
 Open your browser to `http://localhost:9999` (or whatever port you configured).
 
@@ -131,3 +127,14 @@ SQLite, sync status from Git. Nothing is hidden, nothing is abstracted away.
 
 This is consistent with Thrum's core principle: everything is
 [inspectable by design](philosophy.md).
+
+## Next Steps
+
+- [Messaging](messaging.md) — send and receive messages from the CLI, which
+  appear in real time in the Live Feed
+- [WebSocket API](api/websocket.md) — the WebSocket protocol the UI uses to
+  connect to the daemon
+- [Daemon Architecture](daemon.md) — how the embedded SPA is served from the
+  same port as the WebSocket endpoint
+- [Identity System](identity.md) — how the browser auto-registers as a user
+  using your Git config name

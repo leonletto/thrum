@@ -1,6 +1,8 @@
 
 ## Agent Context Management
 
+> **TL;DR:** Context lets agents save notes that survive session restarts and compaction. Save with `thrum context save`, view with `thrum context show`. Files live in `.thrum/context/{agent}.md` — plain Markdown you can read and edit directly.
+
 ## Overview
 
 Agents lose state between sessions due to context window compaction, session
@@ -80,7 +82,9 @@ directly or replace it with `thrum context preamble --file custom.md`.
 ```markdown
 ## Thrum Quick Reference
 
-**Check messages:** `thrum inbox --unread` **Check sent items:**
+**Check messages:** `thrum inbox --unread` (does not mark as read)
+**Mark all read:** `thrum message read --all`
+**Check sent items:**
 `thrum sent --unread` **Send message:** `thrum send "message" --to @role`
 **Reply:** `thrum reply <MSG_ID> "response"` **Status:** `thrum status` **Who's
 online:** `thrum agent list --context` **Save context:** `thrum context save`
@@ -146,6 +150,7 @@ structured context (decisions, next steps, work-in-progress) before saving,
 whereas running the command manually with arbitrary input can overwrite
 accumulated session state.
 
+---
 
 ### thrum context show
 
@@ -203,6 +208,7 @@ Raw (`--raw`, shows file boundaries):
 - Implementing JWT token refresh
 ```
 
+---
 
 ### thrum context clear
 
@@ -228,6 +234,7 @@ thrum context clear --agent furiosa
 
 Note: Idempotent - running clear when no context exists is a no-op.
 
+---
 
 ### thrum context sync
 
@@ -265,6 +272,7 @@ thrum context sync --agent furiosa
 - Respects the `--local` daemon flag
 - Manual only - context is never synced automatically
 
+---
 
 ### thrum context preamble
 
@@ -296,6 +304,7 @@ thrum context preamble --file my-preamble.md
 thrum context preamble --agent furiosa
 ```
 
+---
 
 ### thrum context prime
 
@@ -345,6 +354,7 @@ saves context before compaction to `.thrum/context/{name}.md` and
 agent-initiated `/update-context` skill captures richer context including
 decisions and rationale.
 
+---
 
 ## The /update-context Skill
 
@@ -380,6 +390,7 @@ The skill reduces the friction of updating context and ensures consistent
 formatting by combining your narrative with automatically gathered repo and task
 state.
 
+---
 
 ## Use Cases and Patterns
 
@@ -435,6 +446,7 @@ Context:  1.2 KB (updated 5m ago)    # ← Context indicator
 Inbox:    3 unread (12 total)
 ```
 
+---
 
 ## RPC API
 
@@ -469,6 +481,7 @@ Context operations are available via the daemon's RPC API:
 }
 ```
 
+---
 
 ### context.show
 
@@ -507,6 +520,7 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
 }
 ```
 
+---
 
 ### context.preamble.show
 
@@ -537,6 +551,7 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
 }
 ```
 
+---
 
 ### context.preamble.save
 
@@ -567,6 +582,7 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
 }
 ```
 
+---
 
 ### context.clear
 
@@ -596,6 +612,7 @@ The `include_preamble` field is optional and defaults to `true` when omitted.
 }
 ```
 
+---
 
 ## Implementation Notes
 
@@ -634,6 +651,7 @@ Context sync is manual-only to avoid noise and respect agent autonomy:
 create unnecessary churn. Manual sync gives agents control over when and what to
 share.
 
+---
 
 ## Best Practices
 
@@ -685,10 +703,15 @@ Install it and use it regularly.
 Only sync context that is useful to other agents or future sessions on different
 machines. Local notes and WIP context can stay local.
 
+---
 
-## See Also
+## Next Steps
 
-- [Identity System](identity.md) - Agent identity and registration
-- [CLI Reference](cli.md) - All CLI commands
-- [RPC API Reference](rpc-api.md) - Complete RPC method documentation
-- [Agent Coordination](agent-coordination.md) - Multi-agent workflows
+- [Identity System](identity.md) — how agents are named, registered, and
+  identified across sessions and worktrees
+- [CLI Reference](cli.md) — complete documentation for every `thrum context`
+  command and all other CLI commands
+- [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
+  including context handoff between agents
+- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and the
+  `thrum context prime` command for session recovery
