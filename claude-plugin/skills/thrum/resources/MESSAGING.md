@@ -7,7 +7,9 @@
    `.git/thrum-sync/`)
 3. **Receive** — `thrum inbox` or `thrum wait` (blocking)
 4. **Verify sent state** — `thrum sent` or `thrum sent show <msg-id>`
-5. **Read** — Auto-marked read when displayed via `thrum inbox`
+5. **Read** — Auto-marked read when displayed via `thrum inbox`; use
+   `thrum inbox --unread` to peek without marking. Explicit:
+   `thrum message read --all`
 6. **Reply** — `thrum reply <msg-id> "response"` (same audience)
 
 ## Addressing

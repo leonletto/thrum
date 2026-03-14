@@ -218,8 +218,9 @@ describe('MessageList', () => {
     expect(onReply).toHaveBeenCalledWith('root-4', 'user:alice');
   });
 
-  // 7. Marks unread messages as read
-  it('marks unread messages as read after debounce', async () => {
+  // 7. Marks unread messages as read on click
+  it('marks unread messages as read when clicked', async () => {
+    const user = userEvent.setup();
     const unreadMessage = makeMessage({
       message_id: 'unread-1',
       created_at: '2024-01-01T10:00:00Z',
@@ -227,13 +228,15 @@ describe('MessageList', () => {
       is_read: false,
     });
 
-    renderWithProvider(
+    const { container } = renderWithProvider(
       <MessageList messages={[unreadMessage]} isLoading={false} />
     );
 
-    await waitFor(() => {
-      expect(mockMarkAsReadMutate).toHaveBeenCalledWith(['unread-1']);
-    }, { timeout: 1500 });
+    const messageEl = container.querySelector('[data-message-id="unread-1"]');
+    expect(messageEl).not.toBeNull();
+    await user.click(messageEl!);
+
+    expect(mockMarkAsReadMutate).toHaveBeenCalledWith({ messageIds: ['unread-1'] });
   });
 
   // Extra: does not call markAsRead when all messages are already read

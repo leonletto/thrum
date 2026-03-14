@@ -21,13 +21,13 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Claude Code Plugin
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <strong>Claude Code Plugin</strong> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <strong>Claude Code Plugin</strong> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -64,12 +64,10 @@ identity, worktrees, and anti-patterns</li>
 </ul>
 <h2>Prerequisites</h2>
 <p>Before installing the plugin, you need Thrum installed and initialized:</p>
-<pre><code># Install thrum (Go 1.26+)
-go install github.com/leonletto/thrum@latest
-
-# Or build from source
-git clone https://github.com/leonletto/thrum.git
-cd thrum &amp;&amp; make install
+<pre><code># Install thrum
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+# Or: brew install leonletto/tap/thrum
+# Or: git clone https://github.com/leonletto/thrum.git &amp;&amp; cd thrum &amp;&amp; make install
 
 # Initialize in your repository (v0.4.5+: init does full setup)
 cd /path/to/your/repo
@@ -78,8 +76,7 @@ thrum init</code></pre>
 generates CLAUDE.md coordination instructions, starts the daemon, registers your
 agent, and starts a session. For manual control, you can still run individual
 steps:</p>
-<pre><code>thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
-thrum daemon start               # Start the daemon separately</code></pre>
+<pre><code>thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions</code></pre>
 <p>Verify the daemon is running:</p>
 <pre><code>thrum daemon status</code></pre>
 <h2>Installation</h2>
@@ -122,6 +119,10 @@ and unread messages in the session preamble.</p>
 <tr>
 <td><code>/thrum:inbox</code></td>
 <td>Check message inbox (all or unread only)</td>
+</tr>
+<tr>
+<td><code>thrum sent</code></td>
+<td>Review sent messages with resolved recipients and receipts</td>
 </tr>
 <tr>
 <td><code>/thrum:reply</code></td>
@@ -256,9 +257,9 @@ Copy and run it to start background message monitoring:</p>
   model=&quot;haiku&quot;,
   run_in_background=true,
   prompt=&quot;Listen for Thrum messages.
-    WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 15m --after -1s --json&quot;
+    WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 8m --after -15s --json&quot;
 )</code></pre>
-<p><code>--after -1s</code> means include messages sent up to 1 second ago (negative = &quot;N
+<p><code>--after -15s</code> means include messages sent up to 1 second ago (negative = &quot;N
 ago&quot;; prevents stale replay on restart). The listener runs 6 cycles of 15
 minutes each (~90 min coverage), blocks on <code>thrum wait</code> (no polling), returns
 when messages arrive, and costs ~$0.00003/cycle on Haiku. Re-arm after
@@ -308,18 +309,28 @@ template.</p>
 work and are available in <code>toolkit/agents/</code> for environments that don&#39;t support
 plugins.</p>
 <h2>Troubleshooting</h2>
-<p><strong>&quot;Thrum not initialized&quot; on session start</strong></p>
-<p>Run <code>thrum init &amp;&amp; thrum daemon start</code> in your repository root.</p>
-<p><strong>No context injected after plugin install</strong></p>
+<h3>&quot;Thrum not initialized&quot; on session start</h3>
+<p>Run <code>thrum init</code> in your repository root (it starts the daemon automatically).</p>
+<h3>No context injected after plugin install</h3>
 <p>Verify the plugin is loaded: check that <code>/thrum:prime</code> is available as a slash
 command. If not, reinstall the plugin.</p>
-<p><strong>Messages not arriving</strong></p>
+<h3>Messages not arriving</h3>
 <p>Check daemon status with <code>thrum daemon status</code>. The daemon must be running for
 messaging to work. Start it with <code>thrum daemon start</code>.</p>
-<p><strong>Identity conflicts in multi-worktree setups</strong></p>
+<h3>Identity conflicts in multi-worktree setups</h3>
 <p>Set <code>THRUM_NAME</code> environment variable to give each worktree a unique agent name.
 See <a href="identity.html">Identity System</a> for details.</p>
-<pre><code></code></pre>
+<h2>Next Steps</h2>
+<ul>
+<li><a href="mcp-server.html">MCP Server</a> — the MCP server the plugin configures, including
+the full 11-tool reference</li>
+<li><a href="codex-plugin.html">Codex Plugin</a> — the equivalent skill bundle for Codex
+users instead of Claude Code</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> — practical multi-agent workflows
+using the slash commands and hooks this plugin provides</li>
+<li><a href="identity.html">Identity System</a> — agent naming, <code>THRUM_NAME</code>, and multi-agent
+worktree setup</li>
+</ul>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#claude-code-plugin.html')}</script>

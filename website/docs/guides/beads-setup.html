@@ -21,13 +21,13 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; Recommended Tools &rsaquo; Beads Setup Guide
 <hr>
-<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a><br>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a><br>
 <strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <strong>Beads Setup Guide</strong> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a> | <a href="../overview.html">Technical Overview</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
@@ -40,7 +40,7 @@ a{color:#0366d6}
 </nav>
 <main>
 <h2>Beads Setup Guide</h2>
-<p><a href="https://github.com/leonletto/beads">Beads</a> is a git-backed, dependency-aware
+<p><a href="https://github.com/steveyegge/beads">Beads</a> is a Dolt-backed, dependency-aware
 issue tracker designed for AI agent workflows. It pairs with Thrum to give
 agents persistent task memory that survives session boundaries.</p>
 <h3>Why Beads with Thrum</h3>
@@ -55,59 +55,84 @@ to Thrum context, which agents restore on session start.</li>
 announces it via <code>thrum send</code>.</li>
 </ul>
 <h3>Installation</h3>
-<pre><code># Using Go
-go install github.com/leonletto/beads/cmd/bd@latest
+<p>Beads requires <a href="https://github.com/dolthub/dolt">Dolt</a> as a prerequisite.
+Install it first.</p>
+<p><strong>Minimum versions:</strong> bd 0.59.0+, dolt 1.81.8+</p>
+<pre><code># 1. Install Dolt (required dependency)
 
-# Using Homebrew
-brew install leonletto/tap/beads
+# Option A: Homebrew
+brew install dolt
 
-# Verify installation
-bd version</code></pre>
-<p>Requires Go 1.22+ for source install, or use the Homebrew tap for a pre-built
-binary.</p>
+# Option B: Install script (Linux/macOS — installs to /usr/local/bin)
+sudo bash -c &#39;curl -L https://github.com/dolthub/dolt/releases/latest/download/install.sh | bash&#39;
+
+# 2. Install Beads CLI
+
+# Option A: Homebrew
+brew install steveyegge/beads/bd
+
+# Option B: Install script (installs to ~/.local/bin/bd)
+curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+
+# 3. Verify
+bd version    # must be 0.59.0+
+dolt version  # must be 1.81.8+</code></pre>
 <h3>Initialize in Your Project</h3>
 <pre><code>cd your-project
 bd init</code></pre>
-<p>This creates a <code>.beads/</code> directory with:</p>
+<p><code>bd init</code> v0.59.0+ defaults to a <strong>Dolt backend</strong> (not SQLite) running in server
+mode. It spawns a background <code>dolt sql-server</code> process and auto-restarts it on
+each <code>bd</code> command if it&#39;s not running.</p>
+<p>The <code>.beads/</code> directory it creates:</p>
 <table>
 <thead>
 <tr>
-<th>File</th>
+<th>Path</th>
 <th>Purpose</th>
 </tr>
 </thead>
 <tbody><tr>
 <td><code>config.yaml</code></td>
-<td>Configuration (defaults work out of the box)</td>
-</tr>
-<tr>
-<td><code>issues.jsonl</code></td>
-<td>Append-only event log — the git-tracked source of truth</td>
-</tr>
-<tr>
-<td><code>beads.db</code></td>
-<td>SQLite projection for fast queries (gitignored)</td>
+<td>Team-level config (committed to git)</td>
 </tr>
 <tr>
 <td><code>metadata.json</code></td>
-<td>Database metadata</td>
+<td>Local state: backend, mode, database name (gitignored)</td>
+</tr>
+<tr>
+<td><code>.gitignore</code></td>
+<td>Ignores lock files, pid files, dolt internals</td>
+</tr>
+<tr>
+<td><code>interactions.jsonl</code></td>
+<td>Interaction log</td>
 </tr>
 <tr>
 <td><code>README.md</code></td>
 <td>Quick reference</td>
 </tr>
+<tr>
+<td><code>dolt/config.yaml</code></td>
+<td>Dolt server config</td>
+</tr>
+<tr>
+<td><code>dolt/&lt;reponame&gt;/</code></td>
+<td>Dolt database (synced via <code>refs/dolt/data</code>)</td>
+</tr>
+<tr>
+<td><code>dolt-server.pid/port/log</code></td>
+<td>Server process files (gitignored)</td>
+</tr>
 </tbody></table>
-<p>The key design: <code>issues.jsonl</code> is tracked in Git, while <code>beads.db</code> is
-gitignored. On any fresh clone, Beads rebuilds the SQLite database from the
-JSONL automatically.</p>
+<p><code>bd init</code> also creates <code>AGENTS.md</code> in the repo root with agent instructions.</p>
 <h3>Core Workflow</h3>
 <h4>Create issues</h4>
 <pre><code># Create an epic (groups related tasks)
-bd create &quot;Add user authentication&quot; -t epic -p 1
+bd create --title=&quot;Add user authentication&quot; --type=epic --priority=1
 
 # Create tasks under it
-bd create &quot;Implement JWT middleware&quot; -t task -p 2
-bd create &quot;Write auth tests&quot; -t task -p 2
+bd create --title=&quot;Implement JWT middleware&quot; --type=task --priority=2
+bd create --title=&quot;Write auth tests&quot; --type=task --priority=2
 
 # Set dependencies (tests depend on middleware)
 # bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;: blocker must close before blocked becomes ready
@@ -120,7 +145,7 @@ bd ready
 bd blocked
 
 # Claim a task
-bd update &lt;id&gt; -s in_progress</code></pre>
+bd update &lt;id&gt; --status=in_progress</code></pre>
 <h4>Complete work</h4>
 <pre><code># Close a task
 bd close &lt;id&gt;
@@ -130,14 +155,40 @@ bd close &lt;id1&gt; &lt;id2&gt; &lt;id3&gt;
 
 # Check progress
 bd stats</code></pre>
+<h3>Dolt Sync Setup</h3>
+<p>Beads uses <code>refs/dolt/data</code> to sync task state via your Git remote — no separate
+database server needed.</p>
+<pre><code># Add remote (using your existing git remote)
+bd dolt remote add origin &quot;file:///path/to/your/repo/.git&quot;
+
+# For GitHub:
+bd dolt remote add origin &quot;git+ssh://git@github.com/org/repo.git&quot;</code></pre>
+<p>On a fresh repo with no prior <code>refs/dolt/data</code>, the auto-push after <code>remote add</code>
+succeeds without <code>--force</code>.</p>
+<p><strong>Daily sync workflow:</strong></p>
+<pre><code>bd dolt commit    # commit working set changes
+bd dolt push      # push to remote
+bd dolt pull      # pull (must commit first — see common errors)</code></pre>
+<p><strong>Important:</strong> Never run raw <code>dolt</code> CLI commands while the server is running —
+it causes journal corruption. Always use <code>bd dolt ...</code> commands instead.</p>
+<p><strong>Verify sync:</strong></p>
+<pre><code>git show-ref | grep dolt
+# Expected: &lt;hash&gt; refs/dolt/data</code></pre>
+<p><strong>New machine setup:</strong> <code>refs/dolt/data</code> is not fetched by default <code>git clone</code>.
+Set <code>sync.git-remote</code> in <code>.beads/config.yaml</code> to enable auto-bootstrap on
+<code>bd init</code>, or clone the dolt database manually:</p>
+<pre><code>cd .beads/dolt
+dolt clone git+ssh://git@github.com/org/repo.git &lt;reponame&gt;</code></pre>
 <h3>Agent Integration with Thrum</h3>
 <p>The standard agent workflow combines both tools:</p>
 <pre><code># 1. Agent starts — check for assigned work
 thrum inbox --unread
+thrum sent --unread
+thrum message read --all       # Mark all messages as read
 bd ready
 
 # 2. Claim a task and announce it
-bd update &lt;id&gt; -s in_progress
+bd update &lt;id&gt; --status=in_progress
 thrum send &quot;Starting work on &lt;id&gt;: &lt;title&gt;&quot; --to @coordinator
 
 # 3. Do the work...
@@ -148,39 +199,64 @@ thrum send &quot;Completed &lt;id&gt;, tests passing&quot; --to @coordinator
 
 # 5. Find next task
 bd ready</code></pre>
-<h3>Claude Code Configuration</h3>
-<p>To use Beads with Claude Code agents, add these instructions to your
-<code>CLAUDE.md</code>:</p>
+<h3>Worktree Support</h3>
+<p>If you use git worktrees (common in multi-agent setups), Beads supports sharing
+a single Dolt server across worktrees via a redirect file:</p>
+<pre><code># In each worktree, point to the main repo&#39;s .beads/
+mkdir -p /path/to/worktree/.beads
+echo &quot;/path/to/main/repo/.beads&quot; &gt; /path/to/worktree/.beads/redirect</code></pre>
+<p>All worktrees share the same Dolt server via the redirect — issues created in
+any worktree are immediately visible everywhere.</p>
+<p>If your project includes the Thrum worktree setup script, this is handled
+automatically:</p>
+<pre><code>./scripts/setup-worktree-thrum.sh ~/.workspaces/project/feature feature/name</code></pre>
+<h3>Claude Code Plugin</h3>
+<p>Install the Beads plugin for Claude Code to get slash commands (<code>/beads:ready</code>,
+<code>/beads:create</code>, etc.) and an MCP server for native tool integration:</p>
+<pre><code># In Claude Code
+/plugin marketplace add steveyegge/beads
+/plugin install beads</code></pre>
+<p>Restart Claude Code after installation. See the
+<a href="https://github.com/steveyegge/beads/blob/main/docs/PLUGIN.html">Beads plugin docs</a>
+for the full command reference.</p>
+<h3>CLAUDE.md Configuration</h3>
+<p>For agents that don&#39;t use the plugin (or as a supplement), add these instructions
+to your <code>CLAUDE.md</code>:</p>
 <pre><code>## Task Tracking
 
 Use `bd` (beads) for all task tracking. Do not use TodoWrite, TaskCreate, or
 markdown files for tracking.
 
 - `bd ready` — find available work
-- `bd update &lt;id&gt; -s in_progress` — claim a task
+- `bd update &lt;id&gt; --status=in_progress` — claim a task
 - `bd close &lt;id&gt;` — mark complete
 - `bd stats` — check project progress</code></pre>
 <p>The Thrum Claude Code plugin automatically detects Beads and includes task
 context in the pre-compact hook, so agents recover their task state after
 context compaction.</p>
-<h3>Worktree Support</h3>
-<p>If you use git worktrees (common in multi-agent setups), Beads supports sharing
-a single database across worktrees via a redirect file:</p>
-<pre><code># In each worktree, create a redirect to the main repo&#39;s .beads/
-echo &quot;/path/to/main/repo/.beads&quot; &gt; .beads/redirect</code></pre>
-<p>If your project includes the Thrum worktree setup script, this is handled
-automatically:</p>
-<pre><code>./scripts/setup-worktree-thrum.sh ~/.workspaces/project/feature feature/name</code></pre>
-<h3>Git Hooks</h3>
-<p>Beads provides git hooks that keep the JSONL export fresh:</p>
-<pre><code>bd hooks install</code></pre>
-<p>This adds:</p>
-<ul>
-<li><strong>pre-commit</strong>: Exports the SQLite state to <code>issues.jsonl</code> so it stays in sync
-with Git</li>
-<li><strong>pre-push</strong>: Checks for stale data before pushing</li>
-</ul>
-<h3>Useful Commands Reference</h3>
+<h3>Common Errors and Fixes</h3>
+<p><strong>&quot;no store available&quot; on <code>bd dolt push</code> or <code>bd dolt commit</code></strong> Bug in bd
+v0.55.4. Upgrade: <code>brew upgrade beads</code> (must be 0.59.0+).</p>
+<p><strong>&quot;no common ancestor&quot; on push</strong> Stale <code>refs/dolt/data</code> from a previous
+database. Clear it and retry:</p>
+<pre><code>git update-ref -d refs/dolt/data</code></pre>
+<p><strong>&quot;cannot merge with uncommitted changes&quot; on pull</strong> Run <code>bd dolt commit</code> before
+<code>bd dolt pull</code>.</p>
+<p><strong>&quot;fatal: Unable to read current working directory&quot;</strong> The dolt server&#39;s CWD no
+longer exists. Restart it:</p>
+<pre><code>pkill -f &quot;dolt sql-server&quot;
+bd list   # auto-restarts</code></pre>
+<p><strong>brew / dolt / bd not found over SSH</strong> Homebrew on ARM64 Mac installs to
+<code>/opt/homebrew/bin</code>, not in the default SSH PATH. Use a login shell:
+<code>ssh host &#39;bash -lc &quot;bd version&quot;&#39;</code></p>
+<h3>Stale LOCK files after crash</h3>
+<pre><code>bd doctor --fix --yes
+# If noms LOCK persists:
+rm .beads/dolt/&lt;reponame&gt;/.dolt/noms/LOCK</code></pre>
+<p><strong>Journal corruption from mixed CLI/server access</strong> Caused by running raw <code>dolt</code>
+CLI while the server is running. Prevention: always use <code>bd dolt ...</code> commands.
+Recovery: stop the server, delete the journal, and restart.</p>
+<h3>Commands Reference</h3>
 <table>
 <thead>
 <tr>
@@ -197,7 +273,7 @@ with Git</li>
 <td>All open issues</td>
 </tr>
 <tr>
-<td><code>bd list -s in_progress</code></td>
+<td><code>bd list --status=in_progress</code></td>
 <td>Active work</td>
 </tr>
 <tr>
@@ -213,24 +289,66 @@ with Git</li>
 <td>Project health overview</td>
 </tr>
 <tr>
-<td><code>bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;</code></td>
-<td>Blocker must close before blocked is ready</td>
+<td><code>bd create --title=&quot;...&quot; --type=task --priority=2</code></td>
+<td>Create an issue</td>
 </tr>
 <tr>
-<td><code>bd create &quot;Title&quot; -t epic -p 1</code></td>
-<td>Create an epic</td>
+<td><code>bd update &lt;id&gt; --status=in_progress</code></td>
+<td>Claim work</td>
 </tr>
 <tr>
 <td><code>bd close &lt;id&gt;</code></td>
 <td>Mark complete</td>
 </tr>
+<tr>
+<td><code>bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;</code></td>
+<td>Blocker must close before blocked is ready</td>
+</tr>
+<tr>
+<td><code>bd dep tree &lt;epic-id&gt;</code></td>
+<td>Show dependency graph</td>
+</tr>
+<tr>
+<td><code>bd epic status &lt;epic-id&gt;</code></td>
+<td>Progress on epic children</td>
+</tr>
+<tr>
+<td><code>bd comments add &lt;id&gt; &quot;msg&quot;</code></td>
+<td>Add comment (subcommand before ID)</td>
+</tr>
+<tr>
+<td><code>bd search &quot;query&quot;</code></td>
+<td>Search issues by text</td>
+</tr>
+<tr>
+<td><code>bd dolt commit</code></td>
+<td>Commit working set changes</td>
+</tr>
+<tr>
+<td><code>bd dolt push</code></td>
+<td>Push to remote</td>
+</tr>
+<tr>
+<td><code>bd dolt pull</code></td>
+<td>Pull from remote (commit first)</td>
+</tr>
+<tr>
+<td><code>bd doctor</code></td>
+<td>Health check</td>
+</tr>
+<tr>
+<td><code>bd doctor --fix --yes</code></td>
+<td>Auto-fix stale locks and metadata</td>
+</tr>
 </tbody></table>
+<p><strong>Comments syntax note:</strong> The correct syntax is <code>bd comments add &lt;id&gt; &quot;msg&quot;</code> —
+subcommand comes before the issue ID.</p>
 <h3>Further Reading</h3>
 <ul>
 <li><a href="../beads-and-thrum.html">Beads and Thrum</a> — Conceptual overview of how the two
 tools complement each other</li>
 <li><a href="beads-ui-setup.html">Beads UI Setup</a> — Visual dashboard for Beads</li>
-<li><a href="https://github.com/leonletto/beads">Beads GitHub</a> — Full documentation and
+<li><a href="https://github.com/steveyegge/beads">Beads GitHub</a> — Full documentation and
 source</li>
 </ul>
 

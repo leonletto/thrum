@@ -173,7 +173,9 @@ Examples:
   thrum init --stealth                # Init with zero tracked-file footprint
   thrum init --runtime claude         # Init + generate Claude configs
   thrum init --runtime codex --force  # Init + overwrite Codex configs
-  thrum init --runtime all --dry-run  # Preview all runtime configs`,
+  thrum init --runtime all --dry-run  # Preview all runtime configs
+  thrum init --skills                 # Install thrum skill for detected agent
+  thrum init --skills --runtime cursor # Install skill for Cursor specifically`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			force, _ := cmd.Flags().GetBool("force")
 			stealth, _ := cmd.Flags().GetBool("stealth")
@@ -183,9 +185,16 @@ Examples:
 			agentRole, _ := cmd.Flags().GetString("agent-role")
 			agentModule, _ := cmd.Flags().GetString("agent-module")
 
+			skillsOnly, _ := cmd.Flags().GetBool("skills")
+
 			// Validate runtime flag if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
 				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, auggie, cli-only, all", runtimeFlag)
+			}
+
+			// Skills-only mode: install thrum skill without full init
+			if skillsOnly {
+				return runSkillsInstall(flagRepo, runtimeFlag, force, dryRun)
 			}
 
 			// Step 1: Repo initialization (unless dry-run or runtime-only)
@@ -548,11 +557,9 @@ Examples:
 				}
 			}
 
-			// Step 9b: Refresh preamble if --force (brings preamble up to date with binary version)
-			if force {
-				if err := applyRolePreamble(thrumDir, agentNameResolved, agentRoleResolved, "", true); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to refresh preamble: %v\n", err)
-				}
+			// Step 9b: Ensure preamble exists; --force overwrites with current version
+			if err := applyRolePreamble(thrumDir, agentNameResolved, agentRoleResolved, "", force); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to refresh preamble: %v\n", err)
 			}
 
 			// Step 10: Show whoami-style output
@@ -580,8 +587,94 @@ Examples:
 	cmd.Flags().String("agent-name", "", "Agent name for templates (default: default_agent)")
 	cmd.Flags().String("agent-role", "", "Agent role for templates (default: implementer)")
 	cmd.Flags().String("agent-module", "", "Agent module for templates (default: main)")
+	cmd.Flags().Bool("skills", false, "Install thrum skill only (no MCP config, no startup script)")
 
 	return cmd
+}
+
+// runSkillsInstall handles the --skills flag: detect agent, resolve path, install skill files.
+func runSkillsInstall(repoPath, runtimeFlag string, force, dryRun bool) error {
+	var selectedAgent string
+
+	if runtimeFlag != "" {
+		if runtimeFlag == "all" || runtimeFlag == "cli-only" {
+			return fmt.Errorf("--runtime %q is not valid with --skills; specify an agent (claude, cursor, codex, gemini, auggie, amp)", runtimeFlag)
+		}
+		selectedAgent = runtimeFlag
+	} else {
+		detected := runtime.DetectAgents(repoPath)
+		switch len(detected) {
+		case 0:
+			if !flagQuiet {
+				fmt.Println("No AI coding agent detected.")
+				fmt.Println("Installing to .agents/skills/thrum/ (universal path)")
+			}
+			selectedAgent = "amp" // amp's SkillsDir is .agents/skills
+		case 1:
+			selectedAgent = detected[0].Name
+			if !flagQuiet {
+				displayName := detected[0].Name
+				if a, ok := runtime.GetAgent(detected[0].Name); ok {
+					displayName = a.DisplayName
+				}
+				fmt.Printf("Detected: %s (%s)\n", displayName, detected[0].Source)
+			}
+		default:
+			if isInteractive() && !flagQuiet {
+				fmt.Println("Detected AI coding agents:")
+				for i, d := range detected {
+					displayName := d.Name
+					if a, ok := runtime.GetAgent(d.Name); ok {
+						displayName = a.DisplayName
+					}
+					fmt.Printf("  %d. %-18s (%s)\n", i+1, displayName, d.Source)
+				}
+				fmt.Printf("  %d. Generic           (.agents/skills/thrum/)\n", len(detected)+1)
+				fmt.Printf("\nInstall thrum skill for [1]: ")
+
+				reader := bufio.NewReader(os.Stdin)
+				input, _ := reader.ReadString('\n')
+				input = strings.TrimSpace(input)
+
+				choice := 1
+				if input != "" {
+					n, err := strconv.Atoi(input)
+					if err != nil || n < 1 || n > len(detected)+1 {
+						return fmt.Errorf("invalid selection %q", input)
+					}
+					choice = n
+				}
+				if choice <= len(detected) {
+					selectedAgent = detected[choice-1].Name
+				} else {
+					selectedAgent = "amp"
+				}
+			} else {
+				selectedAgent = detected[0].Name
+			}
+		}
+	}
+
+	opts := cli.SkillsInstallOptions{
+		RepoPath: repoPath,
+		Agent:    selectedAgent,
+		Force:    force,
+		DryRun:   dryRun,
+	}
+
+	result, err := cli.InstallSkills(opts)
+	if err != nil {
+		return err
+	}
+
+	if flagJSON {
+		output, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(output))
+	} else if !flagQuiet {
+		fmt.Print(cli.FormatSkillsInstall(result))
+	}
+
+	return nil
 }
 
 // isInteractive returns true if stdin is a terminal (not piped/redirected).
@@ -1344,7 +1437,8 @@ The daemon must be running and you must have an active session.`,
 			}
 
 			// Auto mark-as-read: mark all displayed messages as read
-			if len(result.Messages) > 0 {
+			// Skip when --unread is set so agents can peek without consuming messages.
+			if !unread && len(result.Messages) > 0 {
 				ids := make([]string, len(result.Messages))
 				for i, m := range result.Messages {
 					ids[i] = m.MessageID
@@ -1587,11 +1681,11 @@ Exit codes:
 				socketPath = cli.DefaultSocketPath(flagRepo)
 			}
 
-			message, err := cli.Wait(socketPath, opts)
+			_, err = cli.Wait(socketPath, opts)
 			if err != nil {
 				if err.Error() == "timeout waiting for message" {
 					if !flagQuiet {
-						fmt.Fprintln(os.Stderr, "Timeout: no matching messages received")
+						fmt.Fprintln(os.Stderr, "NO_MESSAGES_TIMEOUT — re-run thrum wait to continue listening")
 					}
 					os.Exit(1)
 				}
@@ -1599,14 +1693,14 @@ Exit codes:
 			}
 
 			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(message, "", "  ")
+				out := map[string]string{
+					"status": "received",
+					"action": "ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them.",
+				}
+				output, _ := json.MarshalIndent(out, "", "  ")
 				fmt.Println(string(output))
 			} else if !flagQuiet {
-				// Brief message summary
-				agentName := extractAgentName(message.AgentID)
-				fmt.Printf("✓ Message received: %s from %s\n", message.MessageID, agentName)
-				fmt.Printf("  %s\n", message.Body.Content)
+				fmt.Println("MESSAGES_RECEIVED")
 			}
 
 			return nil
@@ -1619,11 +1713,6 @@ Exit codes:
 	cmd.Flags().String("after", "", "Only return messages after this relative time (e.g., -30s, -5m, +60s)")
 
 	return cmd
-}
-
-// extractAgentName is a helper to extract agent name from ID for display.
-func extractAgentName(agentID string) string {
-	return identity.ExtractDisplayName(agentID)
 }
 
 func daemonCmd() *cobra.Command {
@@ -1909,8 +1998,8 @@ func agentCmd() *cobra.Command {
 		Long: `Register this agent with the specified role and module.
 
 The agent identity is determined from:
-1. THRUM_NAME env var (highest priority - overrides --name flag)
-2. --name flag
+1. --name flag (highest priority)
+2. THRUM_NAME env var (default when --name is not provided)
 3. Environment variables (THRUM_ROLE, THRUM_MODULE for role/module)
 4. Identity file in .thrum/identities/ directory`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1924,8 +2013,8 @@ The agent identity is determined from:
 				return fmt.Errorf("role and module are required (use --role and --module flags or THRUM_ROLE and THRUM_MODULE env vars)")
 			}
 
-			// Priority: THRUM_NAME env var > --name flag
-			if envName := os.Getenv("THRUM_NAME"); envName != "" {
+			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.
+			if envName := os.Getenv("THRUM_NAME"); envName != "" && !cmd.Flags().Changed("name") {
 				name = envName
 			}
 
@@ -3883,8 +3972,8 @@ Examples:
 				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, auggie, cli-only", runtimeFlag)
 			}
 
-			// Priority: THRUM_NAME env var > --name flag
-			if envName := os.Getenv("THRUM_NAME"); envName != "" {
+			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.
+			if envName := os.Getenv("THRUM_NAME"); envName != "" && !cmd.Flags().Changed("name") {
 				name = envName
 			}
 
@@ -4023,6 +4112,13 @@ Examples:
 				// Apply preamble: --preamble-file > role template > default
 				if err := applyRolePreamble(thrumDir, savedName, flagRole, preambleFile, false); err != nil {
 					return err
+				}
+			} else if name != "" && !dryRun {
+				// Daemon unreachable or registration skipped — still ensure preamble exists.
+				// EnsurePreamble is a no-op when the file already exists, so this is always safe.
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+				if err := applyRolePreamble(thrumDir, name, flagRole, preambleFile, false); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to ensure preamble: %v\n", err)
 				}
 			}
 

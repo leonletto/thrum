@@ -21,13 +21,13 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Agent Configurations
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <strong>Agent Configurations</strong> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <strong>Agent Configurations</strong> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -59,8 +59,7 @@ session.</p>
 <h2>Available agents</h2>
 <h3>thrum-agent</h3>
 <p>Comprehensive guide for Thrum messaging. Teaches Claude how to register agents,
-send/receive messages, coordinate with teammates, and choose between MCP tools
-and CLI.</p>
+send/receive messages, and coordinate with teammates via the CLI.</p>
 <p><strong>Use when:</strong></p>
 <ul>
 <li>Coordinating multi-agent workflows</li>
@@ -103,7 +102,7 @@ cycles.</p>
 </ul>
 <p><strong>Key capabilities:</strong></p>
 <ul>
-<li>Blocking wait via <code>thrum wait --timeout 15m</code> (6 cycles max, filters by agent
+<li>Blocking wait via <code>thrum wait --timeout 8m</code> (6 cycles max, filters by agent
 identity)</li>
 <li>Immediate return on message arrival</li>
 <li>Time-based filtering with <code>--after</code> flag (negative value = &quot;N ago&quot;; e.g.,
@@ -120,12 +119,12 @@ Task({
   model: &quot;haiku&quot;,
   run_in_background: true,
   prompt:
-    &quot;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 15m --after -1s --json&quot;,
+    &quot;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 8m --after -15s --json&quot;,
 });</code></pre>
 <p><strong>Wait command flags:</strong></p>
 <ul>
-<li><code>--timeout 15m</code> — Block up to 15 minutes per cycle</li>
-<li><code>--after -1s</code> — Include messages sent up to 1 second ago (negative = &quot;N ago&quot;;
+<li><code>--timeout 8m</code> — Block up to 8 minutes per cycle</li>
+<li><code>--after -15s</code> — Include messages sent up to 1 second ago (negative = &quot;N ago&quot;;
 prevents stale replay)</li>
 <li><code>--json</code> — Machine-readable output</li>
 </ul>
@@ -137,16 +136,16 @@ Re-arm the listener after processing messages to continue listening.</p>
 project-specific commands, adjust priorities, or include custom context.</p>
 <p>For the agent file format, see
 <a href="https://docs.anthropic.com/claude-code">Claude Code agent documentation</a>.</p>
-<h2>See also</h2>
+<h2>Next Steps</h2>
 <ul>
-<li><a href="claude-code-plugin.html">Claude Code Plugin</a> — Recommended: plugin with slash
-commands and hooks</li>
-<li><a href="codex-plugin.html">Codex Plugin</a> — Codex skill bundle for Thrum coordination
-and operations</li>
-<li><a href="quickstart.html">Quickstart</a> — Get started with Thrum in 5 minutes</li>
-<li><a href="agent-coordination.html">Agent Coordination</a> — Multi-agent messaging patterns</li>
-<li><a href="../toolkit/templates/">Workflow Templates</a> — Complete planning and
-implementation workflows</li>
+<li><a href="claude-code-plugin.html">Claude Code Plugin</a> — the recommended approach:
+install the plugin to get 10 slash commands and automatic hooks instead</li>
+<li><a href="codex-plugin.html">Codex Plugin</a> — the Codex skill bundle for users who prefer
+skill-guided CLI workflows</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> — multi-agent messaging patterns
+that these agent definitions enable</li>
+<li><a href="workflow-templates.html">Workflow Templates</a> — pre-built skill pipelines for
+the full research → plan → implement cycle</li>
 </ul>
 
 </main>

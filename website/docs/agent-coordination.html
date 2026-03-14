@@ -21,13 +21,13 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Agent Coordination
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <strong>Agent Coordination</strong> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>Guides</strong>: <strong>Agent Coordination</strong> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -48,16 +48,16 @@ the Beads issue tracker, and session workflow templates.</p>
 handing it off — see <a href="philosophy.html">Why Thrum Exists</a>.</p>
 </blockquote>
 <h2>Coordination Methods</h2>
-<p>Thrum supports two integration methods for agent coordination:</p>
-<h3>MCP Server (Recommended)</h3>
-<p>Native tool integration with async message notifications. Best for Claude Code
-agents. See <a href="/docs/mcp-server.html">MCP Server</a> for configuration and the
-complete tools reference.</p>
-<h3>CLI (Fallback)</h3>
-<p>Shell commands for basic messaging. Works everywhere.</p>
+<h3>CLI (Primary)</h3>
+<p>Thrum is CLI-first. Every agent that can run shell commands can use Thrum.</p>
 <pre><code>thrum send &quot;Starting work on task X&quot; --to @coord_main
 thrum inbox --unread
+thrum sent --unread
+thrum message read --all       # Mark all messages as read
 thrum reply &lt;msg-id&gt; &quot;Here&#39;s my update&quot;</code></pre>
+<h3>MCP Server (Optional)</h3>
+<p>For environments that support MCP, Thrum also provides an MCP server with
+native tool integration. See <a href="mcp-server.html">MCP Server</a> for configuration.</p>
 <blockquote>
 <p><strong>Note:</strong> Use agent names (e.g., <code>@coord_main</code>), not role names (e.g.,
 <code>@coordinator</code>). Sending to a role fans out to ALL agents with that role. Run
@@ -78,7 +78,8 @@ thrum send &quot;Please implement build script (task thrum-235d.3). \
   --to @impl1
 
 # Check for updates
-thrum inbox</code></pre>
+thrum inbox
+thrum sent --to @impl1</code></pre>
 <p><strong>Implementer:</strong></p>
 <pre><code># Register
 thrum quickstart --name impl1 --role implementer --module website \
@@ -86,6 +87,9 @@ thrum quickstart --name impl1 --role implementer --module website \
 
 # Check inbox for assignments
 thrum inbox --unread
+
+# Check sent items after responding
+thrum sent --to @planner1
 
 # Acknowledge and work
 thrum reply &lt;msg-id&gt; &quot;Claimed task. Starting implementation.&quot;
@@ -154,7 +158,7 @@ content</li>
 </ol>
 <p><strong>Recommended approach:</strong> Use <code>thrum wait</code> which blocks until a message arrives
 or times out. This is more efficient than polling loops with sleep intervals.
-Use <code>--after -1s</code> to include messages sent up to 1 second ago (<code>--after</code>
+Use <code>--after -15s</code> to include messages sent up to 1 second ago (<code>--after</code>
 negative value = &quot;N ago&quot;). Omit <code>--after</code> to receive only messages that arrive
 after the wait starts.</p>
 <h3>Return Format</h3>
@@ -322,7 +326,7 @@ thrum session end</code></pre>
 <h3>Do</h3>
 <ul>
 <li><strong>Register at session start</strong> -- always use <code>thrum quickstart</code></li>
-<li><strong>Use MCP server when available</strong> -- better than CLI polling</li>
+<li><strong>Use CLI commands</strong> -- they work everywhere, including sub-agents</li>
 <li><strong>Send status updates</strong> -- keep the team informed</li>
 <li><strong>Use @mentions</strong> -- reference agents by name</li>
 <li><strong>Include context</strong> -- Beads IDs, file paths, commit hashes</li>
@@ -392,20 +396,17 @@ thrum agent list --context
 # Check Beads for task state
 bd ready
 bd list --status=in_progress</code></pre>
-<h2>See Also</h2>
+<h2>Next Steps</h2>
 <ul>
-<li><a href="workflow-templates.html">Workflow Templates</a> -- three-phase agent development
-workflows (plan, prepare, implement)</li>
-<li><a href="multi-agent.html">Multi-Agent Support</a> -- groups, runtime presets, and team
-coordination</li>
-<li><a href="tailscale-sync.html">Tailscale Sync</a> -- cross-machine sync via Tailscale</li>
-<li><a href="cli.html">CLI Reference</a> -- complete command documentation</li>
-<li><a href="mcp-server.html">MCP Server</a> -- MCP tools and message-listener details</li>
-<li><a href="messaging.html">Messaging System</a> -- message structure and scopes</li>
-<li><a href="quickstart.html">Quickstart Guide</a> -- getting started in 5 minutes</li>
-<li><a href="identity.html">Identity System</a> -- agent names and registration</li>
+<li><a href="workflow-templates.html">Workflow Templates</a> — pre-built skill pipelines for
+the full research → plan → implement → review cycle</li>
+<li><a href="multi-agent.html">Multi-Agent Support</a> — agent groups, runtime presets, and
+the <code>context prime</code> command for session recovery</li>
+<li><a href="messaging.html">Messaging</a> — full send/receive/reply reference including
+threads, scopes, mentions, and groups</li>
+<li><a href="mcp-server.html">MCP Server</a> — optional native tool integration for
+MCP-capable environments</li>
 </ul>
-<pre><code></code></pre>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#agent-coordination.html')}</script>

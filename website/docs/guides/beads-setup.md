@@ -35,15 +35,23 @@ Install it first.
 **Minimum versions:** bd 0.59.0+, dolt 1.81.8+
 
 ```bash
-# Using Homebrew (recommended)
+# 1. Install Dolt (required dependency)
+
+# Option A: Homebrew
 brew install dolt
+
+# Option B: Install script (Linux/macOS — installs to /usr/local/bin)
+sudo bash -c 'curl -L https://github.com/dolthub/dolt/releases/latest/download/install.sh | bash'
+
+# 2. Install Beads CLI
+
+# Option A: Homebrew
 brew install steveyegge/beads/bd
 
-# Using curl (installs to ~/.local/bin/bd — dolt still required)
-brew install dolt
+# Option B: Install script (installs to ~/.local/bin/bd)
 curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
 
-# Verify
+# 3. Verify
 bd version    # must be 0.59.0+
 dolt version  # must be 1.81.8+
 ```
@@ -168,6 +176,7 @@ The standard agent workflow combines both tools:
 # 1. Agent starts — check for assigned work
 thrum inbox --unread
 thrum sent --unread
+thrum message read --all       # Mark all messages as read
 bd ready
 
 # 2. Claim a task and announce it
@@ -205,10 +214,25 @@ automatically:
 ./scripts/setup-worktree-thrum.sh ~/.workspaces/project/feature feature/name
 ```
 
-### Claude Code Configuration
+### Claude Code Plugin
 
-To use Beads with Claude Code agents, add these instructions to your
-`CLAUDE.md`:
+Install the Beads plugin for Claude Code to get slash commands (`/beads:ready`,
+`/beads:create`, etc.) and an MCP server for native tool integration:
+
+```bash
+# In Claude Code
+/plugin marketplace add steveyegge/beads
+/plugin install beads
+```
+
+Restart Claude Code after installation. See the
+[Beads plugin docs](https://github.com/steveyegge/beads/blob/main/docs/PLUGIN.md)
+for the full command reference.
+
+### CLAUDE.md Configuration
+
+For agents that don't use the plugin (or as a supplement), add these
+instructions to your `CLAUDE.md`:
 
 ```markdown
 ## Task Tracking

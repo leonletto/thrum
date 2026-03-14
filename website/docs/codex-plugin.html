@@ -21,13 +21,13 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Codex Plugin
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <strong>Codex Plugin</strong> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <strong>Codex Plugin</strong> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -41,10 +41,8 @@ a{color:#0366d6}
 <main>
 <h2>Codex Plugin</h2>
 <blockquote>
-<p>See also: <a href="quickstart.html">Quickstart Guide</a> for base Thrum setup,
-<a href="claude-code-plugin.html">Claude Code Plugin</a> for Claude-specific plugin flows,
-<a href="agent-coordination.html">Agent Coordination</a> for coordination patterns,
-<a href="role-templates.html">Role Templates</a> for role preamble details.</p>
+<p><strong>Prerequisites:</strong> Thrum installed and initialized (<code>thrum init</code>), and Codex
+installed with a local skills directory (<code>~/.codex/skills</code>).</p>
 </blockquote>
 <h2>Overview</h2>
 <p>Codex does not currently use the Claude-style plugin marketplace model. Instead,
@@ -53,7 +51,7 @@ Thrum integration is packaged as a <strong>Codex skill bundle</strong> in
 <p>The bundle is split into focused skills:</p>
 <ul>
 <li><code>thrum-core</code> — durable messaging, groups, identity, worktree boundaries</li>
-<li><code>thrum-ops</code> — quickstart/inbox/wait/context/daemon/sync operational flows</li>
+<li><code>thrum-ops</code> — quickstart/inbox/sent/wait/context/daemon/sync operational flows</li>
 <li><code>thrum-role-config</code> — generate or update <code>.thrum/role_templates</code></li>
 <li><code>project-setup</code> — turn design docs into Beads epics/tasks before coding</li>
 </ul>
@@ -67,8 +65,15 @@ Thrum integration is packaged as a <strong>Codex skill bundle</strong> in
 <pre><code>thrum init  # also starts the daemon automatically
 thrum quickstart --name myagent --role implementer --module auth</code></pre>
 <h2>Installation</h2>
-<p>From the Thrum repository root:</p>
-<pre><code>./codex-plugin/scripts/install-skills.sh</code></pre>
+<h3>From GitHub</h3>
+<p>Clone the Thrum repository and run the install script:</p>
+<pre><code>git clone https://github.com/leonletto/thrum.git
+cd thrum
+./codex-plugin/scripts/install-skills.sh</code></pre>
+<h3>From Local Clone</h3>
+<p>If you already have the Thrum repository cloned locally:</p>
+<pre><code>cd /path/to/thrum
+./codex-plugin/scripts/install-skills.sh</code></pre>
 <p>This installs the bundled skills into <code>~/.codex/skills</code> (or <code>$CODEX_HOME/skills</code>
 if <code>CODEX_HOME</code> is set).</p>
 <h3>Verify installed skills</h3>
@@ -86,8 +91,9 @@ Codex installation:</p>
 handles audience routing (<code>@agent</code>, <code>@group</code>, <code>@everyone</code>) and durable
 message/reply workflows.</p>
 <h3>Session operations and triage</h3>
-<p>When you need to bootstrap sessions, triage unread messages, or verify daemon
-health, <code>thrum-ops</code> provides operational workflows and command references.</p>
+<p>When you need to bootstrap sessions, triage unread messages, verify delivery on
+messages you authored, or check daemon health, <code>thrum-ops</code> provides operational
+workflows and command references.</p>
 <h3>Role template generation</h3>
 <p>When team structure changes, use <code>thrum-role-config</code> to detect environment
 context and regenerate <code>.thrum/role_templates/&lt;role&gt;.md</code> with clear autonomy and
@@ -100,18 +106,18 @@ cp -R codex-plugin/skills/thrum-ops &quot;${CODEX_HOME:-$HOME/.codex}/skills/&qu
 cp -R codex-plugin/skills/thrum-role-config &quot;${CODEX_HOME:-$HOME/.codex}/skills/&quot;
 cp -R codex-plugin/skills/project-setup &quot;${CODEX_HOME:-$HOME/.codex}/skills/&quot;</code></pre>
 <h2>Troubleshooting</h2>
-<p><strong>Skills do not appear in Codex</strong></p>
+<h3>Skills do not appear in Codex</h3>
 <ul>
 <li>Confirm install destination: <code>echo &quot;${CODEX_HOME:-$HOME/.codex}/skills&quot;</code></li>
 <li>Re-run <code>./codex-plugin/scripts/install-skills.sh --force</code></li>
 <li>Restart Codex</li>
 </ul>
-<p><strong>Skill updates are not reflected</strong></p>
+<h3>Skill updates are not reflected</h3>
 <ul>
 <li>Run <code>./codex-plugin/scripts/sync-skills.sh</code></li>
 <li>Restart Codex after sync</li>
 </ul>
-<p><strong>Thrum commands fail inside skill workflows</strong></p>
+<h3>Thrum commands fail inside skill workflows</h3>
 <ul>
 <li>Check daemon status: <code>thrum daemon status</code></li>
 <li>Verify identity/session: <code>thrum whoami &amp;&amp; thrum session start</code></li>
@@ -157,6 +163,17 @@ cp -R codex-plugin/skills/project-setup &quot;${CODEX_HOME:-$HOME/.codex}/skills
 <td>project-setup plugin skill</td>
 </tr>
 </tbody></table>
+<h2>Next Steps</h2>
+<ul>
+<li><a href="claude-code-plugin.html">Claude Code Plugin</a> — the equivalent plugin for
+Claude Code users, with slash commands and automatic hooks</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> — practical multi-agent workflows
+that the Codex skills support</li>
+<li><a href="role-templates.html">Role Templates</a> — role-based preamble templates that
+<code>thrum-role-config</code> generates</li>
+<li><a href="workflow-templates.html">Workflow Templates</a> — the <code>project-setup</code> skill&#39;s
+design → plan → implement pipeline in detail</li>
+</ul>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#codex-plugin.html')}</script>

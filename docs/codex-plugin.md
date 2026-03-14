@@ -1,9 +1,7 @@
 ## Codex Plugin
 
-> See also: [Quickstart Guide](quickstart.md) for base Thrum setup,
-> [Claude Code Plugin](claude-code-plugin.md) for Claude-specific plugin flows,
-> [Agent Coordination](agent-coordination.md) for coordination patterns,
-> [Role Templates](role-templates.md) for role preamble details.
+> **Prerequisites:** Thrum installed and initialized (`thrum init`), and Codex
+> installed with a local skills directory (`~/.codex/skills`).
 
 ## Overview
 
@@ -33,9 +31,22 @@ thrum quickstart --name myagent --role implementer --module auth
 
 ## Installation
 
-From the Thrum repository root:
+### From GitHub
+
+Clone the Thrum repository and run the install script:
 
 ```bash
+git clone https://github.com/leonletto/thrum.git
+cd thrum
+./codex-plugin/scripts/install-skills.sh
+```
+
+### From Local Clone
+
+If you already have the Thrum repository cloned locally:
+
+```bash
+cd /path/to/thrum
 ./codex-plugin/scripts/install-skills.sh
 ```
 
@@ -124,3 +135,14 @@ cp -R codex-plugin/skills/project-setup "${CODEX_HOME:-$HOME/.codex}/skills/"
 | Command UX            | Skill-guided CLI workflows           | Slash commands (`/thrum:*`)          |
 | Role customization    | `thrum-role-config` skill            | Configure-roles plugin skill         |
 | Project decomposition | `project-setup` skill                | project-setup plugin skill           |
+
+## Next Steps
+
+- [Claude Code Plugin](claude-code-plugin.md) — the equivalent plugin for Claude
+  Code users, with slash commands and automatic hooks
+- [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
+  that the Codex skills support
+- [Role Templates](role-templates.md) — role-based preamble templates that
+  `thrum-role-config` generates
+- [Workflow Templates](workflow-templates.md) — the `project-setup` skill's
+  design → plan → implement pipeline in detail

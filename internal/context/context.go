@@ -133,14 +133,15 @@ func SavePreamble(thrumDir, agentName string, content []byte) error {
 func DefaultPreamble() []byte {
 	return []byte(`## Thrum Quick Reference
 
-**Check messages:** ` + "`thrum inbox --unread`" + `
+**Check messages:** ` + "`thrum inbox --unread`" + ` (does not mark as read)
 **Check sent status:** ` + "`thrum sent --unread`" + ` (messages with unread recipients)
-**Send message:** ` + "`thrum send \"message\" --to @<agent_name>`" + ` — run ` + "`thrum team`" + ` first to find names. Do NOT send to @role unless you need ALL agents with that role.
+**Mark all read:** ` + "`thrum message read --all`" + `
+**Send message:** ` + "`thrum send \"message\" --to @<agent_name>`" + ` — ALWAYS use the specific agent name (e.g., ` + "`@coordinator_main`" + `), NEVER the role (e.g., ` + "`@coordinator`" + `). Role names fan out to ALL agents with that role. Run ` + "`thrum team`" + ` to find exact names.
 **Reply:** ` + "`thrum reply <MSG_ID> \"response\"`" + `
 **Status:** ` + "`thrum status`" + `
 **Who's online:** ` + "`thrum team`" + `
 **Save context:** Use ` + "`/thrum:update-context`" + ` skill. **NEVER run ` + "`thrum context save`" + ` manually** — it overwrites accumulated session state.
-**Wait for messages:** ` + "`thrum wait --after -1s --timeout 5m`" + ` (` + "`--after -1s`" + ` = include messages sent up to 1s ago)
+**Wait for messages:** ` + "`thrum wait --after -15s --timeout 5m`" + ` (` + "`--after -15s`" + ` = include messages sent up to 15s ago, covers re-arm gap)
 
 ## Agent Strategies
 

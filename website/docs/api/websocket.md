@@ -885,14 +885,13 @@ See the [examples directory](./examples/) for complete, working examples:
 - [TypeScript/JavaScript Client](./examples/ws-client.ts)
 - [Go Client](./examples/ws-client.go)
 
-## See Also
+## Next Steps
 
-- [Event Reference](./events.md) - Detailed event documentation
-- [Authentication Guide](./authentication.md) - Authentication and authorization
-  details
-- [Subscriptions](../subscriptions.md) - Subscription model and notification
-  dispatch
-- [Event Streaming](../event-streaming.md) - Event streaming architecture and
-  Broadcaster
-- [RPC API](../rpc-api.md) - Full RPC method reference
-- [Daemon Architecture](../daemon.md) - Daemon lifecycle and component overview
+- [Event Reference](./events.md) — all event types emitted by the daemon over
+  WebSocket, with full payload schemas
+- [Authentication Guide](./authentication.md) — agent and user authentication,
+  impersonation, and session lifecycle
+- [Subscriptions & Notifications](../subscriptions.md) — subscribe to scopes or
+  mentions and receive push notifications
+- [RPC API Reference](../rpc-api.md) — complete reference for all RPC methods
+  available over this WebSocket connection

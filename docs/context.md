@@ -1,5 +1,10 @@
 ## Agent Context Management
 
+> **TL;DR:** Context lets agents save notes that survive session restarts and
+> compaction. Save with `thrum context save`, view with `thrum context show`.
+> Files live in `.thrum/context/{agent}.md` — plain Markdown you can read and
+> edit directly.
+
 ## Overview
 
 Agents lose state between sessions due to context window compaction, session
@@ -79,12 +84,13 @@ directly or replace it with `thrum context preamble --file custom.md`.
 ```markdown
 ## Thrum Quick Reference
 
-**Check messages:** `thrum inbox --unread` **Check sent items:**
-`thrum sent --unread` **Send message:** `thrum send "message" --to @role`
-**Reply:** `thrum reply <MSG_ID> "response"` **Status:** `thrum status` **Who's
-online:** `thrum agent list --context` **Save context:** `thrum context save`
-**Wait for messages:** `thrum wait --after -30s --timeout 5m` (`--after -30s` =
-include messages sent up to 30s ago)
+**Check messages:** `thrum inbox --unread` (does not mark as read) **Mark all
+read:** `thrum message read --all` **Check sent items:** `thrum sent --unread`
+**Send message:** `thrum send "message" --to @role` **Reply:**
+`thrum reply <MSG_ID> "response"` **Status:** `thrum status` **Who's online:**
+`thrum agent list --context` **Save context:** `thrum context save` **Wait for
+messages:** `thrum wait --after -30s --timeout 5m` (`--after -30s` = include
+messages sent up to 30s ago)
 ```
 
 **Customization examples:**
@@ -700,9 +706,13 @@ machines. Local notes and WIP context can stay local.
 
 ---
 
-## See Also
+## Next Steps
 
-- [Identity System](identity.md) - Agent identity and registration
-- [CLI Reference](cli.md) - All CLI commands
-- [RPC API Reference](rpc-api.md) - Complete RPC method documentation
-- [Agent Coordination](agent-coordination.md) - Multi-agent workflows
+- [Identity System](identity.md) — how agents are named, registered, and
+  identified across sessions and worktrees
+- [CLI Reference](cli.md) — complete documentation for every `thrum context`
+  command and all other CLI commands
+- [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
+  including context handoff between agents
+- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and the
+  `thrum context prime` command for session recovery

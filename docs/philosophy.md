@@ -134,3 +134,14 @@ systems.
 If you want agents to autonomously tackle your backlog while you do something
 else, there are good tools for that. If you want to direct the work yourself and
 have agents execute faster than you can type, that's what Thrum is for.
+
+## Next Steps
+
+- [Quickstart Guide](quickstart.md) — get Thrum installed and running in 5
+  minutes, with your first agent registered and sending messages
+- [Agent Coordination](agent-coordination.md) — practical patterns for running
+  multiple agents in parallel using the workflow described above
+- [Workflow Templates](workflow-templates.md) — pre-built skill pipelines for
+  the full research → plan → implement → review cycle
+- [Beads and Thrum](beads-and-thrum.md) — how task tracking and messaging work
+  together to give agents persistent memory across sessions

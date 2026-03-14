@@ -91,8 +91,12 @@ zero-trust networking, and automatic key rotation. See
 [Tailscale Security](tailscale-security.md) for detailed security model and
 threat analysis.
 
-## See Also
+## Next Steps
 
-- [Development Guide](development.md) — contributing and local setup
-- [Quickstart Guide](quickstart.md) — getting started with Thrum
-- [Tailscale Security](tailscale-security.md) — remote access security model
+- [Development Guide](development.md) — full contributing guide including
+  testing, building, and adding new features
+- [Tailscale Security](tailscale-security.md) — the security model for remote
+  access and cross-machine sync
+- [Architecture](architecture.md) — system design overview before contributing
+  to the codebase
+- [Quickstart Guide](quickstart.md) — get Thrum running locally in 5 minutes

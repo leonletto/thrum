@@ -2,7 +2,7 @@
 
 **URL:** [https://docs.thrum.info](https://docs.thrum.info)
 
-Static documentation website for Thrum - Git-backed messaging for AI agent
+Static documentation website for Thrum - persistent messaging for AI agent
 coordination.
 
 ## Structure

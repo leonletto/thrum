@@ -21,13 +21,13 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Beads and Thrum
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <strong>Beads and Thrum</strong> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a> | <a href="overview.html">Technical Overview</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <strong>Beads and Thrum</strong> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -83,7 +83,7 @@ because everything is committed to version control.</p>
 <tr>
 <td><strong>Key Commands</strong></td>
 <td><code>bd create</code>, <code>bd ready</code>, <code>bd close</code>, <code>bd show</code></td>
-<td><code>thrum send</code>, <code>thrum inbox</code>, <code>thrum agent list</code></td>
+<td><code>thrum send</code>, <code>thrum inbox</code>, <code>thrum sent</code>, <code>thrum agent list</code></td>
 </tr>
 <tr>
 <td><strong>Recovery Scenario</strong></td>
@@ -115,6 +115,12 @@ $ thrum inbox --unread
 From: @planner
 Message: &quot;Search UI should use the MiniSearch interface we built in thrum-c3d4&quot;
 
+# Check sent acknowledgements or receipts
+$ thrum sent --unread
+
+# Mark messages as read after reviewing
+$ thrum message read --all
+
 # Claim the task
 $ bd update thrum-a1b2 -s in_progress
 
@@ -135,13 +141,19 @@ $ thrum inbox --unread
 From: @planner
 Message: &quot;Yes, dark mode required. See design tokens in styles/theme.css&quot;
 
+# Verify your last status message was delivered
+$ thrum sent --to @planner
+
 # Continue work with full context recovered</code></pre>
 <h3>Session 3: Finishing up</h3>
 <pre><code># Mark task complete
 $ bd close thrum-a1b2 --comment &quot;Implemented with dark mode support&quot;
 
 # Notify coordinator
-$ thrum send &quot;Search UI complete (thrum-a1b2). Ready for integration.&quot; --to @planner</code></pre>
+$ thrum send &quot;Search UI complete (thrum-a1b2). Ready for integration.&quot; --to @planner
+
+# Confirm coordinator received it
+$ thrum sent --to @planner</code></pre>
 <h3>Session 4: New agent picks up follow-up work</h3>
 <p>A different agent needs to build on this work.</p>
 <pre><code># Discover what&#39;s ready to work on
@@ -149,7 +161,7 @@ $ bd ready
 - thrum-e5f6: Integrate search UI into main app (depends on thrum-a1b2)
 
 # Check message history for context
-$ thrum inbox --from @implementer_ui
+$ thrum inbox
 From: @implementer_ui
 Message: &quot;Search UI complete (thrum-a1b2). Ready for integration.&quot;
 
@@ -236,12 +248,16 @@ is `bd dep add &lt;blocked&gt; &lt;blocker&gt;` (reversed order).</code></pre>
 <p>You can also generate a minimal starter block with <code>bd onboard</code>, but the block
 above is more comprehensive and covers the epic/dependency patterns that
 sub-agents most commonly get wrong.</p>
-<h2>See Also</h2>
+<h2>Next Steps</h2>
 <ul>
-<li><a href="./quickstart.html">Quickstart</a> — Get started with Beads and Thrum in 5 minutes</li>
-<li><a href="./agent-coordination.html">Agent Coordination</a> — Patterns for multi-agent
-workflows</li>
-<li><a href="./cli.html">CLI Reference</a> — Complete command documentation</li>
+<li><a href="quickstart.html">Quickstart Guide</a> — get Thrum initialized and your first
+agent registered in 5 minutes</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> — practical multi-agent workflows
+showing how Beads and Thrum work together in practice</li>
+<li><a href="workflow-templates.html">Workflow Templates</a> — pre-built skill pipelines for
+the full research → plan → implement cycle using both tools</li>
+<li><a href="guides/beads-setup.html">Beads Setup Guide</a> — install and configure Beads for
+task tracking alongside Thrum</li>
 </ul>
 
 </main>

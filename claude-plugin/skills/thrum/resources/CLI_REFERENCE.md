@@ -80,7 +80,7 @@ Flags:
 
 ```text
 -a, --all           Show all messages (disable auto-filtering)
---unread            Only unread messages
+--unread            Only unread messages (does not mark as read — safe to peek)
 --mentions          Only messages mentioning me
 --scope string      Filter by scope (format: type:value)
 --page int          Page number (default 1)
@@ -96,7 +96,7 @@ Blocks until a matching message arrives or timeout. Exit codes: 0=message,
 ```bash
 thrum wait                                     # Wait for any message (30s default)
 thrum wait --timeout 5m                        # Wait up to 5 minutes
-thrum wait --timeout 15m --after -1s           # Include messages sent up to 1s ago (prevents stale replay)
+thrum wait --timeout 8m --after -15s          # Include messages sent up to 15s ago (covers re-arm gap)
 thrum wait --mention @reviewer                 # Wait for mention of role
 thrum wait --scope module:auth                 # Wait for scoped message
 thrum wait --after -30s                        # Include messages sent up to 30s ago
@@ -495,12 +495,15 @@ thrum init --runtime codex --force             # Init + overwrite Codex configs
 thrum init --runtime all --dry-run             # Preview all runtime configs
 thrum init --stealth                           # Zero tracked-file footprint
 thrum init --agent-role implementer --agent-module auth --agent-name alice
+thrum init --skills                            # Install thrum skill only (no MCP, no startup script)
+thrum init --skills --runtime cursor           # Install skill to Cursor's skill directory
 ```
 
 Flags:
 
 ```text
 --runtime string        Generate runtime-specific configs: claude|codex|cursor|gemini|cli-only|all
+--skills                Install thrum skill only (no MCP config, no startup script)
 --stealth               Use .git/info/exclude instead of .gitignore (zero footprint)
 --force                 Force reinitialization / overwrite existing files
 --dry-run               Preview changes without writing files

@@ -44,7 +44,7 @@ Groups let you send messages to collections of agents without addressing each
 one individually. Groups can contain specific agents or all agents with a role.
 
 For the full group commands reference, see
-[Messaging — Groups](/docs/messaging.html#groups).
+[Messaging — Groups](messaging.md#groups).
 
 ### Auto-Created Groups
 
@@ -144,7 +144,7 @@ Output:
 ### MCP Group Tools
 
 When using the MCP server (`thrum mcp serve`), groups are managed via native MCP
-tools. See [MCP Server](/docs/mcp-server.html) for the complete tools reference.
+tools. See [MCP Server](mcp-server.md) for the complete tools reference.
 
 Example MCP usage:
 
@@ -188,19 +188,20 @@ thrum runtime set-default claude
 
 ### Auto-Detection
 
-Thrum can auto-detect which AI platform is running by checking for file markers
-and environment variables:
+Thrum uses 3-tier detection to identify which AI platform is running:
 
-**File markers:**
+**Tier 1 — File markers** (checked in the repo):
 
 | Marker File             | Detected Runtime |
 | ----------------------- | ---------------- |
 | `.claude/settings.json` | `claude`         |
-| `.codex`                | `codex`          |
+| `.codex/`               | `codex`          |
 | `.cursorrules`          | `cursor`         |
-| `.augment`              | `auggie`         |
+| `.cursor/rules/`        | `cursor`         |
+| `.augment/`             | `auggie`         |
+| `.gemini/`              | `gemini`         |
 
-**Environment variables:**
+**Tier 2 — Environment variables:**
 
 | Variable            | Detected Runtime |
 | ------------------- | ---------------- |
@@ -209,8 +210,17 @@ and environment variables:
 | `GEMINI_CLI`        | `gemini`         |
 | `AUGMENT_AGENT`     | `auggie`         |
 
-If no runtime is detected, Thrum falls back to CLI-only mode (no MCP
-configuration generated).
+**Tier 3 — Binary verification** (falls back to PATH scan):
+
+| Binary   | Verification                      | Detected Runtime |
+| -------- | --------------------------------- | ---------------- |
+| `claude` | `claude --version` matches output | `claude`         |
+| `codex`  | `codex --version` matches output  | `codex`          |
+| `cursor` | Binary exists on PATH             | `cursor`         |
+| `gemini` | Binary exists on PATH             | `gemini`         |
+
+Tiers are checked in order. If no runtime is detected at any tier, Thrum falls
+back to CLI-only mode (no MCP configuration generated).
 
 ### Integration with init and quickstart
 
@@ -279,8 +289,8 @@ thrum context prime        # Human-readable summary
 thrum context prime --json # Structured JSON for LLM consumption
 ```
 
-See [Context Management](/docs/context.html) for full documentation including
-output format, graceful degradation behavior, and use cases.
+See [Context Management](context.md) for full documentation including output
+format, graceful degradation behavior, and use cases.
 
 ---
 
@@ -429,8 +439,8 @@ flag; use subscriptions if you need a firehose.
 # Wait for any message addressed to this agent
 thrum wait --timeout 5m
 
-# Include messages sent up to 1s ago (--after -1s = "1 second ago"; negative = "N ago")
-thrum wait --after -1s --timeout 5m --json
+# Include messages sent up to 1s ago (--after -15s = "1 second ago"; negative = "N ago")
+thrum wait --after -15s --timeout 5m --json
 
 # Wait for mentions of your role
 thrum wait --mention @reviewer --timeout 5m
@@ -504,6 +514,7 @@ thrum context prime
 # Check for urgent messages
 thrum inbox --unread
 thrum sent --unread
+thrum message read --all       # Mark all messages as read
 
 # Resume work based on recovered context
 thrum agent set-intent "Resuming JWT implementation after compaction"
@@ -572,16 +583,13 @@ thrum send "Auth complete, 15 tests passing" --to @coord_main
 - **Set clear intents** so other agents can see what you are working on via
   `thrum agent list --context`
 
-## See Also
+## Next Steps
 
-- [Tailscale Sync](tailscale-sync.md) -- Cross-machine sync via Tailscale with
-  Ed25519 signing and peer discovery
-- [Agent Coordination](agent-coordination.md) -- Workflow patterns and Beads
-  integration
-- [Identity System](identity.md) -- Agent naming, registration, and conflict
-  resolution
-- [Messaging System](messaging.md) -- Message structure, threads, scopes, and
-  refs
-- [MCP Server](mcp-server.md) -- MCP tools for AI agent integration
-- [Context Management](context.md) -- Per-agent context storage and preambles
-- [CLI Reference](cli.md) -- Complete command documentation
+- [Agent Coordination](agent-coordination.md) — workflow patterns and Beads
+  integration for multi-agent teams
+- [Identity System](identity.md) — agent naming, registration, and per-worktree
+  identity files
+- [Messaging](messaging.md) — full send/receive/reply reference including
+  scopes, mentions, and groups
+- [Coordinate Two Agents](guides/coordinate-two-agents.md) — step-by-step
+  walkthrough of the most common setup
