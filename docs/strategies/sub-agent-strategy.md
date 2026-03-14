@@ -73,3 +73,14 @@ When writing prompts for sub-agents:
 - Sub-agents cannot access MCP tools — they fall back to Bash
 - Sub-agents cannot see CLAUDE.md or project `.agents/` files unless you include
   the content in the prompt
+
+## Next Steps
+
+- [Agent Coordination](../agent-coordination.md) — higher-level coordination
+  patterns including how to use sub-agents alongside Thrum messaging
+- [MCP Server](../mcp-server.md) — the message-listener pattern, which runs a
+  background sub-agent to block on `wait_for_message`
+- [Workflow Templates](../workflow-templates.md) — how the design → plan →
+  implement pipeline uses sub-agents for parallel implementation
+- [Claude Code Plugin](../claude-code-plugin.md) — the plugin that provides
+  sub-agent spawning templates via the background listener pattern

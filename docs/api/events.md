@@ -861,7 +861,13 @@ func handleMessage(data []byte) error {
 }
 ```
 
-## See Also
+## Next Steps
 
-- [WebSocket API](./websocket.md) - Main API documentation
-- [Authentication Guide](./authentication.md) - User and agent authentication
+- [WebSocket API](./websocket.md) — connect to the WebSocket endpoint, send RPC
+  requests, and receive the events documented here
+- [Subscriptions & Notifications](../subscriptions.md) — subscribe to specific
+  scopes or mentions so you only receive relevant events
+- [Authentication Guide](./authentication.md) — register agents and users before
+  subscribing to events
+- [Event Streaming](../event-streaming.md) — the Broadcaster and Dispatcher
+  internals that route events to subscribers

@@ -188,19 +188,20 @@ thrum runtime set-default claude
 
 ### Auto-Detection
 
-Thrum can auto-detect which AI platform is running by checking for file markers
-and environment variables:
+Thrum uses 3-tier detection to identify which AI platform is running:
 
-**File markers:**
+**Tier 1 — File markers** (checked in the repo):
 
 | Marker File             | Detected Runtime |
 | ----------------------- | ---------------- |
 | `.claude/settings.json` | `claude`         |
-| `.codex`                | `codex`          |
+| `.codex/`               | `codex`          |
 | `.cursorrules`          | `cursor`         |
-| `.augment`              | `auggie`         |
+| `.cursor/rules/`        | `cursor`         |
+| `.augment/`             | `auggie`         |
+| `.gemini/`              | `gemini`         |
 
-**Environment variables:**
+**Tier 2 — Environment variables:**
 
 | Variable            | Detected Runtime |
 | ------------------- | ---------------- |
@@ -209,8 +210,17 @@ and environment variables:
 | `GEMINI_CLI`        | `gemini`         |
 | `AUGMENT_AGENT`     | `auggie`         |
 
-If no runtime is detected, Thrum falls back to CLI-only mode (no MCP
-configuration generated).
+**Tier 3 — Binary verification** (falls back to PATH scan):
+
+| Binary    | Verification                     | Detected Runtime |
+| --------- | -------------------------------- | ---------------- |
+| `claude`  | `claude --version` matches output | `claude`         |
+| `codex`   | `codex --version` matches output  | `codex`          |
+| `cursor`  | Binary exists on PATH             | `cursor`         |
+| `gemini`  | Binary exists on PATH             | `gemini`         |
+
+Tiers are checked in order. If no runtime is detected at any tier, Thrum falls
+back to CLI-only mode (no MCP configuration generated).
 
 ### Integration with init and quickstart
 

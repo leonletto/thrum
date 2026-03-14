@@ -1,26 +1,339 @@
 
-## Thrum Foundation Architecture
+## System Architecture
 
-This document describes the foundational packages that support the Thrum agent
-messaging system.
+![Thrum architecture: Clients (CLI, Web UI, MCP Server) connect to the Daemon via JSON-RPC/WebSocket, which reads and writes to JSONL Logs, SQLite Index, and Git Sync, which push/pull to the remote a-sync branch](../img/architecture.svg)
 
-## Overview
+## The Daemon: Central Coordinator
 
-The foundation provides core functionality that both the daemon and CLI depend
-on:
+The daemon is the one process that everything else talks to. Start it once and
+it handles messaging, sync, and state for all your agents — CLI, Web UI, and MCP
+server all go through it.
 
-- **Configuration loading** - Environment variables, identity files, CLI flags,
-  agent naming
-- **ID generation** - Deterministic and unique identifiers (ULID-based)
-- **JSONL handling** - Append-only event log with file locking
-- **SQLite schema** - Database tables, indexes, and migrations (version 13)
-- **Event projection** - Replay sharded JSONL events into SQLite
-- **Path resolution** - `.thrum/redirect` for multi-worktree, sync worktree path
-  via `git-common-dir`
-- **Git context** - Extract live git state (branch, commits, files) for agent
-  work context
+### Core Services
 
-## Package Structure
+| Service                     | Purpose                                       | Benefit                       |
+| --------------------------- | --------------------------------------------- | ----------------------------- |
+| **RPC Server**              | JSON-RPC 2.0 API over Unix socket             | CLI and programmatic access   |
+| **WebSocket Server**        | Real-time bidirectional communication         | Web UI and live updates       |
+| **Sync Loop**               | Automatic Git fetch/merge/push (60s interval) | Cross-machine synchronization |
+| **Subscription Dispatcher** | Route notifications to interested clients     | Targeted communication        |
+| **State Management**        | JSONL log + SQLite projection                 | Persistence + fast queries    |
+
+### Everything Depends on the Daemon
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                     CLIENTS (Depend on Daemon)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐       │
+│   │    CLI      │   │   Web UI    │   │  MCP Server │       │
+│   │  (thrum)    │   │  (React)    │   │  (stdio)    │       │
+│   └──────┬──────┘   └──────┬──────┘   └──────┬──────┘       │
+│          │                 │                  │              │
+│          │ Unix Socket     │ WebSocket        │ Unix Socket  │
+│          │ JSON-RPC 2.0    │ JSON-RPC 2.0     │ + WebSocket  │
+│          │                 │                  │              │
+└──────────┼─────────────────┼──────────────────┼──────────────┘
+           │                 │                  │
+           ▼                 ▼                  ▼
+    ┌─────────────────────────────────────────────────┐
+    │                    DAEMON                        │
+    │  (Single source of truth for all clients)        │
+    └─────────────────────────────────────────────────┘
+```
+
+**CLI** (`thrum` command): Sends messages, checks inbox, manages sessions. All
+commands go through the daemon via Unix socket.
+
+**Web UI** (Embedded React SPA): Provides a graphical interface for viewing
+messages and agent activity. Served from the same port as WebSocket (default
+9999). Browser users are auto-registered via git config.
+
+**MCP Server** (`thrum mcp serve`): Exposes Thrum functionality as native MCP
+tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
+directly through MCP protocol without CLI shell-outs. Connects to the daemon via
+Unix socket for RPC and WebSocket for real-time push notifications. Provides 4
+core messaging tools (`send_message`, `check_messages`, `wait_for_message`,
+`list_agents`) and 6 group management tools (`create_group`, `delete_group`,
+`add_group_member`, `remove_group_member`, `list_groups`, `get_group`).
+
+## Key Features
+
+### 1. Persistent Messaging
+
+Messages are stored in append-only JSONL logs on a dedicated `a-sync` orphan
+branch, accessed via a sync worktree at `.git/thrum-sync/a-sync/`:
+
+```go
+.git/thrum-sync/a-sync/   ← Sync worktree on a-sync branch
+├── events.jsonl          ← Agent lifecycle events
+└── messages/
+    └── *.jsonl           ← Per-agent message logs
+
+.thrum/                   ← Gitignored entirely
+├── var/
+│   ├── messages.db       ← SQLite query cache
+│   ├── thrum.sock        ← Unix socket
+│   ├── thrum.pid         ← Process ID (JSON: PID, RepoPath, StartedAt, SocketPath)
+│   ├── thrum.lock        ← flock for SIGKILL resilience
+│   ├── ws.port           ← WebSocket port number
+│   └── sync.lock         ← Sync lock
+├── identities/           ← Per-worktree agent identities
+│   └── {agent_name}.json
+├── context/              ← Per-agent context storage
+│   └── {agent_name}.md
+└── redirect              ← (feature worktrees only) points to main .thrum/
+```
+
+Messages survive session restarts, machine reboots, context window compaction,
+and agent replacement.
+
+### 2. Git-Based Synchronization
+
+The daemon syncs messages via the sync worktree at `.git/thrum-sync/a-sync/`,
+checked out on the `a-sync` orphan branch. No branch switching needed — all git
+operations happen within the worktree:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│          Sync Loop (60s) in .git/thrum-sync/a-sync/          │
+├─────────────────────────────────────────────────────────────┤
+│  1. Acquire lock (.thrum/var/sync.lock)                     │
+│  2. Fetch remote in worktree                                 │
+│  3. Merge JSONL (append-only dedup by event ID)             │
+│  4. Project new events into SQLite                           │
+│  5. Notify subscribers of new events                         │
+│  6. Commit & push local changes in worktree                  │
+│  7. Release lock                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Why Git?** Works offline (changes accumulate locally), leverages existing
+authentication (SSH keys, HTTPS), provides a natural audit trail, and needs no
+additional infrastructure.
+
+### 3. Agent & Session Management
+
+Agents register with a human-readable name, role, and module:
+
+```bash
+thrum agent register --name furiosa --role=implementer --module=auth
+```
+
+Agent names follow the pattern `[a-z0-9_]+`. Reserved names: `daemon`,
+`system`, `thrum`, `all`, `broadcast`. Identity resolves in this order:
+`THRUM_NAME` env var > `--name` flag > solo-agent auto-select.
+
+Each agent gets an identity file at `.thrum/identities/{name}.json`. Multiple
+agents can coexist in a single worktree.
+
+Sessions track active work periods:
+
+```bash
+thrum session start   # Begin working
+# ... do work ...
+thrum session end     # Finish
+```
+
+Agents can be deleted and orphaned agents cleaned up:
+
+```bash
+thrum agent delete furiosa           # Delete a specific agent
+thrum agent cleanup --dry-run        # Preview orphaned agents
+thrum agent cleanup --force          # Delete all orphaned agents
+```
+
+### 4. Subscription-Based Notifications
+
+Agents subscribe to relevant events:
+
+```bash
+# Subscribe to your module
+thrum subscribe --scope module:auth
+
+# Subscribe to @mentions
+thrum subscribe --mention @reviewer
+```
+
+When matching messages arrive, subscribers receive real-time notifications:
+
+```json
+{
+  "method": "notification.message",
+  "params": {
+    "message_id": "msg_01HXE...",
+    "preview": "Auth implementation complete...",
+    "matched_subscription": {
+      "match_type": "scope"
+    }
+  }
+}
+```
+
+### 5. Live Git State Tracking
+
+The daemon tracks what each agent is working on in real-time:
+
+```sql
+-- agent_work_contexts table
+session_id        | agent_id        | branch      | unmerged_commits | uncommitted_files
+ses_01HXE...      | furiosa         | feature/auth| 3                | ["src/auth.go"]
+ses_02HXF...      | maximus         | feature/db  | 1                | []
+```
+
+It tracks current branch, unmerged commits vs main, changed files, uncommitted
+modifications, and agent-set task and intent. Agent2 can see "furiosa is working
+on auth.go with 3 unmerged commits" — no manual investigation, no duplicate
+work, intelligent handoffs.
+
+### 6. Dual-Transport API (Single Port)
+
+The daemon serves the WebSocket API and embedded Web UI SPA on the same port
+(default 9999, configurable via `THRUM_WS_PORT`). The WebSocket endpoint is at
+`/ws`; all other paths serve the React SPA.
+
+| Transport       | Endpoint                 | Use Case                           |
+| --------------- | ------------------------ | ---------------------------------- |
+| **Unix Socket** | `.thrum/var/thrum.sock`  | CLI, MCP server, scripts           |
+| **WebSocket**   | `ws://localhost:9999/ws` | Web UI, MCP waiter, real-time apps |
+| **HTTP**        | `http://localhost:9999/` | Embedded React SPA (Web UI)        |
+
+26 registered RPC methods on Unix socket (24 on WebSocket):
+
+- `health` - Daemon status
+- `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`,
+  `agent.delete`, `agent.cleanup`
+- `session.start`, `session.end`, `session.list`, `session.heartbeat`,
+  `session.setIntent`, `session.setTask`
+- `message.send`, `message.get`, `message.list`, `message.edit`,
+  `message.delete`, `message.markRead`
+- `subscribe`, `unsubscribe`, `subscriptions.list`
+- `sync.force`, `sync.status`
+- `user.register`, `user.identify` (user.register is WebSocket-only)
+
+### 7. Message Lifecycle
+
+Full message lifecycle management beyond send/receive:
+
+```bash
+thrum message get MSG_ID        # Retrieve a message with full details
+thrum message edit MSG_ID TEXT   # Edit your own messages (full replacement)
+thrum message delete MSG_ID     # Delete a message (requires --force)
+```
+
+Messages are automatically marked as read when viewed via `thrum inbox` or
+`thrum message get`. Explicit mark-read is also available via the
+`message.markRead` RPC method.
+
+### 8. Coordination Commands
+
+Lightweight commands for checking team activity:
+
+```bash
+thrum who-has auth.go           # Which agents are editing a file?
+thrum ping @reviewer            # Is an agent online? Show last-seen time
+```
+
+These query agent work contexts to provide quick answers without full status
+output.
+
+### 9. Agent Context Management
+
+Agents save and retrieve volatile project state that doesn't belong in git
+commits but needs to survive session boundaries:
+
+```bash
+# Save context from a file or stdin
+thrum context save --file continuation-notes.md
+echo "Next steps: finish JWT implementation" | thrum context save
+
+# View saved context
+thrum context show
+
+# Share context across worktrees (manual sync)
+thrum context sync
+```
+
+Context files live at `.thrum/context/{agent-name}.md` and appear in
+`thrum status` output. Use the `/update-context` skill in Claude Code for guided
+context updates.
+
+## Storage Architecture
+
+Thrum uses event sourcing with CQRS:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                    Event Sourcing + CQRS                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────────────┐     ┌─────────────────────────┐    │
+│  │   JSONL Event Logs  │     │   SQLite Projection     │    │
+│  │   (Source of Truth) │────▶│   (Query Model)         │    │
+│  │   in sync worktree  │     │   in .thrum/var/        │    │
+│  └─────────────────────┘     └─────────────────────────┘    │
+│        │                              │                      │
+│        │ On a-sync branch             │ Gitignored           │
+│        │ Append-only                  │ Rebuildable          │
+│        │ Conflict-free merge          │ Fast queries         │
+│        │                              │                      │
+└────────┼──────────────────────────────┼──────────────────────┘
+         │                              │
+         ▼                              ▼
+    Sync via worktree           Local CLI/UI queries
+```
+
+JSONL merges conflict-free (immutable events with unique IDs). SQLite provides
+fast indexed queries. SQLite can be rebuilt from JSONL anytime. Offline-first:
+works without network.
+
+## What the Daemon Enables
+
+### For the CLI
+
+| Command                               | Daemon Feature Used                                           |
+| ------------------------------------- | ------------------------------------------------------------- |
+| `thrum send "Hello"`                  | `message.send` RPC + auto-sync                                |
+| `thrum inbox`                         | `message.list` RPC with filtering                             |
+| `thrum subscribe --scope module:auth` | `subscribe` RPC + push notifications                          |
+| `thrum agent list --context`          | `agent.listContext` RPC (live git state)                      |
+| `thrum who-has FILE`                  | `agent.listContext` RPC filtered by file                      |
+| `thrum ping @role`                    | `agent.list` + `agent.listContext` RPCs                       |
+| `thrum quickstart --name NAME`        | `agent.register` + `session.start` + `session.setIntent` RPCs |
+| `thrum overview`                      | Multiple RPCs combined into one view                          |
+| `thrum sync force`                    | `sync.force` RPC                                              |
+| `thrum sync status`                   | `sync.status` RPC                                             |
+| `thrum agent delete NAME`             | `agent.delete` RPC                                            |
+| `thrum agent cleanup`                 | `agent.cleanup` RPC                                           |
+
+### For the Web UI
+
+| Feature                | Daemon Feature Used                |
+| ---------------------- | ---------------------------------- |
+| Real-time message feed | WebSocket + `notification.message` |
+| Agent activity         | `agent.listContext` RPC            |
+| Unread counts          | `message.list` with `unread: true` |
+| Live updates           | WebSocket notifications            |
+
+### For MCP Integration
+
+`thrum mcp serve` runs an MCP server on stdio (JSON-RPC over stdin/stdout),
+enabling LLM agents to communicate via native MCP tools. It provides 4 core
+messaging tools (`send_message`, `check_messages`, `wait_for_message`,
+`list_agents`) and 6 group management tools.
+
+See [MCP Server](mcp-server.md) for the complete tools reference,
+configuration, and setup instructions.
+
+---
+
+## Foundation Packages
+
+The sections below describe the internal packages that implement the architecture
+above.
+
+### Package Structure
 
 ```text
 internal/
@@ -372,7 +685,7 @@ projector.Apply(eventJSON)
    ordering
 4. Apply to SQLite in order
 
-File boundaries are transparent to the projector -- it only cares about event
+File boundaries are transparent to the projector — it only cares about event
 ordering.
 
 ### Event Types
@@ -507,5 +820,15 @@ Plugin restore commands run after the core restore.
 
 - Design document: `dev-docs/2026-02-03-thrum-design.md`
 - Sharding design: `dev-docs/2026-02-06-jsonl-sharding-and-agent-naming.md`
-- Daemon architecture: `docs/daemon.md`
-- Sync protocol: `docs/sync.md`
+- Daemon architecture: [Daemon Architecture](daemon.md)
+- Sync protocol: [Sync Protocol](sync.md)
+
+## Next Steps
+
+- [Daemon Architecture](daemon.md) — deeper dive into the daemon's lifecycle,
+  RPC handlers, sync loop, and WebSocket server internals
+- [Sync Protocol](sync.md) — how the `a-sync` orphan branch, JSONL dedup, and
+  conflict-free merging work in detail
+- [RPC API Reference](rpc-api.md) — all 26 RPC methods that the CLI and Web UI
+  call into
+- [Development Guide](development.md) — how to build, test, and extend Thrum

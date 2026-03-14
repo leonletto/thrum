@@ -80,19 +80,25 @@ JSONL event logs)</li>
 need a separate <code>thrum daemon start</code> step for first-time setup.</p>
 <p>If you are upgrading an existing repo that has JSONL files tracked on <code>main</code>,
 run <code>thrum migrate</code> instead.</p>
-<h3>2. Install the Plugin (Claude Code or Codex)</h3>
-<p>If you use Claude Code or Codex, install the plugin right after initialization
-so agents get automatic context injection and slash commands.</p>
-<p><strong>Claude Code:</strong></p>
+<h3>2. Install the Thrum Skill</h3>
+<p>Install the thrum skill so your agent knows how to use thrum for coordination.
+This works with Claude Code, Cursor, Codex, Gemini, Augment, and Amp:</p>
+<pre><code>thrum init --skills</code></pre>
+<p>Thrum auto-detects which agent you&#39;re using and installs the skill to the right
+location (e.g., <code>.claude/skills/thrum/</code> for Claude Code, <code>.cursor/skills/thrum/</code>
+for Cursor). If no agent-specific directory exists, it installs to
+<code>.agents/skills/thrum/</code> which all agents check.</p>
+<p>You can also target a specific agent:</p>
+<pre><code>thrum init --skills --runtime cursor    # Install for Cursor specifically
+thrum init --skills --runtime codex     # Install for Codex specifically</code></pre>
+<p><strong>Claude Code full plugin (optional):</strong> If you want the complete experience with
+slash commands, automatic context injection, hooks, and startup scripts, install
+the Claude Code plugin instead:</p>
 <pre><code>claude plugin marketplace add https://github.com/leonletto/thrum
 claude plugin install thrum</code></pre>
-<p>See <a href="claude-code-plugin.html">Claude Code Plugin</a> for details on what the plugin
-provides (slash commands, hooks, resource docs).</p>
-<p><strong>Codex:</strong></p>
-<pre><code>git clone https://github.com/leonletto/thrum.git
-cd thrum
-./codex-plugin/scripts/install-skills.sh</code></pre>
-<p>See <a href="codex-plugin.html">Codex Plugin</a> for the full skill bundle reference.</p>
+<p>The plugin already includes the skill — <code>thrum init --skills</code> will detect the
+plugin and skip the install. See <a href="claude-code-plugin.html">Claude Code Plugin</a> for
+details.</p>
 <h3>3. Generate CLAUDE.md Coordination Instructions</h3>
 <p>For Claude Code and other AI agents, generate Thrum coordination instructions:</p>
 <pre><code>thrum setup claude-md --apply</code></pre>

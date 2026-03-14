@@ -80,7 +80,7 @@ Flags:
 
 ```text
 -a, --all           Show all messages (disable auto-filtering)
---unread            Only unread messages
+--unread            Only unread messages (does not mark as read — safe to peek)
 --mentions          Only messages mentioning me
 --scope string      Filter by scope (format: type:value)
 --page int          Page number (default 1)
@@ -495,12 +495,15 @@ thrum init --runtime codex --force             # Init + overwrite Codex configs
 thrum init --runtime all --dry-run             # Preview all runtime configs
 thrum init --stealth                           # Zero tracked-file footprint
 thrum init --agent-role implementer --agent-module auth --agent-name alice
+thrum init --skills                            # Install thrum skill only (no MCP, no startup script)
+thrum init --skills --runtime cursor           # Install skill to Cursor's skill directory
 ```
 
 Flags:
 
 ```text
 --runtime string        Generate runtime-specific configs: claude|codex|cursor|gemini|cli-only|all
+--skills                Install thrum skill only (no MCP config, no startup script)
 --stealth               Use .git/info/exclude instead of .gitignore (zero footprint)
 --force                 Force reinitialization / overwrite existing files
 --dry-run               Preview changes without writing files

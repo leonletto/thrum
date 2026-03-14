@@ -91,3 +91,14 @@ thrum sent --unread         # show sent messages still unread by someone
 thrum message read --all    # mark all messages as read
 thrum reply <MSG_ID> "..."  # reply to a specific message
 ```
+
+## Next Steps
+
+- [Messaging](../messaging.md) — full send/receive/reply reference including
+  scopes, mentions, threads, and group messaging
+- [Identity System](../identity.md) — how agent names, roles, and modules work,
+  and how to resolve conflicts
+- [Resume After Context Loss](resume-after-context-loss.md) — what to do when
+  you need to recover after a session ends unexpectedly
+- [Agent Coordination](../agent-coordination.md) — practical multi-agent
+  patterns built on top of this registration protocol

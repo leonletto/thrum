@@ -29,12 +29,10 @@ disclosure resource docs. It replaces the manual agent definition approach
 Before installing the plugin, you need Thrum installed and initialized:
 
 ```bash
-# Install thrum (Go 1.26+)
-go install github.com/leonletto/thrum@latest
-
-# Or build from source
-git clone https://github.com/leonletto/thrum.git
-cd thrum && make install
+# Install thrum
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+# Or: brew install leonletto/tap/thrum
+# Or: git clone https://github.com/leonletto/thrum.git && cd thrum && make install
 
 # Initialize in your repository (v0.4.5+: init does full setup)
 cd /path/to/your/repo
@@ -48,7 +46,6 @@ steps:
 
 ```bash
 thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
-thrum daemon start               # Start the daemon separately
 ```
 
 Verify the daemon is running:
@@ -252,7 +249,7 @@ plugins.
 
 ### "Thrum not initialized" on session start
 
-Run `thrum init && thrum daemon start` in your repository root.
+Run `thrum init` in your repository root (it starts the daemon automatically).
 
 ### No context injected after plugin install
 
@@ -268,3 +265,14 @@ messaging to work. Start it with `thrum daemon start`.
 
 Set `THRUM_NAME` environment variable to give each worktree a unique agent name.
 See [Identity System](identity.md) for details.
+
+## Next Steps
+
+- [MCP Server](mcp-server.md) — the MCP server the plugin configures, including
+  the full 11-tool reference
+- [Codex Plugin](codex-plugin.md) — the equivalent skill bundle for Codex
+  users instead of Claude Code
+- [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
+  using the slash commands and hooks this plugin provides
+- [Identity System](identity.md) — agent naming, `THRUM_NAME`, and multi-agent
+  worktree setup
