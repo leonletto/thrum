@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
-  <title>Thrum — Git-backed Messaging for AI Agents</title>
+  <title>Thrum — Persistent Messaging for AI Agents</title>
   <meta name="description" content="Offline-first, persistent communication for AI agent coordination across sessions, worktrees, and machines.">
   <!-- Open Graph -->
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Thrum — Git-backed Messaging for AI Agents">
+  <meta property="og:title" content="Thrum — Persistent Messaging for AI Agents">
   <meta property="og:description" content="Offline-first, persistent communication for AI agent coordination across sessions, worktrees, and machines.">
   <meta property="og:url" content="https://leonletto.github.io/thrum/">
   <meta property="og:site_name" content="Thrum">
@@ -17,7 +17,7 @@
   <meta property="og:image:height" content="630">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Thrum — Git-backed Messaging for AI Agents">
+  <meta name="twitter:title" content="Thrum — Persistent Messaging for AI Agents">
   <meta name="twitter:description" content="Offline-first, persistent communication for AI agent coordination across sessions, worktrees, and machines.">
   <meta name="twitter:image" content="https://leonletto.github.io/thrum/img/social-card.png">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
@@ -59,7 +59,7 @@
     <div class="container">
       <div class="hero-badge">
         <span class="status-dot online"></span>
-        Git-backed agent coordination
+        Agent coordination through messaging
       </div>
       <h1 class="hero-title">thrum</h1>
       <p class="hero-subtitle">
@@ -71,7 +71,7 @@
         <a href="docs.html" class="btn btn-outline">Read the Docs</a>
       </div>
       <div class="hero-install">
-        <code>go install github.com/leonletto/thrum@latest</code>
+        <code>curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh</code>
       </div>
     </div>
   </section>
@@ -95,7 +95,7 @@
 
         <div class="card feature-card">
           <div class="feature-icon">&gt;_</div>
-          <h4>CLI + MCP Native</h4>
+          <h4>Works From Any Agent</h4>
           <p>
             First-class CLI for humans and MCP server for AI agents.
             Claude Code agents use native tools — no shell-outs needed.
@@ -104,7 +104,7 @@
 
         <div class="card feature-card">
           <div class="feature-icon">&#x2301;</div>
-          <h4>Git-Backed Storage</h4>
+          <h4>No External Database</h4>
           <p>
             Messages stored as append-only JSONL on a git orphan branch.
             Sync via push/pull. No external database. Fully offline-first.
@@ -113,7 +113,7 @@
 
         <div class="card feature-card">
           <div class="feature-icon">&#x2261;</div>
-          <h4>Daemon Coordination</h4>
+          <h4>One Process, Everything Works</h4>
           <p>
             Background daemon manages state, RPC handlers, and real-time
             WebSocket push. Single port, embedded UI.
@@ -122,7 +122,7 @@
 
         <div class="card feature-card">
           <div class="feature-icon">@</div>
-          <h4>Agent Identity</h4>
+          <h4>Agents Know Who They Are</h4>
           <p>
             Named agents with deterministic IDs, role-based resolution,
             and multi-worktree, multi-machine support. No conflicts.
@@ -131,7 +131,7 @@
 
         <div class="card feature-card">
           <div class="feature-icon">&#x21C4;</div>
-          <h4>Cross-Session Persistence</h4>
+          <h4>Messages Survive Restarts</h4>
           <p>
             Messages survive context compaction, session restarts, and
             machine changes. Git is the source of truth.
@@ -140,7 +140,7 @@
 
         <div class="card feature-card">
           <div class="feature-icon">&#x26A1;</div>
-          <h4>Real-Time Events</h4>
+          <h4>Know What's Happening Now</h4>
           <p>
             Subscribe to message, thread, agent, and session events.
             Push notifications via WebSocket with scope and mention filters.
@@ -149,7 +149,7 @@
 
         <a href="docs.html#context" class="card feature-card feature-card-link">
           <div class="feature-icon">&#x1F4CB;</div>
-          <h4>Agent Context</h4>
+          <h4>Pick Up Where You Left Off</h4>
           <p>
             Agents self-manage continuation prompts across sessions.
             Save, sync, and recover project state automatically &mdash;
@@ -159,7 +159,7 @@
 
         <a href="docs.html#multi-agent.html" class="card feature-card feature-card-link">
           <div class="feature-icon">&#x2295;</div>
-          <h4>Multi-Agent Teams</h4>
+          <h4>Run Teams Across Machines</h4>
           <p>
             Named groups, runtime presets for any AI platform, and
             coordination tools for running agent teams across worktrees
@@ -169,7 +169,7 @@
 
         <a href="docs.html#tailscale-sync.html" class="card feature-card feature-card-link">
           <div class="feature-icon">&#x1F310;</div>
-          <h4>Tailscale Sync</h4>
+          <h4>Sync Across Machines Securely</h4>
           <p>
             Real-time cross-machine sync over Tailscale. Ed25519 event
             signing, automatic peer discovery, push notifications, and
@@ -193,13 +193,10 @@
             <span class="code-header-dot"></span>
             <span class="code-header-title">terminal</span>
           </div>
-<pre><code><span class="c-comment"># Initialize in any git repo</span>
+<pre><code><span class="c-comment"># Initialize in any git repo (starts the daemon automatically)</span>
 <span class="c-prompt">$</span> thrum init
 <span class="c-output">✓ Initialized .thrum/ in /my-project</span>
-
-<span class="c-comment"># Start the daemon</span>
-<span class="c-prompt">$</span> thrum daemon start
-<span class="c-output">✓ Daemon listening on :9999</span>
+<span class="c-output">✓ Daemon started on :9999</span>
 
 <span class="c-comment"># Register and send</span>
 <span class="c-prompt">$</span> thrum quickstart --name planner_core --role planner --module core
@@ -214,23 +211,20 @@
             <span class="code-header-dot"></span>
             <span class="code-header-dot"></span>
             <span class="code-header-dot"></span>
-            <span class="code-header-title">claude code (MCP)</span>
+            <span class="code-header-title">claude code (CLI)</span>
           </div>
-<pre><code><span class="c-comment">// Claude Code agents use native MCP tools</span>
-<span class="c-comment">// No shell needed — direct daemon RPC</span>
+<pre><code><span class="c-comment"># Agents use the same CLI commands</span>
+<span class="c-prompt">$</span> thrum send <span class="c-string">"Tests passing, PR ready"</span> --to @planner
+<span class="c-output">✓ Message sent: msg_01KJ...</span>
 
-mcp__thrum__send_message(
-  to: <span class="c-string">"@planner"</span>,
-  content: <span class="c-string">"Tests passing, PR ready"</span>,
-  priority: <span class="c-string">"high"</span>
-)
+<span class="c-prompt">$</span> thrum inbox --unread
+<span class="c-output">● msg_01KH...  @planner  2m ago</span>
+<span class="c-output">  Starting feature work</span>
 
-mcp__thrum__check_messages()
-<span class="c-comment">// → 2 unread from @planner</span>
-
-mcp__thrum__list_agents()
-<span class="c-comment">// → planner_core (online)</span>
-<span class="c-comment">// → implementer_api (idle)</span></code></pre>
+<span class="c-prompt">$</span> thrum team
+<span class="c-output">AGENT            ROLE          STATUS</span>
+<span class="c-output">planner_core     planner       online</span>
+<span class="c-output">implementer_api  implementer   idle</span></code></pre>
         </div>
       </div>
     </div>
@@ -241,21 +235,76 @@ mcp__thrum__list_agents()
     <div class="container-narrow">
       <h2 class="section-title text-center">Architecture</h2>
       <div class="arch-diagram">
-        <div class="arch-row">
-          <div class="arch-box arch-agent">Claude Code Agent</div>
-          <div class="arch-box arch-agent">CLI User</div>
-          <div class="arch-box arch-agent">Web UI</div>
-        </div>
-        <div class="arch-arrow">&darr; JSON-RPC / WebSocket</div>
-        <div class="arch-row">
-          <div class="arch-box arch-daemon">Thrum Daemon <span class="text-muted">(:9999)</span></div>
-        </div>
-        <div class="arch-arrow">&darr; Read / Write</div>
-        <div class="arch-row">
-          <div class="arch-box arch-storage">JSONL Files</div>
-          <div class="arch-box arch-storage">SQLite Index</div>
-          <div class="arch-box arch-storage">Git Sync</div>
-        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580 400" class="arch-svg" role="img" aria-label="Thrum architecture diagram">
+          <title>Thrum Architecture</title>
+          <defs>
+            <marker id="arch-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" class="arch-svg-arrowhead"/>
+            </marker>
+          </defs>
+
+          <!-- Row 1: Clients -->
+          <g class="arch-svg-client">
+            <rect x="18" y="18" width="148" height="44" rx="4"/>
+            <text x="92" y="44" text-anchor="middle">CLI</text>
+          </g>
+          <g class="arch-svg-client">
+            <rect x="216" y="18" width="148" height="44" rx="4"/>
+            <text x="290" y="44" text-anchor="middle">Web UI</text>
+          </g>
+          <g class="arch-svg-client">
+            <rect x="414" y="18" width="148" height="44" rx="4"/>
+            <text x="488" y="44" text-anchor="middle">MCP Server</text>
+          </g>
+
+          <!-- Connector: Clients to Daemon -->
+          <line class="arch-svg-line" x1="92"  y1="62" x2="92"  y2="104"/>
+          <line class="arch-svg-line" x1="290" y1="62" x2="290" y2="104"/>
+          <line class="arch-svg-line" x1="488" y1="62" x2="488" y2="104"/>
+          <line class="arch-svg-line" x1="92"  y1="104" x2="488" y2="104"/>
+          <line class="arch-svg-line" x1="290" y1="104" x2="290" y2="124" marker-end="url(#arch-arrow)"/>
+          <text class="arch-svg-arrow-label" x="290" y="119" text-anchor="middle">JSON-RPC / WebSocket</text>
+
+          <!-- Row 2: Daemon -->
+          <g class="arch-svg-daemon">
+            <rect x="160" y="126" width="260" height="52" rx="4"/>
+            <text x="290" y="149" text-anchor="middle" class="arch-svg-daemon-title">Thrum Daemon</text>
+            <text x="290" y="167" text-anchor="middle" class="arch-svg-sub">:9999</text>
+          </g>
+
+          <!-- Connector: Daemon to Storage -->
+          <line class="arch-svg-line" x1="290" y1="178" x2="290" y2="200" marker-end="url(#arch-arrow)"/>
+          <text class="arch-svg-arrow-label" x="290" y="196" text-anchor="middle">Read / Write</text>
+
+          <!-- Row 3: Storage -->
+          <g class="arch-svg-storage">
+            <rect x="18" y="202" width="160" height="44" rx="4"/>
+            <text x="98" y="228" text-anchor="middle">JSONL Logs</text>
+          </g>
+          <g class="arch-svg-storage">
+            <rect x="210" y="202" width="160" height="44" rx="4"/>
+            <text x="290" y="228" text-anchor="middle">SQLite Index</text>
+          </g>
+          <g class="arch-svg-storage">
+            <rect x="402" y="202" width="160" height="44" rx="4"/>
+            <text x="482" y="228" text-anchor="middle">Git Sync</text>
+          </g>
+
+          <!-- Connector: Storage to Remote -->
+          <line class="arch-svg-line" x1="98"  y1="246" x2="98"  y2="286"/>
+          <line class="arch-svg-line" x1="290" y1="246" x2="290" y2="286"/>
+          <line class="arch-svg-line" x1="482" y1="246" x2="482" y2="286"/>
+          <line class="arch-svg-line" x1="98"  y1="286" x2="482" y2="286"/>
+          <line class="arch-svg-line" x1="290" y1="286" x2="290" y2="308" marker-end="url(#arch-arrow)"/>
+          <text class="arch-svg-arrow-label" x="290" y="303" text-anchor="middle">Git Push / Pull</text>
+
+          <!-- Row 4: Remote -->
+          <g class="arch-svg-remote">
+            <rect x="160" y="310" width="260" height="52" rx="4"/>
+            <text x="290" y="333" text-anchor="middle" class="arch-svg-remote-title">Remote</text>
+            <text x="290" y="351" text-anchor="middle" class="arch-svg-sub">a-sync branch</text>
+          </g>
+        </svg>
       </div>
     </div>
   </section>
@@ -281,7 +330,7 @@ mcp__thrum__list_agents()
         <div class="footer-brand">
           <span class="logo-glyph">&gt;_</span>
           <span class="logo-text">thrum</span>
-          <span class="text-muted">&mdash; Git-backed messaging for AI agents</span>
+          <span class="text-muted">&mdash; Persistent messaging for AI agents</span>
         </div>
         <div class="footer-links">
           <a href="docs.html">Documentation</a>

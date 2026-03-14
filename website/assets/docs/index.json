@@ -70,11 +70,11 @@
   {
     "path": "architecture.html",
     "title": "Architecture",
-    "description": "Thrum foundation architecture — packages, storage layer, daemon, sync engine, and event system",
+    "description": "Thrum architecture — daemon design, storage, sync engine, transport layer, key features, and foundation packages",
     "category": "architecture",
     "order": 999,
     "tags": [],
-    "lastUpdated": ""
+    "lastUpdated": "2026-03-13"
   },
   {
     "path": "context.html",
@@ -266,6 +266,54 @@
     "lastUpdated": "2026-02-24"
   },
   {
+    "path": "guides/coordinate-two-agents.html",
+    "title": "Coordinate Two Agents",
+    "description": "Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case",
+    "category": "guides",
+    "order": 10,
+    "tags": [
+      "coordination",
+      "two-agents",
+      "messaging",
+      "quickstart",
+      "worktree",
+      "how-to"
+    ],
+    "lastUpdated": "2026-03-13"
+  },
+  {
+    "path": "guides/cross-machine-sync.html",
+    "title": "Sync Across Machines",
+    "description": "Walk through enabling cross-machine sync, sending a message from one machine and receiving it on another, and verifying sync status",
+    "category": "guides",
+    "order": 11,
+    "tags": [
+      "sync",
+      "cross-machine",
+      "git",
+      "remote",
+      "tailscale",
+      "how-to"
+    ],
+    "lastUpdated": "2026-03-13"
+  },
+  {
+    "path": "guides/review-workflow.html",
+    "title": "Code Review Workflow",
+    "description": "Walk through the implement-then-review cycle: one agent writes code on a feature branch, another reviews it, Thrum handles the communication",
+    "category": "guides",
+    "order": 12,
+    "tags": [
+      "review",
+      "workflow",
+      "worktree",
+      "feature-branch",
+      "coordination",
+      "how-to"
+    ],
+    "lastUpdated": "2026-03-13"
+  },
+  {
     "path": "claude-agent-integration.html",
     "title": "Claude Code Agent Integration",
     "description": "Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup",
@@ -296,15 +344,6 @@
     "path": "tailscale-security.html",
     "title": "Tailscale Sync Security",
     "description": "Security model for Thrum's Tailscale peer sync — pairing, encryption, access control, and threat mitigations",
-    "category": "guides",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "overview.html",
-    "title": "Technical Overview",
-    "description": "High-level overview of Thrum — architecture, storage, daemon, CLI, MCP server, and key concepts",
     "category": "guides",
     "order": 999,
     "tags": [],
@@ -345,7 +384,7 @@
   {
     "path": "philosophy.html",
     "title": "Philosophy",
-    "description": "Why Thrum exists — a Git-backed messaging system designed for human-centric AI agent coordination, not another orchestration engine",
+    "description": "Why Thrum exists — a messaging system designed for human-centric AI agent coordination, not another orchestration engine",
     "category": "overview",
     "order": 0,
     "tags": [
@@ -355,6 +394,15 @@
       "workflow"
     ],
     "lastUpdated": "2026-02-12"
+  },
+  {
+    "path": "overview.html",
+    "title": "Overview",
+    "description": "What Thrum is, how the CLI breaks down, and where to go next",
+    "category": "overview",
+    "order": 1,
+    "tags": [],
+    "lastUpdated": "2026-03-13"
   },
   {
     "path": "quickstart.html",
@@ -369,7 +417,7 @@
       "setup",
       "tutorial"
     ],
-    "lastUpdated": "2026-02-12"
+    "lastUpdated": "2026-03-13"
   },
   {
     "path": "cli.html",
@@ -477,7 +525,7 @@
       "agents",
       "guide"
     ],
-    "lastUpdated": "2026-02-27"
+    "lastUpdated": "2026-03-09"
   },
   {
     "path": "guides/beads-ui-setup.html",
@@ -493,7 +541,7 @@
       "web-ui",
       "guide"
     ],
-    "lastUpdated": "2026-02-27"
+    "lastUpdated": "2026-03-09"
   },
   {
     "path": "guides/playwright-cli-setup.html",

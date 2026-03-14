@@ -4,7 +4,6 @@ import type { Message } from '@thrum/shared-logic';
 import {
   groupByConversation,
   useMarkAsRead,
-  useDebounce,
 } from '@thrum/shared-logic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -18,6 +17,9 @@ interface MessageListProps {
   isLoading: boolean;
   currentUserId?: string;
   onReply?: (messageId: string, senderName: string) => void;
+  onMarkAsRead?: (messageIds: string[]) => void;
+  /** Agent ID to use as the caller when marking messages as read (impersonation). */
+  callerAgentId?: string;
   // Pagination props
   totalCount?: number;
   hasMore?: boolean;
@@ -32,6 +34,7 @@ interface ConversationItemProps {
   conversation: ReturnType<typeof groupByConversation>[number];
   currentUserId?: string;
   onReply?: (messageId: string, senderName: string) => void;
+  onMarkAsRead?: (messageIds: string[]) => void;
   selectedMessageId?: string | null;
   highlightRef?: React.RefObject<HTMLDivElement | null>;
 }
@@ -40,7 +43,7 @@ function getSenderName(message: Message): string {
   return message.agent_id ?? 'Unknown';
 }
 
-function ConversationItem({ conversation, currentUserId, onReply, selectedMessageId, highlightRef }: ConversationItemProps) {
+function ConversationItem({ conversation, currentUserId, onReply, onMarkAsRead, selectedMessageId, highlightRef }: ConversationItemProps) {
   const [expanded, setExpanded] = useState(false);
   const { rootMessage, replies } = conversation;
   const hasReplies = replies.length > 0;
@@ -54,12 +57,22 @@ function ConversationItem({ conversation, currentUserId, onReply, selectedMessag
   }, [replyIsSelected]);
 
   const isRootSelected = rootMessage.message_id === selectedMessageId;
+  const isRootUnread = rootMessage.is_read === false;
+
+  const handleRootClick = () => {
+    if (isRootUnread && onMarkAsRead) {
+      onMarkAsRead([rootMessage.message_id]);
+    }
+  };
 
   return (
     <div
-      className={`border rounded-lg p-3 space-y-2 bg-background${isRootSelected ? ' message-highlight' : ''}`}
+      className={`border rounded-lg p-3 space-y-2${isRootUnread ? ' border-l-2 border-l-[var(--accent-color)] bg-[var(--accent-subtle-bg)]' : ' bg-background'}${isRootSelected ? ' message-highlight' : ''}`}
       ref={isRootSelected ? highlightRef : undefined}
       data-message-id={rootMessage.message_id}
+      onClick={handleRootClick}
+      style={isRootUnread ? { cursor: 'pointer' } : undefined}
+      title={isRootUnread ? 'Click to mark as read' : undefined}
     >
       {/* Root message row */}
       <div className="flex items-start gap-2">
@@ -74,7 +87,7 @@ function ConversationItem({ conversation, currentUserId, onReply, selectedMessag
             variant="ghost"
             size="sm"
             className="shrink-0 text-xs"
-            onClick={() => onReply(rootMessage.message_id, getSenderName(rootMessage))}
+            onClick={(e) => { e.stopPropagation(); onReply(rootMessage.message_id, getSenderName(rootMessage)); }}
             aria-label={`Reply to ${getSenderName(rootMessage)}`}
           >
             Reply
@@ -86,7 +99,7 @@ function ConversationItem({ conversation, currentUserId, onReply, selectedMessag
       {hasReplies && (
         <button
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors pl-1"
-          onClick={() => setExpanded(prev => !prev)}
+          onClick={(e) => { e.stopPropagation(); setExpanded(prev => !prev); }}
           aria-expanded={expanded}
           aria-label={expanded ? 'Collapse replies' : `Show ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`}
         >
@@ -107,12 +120,16 @@ function ConversationItem({ conversation, currentUserId, onReply, selectedMessag
         <div className="pl-4 border-l-2 border-muted space-y-2">
           {replies.map(reply => {
             const isReplySelected = reply.message_id === selectedMessageId;
+            const isReplyUnread = reply.is_read === false;
             return (
               <div
                 key={reply.message_id}
-                className={`flex items-start gap-2 rounded${isReplySelected ? ' message-highlight' : ''}`}
+                className={`flex items-start gap-2 rounded${isReplyUnread ? ' bg-[var(--accent-subtle-bg)] border-l-2 border-l-[var(--accent-color)] pl-1' : ''}${isReplySelected ? ' message-highlight' : ''}`}
                 ref={isReplySelected ? highlightRef : undefined}
                 data-message-id={reply.message_id}
+                onClick={(e) => { e.stopPropagation(); if (isReplyUnread && onMarkAsRead) onMarkAsRead([reply.message_id]); }}
+                style={isReplyUnread ? { cursor: 'pointer' } : undefined}
+                title={isReplyUnread ? 'Click to mark as read' : undefined}
               >
                 <div className="flex-1 min-w-0">
                   <MessageBubble
@@ -125,7 +142,7 @@ function ConversationItem({ conversation, currentUserId, onReply, selectedMessag
                     variant="ghost"
                     size="sm"
                     className="shrink-0 text-xs"
-                    onClick={() => onReply(reply.message_id, getSenderName(reply))}
+                    onClick={(e) => { e.stopPropagation(); onReply(reply.message_id, getSenderName(reply)); }}
                     aria-label={`Reply to ${getSenderName(reply)}`}
                   >
                     Reply
@@ -145,6 +162,8 @@ export function MessageList({
   isLoading,
   currentUserId,
   onReply,
+  onMarkAsRead,
+  callerAgentId,
   totalCount,
   hasMore,
   onLoadMore,
@@ -152,29 +171,21 @@ export function MessageList({
   selectedMessageId,
   onClearSelectedMessage,
 }: MessageListProps) {
-  const markAsRead = useMarkAsRead();
+  const markAsReadMutation = useMarkAsRead();
+
+  const handleMarkAsRead = (ids: string[]) => {
+    if (onMarkAsRead) {
+      onMarkAsRead(ids);
+    } else {
+      markAsReadMutation.mutate({
+        messageIds: ids,
+        ...(callerAgentId && { callerAgentId }),
+      });
+    }
+  };
 
   // Ref pointing to the currently highlighted message element
   const highlightRef = useRef<HTMLDivElement | null>(null);
-
-  // Collect IDs of unread messages, debounce to batch-mark as read
-  const unreadIds = messages
-    .filter(m => m.is_read === false)
-    .map(m => m.message_id);
-
-  const debouncedUnreadIds = useDebounce(unreadIds, 500);
-
-  // Track which IDs we've already dispatched so we don't re-call on rerenders
-  const markedRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (debouncedUnreadIds.length === 0) return;
-    const toMark = debouncedUnreadIds.filter(id => !markedRef.current.has(id));
-    if (toMark.length === 0) return;
-    toMark.forEach(id => markedRef.current.add(id));
-    markAsRead.mutate(toMark);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedUnreadIds]);
 
   // Scroll selected message into view, then clear the selection after the animation
   useEffect(() => {
@@ -261,6 +272,7 @@ export function MessageList({
             conversation={convo}
             currentUserId={currentUserId}
             onReply={onReply}
+            onMarkAsRead={handleMarkAsRead}
             selectedMessageId={selectedMessageId}
             highlightRef={highlightRef}
           />

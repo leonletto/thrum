@@ -297,8 +297,10 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 	// Quick command reference
 	out.WriteString("\nCommands:\n")
 	out.WriteString("  thrum send \"msg\" --to @name    Send direct message\n")
-	out.WriteString("  thrum inbox                    Check messages\n")
+	out.WriteString("  thrum inbox                    Check messages (auto-marks read)\n")
+	out.WriteString("  thrum inbox --unread           Peek without marking read\n")
 	out.WriteString("  thrum sent                     Sent messages & receipts\n")
+	out.WriteString("  thrum message read --all       Mark all messages as read\n")
 	out.WriteString("  thrum reply <id> \"msg\"         Reply to message\n")
 	out.WriteString("  thrum send \"msg\" --to @everyone Broadcast to all\n")
 	out.WriteString("  thrum status                   Agent/daemon status\n")
@@ -332,7 +334,7 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 		if entries, err := os.ReadDir(identDir); err == nil && len(entries) > 0 {
 			out.WriteString("\n⚠ ACTION REQUIRED: Start background message listener now:\n")
 			fmt.Fprintf(&out, "  Task(subagent_type=\"message-listener\", model=\"haiku\", run_in_background=true,\n")
-			fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages. WAIT_CMD=cd %s && thrum wait --timeout 15m --after -1s --json\")\n", repoPath)
+			fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages.\\nSTEP_1: %s/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")\n", repoPath)
 
 			// Check for saved context and prompt agent to load it
 			contextDir := filepath.Join(repoPath, ".thrum", "context")

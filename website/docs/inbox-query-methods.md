@@ -272,6 +272,8 @@ Several CLI commands mark messages as read automatically:
 | Command                    | Behavior                                                       |
 | -------------------------- | -------------------------------------------------------------- |
 | `thrum inbox`              | Marks all displayed messages as read (skipped with `--unread`) |
+| `thrum inbox --unread`     | Peeks at unread messages **without** marking them as read      |
+| `thrum message read --all` | Explicitly marks all messages as read                          |
 | `thrum reply MSG_ID ...`   | Marks the replied-to message as read                           |
 | `thrum message get MSG_ID` | Marks the retrieved message as read                            |
 
@@ -340,8 +342,13 @@ All methods have comprehensive test coverage in:
 - `internal/daemon/rpc/session_test.go` -- Session management
 - `tests/e2e/messaging.spec.ts` -- End-to-end messaging scenarios
 
-## See Also
+## Next Steps
 
-- Full RPC API Reference: `docs/rpc-api.md`
-- Messaging System (CLI): `docs/messaging.md`
-- Daemon Architecture: `docs/daemon.md`
+- [RPC API Reference](rpc-api.md) — complete reference for all 26 RPC methods
+  including the full `message.list` parameter schema
+- [Messaging](messaging.md) — the CLI commands that wrap these RPC methods, with
+  examples for filtering and pagination
+- [Daemon Architecture](daemon.md) — how the daemon routes RPC requests from
+  CLI, Web UI, and MCP server
+- [WebSocket API](api/websocket.md) — connect directly to use these methods from
+  browser or custom client code

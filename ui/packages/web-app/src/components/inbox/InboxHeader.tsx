@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Inbox, AlertTriangle, Filter } from 'lucide-react';
+import { Inbox, AlertTriangle, Filter, CheckCheck } from 'lucide-react';
 import type { MessageScope } from '@thrum/shared-logic';
 import { ScopeBadge } from '@/components/ui/ScopeBadge';
 import {
@@ -22,6 +22,7 @@ interface InboxHeaderProps {
   unreadCount: number;
   filter: InboxFilter;
   onFilterChange: (filter: InboxFilter) => void;
+  onMarkAllRead?: () => void;
 }
 
 export function InboxHeader({
@@ -33,6 +34,7 @@ export function InboxHeader({
   unreadCount,
   filter,
   onFilterChange,
+  onMarkAllRead,
 }: InboxHeaderProps) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [scopeType, setScopeType] = useState('');
@@ -141,6 +143,18 @@ export function InboxHeader({
           >
             Mentions
           </Button>
+          {onMarkAllRead && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onMarkAllRead}
+              disabled={unreadCount === 0}
+              aria-label="Mark all messages as read"
+            >
+              <CheckCheck className="h-4 w-4 mr-1" />
+              Mark all read
+            </Button>
+          )}
         </div>
 
         {activeScopeFilter && (

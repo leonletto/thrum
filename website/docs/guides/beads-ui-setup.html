@@ -21,13 +21,13 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; Recommended Tools &rsaquo; Beads UI Setup Guide
 <hr>
-<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a><br>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a><br>
 <strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <strong>Beads UI Setup Guide</strong> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a> | <a href="../overview.html">Technical Overview</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
@@ -55,9 +55,9 @@ drag-and-drop</li>
 <li><strong>Issue detail</strong> — Edit titles, descriptions, priorities, dependencies, and
 comments directly in the browser</li>
 </ul>
-<p>The UI watches the Beads SQLite database for changes and pushes updates over
-WebSocket. When an agent runs <code>bd close &lt;id&gt;</code>, the card moves to Done in your
-browser instantly.</p>
+<p>The UI calls <code>bd</code> commands under the hood and watches the database for changes,
+pushing updates over WebSocket. When an agent runs <code>bd close &lt;id&gt;</code>, the card
+moves to Done in your browser instantly.</p>
 <h3>Installation</h3>
 <pre><code># Install globally from npm
 npm install beads-ui -g
@@ -72,7 +72,11 @@ cd your-project
 # Start the UI and open the browser
 bdui start --open</code></pre>
 <p>The UI is now running at <code>http://localhost:3000</code>. It auto-detects the nearest
-<code>.beads/*.db</code> file by walking up from the current directory.</p>
+<code>.beads/</code> directory by walking up from the current directory.</p>
+<blockquote>
+<p><strong>Tip:</strong> If you&#39;ve just initialized beads or changed the database, run
+<code>bdui restart</code> to pick up the new state.</p>
+</blockquote>
 <h3>Views</h3>
 <h4>Issues View</h4>
 <p>A filterable, searchable list of all issues. Each row shows the title, status,
@@ -147,6 +151,14 @@ bdui start --new-instance --open    # auto-selects port 3002
 # See all running instances
 bdui list</code></pre>
 <p>Each instance watches its own project&#39;s Beads database independently.</p>
+<h3>Worktree Support</h3>
+<p>Beads UI works from git worktrees that have a <code>.beads/redirect</code> file pointing to
+the main repo&#39;s <code>.beads/</code> directory. The redirect is followed automatically — no
+extra configuration needed.</p>
+<h3>Sandbox Mode</h3>
+<p>Beads UI runs <code>bd</code> commands with <code>--sandbox</code> by default, which skips
+auto-push/pull overhead for faster responses. To disable this (e.g., if you need
+real-time sync), set <code>BDUI_BD_SANDBOX=0</code>.</p>
 <h3>Typical Developer Workflow</h3>
 <ol>
 <li>Start Beads UI in your project: <code>bdui start --open</code></li>

@@ -5,6 +5,36 @@ daemon and git-backed message storage.
 
 ## Setup
 
+Use the setup script to create worktrees with all required configuration:
+
+```bash
+# Full setup: creates worktree, branch, thrum redirect, .claude/settings.json, and identity
+./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/feature feature/my-feature \
+  --identity feature_impl --role implementer
+
+# Existing worktree: adds thrum redirect and .claude/settings.json
+./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/feature
+
+# Auto-detect: fixes all worktrees missing redirects or settings
+./scripts/setup-worktree-thrum.sh
+```
+
+### Critical: `.claude/settings.json`
+
+This file is **gitignored** — each worktree needs its own copy. It registers the
+`SessionStart` hook that runs `scripts/thrum-startup.sh` (agent registration,
+daemon check, env vars). Without it, Claude Code sessions in the worktree won't
+auto-register with Thrum.
+
+The setup script copies it automatically from the main repo. If a worktree is
+missing it, either re-run the setup script or copy manually:
+
+```bash
+cp /path/to/main-repo/.claude/settings.json ~/.workspaces/thrum/feature/.claude/settings.json
+```
+
+### Manual identity setup
+
 Each worktree agent uses a unique identity via `THRUM_NAME`:
 
 ```bash
@@ -41,6 +71,7 @@ thrum send "Feature branch ready for integration" --to @feature_impl
 thrum inbox    # Sees message from @main_coordinator
 thrum sent     # Verifies what this worktree sent and who read it
 thrum reply <msg-id> "Integration tests passing, ready to merge"
+thrum message read --all  # Mark all messages as read
 ```
 
 ## File Coordination

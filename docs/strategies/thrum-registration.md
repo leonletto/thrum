@@ -60,7 +60,7 @@ want. Use the agent name instead.
 Spawn a background listener so you receive async notifications without polling:
 
 ```bash
-thrum wait --timeout 15m --after -1s --json
+thrum wait --timeout 8m --after -15s --json
 ```
 
 Re-arm the listener every time it returns — both when messages arrive and when
@@ -90,3 +90,14 @@ thrum sent --unread         # show sent messages still unread by someone
 thrum message read --all    # mark all messages as read
 thrum reply <MSG_ID> "..."  # reply to a specific message
 ```
+
+## Next Steps
+
+- [Messaging](../messaging.md) — full send/receive/reply reference including
+  scopes, mentions, threads, and group messaging
+- [Identity System](../identity.md) — how agent names, roles, and modules work,
+  and how to resolve conflicts
+- [Resume After Context Loss](resume-after-context-loss.md) — what to do when
+  you need to recover after a session ends unexpectedly
+- [Agent Coordination](../agent-coordination.md) — practical multi-agent
+  patterns built on top of this registration protocol

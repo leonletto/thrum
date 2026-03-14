@@ -26,6 +26,8 @@ type Server struct {
 	shutdown   bool
 	wg         sync.WaitGroup
 	startTime  time.Time
+	connsMu    sync.Mutex            // protects conns
+	conns      map[net.Conn]struct{} // active client connections
 }
 
 // NewServer creates a new RPC server.
@@ -34,6 +36,7 @@ func NewServer(socketPath string) *Server {
 		socketPath: socketPath,
 		handlers:   make(map[string]Handler),
 		startTime:  time.Now(),
+		conns:      make(map[net.Conn]struct{}),
 	}
 }
 
@@ -89,7 +92,16 @@ func (s *Server) Stop() error {
 		}
 	}
 
-	// Wait for all connections to finish (with timeout)
+	// Force-close all active client connections so long-polling clients
+	// (like `thrum wait`) immediately detect the disconnect and can
+	// reconnect to the new daemon after a restart.
+	s.connsMu.Lock()
+	for conn := range s.conns {
+		_ = conn.Close()
+	}
+	s.connsMu.Unlock()
+
+	// Wait for all connection goroutines to finish (with timeout)
 	done := make(chan struct{})
 	go func() {
 		s.wg.Wait()
@@ -155,7 +167,17 @@ func (s *Server) acceptLoop(ctx context.Context) {
 // handleConnection handles a single connection.
 func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 	defer s.wg.Done()
-	defer func() { _ = conn.Close() }()
+
+	// Track this connection so Stop() can force-close it.
+	s.connsMu.Lock()
+	s.conns[conn] = struct{}{}
+	s.connsMu.Unlock()
+	defer func() {
+		s.connsMu.Lock()
+		delete(s.conns, conn)
+		s.connsMu.Unlock()
+		_ = conn.Close()
+	}()
 
 	reader := bufio.NewReader(conn)
 	writer := bufio.NewWriter(conn)

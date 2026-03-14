@@ -301,7 +301,7 @@ func TestFormatPrimeContext_ListenerInstruction_ClaudeRuntime(t *testing.T) {
 		"ACTION REQUIRED",
 		"Start background message listener",
 		"message-listener",
-		"--timeout 15m",
+		"--timeout 8m",
 		tmpDir,
 		"thrum context show",
 	}

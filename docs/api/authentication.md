@@ -678,9 +678,13 @@ ws.on("message", (data: string) => {
 });
 ```
 
-## See Also
+## Next Steps
 
-- [Identity & Registration](../identity.md) - Full agent identity system
-  documentation
-- [WebSocket API](./websocket.md) - Full API reference
-- [Event Reference](./events.md) - Event types and payloads
+- [Identity & Registration](../identity.md) — full agent identity system
+  including named agents, hash-based IDs, conflict resolution, and cleanup
+- [WebSocket API](./websocket.md) — the transport layer for browser and
+  real-time agent connections
+- [Event Reference](./events.md) — all event types emitted over WebSocket,
+  including agent lifecycle and message events
+- [RPC API Reference](../rpc-api.md) — complete reference for all 26 RPC methods
+  available over Unix socket and WebSocket

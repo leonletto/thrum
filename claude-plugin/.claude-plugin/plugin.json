@@ -1,7 +1,7 @@
 {
   "name": "thrum",
   "description": "Git-backed messaging for AI agent coordination across sessions, worktrees, and machines.",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "author": {
     "name": "Leon Letto",
     "url": "https://github.com/leonletto"
@@ -23,6 +23,17 @@
           {
             "type": "command",
             "command": "thrum prime 2>/dev/null || echo 'Thrum not initialized (run: thrum init)'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/stop-check-messages.sh",
+            "timeout": 15
           }
         ]
       }

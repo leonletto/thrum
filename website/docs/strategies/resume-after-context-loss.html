@@ -21,13 +21,13 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; strategies &rsaquo; Resume After Context Loss
 <hr>
-<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a><br>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a><br>
 <strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a> | <a href="../overview.html">Technical Overview</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
@@ -47,7 +47,9 @@ such as compaction, a new session start, or a crash.</p>
 follow this sequence exactly. Do not skip steps.</p>
 <h3>Step 1: Re-Register with Thrum (Mandatory)</h3>
 <pre><code>thrum quickstart --name &lt;agent-name&gt; --role &lt;your-role&gt; --module &lt;branch-name&gt; --intent &quot;Resuming &lt;task-or-epic&gt;&quot;
-thrum inbox --unread</code></pre>
+thrum inbox --unread
+thrum sent --unread
+# Tip: thrum inbox --unread peeks without marking read; thrum message read --all to mark all read</code></pre>
 <p>You must re-register even if you were registered in the previous session.
 Registration is per-session and does not persist across context loss.</p>
 <h3>Step 2: Orient from Beads</h3>
@@ -63,14 +65,25 @@ git diff                            # What changes exist but are not staged?</co
 <ul>
 <li>If a task is <code>in_progress</code> in beads and has uncommitted changes: review the
 diff, decide whether to complete or reset, then continue</li>
-<li>If a task is <code>in_progress</code> but git shows it is fully committed: close the
-task in beads and move to the next</li>
+<li>If a task is <code>in_progress</code> but git shows it is fully committed: close the task
+in beads and move to the next</li>
 <li>If all visible tasks are <code>completed</code>: verify nothing was missed, then proceed
 to the next unblocked task or wrap up</li>
 </ul>
 <p><strong>Key principle: DO NOT redo completed work.</strong> Trust beads task status and git
 commit history. If a task is closed in beads and committed in git, it is done —
 do not re-implement it.</p>
+<h2>Next Steps</h2>
+<ul>
+<li><a href="thrum-registration.html">Thrum Registration</a> — the registration protocol that
+Step 1 above depends on</li>
+<li><a href="../context.html">Context Management</a> — save context before session end so
+resumption is faster after a loss event</li>
+<li><a href="../beads-and-thrum.html">Beads and Thrum</a> — how task tracking and messaging
+work together to make context recovery possible</li>
+<li><a href="../agent-coordination.html">Agent Coordination</a> — the full session template
+including start, during, and end-of-session protocols</li>
+</ul>
 
 </main>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#strategies/resume-after-context-loss.html')}</script>

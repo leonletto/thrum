@@ -27,8 +27,7 @@ session.
 ### thrum-agent
 
 Comprehensive guide for Thrum messaging. Teaches Claude how to register agents,
-send/receive messages, coordinate with teammates, and choose between MCP tools
-and CLI.
+send/receive messages, and coordinate with teammates via the CLI.
 
 **Use when:**
 
@@ -80,7 +79,7 @@ cycles.
 
 **Key capabilities:**
 
-- Blocking wait via `thrum wait --timeout 15m` (6 cycles max, filters by agent
+- Blocking wait via `thrum wait --timeout 8m` (6 cycles max, filters by agent
   identity)
 - Immediate return on message arrival
 - Time-based filtering with `--after` flag (negative value = "N ago"; e.g.,
@@ -101,16 +100,15 @@ Task({
   model: "haiku",
   run_in_background: true,
   prompt:
-    "Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 15m --after -1s --json",
+    "Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -15s",
 });
 ```
 
 **Wait command flags:**
 
-- `--timeout 15m` — Block up to 15 minutes per cycle
-- `--after -1s` — Include messages sent up to 1 second ago (negative = "N ago";
-  prevents stale replay)
-- `--json` — Machine-readable output
+- `--timeout 8m` — Block up to 8 minutes per cycle
+- `--after -15s` — Include messages sent up to 15 seconds ago (negative = "N
+  ago"; covers re-arm gap)
 
 The listener uses `thrum wait` which blocks until a message arrives or the
 timeout expires — no polling loops needed. Each cycle is a single Bash call.
@@ -124,13 +122,13 @@ project-specific commands, adjust priorities, or include custom context.
 For the agent file format, see
 [Claude Code agent documentation](https://docs.anthropic.com/claude-code).
 
-## See also
+## Next Steps
 
-- [Claude Code Plugin](claude-code-plugin.md) — Recommended: plugin with slash
-  commands and hooks
-- [Codex Plugin](codex-plugin.md) — Codex skill bundle for Thrum coordination
-  and operations
-- [Quickstart](quickstart.md) — Get started with Thrum in 5 minutes
-- [Agent Coordination](agent-coordination.md) — Multi-agent messaging patterns
-- [Workflow Templates](../toolkit/templates/) — Complete planning and
-  implementation workflows
+- [Claude Code Plugin](claude-code-plugin.md) — the recommended approach:
+  install the plugin to get 10 slash commands and automatic hooks instead
+- [Codex Plugin](codex-plugin.md) — the Codex skill bundle for users who prefer
+  skill-guided CLI workflows
+- [Agent Coordination](agent-coordination.md) — multi-agent messaging patterns
+  that these agent definitions enable
+- [Workflow Templates](workflow-templates.md) — pre-built skill pipelines for
+  the full research → plan → implement cycle
