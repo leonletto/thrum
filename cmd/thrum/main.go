@@ -597,6 +597,9 @@ func runSkillsInstall(repoPath, runtimeFlag string, force, dryRun bool) error {
 	var selectedAgent string
 
 	if runtimeFlag != "" {
+		if runtimeFlag == "all" || runtimeFlag == "cli-only" {
+			return fmt.Errorf("--runtime %q is not valid with --skills; specify an agent (claude, cursor, codex, gemini, auggie, amp)", runtimeFlag)
+		}
 		selectedAgent = runtimeFlag
 	} else {
 		detected := runtime.DetectAgents(repoPath)
