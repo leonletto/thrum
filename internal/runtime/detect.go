@@ -87,11 +87,11 @@ func detectAgents(repoPath string, includeBinary bool) []DetectedAgent {
 	return results
 }
 
-// DetectRuntime identifies the active AI coding runtime by checking repo markers
-// and environment variables. Returns "cli-only" if no runtime is detected.
-// Uses tier-1 and tier-2 detection only (no binary scan).
+// DetectRuntime identifies the active AI coding runtime using all 3 detection
+// tiers (repo markers, env vars, verified binary scan).
+// Returns "cli-only" if no runtime is detected.
 func DetectRuntime(repoPath string) string {
-	results := detectAgents(repoPath, false)
+	results := detectAgents(repoPath, true)
 	if len(results) > 0 {
 		return results[0].Name
 	}
@@ -104,10 +104,9 @@ type DetectedRuntime struct {
 	Source string // e.g. "found .claude/settings.json", "env CLAUDE_SESSION_ID"
 }
 
-// DetectAllRuntimes returns all detected runtimes for backward compatibility.
-// Uses tier-1 and tier-2 detection only (no binary scan).
+// DetectAllRuntimes returns all detected runtimes using all 3 detection tiers.
 func DetectAllRuntimes(repoPath string) []DetectedRuntime {
-	agents := detectAgents(repoPath, false)
+	agents := detectAgents(repoPath, true)
 	var results []DetectedRuntime
 	for _, a := range agents {
 		results = append(results, DetectedRuntime{

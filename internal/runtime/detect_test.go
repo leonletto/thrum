@@ -71,8 +71,11 @@ func TestDetectRuntime(t *testing.T) {
 			expected: "auggie",
 		},
 		{
-			name:     "CLI-only fallback",
-			setup:    func(dir string) {},
+			name:  "CLI-only fallback",
+			setup: func(dir string) {},
+			env: map[string]string{
+				"PATH": "", // clear PATH so tier-3 binary scan finds nothing
+			},
 			expected: "cli-only",
 		},
 	}
@@ -134,6 +137,7 @@ func TestIsValidRuntime(t *testing.T) {
 }
 
 func TestDetectAllRuntimes_MultipleDetected(t *testing.T) {
+	t.Setenv("PATH", "") // isolate from system binaries
 	tmpDir := t.TempDir()
 	// Create Claude and Augment markers
 	_ = os.MkdirAll(filepath.Join(tmpDir, ".claude"), 0750)
@@ -157,10 +161,11 @@ func TestDetectAllRuntimes_MultipleDetected(t *testing.T) {
 }
 
 func TestDetectAllRuntimes_NoneDetected(t *testing.T) {
+	t.Setenv("PATH", "") // isolate from system binaries
 	tmpDir := t.TempDir()
 	results := DetectAllRuntimes(tmpDir)
 	if len(results) != 0 {
-		t.Errorf("expected 0 detected runtimes, got %d", len(results))
+		t.Errorf("expected 0 detected runtimes, got %d: %+v", len(results), results)
 	}
 }
 
@@ -188,12 +193,13 @@ func TestDetectAllRuntimes_DeduplicatesFileAndEnv(t *testing.T) {
 }
 
 func TestDetectAllRuntimes_EnvOnly(t *testing.T) {
+	t.Setenv("PATH", "") // isolate from system binaries
 	tmpDir := t.TempDir()
 	t.Setenv("GEMINI_CLI", "true")
 
 	results := DetectAllRuntimes(tmpDir)
 	if len(results) != 1 {
-		t.Fatalf("expected 1 detected runtime, got %d", len(results))
+		t.Fatalf("expected 1 detected runtime, got %d: %+v", len(results), results)
 	}
 	if results[0].Name != "gemini" {
 		t.Errorf("expected gemini, got %q", results[0].Name)
