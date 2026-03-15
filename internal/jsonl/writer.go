@@ -172,6 +172,101 @@ func (r *Reader) ReadAll() ([]json.RawMessage, error) {
 	return messages, nil
 }
 
+// RemoveByField reads the JSONL file, removes all lines where the given JSON
+// field matches the value, and writes the result back atomically.
+// Returns the number of lines removed.
+func RemoveByField(path, field, value string) (int, error) {
+	file, err := os.Open(path) // #nosec G304 -- path is an internal JSONL file path
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("open file: %w", err)
+	}
+
+	// Acquire exclusive lock for read-modify-write
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil { // #nosec G115 -- file descriptors are small non-negative integers
+		_ = file.Close()
+		return 0, fmt.Errorf("lock file: %w", err)
+	}
+
+	var kept [][]byte
+	removed := 0
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var obj map[string]json.RawMessage
+		if err := json.Unmarshal(line, &obj); err != nil {
+			// Keep unparseable lines
+			cp := make([]byte, len(line))
+			copy(cp, line)
+			kept = append(kept, cp)
+			continue
+		}
+		raw, ok := obj[field]
+		if ok {
+			var fieldVal string
+			if json.Unmarshal(raw, &fieldVal) == nil && fieldVal == value {
+				removed++
+				continue
+			}
+		}
+		cp := make([]byte, len(line))
+		copy(cp, line)
+		kept = append(kept, cp)
+	}
+	if err := scanner.Err(); err != nil {
+		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) // #nosec G115
+		_ = file.Close()
+		return 0, fmt.Errorf("scan file: %w", err)
+	}
+
+	// Write filtered content to temp file
+	tmpPath := path + ".filter.tmp"
+	tmpFile, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600) // #nosec G304 -- derived from internal path
+	if err != nil {
+		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) // #nosec G115
+		_ = file.Close()
+		return 0, fmt.Errorf("create temp file: %w", err)
+	}
+
+	w := bufio.NewWriter(tmpFile)
+	for _, line := range kept {
+		_, _ = w.Write(line)
+		_ = w.WriteByte('\n')
+	}
+	if err := w.Flush(); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) // #nosec G115
+		_ = file.Close()
+		return 0, fmt.Errorf("flush temp file: %w", err)
+	}
+	if err := tmpFile.Sync(); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) // #nosec G115
+		_ = file.Close()
+		return 0, fmt.Errorf("sync temp file: %w", err)
+	}
+	_ = tmpFile.Close()
+
+	// Atomic rename
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) // #nosec G115
+		_ = file.Close()
+		return 0, fmt.Errorf("rename temp file: %w", err)
+	}
+
+	_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) // #nosec G115
+	_ = file.Close()
+	return removed, nil
+}
+
 // Stream reads lines from the JSONL file and sends them to a channel.
 // Closes the channel when done or context is canceled.
 func (r *Reader) Stream(ctx context.Context) <-chan json.RawMessage {
