@@ -1,4 +1,3 @@
-
 ## Codex Plugin
 
 > **Prerequisites:** Thrum installed and initialized (`thrum init`), and Codex

@@ -1,4 +1,3 @@
-
 ## Sync Across Machines
 
 Thrum messages live on a Git branch. That means sync across machines is just Git

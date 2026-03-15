@@ -1,4 +1,3 @@
-
 ## Agent Context Management
 
 > **TL;DR:** Context lets agents save notes that survive session restarts and

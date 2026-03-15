@@ -1,4 +1,3 @@
-
 ## Thrum Quickstart Guide
 
 Install Thrum, register an agent, send your first message. Five minutes.
