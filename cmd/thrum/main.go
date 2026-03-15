@@ -4835,6 +4835,8 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsRegistry.Register("agent.list", websocket.Handler(agentHandler.HandleList))
 	wsRegistry.Register("agent.whoami", websocket.Handler(agentHandler.HandleWhoami))
 	wsRegistry.Register("agent.listContext", websocket.Handler(agentHandler.HandleListContext))
+	wsRegistry.Register("agent.delete", websocket.Handler(agentHandler.HandleDelete))
+	wsRegistry.Register("agent.cleanup", websocket.Handler(agentHandler.HandleCleanup))
 	wsRegistry.Register("session.start", websocket.Handler(sessionHandler.HandleStart))
 	wsRegistry.Register("session.end", websocket.Handler(sessionHandler.HandleEnd))
 	wsRegistry.Register("session.list", websocket.Handler(sessionHandler.HandleList))
