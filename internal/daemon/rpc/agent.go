@@ -18,6 +18,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
+	"github.com/leonletto/thrum/internal/jsonl"
 	"github.com/leonletto/thrum/internal/types"
 )
 
@@ -784,6 +785,12 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("delete preamble file: %w", err)
 	}
 
+	// Remove agent lifecycle events from events.jsonl
+	eventsPath := filepath.Join(h.state.SyncDir(), "events.jsonl")
+	if _, err := jsonl.RemoveByField(eventsPath, "agent_id", req.Name); err != nil {
+		log.Printf("warning: failed to filter events.jsonl for agent %s: %v", req.Name, err)
+	}
+
 	// Re-lock for DB delete + event write
 	h.state.Lock()
 
@@ -823,6 +830,34 @@ func (h *AgentHandler) HandleDelete(ctx context.Context, params json.RawMessage)
 	if err != nil {
 		h.state.Unlock()
 		return nil, fmt.Errorf("delete messages for agent: %w", err)
+	}
+
+	// Delete orphaned sessions for this agent.
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM session_refs WHERE session_id IN (SELECT session_id FROM sessions WHERE agent_id = ?)", req.Name)
+	if err != nil {
+		h.state.Unlock()
+		return nil, fmt.Errorf("delete session refs for agent: %w", err)
+	}
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM session_scopes WHERE session_id IN (SELECT session_id FROM sessions WHERE agent_id = ?)", req.Name)
+	if err != nil {
+		h.state.Unlock()
+		return nil, fmt.Errorf("delete session scopes for agent: %w", err)
+	}
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM sessions WHERE agent_id = ?", req.Name)
+	if err != nil {
+		h.state.Unlock()
+		return nil, fmt.Errorf("delete sessions for agent: %w", err)
+	}
+
+	// Delete events referencing this agent.
+	_, err = h.state.DB().ExecContext(ctx,
+		"DELETE FROM events WHERE event_json LIKE ?", "%\"agent_id\":\""+req.Name+"\"%")
+	if err != nil {
+		h.state.Unlock()
+		return nil, fmt.Errorf("delete events for agent: %w", err)
 	}
 
 	_, err = h.state.DB().ExecContext(ctx, "DELETE FROM agents WHERE agent_id = ?", req.Name)

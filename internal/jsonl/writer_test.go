@@ -322,3 +322,85 @@ func TestWriter_AppendConcurrent(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoveByField(t *testing.T) {
+	t.Run("removes_matching_lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.jsonl")
+
+		w, err := jsonl.NewWriter(path)
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		type agentEvent struct {
+			Type    string `json:"type"`
+			AgentID string `json:"agent_id"`
+		}
+		events := []agentEvent{
+			{Type: "agent.register", AgentID: "alice"},
+			{Type: "session.start", AgentID: "bob"},
+			{Type: "agent.register", AgentID: "bob"},
+			{Type: "session.end", AgentID: "alice"},
+		}
+		for _, e := range events {
+			if err := w.Append(e); err != nil {
+				t.Fatalf("Append: %v", err)
+			}
+		}
+		_ = w.Close()
+
+		removed, err := jsonl.RemoveByField(path, "agent_id", "bob")
+		if err != nil {
+			t.Fatalf("RemoveByField: %v", err)
+		}
+		if removed != 2 {
+			t.Errorf("expected 2 removed, got %d", removed)
+		}
+
+		r, _ := jsonl.NewReader(path)
+		lines, _ := r.ReadAll()
+		if len(lines) != 2 {
+			t.Fatalf("expected 2 remaining lines, got %d", len(lines))
+		}
+		for _, line := range lines {
+			var e agentEvent
+			_ = json.Unmarshal(line, &e)
+			if e.AgentID == "bob" {
+				t.Error("bob should have been removed")
+			}
+		}
+	})
+
+	t.Run("no_matches", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.jsonl")
+
+		w, _ := jsonl.NewWriter(path)
+		_ = w.Append(testEvent{Type: "test", Data: "keep"})
+		_ = w.Close()
+
+		removed, err := jsonl.RemoveByField(path, "type", "nonexistent")
+		if err != nil {
+			t.Fatalf("RemoveByField: %v", err)
+		}
+		if removed != 0 {
+			t.Errorf("expected 0 removed, got %d", removed)
+		}
+
+		r, _ := jsonl.NewReader(path)
+		lines, _ := r.ReadAll()
+		if len(lines) != 1 {
+			t.Errorf("expected 1 line, got %d", len(lines))
+		}
+	})
+
+	t.Run("nonexistent_file", func(t *testing.T) {
+		removed, err := jsonl.RemoveByField("/nonexistent/path.jsonl", "field", "value")
+		if err != nil {
+			t.Errorf("expected nil error for missing file, got: %v", err)
+		}
+		if removed != 0 {
+			t.Errorf("expected 0 removed, got %d", removed)
+		}
+	})
+}
