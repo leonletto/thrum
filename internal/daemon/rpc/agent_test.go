@@ -777,6 +777,26 @@ func TestAgentDelete(t *testing.T) {
 		if count != 0 {
 			t.Errorf("Expected 0 agents in database, got %d", count)
 		}
+
+		// Verify sessions were removed
+		err = st.RawDB().QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ?", "test_agent").Scan(&count)
+		if err != nil {
+			t.Fatalf("Failed to query sessions: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("Expected 0 sessions in database, got %d", count)
+		}
+
+		// Verify old events were removed (only the agent.cleanup event from deletion itself should remain)
+		err = st.RawDB().QueryRow(
+			"SELECT COUNT(*) FROM events WHERE event_json LIKE ? AND event_json NOT LIKE ?",
+			"%test_agent%", "%agent.cleanup%").Scan(&count)
+		if err != nil {
+			t.Fatalf("Failed to query events: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("Expected 0 old events referencing agent, got %d", count)
+		}
 	})
 
 	t.Run("delete_nonexistent_agent", func(t *testing.T) {

@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7] - 2026-03-15
+
+### Fixed
+
+- **Web UI agent deletion** — Register `agent.delete` and `agent.cleanup` on the
+  WebSocket registry so the web UI can call them (previously returned "Method
+  not found")
+- **Agent delete cleanup** — `HandleDelete` now removes orphaned sessions,
+  session child tables (refs, scopes), and events from SQLite; also filters
+  agent lifecycle events from `events.jsonl` via new `jsonl.RemoveByField()`
+  helper to prevent re-projection on daemon restart
+
+### Added
+
+- **a-sync worktree protection** — PreToolUse hook (`block-sync-worktree-cd.sh`)
+  prevents `cd`/`pushd` into `.git/thrum-sync/a-sync/` and blocks
+  branch-changing git operations (`checkout`, `switch`, `reset`, `merge`,
+  `rebase`, `pull`) via `git -C` targeting the sync worktree. Checking out a
+  different branch there destroys the entire `.git` directory.
+
 ## [0.5.6] - 2026-03-14
 
 ### Agent Detection & Skills Installer
