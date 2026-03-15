@@ -10,9 +10,9 @@ and this project adheres to
 
 ### Fixed
 
-- **Web UI agent deletion** — Register `agent.delete` and `agent.cleanup` on
-  the WebSocket registry so the web UI can call them (previously returned
-  "Method not found")
+- **Web UI agent deletion** — Register `agent.delete` and `agent.cleanup` on the
+  WebSocket registry so the web UI can call them (previously returned "Method
+  not found")
 - **Agent delete cleanup** — `HandleDelete` now removes orphaned sessions,
   session child tables (refs, scopes), and events from SQLite; also filters
   agent lifecycle events from `events.jsonl` via new `jsonl.RemoveByField()`
