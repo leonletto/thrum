@@ -1,3 +1,4 @@
+
 ## Tailscale Sync
 
 > **Prerequisites:** Tailscale installed and Thrum v0.4.0+ on all machines. Set

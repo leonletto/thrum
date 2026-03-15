@@ -1,3 +1,4 @@
+
 ## Thrum Daemon Architecture
 
 > **TL;DR:** The daemon is the one process everything talks to. Start it with

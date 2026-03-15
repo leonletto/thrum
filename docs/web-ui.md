@@ -1,3 +1,4 @@
+
 ## Web UI
 
 > The daemon serves a real-time dashboard alongside the WebSocket server. No
