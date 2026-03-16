@@ -404,3 +404,172 @@ func TestRemoveByField(t *testing.T) {
 		}
 	})
 }
+
+func TestRemoveBeforeTimestamp(t *testing.T) {
+	type timedEvent struct {
+		Type      string `json:"type"`
+		CreatedAt string `json:"created_at"`
+	}
+
+	cutoff := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+
+	t.Run("filters_before_cutoff_keeps_at_and_after", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "ts.jsonl")
+
+		w, err := jsonl.NewWriter(path)
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		events := []timedEvent{
+			{Type: "old", CreatedAt: "2024-06-15T11:59:59Z"},   // before — remove
+			{Type: "exact", CreatedAt: "2024-06-15T12:00:00Z"}, // equal — keep
+			{Type: "new", CreatedAt: "2024-06-15T12:00:01Z"},   // after — keep
+			{Type: "much_older", CreatedAt: "2024-01-01T00:00:00Z"}, // before — remove
+		}
+		for _, e := range events {
+			if err := w.Append(e); err != nil {
+				t.Fatalf("Append: %v", err)
+			}
+		}
+		_ = w.Close()
+
+		removed, err := jsonl.RemoveBeforeTimestamp(path, "created_at", cutoff)
+		if err != nil {
+			t.Fatalf("RemoveBeforeTimestamp: %v", err)
+		}
+		if removed != 2 {
+			t.Errorf("expected 2 removed, got %d", removed)
+		}
+
+		r, _ := jsonl.NewReader(path)
+		lines, _ := r.ReadAll()
+		if len(lines) != 2 {
+			t.Fatalf("expected 2 remaining lines, got %d", len(lines))
+		}
+		for _, line := range lines {
+			var e timedEvent
+			_ = json.Unmarshal(line, &e)
+			ts, _ := time.Parse(time.RFC3339, e.CreatedAt)
+			if ts.Before(cutoff) {
+				t.Errorf("line with ts %s should have been removed", e.CreatedAt)
+			}
+		}
+	})
+
+	t.Run("no_matching_lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "ts.jsonl")
+
+		w, _ := jsonl.NewWriter(path)
+		_ = w.Append(timedEvent{Type: "keep", CreatedAt: "2025-01-01T00:00:00Z"})
+		_ = w.Close()
+
+		removed, err := jsonl.RemoveBeforeTimestamp(path, "created_at", cutoff)
+		if err != nil {
+			t.Fatalf("RemoveBeforeTimestamp: %v", err)
+		}
+		if removed != 0 {
+			t.Errorf("expected 0 removed, got %d", removed)
+		}
+
+		r, _ := jsonl.NewReader(path)
+		lines, _ := r.ReadAll()
+		if len(lines) != 1 {
+			t.Errorf("expected 1 line remaining, got %d", len(lines))
+		}
+	})
+
+	t.Run("missing_file_returns_zero_nil", func(t *testing.T) {
+		removed, err := jsonl.RemoveBeforeTimestamp("/nonexistent/path.jsonl", "created_at", cutoff)
+		if err != nil {
+			t.Errorf("expected nil error for missing file, got: %v", err)
+		}
+		if removed != 0 {
+			t.Errorf("expected 0 removed, got %d", removed)
+		}
+	})
+
+	t.Run("empty_lines_skipped", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "ts.jsonl")
+
+		// Write file with blank lines interspersed
+		content := `{"type":"old","created_at":"2024-01-01T00:00:00Z"}` + "\n" +
+			"\n" +
+			`{"type":"new","created_at":"2025-01-01T00:00:00Z"}` + "\n"
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		removed, err := jsonl.RemoveBeforeTimestamp(path, "created_at", cutoff)
+		if err != nil {
+			t.Fatalf("RemoveBeforeTimestamp: %v", err)
+		}
+		if removed != 1 {
+			t.Errorf("expected 1 removed, got %d", removed)
+		}
+
+		r, _ := jsonl.NewReader(path)
+		lines, _ := r.ReadAll()
+		if len(lines) != 1 {
+			t.Errorf("expected 1 remaining line, got %d", len(lines))
+		}
+	})
+
+	t.Run("unparseable_timestamp_kept", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "ts.jsonl")
+
+		w, _ := jsonl.NewWriter(path)
+		_ = w.Append(map[string]string{"type": "bad_ts", "created_at": "not-a-timestamp"})
+		_ = w.Append(timedEvent{Type: "old", CreatedAt: "2024-01-01T00:00:00Z"})
+		_ = w.Close()
+
+		removed, err := jsonl.RemoveBeforeTimestamp(path, "created_at", cutoff)
+		if err != nil {
+			t.Fatalf("RemoveBeforeTimestamp: %v", err)
+		}
+		// Only the parseable old line is removed; bad_ts is kept
+		if removed != 1 {
+			t.Errorf("expected 1 removed, got %d", removed)
+		}
+
+		r, _ := jsonl.NewReader(path)
+		lines, _ := r.ReadAll()
+		if len(lines) != 1 {
+			t.Errorf("expected 1 remaining line (the unparseable one), got %d", len(lines))
+		}
+	})
+
+	t.Run("rfc3339nano_format", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "ts.jsonl")
+
+		w, _ := jsonl.NewWriter(path)
+		// Use nanosecond precision timestamps
+		_ = w.Append(map[string]string{
+			"type":       "nano_old",
+			"created_at": "2024-06-15T11:59:59.999999999Z",
+		})
+		_ = w.Append(map[string]string{
+			"type":       "nano_new",
+			"created_at": "2024-06-15T12:00:00.000000001Z",
+		})
+		_ = w.Close()
+
+		removed, err := jsonl.RemoveBeforeTimestamp(path, "created_at", cutoff)
+		if err != nil {
+			t.Fatalf("RemoveBeforeTimestamp: %v", err)
+		}
+		if removed != 1 {
+			t.Errorf("expected 1 removed, got %d", removed)
+		}
+
+		r, _ := jsonl.NewReader(path)
+		lines, _ := r.ReadAll()
+		if len(lines) != 1 {
+			t.Errorf("expected 1 remaining line, got %d", len(lines))
+		}
+	})
+}
