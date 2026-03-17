@@ -586,6 +586,29 @@ thrum backup plugin remove --name myplugin
 
 ---
 
+## Purge
+
+```bash
+thrum purge --before 2d                        # Preview: what's older than 2 days
+thrum purge --before 2d --confirm              # Execute the purge
+thrum purge --before 2026-03-15 --confirm      # Purge before a specific date
+thrum purge --all --confirm                    # Delete all messages/sessions/events
+```
+
+`purge` flags:
+
+```text
+--before string   Cutoff: duration (2d, 24h), date (2026-03-15), or RFC 3339
+--all             Purge all messages, sessions, and events
+--confirm         Execute the purge (without this, only shows a preview)
+```
+
+Removes messages, sessions, and events from both SQLite and sync JSONL files.
+Agents, groups, and subscriptions are not touched. `--before` and `--all` are
+mutually exclusive.
+
+---
+
 ## Peer
 
 ```bash

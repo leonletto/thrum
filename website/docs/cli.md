@@ -34,6 +34,7 @@ for AI agent coordination.
 | `thrum message edit`       | Edit a message (full replacement)                    |
 | `thrum message delete`     | Delete a message                                     |
 | `thrum message read`       | Mark messages as read                                |
+| `thrum purge`              | Remove old messages, sessions, and events             |
 | `thrum agent register`     | Register this agent with the daemon                  |
 | `thrum agent list`         | List registered agents                               |
 | `thrum agent whoami`       | Show current agent identity                          |
@@ -578,6 +579,48 @@ $ thrum message read msg_01 msg_02 msg_03
 
 $ thrum message read --all
 ✓ Marked 7 messages as read
+```
+
+### thrum purge
+
+Remove messages, sessions, and events before a cutoff date. By default shows a
+preview of what would be deleted. Use `--confirm` to execute.
+
+```text
+thrum purge --before DURATION|DATE
+thrum purge --all
+```
+
+| Flag              | Description                                            | Default |
+| ----------------- | ------------------------------------------------------ | ------- |
+| `--before`        | Cutoff: duration (`2d`, `24h`), date, or RFC 3339      |         |
+| `--all`           | Purge all messages, sessions, and events               | `false` |
+| `--confirm`       | Execute the purge (without this, only shows a preview) | `false` |
+
+`--before` and `--all` are mutually exclusive. One is required.
+
+Example:
+
+```text
+$ thrum purge --before 2d
+Purge preview (before 2026-03-14T00:00:00Z):
+
+  Messages:  142
+  Sessions:   8
+  Events:     47
+  Sync files: 10 message files, 1 events file
+
+Run with --confirm to execute.
+
+$ thrum purge --before 2d --confirm
+Purged (before 2026-03-14T00:00:00Z):
+
+  Messages:  142 deleted
+  Sessions:   8 deleted
+  Events:     47 deleted
+  Sync files: 10 message files filtered, 1 events file filtered
+
+Done.
 ```
 
 ## Identity & Sessions

@@ -1,3 +1,4 @@
+
 ## Authentication Guide
 
 This document explains authentication and authorization in the Thrum API.

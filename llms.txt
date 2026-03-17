@@ -106,6 +106,12 @@ All commands accept these flags:
   thrum message read [MSG_ID...] [--all]
     Mark messages as read. Use --all to mark all unread messages as read.
 
+  thrum purge --before DURATION|DATE [--confirm]
+  thrum purge --all [--confirm]
+    Remove old messages, sessions, and events. Without --confirm, shows a preview.
+    Supports relative durations (2d, 24h), dates (2026-03-15), and RFC 3339.
+    Cleans both SQLite and sync JSONL files. Agents are not touched.
+
 ### Agent Identity
 
   thrum agent register --role ROLE --module MODULE [--name NAME] [--display NAME] [--force] [--re-register]

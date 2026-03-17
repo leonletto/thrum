@@ -1,3 +1,4 @@
+
 ## WebSocket API
 
 The Thrum WebSocket API provides real-time, bidirectional communication between

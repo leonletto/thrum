@@ -1,3 +1,4 @@
+
 ## Agent Configurations
 
 > **Recommended:** Install the [Thrum plugin](claude-code-plugin.md) instead of
