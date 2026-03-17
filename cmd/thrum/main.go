@@ -22,6 +22,7 @@ import (
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
+	"github.com/leonletto/thrum/internal/timeparse"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
@@ -144,6 +145,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(setupCmd())
 	rootCmd.AddCommand(mcpCmd())
 	rootCmd.AddCommand(rolesCmd())
+	rootCmd.AddCommand(purgeCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -739,6 +741,69 @@ and skips steps that are already done.`,
 			return cli.Migrate(flagRepo)
 		},
 	}
+}
+
+func purgeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "purge",
+		Short: "Remove old messages, sessions, and events",
+		Long: `Remove messages, sessions, and events before a cutoff date.
+
+By default, shows a preview of what would be deleted. Use --confirm to execute.
+
+Supports relative durations (2d, 24h), date-only (2026-03-15), and RFC 3339.
+
+Examples:
+  thrum purge --before 2d              # preview: what's older than 2 days
+  thrum purge --before 2d --confirm    # execute the purge
+  thrum purge --before 2026-03-15 --confirm
+  thrum purge --all --confirm          # delete all messages/sessions/events`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			beforeFlag, _ := cmd.Flags().GetString("before")
+			allFlag, _ := cmd.Flags().GetBool("all")
+			confirmFlag, _ := cmd.Flags().GetBool("confirm")
+
+			if beforeFlag == "" && !allFlag {
+				return fmt.Errorf("either --before or --all is required")
+			}
+			if beforeFlag != "" && allFlag {
+				return fmt.Errorf("--before and --all are mutually exclusive")
+			}
+
+			var cutoffStr string
+			if allFlag {
+				// Use a far-future timestamp to match everything
+				cutoffStr = time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+			} else {
+				cutoff, err := timeparse.ParseBefore(beforeFlag)
+				if err != nil {
+					return fmt.Errorf("invalid --before value: %w", err)
+				}
+				cutoffStr = cutoff.Format(time.RFC3339)
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.Purge(client, cli.PurgeOptions{
+				Before: cutoffStr,
+				DryRun: !confirmFlag,
+			})
+			if err != nil {
+				return err
+			}
+
+			fmt.Print(cli.FormatPurge(result))
+			return nil
+		},
+	}
+	cmd.Flags().String("before", "", "Cutoff: duration (2d, 24h), date (2026-03-15), or RFC 3339")
+	cmd.Flags().Bool("all", false, "Purge all messages, sessions, and events")
+	cmd.Flags().Bool("confirm", false, "Execute the purge (without this, only preview)")
+	return cmd
 }
 
 func setupCmd() *cobra.Command {
@@ -4792,6 +4857,10 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	userHandler := rpc.NewUserHandler(st)
 	server.RegisterHandler("user.register", userHandler.HandleRegister)
 	server.RegisterHandler("user.identify", userHandler.HandleIdentify)
+
+	// Purge
+	purgeHandler := rpc.NewPurgeHandler(st)
+	server.RegisterHandler("purge.execute", purgeHandler.Handle)
 
 	// Resolve WS port: env var > config.json > default ("auto" = find free port)
 	wsPort := os.Getenv("THRUM_WS_PORT")
