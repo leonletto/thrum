@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-03-17
+
+### Added
+
+- **`thrum purge` command** — Remove old messages, sessions, and events before a
+  cutoff date. Supports relative durations (`2d`, `24h`), date-only
+  (`2026-03-15`), and RFC 3339 timestamps. Cleans both SQLite tables and sync
+  JSONL files. Agents, groups, and subscriptions are not touched.
+  - `--before` flag with flexible date parsing (`internal/timeparse` package)
+  - `--all` flag to purge everything
+  - `--confirm` flag required to execute (preview by default)
+  - `purge.execute` RPC handler with dry-run and execute modes
+  - `RemoveBeforeTimestamp()` JSONL filter function
+  - Integration tests covering dry-run → execute → agent survival
+
 ## [0.5.7] - 2026-03-15
 
 ### Fixed
