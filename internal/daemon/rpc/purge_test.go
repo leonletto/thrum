@@ -500,6 +500,259 @@ func TestPurgeHandler_DryRun_SyncFiles(t *testing.T) {
 	_ = time.Now() // just to use the time import
 }
 
+// TestPurgeHandler_Integration_DryRunThenExecute verifies the full purge flow:
+// insert data across all table types, dry-run (nothing deleted), execute (all
+// old data deleted), then confirm survivors are intact.
+func TestPurgeHandler_Integration_DryRunThenExecute(t *testing.T) {
+	st, cleanup := setupPurgeTest(t)
+	defer cleanup()
+
+	old := "2024-06-01T00:00:00Z"
+	new_ := "2099-06-01T00:00:00Z"
+	cutoff := "2025-01-01T00:00:00Z"
+	ctx := context.Background()
+
+	// --- Agents (must survive purge) ---
+	agentOld := "agent_integ_old"
+	agentNew := "agent_integ_new"
+	insertPurgeAgent(t, st, agentOld)
+	insertPurgeAgent(t, st, agentNew)
+
+	// --- Old message + all child tables ---
+	oldMsgID := insertPurgeMessage(t, st, agentOld, old)
+
+	// message_reads
+	insertPurgeMessageRead(t, st, oldMsgID)
+
+	// message_deliveries
+	_, err := st.DB().ExecContext(ctx, `
+		INSERT INTO message_deliveries (message_id, recipient_agent_id, delivered_at)
+		VALUES (?, 'agent_recv', ?)
+	`, oldMsgID, old)
+	if err != nil {
+		t.Fatalf("insert message_deliveries: %v", err)
+	}
+
+	// message_edits
+	_, err = st.DB().ExecContext(ctx, `
+		INSERT INTO message_edits (message_id, edited_at, edited_by, old_content, new_content)
+		VALUES (?, ?, 'agent_editor', 'old body', 'new body')
+	`, oldMsgID, old)
+	if err != nil {
+		t.Fatalf("insert message_edits: %v", err)
+	}
+
+	// message_refs
+	_, err = st.DB().ExecContext(ctx, `
+		INSERT INTO message_refs (message_id, ref_type, ref_value)
+		VALUES (?, 'mention', 'some_agent')
+	`, oldMsgID)
+	if err != nil {
+		t.Fatalf("insert message_refs: %v", err)
+	}
+
+	// message_scopes
+	_, err = st.DB().ExecContext(ctx, `
+		INSERT INTO message_scopes (message_id, scope_type, scope_value)
+		VALUES (?, 'group', 'all')
+	`, oldMsgID)
+	if err != nil {
+		t.Fatalf("insert message_scopes: %v", err)
+	}
+
+	// --- New message (should survive) ---
+	newMsgID := insertPurgeMessage(t, st, agentNew, new_)
+
+	// --- Old session + child tables ---
+	insertPurgeSession(t, st, agentOld, "sess_integ_old", old)
+
+	_, err = st.DB().ExecContext(ctx, `
+		INSERT INTO session_refs (session_id, ref_type, ref_value, added_at)
+		VALUES ('sess_integ_old', 'worktree', '/tmp/old_wt', ?)
+	`, old)
+	if err != nil {
+		t.Fatalf("insert session_refs: %v", err)
+	}
+
+	_, err = st.DB().ExecContext(ctx, `
+		INSERT INTO session_scopes (session_id, scope_type, scope_value, added_at)
+		VALUES ('sess_integ_old', 'project', 'thrum', ?)
+	`, old)
+	if err != nil {
+		t.Fatalf("insert session_scopes: %v", err)
+	}
+
+	// --- New session (should survive) ---
+	insertPurgeSession(t, st, agentNew, "sess_integ_new", new_)
+
+	// --- Old and new events ---
+	insertPurgeEvent(t, st, "evt_integ_old", old)
+	insertPurgeEvent(t, st, "evt_integ_new", new_)
+
+	handler := NewPurgeHandler(st)
+
+	// ── Phase 1: dry run ──────────────────────────────────────────────────────
+	dryReq := PurgeRequest{Before: cutoff, DryRun: true}
+	dryParams, _ := json.Marshal(dryReq)
+	dryResult, err := handler.Handle(ctx, dryParams)
+	if err != nil {
+		t.Fatalf("dry-run Handle: %v", err)
+	}
+	dryResp, ok := dryResult.(*PurgeResponse)
+	if !ok {
+		t.Fatalf("expected *PurgeResponse, got %T", dryResult)
+	}
+
+	if !dryResp.DryRun {
+		t.Error("dry-run: DryRun should be true")
+	}
+	if dryResp.MessagesDeleted != 1 {
+		t.Errorf("dry-run: MessagesDeleted = %d, want 1", dryResp.MessagesDeleted)
+	}
+	if dryResp.SessionsDeleted != 1 {
+		t.Errorf("dry-run: SessionsDeleted = %d, want 1", dryResp.SessionsDeleted)
+	}
+	if dryResp.EventsDeleted != 1 {
+		t.Errorf("dry-run: EventsDeleted = %d, want 1", dryResp.EventsDeleted)
+	}
+
+	// Verify nothing was actually deleted after dry run
+	if n := countRows(t, st, "messages"); n != 2 {
+		t.Errorf("dry-run: messages count = %d, want 2", n)
+	}
+	if n := countRows(t, st, "sessions"); n != 2 {
+		t.Errorf("dry-run: sessions count = %d, want 2", n)
+	}
+	if n := countRows(t, st, "events"); n != 2 {
+		t.Errorf("dry-run: events count = %d, want 2", n)
+	}
+	if n := countRows(t, st, "message_reads"); n != 1 {
+		t.Errorf("dry-run: message_reads count = %d, want 1", n)
+	}
+	if n := countRows(t, st, "message_deliveries"); n != 1 {
+		t.Errorf("dry-run: message_deliveries count = %d, want 1", n)
+	}
+	if n := countRows(t, st, "message_edits"); n != 1 {
+		t.Errorf("dry-run: message_edits count = %d, want 1", n)
+	}
+	if n := countRows(t, st, "message_refs"); n != 1 {
+		t.Errorf("dry-run: message_refs count = %d, want 1", n)
+	}
+	if n := countRows(t, st, "message_scopes"); n != 1 {
+		t.Errorf("dry-run: message_scopes count = %d, want 1", n)
+	}
+	if n := countRows(t, st, "session_refs"); n != 1 {
+		t.Errorf("dry-run: session_refs count = %d, want 1", n)
+	}
+	if n := countRows(t, st, "session_scopes"); n != 1 {
+		t.Errorf("dry-run: session_scopes count = %d, want 1", n)
+	}
+
+	// ── Phase 2: execute ──────────────────────────────────────────────────────
+	execReq := PurgeRequest{Before: cutoff, DryRun: false}
+	execParams, _ := json.Marshal(execReq)
+	execResult, err := handler.Handle(ctx, execParams)
+	if err != nil {
+		t.Fatalf("execute Handle: %v", err)
+	}
+	execResp, ok := execResult.(*PurgeResponse)
+	if !ok {
+		t.Fatalf("expected *PurgeResponse, got %T", execResult)
+	}
+
+	if execResp.DryRun {
+		t.Error("execute: DryRun should be false")
+	}
+	if execResp.MessagesDeleted != 1 {
+		t.Errorf("execute: MessagesDeleted = %d, want 1", execResp.MessagesDeleted)
+	}
+	if execResp.SessionsDeleted != 1 {
+		t.Errorf("execute: SessionsDeleted = %d, want 1", execResp.SessionsDeleted)
+	}
+	if execResp.EventsDeleted != 1 {
+		t.Errorf("execute: EventsDeleted = %d, want 1", execResp.EventsDeleted)
+	}
+
+	// ── Phase 3: verify deletions ─────────────────────────────────────────────
+
+	// Old message gone, new message survives
+	var cnt int
+	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE message_id = ?`, oldMsgID).Scan(&cnt); err != nil {
+		t.Fatalf("query old message: %v", err)
+	}
+	if cnt != 0 {
+		t.Errorf("old message still present")
+	}
+	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE message_id = ?`, newMsgID).Scan(&cnt); err != nil {
+		t.Fatalf("query new message: %v", err)
+	}
+	if cnt != 1 {
+		t.Errorf("new message gone, want 1 row")
+	}
+
+	// All message child records for old message gone
+	for _, table := range []string{"message_reads", "message_deliveries", "message_edits", "message_refs", "message_scopes"} {
+		//nolint:gosec // table name is a hardcoded constant, not user input
+		q := `SELECT COUNT(*) FROM ` + table + ` WHERE message_id = ?`
+		if err := st.DB().QueryRowContext(ctx, q, oldMsgID).Scan(&cnt); err != nil {
+			t.Fatalf("query %s: %v", table, err)
+		}
+		if cnt != 0 {
+			t.Errorf("%s still has %d row(s) for deleted message", table, cnt)
+		}
+	}
+
+	// Old session gone, new session survives
+	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions WHERE session_id = 'sess_integ_old'`).Scan(&cnt); err != nil {
+		t.Fatalf("query old session: %v", err)
+	}
+	if cnt != 0 {
+		t.Errorf("old session still present")
+	}
+	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions WHERE session_id = 'sess_integ_new'`).Scan(&cnt); err != nil {
+		t.Fatalf("query new session: %v", err)
+	}
+	if cnt != 1 {
+		t.Errorf("new session gone, want 1 row")
+	}
+
+	// Session child records for old session gone
+	for _, table := range []string{"session_refs", "session_scopes"} {
+		//nolint:gosec // table name is a hardcoded constant, not user input
+		q := `SELECT COUNT(*) FROM ` + table + ` WHERE session_id = 'sess_integ_old'`
+		if err := st.DB().QueryRowContext(ctx, q).Scan(&cnt); err != nil {
+			t.Fatalf("query %s: %v", table, err)
+		}
+		if cnt != 0 {
+			t.Errorf("%s still has %d row(s) for deleted session", table, cnt)
+		}
+	}
+
+	// Old event gone, new event survives
+	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE event_id = 'evt_integ_old'`).Scan(&cnt); err != nil {
+		t.Fatalf("query old event: %v", err)
+	}
+	if cnt != 0 {
+		t.Errorf("old event still present")
+	}
+	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE event_id = 'evt_integ_new'`).Scan(&cnt); err != nil {
+		t.Fatalf("query new event: %v", err)
+	}
+	if cnt != 1 {
+		t.Errorf("new event gone, want 1 row")
+	}
+
+	// ── Phase 4: agents must NOT be deleted ───────────────────────────────────
+	for _, agentID := range []string{agentOld, agentNew} {
+		if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM agents WHERE agent_id = ?`, agentID).Scan(&cnt); err != nil {
+			t.Fatalf("query agent %s: %v", agentID, err)
+		}
+		if cnt != 1 {
+			t.Errorf("agent %s was deleted (count=%d), agents must survive purge", agentID, cnt)
+		}
+	}
+}
+
 // nonEmptyLines splits text by newline, filtering blank lines.
 func nonEmptyLines(s string) []string {
 	var out []string
