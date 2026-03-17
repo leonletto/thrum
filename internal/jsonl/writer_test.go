@@ -422,9 +422,9 @@ func TestRemoveBeforeTimestamp(t *testing.T) {
 			t.Fatalf("NewWriter: %v", err)
 		}
 		events := []timedEvent{
-			{Type: "old", CreatedAt: "2024-06-15T11:59:59Z"},   // before — remove
-			{Type: "exact", CreatedAt: "2024-06-15T12:00:00Z"}, // equal — keep
-			{Type: "new", CreatedAt: "2024-06-15T12:00:01Z"},   // after — keep
+			{Type: "old", CreatedAt: "2024-06-15T11:59:59Z"},        // before — remove
+			{Type: "exact", CreatedAt: "2024-06-15T12:00:00Z"},      // equal — keep
+			{Type: "new", CreatedAt: "2024-06-15T12:00:01Z"},        // after — keep
 			{Type: "much_older", CreatedAt: "2024-01-01T00:00:00Z"}, // before — remove
 		}
 		for _, e := range events {
