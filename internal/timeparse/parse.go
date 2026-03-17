@@ -18,7 +18,7 @@ import (
 //  3. Date-only      – "2026-03-15"             → midnight UTC on that date
 //  4. Full RFC 3339  – "2026-03-15T14:30:00Z"   → exact timestamp
 //
-// Errors are returned for empty input, unrecognised formats, negative or zero
+// Errors are returned for empty input, unrecognized formats, negative or zero
 // day counts, and negative or zero durations.
 func ParseBefore(s string) (time.Time, error) {
 	if s == "" {
@@ -58,7 +58,7 @@ func ParseBefore(s string) (time.Time, error) {
 		return t.UTC(), nil
 	}
 
-	return time.Time{}, fmt.Errorf("unrecognised time specification %q; "+
+	return time.Time{}, fmt.Errorf("unrecognized time specification %q; "+
 		"accepted formats: Nd (e.g. 7d), Go duration (e.g. 24h), "+
 		"date (2006-01-02), or RFC 3339 (2006-01-02T15:04:05Z)", s)
 }
