@@ -1,4 +1,3 @@
-
 ## MCP Server
 
 > **TL;DR:** The MCP server lets AI agents use Thrum through native MCP tools

@@ -1,4 +1,3 @@
-
 ## Sub-Agent Strategy
 
 This is an operational strategy that agents receive via `.thrum/strategies/`. It

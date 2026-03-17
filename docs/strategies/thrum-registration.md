@@ -1,4 +1,3 @@
-
 ## Thrum Registration
 
 This is an operational strategy that agents receive via `.thrum/strategies/`. It

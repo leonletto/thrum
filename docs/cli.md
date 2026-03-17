@@ -1,4 +1,3 @@
-
 ## Thrum CLI Reference
 
 > **TL;DR:** You only need 8 commands for daily use — they're in the
@@ -27,7 +26,7 @@ for AI agent coordination.
 | `thrum message edit`       | Edit a message (full replacement)                    |
 | `thrum message delete`     | Delete a message                                     |
 | `thrum message read`       | Mark messages as read                                |
-| `thrum purge`              | Remove old messages, sessions, and events             |
+| `thrum purge`              | Remove old messages, sessions, and events            |
 | `thrum agent register`     | Register this agent with the daemon                  |
 | `thrum agent list`         | List registered agents                               |
 | `thrum agent whoami`       | Show current agent identity                          |
@@ -584,11 +583,11 @@ thrum purge --before DURATION|DATE
 thrum purge --all
 ```
 
-| Flag              | Description                                            | Default |
-| ----------------- | ------------------------------------------------------ | ------- |
-| `--before`        | Cutoff: duration (`2d`, `24h`), date, or RFC 3339      |         |
-| `--all`           | Purge all messages, sessions, and events               | `false` |
-| `--confirm`       | Execute the purge (without this, only shows a preview) | `false` |
+| Flag        | Description                                            | Default |
+| ----------- | ------------------------------------------------------ | ------- |
+| `--before`  | Cutoff: duration (`2d`, `24h`), date, or RFC 3339      |         |
+| `--all`     | Purge all messages, sessions, and events               | `false` |
+| `--confirm` | Execute the purge (without this, only shows a preview) | `false` |
 
 `--before` and `--all` are mutually exclusive. One is required.
 
