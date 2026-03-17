@@ -1,4 +1,4 @@
-# Thrum v0.5.7 -- Complete Agent Reference
+# Thrum v0.5.8 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
 
@@ -348,6 +348,19 @@ All commands accept:
             Use --all to mark every unread message as read.
   Requires: Daemon running, active session.
   Output:   Count of marked messages. Also shows other agents who read the same messages.
+
+### thrum purge
+
+  Usage:    thrum purge --before DURATION|DATE [--confirm]
+            thrum purge --all [--confirm]
+  Flags:    --before string   Cutoff: duration (2d, 24h), date (2026-03-15), or RFC 3339
+            --all             Purge all messages, sessions, and events
+            --confirm         Execute the purge (without this, only shows a preview)
+  Action:   Removes messages, sessions, and events before the cutoff date from both
+            SQLite and sync JSONL files. Agents, groups, and subscriptions are not
+            touched. --before and --all are mutually exclusive.
+  Requires: Daemon running.
+  Output:   Preview (counts) without --confirm. Deletion summary with --confirm.
 
 ### thrum agent register
 
