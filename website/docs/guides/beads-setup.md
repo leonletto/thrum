@@ -159,13 +159,67 @@ git show-ref | grep dolt
 # Expected: <hash> refs/dolt/data
 ```
 
-**New machine setup:** `refs/dolt/data` is not fetched by default `git clone`.
-Set `sync.git-remote` in `.beads/config.yaml` to enable auto-bootstrap on
-`bd init`, or clone the dolt database manually:
+### Setting Up Beads from an Existing Clone
+
+When you clone a repo that already has beads data (stored in `refs/dolt/data` on
+the Git remote), a standard `git clone` does **not** fetch this ref. You need to
+bootstrap the dolt database manually.
+
+**Check if your remote has beads data:**
 
 ```bash
+git ls-remote origin | grep dolt
+# If you see: <hash> refs/dolt/data — the remote has beads data
+```
+
+**Step-by-step setup:**
+
+```bash
+# 1. Initialize beads (creates .beads/ structure with an empty dolt database)
+bd init
+
+# 2. Stop the auto-started dolt server
+bd dolt stop
+
+# 3. Remove the empty database that bd init created
+#    Replace <dbname> with your database name (shown in bd dolt show, or
+#    check .beads/metadata.json for "dolt_database")
+rm -rf .beads/dolt/<dbname>/
+
+# 4. Clone the dolt data from your git remote
+#    This pulls all data stored under refs/dolt/data
 cd .beads/dolt
-dolt clone git+ssh://git@github.com/org/repo.git <reponame>
+dolt clone git@github.com:org/repo.git <dbname>
+cd ../..
+
+# 5. Start the dolt server with the cloned data
+bd dolt start
+
+# 6. Run schema migrations (needed if the remote data was created with an
+#    older version of beads)
+bd migrate --yes
+
+# 7. Register the remote in the SQL server for bd dolt push/pull
+#    (dolt clone already added it at the CLI level, so you'll see a
+#    warning about "CLI remote failed: remote already exists" — that's fine)
+bd dolt remote add origin git@github.com:org/repo.git
+
+# 8. Verify everything works
+bd dolt test     # connection check
+bd list          # should show your issues
+```
+
+**Why not just `bd dolt pull`?** A freshly initialized database and the remote
+have no common ancestor, so `dolt pull` (and `dolt fetch` + `dolt reset`) fails
+or corrupts the local database. Cloning into a clean directory is the only
+reliable path.
+
+**After setup,** use the normal sync workflow:
+
+```bash
+bd dolt commit    # commit working set changes
+bd dolt push      # push to remote
+bd dolt pull      # pull from remote (commit first)
 ```
 
 ### Agent Integration with Thrum
