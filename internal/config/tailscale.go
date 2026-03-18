@@ -1,9 +1,12 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // DefaultTailscalePort is the default port for the tsnet sync listener.
@@ -19,9 +22,60 @@ type TailscaleConfig struct {
 	ControlURL string // Control plane URL (empty = Tailscale SaaS; set for Headscale)
 }
 
-// LoadTailscaleConfig loads Tailscale configuration from environment variables.
+// loadEnvFile reads one or more .env files (checked in order) and sets any
+// THRUM_ or TAILSCALE_ prefixed variables that are not already present in the
+// environment. The first file that exists wins for each individual variable;
+// later paths cannot override values set by earlier paths or by the process
+// environment.
 //
-// Environment variables:
+// File format: KEY=VALUE lines. Lines starting with '#' and blank lines are
+// ignored. No shell variable expansion is performed.
+//
+// Note: the auth-key variable name in the code is THRUM_TS_AUTHKEY (no
+// underscore between AUTH and KEY). Some guides may show THRUM_TS_AUTH_KEY —
+// use the form without the extra underscore in .env files.
+func loadEnvFile(paths ...string) {
+	for _, path := range paths {
+		f, err := os.Open(path)
+		if err != nil {
+			// File does not exist or is not readable — skip silently.
+			continue
+		}
+
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			// Skip blank lines and comments.
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			idx := strings.IndexByte(line, '=')
+			if idx < 1 {
+				// No '=' or key is empty — skip malformed lines.
+				continue
+			}
+			key := strings.TrimSpace(line[:idx])
+			value := strings.TrimSpace(line[idx+1:])
+
+			// Only load thrum-related variables.
+			if !strings.HasPrefix(key, "THRUM_") && !strings.HasPrefix(key, "TAILSCALE_") {
+				continue
+			}
+
+			// Env vars already set in the process take precedence.
+			if os.Getenv(key) == "" {
+				_ = os.Setenv(key, value)
+			}
+		}
+		f.Close()
+	}
+}
+
+// LoadTailscaleConfig loads Tailscale configuration from environment variables.
+// Before reading env vars it auto-detects .env files in .thrum/ and the repo
+// root, giving the .thrum/.env file higher priority.
+//
+// Environment variables (can also be set via .env files):
 //   - THRUM_TS_ENABLED: "true"/"1" to enable (default: false)
 //   - THRUM_TS_HOSTNAME: tsnet hostname (required when enabled)
 //   - THRUM_TS_PORT: listener port (default: 9100)
@@ -29,6 +83,13 @@ type TailscaleConfig struct {
 //   - THRUM_TS_STATE_DIR: state directory (default: .thrum/var/tsnet)
 //   - THRUM_TAILSCALE_CONTROL_URL: control plane URL (optional, for Headscale)
 func LoadTailscaleConfig(thrumDir string) TailscaleConfig {
+	// Auto-detect .env files. repoRoot is the parent of thrumDir (.thrum).
+	repoRoot := filepath.Dir(thrumDir)
+	loadEnvFile(
+		filepath.Join(thrumDir, ".env"),  // .thrum/.env (highest priority)
+		filepath.Join(repoRoot, ".env"),  // repo root .env
+	)
+
 	cfg := TailscaleConfig{
 		Port:     DefaultTailscalePort,
 		StateDir: fmt.Sprintf("%s/var/tsnet", thrumDir),

@@ -4783,7 +4783,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			}
 			return result.PeerName, result.PeerAddress, result.PeerDaemonID, nil
 		}
-		server.RegisterHandler("peer.wait_pairing",
+		server.RegisterLongPollHandler("peer.wait_pairing",
 			rpc.NewPeerWaitPairingHandler(waitFn).Handle)
 
 		// peer.join — send pairing code to remote peer
