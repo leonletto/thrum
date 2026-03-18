@@ -176,9 +176,12 @@ git ls-remote origin | grep dolt
 
 ```bash
 # 1. Initialize beads (creates .beads/ structure with an empty dolt database)
+#    bd init will detect refs/dolt/data on your remote and suggest bd bootstrap.
+#    As of bd 0.61.0, bd bootstrap may handle this automatically — try it first.
+#    If it doesn't work, continue with the manual steps below.
 bd init
 
-# 2. Stop the auto-started dolt server
+# 2. Stop the auto-started dolt server (may already be stopped — that's fine)
 bd dolt stop
 
 # 3. Remove the empty database that bd init created
@@ -199,13 +202,17 @@ bd dolt start
 #    older version of beads)
 bd migrate --yes
 
-# 7. Register the remote in the SQL server for bd dolt push/pull
-#    (dolt clone already added it at the CLI level, so you'll see a
-#    warning about "CLI remote failed: remote already exists" — that's fine)
-bd dolt remote add origin git@github.com:org/repo.git
+# 7. Register the remote for bd dolt push/pull
+#    dolt clone does not preserve the remote, so you need to add it to both
+#    the dolt CLI and the SQL server separately:
+cd .beads/dolt/<dbname>
+dolt remote add origin git@github.com:org/repo.git
+cd ../../..
+bd sql "CALL dolt_remote('add', 'origin', 'git@github.com:org/repo.git')"
 
 # 8. Verify everything works
 bd dolt test     # connection check
+bd dolt remote list  # should show origin
 bd list          # should show your issues
 ```
 
