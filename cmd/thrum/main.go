@@ -4785,8 +4785,31 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		// --- Peer management RPCs (CLI: thrum peer add/join/list/remove/status) ---
 
 		// peer.start_pairing — begin pairing, return code
+		// Wrap to ensure port is selected before pairing starts.
+		startPairingFn := func(timeout time.Duration) (string, error) {
+			// Lazy port selection: pick a random port on first peer add
+			if peerRegistry.LocalPort() == 0 {
+				// THRUM_TS_PORT env override takes precedence
+				if p := os.Getenv("THRUM_TS_PORT"); p != "" {
+					if port, err := strconv.Atoi(p); err == nil {
+						if err := peerRegistry.SetLocalPort(port); err != nil {
+							return "", fmt.Errorf("set local port from env: %w", err)
+						}
+					}
+				} else {
+					port, err := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
+					if err != nil {
+						return "", fmt.Errorf("find available tsnet port: %w", err)
+					}
+					if err := peerRegistry.SetLocalPort(port); err != nil {
+						return "", fmt.Errorf("set local port: %w", err)
+					}
+				}
+			}
+			return pairingMgr.StartPairing(timeout)
+		}
 		server.RegisterHandler("peer.start_pairing",
-			rpc.NewPeerStartPairingHandler(pairingMgr.StartPairing).Handle)
+			rpc.NewPeerStartPairingHandler(startPairingFn).Handle)
 
 		// peer.wait_pairing — block until pairing completes or times out
 		waitFn := func(ctx context.Context) (peerName, peerAddr, peerDaemonID string, err error) {
