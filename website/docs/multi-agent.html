@@ -225,9 +225,8 @@ thrum runtime show claude
 # Set a default runtime for this machine
 thrum runtime set-default claude</code></pre>
 <h3>Auto-Detection</h3>
-<p>Thrum can auto-detect which AI platform is running by checking for file markers
-and environment variables:</p>
-<p><strong>File markers:</strong></p>
+<p>Thrum uses 3-tier detection to identify which AI platform is running:</p>
+<p><strong>Tier 1 — File markers</strong> (checked in the repo):</p>
 <table>
 <thead>
 <tr>
@@ -240,7 +239,7 @@ and environment variables:</p>
 <td><code>claude</code></td>
 </tr>
 <tr>
-<td><code>.codex</code></td>
+<td><code>.codex/</code></td>
 <td><code>codex</code></td>
 </tr>
 <tr>
@@ -248,11 +247,19 @@ and environment variables:</p>
 <td><code>cursor</code></td>
 </tr>
 <tr>
-<td><code>.augment</code></td>
+<td><code>.cursor/rules/</code></td>
+<td><code>cursor</code></td>
+</tr>
+<tr>
+<td><code>.augment/</code></td>
 <td><code>auggie</code></td>
 </tr>
+<tr>
+<td><code>.gemini/</code></td>
+<td><code>gemini</code></td>
+</tr>
 </tbody></table>
-<p><strong>Environment variables:</strong></p>
+<p><strong>Tier 2 — Environment variables:</strong></p>
 <table>
 <thead>
 <tr>
@@ -277,8 +284,38 @@ and environment variables:</p>
 <td><code>auggie</code></td>
 </tr>
 </tbody></table>
-<p>If no runtime is detected, Thrum falls back to CLI-only mode (no MCP
-configuration generated).</p>
+<p><strong>Tier 3 — Binary verification</strong> (falls back to PATH scan):</p>
+<table>
+<thead>
+<tr>
+<th>Binary</th>
+<th>Verification</th>
+<th>Detected Runtime</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>claude</code></td>
+<td><code>claude --version</code> matches output</td>
+<td><code>claude</code></td>
+</tr>
+<tr>
+<td><code>codex</code></td>
+<td><code>codex --version</code> matches output</td>
+<td><code>codex</code></td>
+</tr>
+<tr>
+<td><code>cursor</code></td>
+<td>Binary exists on PATH</td>
+<td><code>cursor</code></td>
+</tr>
+<tr>
+<td><code>gemini</code></td>
+<td>Binary exists on PATH</td>
+<td><code>gemini</code></td>
+</tr>
+</tbody></table>
+<p>Tiers are checked in order. If no runtime is detected at any tier, Thrum falls
+back to CLI-only mode (no MCP configuration generated).</p>
 <h3>Integration with init and quickstart</h3>
 <p>Use <code>--runtime</code> to specify or auto-detect the platform:</p>
 <pre><code># Auto-detect and generate config
@@ -324,8 +361,8 @@ messages, git context, and saved context into a single output. Run it at session
 startup or after compaction to quickly orient a new or recovering agent.</p>
 <pre><code>thrum context prime        # Human-readable summary
 thrum context prime --json # Structured JSON for LLM consumption</code></pre>
-<p>See <a href="context.html">Context Management</a> for full documentation including
-output format, graceful degradation behavior, and use cases.</p>
+<p>See <a href="context.html">Context Management</a> for full documentation including output
+format, graceful degradation behavior, and use cases.</p>
 <hr>
 <h2>Multi-Worktree Coordination</h2>
 <p>Multiple agents can operate across git worktrees while sharing a single daemon
@@ -577,10 +614,14 @@ with that role are automatically included</li>
 </ul>
 <h2>Next Steps</h2>
 <ul>
-<li><a href="agent-coordination.html">Agent Coordination</a> — workflow patterns and Beads integration for multi-agent teams</li>
-<li><a href="identity.html">Identity System</a> — agent naming, registration, and per-worktree identity files</li>
-<li><a href="messaging.html">Messaging</a> — full send/receive/reply reference including scopes, mentions, and groups</li>
-<li><a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> — step-by-step walkthrough of the most common setup</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> — workflow patterns and Beads
+integration for multi-agent teams</li>
+<li><a href="identity.html">Identity System</a> — agent naming, registration, and per-worktree
+identity files</li>
+<li><a href="messaging.html">Messaging</a> — full send/receive/reply reference including
+scopes, mentions, and groups</li>
+<li><a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> — step-by-step
+walkthrough of the most common setup</li>
 </ul>
 
 </main>

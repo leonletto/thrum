@@ -41,7 +41,10 @@ a{color:#0366d6}
 <main>
 <h2>Thrum CLI Reference</h2>
 <blockquote>
-<p><strong>TL;DR:</strong> You only need 8 commands for daily use — they&#39;re in the <a href="overview.html">Overview</a> page. This page is the full reference for all ~30 commands. Use Ctrl+F or the Quick Reference table at the top to find what you need. Storage layout details are at the very bottom.</p>
+<p><strong>TL;DR:</strong> You only need 8 commands for daily use — they&#39;re in the
+<a href="overview.html">Overview</a> page. This page is the full reference for all ~30
+commands. Use Ctrl+F or the Quick Reference table at the top to find what you
+need. Storage layout details are at the very bottom.</p>
 </blockquote>
 <p>Complete reference for the <code>thrum</code> command-line interface — a messaging system
 for AI agent coordination.</p>
@@ -108,6 +111,10 @@ for AI agent coordination.</p>
 <tr>
 <td><code>thrum message read</code></td>
 <td>Mark messages as read</td>
+</tr>
+<tr>
+<td><code>thrum purge</code></td>
+<td>Remove old messages, sessions, and events</td>
 </tr>
 <tr>
 <td><code>thrum agent register</code></td>
@@ -438,9 +445,9 @@ Skill installed to .claude/skills/thrum/
   references/CLI_REFERENCE.md
   references/LISTENER_PATTERN.md
   references/MESSAGING.md</code></pre>
-<p>Supported agents: Claude Code, Cursor, Codex, Gemini, Augment, Amp. If the
-thrum Claude plugin is already installed, <code>--skills</code> skips the install (use
-<code>--force</code> to override). If no agent-specific directory is found, falls back to
+<p>Supported agents: Claude Code, Cursor, Codex, Gemini, Augment, Amp. If the thrum
+Claude plugin is already installed, <code>--skills</code> skips the install (use <code>--force</code>
+to override). If no agent-specific directory is found, falls back to
 <code>.agents/skills/thrum/</code> (the cross-agent standard path).</p>
 <h3>thrum config show</h3>
 <p>Show effective configuration resolved from all sources. Displays each value and
@@ -863,6 +870,56 @@ thrum message read --all</code></pre>
 
 $ thrum message read --all
 ✓ Marked 7 messages as read</code></pre>
+<h3>thrum purge</h3>
+<p>Remove messages, sessions, and events before a cutoff date. By default shows a
+preview of what would be deleted. Use <code>--confirm</code> to execute.</p>
+<pre><code>thrum purge --before DURATION|DATE
+thrum purge --all</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--before</code></td>
+<td>Cutoff: duration (<code>2d</code>, <code>24h</code>), date, or RFC 3339</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--all</code></td>
+<td>Purge all messages, sessions, and events</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--confirm</code></td>
+<td>Execute the purge (without this, only shows a preview)</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
+<p><code>--before</code> and <code>--all</code> are mutually exclusive. One is required.</p>
+<p>Example:</p>
+<pre><code>$ thrum purge --before 2d
+Purge preview (before 2026-03-14T00:00:00Z):
+
+  Messages:  142
+  Sessions:   8
+  Events:     47
+  Sync files: 10 message files, 1 events file
+
+Run with --confirm to execute.
+
+$ thrum purge --before 2d --confirm
+Purged (before 2026-03-14T00:00:00Z):
+
+  Messages:  142 deleted
+  Sessions:   8 deleted
+  Events:     47 deleted
+  Sync files: 10 message files filtered, 1 events file filtered
+
+Done.</code></pre>
 <h2>Identity &amp; Sessions</h2>
 <h3>Agent Naming</h3>
 <p>Agents support human-readable names that become their canonical identifier for
@@ -1623,15 +1680,20 @@ messages directed to this agent by name or role. There is no <code>--all</code> 
 </tr>
 </tbody></table>
 <p>Exit codes: <code>0</code> = message received, <code>1</code> = timeout, <code>2</code> = error.</p>
-<p>Example:</p>
-<pre><code># Include messages sent up to 30s ago (--after -30s = &quot;30 seconds ago&quot;)
+<p><strong>Output:</strong> <code>thrum wait</code> does not print message content. On success it prints an
+action directive telling the caller to check inbox; on timeout it prints a
+timeout notice to stderr.</p>
+<pre><code># Plain text output (default)
+$ thrum wait --after -30s --timeout=5m
+ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them.
+
+# JSON output
 $ thrum wait --after -30s --timeout=5m --json
-✓ Message received: msg_01HXE8Z7 from @planner
-  We should refactor the sync daemon before adding embeddings.
+{&quot;status&quot;: &quot;received&quot;, &quot;action&quot;: &quot;ACTION REQUIRED: You have unread messages. Run `thrum inbox --unread` now to read and respond to them.&quot;}
 
 # Use in scripts (only new messages — no --after means &quot;now&quot;)
 if thrum wait --timeout=30s; then
-  echo &quot;New message received&quot;
+  thrum inbox --unread   # read the messages
 else
   echo &quot;Timeout&quot;
 fi</code></pre>
@@ -2071,7 +2133,8 @@ name (e.g., <code>furiosa.json</code> or <code>implementer_35HV62T9B9.json</code
 <h2>Next Steps</h2>
 <ul>
 <li><a href="messaging.html">Messaging</a> — how send, inbox, reply, and groups work together</li>
-<li><a href="rpc-api.html">RPC API Reference</a> — the underlying JSON-RPC methods the CLI wraps</li>
+<li><a href="rpc-api.html">RPC API Reference</a> — the underlying JSON-RPC methods the CLI
+wraps</li>
 <li><a href="quickstart.html">Quickstart Guide</a> — get up and running in 5 minutes</li>
 <li><a href="overview.html">Overview</a> — which 8 commands you actually need day-to-day</li>
 </ul>

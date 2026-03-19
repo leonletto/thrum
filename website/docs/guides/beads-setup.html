@@ -174,11 +174,95 @@ it causes journal corruption. Always use <code>bd dolt ...</code> commands inste
 <p><strong>Verify sync:</strong></p>
 <pre><code>git show-ref | grep dolt
 # Expected: &lt;hash&gt; refs/dolt/data</code></pre>
-<p><strong>New machine setup:</strong> <code>refs/dolt/data</code> is not fetched by default <code>git clone</code>.
-Set <code>sync.git-remote</code> in <code>.beads/config.yaml</code> to enable auto-bootstrap on
-<code>bd init</code>, or clone the dolt database manually:</p>
+<h3>Setting Up Beads from an Existing Clone</h3>
+<p>When you clone a repo that already has beads data (stored in <code>refs/dolt/data</code> on
+the Git remote), a standard <code>git clone</code> does <strong>not</strong> fetch this ref. You need to
+bootstrap the dolt database manually.</p>
+<p>This guide was verified end-to-end on bd 0.61.0 and dolt 1.81.8+. Follow the
+steps in order — each step depends on the previous one.</p>
+<h4>Prerequisites</h4>
+<ul>
+<li><code>bd</code> and <code>dolt</code> installed (see <a href="#installation">Installation</a> above)</li>
+<li>A git clone of the repo with SSH access to the remote</li>
+<li>The remote must have <code>refs/dolt/data</code> (check with the command below)</li>
+</ul>
+<h4>Step 0: Confirm your remote has beads data</h4>
+<pre><code>git ls-remote origin | grep dolt
+# Expected output: &lt;hash&gt; refs/dolt/data
+# If you don&#39;t see this, the remote has no beads data — use bd init normally.</code></pre>
+<h4>Step 1: Initialize beads</h4>
+<pre><code>bd init</code></pre>
+<p>This creates the <code>.beads/</code> directory structure, config files, and an empty dolt
+database. It will print a note suggesting <code>bd bootstrap</code> — as of bd 0.61.0,
+<code>bd bootstrap</code> may handle the full setup automatically. Try it first and skip to
+Step 7 if it succeeds.</p>
+<p>The dolt server may or may not start successfully during init. Either way, we
+need to replace the empty database with the remote data, so continue below.</p>
+<h4>Step 2: Stop the dolt server</h4>
+<pre><code>bd dolt stop</code></pre>
+<p>If the server didn&#39;t start during init, you&#39;ll see &quot;Dolt server is not running&quot;
+— that&#39;s expected, continue to the next step.</p>
+<h4>Step 3: Find your database name and remove the empty database</h4>
+<pre><code># Check your database name (look for &quot;dolt_database&quot;)
+cat .beads/metadata.json</code></pre>
+<p>The <code>dolt_database</code> field is your <code>&lt;dbname&gt;</code>. For a repo named <code>myproject</code>, it
+will typically be <code>myproject</code>.</p>
+<pre><code># Remove the empty database that bd init created
+rm -rf .beads/dolt/&lt;dbname&gt;/</code></pre>
+<p>This must be done <strong>before</strong> cloning. If you skip this step, <code>dolt clone</code> will
+fail because the target directory already exists.</p>
+<h4>Step 4: Clone the dolt data from your git remote</h4>
 <pre><code>cd .beads/dolt
-dolt clone git+ssh://git@github.com/org/repo.git &lt;reponame&gt;</code></pre>
+dolt clone git@github.com:org/repo.git &lt;dbname&gt;
+cd ../..</code></pre>
+<p>Dolt automatically reads from <code>refs/dolt/data</code> on the git remote. This downloads
+all beads issue data. For HTTPS remotes, use
+<code>https://github.com/org/repo.git</code> instead.</p>
+<p><strong>You must <code>cd</code> back to the repo root</strong> before running any <code>bd</code> commands — they
+need to discover the <code>.beads/</code> directory from the project root.</p>
+<h4>Step 5: Start the dolt server</h4>
+<pre><code>bd dolt start</code></pre>
+<p>This starts a background <code>dolt sql-server</code> process. You should see output like:</p>
+<pre><code>Dolt server started (PID &lt;num&gt;, port &lt;num&gt;)</code></pre>
+<p>If it fails, check <code>.beads/dolt-server.log</code> for errors. A common cause is a
+corrupted database from a previous failed attempt — go back to Step 3 and start
+over.</p>
+<h4>Step 6: Run schema migrations</h4>
+<pre><code>bd migrate --yes</code></pre>
+<p>This upgrades the database schema if the remote data was created with an older
+version of beads. If the schemas already match, it updates just the version
+marker. Safe to run even if no migrations are needed.</p>
+<h4>Step 7: Ensure the remote is registered</h4>
+<p><code>dolt clone</code> may or may not preserve the remote configuration (behavior varies
+across dolt versions). Both the dolt CLI <strong>and</strong> the SQL server need to know
+about the remote for <code>bd dolt push</code> and <code>bd dolt pull</code> to work.</p>
+<p>Run these commands — they are safe if the remote already exists (you&#39;ll see
+&quot;remote already exists&quot; errors, which you can ignore):</p>
+<pre><code># Add to dolt CLI (run from inside the dolt database directory)
+cd .beads/dolt/&lt;dbname&gt;
+dolt remote add origin git@github.com:org/repo.git
+cd ../../..
+
+# Add to SQL server
+bd sql &quot;CALL dolt_remote(&#39;add&#39;, &#39;origin&#39;, &#39;git@github.com:org/repo.git&#39;)&quot;</code></pre>
+<p>&quot;remote already exists&quot; errors on either command mean <code>dolt clone</code> already set
+it up — that&#39;s fine, move on.</p>
+<h4>Step 8: Verify</h4>
+<pre><code>bd dolt test          # should print: ✓ Connection successful
+bd dolt remote list   # should show: origin &lt;your-remote-url&gt;
+bd list               # should show your issues</code></pre>
+<p>If <code>bd list</code> shows your issues, you&#39;re done.</p>
+<h4>Why this process is necessary</h4>
+<p>You cannot simply run <code>bd dolt pull</code> after <code>bd init</code>. A freshly initialized
+database and the remote have completely separate histories with no common
+ancestor. Dolt&#39;s pull (and fetch + reset) either fails with &quot;no common ancestor&quot;
+or corrupts the local database. Deleting the empty database and cloning fresh is
+the only reliable path.</p>
+<h4>After setup</h4>
+<p>Use the normal sync workflow to keep your issues in sync:</p>
+<pre><code>bd dolt commit    # commit working set changes
+bd dolt push      # push to remote
+bd dolt pull      # pull from remote (must commit first)</code></pre>
 <h3>Agent Integration with Thrum</h3>
 <p>The standard agent workflow combines both tools:</p>
 <pre><code># 1. Agent starts — check for assigned work
@@ -220,8 +304,8 @@ automatically:</p>
 <a href="https://github.com/steveyegge/beads/blob/main/docs/PLUGIN.html">Beads plugin docs</a>
 for the full command reference.</p>
 <h3>CLAUDE.md Configuration</h3>
-<p>For agents that don&#39;t use the plugin (or as a supplement), add these instructions
-to your <code>CLAUDE.md</code>:</p>
+<p>For agents that don&#39;t use the plugin (or as a supplement), add these
+instructions to your <code>CLAUDE.md</code>:</p>
 <pre><code>## Task Tracking
 
 Use `bd` (beads) for all task tracking. Do not use TodoWrite, TaskCreate, or
