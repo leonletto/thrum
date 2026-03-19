@@ -40,8 +40,8 @@ a{color:#0366d6}
 </nav>
 <main>
 <h2>Sync Across Machines</h2>
-<p>Thrum messages live on a Git branch. That means sync across machines is just
-Git push and pull — no cloud service, no account, no special infrastructure.</p>
+<p>Thrum messages live on a Git branch. That means sync across machines is just Git
+push and pull — no cloud service, no account, no special infrastructure.</p>
 <p>This walkthrough takes you from two separate clones to agents on different
 machines exchanging messages.</p>
 <h3>What You Need</h3>
@@ -90,16 +90,17 @@ git log --oneline origin/a-sync -10
 
 # See message files
 git show origin/a-sync:messages/</code></pre>
-<p>Nothing is hidden. The sync branch is just a regular orphan branch in your
-repo.</p>
-<h3>Optional: Tailscale for Real-Time Sync</h3>
+<p>Nothing is hidden. The sync branch is just a regular orphan branch in your repo.</p>
+<h3>Optional: Tailscale for Near-Real-Time Sync</h3>
 <p>Git-based sync is great for async workflows — messages arrive within 60 seconds.
-If you need real-time propagation (sub-second delivery across machines), Tailscale
+If you need faster propagation (under 20 seconds across machines), Tailscale
 sync is the answer.</p>
 <p>Tailscale connects your machines over an encrypted WireGuard tunnel and lets
-Thrum daemons push events directly to each other instead of going through Git.</p>
-<p>See <a href="../tailscale-sync.html">Tailscale Sync</a> for setup. It&#39;s a few steps to pair
-the machines, then everything is real-time automatically.</p>
+Thrum daemons push events directly to each other instead of going through Git.
+With a 15-second sync interval and push notifications, messages typically arrive
+within seconds.</p>
+<p>See <a href="../tailscale-sync.html">Tailscale Sync</a> for setup. It&#39;s a <code>.env</code> file and a
+pairing step, then sync is automatic.</p>
 <h3>Troubleshooting</h3>
 <p><strong>Messages not appearing on the other machine?</strong></p>
 <ol>
@@ -113,9 +114,9 @@ block sync</li>
 </ol>
 <p><strong>&quot;local_only mode&quot; in sync status?</strong> Set <code>local_only: false</code> in config or via
 <code>THRUM_LOCAL_ONLY=false</code> and restart the daemon.</p>
-<p><strong>Messages show up on one machine but not the other?</strong> Both machines need to
-be pushing. Check <code>thrum sync status</code> on both — if one shows a sync error,
-fix it there.</p>
+<p><strong>Messages show up on one machine but not the other?</strong> Both machines need to be
+pushing. Check <code>thrum sync status</code> on both — if one shows a sync error, fix it
+there.</p>
 <h3>Next Steps</h3>
 <ul>
 <li><a href="../sync.html">Sync Protocol</a> — architecture detail on how the <code>a-sync</code> branch

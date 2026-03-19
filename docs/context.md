@@ -84,13 +84,22 @@ directly or replace it with `thrum context preamble --file custom.md`.
 ```markdown
 ## Thrum Quick Reference
 
-**Check messages:** `thrum inbox --unread` (does not mark as read) **Mark all
-read:** `thrum message read --all` **Check sent items:** `thrum sent --unread`
-**Send message:** `thrum send "message" --to @role` **Reply:**
-`thrum reply <MSG_ID> "response"` **Status:** `thrum status` **Who's online:**
-`thrum agent list --context` **Save context:** `thrum context save` **Wait for
-messages:** `thrum wait --after -30s --timeout 5m` (`--after -30s` = include
-messages sent up to 30s ago)
+**Check messages:** `thrum inbox --unread` (does not mark as read) **Check sent
+status:** `thrum sent --unread` (messages with unread recipients) **Mark all
+read:** `thrum message read --all` **Send message:**
+`thrum send "message" --to @<agent_name>` — ALWAYS use the specific agent name
+(e.g., `@coordinator_main`), NEVER the role (e.g., `@coordinator`). Role names
+fan out to ALL agents with that role. Run `thrum team` to find exact names.
+**Reply:** `thrum reply <MSG_ID> "response"` **Status:** `thrum status` **Who's
+online:** `thrum team` **Save context:** Use `/thrum:update-context` skill.
+**NEVER run `thrum context save` manually** — it overwrites accumulated session
+state.
+
+## Background Message Listener
+
+ALWAYS keep a background listener running. Spawn on session start, re-arm every
+time it returns (both MESSAGES_RECEIVED and timeout). Run `thrum prime` to get
+the spawn command with the correct repo path pre-filled.
 ```
 
 **Customization examples:**

@@ -1,4 +1,4 @@
-# Thrum v0.5.8
+# Thrum v0.5.9
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
 
@@ -345,11 +345,12 @@ All commands accept these flags:
 
 ### Peer sync across machines (Tailscale)
 
+  # Configure: .env with THRUM_TS_ENABLED=true, THRUM_TS_HOSTNAME, THRUM_TS_AUTHKEY
   # Machine A
-  thrum peer add              # Displays pairing code
+  thrum peer add                    # Displays pairing code (blocks 5min)
   # Machine B
-  thrum peer join 100.x.y.z   # Enter pairing code
-  # Both machines now sync directly
+  thrum peer join 100.x.y.z:9100   # Use Tailscale IP, enter pairing code
+  # Both machines now sync every 15s
 
 ### Save and recover context
 
