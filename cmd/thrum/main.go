@@ -5032,9 +5032,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					}
 				}()
 
-				// Start periodic sync fallback (safety net for missed notifications)
+				// Start periodic sync with Tailscale-optimized intervals
 				if syncManager != nil {
 					periodicSync := daemon.NewPeriodicSyncScheduler(syncManager, st)
+					periodicSync.SetInterval(daemon.TailscaleSyncInterval)
+					periodicSync.SetRecentThreshold(daemon.TailscaleRecentSyncThreshold)
 					go periodicSync.Start(ctx)
 				}
 

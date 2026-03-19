@@ -12,8 +12,15 @@ import (
 // DefaultSyncInterval is the default interval for periodic sync fallback.
 const DefaultSyncInterval = 5 * time.Minute
 
+// TailscaleSyncInterval is the sync interval when Tailscale peers are connected.
+// Much shorter than the default since Tailscale connections are local network traffic.
+const TailscaleSyncInterval = 15 * time.Second
+
 // DefaultRecentSyncThreshold is how recently a peer must have been synced to skip it.
 const DefaultRecentSyncThreshold = 2 * time.Minute
+
+// TailscaleRecentSyncThreshold is the recent-sync threshold for Tailscale peers.
+const TailscaleRecentSyncThreshold = 10 * time.Second
 
 // PeriodicSyncScheduler runs background sync from all known peers as a safety net
 // for missed push notifications.
@@ -45,8 +52,12 @@ func (s *PeriodicSyncScheduler) SetRecentThreshold(d time.Duration) {
 }
 
 // Start begins periodic sync. It blocks until the context is canceled.
+// Runs an initial sync immediately, then continues on the configured interval.
 func (s *PeriodicSyncScheduler) Start(ctx context.Context) {
 	log.Printf("periodic_sync: starting with interval=%s, recent_threshold=%s", s.interval, s.recentThreshold)
+
+	// Initial sync immediately on startup
+	s.syncFromPeers()
 
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
