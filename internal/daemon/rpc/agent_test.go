@@ -1014,11 +1014,20 @@ func TestNewMessageHandlerWithDispatcher(t *testing.T) {
 }
 
 // TestBuildForAgentValues_NameOnly verifies that buildForAgentValues returns the
-// agent name/ID plus the user:-prefixed form for inbox mention matching.
+// agent name/ID, user:-prefixed form, and role for inbox mention matching.
 func TestBuildForAgentValues_NameOnly(t *testing.T) {
 	values := buildForAgentValues("impl_api", "implementer")
-	if len(values) != 2 || values[0] != "impl_api" || values[1] != "user:impl_api" {
-		t.Errorf("expected [impl_api user:impl_api], got %v", values)
+	if len(values) != 3 || values[0] != "impl_api" || values[1] != "user:impl_api" || values[2] != "implementer" {
+		t.Errorf("expected [impl_api user:impl_api implementer], got %v", values)
+	}
+}
+
+// TestBuildForAgentValues_RoleSameAsName verifies that when role equals name,
+// it is not duplicated in the values.
+func TestBuildForAgentValues_RoleSameAsName(t *testing.T) {
+	values := buildForAgentValues("coordinator", "coordinator")
+	if len(values) != 2 || values[0] != "coordinator" || values[1] != "user:coordinator" {
+		t.Errorf("expected [coordinator user:coordinator], got %v", values)
 	}
 }
 
