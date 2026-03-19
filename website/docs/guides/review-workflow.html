@@ -70,8 +70,8 @@ go test ./internal/auth/...
 git commit -m &quot;feat(auth): add JWT middleware&quot;</code></pre>
 <p>Find the reviewer&#39;s name from <code>thrum team</code>, then send:</p>
 <pre><code>thrum send &quot;Auth module complete — JWT middleware and token refresh. All tests passing. Branch: feature/auth&quot; --to @rev_main_1</code></pre>
-<p>Use the actual agent name, not <code>@reviewer</code>. Sending to a role fans out to
-every agent with that role — not what you want here.</p>
+<p>Use the actual agent name, not <code>@reviewer</code>. Sending to a role fans out to every
+agent with that role — not what you want here.</p>
 <h3>Reviewer Gets Notified</h3>
 <p>Poll at any time with <code>thrum inbox --unread</code>, or block until a message arrives:</p>
 <pre><code>thrum wait --timeout 30m --mention @rev_main_1</code></pre>
@@ -110,10 +110,10 @@ thrum send &quot;Completed thrum-abc.1, ready for review&quot; --to @rev_main_1<
 <p>See <a href="../beads-and-thrum.html">Beads and Thrum</a> for how the two tools fit together.</p>
 <h3>Next Steps</h3>
 <ul>
-<li><a href="../agent-coordination.html">Agent Coordination</a> — patterns for larger teams
-and session templates</li>
-<li><a href="../workflow-templates.html">Workflow Templates</a> — pre-built skill pipelines
-for the full research → plan → implement → review cycle</li>
+<li><a href="../agent-coordination.html">Agent Coordination</a> — patterns for larger teams and
+session templates</li>
+<li><a href="../workflow-templates.html">Workflow Templates</a> — pre-built skill pipelines for
+the full research → plan → implement → review cycle</li>
 <li><a href="coordinate-two-agents.html">Coordinate Two Agents</a> — simpler walkthrough for
 the basic send/receive pattern</li>
 </ul>

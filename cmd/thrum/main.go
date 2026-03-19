@@ -4783,7 +4783,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			}
 			return result.PeerName, result.PeerAddress, result.PeerDaemonID, nil
 		}
-		server.RegisterHandler("peer.wait_pairing",
+		server.RegisterLongPollHandler("peer.wait_pairing",
 			rpc.NewPeerWaitPairingHandler(waitFn).Handle)
 
 		// peer.join — send pairing code to remote peer
@@ -4991,8 +4991,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					syncRegistry.SetPeerRegistry(syncManager.PeerRegistry())
 				}
 
-				// Set Tailscale address so peer.join knows our reachable address
-				tsLocalAddr = fmt.Sprintf("%s:%d", tsCfg.Hostname, tsCfg.Port)
+				// Set Tailscale address so peer.join knows our reachable address.
+				// Use the Tailscale IP from tsnet — regular DNS cannot resolve
+				// tsnet hostnames (e.g., "myhost-1"), so we use the IP directly.
+				tsHost := tsListener.ReachableAddr(tsCfg.Hostname)
+				tsLocalAddr = fmt.Sprintf("%s:%d", tsHost, tsCfg.Port)
 
 				// Register sync handlers
 				syncPullHandler := rpc.NewSyncPullHandler(st)
@@ -5029,9 +5032,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					}
 				}()
 
-				// Start periodic sync fallback (safety net for missed notifications)
+				// Start periodic sync with Tailscale-optimized intervals
 				if syncManager != nil {
 					periodicSync := daemon.NewPeriodicSyncScheduler(syncManager, st)
+					periodicSync.SetInterval(daemon.TailscaleSyncInterval)
+					periodicSync.SetRecentThreshold(daemon.TailscaleRecentSyncThreshold)
 					go periodicSync.Start(ctx)
 				}
 

@@ -1,9 +1,11 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
+	"time"
 
 	"github.com/leonletto/thrum/internal/config"
 	"tailscale.com/client/local"
@@ -77,6 +79,28 @@ func (t *TsnetListener) Addr() net.Addr {
 // Used for peer discovery and WhoIs lookups.
 func (t *TsnetListener) LocalClient() (*local.Client, error) {
 	return t.server.LocalClient()
+}
+
+// ReachableAddr returns the Tailscale IP address of this tsnet server.
+// Regular DNS cannot resolve tsnet hostnames (e.g., "myhost-1"), so peers
+// must use the Tailscale IP for sync connections. Falls back to the
+// configured hostname if the IP cannot be determined.
+func (t *TsnetListener) ReachableAddr(configuredHostname string) string {
+	lc, err := t.server.LocalClient()
+	if err != nil {
+		return configuredHostname
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	st, err := lc.StatusWithoutPeers(ctx)
+	if err != nil {
+		return configuredHostname
+	}
+	// Use the first Tailscale IP (typically the IPv4 address like 100.x.y.z)
+	if st.Self != nil && len(st.Self.TailscaleIPs) > 0 {
+		return st.Self.TailscaleIPs[0].String()
+	}
+	return configuredHostname
 }
 
 // Close stops the tsnet server and listener.

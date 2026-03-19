@@ -1,8 +1,9 @@
 # Ignore output directory
 output/
 
-# Ignore dev-docs (planning documents)
+# Ignore dev-docs and synced plans (planning documents)
 dev-docs/
+docs/plans/
 
 # Ignore vendor
 vendor/
