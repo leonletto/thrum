@@ -53,9 +53,9 @@ The daemon auto-loads `.env` from the repo root (or `.thrum/.env`). Variables
 with `THRUM_` or `TAILSCALE_` prefixes are loaded; existing environment
 variables take precedence.
 
-**Important:** `THRUM_TS_HOSTNAME` and `THRUM_TS_AUTHKEY` are both required.
-The hostname identifies your machine on the Tailscale network. Get an auth key
-from the [Tailscale admin console](https://login.tailscale.com/admin/settings/keys).
+**Important:** `THRUM_TS_HOSTNAME` and `THRUM_TS_AUTHKEY` are both required. The
+hostname identifies your machine on the Tailscale network. Get an auth key from
+the [Tailscale admin console](https://login.tailscale.com/admin/settings/keys).
 
 ### 2. Start the Daemon
 
@@ -98,8 +98,8 @@ thrum peer join <tailscale-ip>:9100
 # Output: Paired with "my-laptop". Syncing started.
 ```
 
-**Important:** Use the tsnet Tailscale IP address (e.g., `100.x.y.z:9100`),
-not the hostname. Regular DNS cannot resolve tsnet hostnames (the `-1` suffix
+**Important:** Use the tsnet Tailscale IP address (e.g., `100.x.y.z:9100`), not
+the hostname. Regular DNS cannot resolve tsnet hostnames (the `-1` suffix
 variants). Find the IP with `tailscale status` — look for the entry with the
 `-1` suffix matching the other machine's `THRUM_TS_HOSTNAME`.
 
@@ -262,14 +262,14 @@ Machine A (thrum peer add)           Machine B (thrum peer join)
 
 ### Environment Variables
 
-| Variable               | Default            | Description                           |
-| ---------------------- | ------------------ | ------------------------------------- |
-| `THRUM_TS_ENABLED`     | `false`            | Enable Tailscale sync                          |
-| `THRUM_TS_HOSTNAME`    | (required)         | Hostname for the tsnet listener                |
-| `THRUM_TS_PORT`        | `9100`             | Port for the sync RPC listener                 |
-| `THRUM_TS_AUTHKEY`     | (required)         | Tailscale auth key (from admin console)        |
-| `THRUM_TS_CONTROL_URL` | (default)          | Custom control server URL (Headscale)          |
-| `THRUM_TS_STATE_DIR`   | `.thrum/var/tsnet` | tsnet state directory                          |
+| Variable               | Default            | Description                             |
+| ---------------------- | ------------------ | --------------------------------------- |
+| `THRUM_TS_ENABLED`     | `false`            | Enable Tailscale sync                   |
+| `THRUM_TS_HOSTNAME`    | (required)         | Hostname for the tsnet listener         |
+| `THRUM_TS_PORT`        | `9100`             | Port for the sync RPC listener          |
+| `THRUM_TS_AUTHKEY`     | (required)         | Tailscale auth key (from admin console) |
+| `THRUM_TS_CONTROL_URL` | (default)          | Custom control server URL (Headscale)   |
+| `THRUM_TS_STATE_DIR`   | `.thrum/var/tsnet` | tsnet state directory                   |
 
 These can be set via environment variables or in a `.env` file at the repo root.
 The `.env` file is auto-loaded by the daemon — only `THRUM_*` and `TAILSCALE_*`

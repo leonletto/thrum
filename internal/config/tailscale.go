@@ -36,7 +36,7 @@ type TailscaleConfig struct {
 // use the form without the extra underscore in .env files.
 func loadEnvFile(paths ...string) {
 	for _, path := range paths {
-		f, err := os.Open(path)
+		f, err := os.Open(path) // #nosec G304 -- paths are .thrum/.env and repo root .env, not user-controlled
 		if err != nil {
 			// File does not exist or is not readable — skip silently.
 			continue
@@ -67,7 +67,7 @@ func loadEnvFile(paths ...string) {
 				_ = os.Setenv(key, value)
 			}
 		}
-		f.Close()
+		_ = f.Close()
 	}
 }
 
@@ -86,8 +86,8 @@ func LoadTailscaleConfig(thrumDir string) TailscaleConfig {
 	// Auto-detect .env files. repoRoot is the parent of thrumDir (.thrum).
 	repoRoot := filepath.Dir(thrumDir)
 	loadEnvFile(
-		filepath.Join(thrumDir, ".env"),  // .thrum/.env (highest priority)
-		filepath.Join(repoRoot, ".env"),  // repo root .env
+		filepath.Join(thrumDir, ".env"), // .thrum/.env (highest priority)
+		filepath.Join(repoRoot, ".env"), // repo root .env
 	)
 
 	cfg := TailscaleConfig{

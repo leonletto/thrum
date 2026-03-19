@@ -132,7 +132,7 @@ func TestLoadEnvFile_ThrumDirPriority(t *testing.T) {
 	//       .env            ← thrumDir .env (higher priority)
 	repoRoot := t.TempDir()
 	thrumDir := filepath.Join(repoRoot, ".thrum")
-	if err := os.MkdirAll(thrumDir, 0o755); err != nil {
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 
@@ -157,7 +157,7 @@ func TestLoadEnvFile_ThrumDirPriority(t *testing.T) {
 func TestLoadTailscaleConfig_FromEnvFile(t *testing.T) {
 	repoRoot := t.TempDir()
 	thrumDir := filepath.Join(repoRoot, ".thrum")
-	if err := os.MkdirAll(thrumDir, 0o755); err != nil {
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 
