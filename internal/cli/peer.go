@@ -10,7 +10,8 @@ import (
 
 // PeerStartPairingResult is the result of starting a pairing session.
 type PeerStartPairingResult struct {
-	Code string `json:"code"`
+	Code    string `json:"code"`
+	Address string `json:"address,omitempty"` // local tsnet address (ip:port)
 }
 
 // PeerWaitPairingResult is the result of waiting for pairing completion.

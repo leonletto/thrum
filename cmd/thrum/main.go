@@ -1918,7 +1918,14 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 				return err
 			}
 
-			fmt.Printf("Waiting for connection... Pairing code: %s\n", result.Code)
+			localHostname, _ := os.Hostname()
+			if result.Address != "" {
+				connStr := daemon.FormatPeercode(localHostname, result.Address, result.Code)
+				fmt.Printf("Waiting for connection...\nPairing code: %s\n\n", connStr)
+				fmt.Printf("Share this with the other machine:\n  thrum peer join --peercode %s\n\n", connStr)
+			} else {
+				fmt.Printf("Waiting for connection... Pairing code: %s\n", result.Code)
+			}
 
 			waitResult, err := cli.PeerWaitPairing(client)
 			if err != nil {
@@ -4787,23 +4794,23 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 		// peer.start_pairing — begin pairing, return code
 		// Wrap to ensure port is selected before pairing starts.
-		startPairingFn := func(timeout time.Duration) (string, error) {
+		startPairingFn := func(timeout time.Duration) (string, string, error) {
 			// Lazy port selection: pick a random port on first peer add
 			if peerRegistry.LocalPort() == 0 {
 				// THRUM_TS_PORT env override takes precedence
 				if p := os.Getenv("THRUM_TS_PORT"); p != "" {
 					if port, err := strconv.Atoi(p); err == nil {
 						if err := peerRegistry.SetLocalPort(port); err != nil {
-							return "", fmt.Errorf("set local port from env: %w", err)
+							return "", "", fmt.Errorf("set local port from env: %w", err)
 						}
 					}
 				} else {
 					port, err := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
 					if err != nil {
-						return "", fmt.Errorf("find available tsnet port: %w", err)
+						return "", "", fmt.Errorf("find available tsnet port: %w", err)
 					}
 					if err := peerRegistry.SetLocalPort(port); err != nil {
-						return "", fmt.Errorf("set local port: %w", err)
+						return "", "", fmt.Errorf("set local port: %w", err)
 					}
 				}
 			}
@@ -4813,7 +4820,8 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					fmt.Fprintf(os.Stderr, "Warning: lazy tsnet start failed: %v\n", err)
 				}
 			}
-			return pairingMgr.StartPairing(timeout)
+			code, err := pairingMgr.StartPairing(timeout)
+			return code, tsLocalAddr, err
 		}
 		server.RegisterHandler("peer.start_pairing",
 			rpc.NewPeerStartPairingHandler(startPairingFn).Handle)
