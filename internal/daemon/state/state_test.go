@@ -48,7 +48,7 @@ func TestWriteEvent_GeneratesEventID(t *testing.T) {
 	}
 
 	// Create state
-	state, err := NewState(thrumDir, thrumDir, "r_TEST123456")
+	state, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestWriteEvent_UniqueEventIDs(t *testing.T) {
 	}
 
 	// Create state
-	state, err := NewState(thrumDir, thrumDir, "r_TEST123456")
+	state, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestWriteEvent_PreservesExistingEventID(t *testing.T) {
 	}
 
 	// Create state
-	state, err := NewState(thrumDir, thrumDir, "r_TEST123456")
+	state, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestWriteEvent_Routing(t *testing.T) {
 	}
 
 	// Create state
-	state, err := NewState(thrumDir, thrumDir, "r_TEST123456")
+	state, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -443,7 +443,7 @@ func TestStateAccessors(t *testing.T) {
 	}
 
 	repoID := "r_TEST123456"
-	state, err := NewState(thrumDir, thrumDir, repoID)
+	state, err := NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -508,7 +508,7 @@ func TestStateClose(t *testing.T) {
 		t.Fatalf("create thrum dir: %v", err)
 	}
 
-	state, err := NewState(thrumDir, thrumDir, "r_TEST123456")
+	state, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -523,7 +523,7 @@ func TestNewState_InvalidDir(t *testing.T) {
 	// Use a path that doesn't exist and can't be created
 	invalidDir := "/nonexistent/directory/that/cannot/be/created/.thrum"
 
-	_, err := NewState(invalidDir, invalidDir, "r_TEST123456")
+	_, err := NewState(invalidDir, invalidDir, "r_TEST123456", "")
 	if err == nil {
 		t.Error("NewState with invalid directory returned nil error, expected error")
 	}
@@ -540,7 +540,7 @@ func TestNewState_SeparateSyncDir(t *testing.T) {
 		t.Fatalf("create sync dir: %v", err)
 	}
 
-	s, err := NewState(thrumDir, syncDir, "r_SEPARATE01")
+	s, err := NewState(thrumDir, syncDir, "r_SEPARATE01", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -611,7 +611,7 @@ func TestNewState_InvalidSyncDir(t *testing.T) {
 		t.Fatalf("create events dir: %v", err)
 	}
 
-	_, err := NewState(thrumDir, badSyncDir, "r_BADSYNC01")
+	_, err := NewState(thrumDir, badSyncDir, "r_BADSYNC01", "")
 	if err == nil {
 		t.Error("Expected error when events.jsonl is a directory")
 	}
@@ -624,7 +624,7 @@ func TestWriteEvent_MarshalError(t *testing.T) {
 		t.Fatalf("create thrum dir: %v", err)
 	}
 
-	s, err := NewState(thrumDir, thrumDir, "r_TEST123456")
+	s, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -647,7 +647,7 @@ func TestResolveAgentForMessage_EdgeCases(t *testing.T) {
 		t.Fatalf("create thrum dir: %v", err)
 	}
 
-	s, err := NewState(thrumDir, thrumDir, "r_TEST123456")
+	s, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -716,7 +716,7 @@ func TestWriteEvent_NonMessageEvent(t *testing.T) {
 		t.Fatalf("create thrum dir: %v", err)
 	}
 
-	s, err := NewState(thrumDir, thrumDir, "r_TEST123456")
+	s, err := NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

@@ -9,10 +9,7 @@ import (
 func TestPeriodicSyncScheduler_Start_StopsOnCancel(t *testing.T) {
 	st := createTestStateForSync(t)
 
-	syncManager, err := NewDaemonSyncManager(st, t.TempDir())
-	if err != nil {
-		t.Fatalf("create sync manager: %v", err)
-	}
+	syncManager := NewDaemonSyncManager(st, createTestPeerRegistry(t))
 
 	scheduler := NewPeriodicSyncScheduler(syncManager, st)
 	scheduler.SetInterval(50 * time.Millisecond)
@@ -40,10 +37,7 @@ func TestPeriodicSyncScheduler_Start_StopsOnCancel(t *testing.T) {
 func TestPeriodicSyncScheduler_SkipsRecentlySynced(t *testing.T) {
 	st := createTestStateForSync(t)
 
-	syncManager, err := NewDaemonSyncManager(st, t.TempDir())
-	if err != nil {
-		t.Fatalf("create sync manager: %v", err)
-	}
+	syncManager := NewDaemonSyncManager(st, createTestPeerRegistry(t))
 
 	scheduler := NewPeriodicSyncScheduler(syncManager, st)
 	scheduler.SetRecentThreshold(1 * time.Hour) // Long threshold
@@ -61,7 +55,7 @@ func TestPeriodicSyncScheduler_SkipsRecentlySynced(t *testing.T) {
 	}
 
 	// Set a recent checkpoint
-	_, err = st.RawDB().Exec(`INSERT OR REPLACE INTO sync_checkpoints (peer_daemon_id, last_synced_sequence, last_sync_timestamp, sync_status) VALUES (?, ?, ?, ?)`,
+	_, err := st.RawDB().Exec(`INSERT OR REPLACE INTO sync_checkpoints (peer_daemon_id, last_synced_sequence, last_sync_timestamp, sync_status) VALUES (?, ?, ?, ?)`,
 		"test-peer", 100, time.Now().Unix(), "idle")
 	if err != nil {
 		t.Fatalf("insert checkpoint: %v", err)
@@ -97,10 +91,7 @@ func TestTailscaleSyncIntervals(t *testing.T) {
 func TestPeriodicSyncScheduler_SyncFromPeersNoPeers(t *testing.T) {
 	st := createTestStateForSync(t)
 
-	syncManager, err := NewDaemonSyncManager(st, t.TempDir())
-	if err != nil {
-		t.Fatalf("create sync manager: %v", err)
-	}
+	syncManager := NewDaemonSyncManager(st, createTestPeerRegistry(t))
 
 	scheduler := NewPeriodicSyncScheduler(syncManager, st)
 

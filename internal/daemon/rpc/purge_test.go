@@ -19,7 +19,7 @@ func setupPurgeTest(t *testing.T) (*state.State, func()) {
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
 		t.Fatalf("create .thrum dir: %v", err)
 	}
-	st, err := state.NewState(thrumDir, thrumDir, "test_repo_purge")
+	st, err := state.NewState(thrumDir, thrumDir, "test_repo_purge", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

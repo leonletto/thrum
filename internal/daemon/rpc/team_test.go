@@ -19,7 +19,7 @@ func TestTeamHandleList(t *testing.T) {
 		t.Fatalf("create messages dir: %v", err)
 	}
 
-	s, err := state.NewState(thrumDir, syncDir, "test_repo_team")
+	s, err := state.NewState(thrumDir, syncDir, "test_repo_team", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestTeamHandleList_EmptyDB(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_empty")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_empty", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

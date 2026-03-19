@@ -24,7 +24,7 @@ func setupGroupTest(t *testing.T) (*GroupHandler, *state.State, func()) {
 	}
 
 	repoID := "r_GROUP_TEST"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -458,7 +458,7 @@ func setupGroupTestWithMessages(t *testing.T) (*GroupHandler, *MessageHandler, *
 	}
 
 	repoID := "r_GROUP_MSG_TEST"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

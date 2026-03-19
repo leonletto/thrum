@@ -21,7 +21,7 @@ func TestMessageSend_WithMentions(t *testing.T) {
 
 	// Create state
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestHandleSend_UnknownRecipient(t *testing.T) {
 	}
 
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}

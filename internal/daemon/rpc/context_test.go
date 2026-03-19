@@ -16,7 +16,7 @@ func setupContextTest(t *testing.T) (*ContextHandler, string) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

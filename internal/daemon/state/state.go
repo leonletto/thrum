@@ -46,7 +46,9 @@ type State struct {
 }
 
 // NewState creates a new state manager for the given .thrum directory.
-func NewState(thrumDir string, syncDir string, repoID string) (*State, error) {
+// If daemonID is non-empty, it is used as the persistent daemon identifier;
+// otherwise a fresh one is generated from the machine hostname.
+func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (*State, error) {
 	// Ensure var directory exists
 	varDir := filepath.Join(thrumDir, "var")
 	if err := os.MkdirAll(varDir, 0750); err != nil {
@@ -114,13 +116,17 @@ func NewState(thrumDir string, syncDir string, repoID string) (*State, error) {
 		return nil, fmt.Errorf("load max sequence: %w", err)
 	}
 
+	if daemonID == "" {
+		daemonID = identity.GenerateDaemonID()
+	}
+
 	s := &State{
 		eventsWriter:   eventsWriter,
 		messageWriters: make(map[string]*jsonl.Writer),
 		db:             safeDB,
 		projector:      projector,
 		repoID:         repoID,
-		daemonID:       identity.GenerateDaemonID(),
+		daemonID:       daemonID,
 		repoPath:       repoPath,
 		thrumDir:       thrumDir,
 		syncDir:        syncDir,

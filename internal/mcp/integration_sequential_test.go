@@ -54,7 +54,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	repoID := "test-repo-123"
 
 	// Create state
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
