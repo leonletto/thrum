@@ -100,9 +100,13 @@ func LoadTailscaleConfig(thrumDir string) TailscaleConfig {
 		cfg.Enabled = true
 	}
 
-	// Hostname
+	// Hostname — auto-derive if not explicitly set
 	if h := os.Getenv("THRUM_TS_HOSTNAME"); h != "" {
 		cfg.Hostname = h
+	} else {
+		if h, err := os.Hostname(); err == nil {
+			cfg.Hostname = strings.ToLower(h) + "-thrum"
+		}
 	}
 
 	// Port
@@ -127,7 +131,8 @@ func LoadTailscaleConfig(thrumDir string) TailscaleConfig {
 }
 
 // Validate checks that the configuration is valid when enabled.
-// Returns nil if disabled or valid.
+// Returns nil if disabled or valid. Port 0 is valid (means not yet configured;
+// will be assigned on first peer add). Auth key is required only when Enabled.
 func (c *TailscaleConfig) Validate() error {
 	if !c.Enabled {
 		return nil
@@ -137,8 +142,8 @@ func (c *TailscaleConfig) Validate() error {
 		return fmt.Errorf("THRUM_TS_HOSTNAME is required when Tailscale sync is enabled")
 	}
 
-	if c.Port < 1 || c.Port > 65535 {
-		return fmt.Errorf("THRUM_TS_PORT must be between 1 and 65535, got %d", c.Port)
+	if c.Port < 0 || c.Port > 65535 {
+		return fmt.Errorf("THRUM_TS_PORT must be between 0 and 65535, got %d", c.Port)
 	}
 
 	if c.AuthKey == "" {

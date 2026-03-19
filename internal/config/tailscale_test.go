@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -20,6 +22,35 @@ func TestLoadTailscaleConfig_Defaults(t *testing.T) {
 	}
 	if cfg.StateDir != "/tmp/.thrum/var/tsnet" {
 		t.Errorf("StateDir = %q, want %q", cfg.StateDir, "/tmp/.thrum/var/tsnet")
+	}
+
+	// Hostname should be auto-derived
+	hostname, _ := os.Hostname()
+	expected := strings.ToLower(hostname) + "-thrum"
+	if cfg.Hostname != expected {
+		t.Errorf("Hostname = %q, want auto-derived %q", cfg.Hostname, expected)
+	}
+}
+
+func TestLoadTailscaleConfig_AutoHostname(t *testing.T) {
+	for _, k := range []string{"THRUM_TS_ENABLED", "THRUM_TS_HOSTNAME", "THRUM_TS_PORT", "THRUM_TS_AUTHKEY"} {
+		t.Setenv(k, "")
+	}
+
+	cfg := LoadTailscaleConfig(t.TempDir())
+
+	hostname, _ := os.Hostname()
+	expected := strings.ToLower(hostname) + "-thrum"
+	if cfg.Hostname != expected {
+		t.Errorf("Hostname = %q, want auto-derived %q", cfg.Hostname, expected)
+	}
+}
+
+func TestLoadTailscaleConfig_ExplicitHostnameOverridesAuto(t *testing.T) {
+	t.Setenv("THRUM_TS_HOSTNAME", "custom-host")
+	cfg := LoadTailscaleConfig(t.TempDir())
+	if cfg.Hostname != "custom-host" {
+		t.Errorf("Hostname = %q, want %q", cfg.Hostname, "custom-host")
 	}
 }
 
@@ -87,9 +118,10 @@ func TestTailscaleConfig_Validate_MissingHostname(t *testing.T) {
 }
 
 func TestTailscaleConfig_Validate_BadPort(t *testing.T) {
+	// Port 0 is valid (not yet configured)
 	cfg := TailscaleConfig{Enabled: true, Hostname: "test", Port: 0, AuthKey: "tskey-test"}
-	if err := cfg.Validate(); err == nil {
-		t.Error("expected error for port 0")
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("port 0 should be valid (not yet configured): %v", err)
 	}
 
 	cfg.Port = 70000
