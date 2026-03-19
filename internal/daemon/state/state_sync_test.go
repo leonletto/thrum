@@ -20,7 +20,7 @@ func createTestState(t *testing.T) *state.State {
 	if err := os.MkdirAll(thrumDir, 0750); err != nil {
 		t.Fatalf("create thrum dir: %v", err)
 	}
-	st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456")
+	st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestSequence_PersistsAcrossRestart(t *testing.T) {
 	}
 
 	// First state instance — write 5 events
-	st1, err := state.NewState(thrumDir, thrumDir, "r_TEST123456")
+	st1, err := state.NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("create state 1: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestSequence_PersistsAcrossRestart(t *testing.T) {
 	_ = st1.Close()
 
 	// Second state instance — should continue from sequence 5
-	st2, err := state.NewState(thrumDir, thrumDir, "r_TEST123456")
+	st2, err := state.NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("create state 2: %v", err)
 	}

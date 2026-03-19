@@ -4562,8 +4562,21 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	// Generate repo ID (use directory name for now)
 	repoID := filepath.Base(absPath)
 
+	// Create peer registry early so we can read the persistent daemon_id
+	peersFile := filepath.Join(varDir, "peers.json")
+	peerRegistry, err := daemon.NewPeerRegistry(peersFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to create peer registry: %v\n", err)
+	}
+
+	// Use persistent daemon_id from peers.json if available
+	var daemonID string
+	if peerRegistry != nil {
+		daemonID = peerRegistry.LocalDaemonID()
+	}
+
 	// Create state manager
-	st, err := state.NewState(thrumDir, syncDir, repoID)
+	st, err := state.NewState(thrumDir, syncDir, repoID, daemonID)
 	if err != nil {
 		return fmt.Errorf("failed to create state: %w", err)
 	}
@@ -4727,9 +4740,9 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	}
 
 	// Tailscale peer sync management
-	syncManager, err := daemon.NewDaemonSyncManager(st, varDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to create sync manager: %v\n", err)
+	var syncManager *daemon.DaemonSyncManager
+	if peerRegistry != nil {
+		syncManager = daemon.NewDaemonSyncManager(st, peerRegistry)
 	}
 
 	var pairingMgr *daemon.PairingManager
