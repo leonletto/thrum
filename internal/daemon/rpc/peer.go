@@ -9,8 +9,8 @@ import (
 
 // --- Function types for peer handlers ---
 
-// StartPairingFunc starts a pairing session and returns the code.
-type StartPairingFunc func(timeout time.Duration) (code string, err error)
+// StartPairingFunc starts a pairing session and returns the code and local address (ip:port).
+type StartPairingFunc func(timeout time.Duration) (code, address string, err error)
 
 // WaitForPairingFunc blocks until the active pairing session completes or times out.
 // Returns the paired peer's name, address, and daemon ID.
@@ -34,7 +34,8 @@ type PeerStartPairingRequest struct {
 
 // PeerStartPairingResponse is the result of peer.start_pairing.
 type PeerStartPairingResponse struct {
-	Code string `json:"code"`
+	Code    string `json:"code"`
+	Address string `json:"address,omitempty"` // local tsnet address (ip:port)
 }
 
 // PeerWaitPairingResponse is the result of peer.wait_pairing.
@@ -110,12 +111,12 @@ func (h *PeerStartPairingHandler) Handle(_ context.Context, params json.RawMessa
 		timeout = time.Duration(req.TimeoutSeconds) * time.Second
 	}
 
-	code, err := h.startPairing(timeout)
+	code, address, err := h.startPairing(timeout)
 	if err != nil {
 		return nil, fmt.Errorf("start pairing: %w", err)
 	}
 
-	return PeerStartPairingResponse{Code: code}, nil
+	return PeerStartPairingResponse{Code: code, Address: address}, nil
 }
 
 // PeerWaitPairingHandler handles the peer.wait_pairing RPC.

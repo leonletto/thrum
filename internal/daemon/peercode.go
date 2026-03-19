@@ -11,6 +11,11 @@ func FormatConnectionString(name, ip string, port int, code string) string {
 	return fmt.Sprintf("%s:%s:%d:%s", name, ip, port, code)
 }
 
+// FormatPeercode creates a peercode from name, address (ip:port), and code.
+func FormatPeercode(name, address, code string) string {
+	return fmt.Sprintf("%s:%s:%s", name, address, code)
+}
+
 // ParseConnectionString parses a peercode string into its 4 components.
 // Format: name:ip:port:code (colon-separated, exactly 4 fields).
 func ParseConnectionString(s string) (name, ip string, port int, code string, err error) {
