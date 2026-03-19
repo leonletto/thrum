@@ -1,0 +1,26 @@
+package daemon
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+// FormatConnectionString creates a peercode string: name:ip:port:code.
+func FormatConnectionString(name, ip string, port int, code string) string {
+	return fmt.Sprintf("%s:%s:%d:%s", name, ip, port, code)
+}
+
+// ParseConnectionString parses a peercode string into its 4 components.
+// Format: name:ip:port:code (colon-separated, exactly 4 fields).
+func ParseConnectionString(s string) (name, ip string, port int, code string, err error) {
+	parts := strings.SplitN(s, ":", 4)
+	if len(parts) != 4 {
+		return "", "", 0, "", fmt.Errorf("invalid peercode: expected name:ip:port:code, got %q", s)
+	}
+	p, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return "", "", 0, "", fmt.Errorf("invalid port in peercode: %w", err)
+	}
+	return parts[0], parts[1], p, parts[3], nil
+}
