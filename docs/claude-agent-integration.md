@@ -1,4 +1,3 @@
-
 ## Claude Code Agent Integration
 
 Thrum ships two Claude Code agent definitions for multi-agent coordination.

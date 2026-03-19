@@ -1,4 +1,3 @@
-
 ## Event Streaming
 
 ## Overview

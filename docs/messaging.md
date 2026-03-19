@@ -1,4 +1,3 @@
-
 ## Thrum Messaging System
 
 > **TL;DR:** Send messages with `thrum send`, check them with `thrum inbox`,

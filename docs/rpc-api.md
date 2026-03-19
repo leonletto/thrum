@@ -1,4 +1,3 @@
-
 ## Thrum Daemon RPC API
 
 > **TL;DR:** 26 RPC methods over JSON-RPC 2.0, available on a Unix socket or
