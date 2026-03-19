@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -99,6 +100,46 @@ func TestLoadTailscaleConfig_EnabledVariants(t *testing.T) {
 		if cfg.Enabled {
 			t.Errorf("expected Enabled=false for THRUM_TS_ENABLED=%q", val)
 		}
+	}
+}
+
+func TestSaveAuthKeyToEnvFile_NewFile(t *testing.T) {
+	dir := t.TempDir()
+	err := SaveAuthKeyToEnvFile(dir, "tskey-test-123")
+	if err != nil {
+		t.Fatalf("SaveAuthKeyToEnvFile: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(data), "THRUM_TS_AUTHKEY=tskey-test-123") {
+		t.Errorf("expected auth key in .env, got: %s", data)
+	}
+}
+
+func TestSaveAuthKeyToEnvFile_UpdateExisting(t *testing.T) {
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, ".env")
+	if err := os.WriteFile(envPath, []byte("THRUM_TS_AUTHKEY=old-key\nOTHER=value\n"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	if err := SaveAuthKeyToEnvFile(dir, "new-key"); err != nil {
+		t.Fatalf("SaveAuthKeyToEnvFile: %v", err)
+	}
+
+	data, _ := os.ReadFile(envPath)
+	content := string(data)
+	if !strings.Contains(content, "THRUM_TS_AUTHKEY=new-key") {
+		t.Errorf("expected updated auth key, got: %s", content)
+	}
+	if strings.Contains(content, "old-key") {
+		t.Error("old auth key should be replaced")
+	}
+	if !strings.Contains(content, "OTHER=value") {
+		t.Error("other env vars should be preserved")
 	}
 }
 

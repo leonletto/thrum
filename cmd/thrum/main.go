@@ -1907,13 +1907,35 @@ func peerCmd() *cobra.Command {
 Share this code with the person running 'thrum peer join' on the other machine.
 Blocks until a peer connects or the session times out (5 minutes).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Ensure auth key is available — prompt if missing
+			var pairingParams *cli.PeerStartPairingParams
+			authKey := os.Getenv("THRUM_TS_AUTHKEY")
+			if authKey == "" {
+				fmt.Print("Enter Tailscale auth key: ")
+				if _, err := fmt.Scanln(&authKey); err != nil {
+					return fmt.Errorf("failed to read auth key: %w", err)
+				}
+				authKey = strings.TrimSpace(authKey)
+				if authKey == "" {
+					return fmt.Errorf("auth key is required for Tailscale sync")
+				}
+				// Save to .thrum/.env for persistence
+				if flagRepo != "" {
+					thrumDir := filepath.Join(flagRepo, ".thrum")
+					if err := config.SaveAuthKeyToEnvFile(thrumDir, authKey); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: could not save auth key to .env: %v\n", err)
+					}
+				}
+				pairingParams = &cli.PeerStartPairingParams{AuthKey: authKey}
+			}
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("failed to connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.PeerStartPairing(client)
+			result, err := cli.PeerStartPairing(client, pairingParams)
 			if err != nil {
 				return err
 			}
@@ -5065,6 +5087,10 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		tsCfg.Enabled = true
 		if tsCfg.Hostname == "" {
 			tsCfg.Hostname = hostname + "-thrum"
+		}
+		// Re-read auth key from env — may have been set by peer.start_pairing RPC
+		if tsCfg.AuthKey == "" {
+			tsCfg.AuthKey = os.Getenv("THRUM_TS_AUTHKEY")
 		}
 		if tsCfg.AuthKey == "" {
 			return fmt.Errorf("Tailscale auth key not available — run 'thrum peer add' to configure")

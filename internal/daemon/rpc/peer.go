@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -29,7 +30,8 @@ type FindPeerByNameFunc func(name string) (daemonID string, found bool)
 
 // PeerStartPairingRequest is the params for peer.start_pairing.
 type PeerStartPairingRequest struct {
-	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
+	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
+	AuthKey        string `json:"auth_key,omitempty"` // Tailscale auth key (passed from CLI prompt)
 }
 
 // PeerStartPairingResponse is the result of peer.start_pairing.
@@ -104,6 +106,12 @@ func (h *PeerStartPairingHandler) Handle(_ context.Context, params json.RawMessa
 	var req PeerStartPairingRequest
 	if params != nil {
 		_ = json.Unmarshal(params, &req)
+	}
+
+	// If the CLI provided an auth key (from user prompt), set it in the process env
+	// so the lazy tsnet start can pick it up
+	if req.AuthKey != "" {
+		_ = os.Setenv("THRUM_TS_AUTHKEY", req.AuthKey)
 	}
 
 	timeout := 5 * time.Minute

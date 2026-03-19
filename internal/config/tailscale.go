@@ -153,6 +153,47 @@ func (c *TailscaleConfig) Validate() error {
 	return nil
 }
 
+// SaveAuthKeyToEnvFile saves the Tailscale auth key to .thrum/.env.
+// If the file exists and already contains THRUM_TS_AUTHKEY, it is updated in place.
+// Otherwise, the key is appended. Uses atomic write.
+func SaveAuthKeyToEnvFile(thrumDir, authKey string) error {
+	envPath := filepath.Join(thrumDir, ".env")
+
+	var lines []string
+	found := false
+
+	// Read existing content if file exists
+	if data, err := os.ReadFile(envPath); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "THRUM_TS_AUTHKEY=") {
+				lines = append(lines, "THRUM_TS_AUTHKEY="+authKey)
+				found = true
+			} else {
+				lines = append(lines, line)
+			}
+		}
+	}
+
+	if !found {
+		lines = append(lines, "THRUM_TS_AUTHKEY="+authKey)
+	}
+
+	content := strings.Join(lines, "\n")
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+
+	// Atomic write
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		return fmt.Errorf("create thrum dir: %w", err)
+	}
+	tmpPath := envPath + ".tmp"
+	if err := os.WriteFile(tmpPath, []byte(content), 0600); err != nil {
+		return fmt.Errorf("write env file: %w", err)
+	}
+	return os.Rename(tmpPath, envPath)
+}
+
 // envBool returns true if the env var is set to a truthy value ("true", "1", "yes").
 func envBool(key string) bool {
 	v := os.Getenv(key)

@@ -53,10 +53,19 @@ type PeerDetailedStatusEntry struct {
 
 // --- RPC client functions ---
 
+// PeerStartPairingParams are optional parameters for starting pairing.
+type PeerStartPairingParams struct {
+	AuthKey string `json:"auth_key,omitempty"`
+}
+
 // PeerStartPairing starts a pairing session on the local daemon.
-func PeerStartPairing(client *Client) (*PeerStartPairingResult, error) {
+func PeerStartPairing(client *Client, params *PeerStartPairingParams) (*PeerStartPairingResult, error) {
+	var reqParams any = struct{}{}
+	if params != nil {
+		reqParams = params
+	}
 	var result PeerStartPairingResult
-	if err := client.Call("peer.start_pairing", struct{}{}, &result); err != nil {
+	if err := client.Call("peer.start_pairing", reqParams, &result); err != nil {
 		return nil, fmt.Errorf("start pairing: %w", err)
 	}
 	return &result, nil
