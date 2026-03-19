@@ -14,6 +14,7 @@ import (
 	goruntime "runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/term"
@@ -4800,8 +4801,15 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 	var pairingMgr *daemon.PairingManager
 	var tsLocalAddr string              // set when Tailscale listener starts
+	var tsnetMu sync.Mutex             // protects tsLocalAddr and tsnetStarted
 	var startTsnetFn func(int) error    // lazy tsnet start, assigned later
 	hostname, _ := os.Hostname()
+
+	getTsLocalAddr := func() string {
+		tsnetMu.Lock()
+		defer tsnetMu.Unlock()
+		return tsLocalAddr
+	}
 
 	if syncManager != nil {
 		// Hook into event writes to broadcast sync.notify to peers
@@ -4867,7 +4875,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 				}
 			}
 			code, err := pairingMgr.StartPairing(timeout)
-			return code, tsLocalAddr, err
+			return code, getTsLocalAddr(), err
 		}
 		server.RegisterHandler("peer.start_pairing",
 			rpc.NewPeerStartPairingHandler(startPairingFn).Handle)
@@ -4885,10 +4893,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 		// peer.join — send pairing code to remote peer
 		joinFn := func(peerAddr, code string) (peerName, peerDaemonID string, err error) {
-			if tsLocalAddr == "" {
+			localAddr := getTsLocalAddr()
+			if localAddr == "" {
 				return "", "", fmt.Errorf("tailscale not configured or not started")
 			}
-			peer, err := syncManager.JoinPeer(peerAddr, code, st.DaemonID(), hostname, tsLocalAddr)
+			peer, err := syncManager.JoinPeer(peerAddr, code, st.DaemonID(), hostname, localAddr)
 			if err != nil {
 				return "", "", err
 			}
@@ -5078,8 +5087,10 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	var tsListenerCleanup func()
 
 	// startTsnet starts the tsnet listener on the given port. Safe to call
-	// multiple times — subsequent calls are no-ops after the first success.
+	// concurrently — subsequent calls are no-ops after the first success.
 	startTsnet := func(port int) error {
+		tsnetMu.Lock()
+		defer tsnetMu.Unlock()
 		if tsnetStarted {
 			return nil
 		}
