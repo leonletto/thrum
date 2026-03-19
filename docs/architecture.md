@@ -1,3 +1,4 @@
+
 ## System Architecture
 
 ![Thrum architecture: Clients (CLI, Web UI, MCP Server) connect to the Daemon via JSON-RPC/WebSocket, which reads and writes to JSONL Logs, SQLite Index, and Git Sync, which push/pull to the remote a-sync branch](../img/architecture.svg)
