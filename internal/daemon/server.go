@@ -22,6 +22,7 @@ type Server struct {
 	socketPath string
 	listener   net.Listener
 	handlers   map[string]Handler
+	longPoll   map[string]bool
 	mu         sync.RWMutex
 	shutdown   bool
 	wg         sync.WaitGroup
@@ -35,6 +36,7 @@ func NewServer(socketPath string) *Server {
 	return &Server{
 		socketPath: socketPath,
 		handlers:   make(map[string]Handler),
+		longPoll:   make(map[string]bool),
 		startTime:  time.Now(),
 		conns:      make(map[net.Conn]struct{}),
 	}
@@ -45,6 +47,16 @@ func (s *Server) RegisterHandler(method string, h Handler) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.handlers[method] = h
+}
+
+// RegisterLongPollHandler registers a handler that may block for an extended
+// period (up to 6 minutes). These handlers receive a longer context timeout
+// than the default 10-second limit used for normal RPC methods.
+func (s *Server) RegisterLongPollHandler(method string, h Handler) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.handlers[method] = h
+	s.longPoll[method] = true
 }
 
 // Start starts the server and begins accepting connections.
@@ -258,7 +270,16 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		// Call handler with transport context and per-request timeout.
 		// This prevents a single blocked handler from permanently hanging
 		// the connection goroutine (which cascades into daemon deadlock).
-		reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Second)
+		// Long-poll methods (e.g. peer.wait_pairing) need a longer timeout
+		// since they block waiting for human interaction.
+		s.mu.RLock()
+		isLongPoll := s.longPoll[req.Method]
+		s.mu.RUnlock()
+		timeout := 10 * time.Second
+		if isLongPoll {
+			timeout = 6 * time.Minute
+		}
+		reqCtx, reqCancel := context.WithTimeout(ctx, timeout)
 		ctxWithTransport := transport.WithTransport(reqCtx, transport.TransportUnixSocket)
 		result, err := handler(ctxWithTransport, reqParams)
 		reqCancel()

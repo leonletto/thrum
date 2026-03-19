@@ -141,7 +141,21 @@ func DefaultPreamble() []byte {
 **Status:** ` + "`thrum status`" + `
 **Who's online:** ` + "`thrum team`" + `
 **Save context:** Use ` + "`/thrum:update-context`" + ` skill. **NEVER run ` + "`thrum context save`" + ` manually** — it overwrites accumulated session state.
-**Wait for messages:** ` + "`thrum wait --after -15s --timeout 5m`" + ` (` + "`--after -15s`" + ` = include messages sent up to 15s ago, covers re-arm gap)
+
+## Background Message Listener
+
+ALWAYS keep a background listener running. Spawn on session start, re-arm every
+time it returns (both MESSAGES_RECEIVED and timeout). Run ` + "`thrum prime`" + ` to get the
+spawn command with the correct repo path pre-filled. The pattern:
+
+` + "```text" + `
+Task(subagent_type="message-listener", model="haiku", run_in_background=true,
+  prompt="Listen for Thrum messages.\nSTEP_1: <repo>/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -15s")
+` + "```" + `
+
+Replace ` + "`<repo>`" + ` with the actual repo path (shown in ` + "`thrum prime`" + ` output).
+` + "`--after -15s`" + ` = include messages sent up to 15s ago, covers re-arm gap between
+listener cycles.
 
 ## Agent Strategies
 

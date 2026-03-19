@@ -41,7 +41,10 @@ a{color:#0366d6}
 <main>
 <h2>Agent Context Management</h2>
 <blockquote>
-<p><strong>TL;DR:</strong> Context lets agents save notes that survive session restarts and compaction. Save with <code>thrum context save</code>, view with <code>thrum context show</code>. Files live in <code>.thrum/context/{agent}.md</code> — plain Markdown you can read and edit directly.</p>
+<p><strong>TL;DR:</strong> Context lets agents save notes that survive session restarts and
+compaction. Save with <code>thrum context save</code>, view with <code>thrum context show</code>.
+Files live in <code>.thrum/context/{agent}.md</code> — plain Markdown you can read and
+edit directly.</p>
 </blockquote>
 <h2>Overview</h2>
 <p>Agents lose state between sessions due to context window compaction, session
@@ -106,13 +109,23 @@ directly or replace it with <code>thrum context preamble --file custom.md</code>
 <pre><code>## Thrum Quick Reference
 
 **Check messages:** `thrum inbox --unread` (does not mark as read)
+**Check sent status:** `thrum sent --unread` (messages with unread recipients)
 **Mark all read:** `thrum message read --all`
-**Check sent items:**
-`thrum sent --unread` **Send message:** `thrum send &quot;message&quot; --to @role`
-**Reply:** `thrum reply &lt;MSG_ID&gt; &quot;response&quot;` **Status:** `thrum status` **Who&#39;s
-online:** `thrum agent list --context` **Save context:** `thrum context save`
-**Wait for messages:** `thrum wait --after -30s --timeout 5m` (`--after -30s` =
-include messages sent up to 30s ago)</code></pre>
+**Send message:** `thrum send &quot;message&quot; --to @&lt;agent_name&gt;` — ALWAYS use the
+specific agent name (e.g., `@coordinator_main`), NEVER the role (e.g.,
+`@coordinator`). Role names fan out to ALL agents with that role. Run
+`thrum team` to find exact names.
+**Reply:** `thrum reply &lt;MSG_ID&gt; &quot;response&quot;`
+**Status:** `thrum status`
+**Who&#39;s online:** `thrum team`
+**Save context:** Use `/thrum:update-context` skill. **NEVER run
+`thrum context save` manually** — it overwrites accumulated session state.
+
+## Background Message Listener
+
+ALWAYS keep a background listener running. Spawn on session start, re-arm every
+time it returns (both MESSAGES_RECEIVED and timeout). Run `thrum prime` to get
+the spawn command with the correct repo path pre-filled.</code></pre>
 <p><strong>Customization examples:</strong></p>
 <p>You can edit the preamble to add project conventions, role-specific
 instructions, team rosters, or boot sequences:</p>

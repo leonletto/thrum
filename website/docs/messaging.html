@@ -41,7 +41,11 @@ a{color:#0366d6}
 <main>
 <h2>Thrum Messaging System</h2>
 <blockquote>
-<p><strong>TL;DR:</strong> Send messages with <code>thrum send</code>, check them with <code>thrum inbox</code>, reply with <code>thrum reply</code>. Messages support scopes, mentions, and groups for targeting specific recipients. The Quick Reference tables below have every command. Implementation details (storage schemas, indexes) are at the bottom — you don&#39;t need them for normal use.</p>
+<p><strong>TL;DR:</strong> Send messages with <code>thrum send</code>, check them with <code>thrum inbox</code>,
+reply with <code>thrum reply</code>. Messages support scopes, mentions, and groups for
+targeting specific recipients. The Quick Reference tables below have every
+command. Implementation details (storage schemas, indexes) are at the bottom —
+you don&#39;t need them for normal use.</p>
 </blockquote>
 <h2>Overview</h2>
 <p>The Thrum messaging system provides structured communication between agents with
@@ -410,7 +414,11 @@ identity has a read record for it.</p>
 </thead>
 <tbody><tr>
 <td><code>thrum inbox</code></td>
-<td>Marks all displayed messages as read (skipped with <code>--unread</code>)</td>
+<td>Marks all displayed messages as read</td>
+</tr>
+<tr>
+<td><code>thrum inbox --unread</code></td>
+<td>Peeks at unread messages <strong>without</strong> marking them as read</td>
 </tr>
 <tr>
 <td><code>thrum reply MSG_ID ...</code></td>
@@ -419,6 +427,10 @@ identity has a read record for it.</p>
 <tr>
 <td><code>thrum message get MSG_ID</code></td>
 <td>Marks the retrieved message as read</td>
+</tr>
+<tr>
+<td><code>thrum message read --all</code></td>
+<td>Explicitly marks all unread messages as read</td>
 </tr>
 </tbody></table>
 <p>All auto mark-as-read operations are best-effort: if they fail, the parent
@@ -674,7 +686,8 @@ thrum send &quot;Deploy complete&quot; --everyone</code></pre>
 </tr>
 </tbody></table>
 <hr>
-<p><em>The sections below cover storage internals. You don&#39;t need these for normal use.</em></p>
+<p><em>The sections below cover storage internals. You don&#39;t need these for normal
+use.</em></p>
 <h2>Implementation Details</h2>
 <h3>Storage</h3>
 <p>Messages are stored in two places:</p>

@@ -79,6 +79,21 @@ func TestPeriodicSyncScheduler_SkipsRecentlySynced(t *testing.T) {
 	}
 }
 
+func TestTailscaleSyncIntervals(t *testing.T) {
+	if TailscaleSyncInterval >= DefaultSyncInterval {
+		t.Errorf("TailscaleSyncInterval (%s) should be shorter than DefaultSyncInterval (%s)",
+			TailscaleSyncInterval, DefaultSyncInterval)
+	}
+	if TailscaleRecentSyncThreshold >= DefaultRecentSyncThreshold {
+		t.Errorf("TailscaleRecentSyncThreshold (%s) should be shorter than DefaultRecentSyncThreshold (%s)",
+			TailscaleRecentSyncThreshold, DefaultRecentSyncThreshold)
+	}
+	if TailscaleRecentSyncThreshold >= TailscaleSyncInterval {
+		t.Errorf("TailscaleRecentSyncThreshold (%s) should be shorter than TailscaleSyncInterval (%s)",
+			TailscaleRecentSyncThreshold, TailscaleSyncInterval)
+	}
+}
+
 func TestPeriodicSyncScheduler_SyncFromPeersNoPeers(t *testing.T) {
 	st := createTestStateForSync(t)
 

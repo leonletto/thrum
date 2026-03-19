@@ -157,9 +157,9 @@ additional infrastructure.</p>
 <h3>3. Agent &amp; Session Management</h3>
 <p>Agents register with a human-readable name, role, and module:</p>
 <pre><code>thrum agent register --name furiosa --role=implementer --module=auth</code></pre>
-<p>Agent names follow the pattern <code>[a-z0-9_]+</code>. Reserved names: <code>daemon</code>,
-<code>system</code>, <code>thrum</code>, <code>all</code>, <code>broadcast</code>. Identity resolves in this order:
-<code>THRUM_NAME</code> env var &gt; <code>--name</code> flag &gt; solo-agent auto-select.</p>
+<p>Agent names follow the pattern <code>[a-z0-9_]+</code>. Reserved names: <code>daemon</code>, <code>system</code>,
+<code>thrum</code>, <code>all</code>, <code>broadcast</code>. Identity resolves in this order: <code>THRUM_NAME</code> env
+var &gt; <code>--name</code> flag &gt; solo-agent auto-select.</p>
 <p>Each agent gets an identity file at <code>.thrum/identities/{name}.json</code>. Multiple
 agents can coexist in a single worktree.</p>
 <p>Sessions track active work periods:</p>
@@ -379,12 +379,12 @@ works without network.</p>
 enabling LLM agents to communicate via native MCP tools. It provides 4 core
 messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
 <code>list_agents</code>) and 6 group management tools.</p>
-<p>See <a href="mcp-server.html">MCP Server</a> for the complete tools reference,
-configuration, and setup instructions.</p>
+<p>See <a href="mcp-server.html">MCP Server</a> for the complete tools reference, configuration,
+and setup instructions.</p>
 <hr>
 <h2>Foundation Packages</h2>
-<p>The sections below describe the internal packages that implement the architecture
-above.</p>
+<p>The sections below describe the internal packages that implement the
+architecture above.</p>
 <h3>Package Structure</h3>
 <pre><code>internal/
 ├── config/      # Configuration loading, identity files, agent naming
