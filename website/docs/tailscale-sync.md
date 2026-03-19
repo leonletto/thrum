@@ -8,8 +8,7 @@ category: "guides"
 
 ## Tailscale Sync
 
-> **Prerequisites:** Tailscale installed and Thrum v0.4.0+ on all machines. Set
-> `THRUM_TS_ENABLED=true` before starting the daemon.
+> **Prerequisites:** Tailscale installed and Thrum v0.5.8+ on all machines.
 
 ## Overview
 
@@ -35,23 +34,33 @@ events, and session updates propagate automatically.
 ## Prerequisites
 
 1. **Tailscale installed** on all machines running Thrum daemons
-2. **Thrum v0.4.0+** installed on all machines (Tailscale support added in
-   v0.4.0)
+2. **Thrum v0.5.8+** installed on all machines
 
 ## Getting Started
 
-### 1. Enable Tailscale Sync
+### 1. Configure Tailscale Sync
 
-Set the environment variable to enable Tailscale integration:
+Create a `.env` file in your repo root with the required variables:
 
 ```bash
-export THRUM_TS_ENABLED=true
+# .env (add to .gitignore — contains auth keys)
+THRUM_TS_ENABLED=true
+THRUM_TS_HOSTNAME=my-laptop
+THRUM_TS_AUTHKEY=tskey-auth-xxxxx
 ```
+
+The daemon auto-loads `.env` from the repo root (or `.thrum/.env`). Variables
+with `THRUM_` or `TAILSCALE_` prefixes are loaded; existing environment
+variables take precedence.
+
+**Important:** `THRUM_TS_HOSTNAME` and `THRUM_TS_AUTHKEY` are both required.
+The hostname identifies your machine on the Tailscale network. Get an auth key
+from the [Tailscale admin console](https://login.tailscale.com/admin/settings/keys).
 
 ### 2. Start the Daemon
 
 ```bash
-thrum daemon start
+thrum daemon restart
 ```
 
 When Tailscale sync is enabled, the daemon:
@@ -59,27 +68,40 @@ When Tailscale sync is enabled, the daemon:
 - Starts a tsnet listener on port 9100 (configurable)
 - Registers sync RPC handlers (`sync.pull`, `sync.notify`, `sync.peer_info`,
   `pair.request`)
+- Runs periodic sync every 15 seconds (with immediate sync on startup)
 - Waits for peer pairing via CLI
+
+**Note:** tsnet creates a separate Tailscale identity with a `-1` suffix (e.g.,
+`my-laptop-1`). This is normal — it's a userspace Tailscale instance running
+alongside your system Tailscale.
 
 ### 3. Pair Two Machines
 
-Pairing requires action on both machines simultaneously:
+Pairing requires action on both machines simultaneously. `thrum peer add` blocks
+for up to 5 minutes waiting for the other machine to connect — coordinate timing
+with the other operator.
 
 **On Machine A** (the one you want to share with):
 
 ```bash
 thrum peer add
 # Output: Waiting for connection... Pairing code: 7392
+# (blocks up to 5 minutes)
 ```
 
 **On Machine B** (the one joining):
 
 ```bash
-thrum peer join my-laptop:9100
+thrum peer join <tailscale-ip>:9100
 # Prompts: Enter pairing code:
 # You type: 7392
 # Output: Paired with "my-laptop". Syncing started.
 ```
+
+**Important:** Use the tsnet Tailscale IP address (e.g., `100.x.y.z:9100`),
+not the hostname. Regular DNS cannot resolve tsnet hostnames (the `-1` suffix
+variants). Find the IP with `tailscale status` — look for the entry with the
+`-1` suffix matching the other machine's `THRUM_TS_HOSTNAME`.
 
 Machine A will also show success:
 
@@ -131,7 +153,7 @@ Machine A                           Machine B
 | **Sync Server**     | Exposes `sync.*` and `pair.*` RPC methods to peers (token-authenticated) |
 | **Peer Registry**   | Thread-safe registry of paired peers with JSON persistence               |
 | **Pairing Manager** | Handles the 4-digit code pairing flow                                    |
-| **Sync Scheduler**  | Periodic fallback sync (5-minute interval, skips recently synced peers)  |
+| **Sync Scheduler**  | Periodic sync every 15s for Tailscale peers (skips recently synced)      |
 
 ## Sync Protocol
 
@@ -191,9 +213,14 @@ the writer.
 
 ### Periodic Sync Scheduler
 
-A fallback mechanism that runs every 5 minutes. It pulls from all known peers
-that were not synced recently (within the last 2 minutes). This ensures
-convergence even if push notifications are lost.
+For Tailscale peers, the scheduler runs every 15 seconds with a 10-second
+recent-sync threshold. It pulls from all known peers that were not synced
+recently. Combined with push notifications, this provides near-real-time sync
+(typically under 20 seconds end-to-end). An initial sync runs immediately on
+daemon startup.
+
+For Git-only sync (no Tailscale), the scheduler uses the default 5-minute
+interval with a 2-minute threshold.
 
 ### Deduplication
 
@@ -237,12 +264,17 @@ Machine A (thrum peer add)           Machine B (thrum peer join)
 
 | Variable               | Default            | Description                           |
 | ---------------------- | ------------------ | ------------------------------------- |
-| `THRUM_TS_ENABLED`     | `false`            | Enable Tailscale sync                 |
-| `THRUM_TS_HOSTNAME`    | (auto)             | Hostname for the tsnet listener       |
-| `THRUM_TS_PORT`        | `9100`             | Port for the sync RPC listener        |
-| `THRUM_TS_AUTH_KEY`    | (none)             | Tailscale auth key for headless setup |
-| `THRUM_TS_CONTROL_URL` | (default)          | Custom control server URL             |
-| `THRUM_TS_STATE_DIR`   | `.thrum/var/tsnet` | tsnet state directory                 |
+| `THRUM_TS_ENABLED`     | `false`            | Enable Tailscale sync                          |
+| `THRUM_TS_HOSTNAME`    | (required)         | Hostname for the tsnet listener                |
+| `THRUM_TS_PORT`        | `9100`             | Port for the sync RPC listener                 |
+| `THRUM_TS_AUTHKEY`     | (required)         | Tailscale auth key (from admin console)        |
+| `THRUM_TS_CONTROL_URL` | (default)          | Custom control server URL (Headscale)          |
+| `THRUM_TS_STATE_DIR`   | `.thrum/var/tsnet` | tsnet state directory                          |
+
+These can be set via environment variables or in a `.env` file at the repo root.
+The `.env` file is auto-loaded by the daemon — only `THRUM_*` and `TAILSCALE_*`
+prefixed variables are read. **Add `.env` to `.gitignore`** since it contains
+your auth key.
 
 ## CLI Commands
 
@@ -352,7 +384,7 @@ Tailscale sync logs are prefixed for easy filtering:
 [pairing] Session started, code=7392, timeout=5m0s
 [pairing] Paired with office-server (d_abc123) at 100.64.2.10:9100
 sync.notify: synced from d_abc123 — applied=5 skipped=0
-periodic_sync: starting with interval=5m0s, recent_threshold=2m0s
+periodic_sync: starting with interval=15s, recent_threshold=10s
 ```
 
 ## Troubleshooting
@@ -361,7 +393,8 @@ periodic_sync: starting with interval=5m0s, recent_threshold=2m0s
 
 1. Verify both machines are on the same Tailscale network
 2. Check that both daemons are running (`thrum daemon start`)
-3. Verify the address format is `hostname:port` (default port: 9100)
+3. Use the Tailscale IP (not hostname) for `peer join`: `tailscale status` to
+   find it
 4. Test connectivity: `tailscale ping <hostname>`
 
 ### Pairing code rejected
@@ -380,15 +413,16 @@ periodic_sync: starting with interval=5m0s, recent_threshold=2m0s
 
 ### Network Setup
 
-- **Use auth keys** (`THRUM_TS_AUTH_KEY`) for headless CI/CD runners
+- **Use auth keys** (`THRUM_TS_AUTHKEY`) for headless CI/CD runners
 - **Keep the default port** (9100) unless you have a conflict
 - **Use Tailscale ACLs** to restrict which machines can communicate
 
 ### Performance
 
-- **Push notifications** handle most sync latency -- events typically propagate
-  within seconds
-- **Periodic sync** (5 min) acts as a safety net, not the primary mechanism
+- **Push notifications** trigger immediate pulls when events are written
+- **Periodic sync** (15s for Tailscale peers) ensures convergence even if push
+  notifications are lost
+- **Typical end-to-end latency** is under 20 seconds across machines
 - **Batch size** of 1000 events per pull keeps memory bounded during large syncs
 - **Checkpointing** ensures no redundant transfers after restarts
 
