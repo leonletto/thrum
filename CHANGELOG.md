@@ -10,24 +10,24 @@ and this project adheres to
 
 ### Added
 
-- **Tailscale sync .env auto-loading** — Daemon automatically reads
-  `THRUM_TS_*` and `TAILSCALE_*` variables from `.env` (repo root or
-  `.thrum/.env`). No more manual `export` before daemon start.
+- **Tailscale sync .env auto-loading** — Daemon automatically reads `THRUM_TS_*`
+  and `TAILSCALE_*` variables from `.env` (repo root or `.thrum/.env`). No more
+  manual `export` before daemon start.
 - **15-second sync interval for Tailscale peers** — Reduced from 5-minute
   periodic fallback to 15-second interval with 10-second recent threshold.
-  Combined with push notifications, cross-machine messages arrive in under
-  20 seconds.
-- **Initial sync on scheduler startup** — Periodic sync scheduler now runs
-  an immediate sync when starting, instead of waiting for the first tick.
+  Combined with push notifications, cross-machine messages arrive in under 20
+  seconds.
+- **Initial sync on scheduler startup** — Periodic sync scheduler now runs an
+  immediate sync when starting, instead of waiting for the first tick.
 
 ### Fixed
 
-- **Tailscale long-poll timeout** — Every RPC had a 10-second context
-  timeout, killing `peer.wait_pairing` instantly. Added
-  `RegisterLongPollHandler` with 6-minute timeout for pairing operations.
-- **Tailscale peer addressing** — Use tsnet Tailscale IP addresses instead
-  of hostnames for `peer join`. tsnet creates `-1` suffix hostnames that
-  regular DNS cannot resolve.
+- **Tailscale long-poll timeout** — Every RPC had a 10-second context timeout,
+  killing `peer.wait_pairing` instantly. Added `RegisterLongPollHandler` with
+  6-minute timeout for pairing operations.
+- **Tailscale peer addressing** — Use tsnet Tailscale IP addresses instead of
+  hostnames for `peer join`. tsnet creates `-1` suffix hostnames that regular
+  DNS cannot resolve.
 - **Background listener preamble** — `DefaultPreamble()` had a standalone
   `Wait for messages` line but no background listener spawn instructions.
   Replaced with `Background Message Listener` section containing the
@@ -35,10 +35,9 @@ and this project adheres to
 
 ### Changed
 
-- **Tailscale docs rewrite** — Updated env var names (`THRUM_TS_AUTHKEY`
-  not `THRUM_TS_AUTH_KEY`), documented `.env` auto-loading, hostname
-  requirement, tsnet `-1` suffix, IP-based peer join, and updated sync
-  intervals throughout.
+- **Tailscale docs rewrite** — Updated env var names (`THRUM_TS_AUTHKEY` not
+  `THRUM_TS_AUTH_KEY`), documented `.env` auto-loading, hostname requirement,
+  tsnet `-1` suffix, IP-based peer join, and updated sync intervals throughout.
 
 ## [0.5.8] - 2026-03-17
 

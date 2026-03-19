@@ -85,18 +85,16 @@ directly or replace it with `thrum context preamble --file custom.md`.
 ```markdown
 ## Thrum Quick Reference
 
-**Check messages:** `thrum inbox --unread` (does not mark as read)
-**Check sent status:** `thrum sent --unread` (messages with unread recipients)
-**Mark all read:** `thrum message read --all`
-**Send message:** `thrum send "message" --to @<agent_name>` — ALWAYS use the
-specific agent name (e.g., `@coordinator_main`), NEVER the role (e.g.,
-`@coordinator`). Role names fan out to ALL agents with that role. Run
-`thrum team` to find exact names.
-**Reply:** `thrum reply <MSG_ID> "response"`
-**Status:** `thrum status`
-**Who's online:** `thrum team`
-**Save context:** Use `/thrum:update-context` skill. **NEVER run
-`thrum context save` manually** — it overwrites accumulated session state.
+**Check messages:** `thrum inbox --unread` (does not mark as read) **Check sent
+status:** `thrum sent --unread` (messages with unread recipients) **Mark all
+read:** `thrum message read --all` **Send message:**
+`thrum send "message" --to @<agent_name>` — ALWAYS use the specific agent name
+(e.g., `@coordinator_main`), NEVER the role (e.g., `@coordinator`). Role names
+fan out to ALL agents with that role. Run `thrum team` to find exact names.
+**Reply:** `thrum reply <MSG_ID> "response"` **Status:** `thrum status` **Who's
+online:** `thrum team` **Save context:** Use `/thrum:update-context` skill.
+**NEVER run `thrum context save` manually** — it overwrites accumulated session
+state.
 
 ## Background Message Listener
 
