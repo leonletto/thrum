@@ -4746,7 +4746,8 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	}
 
 	var pairingMgr *daemon.PairingManager
-	var tsLocalAddr string // set when Tailscale listener starts
+	var tsLocalAddr string              // set when Tailscale listener starts
+	var startTsnetFn func(int) error    // lazy tsnet start, assigned later
 	hostname, _ := os.Hostname()
 
 	if syncManager != nil {
@@ -4804,6 +4805,12 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					if err := peerRegistry.SetLocalPort(port); err != nil {
 						return "", fmt.Errorf("set local port: %w", err)
 					}
+				}
+			}
+			// Lazy tsnet start: start tsnet after port selection
+			if startTsnetFn != nil {
+				if err := startTsnetFn(peerRegistry.LocalPort()); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: lazy tsnet start failed: %v\n", err)
 				}
 			}
 			return pairingMgr.StartPairing(timeout)
@@ -5010,97 +5017,133 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	})
 
 	// Tailscale tsnet listener (optional — daemon works fine without it)
+	// Lazy start: tsnet starts only when peers exist (local.port > 0) or
+	// THRUM_TS_PORT is explicitly set. No more THRUM_TS_ENABLED gate.
 	tsCfg := config.LoadTailscaleConfig(thrumDir)
-	if tsCfg.Enabled {
-		if err := tsCfg.Validate(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Tailscale config invalid: %v (tsnet disabled)\n", err)
-		} else {
-			tsListener, tsErr := daemon.NewTsnetServer(tsCfg)
-			if tsErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to start tsnet: %v (tsnet disabled)\n", tsErr)
-			} else {
-				defer func() { _ = tsListener.Close() }()
+	var tsnetStarted bool
+	var tsListenerCleanup func()
 
-				// Create sync-only registry for Tailscale connections
-				syncRegistry := daemon.NewSyncRegistry()
-				if syncManager != nil {
-					syncRegistry.SetPeerRegistry(syncManager.PeerRegistry())
+	// startTsnet starts the tsnet listener on the given port. Safe to call
+	// multiple times — subsequent calls are no-ops after the first success.
+	startTsnet := func(port int) error {
+		if tsnetStarted {
+			return nil
+		}
+		tsCfg.Port = port
+		tsCfg.Enabled = true
+		if tsCfg.Hostname == "" {
+			tsCfg.Hostname = hostname + "-thrum"
+		}
+		if tsCfg.AuthKey == "" {
+			return fmt.Errorf("Tailscale auth key not available — run 'thrum peer add' to configure")
+		}
+
+		tsListener, err := daemon.NewTsnetServer(tsCfg)
+		if err != nil {
+			return fmt.Errorf("start tsnet: %w", err)
+		}
+		tsListenerCleanup = func() { _ = tsListener.Close() }
+
+		// Create sync-only registry for Tailscale connections
+		syncRegistry := daemon.NewSyncRegistry()
+		if syncManager != nil {
+			syncRegistry.SetPeerRegistry(syncManager.PeerRegistry())
+		}
+
+		// Set Tailscale address so peer.join knows our reachable address.
+		// Use the Tailscale IP — regular DNS cannot resolve tsnet hostnames.
+		tsHost := tsListener.ReachableAddr(tsCfg.Hostname)
+		tsLocalAddr = fmt.Sprintf("%s:%d", tsHost, tsCfg.Port)
+
+		// Register sync handlers
+		syncPullHandler := rpc.NewSyncPullHandler(st)
+		syncPeerInfoHandler := rpc.NewPeerInfoHandler(st.DaemonID(), hostname)
+		_ = syncRegistry.Register("sync.pull", syncPullHandler.Handle)
+		_ = syncRegistry.Register("sync.peer_info", syncPeerInfoHandler.Handle)
+
+		if syncManager != nil {
+			syncNotifyHandler := rpc.NewSyncNotifyHandler(syncManager.SyncFromPeerByID)
+			_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
+		}
+		if pairingMgr != nil {
+			pairHandler := rpc.NewPairRequestHandler(pairingMgr.HandlePairRequest)
+			_ = syncRegistry.Register("pair.request", pairHandler.Handle)
+		}
+
+		// Accept loop for sync connections
+		go func() {
+			for {
+				conn, err := tsListener.Accept()
+				if err != nil {
+					return // Listener closed
 				}
-
-				// Set Tailscale address so peer.join knows our reachable address.
-				// Use the Tailscale IP from tsnet — regular DNS cannot resolve
-				// tsnet hostnames (e.g., "myhost-1"), so we use the IP directly.
-				tsHost := tsListener.ReachableAddr(tsCfg.Hostname)
-				tsLocalAddr = fmt.Sprintf("%s:%d", tsHost, tsCfg.Port)
-
-				// Register sync handlers
-				syncPullHandler := rpc.NewSyncPullHandler(st)
-				syncPeerInfoHandler := rpc.NewPeerInfoHandler(st.DaemonID(), hostname)
-
-				_ = syncRegistry.Register("sync.pull", syncPullHandler.Handle)
-				_ = syncRegistry.Register("sync.peer_info", syncPeerInfoHandler.Handle)
-
-				// Register sync.notify handler (triggers pull sync on notification)
-				if syncManager != nil {
-					syncNotifyHandler := rpc.NewSyncNotifyHandler(syncManager.SyncFromPeerByID)
-					_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
-				}
-
-				// Register pair.request handler (uses PairingManager created earlier)
-				if pairingMgr != nil {
-					pairHandler := rpc.NewPairRequestHandler(pairingMgr.HandlePairRequest)
-					_ = syncRegistry.Register("pair.request", pairHandler.Handle)
-				}
-
-				// Accept loop for sync connections
-				go func() {
-					for {
-						conn, err := tsListener.Accept()
-						if err != nil {
-							return // Listener closed
-						}
-
-						go func(c net.Conn) {
-							defer func() { _ = c.Close() }()
-							peerID := c.RemoteAddr().String()
-							syncRegistry.ServeSyncRPC(ctx, c, peerID)
-						}(conn)
-					}
-				}()
-
-				// Start periodic sync with Tailscale-optimized intervals
-				if syncManager != nil {
-					periodicSync := daemon.NewPeriodicSyncScheduler(syncManager, st)
-					periodicSync.SetInterval(daemon.TailscaleSyncInterval)
-					periodicSync.SetRecentThreshold(daemon.TailscaleRecentSyncThreshold)
-					go periodicSync.Start(ctx)
-				}
-
-				fmt.Fprintf(os.Stderr, "  Tailscale:   %s:%d\n", tsCfg.Hostname, tsCfg.Port)
-
-				// Wire Tailscale sync info into health handler
-				if syncManager != nil {
-					tsHostname := tsCfg.Hostname
-					healthHandler.SetTailscaleInfoProvider(func() *rpc.TailscaleSyncInfo {
-						count, peers := syncManager.TailscaleSyncStatus(tsHostname)
-						tsPeers := make([]rpc.TailscalePeer, len(peers))
-						for i, p := range peers {
-							tsPeers[i] = rpc.TailscalePeer{
-								DaemonID: p.DaemonID,
-								Name:     p.Name,
-								LastSync: p.LastSync,
-							}
-						}
-						return &rpc.TailscaleSyncInfo{
-							Enabled:        true,
-							Hostname:       tsHostname,
-							ConnectedPeers: count,
-							Peers:          tsPeers,
-							SyncStatus:     "idle",
-						}
-					})
-				}
+				go func(c net.Conn) {
+					defer func() { _ = c.Close() }()
+					peerID := c.RemoteAddr().String()
+					syncRegistry.ServeSyncRPC(ctx, c, peerID)
+				}(conn)
 			}
+		}()
+
+		// Start periodic sync with Tailscale-optimized intervals
+		if syncManager != nil {
+			periodicSync := daemon.NewPeriodicSyncScheduler(syncManager, st)
+			periodicSync.SetInterval(daemon.TailscaleSyncInterval)
+			periodicSync.SetRecentThreshold(daemon.TailscaleRecentSyncThreshold)
+			go periodicSync.Start(ctx)
+		}
+
+		fmt.Fprintf(os.Stderr, "  Tailscale:   %s:%d\n", tsCfg.Hostname, tsCfg.Port)
+
+		// Wire Tailscale sync info into health handler
+		if syncManager != nil {
+			tsHostname := tsCfg.Hostname
+			healthHandler.SetTailscaleInfoProvider(func() *rpc.TailscaleSyncInfo {
+				count, peers := syncManager.TailscaleSyncStatus(tsHostname)
+				tsPeers := make([]rpc.TailscalePeer, len(peers))
+				for i, p := range peers {
+					tsPeers[i] = rpc.TailscalePeer{
+						DaemonID: p.DaemonID,
+						Name:     p.Name,
+						LastSync: p.LastSync,
+					}
+				}
+				return &rpc.TailscaleSyncInfo{
+					Enabled:        true,
+					Hostname:       tsHostname,
+					ConnectedPeers: count,
+					Peers:          tsPeers,
+					SyncStatus:     "idle",
+				}
+			})
+		}
+
+		tsnetStarted = true
+		return nil
+	}
+	defer func() {
+		if tsListenerCleanup != nil {
+			tsListenerCleanup()
+		}
+	}()
+
+	// Wire startTsnet into the lazy start callback for peer.start_pairing
+	startTsnetFn = startTsnet
+
+	// Determine whether to start tsnet at boot.
+	// Priority: THRUM_TS_PORT env > peers.json local.port > skip (lazy start on peer add)
+	var tsBootPort int
+	if p := os.Getenv("THRUM_TS_PORT"); p != "" {
+		if port, err := strconv.Atoi(p); err == nil {
+			tsBootPort = port
+		}
+	} else if peerRegistry != nil && peerRegistry.LocalPort() > 0 {
+		tsBootPort = peerRegistry.LocalPort()
+	}
+
+	if tsBootPort > 0 {
+		if err := startTsnet(tsBootPort); err != nil {
+			fmt.Fprintf(os.Stderr, "Tailscale sync disabled: %v\n", err)
 		}
 	}
 
