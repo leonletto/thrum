@@ -96,17 +96,19 @@ git show origin/a-sync:messages/
 
 Nothing is hidden. The sync branch is just a regular orphan branch in your repo.
 
-### Optional: Tailscale for Real-Time Sync
+### Optional: Tailscale for Near-Real-Time Sync
 
 Git-based sync is great for async workflows — messages arrive within 60 seconds.
-If you need real-time propagation (sub-second delivery across machines),
-Tailscale sync is the answer.
+If you need faster propagation (under 20 seconds across machines), Tailscale
+sync is the answer.
 
 Tailscale connects your machines over an encrypted WireGuard tunnel and lets
 Thrum daemons push events directly to each other instead of going through Git.
+With a 15-second sync interval and push notifications, messages typically arrive
+within seconds.
 
-See [Tailscale Sync](../tailscale-sync.md) for setup. It's a few steps to pair
-the machines, then everything is real-time automatically.
+See [Tailscale Sync](../tailscale-sync.md) for setup. It's a `.env` file and a
+pairing step, then sync is automatic.
 
 ### Troubleshooting
 
