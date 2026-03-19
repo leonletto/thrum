@@ -4991,8 +4991,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					syncRegistry.SetPeerRegistry(syncManager.PeerRegistry())
 				}
 
-				// Set Tailscale address so peer.join knows our reachable address
-				tsLocalAddr = fmt.Sprintf("%s:%d", tsCfg.Hostname, tsCfg.Port)
+				// Set Tailscale address so peer.join knows our reachable address.
+				// Use the Tailscale IP from tsnet — regular DNS cannot resolve
+				// tsnet hostnames (e.g., "myhost-1"), so we use the IP directly.
+				tsHost := tsListener.ReachableAddr(tsCfg.Hostname)
+				tsLocalAddr = fmt.Sprintf("%s:%d", tsHost, tsCfg.Port)
 
 				// Register sync handlers
 				syncPullHandler := rpc.NewSyncPullHandler(st)
