@@ -1942,43 +1942,67 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 		},
 	})
 
-	// thrum peer join <address> — connect to a remote peer
-	cmd.AddCommand(&cobra.Command{
-		Use:   "join <address>",
-		Short: "Join a remote peer by entering a pairing code",
-		Long: `Connects to a remote daemon at the given Tailscale address.
-Prompts for the 4-digit pairing code displayed on the other machine.`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			address := args[0]
+	// thrum peer join --peercode — connect to a remote peer using a connection string
+	var peerCode string
+	joinCmd := &cobra.Command{
+		Use:   "join",
+		Short: "Join a remote peer using a peercode",
+		Long: `Connects to a remote peer using the peercode from 'thrum peer add'.
 
-			// Prompt for pairing code
-			fmt.Print("Enter pairing code: ")
-			var code string
-			if _, err := fmt.Scanln(&code); err != nil {
-				return fmt.Errorf("failed to read code: %w", err)
+Three input methods:
+  thrum peer join --peercode name:ip:port:code   (direct argument)
+  echo "name:ip:port:code" | thrum peer join     (piped via stdin)
+  thrum peer join                                 (interactive prompt)`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Resolve peercode: flag value > stdin > prompt
+			code := peerCode
+			if code == "" {
+				stat, _ := os.Stdin.Stat()
+				if (stat.Mode() & os.ModeCharDevice) == 0 {
+					scanner := bufio.NewScanner(os.Stdin)
+					if scanner.Scan() {
+						code = strings.TrimSpace(scanner.Text())
+					}
+				}
+			}
+			if code == "" {
+				fmt.Print("Enter peercode: ")
+				var input string
+				if _, err := fmt.Scanln(&input); err != nil {
+					return fmt.Errorf("failed to read peercode: %w", err)
+				}
+				code = strings.TrimSpace(input)
 			}
 
+			name, ip, port, pairCode, err := daemon.ParseConnectionString(code)
+			if err != nil {
+				return err
+			}
+			_ = name // used by ParseConnectionString output only
+
+			address := fmt.Sprintf("%s:%d", ip, port)
 			client, err := getClient()
 			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
+				return fmt.Errorf("connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.PeerJoin(client, address, code)
+			result, err := cli.PeerJoin(client, address, pairCode)
 			if err != nil {
 				return err
 			}
 
 			if result.Status == "paired" {
-				fmt.Printf("Paired with %q. Syncing started.\n", result.PeerName)
+				fmt.Printf("Paired with %q. Syncing started.\n", name)
 			} else {
 				fmt.Printf("Pairing failed: %s\n", result.Message)
 			}
 
 			return nil
 		},
-	})
+	}
+	joinCmd.Flags().StringVar(&peerCode, "peercode", "", "Connection string from 'thrum peer add'")
+	cmd.AddCommand(joinCmd)
 
 	// thrum peer list — show all peers
 	cmd.AddCommand(&cobra.Command{
