@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -157,5 +158,30 @@ func TestOutboundRelayThreading(t *testing.T) {
 	// Verify reply_to would be set via msgMap
 	if full.Message.ReplyTo != "msg_thrum_original" {
 		t.Errorf("reply_to = %q, want msg_thrum_original", full.Message.ReplyTo)
+	}
+}
+
+func TestOutboundNoInternalMetadata(t *testing.T) {
+	relay := &OutboundRelay{}
+
+	full := &fullMessage{}
+	full.Message.MessageID = "msg_internal_123"
+	full.Message.Author.AgentID = "coordinator_main"
+	full.Message.Body.Content = "Hello from coordinator"
+
+	// formatForTelegram must only include author display name and content —
+	// never message_id, agent_id in raw form, session IDs, or structured metadata.
+	result := relay.formatForTelegram("coordinator_main", full)
+
+	if result != "@coordinator_main: Hello from coordinator" {
+		t.Errorf("unexpected format: %q", result)
+	}
+
+	// Verify internal IDs don't leak
+	if strings.Contains(result, "msg_internal_123") {
+		t.Error("message ID leaked to outbound Telegram message")
+	}
+	if strings.Contains(result, "session") {
+		t.Error("session data leaked to outbound Telegram message")
 	}
 }
