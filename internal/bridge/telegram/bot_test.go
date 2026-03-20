@@ -279,3 +279,49 @@ func TestAllowAll(t *testing.T) {
 		t.Error("IsAllowed returned false with AllowAll=true")
 	}
 }
+
+// TestRateLimiter verifies per-user rate limiting.
+func TestRateLimiter(t *testing.T) {
+	t.Parallel()
+	var rl rateLimiter
+
+	userID := int64(12345)
+
+	// Should allow up to rateLimitMax messages
+	for i := range rateLimitMax {
+		if !rl.allow(userID) {
+			t.Fatalf("message %d should be allowed (limit=%d)", i, rateLimitMax)
+		}
+	}
+
+	// Next message should be rate limited
+	if rl.allow(userID) {
+		t.Error("message should be rate limited after exceeding max")
+	}
+
+	// Different user should be unaffected
+	otherUser := int64(67890)
+	if !rl.allow(otherUser) {
+		t.Error("different user should not be rate limited")
+	}
+}
+
+// TestRateLimiterDropsSilently verifies rate-exceeded messages produce no error or response.
+func TestRateLimiterDropsSilently(t *testing.T) {
+	t.Parallel()
+	var rl rateLimiter
+
+	userID := int64(11111)
+
+	// Exhaust rate limit
+	for range rateLimitMax {
+		rl.allow(userID)
+	}
+
+	// Subsequent calls return false (drop) — no error, no side effect
+	for range 10 {
+		if rl.allow(userID) {
+			t.Fatal("should be rate limited")
+		}
+	}
+}
