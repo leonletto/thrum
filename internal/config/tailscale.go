@@ -3,6 +3,7 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -76,12 +77,12 @@ func loadEnvFile(paths ...string) {
 // root, giving the .thrum/.env file higher priority.
 //
 // Environment variables (can also be set via .env files):
-//   - THRUM_TS_ENABLED: "true"/"1" to enable (default: false)
-//   - THRUM_TS_HOSTNAME: tsnet hostname (required when enabled)
-//   - THRUM_TS_PORT: listener port (default: 9100)
-//   - THRUM_TS_AUTHKEY: Tailscale auth key (required when enabled)
+//   - THRUM_TS_AUTHKEY: Tailscale auth key (prompted on first peer add)
+//   - THRUM_TS_HOSTNAME: tsnet hostname (auto-derived if not set)
+//   - THRUM_TS_PORT: listener port (auto-randomized if not set)
 //   - THRUM_TS_STATE_DIR: state directory (default: .thrum/var/tsnet)
 //   - THRUM_TAILSCALE_CONTROL_URL: control plane URL (optional, for Headscale)
+//   - THRUM_TS_ENABLED: deprecated — Tailscale starts automatically when peers exist
 func LoadTailscaleConfig(thrumDir string) TailscaleConfig {
 	// Auto-detect .env files. repoRoot is the parent of thrumDir (.thrum).
 	repoRoot := filepath.Dir(thrumDir)
@@ -95,9 +96,11 @@ func LoadTailscaleConfig(thrumDir string) TailscaleConfig {
 		StateDir: fmt.Sprintf("%s/var/tsnet", thrumDir),
 	}
 
-	// Enabled
+	// THRUM_TS_ENABLED is deprecated — Tailscale is now enabled implicitly
+	// when peers.json has local.port or peer add is run.
 	if envBool("THRUM_TS_ENABLED") {
 		cfg.Enabled = true
+		log.Println("Note: THRUM_TS_ENABLED is deprecated and can be removed from .env. Tailscale starts automatically when peers are configured.")
 	}
 
 	// Hostname — auto-derive if not explicitly set

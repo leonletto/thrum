@@ -4868,10 +4868,10 @@ func runDaemon(repoPath string, flagLocal bool) error {
 					}
 				}
 			}
-			// Lazy tsnet start: start tsnet after port selection
+			// Lazy tsnet start: start tsnet after port selection — fail if it can't start
 			if startTsnetFn != nil {
 				if err := startTsnetFn(peerRegistry.LocalPort()); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: lazy tsnet start failed: %v\n", err)
+					return "", "", fmt.Errorf("start tailscale for peer add: %w", err)
 				}
 			}
 			code, err := pairingMgr.StartPairing(timeout)
@@ -4893,6 +4893,21 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 		// peer.join — send pairing code to remote peer
 		joinFn := func(peerAddr, code string) (peerName, peerDaemonID string, err error) {
+			// Lazy tsnet start for peer join (machine B may not have run peer add)
+			if startTsnetFn != nil && getTsLocalAddr() == "" {
+				if peerRegistry.LocalPort() == 0 {
+					port, portErr := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
+					if portErr != nil {
+						return "", "", fmt.Errorf("find available tsnet port: %w", portErr)
+					}
+					if portErr := peerRegistry.SetLocalPort(port); portErr != nil {
+						return "", "", fmt.Errorf("set local port: %w", portErr)
+					}
+				}
+				if tsErr := startTsnetFn(peerRegistry.LocalPort()); tsErr != nil {
+					return "", "", fmt.Errorf("start tailscale for peer join: %w", tsErr)
+				}
+			}
 			localAddr := getTsLocalAddr()
 			if localAddr == "" {
 				return "", "", fmt.Errorf("tailscale not configured or not started")

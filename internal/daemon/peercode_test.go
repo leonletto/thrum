@@ -40,6 +40,7 @@ func TestParseConnectionString_Invalid(t *testing.T) {
 		{"three fields", "a:b:c"},
 		{"non-numeric port", "a:b:xyz:d"},
 		{"empty string", ""},
+		{"ipv6 address", "host:fd7a:115c:a1e0::1:9150:1234"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
