@@ -14,7 +14,7 @@ import (
 // and must not be retained anywhere in the struct.
 func TestBotDoesNotStoreToken(t *testing.T) {
 	t.Parallel()
-	rt := reflect.TypeOf(Bot{})
+	rt := reflect.TypeFor[Bot]()
 	for i := 0; i < rt.NumField(); i++ {
 		f := rt.Field(i)
 		if f.Type.Kind() == reflect.String {
@@ -197,7 +197,6 @@ func TestAccessGateOrder(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			// Replicate Poll()'s gate logic exactly.

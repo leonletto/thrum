@@ -228,7 +228,7 @@ func TestWSClientClose(t *testing.T) {
 	}
 
 	// Close multiple times — must not panic or block.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		client.Close()
 	}
 }
@@ -275,7 +275,6 @@ func TestWSClientLoopbackValidation(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := validateLoopback(tc.url)
