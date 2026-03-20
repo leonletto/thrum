@@ -23,6 +23,10 @@ func ParseConnectionString(s string) (name, ip string, port int, code string, er
 	if len(parts) != 4 {
 		return "", "", 0, "", fmt.Errorf("invalid peercode: expected name:ip:port:code, got %q", s)
 	}
+	// Validate IP field doesn't contain colons (IPv6 would break the format)
+	if strings.Contains(parts[1], ":") {
+		return "", "", 0, "", fmt.Errorf("invalid peercode: IP field must not contain colons (IPv6 not supported), got %q", parts[1])
+	}
 	p, err := strconv.Atoi(parts[2])
 	if err != nil {
 		return "", "", 0, "", fmt.Errorf("invalid port in peercode: %w", err)
