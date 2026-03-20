@@ -20,6 +20,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/leonletto/thrum/internal/backup"
+	telegram "github.com/leonletto/thrum/internal/bridge/telegram"
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
@@ -5280,6 +5281,13 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			go scheduler.Start(ctx)
 			fmt.Fprintf(os.Stderr, "  Backup:      every %s\n", backupInterval)
 		}
+	}
+
+	// Start Telegram bridge if configured
+	if thrumCfg.Telegram.TelegramEnabled() {
+		tgBridge := telegram.New(thrumCfg.Telegram, wsPort)
+		go tgBridge.Run(ctx)
+		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)
 	}
 
 	return lifecycle.Run(ctx)
