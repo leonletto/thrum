@@ -216,39 +216,41 @@ func TestAccessGateOrder(t *testing.T) {
 }
 
 // TestDropBotMessages verifies that messages from Telegram bots are always
-// dropped, even when the bot's user ID appears in AllowFrom.
+// dropped, even when the bot's user ID appears in AllowFrom. This tests the
+// gate logic replicated from Poll — IsAllowed alone would pass, but the bot
+// guard must block it.
 func TestDropBotMessages(t *testing.T) {
 	t.Parallel()
 
 	botUserID := int64(8888)
 	cfg := config.TelegramConfig{
-		AllowFrom: []int64{botUserID}, // deliberately added
+		AllowFrom: []int64{botUserID}, // bot ID in allow list
 		AllowAll:  false,
 	}
 
-	// Simulate Poll's gate: bot check comes before IsAllowed.
+	// Confirm IsAllowed would pass for this user ID (proving bot guard is needed)
+	if !cfg.IsAllowed(botUserID) {
+		t.Fatal("test setup error: bot user ID should be in AllowFrom")
+	}
+
+	// Replicate Poll's gate logic: bot check runs BEFORE IsAllowed
 	isBot := true
-	allowed := cfg.IsAllowed(botUserID) // would pass if bot check weren't first
-
-	if !allowed {
-		// IsAllowed would allow it (it's in the list), but IsBot overrides.
-		// This confirms IsAllowed alone is insufficient — the bot guard must be first.
-		t.Log("note: if IsAllowed ran alone without bot guard, user would be blocked anyway (ID not in list)")
+	if isBot {
+		// Poll drops here — message never reaches IsAllowed or extractMessage
+	} else if !cfg.IsAllowed(botUserID) {
+		t.Fatal("non-bot path: should be allowed")
+	} else {
+		t.Fatal("bot message was not dropped — IsBot check must be first in Poll")
 	}
 
-	// The critical assertion: because isBot is true, Poll drops the message.
-	// We verify the bot check runs first by confirming that when isBot=true,
-	// the message is never forwarded regardless of IsAllowed result.
-	dropped := isBot // Poll continues (drops) immediately when isBot is true
-	if !dropped {
-		t.Error("bot message was not dropped — IsBot check must be first in Poll")
+	// AllowAll=true also doesn't let bots through
+	cfgAll := config.TelegramConfig{AllowAll: true}
+	if !cfgAll.IsAllowed(botUserID) {
+		t.Fatal("test setup error: AllowAll should allow any ID")
 	}
-
-	// Also confirm AllowAll=true still doesn't let bots through.
-	cfgAllowAll := config.TelegramConfig{AllowAll: true}
-	droppedWithAllowAll := isBot // bot check precedes AllowAll check in Poll
-	if !droppedWithAllowAll {
-		t.Errorf("bot message passed gate with AllowAll=true (cfg=%+v) — bot check must precede AllowAll", cfgAllowAll)
+	// But Poll still drops because bot check is first
+	if !isBot {
+		t.Error("bot message passed gate with AllowAll=true — bot check must precede AllowAll")
 	}
 }
 

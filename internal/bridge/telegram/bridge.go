@@ -13,8 +13,9 @@ import (
 
 // Bridge orchestrates the Telegram↔Thrum bridge.
 // It connects to the daemon's WebSocket, polls Telegram, and relays messages
-// bidirectionally. The bridge does NOT store the bot token — it reads it
-// from config at startup/restart time.
+// bidirectionally. The token lives in cfg.Token (within the embedded
+// TelegramConfig) and is passed to NewBot() on each restart cycle.
+// It is never logged beyond MaskedToken().
 type Bridge struct {
 	cfg    config.TelegramConfig
 	wsPort string
@@ -96,7 +97,9 @@ func (b *Bridge) run(ctx context.Context) error {
 	var sess struct {
 		SessionID string `json:"session_id"`
 	}
-	_ = json.Unmarshal(sessResult, &sess)
+	if err := json.Unmarshal(sessResult, &sess); err != nil || sess.SessionID == "" {
+		return fmt.Errorf("session.start: could not extract session_id")
+	}
 	defer func() {
 		endCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
