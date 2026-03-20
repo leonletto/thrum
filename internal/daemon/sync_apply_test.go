@@ -13,6 +13,16 @@ import (
 	"github.com/leonletto/thrum/internal/types"
 )
 
+func createTestPeerRegistry(t *testing.T) *PeerRegistry {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "peers.json")
+	reg, err := NewPeerRegistry(path)
+	if err != nil {
+		t.Fatalf("create peer registry: %v", err)
+	}
+	return reg
+}
+
 func createTestStateForSync(t *testing.T) *state.State {
 	t.Helper()
 	tmpDir := t.TempDir()
@@ -20,7 +30,7 @@ func createTestStateForSync(t *testing.T) *state.State {
 	if err := os.MkdirAll(thrumDir, 0750); err != nil {
 		t.Fatalf("create thrum dir: %v", err)
 	}
-	st, err := state.NewState(thrumDir, thrumDir, "r_SYNCTEST123")
+	st, err := state.NewState(thrumDir, thrumDir, "r_SYNCTEST123", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

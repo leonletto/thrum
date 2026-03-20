@@ -21,7 +21,7 @@ func TestImpersonation_ValidateUserCanImpersonateAgent(t *testing.T) {
 	}
 
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestImpersonation_ValidateAgentCannotImpersonate(t *testing.T) {
 	}
 
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestImpersonation_ValidateUserCannotImpersonateUser(t *testing.T) {
 	}
 
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestImpersonation_ValidateNonexistentAgent(t *testing.T) {
 	}
 
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestImpersonation_MessageCreateEventFields(t *testing.T) {
 	}
 
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
