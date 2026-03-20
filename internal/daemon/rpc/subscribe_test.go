@@ -57,7 +57,7 @@ func TestSubscribe(t *testing.T) {
 
 			// Create state and handler
 			repoID := "r_TEST12345678"
-			st, err := state.NewState(thrumDir, thrumDir, repoID)
+			st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 			if err != nil {
 				t.Fatalf("failed to create state: %v", err)
 			}
@@ -112,7 +112,7 @@ func TestUnsubscribe(t *testing.T) {
 	}
 
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestList(t *testing.T) {
 	}
 
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}

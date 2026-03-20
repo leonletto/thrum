@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"path/filepath"
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/checkpoint"
@@ -20,20 +19,14 @@ type DaemonSyncManager struct {
 	applier *SyncApplier
 }
 
-// NewDaemonSyncManager creates a new sync manager.
-func NewDaemonSyncManager(st *state.State, varDir string) (*DaemonSyncManager, error) {
-	peersFile := filepath.Join(varDir, "peers.json")
-	peers, err := NewPeerRegistry(peersFile)
-	if err != nil {
-		return nil, fmt.Errorf("create peer registry: %w", err)
-	}
-
+// NewDaemonSyncManager creates a new sync manager with a pre-created PeerRegistry.
+func NewDaemonSyncManager(st *state.State, peers *PeerRegistry) *DaemonSyncManager {
 	return &DaemonSyncManager{
 		state:   st,
 		peers:   peers,
 		client:  NewSyncClient(),
 		applier: NewSyncApplier(st),
-	}, nil
+	}
 }
 
 // SyncFromPeer pulls events from a specific peer and applies them.

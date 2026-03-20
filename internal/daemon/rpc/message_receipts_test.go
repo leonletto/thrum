@@ -19,7 +19,7 @@ func setupReceiptTestState(t *testing.T) *state.State {
 		t.Fatalf("create .thrum dir: %v", err)
 	}
 
-	st, err := state.NewState(thrumDir, thrumDir, "r_RECEIPT_TEST")
+	st, err := state.NewState(thrumDir, thrumDir, "r_RECEIPT_TEST", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

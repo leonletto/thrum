@@ -24,7 +24,7 @@ func setupArchiveTest(t *testing.T) (*MessageHandler, *state.State, string, func
 	}
 
 	repoID := "r_ARCHIVE_TEST"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

@@ -24,7 +24,7 @@ func setupFilterTest(t *testing.T) (handler *MessageHandler, agentID string, cle
 	}
 
 	repoID := "r_FILTER_TEST"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -402,7 +402,7 @@ func TestMessageListUnreadCountWithoutSession(t *testing.T) {
 	}
 
 	repoID := "r_NOSESS_TEST"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

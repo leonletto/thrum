@@ -31,7 +31,7 @@ func setupGroupIntegrationTest(t *testing.T) (
 
 	repoID := "r_GROUP_INTEG"
 	var err error
-	st, err = state.NewState(thrumDir, thrumDir, repoID)
+	st, err = state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

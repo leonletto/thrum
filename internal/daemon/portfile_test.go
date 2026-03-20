@@ -91,6 +91,41 @@ func TestFindAvailablePort(t *testing.T) {
 	})
 }
 
+func TestFindRandomAvailablePort(t *testing.T) {
+	t.Run("finds port in range", func(t *testing.T) {
+		port, err := FindRandomAvailablePort(9400, 9410)
+		if err != nil {
+			t.Fatalf("expected to find available port, got error: %v", err)
+		}
+		if port < 9400 || port > 9410 {
+			t.Errorf("port %d outside expected range 9400-9410", port)
+		}
+	})
+
+	t.Run("skips occupied ports", func(t *testing.T) {
+		listener, err := net.Listen("tcp", "localhost:9420")
+		if err != nil {
+			t.Skipf("could not occupy port 9420: %v", err)
+		}
+		defer func() { _ = listener.Close() }()
+
+		port, err := FindRandomAvailablePort(9420, 9425)
+		if err != nil {
+			t.Fatalf("expected to find available port: %v", err)
+		}
+		if port == 9420 {
+			t.Error("should not return occupied port 9420")
+		}
+	})
+
+	t.Run("error on invalid range", func(t *testing.T) {
+		_, err := FindRandomAvailablePort(9500, 9400)
+		if err == nil {
+			t.Error("expected error when min > max")
+		}
+	})
+}
+
 func TestIsPortAvailable(t *testing.T) {
 	t.Run("returns true for available port", func(t *testing.T) {
 		// Find an available port first

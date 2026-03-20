@@ -179,7 +179,7 @@ func TestAgentRegister(t *testing.T) {
 			tmpDir := t.TempDir()
 			thrumDir := filepath.Join(tmpDir, ".thrum")
 
-			s, err := state.NewState(thrumDir, thrumDir, "test_repo_123")
+			s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
 			if err != nil {
 				t.Fatalf("create state: %v", err)
 			}
@@ -252,7 +252,7 @@ func TestAgentList(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -345,7 +345,7 @@ func TestAgentWhoami(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -439,7 +439,7 @@ func TestListContext(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_listctx")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_listctx", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -700,7 +700,7 @@ func TestAgentDelete(t *testing.T) {
 	}
 
 	// Create state
-	st, err := state.NewState(thrumDir, syncDir, "test-repo")
+	st, err := state.NewState(thrumDir, syncDir, "test-repo", "")
 	if err != nil {
 		t.Fatalf("Failed to create state: %v", err)
 	}
@@ -846,7 +846,7 @@ func TestHandleCleanup_DryRun(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -959,7 +959,7 @@ func TestGetMessageCount(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -998,7 +998,7 @@ func TestNewMessageHandlerWithDispatcher(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -1061,7 +1061,7 @@ func TestRegisterCreatesRoleGroup(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_rolegroup")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_rolegroup", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -1111,7 +1111,7 @@ func TestRegisterRoleGroupIdempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_idempotent")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_idempotent", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -1151,7 +1151,7 @@ func TestRegisterNameRoleValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_namecheck")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_namecheck", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

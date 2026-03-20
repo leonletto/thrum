@@ -19,7 +19,7 @@ func TestUserRegister_Success(t *testing.T) {
 		t.Fatalf("failed to create .thrum dir: %v", err)
 	}
 
-	st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456")
+	st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestUserRegister_UnixSocketRejection(t *testing.T) {
 		t.Fatalf("failed to create .thrum dir: %v", err)
 	}
 
-	st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456")
+	st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestUserRegister_IdempotentReRegistration(t *testing.T) {
 		t.Fatalf("failed to create .thrum dir: %v", err)
 	}
 
-	st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456")
+	st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestUserRegister_InvalidFormats(t *testing.T) {
 				t.Fatalf("failed to create .thrum dir: %v", err)
 			}
 
-			st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456")
+			st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456", "")
 			if err != nil {
 				t.Fatalf("failed to create state: %v", err)
 			}
@@ -279,7 +279,7 @@ func TestUserRegister_NamespacePrefixEnforcement(t *testing.T) {
 		t.Fatalf("failed to create .thrum dir: %v", err)
 	}
 
-	st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456")
+	st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456", "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -324,7 +324,7 @@ func TestUserRegister_ValidFormats(t *testing.T) {
 				t.Fatalf("failed to create .thrum dir: %v", err)
 			}
 
-			st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456")
+			st, err := state.NewState(thrumDir, thrumDir, "r_TEST123456", "")
 			if err != nil {
 				t.Fatalf("failed to create state: %v", err)
 			}

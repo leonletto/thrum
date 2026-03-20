@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -179,6 +181,151 @@ func TestPeerRegistry_ConcurrentAccess(t *testing.T) {
 	// Should not panic or deadlock
 	if reg.Len() == 0 {
 		t.Error("expected some peers after concurrent adds")
+	}
+}
+
+func TestPeerRegistry_NewSchemaFormat(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "peers.json")
+
+	reg, err := NewPeerRegistry(path)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+
+	// Local config should be initialized with a daemon_id
+	if reg.LocalDaemonID() == "" {
+		t.Error("LocalDaemonID should not be empty for new registry")
+	}
+	if reg.LocalPort() != 0 {
+		t.Error("LocalPort should be 0 for new registry (no port assigned yet)")
+	}
+
+	// Add a peer
+	err = reg.AddPeer(&PeerInfo{
+		Name:     "test-peer",
+		Address:  "100.64.1.2:9150",
+		DaemonID: "d_remote123",
+		Token:    "tok_abc",
+	})
+	if err != nil {
+		t.Fatalf("AddPeer: %v", err)
+	}
+
+	// Read raw file — should be object format, not array
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("file should be an object, not an array: %v", err)
+	}
+	if _, ok := raw["local"]; !ok {
+		t.Error("file should contain 'local' key")
+	}
+	if _, ok := raw["peers"]; !ok {
+		t.Error("file should contain 'peers' key")
+	}
+}
+
+func TestPeerRegistry_MigrateOldFormat(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "peers.json")
+
+	// Write old array format
+	old := []*PeerInfo{{
+		Name:     "old-peer",
+		Address:  "100.64.1.2:9100",
+		DaemonID: "d_old123",
+		Token:    "tok_old",
+		PairedAt: time.Now(),
+		LastSync: time.Now(),
+	}}
+	data, _ := json.Marshal(old)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Load — should migrate
+	reg, err := NewPeerRegistry(path)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+	if reg.LocalDaemonID() == "" {
+		t.Error("LocalDaemonID should be generated during migration")
+	}
+	if reg.Len() != 1 {
+		t.Errorf("Len = %d, want 1", reg.Len())
+	}
+
+	peer := reg.GetPeer("d_old123")
+	if peer == nil {
+		t.Fatal("migrated peer not found")
+	}
+	if peer.Name != "old-peer" {
+		t.Errorf("Name = %q, want %q", peer.Name, "old-peer")
+	}
+
+	// Re-read file — should now be new format
+	data2, _ := os.ReadFile(path)
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data2, &raw); err != nil {
+		t.Fatalf("migrated file should be an object: %v", err)
+	}
+	if _, ok := raw["local"]; !ok {
+		t.Error("migrated file should contain 'local' key")
+	}
+}
+
+func TestPeerRegistry_SetLocalPort(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "peers.json")
+
+	reg, err := NewPeerRegistry(path)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+
+	if err := reg.SetLocalPort(9147); err != nil {
+		t.Fatalf("SetLocalPort: %v", err)
+	}
+	if reg.LocalPort() != 9147 {
+		t.Errorf("LocalPort = %d, want 9147", reg.LocalPort())
+	}
+
+	// Reload from disk — port should persist
+	reg2, err := NewPeerRegistry(path)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry reload: %v", err)
+	}
+	if reg2.LocalPort() != 9147 {
+		t.Errorf("persisted LocalPort = %d, want 9147", reg2.LocalPort())
+	}
+}
+
+func TestPeerRegistry_DaemonIDPersists(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "peers.json")
+
+	reg1, err := NewPeerRegistry(path)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+	id1 := reg1.LocalDaemonID()
+
+	// Force a save so the file exists
+	if err := reg1.SetLocalPort(9100); err != nil {
+		t.Fatalf("SetLocalPort: %v", err)
+	}
+
+	// Reload — should reuse same daemon_id
+	reg2, err := NewPeerRegistry(path)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry reload: %v", err)
+	}
+	if reg2.LocalDaemonID() != id1 {
+		t.Errorf("daemon_id changed across reload: %q -> %q", id1, reg2.LocalDaemonID())
 	}
 }
 
