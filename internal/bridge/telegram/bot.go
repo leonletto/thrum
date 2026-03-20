@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
@@ -20,12 +22,56 @@ type InboundMessage struct {
 	ReplyToMsgID *int
 }
 
+const (
+	// rateLimitWindow is the time window for rate limiting.
+	rateLimitWindow = 1 * time.Minute
+	// rateLimitMax is the maximum messages per user per window.
+	rateLimitMax = 30
+)
+
 // Bot is a Telegram long-poller with an access gate.
 // The bot token is NOT stored as a field — it is passed only to tgbotapi.NewBotAPI.
 type Bot struct {
 	api      *tgbotapi.BotAPI
 	config   config.TelegramConfig
 	messages chan InboundMessage
+	rateLimit rateLimiter
+}
+
+// rateLimiter tracks per-user message counts within a sliding window.
+type rateLimiter struct {
+	mu      sync.Mutex
+	counts  map[int64][]time.Time // userID → timestamps of recent messages
+}
+
+// allow checks if userID is within the rate limit. Returns false if exceeded.
+func (r *rateLimiter) allow(userID int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.counts == nil {
+		r.counts = make(map[int64][]time.Time)
+	}
+
+	now := time.Now()
+	cutoff := now.Add(-rateLimitWindow)
+
+	// Prune old entries
+	timestamps := r.counts[userID]
+	pruned := timestamps[:0]
+	for _, ts := range timestamps {
+		if ts.After(cutoff) {
+			pruned = append(pruned, ts)
+		}
+	}
+
+	if len(pruned) >= rateLimitMax {
+		r.counts[userID] = pruned
+		return false
+	}
+
+	r.counts[userID] = append(pruned, now)
+	return true
 }
 
 // NewBot creates a new Bot. The token is passed to tgbotapi.NewBotAPI and not retained.
@@ -81,6 +127,11 @@ func (b *Bot) Poll(ctx context.Context) {
 
 			// Fail-closed access check using config.IsAllowed.
 			if !b.config.IsAllowed(from.ID) {
+				continue
+			}
+
+			// Rate limit: drop silently if user exceeds max messages per window.
+			if !b.rateLimit.allow(from.ID) {
 				continue
 			}
 
