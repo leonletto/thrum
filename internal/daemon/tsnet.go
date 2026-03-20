@@ -83,23 +83,27 @@ func (t *TsnetListener) LocalClient() (*local.Client, error) {
 
 // ReachableAddr returns the Tailscale IP address of this tsnet server.
 // Regular DNS cannot resolve tsnet hostnames (e.g., "myhost-1"), so peers
-// must use the Tailscale IP for sync connections. Falls back to the
-// configured hostname if the IP cannot be determined.
+// must use the Tailscale IP for sync connections. Retries up to 10 times
+// (1s apart) to allow newly started tsnet nodes to obtain their IP.
+// Falls back to the configured hostname only if all retries fail.
 func (t *TsnetListener) ReachableAddr(configuredHostname string) string {
 	lc, err := t.server.LocalClient()
 	if err != nil {
 		return configuredHostname
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	st, err := lc.StatusWithoutPeers(ctx)
-	if err != nil {
-		return configuredHostname
+
+	for attempt := 0; attempt < 10; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		st, err := lc.StatusWithoutPeers(ctx)
+		cancel()
+		if err == nil && st.Self != nil && len(st.Self.TailscaleIPs) > 0 {
+			return st.Self.TailscaleIPs[0].String()
+		}
+		if attempt < 9 {
+			time.Sleep(1 * time.Second)
+		}
 	}
-	// Use the first Tailscale IP (typically the IPv4 address like 100.x.y.z)
-	if st.Self != nil && len(st.Self.TailscaleIPs) > 0 {
-		return st.Self.TailscaleIPs[0].String()
-	}
+
 	return configuredHostname
 }
 
