@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -213,7 +214,9 @@ func (r *PeerRegistry) RemoveStalePeers(timeout time.Duration) int {
 	}
 
 	if removed > 0 {
-		_ = r.saveLocked()
+		if err := r.saveLocked(); err != nil {
+			log.Printf("peer_registry: failed to save after removing stale peers: %v", err)
+		}
 	}
 	return removed
 }
