@@ -40,6 +40,14 @@ func (m *MessageMap) Store(chatID int64, teleMsgID int, thrumMsgID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// If key already exists, update the mapping without appending to order
+	if oldThrumID, exists := m.teleToThrum[key]; exists {
+		delete(m.thrumToTele, oldThrumID)
+		m.teleToThrum[key] = thrumMsgID
+		m.thrumToTele[thrumMsgID] = key
+		return
+	}
+
 	// Evict oldest if at capacity
 	if len(m.order) >= m.maxSize {
 		oldest := m.order[0]

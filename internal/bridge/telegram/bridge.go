@@ -34,20 +34,14 @@ func New(cfg config.TelegramConfig, wsPort string) *Bridge {
 // Run starts the bridge. Blocks until ctx is cancelled.
 // Designed to be called as: go bridge.Run(ctx)
 //
-// The goroutine recovers from panics to avoid crashing the daemon.
+// Panics are recovered and treated as transient errors (triggers retry).
 // Transient errors cause a 5s backoff before retrying.
 func (b *Bridge) Run(ctx context.Context) {
-	defer func() {
-		if r := recover(); r != nil {
-			b.logger.Printf("PANIC (recovered): %v", r)
-		}
-	}()
-
 	b.logger.Println("starting...")
 	defer b.logger.Println("stopped")
 
 	for {
-		err := b.run(ctx)
+		err := b.runWithRecover(ctx)
 		if ctx.Err() != nil {
 			return // Clean shutdown
 		}
@@ -58,6 +52,18 @@ func (b *Bridge) Run(ctx context.Context) {
 		case <-time.After(5 * time.Second):
 		}
 	}
+}
+
+// runWithRecover wraps run() with panic recovery, converting panics to errors
+// so the retry loop in Run() can restart the bridge.
+func (b *Bridge) runWithRecover(ctx context.Context) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			b.logger.Printf("PANIC (recovered): %v", r)
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
+	return b.run(ctx)
 }
 
 func (b *Bridge) run(ctx context.Context) error {
@@ -111,15 +117,25 @@ func (b *Bridge) run(ctx context.Context) error {
 	inbound := NewInboundRelay(ws, msgMap, userID, b.cfg.Target)
 	outbound := NewOutboundRelay(ws, bot, msgMap, userID, b.cfg.ChatID)
 
-	// 6. Start sub-goroutines
-	go bot.Poll(ctx)
-	go outbound.Run(ctx)
-	go b.heartbeatLoop(ctx, ws, sess.SessionID)
+	// 6. Start sub-goroutines (each with panic recovery)
+	go b.safeGo("bot.Poll", func() { bot.Poll(ctx) })
+	go b.safeGo("outbound.Run", func() { outbound.Run(ctx) })
+	go b.safeGo("heartbeat", func() { b.heartbeatLoop(ctx, ws, sess.SessionID) })
 
 	// 7. Process inbound messages (main loop for this goroutine)
 	b.logger.Printf("connected (user: %s, target: %s, token: %s...)", userID, b.cfg.Target, b.cfg.MaskedToken())
 	inbound.Run(ctx, bot.Messages())
 	return nil
+}
+
+// safeGo runs fn with panic recovery, logging any panics.
+func (b *Bridge) safeGo(name string, fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			b.logger.Printf("PANIC in %s (recovered): %v", name, r)
+		}
+	}()
+	fn()
 }
 
 func (b *Bridge) heartbeatLoop(ctx context.Context, ws *WSClient, sessionID string) {

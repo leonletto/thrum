@@ -53,13 +53,14 @@ type rpcResponse struct {
 // Thrum daemon's WS server. It sends RPC calls and receives BroadcastAll
 // notifications (e.g. notification.message).
 type WSClient struct {
-	conn     *websocket.Conn
-	url      string
-	nextID   atomic.Int64
-	pending  map[int64]chan rpcResponse
-	notifyCh chan Notification
-	mu       sync.Mutex
-	done     chan struct{}
+	conn      *websocket.Conn
+	url       string
+	nextID    atomic.Int64
+	pending   map[int64]chan rpcResponse
+	notifyCh  chan Notification
+	mu        sync.Mutex // guards pending map
+	writeMu   sync.Mutex // guards conn.WriteMessage (gorilla allows one concurrent writer)
+	done      chan struct{}
 	closeOnce sync.Once
 }
 
@@ -170,8 +171,11 @@ func (c *WSClient) Call(ctx context.Context, method string, params any) (json.Ra
 		c.mu.Unlock()
 	}()
 
-	if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
-		return nil, fmt.Errorf("write RPC request: %w", err)
+	c.writeMu.Lock()
+	writeErr := c.conn.WriteMessage(websocket.TextMessage, data)
+	c.writeMu.Unlock()
+	if writeErr != nil {
+		return nil, fmt.Errorf("write RPC request: %w", writeErr)
 	}
 
 	select {
