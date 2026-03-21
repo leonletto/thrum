@@ -322,6 +322,12 @@ func TestDefaultPreambleContent(t *testing.T) {
 		".thrum/strategies/sub-agent-strategy.md",
 		".thrum/strategies/thrum-registration.md",
 		".thrum/strategies/resume-after-context-loss.md",
+		"Operating Principles",
+		"Startup Protocol",
+		"Anti-Patterns",
+		"Deaf Agent",
+		"Silent Agent",
+		"Context Hog",
 	} {
 		if !strings.Contains(s, keyword) {
 			t.Errorf("DefaultPreamble missing keyword %q", keyword)
