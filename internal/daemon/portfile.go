@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
@@ -23,6 +24,39 @@ const DefaultPortRangeMin = 9000
 
 // DefaultPortRangeMax is the default maximum port for WebSocket server.
 const DefaultPortRangeMax = 9999
+
+// TsnetPortRangeMin is the minimum port for randomized tsnet listener.
+const TsnetPortRangeMin = 9100
+
+// TsnetPortRangeMax is the maximum port for randomized tsnet listener.
+const TsnetPortRangeMax = 9200
+
+// FindRandomAvailablePort picks a random available TCP port in the specified range.
+// It shuffles the range and returns the first available port.
+func FindRandomAvailablePort(minPort, maxPort int) (int, error) {
+	if minPort > maxPort {
+		return 0, fmt.Errorf("invalid port range: min (%d) > max (%d)", minPort, maxPort)
+	}
+	if minPort < 1 || maxPort > 65535 {
+		return 0, fmt.Errorf("port range must be between 1 and 65535")
+	}
+
+	// Build and shuffle port list
+	ports := make([]int, maxPort-minPort+1)
+	for i := range ports {
+		ports[i] = minPort + i
+	}
+	rand.Shuffle(len(ports), func(i, j int) {
+		ports[i], ports[j] = ports[j], ports[i]
+	})
+
+	for _, port := range ports {
+		if isPortAvailable(port) {
+			return port, nil
+		}
+	}
+	return 0, fmt.Errorf("no available port in range %d-%d", minPort, maxPort)
+}
 
 // FindAvailablePort finds an available TCP port in the specified range.
 // It tries ports starting from minPort until maxPort, returning the first available port.

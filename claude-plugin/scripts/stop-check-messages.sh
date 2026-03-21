@@ -29,7 +29,7 @@ existing=$(cd "$PROJECT_DIR" && thrum inbox --unread --json 2>/dev/null)
 if [ $? -eq 0 ] && [ -n "$existing" ]; then
   msg_count=$(echo "$existing" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('messages',[])))" 2>/dev/null || echo "0")
   if [ "$msg_count" -gt 0 ]; then
-    echo "ACTION REQUIRED: You have $msg_count unread message(s). Run \`thrum inbox --unread\` now to read and respond to them." >&2
+    echo "ACTION REQUIRED: You have $msg_count unread message(s). Run \`thrum inbox --unread\` now to read and respond to them. Then run \`thrum message read --all\` to mark them read so this hook doesn't fire again on old messages." >&2
     exit 2
   fi
 fi

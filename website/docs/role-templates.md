@@ -73,6 +73,8 @@ Every role template follows the same section structure:
 
 ## Idle Behavior
 
+## Anti-Patterns
+
 ## Project-Specific Rules
 ```
 
@@ -90,6 +92,16 @@ Reference templates in `toolkit/templates/roles/`:
 | `planner-autonomous.md`     | Can create issues and break down epics           |
 | `researcher-strict.md`      | Read-only, responds to research requests         |
 | `researcher-autonomous.md`  | Can proactively research when idle               |
+| `reviewer-strict.md`        | Reviews only assigned PRs/changes                |
+| `reviewer-autonomous.md`    | Can pick up review requests proactively          |
+| `tester-strict.md`          | Runs tests on request, reports results           |
+| `tester-autonomous.md`      | Can proactively run tests on changed files       |
+| `deployer-strict.md`        | Deploys only on explicit coordinator approval    |
+| `deployer-autonomous.md`    | Can deploy to non-production environments freely |
+| `documenter-strict.md`      | Documents only assigned areas                    |
+| `documenter-autonomous.md`  | Can proactively update docs when code changes    |
+| `monitor-strict.md`         | Reports alerts, takes no remediation action      |
+| `monitor-autonomous.md`     | Can restart services and open issues on alerts   |
 
 ## CLI Commands
 

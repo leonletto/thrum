@@ -52,7 +52,7 @@ func newRoutingTestEnv(t *testing.T) *routingTestEnv {
 	socketPath := filepath.Join(varDir, "thrum.sock")
 	repoID := "test-repo-123"
 
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580 440" width="580" height="440" role="img" aria-label="Thrum architecture diagram">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580 520" width="580" height="520" role="img" aria-label="Thrum architecture diagram">
   <title>Thrum Architecture</title>
   <defs>
     <style>
@@ -55,6 +55,15 @@
       }
       .box-remote text { fill: #a78bfa; }
 
+      /* External box — rose */
+      .box-external rect {
+        fill: rgba(251, 113, 133, 0.07);
+        stroke: rgba(251, 113, 133, 0.3);
+        stroke-width: 1;
+        rx: 4;
+      }
+      .box-external text { fill: #fb7185; }
+
       /* Connector lines and arrow labels */
       .connector {
         stroke: #334155;
@@ -62,10 +71,15 @@
         fill: none;
         stroke-dasharray: none;
       }
+      .connector-dashed {
+        stroke: #334155;
+        stroke-width: 1;
+        fill: none;
+        stroke-dasharray: 4 3;
+      }
       .arrow-label { fill: #64748b; }
 
       /* ── Light mode overrides (applied via CSS on the page) ── */
-      /* These selectors only work when the SVG is inlined in the HTML. */
       html[data-theme="light"] .box-client rect {
         fill: rgba(8, 145, 178, 0.08);
         stroke: rgba(8, 145, 178, 0.35);
@@ -90,7 +104,14 @@
       }
       html[data-theme="light"] .box-remote text { fill: #6d28d9; }
 
+      html[data-theme="light"] .box-external rect {
+        fill: rgba(225, 29, 72, 0.07);
+        stroke: rgba(225, 29, 72, 0.25);
+      }
+      html[data-theme="light"] .box-external text { fill: #be123c; }
+
       html[data-theme="light"] .connector { stroke: #94a3b8; }
+      html[data-theme="light"] .connector-dashed { stroke: #94a3b8; }
       html[data-theme="light"] .arrow-label { fill: #64748b; }
     </style>
 
@@ -153,6 +174,16 @@
   </g>
 
   <!-- ═══════════════════════════════════════════════════
+       EXTERNAL: Telegram Bridge (dashed, left side)
+       ═══════════════════════════════════════════════════ -->
+  <g class="box-external">
+    <rect x="28" y="98" width="28" height="90" rx="4"/>
+    <text class="arch-text" x="42" y="147" text-anchor="middle" transform="rotate(-90 42 147)" font-size="9">Telegram</text>
+  </g>
+  <line class="connector-dashed" x1="56" y1="148" x2="155" y2="162" marker-end="url(#arrowhead)"/>
+  <text class="arch-arrow-text arrow-label" x="100" y="142" text-anchor="middle" font-size="8">BRIDGE</text>
+
+  <!-- ═══════════════════════════════════════════════════
        CONNECTOR: Daemon → Storage
        ═══════════════════════════════════════════════════ -->
   <line class="connector" x1="290" y1="188" x2="290" y2="215" marker-end="url(#arrowhead)"/>
@@ -206,5 +237,18 @@
     <text class="arch-text" x="290" y="358" text-anchor="middle" font-size="12" font-weight="500">Remote</text>
     <text class="arch-label" x="290" y="377" text-anchor="middle">a-sync branch</text>
   </g>
+
+  <!-- ═══════════════════════════════════════════════════
+       ROW 5: Remote Machine via Tailscale (dashed)
+       ═══════════════════════════════════════════════════ -->
+  <g class="box-remote">
+    <rect x="120" y="430" width="340" height="52" rx="4"/>
+    <text class="arch-text" x="290" y="452" text-anchor="middle" font-size="12" font-weight="500">Remote Machine</text>
+    <text class="arch-label" x="290" y="471" text-anchor="middle">Thrum Daemon + Agents</text>
+  </g>
+
+  <!-- Tailscale connector (dashed) from Remote to Remote Machine -->
+  <line class="connector-dashed" x1="290" y1="388" x2="290" y2="428" marker-end="url(#arrowhead)"/>
+  <text class="arch-arrow-text arrow-label" x="290" y="414" text-anchor="middle">Tailscale P2P</text>
 
 </svg>

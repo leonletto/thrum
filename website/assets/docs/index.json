@@ -314,6 +314,22 @@
     "lastUpdated": "2026-03-13"
   },
   {
+    "path": "telegram-bridge.html",
+    "title": "Telegram Bridge",
+    "description": "Bidirectional Telegram integration — relay messages between Telegram and Thrum agents via a bridge goroutine inside the daemon",
+    "category": "guides",
+    "order": 12,
+    "tags": [
+      "telegram",
+      "bridge",
+      "messaging",
+      "mobile",
+      "notifications",
+      "integration"
+    ],
+    "lastUpdated": "2026-03-20"
+  },
+  {
     "path": "claude-agent-integration.html",
     "title": "Claude Code Agent Integration",
     "description": "Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup",

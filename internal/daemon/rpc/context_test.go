@@ -16,7 +16,7 @@ func setupContextTest(t *testing.T) (*ContextHandler, string) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -325,6 +325,59 @@ func TestHandlePreambleShow(t *testing.T) {
 	}
 	if string(resp.Content) != string(content) {
 		t.Errorf("content mismatch: got %q, want %q", resp.Content, content)
+	}
+}
+
+func TestContextHandleSaveWorktreeRepoPath(t *testing.T) {
+	handler, _ := setupContextTest(t)
+
+	// Create a separate temp directory to act as a worktree
+	worktreeDir := t.TempDir()
+
+	req := ContextSaveRequest{
+		AgentName: "wt_agent",
+		Content:   []byte("worktree context"),
+		RepoPath:  worktreeDir,
+	}
+	reqJSON, _ := json.Marshal(req)
+
+	_, err := handler.HandleSave(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("HandleSave error: %v", err)
+	}
+
+	// File should be written to the worktree's .thrum/context/, not the daemon's
+	data, err := os.ReadFile(filepath.Join(worktreeDir, ".thrum", "context", "wt_agent.md")) //nolint:gosec // G304 - test helper reading temp file
+	if err != nil {
+		t.Fatalf("context file not found in worktree path: %v", err)
+	}
+	if string(data) != "worktree context" {
+		t.Errorf("content mismatch: got %q", data)
+	}
+}
+
+func TestContextHandleSaveDefaultRepoPath(t *testing.T) {
+	handler, thrumDir := setupContextTest(t)
+
+	// No RepoPath in request — should fall back to daemon's repo path
+	req := ContextSaveRequest{
+		AgentName: "default_agent",
+		Content:   []byte("default context"),
+	}
+	reqJSON, _ := json.Marshal(req)
+
+	_, err := handler.HandleSave(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("HandleSave error: %v", err)
+	}
+
+	// File should be written under the daemon's thrumDir (which IS the .thrum dir in setupContextTest)
+	data, err := os.ReadFile(filepath.Join(thrumDir, "context", "default_agent.md")) //nolint:gosec // G304 - test helper reading temp file
+	if err != nil {
+		t.Fatalf("context file not found at default path: %v", err)
+	}
+	if string(data) != "default context" {
+		t.Errorf("content mismatch: got %q", data)
 	}
 }
 

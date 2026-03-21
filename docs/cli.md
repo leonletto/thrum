@@ -1,3 +1,4 @@
+
 ## Thrum CLI Reference
 
 > **TL;DR:** You only need 8 commands for daily use — they're in the
@@ -51,6 +52,10 @@ for AI agent coordination.
 | `thrum context prime`      | Collect all context for session initialization       |
 | `thrum runtime`            | Manage runtime presets (list, show, set-default)     |
 | `thrum peer`               | Manage Tailscale peers                               |
+| `thrum telegram configure` | Configure the Telegram bridge (interactive or flags) |
+| `thrum telegram status`    | Show Telegram bridge connection status and config    |
+| `thrum roles list`         | List role templates and matching agents              |
+| `thrum roles deploy`       | Re-render agent preambles from role templates        |
 | `thrum config`             | Manage configuration (show, init)                    |
 | `thrum group create`       | Create a named group                                 |
 | `thrum group delete`       | Delete a group                                       |
@@ -1696,6 +1701,99 @@ Notes:
 
 - Daemon must be restarted for schedule changes to take effect
 - Intervals use Go duration format: `24h`, `12h`, `6h30m`, `168h` (1 week)
+
+## Role Templates
+
+### thrum roles list
+
+List all role templates and show which registered agents match each template.
+
+```text
+thrum roles list
+```
+
+### thrum roles deploy
+
+Re-render agent preambles from role templates. By default deploys for all
+agents. Use `--agent` to target a single agent, and `--dry-run` to preview
+changes without writing files.
+
+```text
+thrum roles deploy [flags]
+```
+
+| Flag        | Description                           | Default |
+| ----------- | ------------------------------------- | ------- |
+| `--agent`   | Deploy for a specific agent only      |         |
+| `--dry-run` | Preview changes without writing files | `false` |
+
+Example:
+
+```text
+$ thrum roles list
+Role Templates:
+  implementer   → 2 agents (alice, bob)
+  reviewer      → 1 agent  (carol)
+  coordinator   → 1 agent  (dave)
+
+$ thrum roles deploy --dry-run
+[dry-run] Would update preamble for alice (implementer)
+[dry-run] Would update preamble for bob (implementer)
+[dry-run] Would update preamble for carol (reviewer)
+[dry-run] Would update preamble for dave (coordinator)
+
+$ thrum roles deploy --agent alice
+✓ Deployed preamble for alice (implementer)
+```
+
+## Telegram
+
+### thrum telegram configure
+
+Configure the Telegram bridge. When all flags are provided with `--yes`, runs
+non-interactively. When flags are omitted, runs in interactive mode and prompts
+for each value.
+
+```text
+thrum telegram configure [flags]
+```
+
+| Flag       | Description                    | Default |
+| ---------- | ------------------------------ | ------- |
+| `--token`  | Telegram bot token             |         |
+| `--target` | Target chat ID or username     |         |
+| `--user`   | Telegram username to associate |         |
+| `--yes`    | Skip confirmation prompt       | `false` |
+
+Example:
+
+```text
+# Interactive mode (prompts for each value)
+$ thrum telegram configure
+
+# Non-interactive
+$ thrum telegram configure --token 123456:ABC-DEF --target @mychat --user alice --yes
+✓ Telegram bridge configured
+```
+
+### thrum telegram status
+
+Show the current Telegram bridge connection status and configuration.
+
+```text
+thrum telegram status
+```
+
+Example:
+
+```text
+$ thrum telegram status
+Telegram Bridge
+  Status:  connected
+  Bot:     @my_thrum_bot
+  Target:  @mychat
+  User:    alice
+```
 
 ## MCP Server
 

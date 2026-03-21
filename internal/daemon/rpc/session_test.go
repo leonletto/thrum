@@ -18,7 +18,7 @@ func TestSessionStart(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestSessionEnd(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestSessionCrashRecovery(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestSessionHeartbeat(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -587,7 +587,7 @@ func TestHeartbeat_WorkContext(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_456")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_456", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -691,7 +691,7 @@ func TestHeartbeat_NoWorktreeRef(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_789")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_789", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -801,7 +801,7 @@ func TestSetIntent(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_setintent")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_setintent", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -915,7 +915,7 @@ func TestSetTask(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_settask")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_settask", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -1054,7 +1054,7 @@ func TestSessionList(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_list")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_list", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -1325,7 +1325,7 @@ func TestSessionSetIntent(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_setintent2")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_setintent2", "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

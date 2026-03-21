@@ -1,4 +1,5 @@
 import { useHealth, useNotificationState, useTheme } from '@thrum/shared-logic';
+import { TelegramSettings } from './TelegramSettings';
 
 /** Metadata for a single keyboard shortcut entry */
 interface ShortcutEntry {
@@ -117,6 +118,9 @@ export function SettingsView() {
             )}
           </div>
         </section>
+
+        {/* Telegram Bridge */}
+        <TelegramSettings />
 
         {/* Theme */}
         <section className="panel p-4">
