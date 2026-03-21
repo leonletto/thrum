@@ -146,7 +146,7 @@ func (b *Bridge) run(ctx context.Context) error {
 
 	// 3. Start session
 	sessResult, err := ws.Call(ctx, "session.start", map[string]any{
-		"caller_agent_id": userID,
+		"agent_id": userID,
 	})
 	if err != nil {
 		return fmt.Errorf("session.start: %w", err)
