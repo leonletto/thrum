@@ -20,3 +20,4 @@ export * from './useSession';
 export * from './useRealtimeMessages';
 export * from './useMessageBulk';
 export * from './useConversation';
+export * from './useTelegramConfig';
