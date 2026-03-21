@@ -1,4 +1,4 @@
-# Thrum v0.5.9
+# Thrum v0.6.0
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
 

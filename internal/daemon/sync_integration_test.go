@@ -35,7 +35,7 @@ func newTestDaemon(t *testing.T, name string) *testDaemon {
 		t.Fatalf("create thrum dir for %s: %v", name, err)
 	}
 
-	st, err := state.NewState(thrumDir, thrumDir, "r_"+name)
+	st, err := state.NewState(thrumDir, thrumDir, "r_"+name, "")
 	if err != nil {
 		t.Fatalf("create state for %s: %v", name, err)
 	}
@@ -355,16 +355,13 @@ func TestPullSyncEndToEnd_SyncManager(t *testing.T) {
 		t.Fatalf("create var dir: %v", err)
 	}
 
-	stB, err := state.NewState(thrumDir, thrumDir, "r_bob")
+	stB, err := state.NewState(thrumDir, thrumDir, "r_bob", "")
 	if err != nil {
 		t.Fatalf("create state B: %v", err)
 	}
 	t.Cleanup(func() { _ = stB.Close() })
 
-	syncMgr, err := NewDaemonSyncManager(stB, varDir)
-	if err != nil {
-		t.Fatalf("create sync manager: %v", err)
-	}
+	syncMgr := NewDaemonSyncManager(stB, createTestPeerRegistry(t))
 
 	// Create events on A
 	for i := 1; i <= 15; i++ {

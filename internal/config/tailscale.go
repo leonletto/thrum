@@ -3,6 +3,7 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -76,12 +77,12 @@ func loadEnvFile(paths ...string) {
 // root, giving the .thrum/.env file higher priority.
 //
 // Environment variables (can also be set via .env files):
-//   - THRUM_TS_ENABLED: "true"/"1" to enable (default: false)
-//   - THRUM_TS_HOSTNAME: tsnet hostname (required when enabled)
-//   - THRUM_TS_PORT: listener port (default: 9100)
-//   - THRUM_TS_AUTHKEY: Tailscale auth key (required when enabled)
+//   - THRUM_TS_AUTHKEY: Tailscale auth key (prompted on first peer add)
+//   - THRUM_TS_HOSTNAME: tsnet hostname (auto-derived if not set)
+//   - THRUM_TS_PORT: listener port (auto-randomized if not set)
 //   - THRUM_TS_STATE_DIR: state directory (default: .thrum/var/tsnet)
 //   - THRUM_TAILSCALE_CONTROL_URL: control plane URL (optional, for Headscale)
+//   - THRUM_TS_ENABLED: deprecated — Tailscale starts automatically when peers exist
 func LoadTailscaleConfig(thrumDir string) TailscaleConfig {
 	// Auto-detect .env files. repoRoot is the parent of thrumDir (.thrum).
 	repoRoot := filepath.Dir(thrumDir)
@@ -95,14 +96,20 @@ func LoadTailscaleConfig(thrumDir string) TailscaleConfig {
 		StateDir: fmt.Sprintf("%s/var/tsnet", thrumDir),
 	}
 
-	// Enabled
+	// THRUM_TS_ENABLED is deprecated — Tailscale is now enabled implicitly
+	// when peers.json has local.port or peer add is run.
 	if envBool("THRUM_TS_ENABLED") {
 		cfg.Enabled = true
+		log.Println("Note: THRUM_TS_ENABLED is deprecated and can be removed from .env. Tailscale starts automatically when peers are configured.")
 	}
 
-	// Hostname
+	// Hostname — auto-derive if not explicitly set
 	if h := os.Getenv("THRUM_TS_HOSTNAME"); h != "" {
 		cfg.Hostname = h
+	} else {
+		if h, err := os.Hostname(); err == nil {
+			cfg.Hostname = strings.ToLower(h) + "-thrum"
+		}
 	}
 
 	// Port
@@ -127,7 +134,8 @@ func LoadTailscaleConfig(thrumDir string) TailscaleConfig {
 }
 
 // Validate checks that the configuration is valid when enabled.
-// Returns nil if disabled or valid.
+// Returns nil if disabled or valid. Port 0 is valid (means not yet configured;
+// will be assigned on first peer add). Auth key is required only when Enabled.
 func (c *TailscaleConfig) Validate() error {
 	if !c.Enabled {
 		return nil
@@ -137,8 +145,8 @@ func (c *TailscaleConfig) Validate() error {
 		return fmt.Errorf("THRUM_TS_HOSTNAME is required when Tailscale sync is enabled")
 	}
 
-	if c.Port < 1 || c.Port > 65535 {
-		return fmt.Errorf("THRUM_TS_PORT must be between 1 and 65535, got %d", c.Port)
+	if c.Port < 0 || c.Port > 65535 {
+		return fmt.Errorf("THRUM_TS_PORT must be between 0 and 65535, got %d", c.Port)
 	}
 
 	if c.AuthKey == "" {
@@ -146,6 +154,47 @@ func (c *TailscaleConfig) Validate() error {
 	}
 
 	return nil
+}
+
+// SaveAuthKeyToEnvFile saves the Tailscale auth key to .thrum/.env.
+// If the file exists and already contains THRUM_TS_AUTHKEY, it is updated in place.
+// Otherwise, the key is appended. Uses atomic write.
+func SaveAuthKeyToEnvFile(thrumDir, authKey string) error {
+	envPath := filepath.Join(thrumDir, ".env")
+
+	var lines []string
+	found := false
+
+	// Read existing content if file exists
+	if data, err := os.ReadFile(envPath); err == nil { // #nosec G304 -- envPath is derived from repo root, not user input
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "THRUM_TS_AUTHKEY=") {
+				lines = append(lines, "THRUM_TS_AUTHKEY="+authKey)
+				found = true
+			} else {
+				lines = append(lines, line)
+			}
+		}
+	}
+
+	if !found {
+		lines = append(lines, "THRUM_TS_AUTHKEY="+authKey)
+	}
+
+	content := strings.Join(lines, "\n")
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+
+	// Atomic write
+	if err := os.MkdirAll(thrumDir, 0750); err != nil {
+		return fmt.Errorf("create thrum dir: %w", err)
+	}
+	tmpPath := envPath + ".tmp"
+	if err := os.WriteFile(tmpPath, []byte(content), 0600); err != nil { // #nosec G703 -- path derived from repo root
+		return fmt.Errorf("write env file: %w", err)
+	}
+	return os.Rename(tmpPath, envPath)
 }
 
 // envBool returns true if the env var is set to a truthy value ("true", "1", "yes").

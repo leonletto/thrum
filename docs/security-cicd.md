@@ -1,3 +1,4 @@
+
 ## Security & CI/CD
 
 Thrum uses GitHub Actions for continuous integration, security scanning, and

@@ -26,7 +26,7 @@ func newTestDaemonWithNotify(t *testing.T, name string, notifyHandler rpc.SyncTr
 		t.Fatalf("create thrum dir for %s: %v", name, err)
 	}
 
-	st, err := state.NewState(thrumDir, thrumDir, "r_"+name)
+	st, err := state.NewState(thrumDir, thrumDir, "r_"+name, "")
 	if err != nil {
 		t.Fatalf("create state for %s: %v", name, err)
 	}
@@ -105,10 +105,7 @@ func TestPushSync_EndToEndEventSync(t *testing.T) {
 	writeTestEvent(t, daemonA.state, "message.create")
 
 	// Create sync manager for daemon B
-	syncManager, err := NewDaemonSyncManager(daemonB.state, t.TempDir())
-	if err != nil {
-		t.Fatalf("create sync manager: %v", err)
-	}
+	syncManager := NewDaemonSyncManager(daemonB.state, createTestPeerRegistry(t))
 
 	// Add daemon A as a peer (use 127.0.0.1 since we're on localhost)
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
@@ -153,10 +150,7 @@ func TestPushSync_BroadcastNotifyAllPeers(t *testing.T) {
 	})
 
 	// Create sync manager for daemon A
-	syncManager, err := NewDaemonSyncManager(daemonA.state, t.TempDir())
-	if err != nil {
-		t.Fatalf("create sync manager: %v", err)
-	}
+	syncManager := NewDaemonSyncManager(daemonA.state, createTestPeerRegistry(t))
 
 	// Add both peers
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
@@ -195,10 +189,7 @@ func TestPushSync_EventWriteHookTriggersNotification(t *testing.T) {
 	})
 
 	// Create sync manager
-	syncManager, err := NewDaemonSyncManager(daemonA.state, t.TempDir())
-	if err != nil {
-		t.Fatalf("create sync manager: %v", err)
-	}
+	syncManager := NewDaemonSyncManager(daemonA.state, createTestPeerRegistry(t))
 
 	// Add peer
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
@@ -227,10 +218,7 @@ func TestPushSync_NotifyFailureDoesNotBlockWrite(t *testing.T) {
 	// Create daemon A with a hook that tries to notify an unreachable peer
 	daemonA := newTestDaemon(t, "daemon-a")
 
-	syncManager, err := NewDaemonSyncManager(daemonA.state, t.TempDir())
-	if err != nil {
-		t.Fatalf("create sync manager: %v", err)
-	}
+	syncManager := NewDaemonSyncManager(daemonA.state, createTestPeerRegistry(t))
 
 	// Add peer with unreachable address
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
@@ -267,10 +255,7 @@ func TestPushSync_PeriodicSyncCatchesMissedNotifications(t *testing.T) {
 	writeTestEvent(t, daemonA.state, "message.create")
 
 	// Create sync manager for daemon B
-	syncManager, err := NewDaemonSyncManager(daemonB.state, t.TempDir())
-	if err != nil {
-		t.Fatalf("create sync manager: %v", err)
-	}
+	syncManager := NewDaemonSyncManager(daemonB.state, createTestPeerRegistry(t))
 
 	// Add daemon A as peer
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
@@ -301,10 +286,7 @@ func TestPushSync_PeriodicSyncSkipsRecentlySynced(t *testing.T) {
 	writeTestEvent(t, daemonA.state, "message.create")
 
 	// Create sync manager for daemon B
-	syncManager, err := NewDaemonSyncManager(daemonB.state, t.TempDir())
-	if err != nil {
-		t.Fatalf("create sync manager: %v", err)
-	}
+	syncManager := NewDaemonSyncManager(daemonB.state, createTestPeerRegistry(t))
 
 	_ = syncManager.PeerRegistry().AddPeer(&PeerInfo{
 		DaemonID: daemonA.state.DaemonID(),

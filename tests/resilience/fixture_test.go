@@ -209,7 +209,7 @@ func startDaemonAt(t TB, thrumDir, socketPath string) (*state.State, *daemon.Ser
 
 	os.Remove(socketPath)
 
-	st, err := state.NewState(thrumDir, thrumDir, "test-resilience")
+	st, err := state.NewState(thrumDir, thrumDir, "test-resilience", "")
 	if err != nil {
 		t.Fatalf("NewState failed: %v", err)
 	}
@@ -247,7 +247,7 @@ func startDaemonManual(t *testing.T, thrumDir, agentName string) (*state.State, 
 
 	socketPath := shortSocketPath(t)
 
-	st, err := state.NewState(thrumDir, thrumDir, agentName)
+	st, err := state.NewState(thrumDir, thrumDir, agentName, "")
 	if err != nil {
 		t.Fatalf("NewState failed: %v", err)
 	}

@@ -133,16 +133,32 @@ func SavePreamble(thrumDir, agentName string, content []byte) error {
 func DefaultPreamble() []byte {
 	return []byte(`## Thrum Quick Reference
 
-**Check messages:** ` + "`thrum inbox --unread`" + ` (does not mark as read)
-**Check sent status:** ` + "`thrum sent --unread`" + ` (messages with unread recipients)
-**Mark all read:** ` + "`thrum message read --all`" + `
-**Send message:** ` + "`thrum send \"message\" --to @<agent_name>`" + ` — ALWAYS use the specific agent name (e.g., ` + "`@coordinator_main`" + `), NEVER the role (e.g., ` + "`@coordinator`" + `). Role names fan out to ALL agents with that role. Run ` + "`thrum team`" + ` to find exact names.
-**Reply:** ` + "`thrum reply <MSG_ID> \"response\"`" + `
-**Status:** ` + "`thrum status`" + `
-**Who's online:** ` + "`thrum team`" + `
-**Save context:** Use ` + "`/thrum:update-context`" + ` skill. **NEVER run ` + "`thrum context save`" + ` manually** — it overwrites accumulated session state.
+## Operating Principles
 
-## Background Message Listener
+1. **ALWAYS keep a background message listener running.** [LISTENER RULE #1]
+   Missing messages = broken coordination. Spawn on start, re-arm on every return.
+2. **Check inbox before starting work and at every breakpoint.**
+   ` + "`thrum inbox --unread`" + ` — never assume you have the full picture.
+3. **Send to agent NAMES, never role names.**
+   ` + "`thrum send \"msg\" --to @coordinator_main`" + ` not ` + "`--to @coordinator`" + `.
+   Role names fan out to ALL agents with that role. Run ` + "`thrum team`" + ` first.
+4. **Save context before compaction.**
+   Use ` + "`/thrum:update-context`" + ` skill. **NEVER run ` + "`thrum context save`" + ` manually** — it overwrites accumulated session state.
+
+## Startup Protocol
+
+1. Run ` + "`thrum prime`" + ` — get spawn command with correct repo path pre-filled
+2. Spawn background listener (re-arm every return — see below) [LISTENER RULE #2]
+3. Check inbox: ` + "`thrum inbox --unread`" + `
+4. Check team: ` + "`thrum team`" + `
+
+## Anti-Patterns
+
+` + "❌" + ` **Deaf Agent** — No listener running. You miss messages, block coordination, leave teammates waiting.
+` + "❌" + ` **Silent Agent** — Never sends status updates. Coordinator cannot track progress or unblock dependencies.
+` + "❌" + ` **Context Hog** — Reads entire files into context. Use ` + "`auggie-mcp codebase-retrieval`" + ` instead.
+
+## Background Message Listener [LISTENER RULE #2]
 
 ALWAYS keep a background listener running. Spawn on session start, re-arm every
 time it returns (both MESSAGES_RECEIVED and timeout). Run ` + "`thrum prime`" + ` to get the
@@ -164,7 +180,89 @@ Read these strategy files for operational patterns. They are in ` + "`.thrum/str
 - ` + "`.thrum/strategies/sub-agent-strategy.md`" + ` — When and how to delegate work to sub-agents
 - ` + "`.thrum/strategies/thrum-registration.md`" + ` — Registration, messaging, and coordination patterns
 - ` + "`.thrum/strategies/resume-after-context-loss.md`" + ` — How to resume work after compaction or session restart
+
+## Command Reference
+
+**Check messages:** ` + "`thrum inbox --unread`" + ` (does not mark as read)
+**Check sent status:** ` + "`thrum sent --unread`" + ` (messages with unread recipients)
+**Mark all read:** ` + "`thrum message read --all`" + `
+**Send message:** ` + "`thrum send \"message\" --to @<agent_name>`" + ` — ALWAYS use the specific agent name (e.g., ` + "`@coordinator_main`" + `), NEVER the role (e.g., ` + "`@coordinator`" + `). Role names fan out to ALL agents with that role. Run ` + "`thrum team`" + ` to find exact names.
+**Reply:** ` + "`thrum reply <MSG_ID> \"response\"`" + `
+**Status:** ` + "`thrum status`" + `
+**Who's online:** ` + "`thrum team`" + `
+
+` + "⚠" + ` **REMINDER: Is your listener running? If not, spawn it now.** [LISTENER RULE #3]
 `)
+}
+
+// RoleAwarePreamble returns a preamble with a role-specific behavioral header
+// prepended to the default preamble. For unknown roles, returns the default.
+func RoleAwarePreamble(role string) []byte {
+	header := roleHeader(role)
+	if header == "" {
+		return DefaultPreamble()
+	}
+	base := DefaultPreamble()
+	return append([]byte(header+"\n---\n\n"), base...)
+}
+
+// roleHeader returns a brief role-specific behavioral header for known roles,
+// or an empty string for unknown roles.
+func roleHeader(role string) string {
+	switch strings.ToLower(role) {
+	case "coordinator":
+		return "## Your Role: Coordinator\n\n" +
+			"You orchestrate the team. You dispatch tasks, review completions, and make\n" +
+			"decisions. You do NOT implement features — delegate to implementers. Your\n" +
+			"value is fast decisions that unblock agents, not perfect code written yourself.\n" +
+			"Reply to every message. Silence stalls your team."
+	case "implementer":
+		return "## Your Role: Implementer\n\n" +
+			"You build what you're assigned. Wait for tasks from your coordinator — do not\n" +
+			"self-assign work. Implement exactly what the task description says, test it,\n" +
+			"commit it, and report completion. Stay in your worktree. Do not touch files\n" +
+			"outside your scope."
+	case "planner":
+		return "## Your Role: Planner\n\n" +
+			"You design and plan. You create implementation plans, break epics into tasks,\n" +
+			"and write design documents. You do NOT write implementation code. Your output\n" +
+			"is plans and task descriptions detailed enough for implementers to execute\n" +
+			"without ambiguity."
+	case "researcher":
+		return "## Your Role: Researcher\n\n" +
+			"You investigate and report. When asked a question, you find the answer with\n" +
+			"evidence — file paths, line numbers, concrete data. You do NOT modify code.\n" +
+			"Your findings must be specific enough that the requester can act on them\n" +
+			"without re-investigating."
+	case "reviewer":
+		return "## Your Role: Reviewer\n\n" +
+			"You review code for correctness, security, and quality. You do NOT implement\n" +
+			"fixes — you identify issues and suggest solutions. Your findings must include\n" +
+			"file:line references and severity ratings. Be thorough but fair — push back\n" +
+			"on false positives."
+	case "tester":
+		return "## Your Role: Tester\n\n" +
+			"You write and run tests. You design test cases, implement test code, and\n" +
+			"verify that implementations meet their acceptance criteria. Report test\n" +
+			"results with specific pass/fail details and reproduction steps for failures."
+	case "deployer":
+		return "## Your Role: Deployer\n\n" +
+			"You handle deployment operations. You run builds, manage releases, and\n" +
+			"monitor deployment health. Follow runbooks exactly. Report deployment status\n" +
+			"and any issues immediately. Do not make ad-hoc changes — follow the process."
+	case "documenter":
+		return "## Your Role: Documenter\n\n" +
+			"You write documentation. You create, update, and organize docs based on\n" +
+			"the current state of the codebase. Your docs must be accurate, concise, and\n" +
+			"actionable. Verify code references are correct before writing about them."
+	case "monitor":
+		return "## Your Role: Monitor\n\n" +
+			"You watch system health and report anomalies. You check logs, metrics, and\n" +
+			"status endpoints. Report issues immediately with evidence. Do not attempt\n" +
+			"fixes — escalate to the coordinator with enough context for them to decide."
+	default:
+		return ""
+	}
 }
 
 // EnsurePreamble creates the default preamble file if it doesn't exist.

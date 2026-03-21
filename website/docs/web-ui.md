@@ -46,10 +46,21 @@ Three filter buttons sit at the top right:
 
 ![Messages-only filter applied to the activity feed](img/docs/ui-feed-messages-filter.png)
 
+## Conversation View
+
+The default inbox experience is the **Conversation UI** — a threaded chat
+timeline that feels like Slack or Telegram. The sidebar shows a
+**ConversationList** with one entry per agent you've exchanged messages with.
+Clicking an entry opens the **ConversationView**, which renders the full
+bidirectional message history in chronological order with sent and received
+messages on opposite sides.
+
+This is the default view shown on the dashboard when you open the inbox area.
+
 ## My Inbox
 
-Click **My Inbox** in the sidebar to see messages addressed to you. Three tabs
-across the top:
+**My Inbox** is the flat inbox view, still accessible via "My Inbox" in the
+sidebar. It shows all messages addressed to you with three tabs across the top:
 
 - **All** — everything in your inbox
 - **Unread** — messages you haven't opened (badge count shown)

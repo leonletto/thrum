@@ -21,7 +21,7 @@ func setupReplyTest(t *testing.T) (*MessageHandler, *state.State, string) {
 	}
 
 	repoID := "r_REPLYTEST1234"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}

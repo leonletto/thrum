@@ -14,11 +14,13 @@ import (
 	goruntime "runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/term"
 
 	"github.com/leonletto/thrum/internal/backup"
+	telegram "github.com/leonletto/thrum/internal/bridge/telegram"
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
@@ -146,6 +148,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(mcpCmd())
 	rootCmd.AddCommand(rolesCmd())
 	rootCmd.AddCommand(purgeCmd())
+	rootCmd.AddCommand(telegramCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -1907,18 +1910,47 @@ func peerCmd() *cobra.Command {
 Share this code with the person running 'thrum peer join' on the other machine.
 Blocks until a peer connects or the session times out (5 minutes).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Ensure auth key is available — prompt if missing
+			var pairingParams *cli.PeerStartPairingParams
+			authKey := os.Getenv("THRUM_TS_AUTHKEY")
+			if authKey == "" {
+				fmt.Print("Enter Tailscale auth key: ")
+				if _, err := fmt.Scanln(&authKey); err != nil {
+					return fmt.Errorf("failed to read auth key: %w", err)
+				}
+				authKey = strings.TrimSpace(authKey)
+				if authKey == "" {
+					return fmt.Errorf("auth key is required for Tailscale sync")
+				}
+				// Save to .thrum/.env for persistence
+				if flagRepo != "" {
+					thrumDir := filepath.Join(flagRepo, ".thrum")
+					if err := config.SaveAuthKeyToEnvFile(thrumDir, authKey); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: could not save auth key to .env: %v\n", err)
+					}
+				}
+				pairingParams = &cli.PeerStartPairingParams{AuthKey: authKey}
+			}
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("failed to connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.PeerStartPairing(client)
+			result, err := cli.PeerStartPairing(client, pairingParams)
 			if err != nil {
 				return err
 			}
 
-			fmt.Printf("Waiting for connection... Pairing code: %s\n", result.Code)
+			localHostname, _ := os.Hostname()
+			if result.Address != "" {
+				connStr := daemon.FormatPeercode(localHostname, result.Address, result.Code)
+				fmt.Printf("Waiting for connection...\nPairing code: %s\n\n", connStr)
+				fmt.Printf("Share this with the other machine:\n  thrum peer join --peercode %s\n\n", connStr)
+			} else {
+				fmt.Printf("Waiting for connection... Pairing code: %s\n", result.Code)
+			}
 
 			waitResult, err := cli.PeerWaitPairing(client)
 			if err != nil {
@@ -1935,43 +1967,72 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 		},
 	})
 
-	// thrum peer join <address> — connect to a remote peer
-	cmd.AddCommand(&cobra.Command{
-		Use:   "join <address>",
-		Short: "Join a remote peer by entering a pairing code",
-		Long: `Connects to a remote daemon at the given Tailscale address.
-Prompts for the 4-digit pairing code displayed on the other machine.`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			address := args[0]
+	// thrum peer join --peercode — connect to a remote peer using a connection string
+	var peerCode string
+	joinCmd := &cobra.Command{
+		Use:   "join [peercode]",
+		Short: "Join a remote peer using a peercode",
+		Long: `Connects to a remote peer using the peercode from 'thrum peer add'.
 
-			// Prompt for pairing code
-			fmt.Print("Enter pairing code: ")
-			var code string
-			if _, err := fmt.Scanln(&code); err != nil {
-				return fmt.Errorf("failed to read code: %w", err)
+Four input methods:
+  thrum peer join name:ip:port:code              (positional argument)
+  thrum peer join --peercode name:ip:port:code   (flag)
+  echo "name:ip:port:code" | thrum peer join     (piped via stdin)
+  thrum peer join                                 (interactive prompt)`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Resolve peercode: flag > positional arg > stdin > prompt
+			code := peerCode
+			if code == "" && len(args) > 0 {
+				code = strings.TrimSpace(args[0])
+			}
+			if code == "" {
+				stat, _ := os.Stdin.Stat()
+				if (stat.Mode() & os.ModeCharDevice) == 0 {
+					scanner := bufio.NewScanner(os.Stdin)
+					if scanner.Scan() {
+						code = strings.TrimSpace(scanner.Text())
+					}
+				}
+			}
+			if code == "" {
+				fmt.Print("Enter peercode: ")
+				var input string
+				if _, err := fmt.Scanln(&input); err != nil {
+					return fmt.Errorf("failed to read peercode: %w", err)
+				}
+				code = strings.TrimSpace(input)
 			}
 
+			name, ip, port, pairCode, err := daemon.ParseConnectionString(code)
+			if err != nil {
+				return err
+			}
+			_ = name // used by ParseConnectionString output only
+
+			address := fmt.Sprintf("%s:%d", ip, port)
 			client, err := getClient()
 			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
+				return fmt.Errorf("connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.PeerJoin(client, address, code)
+			result, err := cli.PeerJoin(client, address, pairCode)
 			if err != nil {
 				return err
 			}
 
 			if result.Status == "paired" {
-				fmt.Printf("Paired with %q. Syncing started.\n", result.PeerName)
+				fmt.Printf("Paired with %q. Syncing started.\n", name)
 			} else {
 				fmt.Printf("Pairing failed: %s\n", result.Message)
 			}
 
 			return nil
 		},
-	})
+	}
+	joinCmd.Flags().StringVar(&peerCode, "peercode", "", "Connection string from 'thrum peer add'")
+	cmd.AddCommand(joinCmd)
 
 	// thrum peer list — show all peers
 	cmd.AddCommand(&cobra.Command{
@@ -3426,6 +3487,8 @@ Examples:
 				agentID = flagAgent
 			}
 
+			absRepo, _ := filepath.Abs(flagRepo)
+
 			var content []byte
 			if flagFile != "" {
 				content, err = os.ReadFile(flagFile) // #nosec G304 -- flagFile is user-specified via CLI flag; this is a CLI tool, user controls the path
@@ -3449,6 +3512,7 @@ Examples:
 			if err := client.Call("context.save", rpc.ContextSaveRequest{
 				AgentName: agentID,
 				Content:   content,
+				RepoPath:  absRepo,
 			}, &resp); err != nil {
 				return err
 			}
@@ -3491,6 +3555,8 @@ Examples:
 				agentID = flagAgent
 			}
 
+			absRepo, _ := filepath.Abs(flagRepo)
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
@@ -3502,6 +3568,7 @@ Examples:
 			if err := client.Call("context.show", rpc.ContextShowRequest{
 				AgentName:       agentID,
 				IncludePreamble: &includePreamble,
+				RepoPath:        absRepo,
 			}, &resp); err != nil {
 				return err
 			}
@@ -3578,6 +3645,8 @@ Examples:
 				agentID = flagAgent
 			}
 
+			absRepo, _ := filepath.Abs(flagRepo)
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
@@ -3587,6 +3656,7 @@ Examples:
 			var resp rpc.ContextClearResponse
 			if err := client.Call("context.clear", rpc.ContextClearRequest{
 				AgentName: agentID,
+				RepoPath:  absRepo,
 			}, &resp); err != nil {
 				return err
 			}
@@ -3628,6 +3698,8 @@ Examples:
 				agentID = flagAgent
 			}
 
+			absRepo, _ := filepath.Abs(flagRepo)
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
@@ -3635,11 +3707,13 @@ Examples:
 			defer func() { _ = client.Close() }()
 
 			if flagInit {
-				// Reset to default preamble
+				// Reset to role-aware default preamble
+				role, _ := resolveLocalMentionRole()
 				var resp rpc.PreambleSaveResponse
 				if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
 					AgentName: agentID,
-					Content:   agentcontext.DefaultPreamble(),
+					Content:   agentcontext.RoleAwarePreamble(role),
+					RepoPath:  absRepo,
 				}, &resp); err != nil {
 					return err
 				}
@@ -3657,6 +3731,7 @@ Examples:
 				if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
 					AgentName: agentID,
 					Content:   data,
+					RepoPath:  absRepo,
 				}, &resp); err != nil {
 					return err
 				}
@@ -3668,6 +3743,7 @@ Examples:
 			var resp rpc.PreambleShowResponse
 			if err := client.Call("context.preamble.show", rpc.PreambleShowRequest{
 				AgentName: agentID,
+				RepoPath:  absRepo,
 			}, &resp); err != nil {
 				return err
 			}
@@ -4562,8 +4638,21 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	// Generate repo ID (use directory name for now)
 	repoID := filepath.Base(absPath)
 
+	// Create peer registry early so we can read the persistent daemon_id
+	peersFile := filepath.Join(varDir, "peers.json")
+	peerRegistry, err := daemon.NewPeerRegistry(peersFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to create peer registry: %v\n", err)
+	}
+
+	// Use persistent daemon_id from peers.json if available
+	var daemonID string
+	if peerRegistry != nil {
+		daemonID = peerRegistry.LocalDaemonID()
+	}
+
 	// Create state manager
-	st, err := state.NewState(thrumDir, syncDir, repoID)
+	st, err := state.NewState(thrumDir, syncDir, repoID, daemonID)
 	if err != nil {
 		return fmt.Errorf("failed to create state: %w", err)
 	}
@@ -4727,14 +4816,22 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	}
 
 	// Tailscale peer sync management
-	syncManager, err := daemon.NewDaemonSyncManager(st, varDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to create sync manager: %v\n", err)
+	var syncManager *daemon.DaemonSyncManager
+	if peerRegistry != nil {
+		syncManager = daemon.NewDaemonSyncManager(st, peerRegistry)
 	}
 
 	var pairingMgr *daemon.PairingManager
-	var tsLocalAddr string // set when Tailscale listener starts
+	var tsLocalAddr string           // set when Tailscale listener starts
+	var tsnetMu sync.Mutex           // protects tsLocalAddr and tsnetStarted
+	var startTsnetFn func(int) error // lazy tsnet start, assigned later
 	hostname, _ := os.Hostname()
+
+	getTsLocalAddr := func() string {
+		tsnetMu.Lock()
+		defer tsnetMu.Unlock()
+		return tsLocalAddr
+	}
 
 	if syncManager != nil {
 		// Hook into event writes to broadcast sync.notify to peers
@@ -4772,8 +4869,38 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		// --- Peer management RPCs (CLI: thrum peer add/join/list/remove/status) ---
 
 		// peer.start_pairing — begin pairing, return code
+		// Wrap to ensure port is selected before pairing starts.
+		startPairingFn := func(timeout time.Duration) (string, string, error) {
+			// Lazy port selection: pick a random port on first peer add
+			if peerRegistry.LocalPort() == 0 {
+				// THRUM_TS_PORT env override takes precedence
+				if p := os.Getenv("THRUM_TS_PORT"); p != "" {
+					if port, err := strconv.Atoi(p); err == nil {
+						if err := peerRegistry.SetLocalPort(port); err != nil {
+							return "", "", fmt.Errorf("set local port from env: %w", err)
+						}
+					}
+				} else {
+					port, err := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
+					if err != nil {
+						return "", "", fmt.Errorf("find available tsnet port: %w", err)
+					}
+					if err := peerRegistry.SetLocalPort(port); err != nil {
+						return "", "", fmt.Errorf("set local port: %w", err)
+					}
+				}
+			}
+			// Lazy tsnet start: start tsnet after port selection — fail if it can't start
+			if startTsnetFn != nil {
+				if err := startTsnetFn(peerRegistry.LocalPort()); err != nil {
+					return "", "", fmt.Errorf("start tailscale for peer add: %w", err)
+				}
+			}
+			code, err := pairingMgr.StartPairing(timeout)
+			return code, getTsLocalAddr(), err
+		}
 		server.RegisterHandler("peer.start_pairing",
-			rpc.NewPeerStartPairingHandler(pairingMgr.StartPairing).Handle)
+			rpc.NewPeerStartPairingHandler(startPairingFn).Handle)
 
 		// peer.wait_pairing — block until pairing completes or times out
 		waitFn := func(ctx context.Context) (peerName, peerAddr, peerDaemonID string, err error) {
@@ -4788,10 +4915,26 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 		// peer.join — send pairing code to remote peer
 		joinFn := func(peerAddr, code string) (peerName, peerDaemonID string, err error) {
-			if tsLocalAddr == "" {
+			// Lazy tsnet start for peer join (machine B may not have run peer add)
+			if startTsnetFn != nil && getTsLocalAddr() == "" {
+				if peerRegistry.LocalPort() == 0 {
+					port, portErr := daemon.FindRandomAvailablePort(daemon.TsnetPortRangeMin, daemon.TsnetPortRangeMax)
+					if portErr != nil {
+						return "", "", fmt.Errorf("find available tsnet port: %w", portErr)
+					}
+					if portErr := peerRegistry.SetLocalPort(port); portErr != nil {
+						return "", "", fmt.Errorf("set local port: %w", portErr)
+					}
+				}
+				if tsErr := startTsnetFn(peerRegistry.LocalPort()); tsErr != nil {
+					return "", "", fmt.Errorf("start tailscale for peer join: %w", tsErr)
+				}
+			}
+			localAddr := getTsLocalAddr()
+			if localAddr == "" {
 				return "", "", fmt.Errorf("tailscale not configured or not started")
 			}
-			peer, err := syncManager.JoinPeer(peerAddr, code, st.DaemonID(), hostname, tsLocalAddr)
+			peer, err := syncManager.JoinPeer(peerAddr, code, st.DaemonID(), hostname, localAddr)
 			if err != nil {
 				return "", "", err
 			}
@@ -4974,97 +5117,139 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	})
 
 	// Tailscale tsnet listener (optional — daemon works fine without it)
+	// Lazy start: tsnet starts only when peers exist (local.port > 0) or
+	// THRUM_TS_PORT is explicitly set. No more THRUM_TS_ENABLED gate.
 	tsCfg := config.LoadTailscaleConfig(thrumDir)
-	if tsCfg.Enabled {
-		if err := tsCfg.Validate(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Tailscale config invalid: %v (tsnet disabled)\n", err)
-		} else {
-			tsListener, tsErr := daemon.NewTsnetServer(tsCfg)
-			if tsErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to start tsnet: %v (tsnet disabled)\n", tsErr)
-			} else {
-				defer func() { _ = tsListener.Close() }()
+	var tsnetStarted bool
+	var tsListenerCleanup func()
 
-				// Create sync-only registry for Tailscale connections
-				syncRegistry := daemon.NewSyncRegistry()
-				if syncManager != nil {
-					syncRegistry.SetPeerRegistry(syncManager.PeerRegistry())
+	// startTsnet starts the tsnet listener on the given port. Safe to call
+	// concurrently — subsequent calls are no-ops after the first success.
+	startTsnet := func(port int) error {
+		tsnetMu.Lock()
+		defer tsnetMu.Unlock()
+		if tsnetStarted {
+			return nil
+		}
+		tsCfg.Port = port
+		tsCfg.Enabled = true
+		if tsCfg.Hostname == "" {
+			tsCfg.Hostname = hostname + "-thrum"
+		}
+		// Re-read auth key from env — may have been set by peer.start_pairing RPC
+		if tsCfg.AuthKey == "" {
+			tsCfg.AuthKey = os.Getenv("THRUM_TS_AUTHKEY")
+		}
+		if tsCfg.AuthKey == "" {
+			return fmt.Errorf("tailscale auth key not available — run 'thrum peer add' to configure")
+		}
+
+		tsListener, err := daemon.NewTsnetServer(tsCfg)
+		if err != nil {
+			return fmt.Errorf("start tsnet: %w", err)
+		}
+		tsListenerCleanup = func() { _ = tsListener.Close() }
+
+		// Create sync-only registry for Tailscale connections
+		syncRegistry := daemon.NewSyncRegistry()
+		if syncManager != nil {
+			syncRegistry.SetPeerRegistry(syncManager.PeerRegistry())
+		}
+
+		// Set Tailscale address so peer.join knows our reachable address.
+		// Use the Tailscale IP — regular DNS cannot resolve tsnet hostnames.
+		tsHost := tsListener.ReachableAddr(tsCfg.Hostname)
+		tsLocalAddr = fmt.Sprintf("%s:%d", tsHost, tsCfg.Port)
+
+		// Register sync handlers
+		syncPullHandler := rpc.NewSyncPullHandler(st)
+		syncPeerInfoHandler := rpc.NewPeerInfoHandler(st.DaemonID(), hostname)
+		_ = syncRegistry.Register("sync.pull", syncPullHandler.Handle)
+		_ = syncRegistry.Register("sync.peer_info", syncPeerInfoHandler.Handle)
+
+		if syncManager != nil {
+			syncNotifyHandler := rpc.NewSyncNotifyHandler(syncManager.SyncFromPeerByID)
+			_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
+		}
+		if pairingMgr != nil {
+			pairHandler := rpc.NewPairRequestHandler(pairingMgr.HandlePairRequest)
+			_ = syncRegistry.Register("pair.request", pairHandler.Handle)
+		}
+
+		// Accept loop for sync connections
+		go func() {
+			for {
+				conn, err := tsListener.Accept()
+				if err != nil {
+					return // Listener closed
 				}
-
-				// Set Tailscale address so peer.join knows our reachable address.
-				// Use the Tailscale IP from tsnet — regular DNS cannot resolve
-				// tsnet hostnames (e.g., "myhost-1"), so we use the IP directly.
-				tsHost := tsListener.ReachableAddr(tsCfg.Hostname)
-				tsLocalAddr = fmt.Sprintf("%s:%d", tsHost, tsCfg.Port)
-
-				// Register sync handlers
-				syncPullHandler := rpc.NewSyncPullHandler(st)
-				syncPeerInfoHandler := rpc.NewPeerInfoHandler(st.DaemonID(), hostname)
-
-				_ = syncRegistry.Register("sync.pull", syncPullHandler.Handle)
-				_ = syncRegistry.Register("sync.peer_info", syncPeerInfoHandler.Handle)
-
-				// Register sync.notify handler (triggers pull sync on notification)
-				if syncManager != nil {
-					syncNotifyHandler := rpc.NewSyncNotifyHandler(syncManager.SyncFromPeerByID)
-					_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
-				}
-
-				// Register pair.request handler (uses PairingManager created earlier)
-				if pairingMgr != nil {
-					pairHandler := rpc.NewPairRequestHandler(pairingMgr.HandlePairRequest)
-					_ = syncRegistry.Register("pair.request", pairHandler.Handle)
-				}
-
-				// Accept loop for sync connections
-				go func() {
-					for {
-						conn, err := tsListener.Accept()
-						if err != nil {
-							return // Listener closed
-						}
-
-						go func(c net.Conn) {
-							defer func() { _ = c.Close() }()
-							peerID := c.RemoteAddr().String()
-							syncRegistry.ServeSyncRPC(ctx, c, peerID)
-						}(conn)
-					}
-				}()
-
-				// Start periodic sync with Tailscale-optimized intervals
-				if syncManager != nil {
-					periodicSync := daemon.NewPeriodicSyncScheduler(syncManager, st)
-					periodicSync.SetInterval(daemon.TailscaleSyncInterval)
-					periodicSync.SetRecentThreshold(daemon.TailscaleRecentSyncThreshold)
-					go periodicSync.Start(ctx)
-				}
-
-				fmt.Fprintf(os.Stderr, "  Tailscale:   %s:%d\n", tsCfg.Hostname, tsCfg.Port)
-
-				// Wire Tailscale sync info into health handler
-				if syncManager != nil {
-					tsHostname := tsCfg.Hostname
-					healthHandler.SetTailscaleInfoProvider(func() *rpc.TailscaleSyncInfo {
-						count, peers := syncManager.TailscaleSyncStatus(tsHostname)
-						tsPeers := make([]rpc.TailscalePeer, len(peers))
-						for i, p := range peers {
-							tsPeers[i] = rpc.TailscalePeer{
-								DaemonID: p.DaemonID,
-								Name:     p.Name,
-								LastSync: p.LastSync,
-							}
-						}
-						return &rpc.TailscaleSyncInfo{
-							Enabled:        true,
-							Hostname:       tsHostname,
-							ConnectedPeers: count,
-							Peers:          tsPeers,
-							SyncStatus:     "idle",
-						}
-					})
-				}
+				go func(c net.Conn) {
+					defer func() { _ = c.Close() }()
+					peerID := c.RemoteAddr().String()
+					syncRegistry.ServeSyncRPC(ctx, c, peerID)
+				}(conn)
 			}
+		}()
+
+		// Start periodic sync with Tailscale-optimized intervals
+		if syncManager != nil {
+			periodicSync := daemon.NewPeriodicSyncScheduler(syncManager, st)
+			periodicSync.SetInterval(daemon.TailscaleSyncInterval)
+			periodicSync.SetRecentThreshold(daemon.TailscaleRecentSyncThreshold)
+			go periodicSync.Start(ctx)
+		}
+
+		fmt.Fprintf(os.Stderr, "  Tailscale:   %s:%d\n", tsCfg.Hostname, tsCfg.Port)
+
+		// Wire Tailscale sync info into health handler
+		if syncManager != nil {
+			tsHostname := tsCfg.Hostname
+			healthHandler.SetTailscaleInfoProvider(func() *rpc.TailscaleSyncInfo {
+				count, peers := syncManager.TailscaleSyncStatus(tsHostname)
+				tsPeers := make([]rpc.TailscalePeer, len(peers))
+				for i, p := range peers {
+					tsPeers[i] = rpc.TailscalePeer{
+						DaemonID: p.DaemonID,
+						Name:     p.Name,
+						LastSync: p.LastSync,
+					}
+				}
+				return &rpc.TailscaleSyncInfo{
+					Enabled:        true,
+					Hostname:       tsHostname,
+					ConnectedPeers: count,
+					Peers:          tsPeers,
+					SyncStatus:     "idle",
+				}
+			})
+		}
+
+		tsnetStarted = true
+		return nil
+	}
+	defer func() {
+		if tsListenerCleanup != nil {
+			tsListenerCleanup()
+		}
+	}()
+
+	// Wire startTsnet into the lazy start callback for peer.start_pairing
+	startTsnetFn = startTsnet
+
+	// Determine whether to start tsnet at boot.
+	// Priority: THRUM_TS_PORT env > peers.json local.port > skip (lazy start on peer add)
+	var tsBootPort int
+	if p := os.Getenv("THRUM_TS_PORT"); p != "" {
+		if port, err := strconv.Atoi(p); err == nil {
+			tsBootPort = port
+		}
+	} else if peerRegistry != nil && peerRegistry.LocalPort() > 0 {
+		tsBootPort = peerRegistry.LocalPort()
+	}
+
+	if tsBootPort > 0 {
+		if err := startTsnet(tsBootPort); err != nil {
+			fmt.Fprintf(os.Stderr, "Tailscale sync disabled: %v\n", err)
 		}
 	}
 
@@ -5117,6 +5302,18 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			go scheduler.Start(ctx)
 			fmt.Fprintf(os.Stderr, "  Backup:      every %s\n", backupInterval)
 		}
+	}
+
+	// Telegram bridge RPC handlers + goroutine
+	telegramHandler := rpc.NewTelegramHandler(absPath)
+	server.RegisterHandler("telegram.configure", telegramHandler.HandleConfigure)
+	server.RegisterHandler("telegram.status", telegramHandler.HandleStatus)
+
+	if thrumCfg.Telegram.TelegramEnabled() {
+		tgBridge := telegram.New(thrumCfg.Telegram, wsPort)
+		telegramHandler.SetBridge(tgBridge)
+		go tgBridge.Run(ctx)
+		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)
 	}
 
 	return lifecycle.Run(ctx)
@@ -5262,15 +5459,20 @@ func applyRolePreamble(thrumDir, agentName, role, preambleFile string, force boo
 		return nil
 	}
 
-	// Fall back to default preamble
+	// Fall back to role-aware default preamble
+	preamble := agentcontext.RoleAwarePreamble(role)
 	if force {
 		// Force mode: always overwrite with current default
-		if err := agentcontext.SavePreamble(thrumDir, agentName, agentcontext.DefaultPreamble()); err != nil {
+		if err := agentcontext.SavePreamble(thrumDir, agentName, preamble); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to save preamble: %v\n", err)
 		}
 	} else {
-		if err := agentcontext.EnsurePreamble(thrumDir, agentName); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
+		// Only write if no preamble exists yet
+		path := agentcontext.PreamblePath(thrumDir, agentName)
+		if _, err := os.Stat(path); os.IsNotExist(err) { // #nosec G703 -- path from PreamblePath, not user input
+			if err := agentcontext.SavePreamble(thrumDir, agentName, preamble); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
+			}
 		}
 	}
 	return nil
@@ -5877,3 +6079,256 @@ func runPluginRemove(name string) error {
 }
 
 // getWorktreeName extracts the worktree name from the repo path.
+
+func telegramCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "telegram",
+		Short: "Manage Telegram bridge",
+	}
+	cmd.AddCommand(telegramConfigureCmd())
+	cmd.AddCommand(telegramStatusCmd())
+	return cmd
+}
+
+func telegramConfigureCmd() *cobra.Command {
+	var flagToken, flagTarget, flagUser string
+	var flagYes bool
+
+	cmd := &cobra.Command{
+		Use:   "configure",
+		Short: "Configure the Telegram bridge",
+		Long: `Configure the Telegram bridge connection.
+
+Set the bot token from BotFather, the target agent that receives Telegram
+messages, and your Thrum user ID.
+
+Examples:
+  thrum telegram configure --token 123456789:AAH... --target @coordinator_main --user leon-letto
+  thrum telegram configure  # interactive mode`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTelegramConfigure(flagToken, flagTarget, flagUser, flagYes)
+		},
+	}
+
+	cmd.Flags().StringVar(&flagToken, "token", "", "Telegram bot token from BotFather")
+	cmd.Flags().StringVar(&flagTarget, "target", "", "Target agent for incoming messages (e.g., @coordinator_main)")
+	cmd.Flags().StringVar(&flagUser, "user", "", "Your Thrum username (e.g., leon-letto)")
+	cmd.Flags().BoolVar(&flagYes, "yes", false, "Skip confirmation prompts")
+
+	return cmd
+}
+
+func runTelegramConfigure(token, target, userID string, skipConfirm bool) error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	// Interactive prompts for missing fields
+	if token == "" {
+		if cfg.Telegram.Token != "" {
+			fmt.Printf("Current token: %s...\n", cfg.Telegram.MaskedToken())
+		}
+		fmt.Print("Bot token (from @BotFather): ")
+		if _, err := fmt.Scanln(&token); err != nil {
+			return fmt.Errorf("read token: %w", err)
+		}
+	}
+
+	// Validate token format: numeric:alphanumeric
+	if !isValidBotToken(token) {
+		return fmt.Errorf("invalid token format (expected: 123456789:AAH...)")
+	}
+
+	if target == "" {
+		target = "@coordinator_main"
+		fmt.Printf("Target agent [%s]: ", target)
+		var input string
+		if _, err := fmt.Scanln(&input); err == nil && input != "" {
+			target = input
+		}
+	}
+
+	// Validate target starts with @
+	if len(target) == 0 || target[0] != '@' {
+		return fmt.Errorf("target must start with @ (e.g., @coordinator_main)")
+	}
+
+	if userID == "" {
+		// Auto-detect from git config
+		userID = detectGitUser()
+		if userID != "" {
+			fmt.Printf("User ID [%s]: ", userID)
+			var input string
+			if _, err := fmt.Scanln(&input); err == nil && input != "" {
+				userID = input
+			}
+		} else {
+			fmt.Print("User ID (your Thrum username): ")
+			if _, err := fmt.Scanln(&userID); err != nil {
+				return fmt.Errorf("read user ID: %w", err)
+			}
+		}
+	}
+
+	if userID == "" {
+		return fmt.Errorf("user ID is required")
+	}
+
+	// Confirm if replacing existing token
+	if cfg.Telegram.Token != "" && !skipConfirm {
+		fmt.Printf("Existing token will be replaced (%s... → %s...)\n",
+			cfg.Telegram.MaskedToken(), maskToken(token))
+		fmt.Print("Continue? [y/N]: ")
+		var confirm string
+		_, _ = fmt.Scanln(&confirm)
+		if confirm != "y" && confirm != "Y" {
+			fmt.Println("Canceled.")
+			return nil
+		}
+	}
+
+	// Update config (preserve existing fields like AllowFrom, ChatID)
+	cfg.Telegram.Token = token
+	cfg.Telegram.Target = target
+	cfg.Telegram.UserID = userID
+
+	if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+
+	fmt.Printf("Telegram bridge configured:\n")
+	fmt.Printf("  Token:  %s...\n", maskToken(token))
+	fmt.Printf("  Target: %s\n", target)
+	fmt.Printf("  User:   %s\n", userID)
+	fmt.Println("\nRestart the daemon to apply: thrum daemon restart")
+
+	return nil
+}
+
+func telegramStatusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Show Telegram bridge status",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTelegramStatus()
+		},
+	}
+}
+
+func runTelegramStatus() error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	tg := cfg.Telegram
+
+	if flagJSON {
+		status := map[string]any{
+			"configured": tg.Token != "",
+			"enabled":    tg.TelegramEnabled(),
+			"target":     tg.Target,
+			"user_id":    tg.UserID,
+			"chat_id":    tg.ChatID,
+			"allow_all":  tg.AllowAll,
+		}
+		if tg.Token != "" {
+			status["token"] = tg.MaskedToken() + "..."
+		}
+		if len(tg.AllowFrom) > 0 {
+			status["allow_from"] = tg.AllowFrom
+		}
+		data, _ := json.MarshalIndent(status, "", "  ")
+		fmt.Println(string(data))
+		return nil
+	}
+
+	if tg.Token == "" {
+		fmt.Println("Telegram bridge: not configured")
+		fmt.Println("\nRun 'thrum telegram configure' to set up.")
+		return nil
+	}
+
+	fmt.Println("Telegram Bridge")
+	fmt.Println("───────────────")
+	fmt.Printf("  Token:   %s...\n", tg.MaskedToken())
+	fmt.Printf("  Target:  %s\n", tg.Target)
+	fmt.Printf("  User:    %s\n", tg.UserID)
+	if tg.ChatID != 0 {
+		fmt.Printf("  Chat ID: %d\n", tg.ChatID)
+	}
+
+	if tg.Enabled != nil && !*tg.Enabled {
+		fmt.Printf("  Enabled: no (explicitly disabled)\n")
+	} else {
+		fmt.Printf("  Enabled: yes\n")
+	}
+
+	// Access control
+	if tg.AllowAll {
+		fmt.Printf("  Access:  allow all\n")
+	} else if len(tg.AllowFrom) > 0 {
+		fmt.Printf("  Access:  %d allowed user(s)\n", len(tg.AllowFrom))
+	} else {
+		fmt.Printf("  Access:  block all (no AllowFrom configured)\n")
+	}
+
+	// Check daemon
+	wsPort := cli.ReadWebSocketPort(flagRepo)
+	if wsPort > 0 {
+		fmt.Printf("  Daemon:  running (port %d)\n", wsPort)
+	} else {
+		fmt.Printf("  Daemon:  not running\n")
+	}
+
+	return nil
+}
+
+func isValidBotToken(token string) bool {
+	// Token format: numeric_id:alphanumeric_secret
+	parts := strings.SplitN(token, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return false
+	}
+	for _, c := range parts[0] {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	for _, c := range parts[1] {
+		if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func maskToken(token string) string {
+	if len(token) <= 10 {
+		return token
+	}
+	return token[:10]
+}
+
+func detectGitUser() string {
+	out, err := exec.Command("git", "config", "user.name").Output() // #nosec G204 -- fixed command, no user input
+	if err != nil {
+		return ""
+	}
+	name := strings.TrimSpace(string(out))
+	// Convert "Leon Letto" → "leon-letto"
+	name = strings.ToLower(name)
+	name = strings.ReplaceAll(name, " ", "-")
+	return name
+}
