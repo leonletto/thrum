@@ -3691,11 +3691,12 @@ Examples:
 			defer func() { _ = client.Close() }()
 
 			if flagInit {
-				// Reset to default preamble
+				// Reset to role-aware default preamble
+				role, _ := resolveLocalMentionRole()
 				var resp rpc.PreambleSaveResponse
 				if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
 					AgentName: agentID,
-					Content:   agentcontext.DefaultPreamble(),
+					Content:   agentcontext.RoleAwarePreamble(role),
 				}, &resp); err != nil {
 					return err
 				}
