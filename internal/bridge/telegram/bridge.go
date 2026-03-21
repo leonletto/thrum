@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
@@ -16,10 +18,24 @@ import (
 // bidirectionally. The token lives in cfg.Token (within the embedded
 // TelegramConfig) and is passed to NewBot() on each restart cycle.
 // It is never logged beyond MaskedToken().
+// BridgeStatus contains the current runtime state of the bridge.
+type BridgeStatus struct {
+	Running      bool   `json:"running"`
+	ConnectedAt  string `json:"connected_at,omitempty"`
+	LastError    string `json:"error,omitempty"`
+	InboundCount int64  `json:"inbound_count"`
+}
+
 type Bridge struct {
-	cfg    config.TelegramConfig
-	wsPort string
-	logger *log.Logger
+	cfg       config.TelegramConfig
+	wsPort    string
+	logger    *log.Logger
+	mu        sync.Mutex
+	cancelRun context.CancelFunc // cancels the current run loop for restart
+	running   atomic.Bool
+	connectedAt time.Time
+	lastError   string
+	inboundCount atomic.Int64
 }
 
 // New creates a new Bridge. The token is read from cfg but not stored
@@ -29,6 +45,33 @@ func New(cfg config.TelegramConfig, wsPort string) *Bridge {
 		cfg:    cfg,
 		wsPort: wsPort,
 		logger: log.New(os.Stderr, "telegram bridge: ", log.LstdFlags),
+	}
+}
+
+// Status returns the current bridge runtime state.
+func (b *Bridge) Status() BridgeStatus {
+	s := BridgeStatus{
+		Running:      b.running.Load(),
+		InboundCount: b.inboundCount.Load(),
+	}
+	b.mu.Lock()
+	if !b.connectedAt.IsZero() {
+		s.ConnectedAt = b.connectedAt.Format(time.RFC3339)
+	}
+	s.LastError = b.lastError
+	b.mu.Unlock()
+	return s
+}
+
+// Restart cancels the current run loop and relaunches with new config.
+func (b *Bridge) Restart(newCfg config.TelegramConfig) {
+	b.mu.Lock()
+	b.cfg = newCfg
+	cancel := b.cancelRun
+	b.mu.Unlock()
+
+	if cancel != nil {
+		cancel() // triggers retry loop with new config
 	}
 }
 
@@ -42,10 +85,25 @@ func (b *Bridge) Run(ctx context.Context) {
 	defer b.logger.Println("stopped")
 
 	for {
-		err := b.runWithRecover(ctx)
+		// Create a child context for this run cycle (can be cancelled by Restart)
+		runCtx, runCancel := context.WithCancel(ctx)
+		b.mu.Lock()
+		b.cancelRun = runCancel
+		b.mu.Unlock()
+
+		err := b.runWithRecover(runCtx)
+		runCancel()
+
 		if ctx.Err() != nil {
-			return // Clean shutdown
+			return // Parent context done — clean shutdown
 		}
+
+		b.mu.Lock()
+		if err != nil {
+			b.lastError = err.Error()
+		}
+		b.mu.Unlock()
+
 		b.logger.Printf("restarting after error: %v", err)
 		select {
 		case <-ctx.Done():
@@ -125,10 +183,31 @@ func (b *Bridge) run(ctx context.Context) error {
 	go b.safeGo("outbound.Run", func() { outbound.Run(ctx) })
 	go b.safeGo("heartbeat", func() { b.heartbeatLoop(ctx, ws, sess.SessionID) })
 
-	// 7. Process inbound messages (main loop for this goroutine)
+	// 7. Track connection state and process inbound messages
+	b.running.Store(true)
+	b.mu.Lock()
+	b.connectedAt = time.Now()
+	b.lastError = ""
+	b.mu.Unlock()
+	defer b.running.Store(false)
+
 	b.logger.Printf("connected (user: %s, target: %s, token: %s...)", userID, b.cfg.Target, b.cfg.MaskedToken())
-	inbound.Run(ctx, bot.Messages())
-	return nil
+
+	// Main inbound loop — count messages
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case msg, ok := <-bot.Messages():
+			if !ok {
+				return nil
+			}
+			b.inboundCount.Add(1)
+			if err := inbound.relay(ctx, msg); err != nil {
+				b.logger.Printf("inbound relay error: %v", err)
+			}
+		}
+	}
 }
 
 // safeGo runs fn with panic recovery, logging any panics.
