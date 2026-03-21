@@ -3482,6 +3482,8 @@ Examples:
 				agentID = flagAgent
 			}
 
+			absRepo, _ := filepath.Abs(flagRepo)
+
 			var content []byte
 			if flagFile != "" {
 				content, err = os.ReadFile(flagFile) // #nosec G304 -- flagFile is user-specified via CLI flag; this is a CLI tool, user controls the path
@@ -3505,6 +3507,7 @@ Examples:
 			if err := client.Call("context.save", rpc.ContextSaveRequest{
 				AgentName: agentID,
 				Content:   content,
+				RepoPath:  absRepo,
 			}, &resp); err != nil {
 				return err
 			}
@@ -3547,6 +3550,8 @@ Examples:
 				agentID = flagAgent
 			}
 
+			absRepo, _ := filepath.Abs(flagRepo)
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
@@ -3558,6 +3563,7 @@ Examples:
 			if err := client.Call("context.show", rpc.ContextShowRequest{
 				AgentName:       agentID,
 				IncludePreamble: &includePreamble,
+				RepoPath:        absRepo,
 			}, &resp); err != nil {
 				return err
 			}
@@ -3634,6 +3640,8 @@ Examples:
 				agentID = flagAgent
 			}
 
+			absRepo, _ := filepath.Abs(flagRepo)
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
@@ -3643,6 +3651,7 @@ Examples:
 			var resp rpc.ContextClearResponse
 			if err := client.Call("context.clear", rpc.ContextClearRequest{
 				AgentName: agentID,
+				RepoPath:  absRepo,
 			}, &resp); err != nil {
 				return err
 			}
@@ -3684,6 +3693,8 @@ Examples:
 				agentID = flagAgent
 			}
 
+			absRepo, _ := filepath.Abs(flagRepo)
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
@@ -3697,6 +3708,7 @@ Examples:
 				if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
 					AgentName: agentID,
 					Content:   agentcontext.RoleAwarePreamble(role),
+					RepoPath:  absRepo,
 				}, &resp); err != nil {
 					return err
 				}
@@ -3714,6 +3726,7 @@ Examples:
 				if err := client.Call("context.preamble.save", rpc.PreambleSaveRequest{
 					AgentName: agentID,
 					Content:   data,
+					RepoPath:  absRepo,
 				}, &resp); err != nil {
 					return err
 				}
@@ -3725,6 +3738,7 @@ Examples:
 			var resp rpc.PreambleShowResponse
 			if err := client.Call("context.preamble.show", rpc.PreambleShowRequest{
 				AgentName: agentID,
+				RepoPath:  absRepo,
 			}, &resp); err != nil {
 				return err
 			}
