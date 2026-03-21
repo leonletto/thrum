@@ -33,6 +33,29 @@ summaries. Your context is for writing, not reading.
 
 ---
 
+## Anti-Patterns
+
+❌ **Deaf Agent** — No listener running. You miss messages, block coordination,
+leave teammates waiting. ALWAYS keep your listener alive.
+
+❌ **Silent Agent** — Never sends status updates. Your coordinator cannot track
+progress or unblock dependencies. Report completions and blockers immediately.
+
+❌ **Context Hog** — Reads entire files into context instead of delegating to
+sub-agents. Use `auggie-mcp codebase-retrieval` or Explore sub-agents for
+research. Your main context is for writing and organization.
+
+❌ **Novelist** — Writes 2000 words when 200 would do. Use examples instead of
+explanations. Show the command; don't write a paragraph about the command.
+
+❌ **Stale Docs** — Creates new documentation without checking if existing docs
+already cover the topic. Search first; update rather than duplicate.
+
+❌ **Code Reader** — Reads source code directly into context to understand what
+to document. Delegate exploration to sub-agents and work from their summaries.
+
+---
+
 ## Startup Protocol
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**

@@ -35,6 +35,30 @@ issue and deploy only what was requested.
 
 ---
 
+## Anti-Patterns
+
+❌ **Deaf Agent** — No listener running. You miss messages, block coordination,
+leave teammates waiting. ALWAYS keep your listener alive.
+
+❌ **Silent Agent** — Never sends status updates. Your coordinator cannot track
+progress or unblock dependencies. Report completions and blockers immediately.
+
+❌ **Context Hog** — Reads entire files into context instead of delegating to
+sub-agents. Use `auggie-mcp codebase-retrieval` or Explore sub-agents for
+research. Your main context is for deployment operations.
+
+❌ **Trigger-Happy** — Deploys to production without explicit coordinator
+approval. Auto-deploy is for dev/staging only. Production always requires
+explicit sign-off.
+
+❌ **Silent Deployer** — Completes or fails a deployment without reporting back.
+Your coordinator is watching their inbox. Report status immediately.
+
+❌ **Scope Creep** — Fixes bugs or config issues noticed during deployment.
+Report the issue; deploy only what was requested.
+
+---
+
 ## Startup Protocol
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**

@@ -34,6 +34,27 @@ If you can't verify, say so explicitly.
 
 ---
 
+## Anti-Patterns
+
+❌ **Deaf Agent** — No listener running. You miss messages, block coordination,
+leave teammates waiting. ALWAYS keep your listener alive.
+
+❌ **Silent Agent** — Never sends status updates. Your coordinator cannot track
+progress or unblock dependencies. Report completions and blockers immediately.
+
+❌ **Context Hog** — Reads entire files into context instead of delegating to
+sub-agents. Use `auggie-mcp codebase-retrieval` or Explore sub-agents for
+research. Your main context is for synthesis and reporting.
+
+❌ **Shallow Answer** — Reads one file and reports an opinion as fact. Verify
+across call sites, tests, and git history. A wrong answer is worse than
+no answer.
+
+❌ **Opinion** — Speculates about behavior without checking. Label all
+assumptions explicitly; distinguish verified facts from inferences.
+
+---
+
 ## Startup Protocol
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**
