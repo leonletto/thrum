@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-03-21
+
+### Added
+
+- **Telegram bridge** — Bidirectional messaging between Telegram and Thrum.
+  Bridge runs as an isolated WebSocket RPC client inside the daemon (no internal
+  imports — fail-closed security boundary). Inbound messages routed from
+  Telegram users to Thrum agents; outbound replies threaded back to the
+  originating Telegram chat. Access controlled via AllowFrom whitelist (empty
+  blocks all).
+  - `thrum telegram configure` — set bot token and allowed user IDs
+  - `thrum telegram status` — check bridge connection and config
+  - Per-user rate limiting on inbound messages
+  - PingHandler keeps WebSocket alive during idle periods
+- **Conversation UI** — Threaded conversation timeline replaces flat inbox as
+  default dashboard view. ConversationList sidebar with ConversationView chat
+  layout.
+- **Telegram settings panel** — Configure and monitor the Telegram bridge from
+  the Web UI with live status and token management.
+- **Role-aware preambles** — 9 built-in roles (coordinator, implementer,
+  reviewer, planner, tester, researcher, architect, documenter, analyst) get
+  role-specific preamble headers with Anti-Patterns sections. `thrum preamble
+  --init` is now role-aware.
+- **Behavioral anchoring in DefaultPreamble** — Rewritten with Operating
+  Principles, Startup Protocol, and Anti-Patterns (Deaf Agent, Silent Agent,
+  Context Hog) for stronger agent behavior.
+
+### Fixed
+
+- **Context RPC repo_path** — Context save/show RPCs now pass the worktree's
+  repo_path, fixing preamble and context files being written to the wrong
+  `.thrum/` directory in multi-worktree setups.
+- **Peer join positional arg** — `thrum peer join` now accepts peercode as a
+  positional argument in addition to `--peercode` flag, stdin pipe, and
+  interactive prompt. Fixes "flag needs an argument" error when piping.
+- **Stop hook message reminder** — Stop hook now reminds agents to mark messages
+  as read before session end.
+- **SettingsView test mocks** — Added missing Telegram hook mocks to UI test
+  suite.
+- **Resilience test timing** — Fixed flaky `TestTimeout_HandlerDeadlineEnforced`
+  benchmark by adding polling for handler context cancellation flag.
+
 ## [0.5.9] - 2026-03-18
 
 ### Added

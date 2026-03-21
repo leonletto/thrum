@@ -633,10 +633,20 @@ thrum backup plugin remove --name myplugin
 
 ```bash
 thrum peer add                                 # Start pairing (displays 4-digit code, blocks 5min)
-thrum peer join <address>                      # Join remote peer (prompts for code)
+thrum peer join [peercode]                     # Join remote peer
 thrum peer list                                # List paired peers
 thrum peer remove <name>                       # Remove a paired peer
 thrum peer status                              # Detailed sync status for all peers
+```
+
+`peer join` accepts the peercode (format: `name:ip:port:code`) via four input
+methods (tried in order): positional argument, `--peercode` flag, stdin pipe,
+interactive prompt.
+
+Flags:
+
+```text
+--peercode string   Peer connection code (format: name:ip:port:code)
 ```
 
 ---
@@ -690,6 +700,31 @@ thrum roles deploy --dry-run                   # Preview changes without writing
 --agent string   Deploy for a specific agent only
 --dry-run        Preview changes without writing files
 ```
+
+---
+
+## Telegram
+
+```bash
+thrum telegram configure                       # Interactive setup (prompts for token, target, user)
+thrum telegram configure --token <token> --target <chat-id> --user <username>
+thrum telegram configure --token <token> --target <chat-id> --user <username> --yes
+thrum telegram status                          # Show bridge connection status and config
+```
+
+`telegram configure` flags:
+
+```text
+--token string    Telegram bot token
+--target string   Target chat ID or username
+--user string     Telegram username to associate
+--yes             Skip confirmation prompt (non-interactive)
+```
+
+When flags are omitted, `configure` runs in interactive mode and prompts for
+each value.
+
+`telegram status` has no additional flags beyond globals.
 
 ---
 
