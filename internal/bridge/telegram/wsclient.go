@@ -87,7 +87,16 @@ func Dial(ctx context.Context, rawURL string) (*WSClient, error) {
 		done:     make(chan struct{}),
 	}
 
-	// Set up pong handler to reset read deadline on each pong received.
+	// Reset read deadline when we receive pings from the server (server pings
+	// every 54s). Without this, the client's 90s read deadline expires during
+	// idle periods and kills the connection.
+	conn.SetPingHandler(func(appData string) error {
+		// Reset read deadline on each server ping
+		_ = conn.SetReadDeadline(time.Now().Add(readDeadline))
+		// Send pong back (gorilla's default handler does this, but we replaced it)
+		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(10*time.Second))
+	})
+	// Also handle pongs (in case we send pings in the future).
 	conn.SetPongHandler(func(string) error {
 		return conn.SetReadDeadline(time.Now().Add(readDeadline))
 	})
