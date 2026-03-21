@@ -2,8 +2,11 @@
 node_modules/
 package-lock.json
 
-# Generated files
-assets/docs/
+# Generated files — HTML build output is gitignored except tracked metadata
+assets/docs/*
+!assets/docs/index.json
+!assets/docs/search-index.json
+!assets/docs/philosophy.html
 
 # OS files
 .DS_Store

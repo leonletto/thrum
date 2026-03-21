@@ -24,7 +24,7 @@ func TestMessageSend(t *testing.T) {
 
 	// Create state
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestMessageGet(t *testing.T) {
 
 	// Create state
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -632,7 +632,7 @@ func TestMessageList(t *testing.T) {
 
 	// Create state
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -946,7 +946,7 @@ func TestMessageDelete(t *testing.T) {
 
 	// Create state
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -1125,7 +1125,7 @@ func TestMessageEdit(t *testing.T) {
 
 	// Create state
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -1500,7 +1500,7 @@ func TestMessageMarkRead(t *testing.T) {
 
 	// Create state
 	repoID := "r_TEST12345678"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("failed to create state: %v", err)
 	}
@@ -1847,7 +1847,7 @@ func TestHandleSend_GroupScope(t *testing.T) {
 	}
 
 	repoID := "r_GROUPSCOPE_TEST"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -2011,7 +2011,7 @@ func TestInboxGroupMembership(t *testing.T) {
 	}
 
 	repoID := "r_INBOX_GROUP_TEST"
-	st, err := state.NewState(thrumDir, thrumDir, repoID)
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}

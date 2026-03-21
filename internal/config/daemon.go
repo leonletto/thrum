@@ -5,14 +5,60 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 // ThrumConfig represents the top-level .thrum/config.json file.
 type ThrumConfig struct {
-	Runtime RuntimeConfig `json:"runtime"`
-	Daemon  DaemonConfig  `json:"daemon"`
-	Backup  BackupConfig  `json:"backup"`
+	Runtime  RuntimeConfig  `json:"runtime"`
+	Daemon   DaemonConfig   `json:"daemon"`
+	Backup   BackupConfig   `json:"backup"`
+	Telegram TelegramConfig `json:"telegram"`
 }
+
+// TelegramConfig holds Telegram bridge settings.
+// The bridge is disabled when Token is empty.
+type TelegramConfig struct {
+	Token     string  `json:"token,omitempty"`      // BotFather token (e.g., "123456789:AAH...")
+	Target    string  `json:"target,omitempty"`     // Target agent mention (e.g., "@coordinator_main")
+	UserID    string  `json:"user_id,omitempty"`    // Thrum username (e.g., "leon-letto")
+	ChatID    int64   `json:"chat_id,omitempty"`    // Telegram chat ID for outbound messages
+	Enabled   *bool   `json:"enabled,omitempty"`    // Explicit enable/disable; nil = enabled if token set
+	AllowFrom []int64 `json:"allow_from,omitempty"` // Allowed Telegram user IDs; empty = block all
+	AllowAll  bool    `json:"allow_all,omitempty"`  // If true, allow all users (overrides AllowFrom)
+}
+
+// TelegramEnabled returns whether the bridge should run.
+func (t TelegramConfig) TelegramEnabled() bool {
+	if t.Token == "" {
+		return false
+	}
+	if t.Enabled != nil {
+		return *t.Enabled
+	}
+	return true
+}
+
+// IsAllowed returns whether a Telegram user ID is permitted to send messages.
+// Empty AllowFrom with AllowAll=false blocks all (fail-closed).
+func (t TelegramConfig) IsAllowed(userID int64) bool {
+	if t.AllowAll {
+		return true
+	}
+	return slices.Contains(t.AllowFrom, userID)
+}
+
+// MaskedToken returns the token masked to the first 10 characters.
+// Used for display/logging — never log the full token.
+func (t TelegramConfig) MaskedToken() string {
+	if len(t.Token) <= 10 {
+		return t.Token
+	}
+	return t.Token[:10]
+}
+
+// BoolPtr is a helper to create a pointer to a bool.
+func BoolPtr(v bool) *bool { return &v }
 
 // RuntimeConfig holds runtime selection preferences.
 type RuntimeConfig struct {
@@ -178,6 +224,17 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 		var backupMap any
 		_ = json.Unmarshal(backupBytes, &backupMap)
 		existing["backup"] = backupMap
+	}
+
+	// Marshal and merge the telegram section (only if token is set or explicitly configured)
+	if cfg.Telegram.Token != "" || cfg.Telegram.Enabled != nil || cfg.Telegram.AllowAll || len(cfg.Telegram.AllowFrom) > 0 {
+		telegramBytes, err := json.Marshal(cfg.Telegram)
+		if err != nil {
+			return err
+		}
+		var telegramMap any
+		_ = json.Unmarshal(telegramBytes, &telegramMap)
+		existing["telegram"] = telegramMap
 	}
 
 	data, err := json.MarshalIndent(existing, "", "  ")

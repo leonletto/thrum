@@ -34,7 +34,7 @@ func TestEventStreamingIntegration(t *testing.T) {
 	t.Setenv("THRUM_MODULE", "integration")
 
 	// Create state
-	st, err := state.NewState(thrumDir, thrumDir, "test-repo-123")
+	st, err := state.NewState(thrumDir, thrumDir, "test-repo-123", "")
 	if err != nil {
 		t.Fatalf("Failed to create state: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestEventStreamingSetup(t *testing.T) {
 	t.Setenv("THRUM_MODULE", "integration")
 
 	// Create state
-	st, err := state.NewState(thrumDir, thrumDir, "test-repo-123")
+	st, err := state.NewState(thrumDir, thrumDir, "test-repo-123", "")
 	if err != nil {
 		t.Fatalf("Failed to create state: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestEventStreamingWithSubscriptionFiltering(t *testing.T) {
 	t.Setenv("THRUM_MODULE", "test")
 
 	// Create state
-	st, err := state.NewState(thrumDir, thrumDir, "test-repo-123")
+	st, err := state.NewState(thrumDir, thrumDir, "test-repo-123", "")
 	if err != nil {
 		t.Fatalf("Failed to create state: %v", err)
 	}

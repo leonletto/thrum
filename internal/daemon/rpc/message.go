@@ -1486,7 +1486,7 @@ func combineFilterClauses(left, right string) string {
 // For user identities, mention refs are stored with the "user:" prefix
 // (e.g., "user:leon-letto") but the UI sends the plain username (e.g.,
 // "leon-letto"). We include both forms so the mention subquery matches either.
-func buildForAgentValues(forAgent, _ string) []string {
+func buildForAgentValues(forAgent, forAgentRole string) []string {
 	if forAgent == "" {
 		return nil
 	}
@@ -1495,6 +1495,11 @@ func buildForAgentValues(forAgent, _ string) []string {
 	// prefixed form so UI user inboxes match mention refs correctly.
 	if !strings.HasPrefix(forAgent, "user:") {
 		values = append(values, "user:"+forAgent)
+	}
+	// Also match role-based mention refs so messages sent to @role appear
+	// in the inbox of agents with that role (e.g., @coordinator → coordinator_main).
+	if forAgentRole != "" && forAgentRole != forAgent {
+		values = append(values, forAgentRole)
 	}
 	return values
 }

@@ -322,6 +322,12 @@ func TestDefaultPreambleContent(t *testing.T) {
 		".thrum/strategies/sub-agent-strategy.md",
 		".thrum/strategies/thrum-registration.md",
 		".thrum/strategies/resume-after-context-loss.md",
+		"Operating Principles",
+		"Startup Protocol",
+		"Anti-Patterns",
+		"Deaf Agent",
+		"Silent Agent",
+		"Context Hog",
 	} {
 		if !strings.Contains(s, keyword) {
 			t.Errorf("DefaultPreamble missing keyword %q", keyword)
@@ -514,6 +520,70 @@ func TestBootstrapPreambleFileNotFound(t *testing.T) {
 	}
 	if !os.IsNotExist(err) {
 		t.Errorf("expected IsNotExist error, got: %v", err)
+	}
+}
+
+func TestRoleAwarePreamble(t *testing.T) {
+	knownRoles := []struct {
+		role       string
+		headerText string
+	}{
+		{"coordinator", "## Your Role: Coordinator"},
+		{"implementer", "## Your Role: Implementer"},
+		{"planner", "## Your Role: Planner"},
+		{"researcher", "## Your Role: Researcher"},
+		{"reviewer", "## Your Role: Reviewer"},
+		{"tester", "## Your Role: Tester"},
+		{"deployer", "## Your Role: Deployer"},
+		{"documenter", "## Your Role: Documenter"},
+		{"monitor", "## Your Role: Monitor"},
+	}
+
+	for _, tc := range knownRoles {
+		t.Run(tc.role, func(t *testing.T) {
+			content := RoleAwarePreamble(tc.role)
+			s := string(content)
+
+			// Role header must appear at the start
+			if !strings.HasPrefix(s, tc.headerText) {
+				t.Errorf("RoleAwarePreamble(%q): expected prefix %q, got start: %q", tc.role, tc.headerText, s[:min(len(s), 80)])
+			}
+
+			// Separator between header and base preamble
+			if !strings.Contains(s, "\n---\n\n") {
+				t.Errorf("RoleAwarePreamble(%q): missing separator", tc.role)
+			}
+
+			// Base preamble content must still be present
+			if !strings.Contains(s, "Operating Principles") {
+				t.Errorf("RoleAwarePreamble(%q): missing base preamble content", tc.role)
+			}
+			if !strings.Contains(s, "thrum inbox") {
+				t.Errorf("RoleAwarePreamble(%q): missing command reference", tc.role)
+			}
+		})
+	}
+
+	// Case-insensitive matching
+	t.Run("case_insensitive", func(t *testing.T) {
+		upper := RoleAwarePreamble("COORDINATOR")
+		lower := RoleAwarePreamble("coordinator")
+		if string(upper) != string(lower) {
+			t.Error("RoleAwarePreamble should be case-insensitive")
+		}
+	})
+}
+
+func TestRoleAwarePreambleUnknownRole(t *testing.T) {
+	unknown := RoleAwarePreamble("unknown-role")
+	def := DefaultPreamble()
+	if string(unknown) != string(def) {
+		t.Errorf("RoleAwarePreamble(unknown): expected DefaultPreamble(), got different content")
+	}
+
+	empty := RoleAwarePreamble("")
+	if string(empty) != string(def) {
+		t.Errorf("RoleAwarePreamble(\"\"): expected DefaultPreamble(), got different content")
 	}
 }
 

@@ -64,9 +64,24 @@ Ask these in sequence using AskUserQuestion:
 Options based on detected agents, plus common defaults:
 
 - coordinator, implementer (most common)
-- coordinator, implementer, planner
-- coordinator, implementer, researcher
+- coordinator, implementer, planner, researcher
+- coordinator, implementer, reviewer, tester
 - Custom set
+
+Available roles (all have strict and autonomous variants in
+`toolkit/templates/roles/`):
+
+| Role        | Purpose                                             |
+| ----------- | --------------------------------------------------- |
+| coordinator | Orchestrates team, dispatches tasks, reviews/merges |
+| implementer | Writes code in assigned worktree                    |
+| planner     | Creates plans, designs architecture, writes specs   |
+| researcher  | Investigates codebases, produces research reports   |
+| reviewer    | Reviews code for quality, security, correctness     |
+| tester      | Writes and runs tests, verifies acceptance criteria |
+| deployer    | Handles builds, releases, deployment operations     |
+| documenter  | Creates and maintains documentation                 |
+| monitor     | Watches system health, reports anomalies            |
 
 ### 4b: Autonomy Level Per Role
 
