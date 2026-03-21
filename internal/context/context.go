@@ -133,16 +133,32 @@ func SavePreamble(thrumDir, agentName string, content []byte) error {
 func DefaultPreamble() []byte {
 	return []byte(`## Thrum Quick Reference
 
-**Check messages:** ` + "`thrum inbox --unread`" + ` (does not mark as read)
-**Check sent status:** ` + "`thrum sent --unread`" + ` (messages with unread recipients)
-**Mark all read:** ` + "`thrum message read --all`" + `
-**Send message:** ` + "`thrum send \"message\" --to @<agent_name>`" + ` — ALWAYS use the specific agent name (e.g., ` + "`@coordinator_main`" + `), NEVER the role (e.g., ` + "`@coordinator`" + `). Role names fan out to ALL agents with that role. Run ` + "`thrum team`" + ` to find exact names.
-**Reply:** ` + "`thrum reply <MSG_ID> \"response\"`" + `
-**Status:** ` + "`thrum status`" + `
-**Who's online:** ` + "`thrum team`" + `
-**Save context:** Use ` + "`/thrum:update-context`" + ` skill. **NEVER run ` + "`thrum context save`" + ` manually** — it overwrites accumulated session state.
+## Operating Principles
 
-## Background Message Listener
+1. **ALWAYS keep a background message listener running.** [LISTENER RULE #1]
+   Missing messages = broken coordination. Spawn on start, re-arm on every return.
+2. **Check inbox before starting work and at every breakpoint.**
+   ` + "`thrum inbox --unread`" + ` — never assume you have the full picture.
+3. **Send to agent NAMES, never role names.**
+   ` + "`thrum send \"msg\" --to @coordinator_main`" + ` not ` + "`--to @coordinator`" + `.
+   Role names fan out to ALL agents with that role. Run ` + "`thrum team`" + ` first.
+4. **Save context before compaction.**
+   Use ` + "`/thrum:update-context`" + ` skill. **NEVER run ` + "`thrum context save`" + ` manually** — it overwrites accumulated session state.
+
+## Startup Protocol
+
+1. Run ` + "`thrum prime`" + ` — get spawn command with correct repo path pre-filled
+2. Spawn background listener (re-arm every return — see below) [LISTENER RULE #2]
+3. Check inbox: ` + "`thrum inbox --unread`" + `
+4. Check team: ` + "`thrum team`" + `
+
+## Anti-Patterns
+
+` + "❌" + ` **Deaf Agent** — No listener running. You miss messages, block coordination, leave teammates waiting.
+` + "❌" + ` **Silent Agent** — Never sends status updates. Coordinator cannot track progress or unblock dependencies.
+` + "❌" + ` **Context Hog** — Reads entire files into context. Use ` + "`auggie-mcp codebase-retrieval`" + ` instead.
+
+## Background Message Listener [LISTENER RULE #2]
 
 ALWAYS keep a background listener running. Spawn on session start, re-arm every
 time it returns (both MESSAGES_RECEIVED and timeout). Run ` + "`thrum prime`" + ` to get the
@@ -164,6 +180,18 @@ Read these strategy files for operational patterns. They are in ` + "`.thrum/str
 - ` + "`.thrum/strategies/sub-agent-strategy.md`" + ` — When and how to delegate work to sub-agents
 - ` + "`.thrum/strategies/thrum-registration.md`" + ` — Registration, messaging, and coordination patterns
 - ` + "`.thrum/strategies/resume-after-context-loss.md`" + ` — How to resume work after compaction or session restart
+
+## Command Reference
+
+**Check messages:** ` + "`thrum inbox --unread`" + ` (does not mark as read)
+**Check sent status:** ` + "`thrum sent --unread`" + ` (messages with unread recipients)
+**Mark all read:** ` + "`thrum message read --all`" + `
+**Send message:** ` + "`thrum send \"message\" --to @<agent_name>`" + ` — ALWAYS use the specific agent name (e.g., ` + "`@coordinator_main`" + `), NEVER the role (e.g., ` + "`@coordinator`" + `). Role names fan out to ALL agents with that role. Run ` + "`thrum team`" + ` to find exact names.
+**Reply:** ` + "`thrum reply <MSG_ID> \"response\"`" + `
+**Status:** ` + "`thrum status`" + `
+**Who's online:** ` + "`thrum team`" + `
+
+` + "⚠" + ` **REMINDER: Is your listener running? If not, spawn it now.** [LISTENER RULE #3]
 `)
 }
 
