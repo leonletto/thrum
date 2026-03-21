@@ -49,7 +49,14 @@ func TestTimeout_HandlerDeadlineEnforced(t *testing.T) {
 		t.Errorf("handler returned too quickly (%v) — timeout may not be enforced", elapsed)
 	}
 
-	// Verify context cancellation propagated to the handler
+	// Verify context cancellation propagated to the handler.
+	// The handler goroutine may still be running — give it a moment to set the flag.
+	for range 50 {
+		if ctxCancelled.Load() {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if !ctxCancelled.Load() {
 		t.Error("context cancellation did not propagate to handler")
 	}
