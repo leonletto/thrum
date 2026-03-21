@@ -7,6 +7,7 @@ import { AgentList } from './AgentList';
 import {
   uiStore,
   selectLiveFeed,
+  selectConversations,
   selectMyInbox,
   selectGroup,
   selectWhoHas,
@@ -87,6 +88,12 @@ export function Sidebar() {
         <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Your Inbox
         </div>
+        <SidebarItem
+          icon={<span>💬</span>}
+          label="Conversations"
+          active={selectedView === 'conversations'}
+          onClick={selectConversations}
+        />
         <SidebarItem
           icon={<span>📥</span>}
           label="My Inbox"
