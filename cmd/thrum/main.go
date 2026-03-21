@@ -1970,17 +1970,22 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 	// thrum peer join --peercode — connect to a remote peer using a connection string
 	var peerCode string
 	joinCmd := &cobra.Command{
-		Use:   "join",
+		Use:   "join [peercode]",
 		Short: "Join a remote peer using a peercode",
 		Long: `Connects to a remote peer using the peercode from 'thrum peer add'.
 
-Three input methods:
-  thrum peer join --peercode name:ip:port:code   (direct argument)
+Four input methods:
+  thrum peer join name:ip:port:code              (positional argument)
+  thrum peer join --peercode name:ip:port:code   (flag)
   echo "name:ip:port:code" | thrum peer join     (piped via stdin)
   thrum peer join                                 (interactive prompt)`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Resolve peercode: flag value > stdin > prompt
+			// Resolve peercode: flag > positional arg > stdin > prompt
 			code := peerCode
+			if code == "" && len(args) > 0 {
+				code = strings.TrimSpace(args[0])
+			}
 			if code == "" {
 				stat, _ := os.Stdin.Stat()
 				if (stat.Mode() & os.ModeCharDevice) == 0 {
