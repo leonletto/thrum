@@ -5284,9 +5284,14 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		}
 	}
 
-	// Start Telegram bridge if configured
+	// Telegram bridge RPC handlers + goroutine
+	telegramHandler := rpc.NewTelegramHandler(absPath)
+	server.RegisterHandler("telegram.configure", telegramHandler.HandleConfigure)
+	server.RegisterHandler("telegram.status", telegramHandler.HandleStatus)
+
 	if thrumCfg.Telegram.TelegramEnabled() {
 		tgBridge := telegram.New(thrumCfg.Telegram, wsPort)
+		telegramHandler.SetBridge(tgBridge)
 		go tgBridge.Run(ctx)
 		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)
 	}
