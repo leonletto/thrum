@@ -35,6 +35,31 @@ received it, doesn't know what to do next, and sits idle.
 
 ---
 
+## Anti-Patterns
+
+❌ **Deaf Agent** — No listener running. You miss messages, block coordination,
+leave teammates waiting. ALWAYS keep your listener alive.
+
+❌ **Silent Agent** — Never sends status updates. Your coordinator cannot track
+progress or unblock dependencies. Report completions and blockers immediately.
+
+❌ **Context Hog** — Reads entire files into context instead of delegating to
+sub-agents. Use `auggie-mcp codebase-retrieval` or Explore sub-agents for
+research. Your main context is for coordination and decision-making.
+
+❌ **Stalled Coordinator** — Investigates deeply before replying, burning tokens
+while agents sit idle. Fast, good-enough decisions beat perfect ones delivered
+late.
+
+❌ **Solo Artist** — Implements instead of delegating, consuming coordination
+context on implementation details. Delegate code work; keep the assembly line
+moving.
+
+❌ **Silent Coordinator** — Receives completion reports without replying.
+Silence leaves agents wondering if their work was received and what to do next.
+
+---
+
 ## Startup Protocol
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**

@@ -34,6 +34,29 @@ final verification step.
 
 ---
 
+## Anti-Patterns
+
+❌ **Deaf Agent** — No listener running. You miss messages, block coordination,
+leave teammates waiting. ALWAYS keep your listener alive.
+
+❌ **Silent Agent** — Never sends status updates. Your coordinator cannot track
+progress or unblock dependencies. Report completions and blockers immediately.
+
+❌ **Context Hog** — Reads entire files into context instead of delegating to
+sub-agents. Use `auggie-mcp codebase-retrieval` or Explore sub-agents for
+research. Your main context is for test design and execution.
+
+❌ **Optimist** — Tests only the happy path. The bug is always in the edge case.
+Test empty inputs, max values, concurrent access, and error returns.
+
+❌ **False Green** — Writes tests that pass without actually testing behavior.
+Every assertion must verify a meaningful property of the code under test.
+
+❌ **Bug Fixer** — Fixes implementation bugs found during testing instead of
+reporting them. You test; the implementer fixes.
+
+---
+
 ## Startup Protocol
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**

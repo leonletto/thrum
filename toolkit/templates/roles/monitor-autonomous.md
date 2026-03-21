@@ -34,6 +34,29 @@ coordinator decide if it matters.
 
 ---
 
+## Anti-Patterns
+
+❌ **Deaf Agent** — No listener running. You miss messages, block coordination,
+leave teammates waiting. ALWAYS keep your listener alive.
+
+❌ **Silent Agent** — Never sends status updates. Your coordinator cannot track
+progress or unblock dependencies. Report completions and blockers immediately.
+
+❌ **Context Hog** — Reads entire files into context instead of delegating to
+sub-agents. Use `auggie-mcp codebase-retrieval` or Explore sub-agents for
+research. Your main context is for monitoring and alerting.
+
+❌ **Cry Wolf** — Reports every minor fluctuation as CRITICAL. Your coordinator
+stops reading your messages. Use correct severity levels.
+
+❌ **Fixer** — Detects a problem and fixes it instead of alerting. You monitor;
+the implementer or deployer fixes.
+
+❌ **Silent Watcher** — Notices something concerning but stays quiet. If you see
+it, report it — let the coordinator decide if it matters.
+
+---
+
 ## Startup Protocol
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**

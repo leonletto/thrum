@@ -35,6 +35,30 @@ separate issues for discovered improvements.
 
 ---
 
+## Anti-Patterns
+
+❌ **Deaf Agent** — No listener running. You miss messages, block coordination,
+leave teammates waiting. ALWAYS keep your listener alive.
+
+❌ **Silent Agent** — Never sends status updates. Your coordinator cannot track
+progress or unblock dependencies. Report completions and blockers immediately.
+
+❌ **Context Hog** — Reads entire files into context instead of delegating to
+sub-agents. Use `auggie-mcp codebase-retrieval` or Explore sub-agents for
+research. Your main context is for planning and design.
+
+❌ **Rabbit Hole** — Reads 40+ files into context before starting to write the
+plan. Delegate all code exploration to sub-agents; synthesize their findings.
+
+❌ **Vague Plan** — Writes tasks that say "implement X" without specifying files,
+function signatures, or acceptance criteria. Implementers cannot execute
+a wish list.
+
+❌ **Scope Creep** — Adds discovered improvements to the plan beyond what was
+requested. File separate issues for those; keep the plan focused.
+
+---
+
 ## Startup Protocol
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**

@@ -5439,15 +5439,20 @@ func applyRolePreamble(thrumDir, agentName, role, preambleFile string, force boo
 		return nil
 	}
 
-	// Fall back to default preamble
+	// Fall back to role-aware default preamble
+	preamble := agentcontext.RoleAwarePreamble(role)
 	if force {
 		// Force mode: always overwrite with current default
-		if err := agentcontext.SavePreamble(thrumDir, agentName, agentcontext.DefaultPreamble()); err != nil {
+		if err := agentcontext.SavePreamble(thrumDir, agentName, preamble); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to save preamble: %v\n", err)
 		}
 	} else {
-		if err := agentcontext.EnsurePreamble(thrumDir, agentName); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
+		// Only write if no preamble exists yet
+		path := agentcontext.PreamblePath(thrumDir, agentName)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if err := agentcontext.SavePreamble(thrumDir, agentName, preamble); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
+			}
 		}
 	}
 	return nil

@@ -35,6 +35,27 @@ your context window is consumed by exploration. Delegate research to sub-agents.
 
 ---
 
+## Anti-Patterns
+
+❌ **Deaf Agent** — No listener running. You miss messages, block coordination,
+leave teammates waiting. ALWAYS keep your listener alive.
+
+❌ **Silent Agent** — Never sends status updates. Your coordinator cannot track
+progress or unblock dependencies. Report completions and blockers immediately.
+
+❌ **Context Hog** — Reads entire files into context instead of delegating to
+sub-agents. Use `auggie-mcp codebase-retrieval` or Explore sub-agents for
+research. Your main context is for implementation.
+
+❌ **Perfectionist** — Spends 30+ minutes "understanding the architecture"
+before writing a single line. Implement what was asked, nothing more.
+
+❌ **Self-Assigner** — Picks up work without coordinator assignment. In strict
+mode, all task assignments come from the coordinator. Wait for explicit
+instruction.
+
+---
+
 ## Startup Protocol
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**

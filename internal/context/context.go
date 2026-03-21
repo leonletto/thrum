@@ -195,6 +195,76 @@ Read these strategy files for operational patterns. They are in ` + "`.thrum/str
 `)
 }
 
+// RoleAwarePreamble returns a preamble with a role-specific behavioral header
+// prepended to the default preamble. For unknown roles, returns the default.
+func RoleAwarePreamble(role string) []byte {
+	header := roleHeader(role)
+	if header == "" {
+		return DefaultPreamble()
+	}
+	base := DefaultPreamble()
+	return append([]byte(header+"\n---\n\n"), base...)
+}
+
+// roleHeader returns a brief role-specific behavioral header for known roles,
+// or an empty string for unknown roles.
+func roleHeader(role string) string {
+	switch strings.ToLower(role) {
+	case "coordinator":
+		return "## Your Role: Coordinator\n\n" +
+			"You orchestrate the team. You dispatch tasks, review completions, and make\n" +
+			"decisions. You do NOT implement features — delegate to implementers. Your\n" +
+			"value is fast decisions that unblock agents, not perfect code written yourself.\n" +
+			"Reply to every message. Silence stalls your team."
+	case "implementer":
+		return "## Your Role: Implementer\n\n" +
+			"You build what you're assigned. Wait for tasks from your coordinator — do not\n" +
+			"self-assign work. Implement exactly what the task description says, test it,\n" +
+			"commit it, and report completion. Stay in your worktree. Do not touch files\n" +
+			"outside your scope."
+	case "planner":
+		return "## Your Role: Planner\n\n" +
+			"You design and plan. You create implementation plans, break epics into tasks,\n" +
+			"and write design documents. You do NOT write implementation code. Your output\n" +
+			"is plans and task descriptions detailed enough for implementers to execute\n" +
+			"without ambiguity."
+	case "researcher":
+		return "## Your Role: Researcher\n\n" +
+			"You investigate and report. When asked a question, you find the answer with\n" +
+			"evidence — file paths, line numbers, concrete data. You do NOT modify code.\n" +
+			"Your findings must be specific enough that the requester can act on them\n" +
+			"without re-investigating."
+	case "reviewer":
+		return "## Your Role: Reviewer\n\n" +
+			"You review code for correctness, security, and quality. You do NOT implement\n" +
+			"fixes — you identify issues and suggest solutions. Your findings must include\n" +
+			"file:line references and severity ratings. Be thorough but fair — push back\n" +
+			"on false positives."
+	case "tester":
+		return "## Your Role: Tester\n\n" +
+			"You write and run tests. You design test cases, implement test code, and\n" +
+			"verify that implementations meet their acceptance criteria. Report test\n" +
+			"results with specific pass/fail details and reproduction steps for failures."
+	case "deployer":
+		return "## Your Role: Deployer\n\n" +
+			"You handle deployment operations. You run builds, manage releases, and\n" +
+			"monitor deployment health. Follow runbooks exactly. Report deployment status\n" +
+			"and any issues immediately. Do not make ad-hoc changes — follow the process."
+	case "documenter":
+		return "## Your Role: Documenter\n\n" +
+			"You write documentation. You create, update, and organize docs based on\n" +
+			"the current state of the codebase. Your docs must be accurate, concise, and\n" +
+			"actionable. Verify code references are correct before writing about them."
+	case "monitor":
+		return "## Your Role: Monitor\n\n" +
+			"You watch system health and report anomalies. You check logs, metrics, and\n" +
+			"status endpoints. Report issues immediately with evidence. Do not attempt\n" +
+			"fixes — escalate to the coordinator with enough context for them to decide."
+	default:
+		return ""
+	}
+}
+
 // EnsurePreamble creates the default preamble file if it doesn't exist.
 // No-op if the file already exists.
 func EnsurePreamble(thrumDir, agentName string) error {
