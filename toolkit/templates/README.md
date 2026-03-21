@@ -8,6 +8,7 @@ a self-contained template set with its own CLAUDE.md explaining usage.
 | Name               | Folder                                       | Description                                                                                                                                                        |
 | ------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Agent Dev Workflow | [`agent-dev-workflow/`](agent-dev-workflow/) | Four-phase skill pipeline (Design → Plan → Setup → Implement) for feature development with AI agents using Beads for task tracking and git worktrees for isolation |
+| Role Templates     | [`roles/`](roles/)                           | Behavioral preamble templates for 9 agent roles × 2 autonomy levels (18 templates total). Auto-applied on agent registration via `thrum quickstart`.               |
 
 ## How to Use
 
@@ -55,6 +56,62 @@ This workflow is designed for:
 
 See [`agent-dev-workflow/CLAUDE.md`](agent-dev-workflow/CLAUDE.md) for complete
 documentation.
+
+## Role Templates
+
+The `roles/` directory contains behavioral preamble templates for AI agents.
+Each role has two variants:
+
+- **Strict** — Agent waits for coordinator instruction, limited scope, reports
+  everything
+- **Autonomous** — Agent can self-assign tasks, broader scope, independent
+  decision-making
+
+### Available Roles
+
+| Role          | Purpose                                            | Worktree Pattern         |
+| ------------- | -------------------------------------------------- | ------------------------ |
+| coordinator   | Orchestrates team, dispatches tasks, reviews/merges | Main repo (not detached) |
+| implementer   | Writes code in assigned worktree                   | Own feature branch       |
+| planner       | Creates plans, designs architecture, writes specs  | Own branch or main       |
+| researcher    | Investigates codebases, produces research reports  | Detached HEAD (read-only)|
+| reviewer      | Reviews code for quality, security, correctness    | Detached HEAD (read-only)|
+| tester        | Writes and runs tests, verifies acceptance criteria | Own feature branch       |
+| deployer      | Handles builds, releases, deployment operations    | Main repo or ops branch  |
+| documenter    | Creates and maintains documentation                | Own branch or main       |
+| monitor       | Watches system health, reports anomalies           | Main repo (read-only)    |
+
+### Template Structure
+
+Every role template includes these sections:
+
+1. **Operating Principle** — Core behavioral anchor with role-specific traps
+2. **Anti-Patterns** — Universal (Deaf Agent, Silent Agent, Context Hog) plus
+   role-specific anti-patterns
+3. **Startup Protocol** — Mandatory ordered checklist
+4. **Identity & Authority** — CAN/CANNOT lists
+5. **Scope Boundaries** — Worktree restrictions
+6. **Task Protocol** — Role-specific workflow steps
+7. **Communication Protocol** — Messaging rules and examples
+8. **Message Listener** — Background listener requirement
+9. **Idle Behavior** — What to do when waiting
+10. **Critical Reminders** — Top 5 rules repeated for emphasis
+
+Templates use Go template variables: `{{.AgentName}}`, `{{.Role}}`,
+`{{.Module}}`, `{{.WorktreePath}}`, `{{.RepoRoot}}`, `{{.CoordinatorName}}`.
+
+### How to Use
+
+```bash
+# Generate role templates for your project
+/thrum:configure-roles
+
+# Or copy manually
+cp toolkit/templates/roles/implementer-strict.md .thrum/role_templates/implementer.md
+
+# Deploy to registered agents
+thrum roles deploy
+```
 
 ## Creating Custom Template Sets
 
