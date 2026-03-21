@@ -148,6 +148,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(mcpCmd())
 	rootCmd.AddCommand(rolesCmd())
 	rootCmd.AddCommand(purgeCmd())
+	rootCmd.AddCommand(telegramCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -6048,3 +6049,255 @@ func runPluginRemove(name string) error {
 }
 
 // getWorktreeName extracts the worktree name from the repo path.
+
+func telegramCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "telegram",
+		Short: "Manage Telegram bridge",
+	}
+	cmd.AddCommand(telegramConfigureCmd())
+	cmd.AddCommand(telegramStatusCmd())
+	return cmd
+}
+
+func telegramConfigureCmd() *cobra.Command {
+	var flagToken, flagTarget, flagUser string
+	var flagYes bool
+
+	cmd := &cobra.Command{
+		Use:   "configure",
+		Short: "Configure the Telegram bridge",
+		Long: `Configure the Telegram bridge connection.
+
+Set the bot token from BotFather, the target agent that receives Telegram
+messages, and your Thrum user ID.
+
+Examples:
+  thrum telegram configure --token 123456789:AAH... --target @coordinator_main --user leon-letto
+  thrum telegram configure  # interactive mode`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTelegramConfigure(flagToken, flagTarget, flagUser, flagYes)
+		},
+	}
+
+	cmd.Flags().StringVar(&flagToken, "token", "", "Telegram bot token from BotFather")
+	cmd.Flags().StringVar(&flagTarget, "target", "", "Target agent for incoming messages (e.g., @coordinator_main)")
+	cmd.Flags().StringVar(&flagUser, "user", "", "Your Thrum username (e.g., leon-letto)")
+	cmd.Flags().BoolVar(&flagYes, "yes", false, "Skip confirmation prompts")
+
+	return cmd
+}
+
+func runTelegramConfigure(token, target, userID string, skipConfirm bool) error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	// Interactive prompts for missing fields
+	if token == "" {
+		if cfg.Telegram.Token != "" {
+			fmt.Printf("Current token: %s...\n", cfg.Telegram.MaskedToken())
+		}
+		fmt.Print("Bot token (from @BotFather): ")
+		if _, err := fmt.Scanln(&token); err != nil {
+			return fmt.Errorf("read token: %w", err)
+		}
+	}
+
+	// Validate token format: numeric:alphanumeric
+	if !isValidBotToken(token) {
+		return fmt.Errorf("invalid token format (expected: 123456789:AAH...)")
+	}
+
+	if target == "" {
+		target = "@coordinator_main"
+		fmt.Printf("Target agent [%s]: ", target)
+		var input string
+		if _, err := fmt.Scanln(&input); err == nil && input != "" {
+			target = input
+		}
+	}
+
+	// Validate target starts with @
+	if len(target) == 0 || target[0] != '@' {
+		return fmt.Errorf("target must start with @ (e.g., @coordinator_main)")
+	}
+
+	if userID == "" {
+		// Auto-detect from git config
+		userID = detectGitUser()
+		if userID != "" {
+			fmt.Printf("User ID [%s]: ", userID)
+			var input string
+			if _, err := fmt.Scanln(&input); err == nil && input != "" {
+				userID = input
+			}
+		} else {
+			fmt.Print("User ID (your Thrum username): ")
+			if _, err := fmt.Scanln(&userID); err != nil {
+				return fmt.Errorf("read user ID: %w", err)
+			}
+		}
+	}
+
+	if userID == "" {
+		return fmt.Errorf("user ID is required")
+	}
+
+	// Confirm if replacing existing token
+	if cfg.Telegram.Token != "" && !skipConfirm {
+		fmt.Printf("Existing token will be replaced (%s... → %s...)\n",
+			cfg.Telegram.MaskedToken(), maskToken(token))
+		fmt.Print("Continue? [y/N]: ")
+		var confirm string
+		if _, err := fmt.Scanln(&confirm); err != nil || (confirm != "y" && confirm != "Y") {
+			fmt.Println("Cancelled.")
+			return nil
+		}
+	}
+
+	// Update config (preserve existing fields like AllowFrom, ChatID)
+	cfg.Telegram.Token = token
+	cfg.Telegram.Target = target
+	cfg.Telegram.UserID = userID
+
+	if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+
+	fmt.Printf("Telegram bridge configured:\n")
+	fmt.Printf("  Token:  %s...\n", maskToken(token))
+	fmt.Printf("  Target: %s\n", target)
+	fmt.Printf("  User:   %s\n", userID)
+	fmt.Println("\nRestart the daemon to apply: thrum daemon restart")
+
+	return nil
+}
+
+func telegramStatusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Show Telegram bridge status",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTelegramStatus()
+		},
+	}
+}
+
+func runTelegramStatus() error {
+	thrumDir, err := paths.ResolveThrumDir(flagRepo)
+	if err != nil {
+		return fmt.Errorf("resolve thrum dir: %w", err)
+	}
+
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	tg := cfg.Telegram
+
+	if flagJSON {
+		status := map[string]any{
+			"configured": tg.Token != "",
+			"enabled":    tg.TelegramEnabled(),
+			"target":     tg.Target,
+			"user_id":    tg.UserID,
+			"chat_id":    tg.ChatID,
+			"allow_all":  tg.AllowAll,
+		}
+		if tg.Token != "" {
+			status["token"] = tg.MaskedToken() + "..."
+		}
+		if len(tg.AllowFrom) > 0 {
+			status["allow_from"] = tg.AllowFrom
+		}
+		data, _ := json.MarshalIndent(status, "", "  ")
+		fmt.Println(string(data))
+		return nil
+	}
+
+	if tg.Token == "" {
+		fmt.Println("Telegram bridge: not configured")
+		fmt.Println("\nRun 'thrum telegram configure' to set up.")
+		return nil
+	}
+
+	fmt.Println("Telegram Bridge")
+	fmt.Println("───────────────")
+	fmt.Printf("  Token:   %s...\n", tg.MaskedToken())
+	fmt.Printf("  Target:  %s\n", tg.Target)
+	fmt.Printf("  User:    %s\n", tg.UserID)
+	if tg.ChatID != 0 {
+		fmt.Printf("  Chat ID: %d\n", tg.ChatID)
+	}
+
+	if tg.Enabled != nil && !*tg.Enabled {
+		fmt.Printf("  Enabled: no (explicitly disabled)\n")
+	} else {
+		fmt.Printf("  Enabled: yes\n")
+	}
+
+	// Access control
+	if tg.AllowAll {
+		fmt.Printf("  Access:  allow all\n")
+	} else if len(tg.AllowFrom) > 0 {
+		fmt.Printf("  Access:  %d allowed user(s)\n", len(tg.AllowFrom))
+	} else {
+		fmt.Printf("  Access:  block all (no AllowFrom configured)\n")
+	}
+
+	// Check daemon
+	wsPort := cli.ReadWebSocketPort(flagRepo)
+	if wsPort > 0 {
+		fmt.Printf("  Daemon:  running (port %d)\n", wsPort)
+	} else {
+		fmt.Printf("  Daemon:  not running\n")
+	}
+
+	return nil
+}
+
+func isValidBotToken(token string) bool {
+	// Token format: numeric_id:alphanumeric_secret
+	parts := strings.SplitN(token, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return false
+	}
+	for _, c := range parts[0] {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	for _, c := range parts[1] {
+		if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func maskToken(token string) string {
+	if len(token) <= 10 {
+		return token
+	}
+	return token[:10]
+}
+
+func detectGitUser() string {
+	out, err := exec.Command("git", "config", "user.name").Output() // #nosec G204 -- fixed command, no user input
+	if err != nil {
+		return ""
+	}
+	name := strings.TrimSpace(string(out))
+	// Convert "Leon Letto" → "leon-letto"
+	name = strings.ToLower(name)
+	name = strings.ReplaceAll(name, " ", "-")
+	return name
+}
