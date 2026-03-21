@@ -17,6 +17,7 @@ import (
 type ContextSaveRequest struct {
 	AgentName string `json:"agent_name"`
 	Content   []byte `json:"content"`
+	RepoPath  string `json:"repo_path,omitempty"`
 }
 
 // ContextSaveResponse is the response for context.save.
@@ -29,6 +30,7 @@ type ContextSaveResponse struct {
 type ContextShowRequest struct {
 	AgentName       string `json:"agent_name"`
 	IncludePreamble *bool  `json:"include_preamble,omitempty"` // nil = true (default include)
+	RepoPath        string `json:"repo_path,omitempty"`
 }
 
 // ContextShowResponse is the response for context.show.
@@ -46,6 +48,7 @@ type ContextShowResponse struct {
 // ContextClearRequest is the request for context.clear.
 type ContextClearRequest struct {
 	AgentName string `json:"agent_name"`
+	RepoPath  string `json:"repo_path,omitempty"`
 }
 
 // ContextClearResponse is the response for context.clear.
@@ -64,6 +67,17 @@ func NewContextHandler(state *state.State) *ContextHandler {
 	return &ContextHandler{state: state}
 }
 
+// effectiveRepoPath returns the repo path to use for per-agent file operations.
+// If the request includes a repo_path (from a worktree CLI), use that.
+// Otherwise fall back to the daemon's repo path.
+// Context and identity files are per-worktree and should NOT follow redirects.
+func (h *ContextHandler) effectiveRepoPath(requestRepoPath string) string {
+	if requestRepoPath != "" {
+		return requestRepoPath
+	}
+	return h.state.RepoPath()
+}
+
 // HandleSave handles the context.save RPC method.
 func (h *ContextHandler) HandleSave(ctx context.Context, params json.RawMessage) (any, error) {
 	var req ContextSaveRequest
@@ -78,7 +92,7 @@ func (h *ContextHandler) HandleSave(ctx context.Context, params json.RawMessage)
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	thrumDir := filepath.Join(h.state.RepoPath(), ".thrum")
+	thrumDir := filepath.Join(h.effectiveRepoPath(req.RepoPath), ".thrum")
 
 	if err := agentcontext.Save(thrumDir, req.AgentName, req.Content); err != nil {
 		return nil, fmt.Errorf("save context: %w", err)
@@ -107,7 +121,7 @@ func (h *ContextHandler) HandleShow(ctx context.Context, params json.RawMessage)
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	thrumDir := filepath.Join(h.state.RepoPath(), ".thrum")
+	thrumDir := filepath.Join(h.effectiveRepoPath(req.RepoPath), ".thrum")
 
 	content, err := agentcontext.Load(thrumDir, req.AgentName)
 	if err != nil {
@@ -159,7 +173,7 @@ func (h *ContextHandler) HandleClear(ctx context.Context, params json.RawMessage
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	thrumDir := filepath.Join(h.state.RepoPath(), ".thrum")
+	thrumDir := filepath.Join(h.effectiveRepoPath(req.RepoPath), ".thrum")
 
 	if err := agentcontext.Clear(thrumDir, req.AgentName); err != nil {
 		return nil, fmt.Errorf("clear context: %w", err)
@@ -174,6 +188,7 @@ func (h *ContextHandler) HandleClear(ctx context.Context, params json.RawMessage
 // PreambleShowRequest is the request for context.preamble.show.
 type PreambleShowRequest struct {
 	AgentName string `json:"agent_name"`
+	RepoPath  string `json:"repo_path,omitempty"`
 }
 
 // PreambleShowResponse is the response for context.preamble.show.
@@ -187,6 +202,7 @@ type PreambleShowResponse struct {
 type PreambleSaveRequest struct {
 	AgentName string `json:"agent_name"`
 	Content   []byte `json:"content"`
+	RepoPath  string `json:"repo_path,omitempty"`
 }
 
 // PreambleSaveResponse is the response for context.preamble.save.
@@ -209,7 +225,7 @@ func (h *ContextHandler) HandlePreambleShow(ctx context.Context, params json.Raw
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	thrumDir := filepath.Join(h.state.RepoPath(), ".thrum")
+	thrumDir := filepath.Join(h.effectiveRepoPath(req.RepoPath), ".thrum")
 
 	content, err := agentcontext.LoadPreamble(thrumDir, req.AgentName)
 	if err != nil {
@@ -237,7 +253,7 @@ func (h *ContextHandler) HandlePreambleSave(ctx context.Context, params json.Raw
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	thrumDir := filepath.Join(h.state.RepoPath(), ".thrum")
+	thrumDir := filepath.Join(h.effectiveRepoPath(req.RepoPath), ".thrum")
 
 	if err := agentcontext.SavePreamble(thrumDir, req.AgentName, req.Content); err != nil {
 		return nil, fmt.Errorf("save preamble: %w", err)

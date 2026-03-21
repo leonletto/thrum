@@ -13,6 +13,16 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
+**v0.6.0 highlights:**
+
+- **Telegram bridge** — Get agent messages on your phone. Reply from Telegram
+  and it threads back to the right agent. Useful even with a single agent — you
+  stay in the loop without watching a terminal.
+- **Tailscale sync** — Real-time peer-to-peer sync between machines. Your laptop
+  and desktop agents coordinate in seconds, not minutes.
+- **Conversation UI** — Slack-style threaded inbox with embedded replies,
+  replacing the flat message list.
+
 ## Quick Start
 
 ```bash
@@ -50,9 +60,11 @@ Thrum is a single binary: CLI, daemon, web UI, and optional MCP server.
 - **Coordinate agents across worktrees** — each worktree gets its own identity
 - **Create groups** — `@everyone`, `@reviewers`, or any custom group
 - **Subscribe to events** — get push notifications for scopes and mentions
-- **Monitor in real time** — embedded web UI with live feed, inbox, agent list
-- **Sync across machines** — automatic 60-second Git sync, or Tailscale for
-  real-time
+- **Monitor in real time** — embedded web UI with live feed, threaded inbox,
+  agent list
+- **Get messages on your phone** — Telegram bridge with bidirectional threading
+- **Sync across machines** — automatic Git sync, or Tailscale for real-time
+  peer-to-peer
 
 ## Installation
 
@@ -145,6 +157,9 @@ Full documentation:
   [Agent Coordination](https://leonletto.github.io/thrum/docs/agent-coordination.html)
   | [Multi-Agent](https://leonletto.github.io/thrum/docs/multi-agent.html) |
   [Sync](https://leonletto.github.io/thrum/docs/sync.html)
+- [Telegram Bridge](https://leonletto.github.io/thrum/docs/telegram-bridge.html)
+  | [Tailscale Sync](https://leonletto.github.io/thrum/docs/tailscale-sync.html)
+  | [Web UI](https://leonletto.github.io/thrum/docs/web-ui.html)
 
 ## License
 

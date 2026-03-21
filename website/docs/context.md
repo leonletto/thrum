@@ -325,6 +325,13 @@ thrum context preamble --file my-preamble.md
 thrum context preamble --agent furiosa
 ```
 
+**Role-aware `--init`:** When a role template exists in
+`.thrum/role_templates/{role}.md`, `--init` uses it instead of the generic
+default. The template is rendered with the agent's identity data (name, role,
+module, worktree path) to produce a role-specific preamble. If no role template
+is found, the default thrum quick-reference preamble is used as a fallback. See
+[Role-Based Preamble Templates](role-templates.md) for details.
+
 ---
 
 ### thrum context prime

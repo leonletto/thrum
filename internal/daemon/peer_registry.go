@@ -3,10 +3,13 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/leonletto/thrum/internal/identity"
 )
 
 // PeerInfo represents a paired sync peer.
@@ -24,12 +27,25 @@ func (p *PeerInfo) Addr() string {
 	return p.Address
 }
 
+// LocalConfig holds this daemon's local peering configuration.
+type LocalConfig struct {
+	DaemonID string `json:"daemon_id"`
+	Port     int    `json:"port,omitempty"`
+}
+
+// peersFile is the on-disk format for peers.json (object schema).
+type peersFile struct {
+	Local LocalConfig `json:"local"`
+	Peers []*PeerInfo `json:"peers"`
+}
+
 // PeerRegistry tracks paired peer daemons for sync.
 // Thread-safe and persisted to disk.
 type PeerRegistry struct {
 	mu       sync.RWMutex
 	peers    map[string]*PeerInfo // keyed by DaemonID
-	filePath string               // path to peers.json for persistence
+	local    LocalConfig
+	filePath string // path to peers.json for persistence
 }
 
 // NewPeerRegistry creates a new peer registry. If filePath exists, peers are loaded from it.
@@ -39,14 +55,39 @@ func NewPeerRegistry(filePath string) (*PeerRegistry, error) {
 		filePath: filePath,
 	}
 
-	// Load existing peers if file exists
 	if _, err := os.Stat(filePath); err == nil {
+		// File exists — load (handles both old array and new object format)
 		if err := r.load(); err != nil {
 			return nil, fmt.Errorf("load peer registry: %w", err)
 		}
+	} else {
+		// No file — generate fresh local config
+		r.local.DaemonID = identity.GenerateDaemonID()
 	}
 
 	return r, nil
+}
+
+// LocalDaemonID returns this daemon's persistent ID.
+func (r *PeerRegistry) LocalDaemonID() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.local.DaemonID
+}
+
+// LocalPort returns the tsnet listener port, or 0 if not yet assigned.
+func (r *PeerRegistry) LocalPort() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.local.Port
+}
+
+// SetLocalPort sets the tsnet listener port and persists to disk.
+func (r *PeerRegistry) SetLocalPort(port int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.local.Port = port
+	return r.saveLocked()
 }
 
 // AddPeer adds or updates a peer in the registry and persists to disk.
@@ -173,7 +214,9 @@ func (r *PeerRegistry) RemoveStalePeers(timeout time.Duration) int {
 	}
 
 	if removed > 0 {
-		_ = r.saveLocked()
+		if err := r.saveLocked(); err != nil {
+			log.Printf("peer_registry: failed to save after removing stale peers: %v", err)
+		}
 	}
 	return removed
 }
@@ -185,32 +228,50 @@ func (r *PeerRegistry) Len() int {
 	return len(r.peers)
 }
 
-// load reads the peers.json file. Must be called without holding mu.
+// load reads the peers.json file, auto-detecting old array or new object format.
 func (r *PeerRegistry) load() error {
 	data, err := os.ReadFile(r.filePath)
 	if err != nil {
 		return fmt.Errorf("read peers file: %w", err)
 	}
 
+	// Try new object format first
+	var pf peersFile
+	if err := json.Unmarshal(data, &pf); err == nil && pf.Local.DaemonID != "" {
+		r.local = pf.Local
+		for _, p := range pf.Peers {
+			r.peers[p.DaemonID] = p
+		}
+		return nil
+	}
+
+	// Fall back to old array format — migrate
 	var peers []*PeerInfo
 	if err := json.Unmarshal(data, &peers); err != nil {
 		return fmt.Errorf("unmarshal peers: %w", err)
 	}
 
+	r.local.DaemonID = identity.GenerateDaemonID()
 	for _, p := range peers {
 		r.peers[p.DaemonID] = p
 	}
-	return nil
+
+	// Persist migration to new format
+	return r.saveLocked()
 }
 
-// saveLocked writes the peers to disk. Caller must hold mu.
+// saveLocked writes the peers to disk using atomic temp-file + rename.
+// Caller must hold mu.
 func (r *PeerRegistry) saveLocked() error {
-	peers := make([]*PeerInfo, 0, len(r.peers))
+	pf := peersFile{
+		Local: r.local,
+		Peers: make([]*PeerInfo, 0, len(r.peers)),
+	}
 	for _, p := range r.peers {
-		peers = append(peers, p)
+		pf.Peers = append(pf.Peers, p)
 	}
 
-	data, err := json.MarshalIndent(peers, "", "  ")
+	data, err := json.MarshalIndent(pf, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal peers: %w", err)
 	}
@@ -220,8 +281,13 @@ func (r *PeerRegistry) saveLocked() error {
 		return fmt.Errorf("create peers directory: %w", err)
 	}
 
-	if err := os.WriteFile(r.filePath, data, 0600); err != nil {
-		return fmt.Errorf("write peers file: %w", err)
+	// Atomic write: temp file + rename
+	tmpPath := r.filePath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
+		return fmt.Errorf("write peers temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, r.filePath); err != nil {
+		return fmt.Errorf("rename peers file: %w", err)
 	}
 
 	return nil

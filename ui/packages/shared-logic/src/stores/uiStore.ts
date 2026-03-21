@@ -1,6 +1,6 @@
 import { Store } from '@tanstack/store';
 
-export type View = 'live-feed' | 'my-inbox' | 'agent-inbox' | 'group-channel' | 'who-has' | 'settings';
+export type View = 'live-feed' | 'my-inbox' | 'conversations' | 'agent-inbox' | 'group-channel' | 'who-has' | 'settings';
 
 export interface UIState {
   selectedView: View;
@@ -12,6 +12,7 @@ export interface UIState {
 export const validViews: View[] = [
   'live-feed',
   'my-inbox',
+  'conversations',
   'agent-inbox',
   'group-channel',
   'who-has',
@@ -96,6 +97,15 @@ export const selectGroup = (groupName: string) => {
     selectedView: 'group-channel',
     selectedGroupName: groupName,
     selectedAgentId: null,
+  }));
+};
+
+export const selectConversations = () => {
+  uiStore.setState((state: UIState) => ({
+    ...state,
+    selectedView: 'conversations',
+    selectedAgentId: null,
+    selectedGroupName: null,
   }));
 };
 

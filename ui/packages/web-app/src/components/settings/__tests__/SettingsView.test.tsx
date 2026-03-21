@@ -7,6 +7,8 @@ vi.mock('@thrum/shared-logic', () => ({
   useHealth: vi.fn(),
   useNotificationState: vi.fn(),
   useTheme: vi.fn(),
+  useTelegramStatus: vi.fn(),
+  useTelegramConfigure: vi.fn(),
 }));
 
 const healthOk = {
@@ -32,6 +34,15 @@ function setupDefaultMocks() {
     theme: 'system',
     setTheme: vi.fn(),
   });
+  vi.mocked(sharedLogic.useTelegramStatus).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    error: null,
+  } as any);
+  vi.mocked(sharedLogic.useTelegramConfigure).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  } as any);
 }
 
 describe('SettingsView', () => {
@@ -263,12 +274,13 @@ describe('SettingsView', () => {
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Settings');
     });
 
-    it('renders all four sections', () => {
+    it('renders all sections', () => {
       render(<SettingsView />);
       expect(screen.getByText('Daemon Status')).toBeInTheDocument();
       expect(screen.getByText('Notifications')).toBeInTheDocument();
       expect(screen.getByText('Theme')).toBeInTheDocument();
       expect(screen.getByText('Keyboard Shortcuts')).toBeInTheDocument();
+      expect(screen.getByText('Telegram Bridge')).toBeInTheDocument();
     });
   });
 });

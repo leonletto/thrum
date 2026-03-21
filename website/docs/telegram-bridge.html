@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Telegram Bridge — Thrum</title>
+<meta name="description" content="Bidirectional Telegram integration — relay messages between Telegram and Thrum agents via a bridge goroutine inside the daemon">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#telegram-bridge.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Telegram Bridge
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <strong>Telegram Bridge</strong> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>strategies</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
+<h2>Telegram Bridge</h2>
+<p>The Telegram bridge connects your Telegram account to Thrum&#39;s messaging system.
+Messages you send from Telegram appear as Thrum messages from your user
+identity, and messages sent to your Thrum inbox are forwarded to Telegram.</p>
+<p>This lets you communicate with your agents from your phone — send instructions,
+receive status updates, and reply to messages without being at your terminal.</p>
+<h3>How It Works</h3>
+<p>The bridge runs as a goroutine inside the Thrum daemon. It connects to the
+daemon&#39;s own WebSocket server as a client (the same way the browser UI does) and
+polls Telegram for inbound messages.</p>
+<pre><code>Telegram ←→ Bridge Goroutine ←→ Daemon WebSocket ←→ Agents
+              (inside daemon)    (JSON-RPC 2.0)</code></pre>
+<ul>
+<li><strong>Inbound:</strong> Telegram message → bridge registers as your user identity →
+sends via <code>message.send</code> RPC to the target agent</li>
+<li><strong>Outbound:</strong> Agent sends message to your inbox → bridge receives via
+WebSocket notification → forwards to your Telegram chat</li>
+<li><strong>Threading:</strong> Telegram replies map to Thrum <code>reply_to</code>; new messages create
+new Thrum threads</li>
+</ul>
+<p>The bridge is isolated — it connects via the public WebSocket RPC interface and
+never imports internal daemon packages.</p>
+<h3>Setup</h3>
+<h4>1. Create a Telegram Bot</h4>
+<ol>
+<li>Open Telegram and message <a href="https://t.me/BotFather">@BotFather</a></li>
+<li>Send <code>/newbot</code> and follow the prompts</li>
+<li>Copy the bot token (looks like <code>123456789:AAH...</code>)</li>
+</ol>
+<h4>2. Find Your Telegram User ID</h4>
+<p>Message <a href="https://t.me/userinfobot">@userinfobot</a> on Telegram. It replies with
+your numeric user ID (e.g., <code>7747509251</code>).</p>
+<h4>3. Configure the Bridge</h4>
+<pre><code>thrum telegram configure \
+  --token &quot;123456789:AAHyour-token-here&quot; \
+  --target &quot;@coordinator_main&quot; \
+  --user &quot;your-username&quot;</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--token</code></td>
+<td>Bot token from BotFather</td>
+</tr>
+<tr>
+<td><code>--target</code></td>
+<td>Agent that receives your Telegram messages (with <code>@</code>)</td>
+</tr>
+<tr>
+<td><code>--user</code></td>
+<td>Your Thrum username (e.g., <code>leon-letto</code>)</td>
+</tr>
+</tbody></table>
+<h4>4. Add Your Telegram User ID to the Allow List</h4>
+<p>Edit <code>.thrum/config.json</code> and add your Telegram user ID to <code>allow_from</code>, plus
+set <code>chat_id</code> to the same value (for DMs, chat ID equals user ID):</p>
+<pre><code>{
+  &quot;telegram&quot;: {
+    &quot;token&quot;: &quot;123456789:AAH...&quot;,
+    &quot;target&quot;: &quot;@coordinator_main&quot;,
+    &quot;user_id&quot;: &quot;leon-letto&quot;,
+    &quot;chat_id&quot;: 7747509251,
+    &quot;allow_from&quot;: [7747509251]
+  }
+}</code></pre>
+<h4>5. Restart the Daemon</h4>
+<pre><code>thrum daemon restart</code></pre>
+<p>The startup banner will show:</p>
+<pre><code>Telegram:    bridge enabled (target: @coordinator_main)</code></pre>
+<h4>6. Test It</h4>
+<p>Send a message from Telegram to your bot. It should appear in the target
+agent&#39;s inbox:</p>
+<pre><code>thrum inbox --unread</code></pre>
+<p>Send a message back:</p>
+<pre><code>thrum send &quot;Hello from the terminal!&quot; --to @your-username</code></pre>
+<p>It should appear in your Telegram chat.</p>
+<h3>Configuration Reference</h3>
+<p>The full configuration lives in <code>.thrum/config.json</code> under the <code>telegram</code> key:</p>
+<pre><code>{
+  &quot;telegram&quot;: {
+    &quot;token&quot;: &quot;123456789:AAH...&quot;,
+    &quot;target&quot;: &quot;@coordinator_main&quot;,
+    &quot;user_id&quot;: &quot;leon-letto&quot;,
+    &quot;chat_id&quot;: 7747509251,
+    &quot;allow_from&quot;: [7747509251, 412587349],
+    &quot;allow_all&quot;: false,
+    &quot;enabled&quot;: true
+  }
+}</code></pre>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>token</code></td>
+<td>string</td>
+<td>Telegram bot token from BotFather. Required.</td>
+</tr>
+<tr>
+<td><code>target</code></td>
+<td>string</td>
+<td>Target agent mention (e.g., <code>@coordinator_main</code>). Required.</td>
+</tr>
+<tr>
+<td><code>user_id</code></td>
+<td>string</td>
+<td>Your Thrum username. Required.</td>
+</tr>
+<tr>
+<td><code>chat_id</code></td>
+<td>int</td>
+<td>Telegram chat ID for outbound messages. For DMs, same as your user ID.</td>
+</tr>
+<tr>
+<td><code>allow_from</code></td>
+<td>int[]</td>
+<td>Telegram user IDs allowed to send messages. Empty = block all.</td>
+</tr>
+<tr>
+<td><code>allow_all</code></td>
+<td>bool</td>
+<td>If true, allow all Telegram users (overrides <code>allow_from</code>). Default: false.</td>
+</tr>
+<tr>
+<td><code>enabled</code></td>
+<td>bool</td>
+<td>Explicit enable/disable. Default: true when token is set.</td>
+</tr>
+</tbody></table>
+<h3>CLI Commands</h3>
+<pre><code># Configure the bridge
+thrum telegram configure --token &lt;token&gt; --target &lt;agent&gt; --user &lt;username&gt;
+
+# Check bridge status
+thrum telegram status
+
+# Status as JSON
+thrum telegram status --json</code></pre>
+<h3>Security</h3>
+<p>The bridge follows a defense-in-depth security model:</p>
+<p><strong>Access control:</strong></p>
+<ul>
+<li><strong>Fail-closed:</strong> Empty <code>allow_from</code> with <code>allow_all: false</code> blocks all
+inbound messages. You must explicitly add Telegram user IDs.</li>
+<li><strong>Gate ordering:</strong> The access check runs before any message processing — a
+blocked sender produces zero observable side effects (no error reply, no
+typing indicator).</li>
+<li><strong>Bot blocking:</strong> Messages from other Telegram bots (<code>from.is_bot</code>) are
+always dropped, even if the bot&#39;s ID is in <code>allow_from</code>.</li>
+<li><strong>Rate limiting:</strong> Allowed users have per-user rate limits to prevent abuse.</li>
+</ul>
+<p><strong>Token hygiene:</strong></p>
+<ul>
+<li>The bot token is never logged, printed in error messages, or included in
+message metadata.</li>
+<li>The bridge struct does not store the token as a field — it passes through to
+the Telegram API at startup and is not retained.</li>
+<li>CLI and web UI display only the first 10 characters (masked).</li>
+</ul>
+<p><strong>Isolation:</strong></p>
+<ul>
+<li>The bridge connects via the daemon&#39;s WebSocket RPC — it never imports
+internal daemon packages.</li>
+<li>The WebSocket client validates the URL is a loopback address before
+connecting.</li>
+<li>Outbound messages are restricted to the configured <code>chat_id</code> only.</li>
+</ul>
+<p><strong>Data flow:</strong></p>
+<ul>
+<li>Only message content is sent to Telegram — no internal metadata (agent IDs,
+session IDs, structured data).</li>
+<li>Telegram metadata (chat ID, message ID, username) is stored in the Thrum
+message&#39;s <code>structured</code> field, never in the content text.</li>
+</ul>
+<h3>Web UI</h3>
+<p>The Telegram bridge can also be configured from the web UI settings panel.
+Navigate to Settings → Telegram to set the token, target agent, and view bridge
+status.</p>
+<p>The web UI&#39;s inbox has been redesigned as a conversation-style chat timeline
+(similar to Slack or Telegram). Select an agent from the conversation list to
+see the full bidirectional message history.</p>
+<h3>Troubleshooting</h3>
+<p><strong>Bridge not starting:</strong></p>
+<pre><code>thrum telegram status
+# Check: is the token set? Is enabled = yes?
+# Check daemon logs for &quot;telegram bridge:&quot; messages</code></pre>
+<p><strong>Messages not arriving from Telegram:</strong></p>
+<ul>
+<li>Verify your Telegram user ID is in <code>allow_from</code></li>
+<li>Check that no other process is polling the same bot (only one poller per bot
+token)</li>
+<li>Make sure <code>allow_all</code> is not false with an empty <code>allow_from</code> (fail-closed)</li>
+</ul>
+<p><strong>Messages not forwarding to Telegram:</strong></p>
+<ul>
+<li>Verify <code>chat_id</code> is set (for DMs, same as your user ID)</li>
+<li>Check that the target agent is sending to your Thrum username
+(<code>--to @your-username</code>)</li>
+</ul>
+<p><strong>Connection drops after idle:</strong></p>
+<ul>
+<li>The bridge handles WebSocket keep-alive automatically via ping/pong. If you
+see <code>client closed</code> errors in logs, ensure you&#39;re running the latest version.</li>
+</ul>
+<p><strong>&quot;Existing token will be replaced&quot; prompt:</strong></p>
+<ul>
+<li>This confirmation appears when reconfiguring with a different token. Use
+<code>--yes</code> to bypass in scripts.</li>
+</ul>
+
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#telegram-bridge.html')}</script>
+</body>
+</html>
