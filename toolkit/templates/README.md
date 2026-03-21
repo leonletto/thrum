@@ -69,17 +69,17 @@ Each role has two variants:
 
 ### Available Roles
 
-| Role          | Purpose                                            | Worktree Pattern         |
-| ------------- | -------------------------------------------------- | ------------------------ |
-| coordinator   | Orchestrates team, dispatches tasks, reviews/merges | Main repo (not detached) |
-| implementer   | Writes code in assigned worktree                   | Own feature branch       |
-| planner       | Creates plans, designs architecture, writes specs  | Own branch or main       |
-| researcher    | Investigates codebases, produces research reports  | Detached HEAD (read-only)|
-| reviewer      | Reviews code for quality, security, correctness    | Detached HEAD (read-only)|
-| tester        | Writes and runs tests, verifies acceptance criteria | Own feature branch       |
-| deployer      | Handles builds, releases, deployment operations    | Main repo or ops branch  |
-| documenter    | Creates and maintains documentation                | Own branch or main       |
-| monitor       | Watches system health, reports anomalies           | Main repo (read-only)    |
+| Role        | Purpose                                             | Worktree Pattern          |
+| ----------- | --------------------------------------------------- | ------------------------- |
+| coordinator | Orchestrates team, dispatches tasks, reviews/merges | Main repo (not detached)  |
+| implementer | Writes code in assigned worktree                    | Own feature branch        |
+| planner     | Creates plans, designs architecture, writes specs   | Own branch or main        |
+| researcher  | Investigates codebases, produces research reports   | Detached HEAD (read-only) |
+| reviewer    | Reviews code for quality, security, correctness     | Detached HEAD (read-only) |
+| tester      | Writes and runs tests, verifies acceptance criteria | Own feature branch        |
+| deployer    | Handles builds, releases, deployment operations     | Main repo or ops branch   |
+| documenter  | Creates and maintains documentation                 | Own branch or main        |
+| monitor     | Watches system health, reports anomalies            | Main repo (read-only)     |
 
 ### Template Structure
 

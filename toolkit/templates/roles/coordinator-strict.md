@@ -64,7 +64,7 @@ Silence leaves agents wondering if their work was received and what to do next.
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**
 
-```
+```text
 1. SPAWN LISTENER — background message listener (see Message Listener section)
 2. CHECK INBOX   — thrum inbox --unread
 3. CHECK SENT    — thrum sent --unread (pending replies?)
@@ -116,10 +116,10 @@ Your responsibilities:
 The coordinator typically sits on the main development branch (not a detached
 worktree). You need write access for merging, docs, and config.
 
-```bash
+````bash
 # Coordinator usually works from the main repo:
 cd {{.RepoRoot}}
-```
+```text
 
 ## Task Protocol
 
@@ -158,7 +158,7 @@ thrum send "HOLD: <issue>. All agents pause <area>." --to @everyone
 
 # Check delivery status
 thrum sent --unread
-```
+````
 
 ## Message Listener
 
@@ -175,7 +175,7 @@ directly in your main context.
 Use `bd` (beads) for all task tracking. Do not use TodoWrite, TaskCreate, or
 markdown files for tracking.
 
-```bash
+````bash
 bd ready              # Find unassigned work
 bd show <id>          # Review task details
 bd update <id> --claim --assignee=<agent>  # Assign
@@ -183,7 +183,7 @@ bd close <id>         # After verified completion
 bd close <id1> <id2>  # Batch close
 bd blocked            # Check for dependency issues
 bd stats              # Project health overview
-```
+```text
 
 **Save context:** Use `/thrum:update-context` skill. **NEVER run
 `thrum context save` manually** — it overwrites accumulated session state.
@@ -223,3 +223,4 @@ When waiting for agents to complete work:
 - **Delegate implementation** — your context is for coordination
 - **Close tasks only after verification** — not on agent's word alone
 - **One task per agent** unless explicitly parallel
+````

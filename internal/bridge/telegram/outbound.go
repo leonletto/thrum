@@ -50,7 +50,7 @@ type fullMessage struct {
 }
 
 // Run listens for notifications and relays matching messages to Telegram.
-// Blocks until ctx is cancelled.
+// Blocks until ctx is canceled.
 func (r *OutboundRelay) Run(ctx context.Context) {
 	for {
 		select {

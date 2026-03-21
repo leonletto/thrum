@@ -166,7 +166,7 @@ func SaveAuthKeyToEnvFile(thrumDir, authKey string) error {
 	found := false
 
 	// Read existing content if file exists
-	if data, err := os.ReadFile(envPath); err == nil {
+	if data, err := os.ReadFile(envPath); err == nil { // #nosec G304 -- envPath is derived from repo root, not user input
 		for _, line := range strings.Split(string(data), "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "THRUM_TS_AUTHKEY=") {
 				lines = append(lines, "THRUM_TS_AUTHKEY="+authKey)
@@ -191,7 +191,7 @@ func SaveAuthKeyToEnvFile(thrumDir, authKey string) error {
 		return fmt.Errorf("create thrum dir: %w", err)
 	}
 	tmpPath := envPath + ".tmp"
-	if err := os.WriteFile(tmpPath, []byte(content), 0600); err != nil {
+	if err := os.WriteFile(tmpPath, []byte(content), 0600); err != nil { // #nosec G703 -- path derived from repo root
 		return fmt.Errorf("write env file: %w", err)
 	}
 	return os.Rename(tmpPath, envPath)

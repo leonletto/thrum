@@ -333,7 +333,7 @@ func TestWSClientCallRPCError(t *testing.T) {
 }
 
 // TestWSClientCallContextCancellation verifies that Call returns when context
-// is cancelled while waiting for a response.
+// is canceled while waiting for a response.
 func TestWSClientCallContextCancellation(t *testing.T) {
 	t.Parallel()
 

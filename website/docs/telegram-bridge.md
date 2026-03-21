@@ -6,14 +6,7 @@ description:
 category: "guides"
 order: 12
 tags:
-  [
-    "telegram",
-    "bridge",
-    "messaging",
-    "mobile",
-    "notifications",
-    "integration",
-  ]
+  ["telegram", "bridge", "messaging", "mobile", "notifications", "integration"]
 last_updated: "2026-03-20"
 ---
 
@@ -32,13 +25,13 @@ The bridge runs as a goroutine inside the Thrum daemon. It connects to the
 daemon's own WebSocket server as a client (the same way the browser UI does) and
 polls Telegram for inbound messages.
 
-```
+```text
 Telegram ←→ Bridge Goroutine ←→ Daemon WebSocket ←→ Agents
               (inside daemon)    (JSON-RPC 2.0)
 ```
 
-- **Inbound:** Telegram message → bridge registers as your user identity →
-  sends via `message.send` RPC to the target agent
+- **Inbound:** Telegram message → bridge registers as your user identity → sends
+  via `message.send` RPC to the target agent
 - **Outbound:** Agent sends message to your inbox → bridge receives via
   WebSocket notification → forwards to your Telegram chat
 - **Threading:** Telegram replies map to Thrum `reply_to`; new messages create
@@ -100,14 +93,14 @@ thrum daemon restart
 
 The startup banner will show:
 
-```
+```text
 Telegram:    bridge enabled (target: @coordinator_main)
 ```
 
 #### 6. Test It
 
-Send a message from Telegram to your bot. It should appear in the target
-agent's inbox:
+Send a message from Telegram to your bot. It should appear in the target agent's
+inbox:
 
 ```bash
 thrum inbox --unread
@@ -139,15 +132,15 @@ The full configuration lives in `.thrum/config.json` under the `telegram` key:
 }
 ```
 
-| Field        | Type     | Description                                                              |
-| ------------ | -------- | ------------------------------------------------------------------------ |
-| `token`      | string   | Telegram bot token from BotFather. Required.                             |
-| `target`     | string   | Target agent mention (e.g., `@coordinator_main`). Required.              |
-| `user_id`    | string   | Your Thrum username. Required.                                           |
-| `chat_id`    | int      | Telegram chat ID for outbound messages. For DMs, same as your user ID.   |
-| `allow_from` | int[]    | Telegram user IDs allowed to send messages. Empty = block all.           |
-| `allow_all`  | bool     | If true, allow all Telegram users (overrides `allow_from`). Default: false. |
-| `enabled`    | bool     | Explicit enable/disable. Default: true when token is set.                |
+| Field        | Type   | Description                                                                 |
+| ------------ | ------ | --------------------------------------------------------------------------- |
+| `token`      | string | Telegram bot token from BotFather. Required.                                |
+| `target`     | string | Target agent mention (e.g., `@coordinator_main`). Required.                 |
+| `user_id`    | string | Your Thrum username. Required.                                              |
+| `chat_id`    | int    | Telegram chat ID for outbound messages. For DMs, same as your user ID.      |
+| `allow_from` | int[]  | Telegram user IDs allowed to send messages. Empty = block all.              |
+| `allow_all`  | bool   | If true, allow all Telegram users (overrides `allow_from`). Default: false. |
+| `enabled`    | bool   | Explicit enable/disable. Default: true when token is set.                   |
 
 ### CLI Commands
 
@@ -168,13 +161,13 @@ The bridge follows a defense-in-depth security model:
 
 **Access control:**
 
-- **Fail-closed:** Empty `allow_from` with `allow_all: false` blocks all
-  inbound messages. You must explicitly add Telegram user IDs.
+- **Fail-closed:** Empty `allow_from` with `allow_all: false` blocks all inbound
+  messages. You must explicitly add Telegram user IDs.
 - **Gate ordering:** The access check runs before any message processing — a
   blocked sender produces zero observable side effects (no error reply, no
   typing indicator).
-- **Bot blocking:** Messages from other Telegram bots (`from.is_bot`) are
-  always dropped, even if the bot's ID is in `allow_from`.
+- **Bot blocking:** Messages from other Telegram bots (`from.is_bot`) are always
+  dropped, even if the bot's ID is in `allow_from`.
 - **Rate limiting:** Allowed users have per-user rate limits to prevent abuse.
 
 **Token hygiene:**
@@ -187,8 +180,8 @@ The bridge follows a defense-in-depth security model:
 
 **Isolation:**
 
-- The bridge connects via the daemon's WebSocket RPC — it never imports
-  internal daemon packages.
+- The bridge connects via the daemon's WebSocket RPC — it never imports internal
+  daemon packages.
 - The WebSocket client validates the URL is a loopback address before
   connecting.
 - Outbound messages are restricted to the configured `chat_id` only.

@@ -20,12 +20,12 @@ and the code does another, the docs are wrong — update them.
 3. If no request, audit existing docs for staleness and gaps
 
 **The Novelist trap:** You write 2000 words when 200 would do. Documentation
-should be concise. Use examples instead of explanations. Show the command, not
-a paragraph about the command.
+should be concise. Use examples instead of explanations. Show the command, not a
+paragraph about the command.
 
 **The Stale Docs trap:** You write new docs without checking if existing docs
-already cover the topic. Search first. Update existing docs rather than
-creating duplicates.
+already cover the topic. Search first. Update existing docs rather than creating
+duplicates.
 
 **The Code Reader trap:** You read source code into your context to understand
 what to document. Delegate code exploration to sub-agents and ask them for
@@ -60,7 +60,7 @@ to document. Delegate exploration to sub-agents and work from their summaries.
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**
 
-```
+```text
 1. SPAWN LISTENER — background message listener (see Message Listener section)
 2. CHECK INBOX   — thrum inbox --unread
 3. CHECK SENT    — thrum sent --unread
@@ -89,7 +89,7 @@ Your responsibilities:
 **You CAN:**
 
 - Read all code in the repository via sub-agents
-- Write and modify documentation files (*.md, docs/, website/)
+- Write and modify documentation files (\*.md, docs/, website/)
 - Run documentation build commands
 - Commit documentation changes to your branch
 - Proactively fix stale or missing docs
@@ -104,7 +104,7 @@ Your responsibilities:
 
 When looking for documentation gaps:
 
-```
+```text
 [ ] API/CLI commands — do docs match current flags and behavior?
 [ ] Configuration — are all config options documented?
 [ ] Examples — do code examples still work?
@@ -126,11 +126,11 @@ When looking for documentation gaps:
 Documenters work in their own worktree on a docs branch. They need to write
 documentation files and commit them, which requires a real branch.
 
-```bash
+````bash
 # Setup (docs branch):
 ./scripts/setup-worktree-thrum.sh ~/.workspaces/<project>/documenter \
   feature/docs --identity {{.AgentName}} --role documenter
-```
+```text
 
 ## Task Protocol
 
@@ -147,14 +147,14 @@ documentation files and commit them, which requires a real branch.
 
 ## Documentation Standards
 
-```
-[ ] Checked for existing docs on this topic (update vs create)
-[ ] Code examples are tested/verified
-[ ] All referenced commands actually work
-[ ] Links are valid
-[ ] Follows project doc conventions (frontmatter, structure)
-[ ] Concise — used examples over explanations where possible
-```
+````
+
+[ ] Checked for existing docs on this topic (update vs create) [ ] Code examples
+are tested/verified [ ] All referenced commands actually work [ ] Links are
+valid [ ] Follows project doc conventions (frontmatter, structure) [ ] Concise —
+used examples over explanations where possible
+
+````text
 
 ## Communication Protocol
 
@@ -177,7 +177,7 @@ thrum send "Docs mismatch: <file> says X but code does Y. Is this a bug or stale
 
 # Check delivery
 thrum sent --unread
-```
+````
 
 ## Message Listener
 
@@ -194,12 +194,12 @@ directly in your main context.
 Use `bd` (beads) for task tracking. Do not use TodoWrite, TaskCreate, or
 markdown files.
 
-```bash
+````bash
 bd ready              # Find docs tasks
 bd show <id>          # Read task details
 bd update <id> --claim               # Claim task
 bd close <id>         # Mark complete
-```
+```text
 
 **Save context:** Use `/thrum:update-context` skill. **NEVER run
 `thrum context save` manually** — it overwrites accumulated session state.
@@ -241,3 +241,4 @@ When you have no assigned documentation task:
 - **Verify examples** — code samples must actually work
 - **Only modify docs** — never touch source code
 - **Flag code-docs mismatches** — they might be bugs
+````

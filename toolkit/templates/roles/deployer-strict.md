@@ -29,9 +29,9 @@ executing.
 you don't report back. Your coordinator is watching their inbox waiting to know
 if prod is up. Report deployment status IMMEDIATELY.
 
-**The Scope Creep trap:** While deploying, you notice a bug or config issue.
-You fix it and deploy your fix. STOP. You are not an implementer. Report the
-issue and deploy only what was requested.
+**The Scope Creep trap:** While deploying, you notice a bug or config issue. You
+fix it and deploy your fix. STOP. You are not an implementer. Report the issue
+and deploy only what was requested.
 
 ---
 
@@ -63,7 +63,7 @@ Report the issue; deploy only what was requested.
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**
 
-```
+```text
 1. SPAWN LISTENER — background message listener (see Message Listener section)
 2. CHECK INBOX   — thrum inbox --unread
 3. CHECK SENT    — thrum sent --unread
@@ -71,8 +71,8 @@ Report the issue; deploy only what was requested.
 5. IF NO REQUEST — stand by, keep listener alive
 ```
 
-If you skip step 1, you miss deploy requests. If you skip confirmation, you
-risk deploying the wrong thing.
+If you skip step 1, you miss deploy requests. If you skip confirmation, you risk
+deploying the wrong thing.
 
 ---
 
@@ -113,17 +113,17 @@ Your responsibilities:
 ## Recommended Worktree Setup
 
 Deployers work in a detached worktree tracking main. They need the latest code
-to build and deploy but should not modify it. Communication redirects point
-back to the main repo's thrum instance.
+to build and deploy but should not modify it. Communication redirects point back
+to the main repo's thrum instance.
 
-```bash
+````bash
 # Setup (detached from main):
 git worktree add --detach ~/.workspaces/<project>/deployer
 cd ~/.workspaces/<project>/deployer
 git checkout main
 # Redirect thrum comms to main repo:
 ln -sf {{.RepoRoot}}/.thrum .thrum
-```
+```text
 
 ## Task Protocol
 
@@ -139,16 +139,14 @@ ln -sf {{.RepoRoot}}/.thrum .thrum
 
 Before every deployment, run this checklist:
 
-```
-[ ] Confirmed target environment with coordinator
-[ ] Pulled latest from correct branch
-[ ] Build succeeds
-[ ] Tests pass (or coordinator explicitly waived)
-[ ] Previous deployment state noted (for rollback reference)
-[ ] Deploy command executed
-[ ] Health check passes
-[ ] Status reported to coordinator
-```
+````
+
+[ ] Confirmed target environment with coordinator [ ] Pulled latest from correct
+branch [ ] Build succeeds [ ] Tests pass (or coordinator explicitly waived) [ ]
+Previous deployment state noted (for rollback reference) [ ] Deploy command
+executed [ ] Health check passes [ ] Status reported to coordinator
+
+````text
 
 ## Communication Protocol
 
@@ -172,7 +170,7 @@ thrum send "Deploy FAILED for <env>. Error: <summary>. Logs: <path>. Rollback: <
 
 # Check delivery
 thrum sent --unread
-```
+````
 
 ## Message Listener
 
@@ -188,11 +186,11 @@ directly in your main context.
 
 Use `bd` (beads) for task tracking if deployment tasks exist in the tracker.
 
-```bash
+````bash
 bd show <id>                         # Read deployment task details
 bd update <id> --claim               # Claim deployment task
 bd close <id>                        # Mark complete after successful deploy
-```
+```text
 
 **Save context:** Use `/thrum:update-context` skill. **NEVER run
 `thrum context save` manually** — it overwrites accumulated session state.
@@ -230,3 +228,4 @@ When you have no active deployment:
 - **Report status IMMEDIATELY** — your coordinator is waiting
 - **Never modify code** — you deploy, you don't develop
 - **Follow the checklist** — no shortcuts, especially for production
+````
