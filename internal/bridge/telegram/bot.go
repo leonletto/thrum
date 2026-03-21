@@ -23,25 +23,25 @@ type InboundMessage struct {
 }
 
 const (
-	// rateLimitWindow is the time window for rate limiting.
+	// RateLimitWindow is the time window for rate limiting.
 	rateLimitWindow = 1 * time.Minute
-	// rateLimitMax is the maximum messages per user per window.
+	// RateLimitMax is the maximum messages per user per window.
 	rateLimitMax = 30
 )
 
 // Bot is a Telegram long-poller with an access gate.
 // The bot token is NOT stored as a field — it is passed only to tgbotapi.NewBotAPI.
 type Bot struct {
-	api      *tgbotapi.BotAPI
-	config   config.TelegramConfig
-	messages chan InboundMessage
+	api       *tgbotapi.BotAPI
+	config    config.TelegramConfig
+	messages  chan InboundMessage
 	rateLimit rateLimiter
 }
 
 // rateLimiter tracks per-user message counts within a sliding window.
 type rateLimiter struct {
-	mu      sync.Mutex
-	counts  map[int64][]time.Time // userID → timestamps of recent messages
+	mu     sync.Mutex
+	counts map[int64][]time.Time // userID → timestamps of recent messages
 }
 
 // allow checks if userID is within the rate limit. Returns false if exceeded.
@@ -93,7 +93,7 @@ func (b *Bot) Messages() <-chan InboundMessage {
 }
 
 // Poll long-polls Telegram for updates and forwards allowed messages to the messages channel.
-// It runs until ctx is cancelled.
+// It runs until ctx is canceled.
 func (b *Bot) Poll(ctx context.Context) {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 30

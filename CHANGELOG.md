@@ -27,8 +27,8 @@ and this project adheres to
   the Web UI with live status and token management.
 - **Role-aware preambles** — 9 built-in roles (coordinator, implementer,
   reviewer, planner, tester, researcher, architect, documenter, analyst) get
-  role-specific preamble headers with Anti-Patterns sections. `thrum preamble
-  --init` is now role-aware.
+  role-specific preamble headers with Anti-Patterns sections.
+  `thrum preamble --init` is now role-aware.
 - **Behavioral anchoring in DefaultPreamble** — Rewritten with Operating
   Principles, Startup Protocol, and Anti-Patterns (Deaf Agent, Silent Agent,
   Context Hog) for stronger agent behavior.

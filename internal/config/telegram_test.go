@@ -11,9 +11,9 @@ import (
 
 func TestTelegramConfig_Enabled(t *testing.T) {
 	tests := []struct {
-		name    string
-		cfg     config.TelegramConfig
-		want    bool
+		name string
+		cfg  config.TelegramConfig
+		want bool
 	}{
 		{"empty token", config.TelegramConfig{}, false},
 		{"token set", config.TelegramConfig{Token: "123:AAH"}, true},

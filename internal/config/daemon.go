@@ -20,12 +20,12 @@ type ThrumConfig struct {
 // The bridge is disabled when Token is empty.
 type TelegramConfig struct {
 	Token     string  `json:"token,omitempty"`      // BotFather token (e.g., "123456789:AAH...")
-	Target    string  `json:"target,omitempty"`      // Target agent mention (e.g., "@coordinator_main")
-	UserID    string  `json:"user_id,omitempty"`     // Thrum username (e.g., "leon-letto")
-	ChatID    int64   `json:"chat_id,omitempty"`     // Telegram chat ID for outbound messages
-	Enabled   *bool   `json:"enabled,omitempty"`     // Explicit enable/disable; nil = enabled if token set
-	AllowFrom []int64 `json:"allow_from,omitempty"`  // Allowed Telegram user IDs; empty = block all
-	AllowAll  bool    `json:"allow_all,omitempty"`   // If true, allow all users (overrides AllowFrom)
+	Target    string  `json:"target,omitempty"`     // Target agent mention (e.g., "@coordinator_main")
+	UserID    string  `json:"user_id,omitempty"`    // Thrum username (e.g., "leon-letto")
+	ChatID    int64   `json:"chat_id,omitempty"`    // Telegram chat ID for outbound messages
+	Enabled   *bool   `json:"enabled,omitempty"`    // Explicit enable/disable; nil = enabled if token set
+	AllowFrom []int64 `json:"allow_from,omitempty"` // Allowed Telegram user IDs; empty = block all
+	AllowAll  bool    `json:"allow_all,omitempty"`  // If true, allow all users (overrides AllowFrom)
 }
 
 // TelegramEnabled returns whether the bridge should run.

@@ -27,14 +27,14 @@ type BridgeStatus struct {
 }
 
 type Bridge struct {
-	cfg       config.TelegramConfig
-	wsPort    string
-	logger    *log.Logger
-	mu        sync.Mutex
-	cancelRun context.CancelFunc // cancels the current run loop for restart
-	running   atomic.Bool
-	connectedAt time.Time
-	lastError   string
+	cfg          config.TelegramConfig
+	wsPort       string
+	logger       *log.Logger
+	mu           sync.Mutex
+	cancelRun    context.CancelFunc // cancels the current run loop for restart
+	running      atomic.Bool
+	connectedAt  time.Time
+	lastError    string
 	inboundCount atomic.Int64
 }
 
@@ -75,7 +75,7 @@ func (b *Bridge) Restart(newCfg config.TelegramConfig) {
 	}
 }
 
-// Run starts the bridge. Blocks until ctx is cancelled.
+// Run starts the bridge. Blocks until ctx is canceled.
 // Designed to be called as: go bridge.Run(ctx)
 //
 // Panics are recovered and treated as transient errors (triggers retry).
@@ -85,7 +85,7 @@ func (b *Bridge) Run(ctx context.Context) {
 	defer b.logger.Println("stopped")
 
 	for {
-		// Create a child context for this run cycle (can be cancelled by Restart)
+		// Create a child context for this run cycle (can be canceled by Restart)
 		runCtx, runCancel := context.WithCancel(ctx)
 		b.mu.Lock()
 		b.cancelRun = runCancel

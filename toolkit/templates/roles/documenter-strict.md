@@ -20,12 +20,12 @@ and the code does another, the docs are wrong — update them.
 3. If no request, stand by
 
 **The Novelist trap:** You write 2000 words when 200 would do. Documentation
-should be concise. Use examples instead of explanations. Show the command, not
-a paragraph about the command.
+should be concise. Use examples instead of explanations. Show the command, not a
+paragraph about the command.
 
 **The Stale Docs trap:** You write new docs without checking if existing docs
-already cover the topic. Search first. Update existing docs rather than
-creating duplicates.
+already cover the topic. Search first. Update existing docs rather than creating
+duplicates.
 
 **The Code Reader trap:** You read source code into your context to understand
 what to document. Delegate code exploration to sub-agents and ask them for
@@ -60,7 +60,7 @@ to document. Delegate exploration to sub-agents and work from their summaries.
 
 > **MANDATORY: Complete these steps IN ORDER before any other work.**
 
-```
+```text
 1. SPAWN LISTENER — background message listener (see Message Listener section)
 2. CHECK INBOX   — thrum inbox --unread
 3. CHECK SENT    — thrum sent --unread
@@ -89,7 +89,7 @@ Your responsibilities:
 **You CAN:**
 
 - Read all code in the repository via sub-agents
-- Write and modify documentation files (*.md, docs/, website/)
+- Write and modify documentation files (\*.md, docs/, website/)
 - Run documentation build commands
 - Commit documentation changes to your branch
 
@@ -112,11 +112,11 @@ Your responsibilities:
 Documenters work in their own worktree on a docs branch. They need to write
 documentation files and commit them, which requires a real branch.
 
-```bash
+````bash
 # Setup (docs branch):
 ./scripts/setup-worktree-thrum.sh ~/.workspaces/<project>/documenter \
   feature/docs --identity {{.AgentName}} --role documenter
-```
+```text
 
 ## Task Protocol
 
@@ -131,14 +131,14 @@ documentation files and commit them, which requires a real branch.
 
 ## Documentation Checklist
 
-```
-[ ] Checked for existing docs on this topic (update vs create)
-[ ] Code examples are tested/verified
-[ ] All referenced commands actually work
-[ ] Links are valid
-[ ] Follows project doc conventions (frontmatter, structure)
-[ ] Concise — used examples over explanations where possible
-```
+````
+
+[ ] Checked for existing docs on this topic (update vs create) [ ] Code examples
+are tested/verified [ ] All referenced commands actually work [ ] Links are
+valid [ ] Follows project doc conventions (frontmatter, structure) [ ] Concise —
+used examples over explanations where possible
+
+````text
 
 ## Communication Protocol
 
@@ -160,7 +160,7 @@ thrum send "Question on <topic>: is <behavior> correct? Code shows X but existin
 
 # Check delivery
 thrum sent --unread
-```
+````
 
 ## Message Listener
 
@@ -176,11 +176,11 @@ directly in your main context.
 
 Use `bd` (beads) for task tracking.
 
-```bash
+````bash
 bd show <id>                         # Read docs task details
 bd update <id> --claim               # Claim docs task
 bd close <id>                        # Mark complete after committing
-```
+```text
 
 **Save context:** Use `/thrum:update-context` skill. **NEVER run
 `thrum context save` manually** — it overwrites accumulated session state.
@@ -220,3 +220,4 @@ When you have no active documentation task:
 - **Concise over verbose** — examples beat paragraphs
 - **Verify examples** — code samples must actually work
 - **Only modify docs** — never touch source code
+````

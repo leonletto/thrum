@@ -1722,10 +1722,10 @@ changes without writing files.
 thrum roles deploy [flags]
 ```
 
-| Flag        | Description                             | Default |
-| ----------- | --------------------------------------- | ------- |
-| `--agent`   | Deploy for a specific agent only        |         |
-| `--dry-run` | Preview changes without writing files   | `false` |
+| Flag        | Description                           | Default |
+| ----------- | ------------------------------------- | ------- |
+| `--agent`   | Deploy for a specific agent only      |         |
+| `--dry-run` | Preview changes without writing files | `false` |
 
 Example:
 
@@ -1758,12 +1758,12 @@ for each value.
 thrum telegram configure [flags]
 ```
 
-| Flag        | Description                             | Default |
-| ----------- | --------------------------------------- | ------- |
-| `--token`   | Telegram bot token                      |         |
-| `--target`  | Target chat ID or username              |         |
-| `--user`    | Telegram username to associate          |         |
-| `--yes`     | Skip confirmation prompt                | `false` |
+| Flag       | Description                    | Default |
+| ---------- | ------------------------------ | ------- |
+| `--token`  | Telegram bot token             |         |
+| `--target` | Target chat ID or username     |         |
+| `--user`   | Telegram username to associate |         |
+| `--yes`    | Skip confirmation prompt       | `false` |
 
 Example:
 

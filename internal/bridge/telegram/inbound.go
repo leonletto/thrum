@@ -21,7 +21,7 @@ func NewInboundRelay(ws *WSClient, msgMap *MessageMap, userID, target string) *I
 }
 
 // Run reads from the bot's message channel and relays each to Thrum.
-// Blocks until ctx is cancelled or the messages channel is closed.
+// Blocks until ctx is canceled or the messages channel is closed.
 func (r *InboundRelay) Run(ctx context.Context, messages <-chan InboundMessage) {
 	for {
 		select {
@@ -49,10 +49,10 @@ func (r *InboundRelay) relay(ctx context.Context, msg InboundMessage) error {
 	}
 
 	sendReq := map[string]any{
-		"content":          msg.Text,
-		"mentions":         []string{r.target},
-		"caller_agent_id":  r.userID,
-		"structured":       structured,
+		"content":         msg.Text,
+		"mentions":        []string{r.target},
+		"caller_agent_id": r.userID,
+		"structured":      structured,
 	}
 
 	// Threading: if Telegram message is a reply, look up the Thrum message_id

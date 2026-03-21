@@ -4822,9 +4822,9 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	}
 
 	var pairingMgr *daemon.PairingManager
-	var tsLocalAddr string              // set when Tailscale listener starts
-	var tsnetMu sync.Mutex             // protects tsLocalAddr and tsnetStarted
-	var startTsnetFn func(int) error    // lazy tsnet start, assigned later
+	var tsLocalAddr string           // set when Tailscale listener starts
+	var tsnetMu sync.Mutex           // protects tsLocalAddr and tsnetStarted
+	var startTsnetFn func(int) error // lazy tsnet start, assigned later
 	hostname, _ := os.Hostname()
 
 	getTsLocalAddr := func() string {
@@ -5141,7 +5141,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			tsCfg.AuthKey = os.Getenv("THRUM_TS_AUTHKEY")
 		}
 		if tsCfg.AuthKey == "" {
-			return fmt.Errorf("Tailscale auth key not available — run 'thrum peer add' to configure")
+			return fmt.Errorf("tailscale auth key not available — run 'thrum peer add' to configure")
 		}
 
 		tsListener, err := daemon.NewTsnetServer(tsCfg)
@@ -5469,7 +5469,7 @@ func applyRolePreamble(thrumDir, agentName, role, preambleFile string, force boo
 	} else {
 		// Only write if no preamble exists yet
 		path := agentcontext.PreamblePath(thrumDir, agentName)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
+		if _, err := os.Stat(path); os.IsNotExist(err) { // #nosec G703 -- path from PreamblePath, not user input
 			if err := agentcontext.SavePreamble(thrumDir, agentName, preamble); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
 			}
@@ -6186,8 +6186,9 @@ func runTelegramConfigure(token, target, userID string, skipConfirm bool) error 
 			cfg.Telegram.MaskedToken(), maskToken(token))
 		fmt.Print("Continue? [y/N]: ")
 		var confirm string
-		if _, err := fmt.Scanln(&confirm); err != nil || (confirm != "y" && confirm != "Y") {
-			fmt.Println("Cancelled.")
+		_, _ = fmt.Scanln(&confirm)
+		if confirm != "y" && confirm != "Y" {
+			fmt.Println("Canceled.")
 			return nil
 		}
 	}

@@ -16,7 +16,7 @@ func TestOutboundSkipsOwnMessages(t *testing.T) {
 	// Notification from the bridge user itself — should be skipped
 	params, _ := json.Marshal(notificationParams{
 		MessageID: "msg_1",
-		Author:    struct {
+		Author: struct {
 			AgentID string `json:"agent_id"`
 			Name    string `json:"name"`
 		}{AgentID: "user:leon-letto", Name: "leon-letto"},
