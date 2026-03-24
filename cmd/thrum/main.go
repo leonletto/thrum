@@ -6382,7 +6382,7 @@ func runTelegramPair(pairTimeout time.Duration, autoAccept bool) error {
 	if err != nil {
 		return fmt.Errorf("daemon not running — start with 'thrum daemon start'")
 	}
-	defer client.Close()
+	defer client.Close() //nolint:errcheck
 
 	// Call telegram.pair RPC with extended timeout
 	fmt.Printf("Pairing — send any message to your bot from Telegram (timeout: %s)...\n", pairTimeout)
@@ -6404,7 +6404,7 @@ func runTelegramPair(pairTimeout time.Duration, autoAccept bool) error {
 	if !autoAccept {
 		fmt.Print("  Allow this user? [y/n]: ")
 		var answer string
-		fmt.Scanln(&answer) //nolint:errcheck
+		_, _ = fmt.Scanln(&answer)
 		if answer != "y" && answer != "Y" {
 			fmt.Println("Pairing skipped. Run 'thrum telegram pair' to retry.")
 			return nil
