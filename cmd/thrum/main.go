@@ -5308,6 +5308,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	telegramHandler := rpc.NewTelegramHandler(absPath)
 	server.RegisterHandler("telegram.configure", telegramHandler.HandleConfigure)
 	server.RegisterHandler("telegram.status", telegramHandler.HandleStatus)
+	server.RegisterHandler("telegram.pair", telegramHandler.HandlePair)
 
 	if thrumCfg.Telegram.TelegramEnabled() {
 		tgBridge := telegram.New(thrumCfg.Telegram, wsPort)
