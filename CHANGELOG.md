@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Telegram pairing flow** — Interactive onboarding for the Telegram bridge.
+  `thrum telegram configure` now automatically restarts the daemon and enters a
+  pairing mode that captures your Telegram user ID when you send the first
+  message. No more manually looking up IDs or editing config files.
+  - `thrum telegram pair` — standalone pairing for already-configured bridges
+  - `--allow-from` flag for non-interactive setup when the ID is known
+  - `--pair-timeout` controls the pairing window (default 60s, max 5 minutes)
+  - `--skip-pair` writes config only without interactive pairing
+  - `telegram.pair` RPC with bridge readiness polling and timeout cap
+  - Pairing security model: short window, explicit consent, single session,
+    no persistent state change, fail-closed on decline or timeout
+
 ## [0.6.0] - 2026-03-21
 
 ### Added
@@ -18,6 +34,7 @@ and this project adheres to
   blocks all).
   - `thrum telegram configure` — set bot token and allowed user IDs
   - `thrum telegram status` — check bridge connection and config
+  - `thrum telegram pair` — interactive account pairing
   - Per-user rate limiting on inbound messages
   - PingHandler keeps WebSocket alive during idle periods
 - **Conversation UI** — Threaded conversation timeline replaces flat inbox as
