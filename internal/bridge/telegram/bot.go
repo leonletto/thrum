@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -36,6 +37,8 @@ type Bot struct {
 	config    config.TelegramConfig
 	messages  chan InboundMessage
 	rateLimit rateLimiter
+	pairMode  atomic.Bool
+	pairCh    atomic.Pointer[chan PairResult]
 }
 
 // rateLimiter tracks per-user message counts within a sliding window.
@@ -123,6 +126,25 @@ func (b *Bot) Poll(ctx context.Context) {
 			// Drop bot messages — bots are never allowed, even if ID is in AllowFrom.
 			if from.IsBot {
 				continue
+			}
+
+			// Pair mode: intercept message for pairing handshake.
+			if b.pairMode.Load() {
+				if ch := b.pairCh.Load(); ch != nil {
+					im := extractMessage(msg)
+					select {
+					case *ch <- PairResult{
+						UserID:    from.ID,
+						Username:  from.UserName,
+						FirstName: from.FirstName,
+						LastName:  from.LastName,
+						ChatID:    msg.Chat.ID,
+						Text:      im.Text,
+					}:
+					default:
+					}
+					continue
+				}
 			}
 
 			// Fail-closed access check using config.IsAllowed.
