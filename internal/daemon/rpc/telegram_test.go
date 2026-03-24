@@ -3,7 +3,12 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
+	"time"
+
+	telegram "github.com/leonletto/thrum/internal/bridge/telegram"
+	"github.com/leonletto/thrum/internal/config"
 )
 
 // TestHandlePair_Success tests that HandlePair returns "not configured" when
@@ -29,27 +34,31 @@ func TestHandlePair_Success(t *testing.T) {
 }
 
 // TestHandlePair_BridgeNotReady tests that HandlePair returns an error when the
-// bridge is set but not running. We use a short context deadline to avoid
-// waiting the full 5s readiness poll.
+// bridge is set but not running (Running() returns false). Uses a short context
+// deadline to avoid waiting the full 5s readiness poll.
 func TestHandlePair_BridgeNotReady(t *testing.T) {
 	handler := NewTelegramHandler("/tmp/test-repo")
-	// SetBridge with a non-nil pointer requires a real Bridge, but we can't
-	// easily construct one without a real Telegram token. Instead we test the
-	// nil-bridge path above and the timeout-validation path below.
-	// This test verifies timeout validation rejects values out of range before
-	// any bridge readiness check occurs.
-	req := TelegramPairRequest{TimeoutSeconds: 0}
+
+	// Construct a real Bridge without starting it — Running() returns false.
+	bridge := telegram.New(config.TelegramConfig{Token: "fake:token"}, "0")
+	handler.SetBridge(bridge)
+
+	req := TelegramPairRequest{TimeoutSeconds: 10}
 	raw, err := json.Marshal(req)
 	if err != nil {
 		t.Fatalf("failed to marshal request: %v", err)
 	}
 
-	ctx := context.Background()
+	// Short context deadline so we don't wait the full 5s readiness poll.
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
 	_, err = handler.HandlePair(ctx, raw)
 	if err == nil {
-		t.Fatal("expected error for timeout_seconds=0, got nil")
+		t.Fatal("expected error for bridge not ready, got nil")
 	}
-	if err.Error() != "timeout_seconds must be between 1 and 300" {
+	// Either the readiness poll times out or the context deadline fires first.
+	if !strings.Contains(err.Error(), "not connected") && !strings.Contains(err.Error(), "context deadline") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

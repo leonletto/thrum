@@ -243,12 +243,8 @@ func (b *Bridge) run(ctx context.Context) error {
 	inbound := NewInboundRelay(ws, msgMap, userID, b.cfg.Target)
 	outbound := NewOutboundRelay(ws, bot, msgMap, userID, b.cfg.ChatID)
 
-	// 6. Start sub-goroutines (each with panic recovery)
-	go b.safeGo("bot.Poll", func() { bot.Poll(ctx) })
-	go b.safeGo("outbound.Run", func() { outbound.Run(ctx) })
-	go b.safeGo("heartbeat", func() { b.heartbeatLoop(ctx, ws, sess.SessionID) })
-
-	// 7. Track connection state and process inbound messages
+	// 6. Mark running BEFORE launching goroutines so Pair() sees accurate state.
+	// b.bot.Store(bot) was set above — Pair() checks running first, then loads bot.
 	b.running.Store(true)
 	b.mu.Lock()
 	b.connectedAt = time.Now()
@@ -258,6 +254,11 @@ func (b *Bridge) run(ctx context.Context) error {
 		b.running.Store(false)
 		b.bot.Store(nil)
 	}()
+
+	// 7. Start sub-goroutines (each with panic recovery)
+	go b.safeGo("bot.Poll", func() { bot.Poll(ctx) })
+	go b.safeGo("outbound.Run", func() { outbound.Run(ctx) })
+	go b.safeGo("heartbeat", func() { b.heartbeatLoop(ctx, ws, sess.SessionID) })
 
 	b.logger.Printf("connected (user: %s, target: %s, token: %s...)", userID, b.cfg.Target, b.cfg.MaskedToken())
 
