@@ -1,8 +1,6 @@
 # Telegram Pairing Flow
 
-**Date:** 2026-03-24
-**Status:** Approved
-**Branch:** thrum-dev
+**Date:** 2026-03-24 **Status:** Approved **Branch:** thrum-dev
 
 ## Problem
 
@@ -61,19 +59,19 @@ thrum telegram configure --token 123:AAH... --target @coord --user leon --allow-
 ### Declined pairing
 
 If the user declines the `[y/n]` prompt, the probe message is consumed and
-discarded. The bridge returns to `block all` state (no `allow_from` set).
-To retry, run `thrum telegram pair` again.
+discarded. The bridge returns to `block all` state (no `allow_from` set). To
+retry, run `thrum telegram pair` again.
 
 ## New CLI Flags
 
 ### `thrum telegram configure`
 
-| Flag              | Type     | Default | Description                                       |
-| ----------------- | -------- | ------- | ------------------------------------------------- |
-| `--allow-from`    | int64    | 0       | Telegram user ID to whitelist (skips pairing)     |
-| `--chat-id`       | int64    | 0       | Telegram chat ID for outbound (defaults to allow-from for personal chats) |
-| `--pair-timeout`  | duration | 60s     | How long to wait for a pairing message            |
-| `--skip-pair`     | bool     | false   | Write config only, don't pair                     |
+| Flag             | Type     | Default | Description                                                               |
+| ---------------- | -------- | ------- | ------------------------------------------------------------------------- |
+| `--allow-from`   | int64    | 0       | Telegram user ID to whitelist (skips pairing)                             |
+| `--chat-id`      | int64    | 0       | Telegram chat ID for outbound (defaults to allow-from for personal chats) |
+| `--pair-timeout` | duration | 60s     | How long to wait for a pairing message                                    |
+| `--skip-pair`    | bool     | false   | Write config only, don't pair                                             |
 
 The existing `--yes` flag on `configure` also applies to the pairing
 confirmation step. When `--yes` is set, both the token-replacement prompt and
@@ -81,10 +79,10 @@ the pair confirmation are auto-accepted.
 
 ### `thrum telegram pair` (new subcommand)
 
-| Flag             | Type     | Default | Description                                       |
-| ---------------- | -------- | ------- | ------------------------------------------------- |
-| `--pair-timeout` | duration | 60s     | How long to wait for a pairing message            |
-| `--yes`          | bool     | false   | Auto-accept the first sender without prompting    |
+| Flag             | Type     | Default | Description                                    |
+| ---------------- | -------- | ------- | ---------------------------------------------- |
+| `--pair-timeout` | duration | 60s     | How long to wait for a pairing message         |
+| `--yes`          | bool     | false   | Auto-accept the first sender without prompting |
 
 **Note on `--yes`:** This removes the explicit-consent safeguard. Intended for
 automated testing and trusted environments only. In untrusted contexts, omit
@@ -107,11 +105,10 @@ automated testing and trusted environments only. In untrusted contexts, omit
 
 **Handler behavior:**
 
-1. Validate `timeout_seconds` is between 1 and 300 (max 5 minutes). Return
-   error if out of range.
-2. Wait for bridge readiness: poll `bridge.Running()` for up to 5 seconds
-   (100ms intervals). Return error `"bridge not running"` if it doesn't become
-   ready.
+1. Validate `timeout_seconds` is between 1 and 300 (max 5 minutes). Return error
+   if out of range.
+2. Wait for bridge readiness: poll `bridge.Running()` for up to 5 seconds (100ms
+   intervals). Return error `"bridge not running"` if it doesn't become ready.
 3. Call `bridge.Pair(ctx, timeout)`.
 4. Return sender info on success.
 
@@ -151,19 +148,19 @@ process, not a process restart).
 
 **CLI must use `CallWithTimeout`:** The default RPC client timeout is 10s
 (`defaultCallTimeout` in `internal/cli/client.go`). Since `telegram.pair` blocks
-server-side for up to 300s, the CLI must use `client.CallWithTimeout()` with
-a deadline of `pairTimeout + 5s` buffer. This follows the existing pattern used
-by `peer.wait_pairing`.
+server-side for up to 300s, the CLI must use `client.CallWithTimeout()` with a
+deadline of `pairTimeout + 5s` buffer. This follows the existing pattern used by
+`peer.wait_pairing`.
 
 ## Implementation
 
 ### Files to modify
 
-| File                                 | Change                                                |
-| ------------------------------------ | ----------------------------------------------------- |
-| `internal/bridge/telegram/bridge.go` | Add `Pair(ctx, timeout) (PairResult, error)` method, `PairResult` struct, pair mutex |
-| `internal/bridge/telegram/bot.go`    | Add `pairCh` via `atomic.Pointer`, branch in `Poll()` to intercept during pairing |
-| `internal/daemon/rpc/telegram.go`    | Add `HandlePair` RPC handler with bridge readiness polling and timeout cap |
+| File                                 | Change                                                                                                                                                         |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/bridge/telegram/bridge.go` | Add `Pair(ctx, timeout) (PairResult, error)` method, `PairResult` struct, pair mutex                                                                           |
+| `internal/bridge/telegram/bot.go`    | Add `pairCh` via `atomic.Pointer`, branch in `Poll()` to intercept during pairing                                                                              |
+| `internal/daemon/rpc/telegram.go`    | Add `HandlePair` RPC handler with bridge readiness polling and timeout cap                                                                                     |
 | `cmd/thrum/main.go`                  | Add `telegram pair` subcommand; modify `configure` to auto-restart + flow into pairing; add `--allow-from`, `--chat-id`, `--pair-timeout`, `--skip-pair` flags |
 
 No new files. No config schema changes (`allow_from`, `chat_id`, `allow_all`
@@ -188,8 +185,8 @@ Bridge.Pair(ctx, timeout):
 ```
 
 **Memory ordering:** `pairCh` is stored via `atomic.Pointer` before `pairMode`
-is set to `true`. In `Poll()`, `pairMode` is checked first; if true, `pairCh`
-is loaded via `atomic.Pointer`. The store-before-flag / check-flag-before-load
+is set to `true`. In `Poll()`, `pairMode` is checked first; if true, `pairCh` is
+loaded via `atomic.Pointer`. The store-before-flag / check-flag-before-load
 pattern ensures `Poll()` always sees a valid channel when `pairMode` is true.
 
 ### Bot.Poll() changes
@@ -268,9 +265,9 @@ chat ID.
 
 **`--yes` flag risk:** When `--yes` is used, the first Telegram sender is
 auto-accepted without visual confirmation. If a bot scan hits the Telegram bot
-before the legitimate user, the scanner's ID is whitelisted. Use `--yes` only
-in automated testing or trusted environments. In production, always confirm
-the sender visually.
+before the legitimate user, the scanner's ID is whitelisted. Use `--yes` only in
+automated testing or trusted environments. In production, always confirm the
+sender visually.
 
 **Timeout cap:** The RPC handler enforces a maximum of 300s (5 minutes) for the
 pairing window, regardless of what the CLI requests. This prevents indefinite
@@ -278,15 +275,15 @@ open windows from misconfiguration.
 
 ### Pairing-specific safeguards
 
-| Safeguard        | Implementation                                           |
-| ---------------- | -------------------------------------------------------- |
-| Short window     | Default 60s timeout, max 300s enforced by RPC handler    |
-| Explicit consent | `[y/n]` prompt required (unless `--yes`)                 |
+| Safeguard        | Implementation                                                          |
+| ---------------- | ----------------------------------------------------------------------- |
+| Short window     | Default 60s timeout, max 300s enforced by RPC handler                   |
+| Explicit consent | `[y/n]` prompt required (unless `--yes`)                                |
 | Single session   | `pairMu` mutex; concurrent calls return `"pairing already in progress"` |
-| No relay         | Pairing message consumed, never forwarded to Thrum       |
-| No disk state    | `pairMode` is in-memory only, reverts on timeout/crash   |
-| Fail-closed      | If pairing fails or is declined, `allow_from` stays empty = block all |
-| Atomic safety    | `pairCh` stored via `atomic.Pointer`, set before `pairMode` flag |
+| No relay         | Pairing message consumed, never forwarded to Thrum                      |
+| No disk state    | `pairMode` is in-memory only, reverts on timeout/crash                  |
+| Fail-closed      | If pairing fails or is declined, `allow_from` stays empty = block all   |
+| Atomic safety    | `pairCh` stored via `atomic.Pointer`, set before `pairMode` flag        |
 
 ### Restart clarification
 
@@ -300,13 +297,15 @@ pairing and the restart.
 ## Testing
 
 - Unit test: `Bridge.Pair()` returns correct sender info from a mock bot
-- Unit test: `Pair()` rejects concurrent calls with `"pairing already in progress"` error
+- Unit test: `Pair()` rejects concurrent calls with
+  `"pairing already in progress"` error
 - Unit test: `Pair()` times out correctly
 - Unit test: `Bot.Poll()` routes to `pairCh` when `pairMode` is true
 - Unit test: `Bot.Poll()` skips `IsAllowed` during pair mode
 - Unit test: `HandlePair` rejects `timeout_seconds` > 300
 - Unit test: `HandlePair` polls bridge readiness before pairing
 - Integration test: `configure` with `--allow-from` writes config correctly
-- Integration test: `configure` with `--allow-from` sets `chat_id` to same value when `--chat-id` omitted
+- Integration test: `configure` with `--allow-from` sets `chat_id` to same value
+  when `--chat-id` omitted
 - Integration test: `pair` subcommand calls RPC and updates config on confirm
 - Integration test: `pair` subcommand prints retry message on decline

@@ -4,6 +4,7 @@ output/
 # Ignore dev-docs and synced plans (planning documents)
 dev-docs/
 docs/plans/
+docs/superpowers/
 
 # Ignore vendor
 vendor/

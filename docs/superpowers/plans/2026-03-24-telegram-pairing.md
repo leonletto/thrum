@@ -23,15 +23,15 @@ atomic.Pointer for lock-free goroutine coordination.
 
 ## File Map
 
-| File | Action | Responsibility |
-| ---- | ------ | -------------- |
-| `internal/bridge/telegram/bot.go` | Modify | Add `pairMode` atomic bool, `pairCh` atomic pointer; branch in `Poll()` |
-| `internal/bridge/telegram/bridge.go` | Modify | Add `PairResult` struct, `Pair()` method, `pairMu` mutex |
-| `internal/bridge/telegram/bridge_test.go` | Create | Unit tests for `Pair()` — success, timeout, concurrent rejection |
-| `internal/bridge/telegram/bot_test.go` | Modify | Unit tests for `Poll()` pair mode routing |
-| `internal/daemon/rpc/telegram.go` | Modify | Add `HandlePair` RPC handler with readiness polling and timeout cap |
-| `internal/daemon/rpc/telegram_test.go` | Modify | Unit tests for `HandlePair` |
-| `cmd/thrum/main.go` | Modify | Add `telegram pair` subcommand, extend `configure` with pairing flow |
+| File                                      | Action | Responsibility                                                          |
+| ----------------------------------------- | ------ | ----------------------------------------------------------------------- |
+| `internal/bridge/telegram/bot.go`         | Modify | Add `pairMode` atomic bool, `pairCh` atomic pointer; branch in `Poll()` |
+| `internal/bridge/telegram/bridge.go`      | Modify | Add `PairResult` struct, `Pair()` method, `pairMu` mutex                |
+| `internal/bridge/telegram/bridge_test.go` | Create | Unit tests for `Pair()` — success, timeout, concurrent rejection        |
+| `internal/bridge/telegram/bot_test.go`    | Modify | Unit tests for `Poll()` pair mode routing                               |
+| `internal/daemon/rpc/telegram.go`         | Modify | Add `HandlePair` RPC handler with readiness polling and timeout cap     |
+| `internal/daemon/rpc/telegram_test.go`    | Modify | Unit tests for `HandlePair`                                             |
+| `cmd/thrum/main.go`                       | Modify | Add `telegram pair` subcommand, extend `configure` with pairing flow    |
 
 ---
 
@@ -39,7 +39,8 @@ atomic.Pointer for lock-free goroutine coordination.
 
 **Files:**
 
-- Modify: `internal/bridge/telegram/bridge.go:22-27` (add `PairResult` after `BridgeStatus`)
+- Modify: `internal/bridge/telegram/bridge.go:22-27` (add `PairResult` after
+  `BridgeStatus`)
 - Modify: `internal/bridge/telegram/bot.go:34-39` (add fields to `Bot` struct)
 
 - [ ] **Step 1: Define PairResult struct in bridge.go**
@@ -78,8 +79,7 @@ type Bot struct {
 
 - [ ] **Step 3: Verify build**
 
-Run: `go build ./internal/bridge/telegram/...`
-Expected: clean build, no errors.
+Run: `go build ./internal/bridge/telegram/...` Expected: clean build, no errors.
 
 - [ ] **Step 4: Commit**
 
@@ -94,15 +94,16 @@ git commit -m "feat(telegram): add PairResult struct and bot pair-mode fields"
 
 **Files:**
 
-- Modify: `internal/bridge/telegram/bot.go:124-136` (add pair branch before `IsAllowed`)
+- Modify: `internal/bridge/telegram/bot.go:124-136` (add pair branch before
+  `IsAllowed`)
 - Modify: `internal/bridge/telegram/bot_test.go` (add pair-mode tests)
 
 - [ ] **Step 1: Write test — pair-mode atomic plumbing works correctly**
 
 In `bot_test.go`, add tests that verify the atomic `pairMode`/`pairCh`
 coordination. These test the channel plumbing that `Poll()` uses — `Poll()`
-itself requires a live Telegram API connection and is covered by the E2E test
-in Task 7.
+itself requires a live Telegram API connection and is covered by the E2E test in
+Task 7.
 
 ```go
 func TestBot_PairModeAtomicPlumbing(t *testing.T) {
@@ -165,9 +166,9 @@ func TestBot_PairModeAtomicPlumbing(t *testing.T) {
 
 - [ ] **Step 2: Run test to verify it compiles and passes**
 
-Run: `go test ./internal/bridge/telegram/... -run TestBot_PairMode -v`
-Expected: PASS — this verifies the atomic fields and channel plumbing added in
-Task 1 work correctly.
+Run: `go test ./internal/bridge/telegram/... -run TestBot_PairMode -v` Expected:
+PASS — this verifies the atomic fields and channel plumbing added in Task 1 work
+correctly.
 
 - [ ] **Step 3: Add pair-mode branch to Poll()**
 
@@ -199,14 +200,14 @@ In `bot.go` `Poll()` method, after the `from.IsBot` check (line 126) and
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `go test ./internal/bridge/telegram/... -run TestBot_PairMode -v`
-Expected: PASS
+Run: `go test ./internal/bridge/telegram/... -run TestBot_PairMode -v` Expected:
+PASS
 
 - [ ] **Step 5: Verify Poll() pair-mode branch compiles and build passes**
 
-Run: `go build ./internal/bridge/telegram/...`
-Expected: clean build. The pair-mode branch in `Poll()` is exercised end-to-end
-in Task 7's manual E2E test with a real Telegram bot.
+Run: `go build ./internal/bridge/telegram/...` Expected: clean build. The
+pair-mode branch in `Poll()` is exercised end-to-end in Task 7's manual E2E test
+with a real Telegram bot.
 
 - [ ] **Step 7: Commit**
 
@@ -221,7 +222,8 @@ git commit -m "feat(telegram): add pair-mode branch in Bot.Poll()"
 
 **Files:**
 
-- Modify: `internal/bridge/telegram/bridge.go:29-39` (add `pairMu` to Bridge struct)
+- Modify: `internal/bridge/telegram/bridge.go:29-39` (add `pairMu` to Bridge
+  struct)
 - Modify: `internal/bridge/telegram/bridge.go` (add `Pair()` method)
 - Create: `internal/bridge/telegram/bridge_test.go` (unit tests)
 
@@ -247,8 +249,8 @@ type Bridge struct {
 }
 ```
 
-In `run()` (around line 171 where `NewBot` is called), store the bot
-atomically **before** `b.running.Store(true)` to ensure memory ordering:
+In `run()` (around line 171 where `NewBot` is called), store the bot atomically
+**before** `b.running.Store(true)` to ensure memory ordering:
 
 ```go
 bot := NewBot(b.cfg.Token, b.cfg)
@@ -439,8 +441,8 @@ func TestBridge_Pair_NotRunning(t *testing.T) {
 
 - [ ] **Step 11: Run all bridge tests**
 
-Run: `go test ./internal/bridge/telegram/... -run TestBridge_Pair -v`
-Expected: all 4 tests PASS
+Run: `go test ./internal/bridge/telegram/... -run TestBridge_Pair -v` Expected:
+all 4 tests PASS
 
 - [ ] **Step 12: Commit**
 
@@ -515,8 +517,8 @@ func TestHandlePair_TimeoutValidation(t *testing.T) {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `go test ./internal/daemon/rpc/... -run TestHandlePair -v`
-Expected: FAIL — `HandlePair` doesn't exist.
+Run: `go test ./internal/daemon/rpc/... -run TestHandlePair -v` Expected: FAIL —
+`HandlePair` doesn't exist.
 
 - [ ] **Step 3: Implement HandlePair**
 
@@ -587,8 +589,7 @@ func (b *Bridge) Running() bool {
 
 - [ ] **Step 4: Run tests**
 
-Run: `go test ./internal/daemon/rpc/... -run TestHandlePair -v`
-Expected: PASS
+Run: `go test ./internal/daemon/rpc/... -run TestHandlePair -v` Expected: PASS
 
 - [ ] **Step 5: Register telegram.pair in daemon startup**
 
@@ -601,8 +602,7 @@ server.RegisterHandler("telegram.pair", telegramHandler.HandlePair)
 
 - [ ] **Step 6: Verify build**
 
-Run: `go build ./cmd/thrum/...`
-Expected: clean build.
+Run: `go build ./cmd/thrum/...` Expected: clean build.
 
 - [ ] **Step 7: Commit**
 
@@ -619,7 +619,8 @@ git commit -m "feat(telegram): add telegram.pair RPC handler with readiness poll
 **Files:**
 
 - Modify: `cmd/thrum/main.go:6083-6091` (add `telegramPairCmd` to `telegramCmd`)
-- Modify: `cmd/thrum/main.go` (add `telegramPairCmd()` function and `runTelegramPair()`)
+- Modify: `cmd/thrum/main.go` (add `telegramPairCmd()` function and
+  `runTelegramPair()`)
 
 - [ ] **Step 1: Add telegramPairCmd() function**
 
@@ -736,8 +737,7 @@ cmd.AddCommand(telegramPairCmd())
 
 - [ ] **Step 4: Verify build**
 
-Run: `go build ./cmd/thrum/...`
-Expected: clean build.
+Run: `go build ./cmd/thrum/...` Expected: clean build.
 
 - [ ] **Step 5: Commit**
 
@@ -752,7 +752,8 @@ git commit -m "feat(telegram): add 'thrum telegram pair' subcommand"
 
 **Files:**
 
-- Modify: `cmd/thrum/main.go:6093-6212` (add flags, extend `runTelegramConfigure`)
+- Modify: `cmd/thrum/main.go:6093-6212` (add flags, extend
+  `runTelegramConfigure`)
 
 - [ ] **Step 1: Add new flags to telegramConfigureCmd()**
 
@@ -774,7 +775,8 @@ cmd.Flags().BoolVar(&flagSkipPair, "skip-pair", false, "Write config only, don't
 ```
 
 Update `runTelegramConfigure` signature to accept the new flags. The existing
-signature is `func runTelegramConfigure(token, target, userID string, skipConfirm bool)`.
+signature is
+`func runTelegramConfigure(token, target, userID string, skipConfirm bool)`.
 Change it to capture the new flags via closure in the `RunE` function instead of
 passing them as parameters — this matches the pattern used by other commands
 with many flags (e.g., `runTelegramPair` in Task 5). The `RunE` closure already
@@ -819,8 +821,7 @@ Replace the current "print restart instruction" ending with:
 
 - [ ] **Step 3: Verify build**
 
-Run: `go build ./cmd/thrum/...`
-Expected: clean build.
+Run: `go build ./cmd/thrum/...` Expected: clean build.
 
 - [ ] **Step 4: Manual smoke test — configure with --allow-from**
 
@@ -849,13 +850,11 @@ git commit -m "feat(telegram): extend configure with --allow-from, --skip-pair, 
 
 - [ ] **Step 1: Run full test suite**
 
-Run: `make test`
-Expected: all existing tests pass, no regressions.
+Run: `make test` Expected: all existing tests pass, no regressions.
 
 - [ ] **Step 2: Run lint**
 
-Run: `make lint`
-Expected: clean.
+Run: `make lint` Expected: clean.
 
 - [ ] **Step 3: Manual E2E test — full pair flow**
 

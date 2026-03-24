@@ -1,4 +1,3 @@
-
 ## Telegram Bridge
 
 The Telegram bridge connects your Telegram account to Thrum's messaging system.
@@ -62,15 +61,15 @@ Paired! Allowed users: [123456789]
   Bridge is live — no further restart needed.
 ```
 
-| Flag             | Description                                             |
-| ---------------- | ------------------------------------------------------- |
-| `--token`        | Bot token from BotFather                                |
-| `--target`       | Agent that receives your Telegram messages (with `@`)   |
-| `--user`         | Your Thrum username (e.g., `your-username`)             |
-| `--allow-from`   | Skip pairing — set Telegram user ID directly            |
-| `--chat-id`      | Telegram chat ID for outbound (defaults to --allow-from)|
-| `--pair-timeout`  | How long to wait for pairing message (default: 60s)     |
-| `--skip-pair`    | Write config only, don't pair                           |
+| Flag             | Description                                              |
+| ---------------- | -------------------------------------------------------- |
+| `--token`        | Bot token from BotFather                                 |
+| `--target`       | Agent that receives your Telegram messages (with `@`)    |
+| `--user`         | Your Thrum username (e.g., `your-username`)              |
+| `--allow-from`   | Skip pairing — set Telegram user ID directly             |
+| `--chat-id`      | Telegram chat ID for outbound (defaults to --allow-from) |
+| `--pair-timeout` | How long to wait for pairing message (default: 60s)      |
+| `--skip-pair`    | Write config only, don't pair                            |
 
 #### Re-pairing
 
