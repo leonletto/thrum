@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	telegram "github.com/leonletto/thrum/internal/bridge/telegram"
 	"github.com/leonletto/thrum/internal/config"
@@ -42,6 +43,21 @@ type TelegramStatusResponse struct {
 	ConnectedAt  string  `json:"connected_at,omitempty"`
 	InboundCount int64   `json:"inbound_count"`
 	Error        string  `json:"error,omitempty"`
+}
+
+// TelegramPairRequest is the request for telegram.pair.
+type TelegramPairRequest struct {
+	TimeoutSeconds int `json:"timeout_seconds"`
+}
+
+// TelegramPairResponse is the response for telegram.pair.
+type TelegramPairResponse struct {
+	UserID    int64  `json:"telegram_user_id"`
+	Username  string `json:"telegram_username"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	ChatID    int64  `json:"chat_id"`
+	Text      string `json:"message_text"`
 }
 
 // TelegramHandler handles telegram.configure and telegram.status RPCs.
@@ -117,6 +133,48 @@ func (h *TelegramHandler) HandleConfigure(_ context.Context, params json.RawMess
 	return TelegramConfigureResponse{
 		Status:  status,
 		Message: msg,
+	}, nil
+}
+
+// HandlePair handles the telegram.pair RPC.
+// It enters pair mode on the bridge and waits up to timeout_seconds for a
+// Telegram user to send any message, returning their identity.
+func (h *TelegramHandler) HandlePair(ctx context.Context, raw json.RawMessage) (any, error) {
+	var req TelegramPairRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	if req.TimeoutSeconds < 1 || req.TimeoutSeconds > 300 {
+		return nil, fmt.Errorf("timeout_seconds must be between 1 and 300")
+	}
+
+	if h.bridge == nil {
+		return nil, fmt.Errorf("telegram bridge not configured")
+	}
+
+	// Poll for bridge readiness (up to 5 seconds after daemon restart)
+	deadline := time.Now().Add(5 * time.Second)
+	for !h.bridge.Running() && time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !h.bridge.Running() {
+		return nil, fmt.Errorf("telegram bridge not connected (waited 5s)")
+	}
+
+	timeout := time.Duration(req.TimeoutSeconds) * time.Second
+	result, err := h.bridge.Pair(ctx, timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	return TelegramPairResponse{
+		UserID:    result.UserID,
+		Username:  result.Username,
+		FirstName: result.FirstName,
+		LastName:  result.LastName,
+		ChatID:    result.ChatID,
+		Text:      result.Text,
 	}, nil
 }
 

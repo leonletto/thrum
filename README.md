@@ -13,15 +13,15 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.6.0 highlights:**
+**v0.6.1 highlights:**
 
+- **Telegram pairing** — One-command setup for the Telegram bridge.
+  `thrum telegram configure` now pairs your account interactively — no more
+  manually looking up Telegram user IDs or editing config files.
 - **Telegram bridge** — Get agent messages on your phone. Reply from Telegram
-  and it threads back to the right agent. Useful even with a single agent — you
-  stay in the loop without watching a terminal.
+  and it threads back to the right agent.
 - **Tailscale sync** — Real-time peer-to-peer sync between machines. Your laptop
   and desktop agents coordinate in seconds, not minutes.
-- **Conversation UI** — Slack-style threaded inbox with embedded replies,
-  replacing the flat message list.
 
 ## Quick Start
 

@@ -1,4 +1,3 @@
-
 ## Tailscale Sync Security
 
 > **See first:** [Tailscale Sync](tailscale-sync.md) for setup, architecture,

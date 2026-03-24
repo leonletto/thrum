@@ -7,7 +7,7 @@ category: "guides"
 order: 12
 tags:
   ["telegram", "bridge", "messaging", "mobile", "notifications", "integration"]
-last_updated: "2026-03-20"
+last_updated: "2026-03-24"
 ---
 
 ## Telegram Bridge
@@ -48,12 +48,11 @@ never imports internal daemon packages.
 2. Send `/newbot` and follow the prompts
 3. Copy the bot token (looks like `123456789:AAH...`)
 
-#### 2. Find Your Telegram User ID
+#### 2. Configure and Pair
 
-Message [@userinfobot](https://t.me/userinfobot) on Telegram. It replies with
-your numeric user ID (e.g., `7747509251`).
-
-#### 3. Configure the Bridge
+Run `configure` with your bot token. The command writes the config, restarts the
+daemon, and enters a pairing flow that captures your Telegram user ID
+automatically:
 
 ```bash
 thrum telegram configure \
@@ -62,42 +61,59 @@ thrum telegram configure \
   --user "your-username"
 ```
 
-| Flag       | Description                                           |
-| ---------- | ----------------------------------------------------- |
-| `--token`  | Bot token from BotFather                              |
-| `--target` | Agent that receives your Telegram messages (with `@`) |
-| `--user`   | Your Thrum username (e.g., `leon-letto`)              |
+After writing the config, it prompts you to send a message from Telegram:
 
-#### 4. Add Your Telegram User ID to the Allow List
+```text
+Pairing — send any message to your bot from Telegram (timeout: 60s)...
 
-Edit `.thrum/config.json` and add your Telegram user ID to `allow_from`, plus
-set `chat_id` to the same value (for DMs, chat ID equals user ID):
+Message from: Jane Doe (ID: 123456789)
+  Allow this user? [y/n]: y
 
-```json
-{
-  "telegram": {
-    "token": "123456789:AAH...",
-    "target": "@coordinator_main",
-    "user_id": "leon-letto",
-    "chat_id": 7747509251,
-    "allow_from": [7747509251]
-  }
-}
+Paired! Allowed users: [123456789]
+  Bridge is live — no further restart needed.
 ```
 
-#### 5. Restart the Daemon
+| Flag             | Description                                              |
+| ---------------- | -------------------------------------------------------- |
+| `--token`        | Bot token from BotFather                                 |
+| `--target`       | Agent that receives your Telegram messages (with `@`)    |
+| `--user`         | Your Thrum username (e.g., `your-username`)              |
+| `--allow-from`   | Skip pairing — set Telegram user ID directly             |
+| `--chat-id`      | Telegram chat ID for outbound (defaults to --allow-from) |
+| `--pair-timeout` | How long to wait for pairing message (default: 60s)      |
+| `--skip-pair`    | Write config only, don't pair                            |
+
+#### Re-pairing
+
+If you need to pair again (e.g., after resetting the allow list), use the
+standalone pair command:
+
+```bash
+thrum telegram pair
+```
+
+This connects to the running daemon and waits for a Telegram message to capture
+your user ID.
+
+#### Manual Setup (alternative)
+
+If you already know your Telegram user ID, skip the interactive pairing:
+
+```bash
+thrum telegram configure \
+  --token "123456789:AAHyour-token-here" \
+  --target "@coordinator_main" \
+  --user "your-username" \
+  --allow-from 123456789
+```
+
+Then restart the daemon:
 
 ```bash
 thrum daemon restart
 ```
 
-The startup banner will show:
-
-```text
-Telegram:    bridge enabled (target: @coordinator_main)
-```
-
-#### 6. Test It
+#### 3. Test It
 
 Send a message from Telegram to your bot. It should appear in the target agent's
 inbox:
@@ -124,8 +140,8 @@ The full configuration lives in `.thrum/config.json` under the `telegram` key:
     "token": "123456789:AAH...",
     "target": "@coordinator_main",
     "user_id": "leon-letto",
-    "chat_id": 7747509251,
-    "allow_from": [7747509251, 412587349],
+    "chat_id": 123456789,
+    "allow_from": [123456789, 412587349],
     "allow_all": false,
     "enabled": true
   }
@@ -145,8 +161,14 @@ The full configuration lives in `.thrum/config.json` under the `telegram` key:
 ### CLI Commands
 
 ```bash
-# Configure the bridge
+# Configure the bridge (interactive pairing)
 thrum telegram configure --token <token> --target <agent> --user <username>
+
+# Configure with known user ID (skip pairing)
+thrum telegram configure --token <token> --target <agent> --user <username> --allow-from <id>
+
+# Pair your Telegram account (bridge must be configured and daemon running)
+thrum telegram pair
 
 # Check bridge status
 thrum telegram status
@@ -169,6 +191,16 @@ The bridge follows a defense-in-depth security model:
 - **Bot blocking:** Messages from other Telegram bots (`from.is_bot`) are always
   dropped, even if the bot's ID is in `allow_from`.
 - **Rate limiting:** Allowed users have per-user rate limits to prevent abuse.
+
+**Pairing security:**
+
+- During pairing, the bridge temporarily accepts messages from any Telegram user
+  for up to 60 seconds (configurable, max 5 minutes).
+- The user must explicitly confirm the sender via a `[y/n]` prompt.
+- Only one pairing session can be active at a time.
+- The pairing message is consumed and never relayed to Thrum agents.
+- No persistent state changes occur during pairing — a crash reverts to the
+  prior access control state (block all).
 
 **Token hygiene:**
 

@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -26,13 +27,26 @@ type BridgeStatus struct {
 	InboundCount int64  `json:"inbound_count"`
 }
 
+// PairResult holds the identity information extracted from the first message
+// received while the bridge is in pair mode.
+type PairResult struct {
+	UserID    int64  `json:"telegram_user_id"`
+	Username  string `json:"telegram_username"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	ChatID    int64  `json:"chat_id"`
+	Text      string `json:"message_text"`
+}
+
 type Bridge struct {
 	cfg          config.TelegramConfig
 	wsPort       string
 	logger       *log.Logger
 	mu           sync.Mutex
+	pairMu       sync.Mutex
 	cancelRun    context.CancelFunc // cancels the current run loop for restart
 	running      atomic.Bool
+	bot          atomic.Pointer[Bot]
 	connectedAt  time.Time
 	lastError    string
 	inboundCount atomic.Int64
@@ -61,6 +75,54 @@ func (b *Bridge) Status() BridgeStatus {
 	s.LastError = b.lastError
 	b.mu.Unlock()
 	return s
+}
+
+// Running reports whether the bridge is currently connected and running.
+func (b *Bridge) Running() bool {
+	return b.running.Load()
+}
+
+var (
+	// ErrPairingInProgress is returned by Pair() when another pairing is already underway.
+	ErrPairingInProgress = errors.New("pairing already in progress")
+	// ErrBridgeNotRunning is returned by Pair() when the bridge is not connected.
+	ErrBridgeNotRunning = errors.New("bridge not running")
+)
+
+// Pair waits up to timeout for a Telegram user to send any message, then
+// returns their identity. Only one Pair() may be in progress at a time;
+// concurrent callers receive ErrPairingInProgress. Messages from bots are
+// still silently dropped during pair mode (the IsBot guard fires before the
+// pair-mode branch in Poll).
+func (b *Bridge) Pair(ctx context.Context, timeout time.Duration) (PairResult, error) {
+	if !b.running.Load() {
+		return PairResult{}, ErrBridgeNotRunning
+	}
+	bot := b.bot.Load()
+	if bot == nil {
+		return PairResult{}, ErrBridgeNotRunning
+	}
+	if !b.pairMu.TryLock() {
+		return PairResult{}, ErrPairingInProgress
+	}
+	defer b.pairMu.Unlock()
+
+	pairCh := make(chan PairResult, 1)
+	bot.pairCh.Store(&pairCh)
+	bot.pairMode.Store(true)
+	defer func() {
+		bot.pairMode.Store(false)
+		bot.pairCh.Store(nil)
+	}()
+
+	select {
+	case result := <-pairCh:
+		return result, nil
+	case <-time.After(timeout):
+		return PairResult{}, fmt.Errorf("no message received within %s", timeout)
+	case <-ctx.Done():
+		return PairResult{}, ctx.Err()
+	}
 }
 
 // Restart cancels the current run loop and relaunches with new config.
@@ -173,23 +235,30 @@ func (b *Bridge) run(ctx context.Context) error {
 		return fmt.Errorf("telegram bot: %w", err)
 	}
 
+	// Store bot pointer for concurrent access by Pair() before marking running.
+	b.bot.Store(bot)
+
 	// 5. Create message map and relays
 	msgMap := NewMessageMap(10000)
 	inbound := NewInboundRelay(ws, msgMap, userID, b.cfg.Target)
 	outbound := NewOutboundRelay(ws, bot, msgMap, userID, b.cfg.ChatID)
 
-	// 6. Start sub-goroutines (each with panic recovery)
-	go b.safeGo("bot.Poll", func() { bot.Poll(ctx) })
-	go b.safeGo("outbound.Run", func() { outbound.Run(ctx) })
-	go b.safeGo("heartbeat", func() { b.heartbeatLoop(ctx, ws, sess.SessionID) })
-
-	// 7. Track connection state and process inbound messages
+	// 6. Mark running BEFORE launching goroutines so Pair() sees accurate state.
+	// b.bot.Store(bot) was set above — Pair() checks running first, then loads bot.
 	b.running.Store(true)
 	b.mu.Lock()
 	b.connectedAt = time.Now()
 	b.lastError = ""
 	b.mu.Unlock()
-	defer b.running.Store(false)
+	defer func() {
+		b.running.Store(false)
+		b.bot.Store(nil)
+	}()
+
+	// 7. Start sub-goroutines (each with panic recovery)
+	go b.safeGo("bot.Poll", func() { bot.Poll(ctx) })
+	go b.safeGo("outbound.Run", func() { outbound.Run(ctx) })
+	go b.safeGo("heartbeat", func() { b.heartbeatLoop(ctx, ws, sess.SessionID) })
 
 	b.logger.Printf("connected (user: %s, target: %s, token: %s...)", userID, b.cfg.Target, b.cfg.MaskedToken())
 
