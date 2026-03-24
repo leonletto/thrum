@@ -19,8 +19,8 @@ and this project adheres to
   - `--pair-timeout` controls the pairing window (default 60s, max 5 minutes)
   - `--skip-pair` writes config only without interactive pairing
   - `telegram.pair` RPC with bridge readiness polling and timeout cap
-  - Pairing security model: short window, explicit consent, single session,
-    no persistent state change, fail-closed on decline or timeout
+  - Pairing security model: short window, explicit consent, single session, no
+    persistent state change, fail-closed on decline or timeout
 
 ## [0.6.0] - 2026-03-21
 
