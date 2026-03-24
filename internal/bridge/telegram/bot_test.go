@@ -325,3 +325,73 @@ func TestRateLimiterDropsSilently(t *testing.T) {
 		}
 	}
 }
+
+// TestBot_PairModeAtomicPlumbing verifies that pairMode and pairCh atomic fields
+// on Bot work correctly: store channel, set pairMode, load and send, receive,
+// then verify teardown resets both fields.
+func TestBot_PairModeAtomicPlumbing(t *testing.T) {
+	t.Parallel()
+
+	var bot Bot
+
+	// Initially both fields are zero values.
+	if bot.pairMode.Load() {
+		t.Error("pairMode should be false initially")
+	}
+	if bot.pairCh.Load() != nil {
+		t.Error("pairCh should be nil initially")
+	}
+
+	// Store channel BEFORE setting pairMode (mirrors Pair() ordering).
+	pairCh := make(chan PairResult, 1)
+	bot.pairCh.Store(&pairCh)
+	bot.pairMode.Store(true)
+
+	// Both fields should now be set.
+	if !bot.pairMode.Load() {
+		t.Error("pairMode should be true after Store(true)")
+	}
+	if bot.pairCh.Load() == nil {
+		t.Error("pairCh should be non-nil after Store")
+	}
+
+	// Send a result through the channel (simulates Poll() delivering a pair hit).
+	want := PairResult{
+		UserID:    42,
+		Username:  "alice",
+		FirstName: "Alice",
+		LastName:  "Smith",
+		ChatID:    999,
+		Text:      "hello",
+	}
+	ch := bot.pairCh.Load()
+	if ch == nil {
+		t.Fatal("pairCh pointer is nil")
+	}
+	select {
+	case *ch <- want:
+	default:
+		t.Fatal("send to pairCh blocked unexpectedly (channel should be buffered)")
+	}
+
+	// Receive from the channel and verify the value.
+	select {
+	case got := <-*ch:
+		if got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	default:
+		t.Fatal("no value in pairCh after send")
+	}
+
+	// Simulate teardown: reset both fields (mirrors Pair() defer).
+	bot.pairMode.Store(false)
+	bot.pairCh.Store(nil)
+
+	if bot.pairMode.Load() {
+		t.Error("pairMode should be false after teardown")
+	}
+	if bot.pairCh.Load() != nil {
+		t.Error("pairCh should be nil after teardown")
+	}
+}
