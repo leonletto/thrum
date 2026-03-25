@@ -249,3 +249,77 @@ func TestApplyRemoteEvents_SkipsBeforePurgeCutoff(t *testing.T) {
 		t.Error("new_agent should exist (event was after purge cutoff)")
 	}
 }
+
+func TestSyncApply_PurgeExecutedPropagation(t *testing.T) {
+	st := createTestStateForSync(t)
+	defer func() { _ = st.Close() }()
+
+	ctx := context.Background()
+	applier := NewSyncApplier(st)
+
+	// Simulate: peer sends a batch that includes old events + a purge.executed event.
+	// The old event arrives before purge.executed in the batch, so it gets applied first
+	// (no cutoff set yet). But the purge.executed projector then cleans up the stale data.
+	oldRegister := eventlog.Event{
+		EventID:      "evt_stale_reg",
+		Type:         "agent.register",
+		Timestamp:    "2026-03-18T00:00:00Z",
+		OriginDaemon: "peer_1",
+		Sequence:     1,
+		EventJSON:    []byte(`{"type":"agent.register","timestamp":"2026-03-18T00:00:00Z","event_id":"evt_stale_reg","agent_id":"stale_agent","kind":"agent","role":"test","module":"test","v":1,"origin_daemon":"peer_1"}`),
+	}
+
+	purgeEvt := eventlog.Event{
+		EventID:      "evt_purge_001",
+		Type:         "purge.executed",
+		Timestamp:    "2026-03-25T00:00:00Z",
+		OriginDaemon: "peer_1",
+		Sequence:     2,
+		EventJSON:    []byte(`{"type":"purge.executed","timestamp":"2026-03-25T00:00:00Z","event_id":"evt_purge_001","cutoff":"2026-03-20T00:00:00Z","v":1,"origin_daemon":"peer_1"}`),
+	}
+
+	// Both events should be applied: old one passes (no cutoff yet), purge.executed then cleans up
+	applied, _, err := applier.ApplyRemoteEvents(ctx, []eventlog.Event{oldRegister, purgeEvt})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if applied != 2 {
+		t.Errorf("expected 2 applied in first batch, got %d", applied)
+	}
+
+	// After purge.executed projection, the stale agent.register event should be gone from
+	// the events table (purge.executed deletes events with timestamp < cutoff).
+	var evtCount int
+	_ = st.RawDB().QueryRow(`SELECT COUNT(*) FROM events WHERE event_id = 'evt_stale_reg'`).Scan(&evtCount)
+	if evtCount != 0 {
+		t.Error("evt_stale_reg should have been removed from events table by purge.executed projection")
+	}
+
+	// Verify purge cutoff is now stored
+	var cutoff string
+	err = st.RawDB().QueryRow(`SELECT value FROM purge_metadata WHERE key = 'purge_cutoff'`).Scan(&cutoff)
+	if err != nil {
+		t.Fatalf("query purge_metadata: %v", err)
+	}
+	if cutoff != "2026-03-20T00:00:00Z" {
+		t.Errorf("expected cutoff 2026-03-20T00:00:00Z, got %s", cutoff)
+	}
+
+	// Now try to apply another old event — should be skipped by cutoff filter
+	anotherOld := eventlog.Event{
+		EventID:      "evt_stale_msg",
+		Type:         "agent.register",
+		Timestamp:    "2026-03-19T00:00:00Z",
+		OriginDaemon: "peer_1",
+		Sequence:     3,
+		EventJSON:    []byte(`{"type":"agent.register","timestamp":"2026-03-19T00:00:00Z","event_id":"evt_stale_msg","agent_id":"another_stale","kind":"agent","role":"test","module":"test","v":1,"origin_daemon":"peer_1"}`),
+	}
+
+	applied2, skipped2, err := applier.ApplyRemoteEvents(ctx, []eventlog.Event{anotherOld})
+	if err != nil {
+		t.Fatalf("apply second batch: %v", err)
+	}
+	if applied2 != 0 || skipped2 != 1 {
+		t.Errorf("expected 0 applied / 1 skipped, got %d / %d", applied2, skipped2)
+	}
+}
