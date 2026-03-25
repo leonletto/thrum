@@ -192,3 +192,60 @@ func TestSyncApplier_GetCheckpoint(t *testing.T) {
 		t.Errorf("expected 0 for unknown peer, got %d", seq)
 	}
 }
+
+func TestApplyRemoteEvents_SkipsBeforePurgeCutoff(t *testing.T) {
+	st := createTestStateForSync(t)
+	defer func() { _ = st.Close() }()
+
+	cutoff := "2026-03-20T00:00:00Z"
+	_, err := st.RawDB().Exec(`INSERT INTO purge_metadata (key, value) VALUES ('purge_cutoff', ?)`, cutoff)
+	if err != nil {
+		t.Fatalf("insert purge_metadata: %v", err)
+	}
+
+	applier := NewSyncApplier(st)
+
+	// Event before cutoff — should be skipped
+	oldEvent := eventlog.Event{
+		EventID:      "evt_old_001",
+		Type:         "agent.register",
+		Timestamp:    "2026-03-19T12:00:00Z",
+		OriginDaemon: "peer_1",
+		Sequence:     1,
+		EventJSON:    []byte(`{"type":"agent.register","timestamp":"2026-03-19T12:00:00Z","event_id":"evt_old_001","agent_id":"old_agent","role":"test","module":"test","v":1,"origin_daemon":"peer_1"}`),
+	}
+
+	// Event after cutoff — should be applied
+	newEvent := eventlog.Event{
+		EventID:      "evt_new_001",
+		Type:         "agent.register",
+		Timestamp:    "2026-03-21T12:00:00Z",
+		OriginDaemon: "peer_1",
+		Sequence:     2,
+		EventJSON:    []byte(`{"type":"agent.register","timestamp":"2026-03-21T12:00:00Z","event_id":"evt_new_001","agent_id":"new_agent","role":"test","module":"test","v":1,"origin_daemon":"peer_1"}`),
+	}
+
+	applied, skipped, err := applier.ApplyRemoteEvents(context.Background(), []eventlog.Event{oldEvent, newEvent})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if applied != 1 {
+		t.Errorf("expected 1 applied, got %d", applied)
+	}
+	if skipped != 1 {
+		t.Errorf("expected 1 skipped, got %d", skipped)
+	}
+
+	// Verify old agent was NOT created
+	var count int
+	_ = st.RawDB().QueryRow(`SELECT COUNT(*) FROM agents WHERE agent_id = 'old_agent'`).Scan(&count)
+	if count != 0 {
+		t.Error("old_agent should not exist (event was before purge cutoff)")
+	}
+
+	// Verify new agent WAS created
+	_ = st.RawDB().QueryRow(`SELECT COUNT(*) FROM agents WHERE agent_id = 'new_agent'`).Scan(&count)
+	if count != 1 {
+		t.Error("new_agent should exist (event was after purge cutoff)")
+	}
+}

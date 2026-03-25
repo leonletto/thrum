@@ -23,11 +23,20 @@ func NewSyncApplier(st *state.State) *SyncApplier {
 }
 
 // ApplyRemoteEvents applies a batch of remote events to the local store.
-// Returns the number of events applied and skipped (duplicates).
+// Returns the number of events applied and skipped (duplicates or before purge cutoff).
 func (a *SyncApplier) ApplyRemoteEvents(ctx context.Context, events []eventlog.Event) (applied, skipped int, err error) {
 	db := a.state.DB()
 
+	// Load purge cutoff — events before this are discarded (RFC 3339 sorts lexicographically)
+	purgeCutoff := a.loadPurgeCutoff(ctx)
+
 	for _, evt := range events {
+		// Skip events before purge cutoff
+		if purgeCutoff != nil && evt.Timestamp < *purgeCutoff {
+			skipped++
+			continue
+		}
+
 		// Deduplication: check if event already exists
 		exists, err := eventlog.HasEvent(ctx, db, evt.EventID)
 		if err != nil {
@@ -49,6 +58,19 @@ func (a *SyncApplier) ApplyRemoteEvents(ctx context.Context, events []eventlog.E
 	}
 
 	return applied, skipped, nil
+}
+
+// loadPurgeCutoff reads the purge cutoff from purge_metadata.
+// Returns nil if no cutoff is set.
+func (a *SyncApplier) loadPurgeCutoff(ctx context.Context) *string {
+	var cutoff string
+	err := a.state.DB().QueryRowContext(ctx,
+		`SELECT value FROM purge_metadata WHERE key = 'purge_cutoff'`,
+	).Scan(&cutoff)
+	if err != nil {
+		return nil
+	}
+	return &cutoff
 }
 
 // ApplyAndCheckpoint applies remote events and updates the checkpoint for the peer.
