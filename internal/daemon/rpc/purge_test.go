@@ -419,14 +419,14 @@ func TestPurgeHandler_SyncFiles(t *testing.T) {
 		t.Errorf("SyncMessageFiles = %d, want 1 (files with at least one removal)", resp.SyncMessageFiles)
 	}
 
-	// Verify events.jsonl has 1 line left
+	// Verify events.jsonl has 2 lines: the surviving new event + the purge.executed event
 	eventsData, err := os.ReadFile(eventsPath)
 	if err != nil {
 		t.Fatalf("read events.jsonl after purge: %v", err)
 	}
 	lines := nonEmptyLines(string(eventsData))
-	if len(lines) != 1 {
-		t.Errorf("events.jsonl has %d lines, want 1", len(lines))
+	if len(lines) != 2 {
+		t.Errorf("events.jsonl has %d lines, want 2 (surviving new event + purge.executed)", len(lines))
 	}
 
 	// Verify messages/agent_test.jsonl has 1 line left
@@ -750,6 +750,46 @@ func TestPurgeHandler_Integration_DryRunThenExecute(t *testing.T) {
 		if cnt != 1 {
 			t.Errorf("agent %s was deleted (count=%d), agents must survive purge", agentID, cnt)
 		}
+	}
+}
+
+// TestPurge_EmitsPurgeExecutedEvent verifies that purge.execute emits a
+// purge.executed event and stores the cutoff in purge_metadata.
+func TestPurge_EmitsPurgeExecutedEvent(t *testing.T) {
+	st, cleanup := setupPurgeTest(t)
+	defer cleanup()
+
+	// Insert old data
+	oldTime := time.Now().Add(-48 * time.Hour).UTC().Format(time.RFC3339Nano)
+	insertPurgeMessage(t, st, "agent_a", oldTime)
+
+	// Run purge
+	cutoff := time.Now().Add(-24 * time.Hour).UTC().Format(time.RFC3339)
+	handler := NewPurgeHandler(st)
+	reqJSON, _ := json.Marshal(PurgeRequest{Before: cutoff})
+	_, err := handler.Handle(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+
+	// Verify purge.executed event exists
+	var count int
+	err = st.DB().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM events WHERE type = 'purge.executed'`).Scan(&count)
+	if err != nil {
+		t.Fatalf("query events: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 purge.executed event, got %d", count)
+	}
+
+	// Verify cutoff is stored in purge_metadata
+	var storedCutoff string
+	err = st.DB().QueryRowContext(context.Background(), `SELECT value FROM purge_metadata WHERE key = 'purge_cutoff'`).Scan(&storedCutoff)
+	if err != nil {
+		t.Fatalf("query purge_metadata: %v", err)
+	}
+	if storedCutoff != cutoff {
+		t.Errorf("expected cutoff %s, got %s", cutoff, storedCutoff)
 	}
 }
 
