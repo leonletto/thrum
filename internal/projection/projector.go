@@ -51,6 +51,8 @@ func (p *Projector) Apply(ctx context.Context, event json.RawMessage) error {
 		return p.applyAgentUpdate(ctx, event)
 	case "agent.cleanup":
 		return p.applyAgentCleanup(ctx, event)
+	case "purge.executed":
+		return p.applyPurgeExecuted(ctx, event)
 	case "group.create":
 		return p.applyGroupCreate(ctx, event)
 	case "group.member.add":
@@ -632,9 +634,100 @@ func (p *Projector) applyAgentCleanup(ctx context.Context, data json.RawMessage)
 		return fmt.Errorf("unmarshal agent.cleanup: %w", err)
 	}
 
-	_, err := p.db.ExecContext(ctx, `DELETE FROM agents WHERE agent_id = ?`, event.AgentID)
-	if err != nil {
+	agentID := event.AgentID
+
+	// Delete message child tables
+	for _, table := range []string{"message_edits", "message_reads", "message_deliveries", "message_refs", "message_scopes"} {
+		//nolint:gosec // table name is a hardcoded constant, not user input
+		q := `DELETE FROM ` + table + ` WHERE message_id IN (SELECT message_id FROM messages WHERE agent_id = ?)`
+		if _, err := p.db.ExecContext(ctx, q, agentID); err != nil {
+			return fmt.Errorf("delete %s for agent: %w", table, err)
+		}
+	}
+
+	// Delete messages
+	if _, err := p.db.ExecContext(ctx, `DELETE FROM messages WHERE agent_id = ?`, agentID); err != nil {
+		return fmt.Errorf("delete messages for agent: %w", err)
+	}
+
+	// Delete session child tables
+	for _, table := range []string{"session_refs", "session_scopes"} {
+		//nolint:gosec // table name is a hardcoded constant, not user input
+		q := `DELETE FROM ` + table + ` WHERE session_id IN (SELECT session_id FROM sessions WHERE agent_id = ?)`
+		if _, err := p.db.ExecContext(ctx, q, agentID); err != nil {
+			return fmt.Errorf("delete %s for agent: %w", table, err)
+		}
+	}
+
+	// Delete sessions
+	if _, err := p.db.ExecContext(ctx, `DELETE FROM sessions WHERE agent_id = ?`, agentID); err != nil {
+		return fmt.Errorf("delete sessions for agent: %w", err)
+	}
+
+	// Delete events referencing this agent (but not the cleanup event itself).
+	// Note: LIKE pattern shares a known limitation with HandleDelete in agent.go —
+	// agent IDs that are prefixes of other IDs could cause false positives.
+	// Acceptable since agent names are generated with sufficient entropy.
+	if _, err := p.db.ExecContext(ctx,
+		`DELETE FROM events WHERE event_json LIKE ? AND type != 'agent.cleanup'`,
+		`%"agent_id":"`+agentID+`"%`); err != nil {
+		return fmt.Errorf("delete events for agent: %w", err)
+	}
+
+	// Delete agent row
+	if _, err := p.db.ExecContext(ctx, `DELETE FROM agents WHERE agent_id = ?`, agentID); err != nil {
 		return fmt.Errorf("delete agent: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Projector) applyPurgeExecuted(ctx context.Context, data json.RawMessage) error {
+	var event types.PurgeExecutedEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		return fmt.Errorf("unmarshal purge.executed: %w", err)
+	}
+
+	cutoff := event.Cutoff
+
+	// Store/update purge cutoff (only advance, never regress)
+	_, err := p.db.ExecContext(ctx,
+		`INSERT INTO purge_metadata (key, value) VALUES ('purge_cutoff', ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value
+		 WHERE excluded.value > purge_metadata.value`,
+		cutoff)
+	if err != nil {
+		return fmt.Errorf("store purge cutoff: %w", err)
+	}
+
+	// Delete old messages (child tables first)
+	for _, table := range []string{"message_edits", "message_reads", "message_deliveries", "message_refs", "message_scopes"} {
+		//nolint:gosec // table name is a hardcoded constant, not user input
+		q := `DELETE FROM ` + table + ` WHERE message_id IN (SELECT message_id FROM messages WHERE created_at < ?)`
+		if _, err := p.db.ExecContext(ctx, q, cutoff); err != nil {
+			return fmt.Errorf("delete %s: %w", table, err)
+		}
+	}
+	if _, err := p.db.ExecContext(ctx, `DELETE FROM messages WHERE created_at < ?`, cutoff); err != nil {
+		return fmt.Errorf("delete messages: %w", err)
+	}
+
+	// Delete old sessions (child tables first)
+	for _, table := range []string{"session_refs", "session_scopes"} {
+		//nolint:gosec // table name is a hardcoded constant, not user input
+		q := `DELETE FROM ` + table + ` WHERE session_id IN (SELECT session_id FROM sessions WHERE started_at < ?)`
+		if _, err := p.db.ExecContext(ctx, q, cutoff); err != nil {
+			return fmt.Errorf("delete %s: %w", table, err)
+		}
+	}
+	if _, err := p.db.ExecContext(ctx, `DELETE FROM sessions WHERE started_at < ?`, cutoff); err != nil {
+		return fmt.Errorf("delete sessions: %w", err)
+	}
+
+	// Delete old events (but not purge.executed events — they must survive for replay)
+	if _, err := p.db.ExecContext(ctx,
+		`DELETE FROM events WHERE timestamp < ? AND type != 'purge.executed'`, cutoff); err != nil {
+		return fmt.Errorf("delete events: %w", err)
 	}
 
 	return nil
