@@ -175,6 +175,17 @@ type AgentCleanupEvent struct {
 	Method       string `json:"method,omitempty"` // "manual", "automated", "ui"
 }
 
+// PurgeExecutedEvent represents a purge.executed event.
+// When synced to peers, triggers the same purge on the remote node.
+type PurgeExecutedEvent struct {
+	Type         string `json:"type"`                    // "purge.executed"
+	Timestamp    string `json:"timestamp"`
+	EventID      string `json:"event_id"`
+	Version      int    `json:"v"`
+	OriginDaemon string `json:"origin_daemon,omitempty"`
+	Cutoff       string `json:"cutoff"`                  // RFC 3339 — purge everything before this
+}
+
 // GroupCreateEvent represents a group.create event.
 type GroupCreateEvent struct {
 	Type         string `json:"type"` // "group.create"
