@@ -1,4 +1,3 @@
-
 ## Telegram Bridge
 
 The Telegram bridge connects your Telegram account to Thrum's messaging system.
