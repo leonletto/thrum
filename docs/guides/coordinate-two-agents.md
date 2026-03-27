@@ -1,4 +1,3 @@
-
 ## Coordinate Two Agents
 
 The most common Thrum setup: two agents working on the same project. One
