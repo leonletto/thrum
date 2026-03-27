@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-03-27
+
+### Fixed
+
+- **Sync-aware purge** — `thrum purge` now propagates across Tailscale-synced
+  nodes. Previously, purged messages, sessions, and events would resurrect when
+  a peer synced its unpurged data back. The purge handler now emits a
+  `purge.executed` event that peers apply automatically, and the `SyncApplier`
+  rejects any incoming events older than the latest purge cutoff.
+- **Agent deletion propagation** — Deleting an agent from the web console or CLI
+  now fully scrubs all related data (messages, sessions, events) on peer nodes.
+  Previously, `agent.cleanup` only deleted the agent row, leaving orphaned data
+  that could resurrect the agent via sync.
+
+### Added
+
+- `purge_metadata` table (schema v15) — stores the latest purge cutoff for
+  sync-aware filtering
+- `purge.executed` event type — propagates purge operations to Tailscale-synced
+  peers
+- `applyPurgeExecuted` projector handler — auto-purges SQLite on peers when
+  `purge.executed` arrives via sync
+
 ## [0.6.1] - 2026-03-24
 
 ### Added

@@ -10,6 +10,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/jsonl"
+	"github.com/leonletto/thrum/internal/types"
 )
 
 // PurgeRequest is the input for the purge.execute RPC method.
@@ -197,6 +198,27 @@ func (h *PurgeHandler) execute(ctx context.Context, before string, cutoff time.T
 	}
 	resp.SyncEventsFiltered = eventsFiltered
 	resp.SyncMessageFiles = messageFiles
+
+	// Store purge cutoff in metadata for sync filtering (only advance, never regress)
+	_, err = h.state.DB().ExecContext(ctx,
+		`INSERT INTO purge_metadata (key, value) VALUES ('purge_cutoff', ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value
+		 WHERE excluded.value > purge_metadata.value`,
+		before)
+	if err != nil {
+		return nil, fmt.Errorf("store purge cutoff: %w", err)
+	}
+
+	// Emit purge.executed event so peers auto-purge
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	purgeEvent := types.PurgeExecutedEvent{
+		Type:      "purge.executed",
+		Timestamp: now,
+		Cutoff:    before,
+	}
+	if err := h.state.WriteEvent(ctx, purgeEvent); err != nil {
+		return nil, fmt.Errorf("write purge.executed event: %w", err)
+	}
 
 	return resp, nil
 }

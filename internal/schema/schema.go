@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 14
+const CurrentVersion = 15
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -254,6 +254,12 @@ func createTables(tx *sql.Tx) error {
 			last_synced_sequence INTEGER NOT NULL DEFAULT 0,
 			last_sync_timestamp INTEGER NOT NULL,
 			sync_status TEXT NOT NULL DEFAULT 'idle'
+		)`,
+
+		// Purge metadata table (for sync-aware purge coordination)
+		`CREATE TABLE IF NOT EXISTS purge_metadata (
+			key   TEXT PRIMARY KEY,
+			value TEXT NOT NULL
 		)`,
 
 		// Agent work contexts table (for live git state tracking)
@@ -678,6 +684,17 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_message_deliveries_read ON message_deliveries(recipient_agent_id, read_at)`)
 		if err != nil {
 			return fmt.Errorf("create idx_message_deliveries_read: %w", err)
+		}
+	}
+
+	// Migration from version 14 to 15: Add purge_metadata table
+	if startVersion < 15 && endVersion >= 15 {
+		_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS purge_metadata (
+			key   TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		)`)
+		if err != nil {
+			return fmt.Errorf("migration 14→15: %w", err)
 		}
 	}
 

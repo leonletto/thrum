@@ -553,6 +553,120 @@ func TestProjector_MessageEditNonExistent(t *testing.T) {
 	}
 }
 
+func TestProjector_PurgeExecuted(t *testing.T) {
+	rawDB := setupTestDB(t)
+	db := safedb.New(rawDB)
+	p := projection.NewProjector(db)
+	ctx := context.Background()
+
+	// Insert some old data
+	_, _ = db.ExecContext(ctx, `INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content) VALUES ('msg_old', 'agent_a', 'sess_1', '2026-03-18T00:00:00Z', 'text', 'old')`)
+	_, _ = db.ExecContext(ctx, `INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content) VALUES ('msg_new', 'agent_a', 'sess_1', '2026-03-22T00:00:00Z', 'text', 'new')`)
+	_, _ = db.ExecContext(ctx, `INSERT INTO sessions (session_id, agent_id, started_at) VALUES ('sess_old', 'agent_a', '2026-03-18T00:00:00Z')`)
+	_, _ = db.ExecContext(ctx, `INSERT INTO events (event_id, sequence, type, timestamp, origin_daemon, event_json) VALUES ('evt_old', 1, 'agent.register', '2026-03-18T00:00:00Z', 'peer_1', '{}')`)
+	_, _ = db.ExecContext(ctx, `INSERT INTO events (event_id, sequence, type, timestamp, origin_daemon, event_json) VALUES ('evt_new', 2, 'agent.register', '2026-03-22T00:00:00Z', 'peer_1', '{}')`)
+
+	// Apply purge.executed event
+	event := []byte(`{"type":"purge.executed","timestamp":"2026-03-25T00:00:00Z","event_id":"evt_purge","cutoff":"2026-03-20T00:00:00Z","v":1,"origin_daemon":"peer_1"}`)
+	err := p.Apply(ctx, event)
+	if err != nil {
+		t.Fatalf("apply purge.executed: %v", err)
+	}
+
+	// Old message deleted, new message kept
+	var msgCount int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages`).Scan(&msgCount)
+	if msgCount != 1 {
+		t.Errorf("expected 1 message after purge, got %d", msgCount)
+	}
+
+	// Old session deleted
+	var sessCount int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions WHERE started_at < '2026-03-20T00:00:00Z'`).Scan(&sessCount)
+	if sessCount != 0 {
+		t.Errorf("expected 0 old sessions, got %d", sessCount)
+	}
+
+	// Old event deleted, new event kept (plus the purge event itself)
+	var evtCount int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE type != 'purge.executed'`).Scan(&evtCount)
+	if evtCount != 1 {
+		t.Errorf("expected 1 non-purge event after purge, got %d", evtCount)
+	}
+
+	// Cutoff stored in purge_metadata
+	var stored string
+	err = db.QueryRowContext(ctx, `SELECT value FROM purge_metadata WHERE key = 'purge_cutoff'`).Scan(&stored)
+	if err != nil {
+		t.Fatalf("query purge_metadata: %v", err)
+	}
+	if stored != "2026-03-20T00:00:00Z" {
+		t.Errorf("expected cutoff 2026-03-20T00:00:00Z, got %s", stored)
+	}
+}
+
+func TestProjector_AgentCleanup_FullScrub(t *testing.T) {
+	rawDB := setupTestDB(t)
+	db := safedb.New(rawDB)
+	p := projection.NewProjector(db)
+	ctx := context.Background()
+
+	// Insert agent + related data
+	_, _ = db.ExecContext(ctx, `INSERT INTO agents (agent_id, kind, role, module, registered_at) VALUES ('doomed', 'agent', 'test', 'test', '2026-03-20T00:00:00Z')`)
+	_, _ = db.ExecContext(ctx, `INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content) VALUES ('msg_d1', 'doomed', 'sess_d1', '2026-03-20T01:00:00Z', 'text', 'hi')`)
+	_, _ = db.ExecContext(ctx, `INSERT INTO sessions (session_id, agent_id, started_at) VALUES ('sess_d1', 'doomed', '2026-03-20T00:00:00Z')`)
+	_, _ = db.ExecContext(ctx, `INSERT INTO events (event_id, sequence, type, timestamp, origin_daemon, event_json) VALUES ('evt_d1', 10, 'agent.register', '2026-03-20T00:00:00Z', 'peer_1', '{"agent_id":"doomed"}')`)
+
+	// Also insert another agent's data to ensure it's not affected
+	_, _ = db.ExecContext(ctx, `INSERT INTO agents (agent_id, kind, role, module, registered_at) VALUES ('keeper', 'agent', 'test', 'test', '2026-03-20T00:00:00Z')`)
+	_, _ = db.ExecContext(ctx, `INSERT INTO messages (message_id, agent_id, session_id, created_at, body_format, body_content) VALUES ('msg_k1', 'keeper', 'sess_k1', '2026-03-20T01:00:00Z', 'text', 'hi')`)
+
+	// Apply agent.cleanup
+	event := []byte(`{"type":"agent.cleanup","timestamp":"2026-03-25T00:00:00Z","event_id":"evt_cleanup","agent_id":"doomed","reason":"manual deletion","method":"manual","v":1}`)
+	err := p.Apply(ctx, event)
+	if err != nil {
+		t.Fatalf("apply agent.cleanup: %v", err)
+	}
+
+	// Verify doomed agent is gone
+	var agentCount int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM agents WHERE agent_id = 'doomed'`).Scan(&agentCount)
+	if agentCount != 0 {
+		t.Error("doomed agent should be deleted")
+	}
+
+	// Verify doomed agent's messages are gone
+	var msgCount int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE agent_id = 'doomed'`).Scan(&msgCount)
+	if msgCount != 0 {
+		t.Error("doomed agent's messages should be deleted")
+	}
+
+	// Verify doomed agent's sessions are gone
+	var sessCount int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions WHERE agent_id = 'doomed'`).Scan(&sessCount)
+	if sessCount != 0 {
+		t.Error("doomed agent's sessions should be deleted")
+	}
+
+	// Verify doomed agent's events are gone
+	var evtCount int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE event_json LIKE '%"doomed"%' AND type != 'agent.cleanup'`).Scan(&evtCount)
+	if evtCount != 0 {
+		t.Error("doomed agent's events should be deleted")
+	}
+
+	// Verify keeper agent is untouched
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM agents WHERE agent_id = 'keeper'`).Scan(&agentCount)
+	if agentCount != 1 {
+		t.Error("keeper agent should still exist")
+	}
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE agent_id = 'keeper'`).Scan(&msgCount)
+	if msgCount != 1 {
+		t.Error("keeper agent's messages should still exist")
+	}
+}
+
 func TestProjector_UnknownEventType(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() { _ = db.Close() }()

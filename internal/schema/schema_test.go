@@ -631,6 +631,37 @@ func TestMigrateJSONLSharding(t *testing.T) {
 	}
 }
 
+func setupTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() failed: %v", err)
+	}
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB() failed: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
+func TestMigration_PurgeMetadata(t *testing.T) {
+	db := setupTestDB(t)
+	_, err := db.Exec(`INSERT INTO purge_metadata (key, value) VALUES ('purge_cutoff', '2026-01-01T00:00:00Z')`)
+	if err != nil {
+		t.Fatalf("insert into purge_metadata: %v", err)
+	}
+	var val string
+	err = db.QueryRow(`SELECT value FROM purge_metadata WHERE key = 'purge_cutoff'`).Scan(&val)
+	if err != nil {
+		t.Fatalf("select from purge_metadata: %v", err)
+	}
+	if val != "2026-01-01T00:00:00Z" {
+		t.Errorf("expected cutoff value, got %s", val)
+	}
+}
+
 func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "cascade.db")
