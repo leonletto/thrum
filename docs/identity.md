@@ -1,3 +1,4 @@
+
 ## Agent Identity & Registration
 
 > **TL;DR:** Each agent gets a name, role, and module. Names must be lowercase
