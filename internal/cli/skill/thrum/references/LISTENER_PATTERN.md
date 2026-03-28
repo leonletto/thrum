@@ -12,7 +12,7 @@ without polling.
 3. **Return** — When a message arrives, output it and stop
 4. **Re-arm** — After processing the message, spawn a new listener
 
-The listener loops internally (up to 10 cycles of 8 min each = ~80 min max
+The listener loops internally (up to 30 cycles of 8 min each = ~4 hours max
 coverage per spawn).
 
 ## Wait Command Flags
@@ -22,6 +22,20 @@ coverage per spawn).
 | `--timeout 8m` | Block up to 8 min per cycle (keeps within process time limits)                  |
 | `--after -15s` | Include messages sent up to 15s ago (covers re-arm gap between listener cycles) |
 | `--json`       | Machine-readable output                                                         |
+
+## Cron Watchdog (Recommended)
+
+Use a cron job to automatically respawn the listener if it dies or times out:
+
+```text
+CronCreate(
+  cron="*/30 * * * *",
+  prompt="If there is no background message listener running, spawn one."
+)
+```
+
+The cron fires every 30 minutes. If a listener is running, it skips. If not, it
+spawns one. This eliminates manual re-arming.
 
 ## Key Rules
 

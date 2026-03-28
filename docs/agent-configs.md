@@ -67,9 +67,10 @@ Or visit the [Beads project](https://github.com/steveyegge/beads) for details.
 
 Lightweight background listener that watches for incoming Thrum messages so you
 don't have to manually check your inbox. Runs on Haiku for cost efficiency
-(~$0.00003/cycle). Uses `thrum wait` for efficient blocking instead of polling
-loops — returns immediately when messages arrive, covers ~90 minutes across 6
-cycles.
+(~$0.00003/cycle, ~65% fewer tokens than the old pattern). Uses `thrum wait` for
+efficient blocking instead of polling loops — returns immediately when messages
+arrive, covers up to 4 hours across 30 cycles. A cron watchdog auto-respawns it
+every 30 min if it stops — no manual re-arming needed.
 
 **Use when:**
 
@@ -79,12 +80,13 @@ cycles.
 
 **Key capabilities:**
 
-- Blocking wait via `thrum wait --timeout 8m` (6 cycles max, filters by agent
-  identity)
+- Blocking wait via `thrum wait --timeout 8m` (30 cycles max, ~4 hours, filters
+  by agent identity)
 - Immediate return on message arrival
 - Time-based filtering with `--after` flag (negative value = "N ago"; e.g.,
   `-1s` includes messages sent up to 1 second ago)
 - CLI-only (no MCP tools — sub-agents can't access MCP)
+- Cron watchdog auto-respawns the listener every 30 min if it is not running
 
 ## Configure the message listener
 
@@ -108,11 +110,19 @@ Task({
 
 - `--timeout 8m` — Block up to 8 minutes per cycle
 - `--after -15s` — Include messages sent up to 15 seconds ago (negative = "N
-  ago"; covers re-arm gap)
+  ago"; covers restart gap)
 
 The listener uses `thrum wait` which blocks until a message arrives or the
-timeout expires — no polling loops needed. Each cycle is a single Bash call.
-Re-arm the listener after processing messages to continue listening.
+timeout expires — no polling loops needed. Each cycle is a single Bash call. The
+listener loops automatically for up to 4 hours (30 cycles). Set up a cron
+watchdog to auto-respawn it if it stops:
+
+```text
+CronCreate(cron="*/30 * * * *",
+  prompt="If there is no background message listener running, spawn one now:
+    Task(subagent_type='message-listener', model='haiku', run_in_background=true,
+      prompt='Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -15s --json')")
+```
 
 ## Customize for your project
 

@@ -29,7 +29,7 @@ Replace `/path/to/repo` with the actual repo path. When using the Thrum plugin,
 4. **Return or loop** — If message received, output JSON and stop. If timeout,
    go back to step 2.
 
-The listener loops internally (up to 10 cycles of 8 min each = ~80 min max).
+The listener loops internally (up to 30 cycles of 8 min each = ~4 hours max).
 
 ## Heartbeat Mechanism
 
@@ -55,6 +55,25 @@ different session, the hook tells Claude to restart the listener.
 | `--timeout 8m` | Block up to 8 min per cycle (under Bash 600s limit)                             |
 | `--after -15s` | Include messages sent up to 15s ago (covers re-arm gap between listener cycles) |
 | `--json`       | Machine-readable output (not used by listener)                                  |
+
+## Cron Watchdog (Recommended)
+
+Use a cron job to automatically respawn the listener if it dies, times out, or
+is lost after compaction. This eliminates manual re-arming entirely.
+
+```text
+CronCreate(
+  cron="*/30 * * * *",
+  prompt="If there is no background message listener running, spawn one now:\n\nAgent(subagent_type=\"message-listener\", model=\"haiku\", run_in_background=true, prompt=\"Listen for Thrum messages.\\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")"
+)
+```
+
+The cron fires every 30 minutes. If a listener is already running, it skips. If
+the listener has died or expired, it spawns a new one. Combined with the 4-hour
+listener budget, this provides continuous coverage with minimal overhead.
+
+**Setup:** Spawn the initial listener on session start, then create the cron
+watchdog. The cron handles all subsequent re-arming automatically.
 
 ## Key Rules
 

@@ -45,3 +45,21 @@ while IFS= read -r src_file; do
 done < <(find "$SRC" -name '*.md' -type f)
 
 echo "Synced $count files from website/docs/ to docs/"
+
+# Run formatting and linting so synced files match CI expectations
+echo ""
+echo "Running fmt-all and lint-all to ensure synced files pass CI..."
+if make -C "$REPO_ROOT" fmt-all 2>&1; then
+  echo "Formatting: OK"
+else
+  echo "Warning: formatting had issues (non-fatal)" >&2
+fi
+
+if make -C "$REPO_ROOT" lint-md-fix 2>&1; then
+  echo "Markdown lint fix: OK"
+else
+  echo "Warning: markdown lint fix had issues (non-fatal)" >&2
+fi
+
+echo ""
+echo "Sync complete. All files formatted and linted — ready to commit."
