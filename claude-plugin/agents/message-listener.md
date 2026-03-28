@@ -24,7 +24,7 @@ Your prompt contains STEP_1 and STEP_2. Each is a complete Bash command.
    - **Exit 1** → Timeout, no messages. Go back to step 1.
    - **Exit 2** → Error. Return "ERROR" and STOP.
 
-Budget: 20 Bash calls max.
+Budget: 62 Bash calls max.
 
 ## Rules
 

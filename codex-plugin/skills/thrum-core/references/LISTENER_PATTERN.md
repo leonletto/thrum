@@ -26,7 +26,7 @@ Replace `/path/to/repo` with the actual repo path. When using the Thrum plugin,
    `NO_MESSAGES_TIMEOUT`
 4. **Re-arm** — After processing, spawn a new listener to continue monitoring
 
-The listener loops internally (up to 10 cycles of 8 min each = ~80 min max).
+The listener loops internally (up to 30 cycles of 8 min each = ~4 hours max).
 
 ## Processing Messages
 
@@ -76,9 +76,24 @@ NO_MESSAGES_TIMEOUT
 RE-ARM: This listener has stopped. Spawn a new message-listener agent to continue listening.
 ```
 
+## Cron Watchdog (Recommended)
+
+Use a cron job to automatically respawn the listener if it dies or times out.
+This eliminates manual re-arming entirely.
+
+```text
+CronCreate(
+  cron="*/30 * * * *",
+  prompt="If there is no background message listener running, spawn one now:\n\nAgent(subagent_type=\"message-listener\", model=\"haiku\", run_in_background=true, prompt=\"Listen for Thrum messages.\\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")"
+)
+```
+
+The cron fires every 30 minutes. If a listener is already running, it skips. If
+not, it spawns one. Combined with the 4-hour listener budget, this provides
+continuous coverage with minimal overhead.
+
 ## Key Rules
 
-- **Always re-arm** after processing results
 - **Return immediately** when messages arrive (don't wait for more)
 - **Read-only** — the listener never sends messages
 - **Cost-efficient** — runs on Haiku, blocks instead of polling
