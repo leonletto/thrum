@@ -532,9 +532,10 @@ Haiku sub-agent that blocks on `wait_for_message`. This is defined in
 2. The listener calls `check_messages` to drain any backlog
 3. If messages are found, it returns them immediately
 4. If none, it calls `wait_for_message(timeout=300)` and blocks
-5. When a message arrives or timeout occurs, the listener returns to the main
-   agent
-6. The main agent processes the result and re-arms the listener
+5. When a message arrives or timeout occurs, the listener loops automatically
+   for up to 4 hours (30 cycles) — no manual re-arming needed
+6. A cron watchdog (`CronCreate`, every 30 min) auto-respawns the listener if it
+   is not running, reducing token usage by ~65% compared to the old pattern
 
 **Return format:**
 
@@ -557,6 +558,8 @@ NO_MESSAGES_TIMEOUT
 
 ### Context Management
 
+- The listener runs up to 30 cycles (~4 hours) before stopping; the cron
+  watchdog respawns it automatically every 30 min if needed
 - Compact after 10+ message cycles to prevent context overflow
 - After 5 consecutive timeouts with no pending work, send status to the
   coordinator and stop the listener

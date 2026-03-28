@@ -108,9 +108,10 @@ state.
 
 ## Background Message Listener
 
-ALWAYS keep a background listener running. Spawn on session start, re-arm every
-time it returns (both MESSAGES_RECEIVED and timeout). Run `thrum prime` to get
-the spawn command with the correct repo path pre-filled.
+ALWAYS keep a background listener running. Spawn on session start; it loops
+automatically for up to 4 hours — no manual re-arming needed. Set up a cron
+watchdog (`CronCreate`, every 30 min) to auto-respawn it if it stops. Run
+`thrum prime` to get the spawn command with the correct repo path pre-filled.
 ```
 
 **Customization examples:**

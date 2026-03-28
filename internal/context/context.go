@@ -136,7 +136,7 @@ func DefaultPreamble() []byte {
 ## Operating Principles
 
 1. **ALWAYS keep a background message listener running.** [LISTENER RULE #1]
-   Missing messages = broken coordination. Spawn on start, re-arm on every return.
+   Missing messages = broken coordination. Spawn on start, use cron watchdog for auto-recovery.
 2. **Check inbox before starting work and at every breakpoint.**
    ` + "`thrum inbox --unread`" + ` — never assume you have the full picture.
 3. **Send to agent NAMES, never role names.**
@@ -148,7 +148,7 @@ func DefaultPreamble() []byte {
 ## Startup Protocol
 
 1. Run ` + "`thrum prime`" + ` — get spawn command with correct repo path pre-filled
-2. Spawn background listener (re-arm every return — see below) [LISTENER RULE #2]
+2. Spawn background listener + cron watchdog (see below) [LISTENER RULE #2]
 3. Check inbox: ` + "`thrum inbox --unread`" + `
 4. Check team: ` + "`thrum team`" + `
 
@@ -160,9 +160,12 @@ func DefaultPreamble() []byte {
 
 ## Background Message Listener [LISTENER RULE #2]
 
-ALWAYS keep a background listener running. Spawn on session start, re-arm every
-time it returns (both MESSAGES_RECEIVED and timeout). Run ` + "`thrum prime`" + ` to get the
-spawn command with the correct repo path pre-filled. The pattern:
+On session start, spawn a background listener AND a cron watchdog. The listener
+blocks on ` + "`thrum wait`" + ` for up to 4 hours (~30 cycles of 8 min). The cron watchdog
+checks every 30 minutes and respawns the listener if it has died. This eliminates
+manual re-arming entirely.
+
+**Step 1 — Spawn initial listener:**
 
 ` + "```text" + `
 Task(subagent_type="message-listener", model="haiku", run_in_background=true,
@@ -170,8 +173,15 @@ Task(subagent_type="message-listener", model="haiku", run_in_background=true,
 ` + "```" + `
 
 Replace ` + "`<repo>`" + ` with the actual repo path (shown in ` + "`thrum prime`" + ` output).
-` + "`--after -15s`" + ` = include messages sent up to 15s ago, covers re-arm gap between
-listener cycles.
+
+**Step 2 — Create cron watchdog:**
+
+` + "```text" + `
+CronCreate(cron="*/30 * * * *",
+  prompt="If there is no background message listener running, spawn one now:\n\nAgent(subagent_type=\"message-listener\", model=\"haiku\", run_in_background=true, prompt=\"Listen for Thrum messages.\\nSTEP_1: <repo>/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")")
+` + "```" + `
+
+The cron fires every 30 min. If a listener is running, it skips. If not, it spawns one.
 
 ## Agent Strategies
 
@@ -191,7 +201,7 @@ Read these strategy files for operational patterns. They are in ` + "`.thrum/str
 **Status:** ` + "`thrum status`" + `
 **Who's online:** ` + "`thrum team`" + `
 
-` + "⚠" + ` **REMINDER: Is your listener running? If not, spawn it now.** [LISTENER RULE #3]
+` + "⚠" + ` **REMINDER: Is your listener + cron watchdog running? If not, set them up now.** [LISTENER RULE #3]
 `)
 }
 

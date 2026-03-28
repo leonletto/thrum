@@ -13,15 +13,15 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.6.2 highlights:**
+**v0.6.3 highlights:**
 
-- **Sync-aware purge** — `thrum purge` now propagates across Tailscale-synced
-  nodes. Purged messages, sessions, and events stay purged — no more
-  resurrection via sync. Agent deletion also fully propagates to peers.
-- **Telegram bridge** — Get agent messages on your phone. Reply from Telegram
-  and it threads back to the right agent.
-- **Tailscale sync** — Real-time peer-to-peer sync between machines. Your laptop
-  and desktop agents coordinate in seconds, not minutes.
+- **Cron watchdog for message listener** — The background listener now
+  automatically recovers when it exits. No more manual re-arming after each
+  cycle.
+- **Extended listener budget** — 30 cycles (~4 hours) instead of 10 (~80 min),
+  with ~65% lower token usage overall.
+- **Sync-aware purge** — `thrum purge` propagates across Tailscale-synced nodes.
+  Agent deletion also fully propagates to peers.
 
 ## Quick Start
 

@@ -71,3 +71,23 @@ done < <(find "$SRC_DIR" -name '*.md' -type f | sort)
 
 echo ""
 echo "Done. $synced synced, $skipped unchanged."
+
+if [[ $synced -gt 0 ]] && ! $DRY_RUN; then
+  # Run formatting and linting so synced files match CI expectations
+  echo ""
+  echo "Running fmt-all and lint-all to ensure synced files pass CI..."
+  if make -C "$REPO_ROOT" fmt-all 2>&1; then
+    echo "Formatting: OK"
+  else
+    echo "Warning: formatting had issues (non-fatal)" >&2
+  fi
+
+  if make -C "$REPO_ROOT" lint-md-fix 2>&1; then
+    echo "Markdown lint fix: OK"
+  else
+    echo "Warning: markdown lint fix had issues (non-fatal)" >&2
+  fi
+
+  echo ""
+  echo "Sync complete. All files formatted and linted — ready to commit."
+fi

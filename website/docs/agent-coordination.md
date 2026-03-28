@@ -171,13 +171,24 @@ incoming messages and notifies the main agent when they arrive.
 2. The listener uses `thrum wait` (blocks until message arrives or timeout)
 3. When a message arrives, the listener returns immediately with the message
    content
-4. The main agent processes the message and re-arms the listener
+4. The main agent processes the message; the listener continues looping
+   automatically (no manual re-arming needed)
+5. A cron watchdog respawns the listener every 30 min if it is not running
 
 **Recommended approach:** Use `thrum wait` which blocks until a message arrives
 or times out. This is more efficient than polling loops with sleep intervals.
 Use `--after -15s` to include messages sent up to 1 second ago (`--after`
 negative value = "N ago"). Omit `--after` to receive only messages that arrive
 after the wait starts.
+
+**Cron watchdog:** Set up a cron job to auto-respawn the listener if it stops:
+
+```text
+CronCreate(cron="*/30 * * * *",
+  prompt="If there is no background message listener running, spawn one now:
+    Task(subagent_type='message-listener', model='haiku', run_in_background=true,
+      prompt='Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -15s --json')")
+```
 
 ### Return Format
 
@@ -200,8 +211,8 @@ NO_MESSAGES_TIMEOUT
 
 ### Context Management
 
-- Re-arm the listener after processing messages (the listener exits after
-  returning)
+- The listener loops for up to 4 hours (30 cycles of ~8 min each) before
+  stopping; the cron watchdog will respawn it automatically
 - After 5 consecutive timeouts with no pending work, send status to the
   coordinator and stop the listener
 - The listener is read-only; it never sends messages
@@ -330,7 +341,7 @@ thrum session end
 
 - **Don't use Thrum for task management** -- use Beads for that
 - **Don't spam messages** -- batch updates when possible
-- **Don't forget to re-arm the listener** -- after processing messages
+- **Don't skip the cron watchdog** -- it auto-respawns the listener if it stops
 - **Don't ignore critical messages** -- stop work and respond
 - **Don't skip registration** -- the system won't route messages correctly
 - **Don't leave sessions open** -- end them when done to avoid stale status

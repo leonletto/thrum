@@ -59,8 +59,9 @@ Spawn a background listener so you receive async notifications without polling:
 thrum wait --timeout 8m --after -15s --json
 ```
 
-Re-arm the listener every time it returns — both when messages arrive and when
-it times out. This keeps you reachable throughout your session.
+The listener loops internally for up to 30 cycles (~4 hours). Set up a cron
+watchdog (`CronCreate`, every 30 min) to automatically respawn the listener if
+it dies or expires. This eliminates manual re-arming.
 
 ## Completion and Blocker Messages
 
