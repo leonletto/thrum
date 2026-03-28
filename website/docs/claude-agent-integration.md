@@ -65,8 +65,9 @@ Add to .claude/settings.json:
 
 ### 3. Launch Background Listener
 
-Spawn a message-listener sub-agent to get async notifications. Re-arm it every
-time it returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
+Spawn a message-listener sub-agent to get async notifications. The listener
+loops automatically for up to 4 hours — no manual re-arming needed. Set up a
+cron watchdog to auto-respawn it every 30 min if it stops.
 
 ### 4. Communicate
 
@@ -118,11 +119,12 @@ thrum session end
 
 A lightweight background agent (runs on Haiku for ~$0.00003/cycle) that uses
 `thrum wait` for efficient blocking until messages arrive — no polling loops or
-sleep intervals needed. It loops up to ~6 cycles (~90 minutes of coverage),
-returning immediately when new messages arrive.
+sleep intervals needed. It loops up to 30 cycles (~4 hours of coverage),
+returning immediately when new messages arrive. A cron watchdog auto-respawns it
+every 30 min if it stops — no manual re-arming needed.
 
-**Usage:** Spawn at the start of every coordination session. Re-arm immediately
-when it returns.
+**Usage:** Spawn at the start of every coordination session. Set up a cron
+watchdog to keep it running automatically.
 
 <details>
 <summary>message-listener.md</summary>
@@ -154,7 +156,7 @@ loops needed — `thrum wait` uses the daemon's WebSocket push internally.
 Your prompt contains the EXACT command to use after "WAIT_CMD=". Use that
 command verbatim.
 
-**LOOP** (repeat up to 6 cycles, ~90 min coverage):
+**LOOP** (repeat up to 30 cycles, ~4 hour coverage):
 
 1. Run the WAIT_CMD from your prompt EXACTLY as given (Bash).
 2. If messages found (exit code 0), return them immediately.
@@ -179,8 +181,8 @@ NO_MESSAGES_TIMEOUT
 
 Always end with:
 
-RE-ARM: This listener has stopped. Spawn a new message-listener agent to
-continue listening.
+LISTENER_STOPPED: This listener has exhausted its cycles. The cron watchdog will
+respawn it automatically within 30 minutes.
 ```
 
 </details>

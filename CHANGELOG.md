@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-03-28
+
+### Added
+
+- **Message-listener cron watchdog** — A cron-based watchdog automatically
+  re-arms the background message listener when it exits. Previously, agents had
+  to manually re-spawn the listener after each cycle; now recovery is fully
+  automatic. Eliminates the most common cause of missed messages in long-running
+  sessions.
+- **Extended listener budget** — Message-listener cycle count increased from 10
+  cycles (~80 minutes) to 30 cycles (~4 hours). Combined with the watchdog
+  pattern, a single listener setup now provides continuous coverage without
+  manual intervention.
+
+### Changed
+
+- **Listener token usage** — The extended budget and watchdog pattern together
+  reduce listener token consumption by ~65% compared to the previous frequent
+  re-arm model.
+
 ## [0.6.2] - 2026-03-27
 
 ### Fixed
