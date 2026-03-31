@@ -1,0 +1,18 @@
+{
+  "name": "thrum",
+  "version": "0.6.3",
+  "description": "Git-backed messaging for AI agent coordination across sessions, worktrees, and machines.",
+  "author": {
+    "name": "Leon Letto",
+    "url": "https://github.com/leonletto"
+  },
+  "repository": "https://github.com/leonletto/thrum",
+  "homepage": "https://leonletto.github.io/thrum",
+  "license": "MIT",
+  "keywords": ["messaging", "multi-agent", "coordination", "git-sync"],
+  "commands": "commands",
+  "skills": "skills",
+  "rules": "rules",
+  "agents": "agents",
+  "hooks": "hooks/hooks.json"
+}
