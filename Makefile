@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go install deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks
+.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go install deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks plugin-check
 
 # Tool versions - pinned for supply chain security
 GOLANGCI_LINT_VERSION := v1.64.5
@@ -288,6 +288,9 @@ ci: fmt-all lint-all vet test security build
 pre-commit: quick-check
 
 pre-push: ci
+
+plugin-check:
+	@./cursor-plugin/scripts/assert-plugin-versions.sh
 
 # Setup git hook chaining
 setup-hooks:
