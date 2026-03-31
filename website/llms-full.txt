@@ -1,0 +1,1375 @@
+# Thrum v0.6.3 -- Complete Agent Reference
+
+> Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
+
+## Architecture
+
+Thrum uses event sourcing with CQRS:
+
+  Source of truth:  Append-only JSONL event logs (sharded by agent), tracked on
+                    the `a-sync` orphan branch via a `.git/thrum-sync/a-sync` worktree
+                    - events.jsonl (agent lifecycle events)
+                    - messages/{agent_name}.jsonl (per-agent message logs)
+  Query model:      SQLite projection (.thrum/var/messages.db), gitignored, rebuildable
+  Daemon:           Background service with JSON-RPC 2.0 over Unix socket + WebSocket
+  Sync:             Automatic fetch/merge/push in `.git/thrum-sync/a-sync` worktree every 60 seconds
+                    No branch switching -- all operations happen within the worktree
+
+All CLI commands communicate with the daemon via the Unix socket. The daemon
+manages the JSONL log, SQLite projection, sync loop, and subscription
+notifications. SQLite can be rebuilt from JSONL at any time.
+
+### Directory Structure
+
+  .thrum/                           Gitignored entirely
+    sync/                           Git worktree on `a-sync` orphan branch
+      events.jsonl                  Agent lifecycle events (tracked on a-sync)
+      messages/                     Per-agent message logs (tracked on a-sync)
+        {agent_name}.jsonl          One JSONL file per agent
+      context/                      Agent context files (tracked on a-sync)
+        {agent_name}.md             Saved context per agent
+    var/                            Runtime files
+      messages.db                   SQLite query cache
+      thrum.sock                    Unix domain socket
+      thrum.pid                     Daemon process ID
+      ws.port                       Actual WebSocket port
+      sync.lock                     Sync lock file
+    identities/                     Agent identity files (per-worktree)
+      {agent_name}.json             One JSON file per agent
+    context/                        Local agent context files
+      {agent_name}.md               Saved context per agent
+      {agent_name}.preamble.md      Agent preamble file
+    config.json                     Local configuration (local_only, etc.)
+    redirect                        (feature worktrees only) points to main .thrum/
+
+### Transport
+
+  Unix Socket:  .thrum/var/thrum.sock (CLI, scripts, local tools)
+  WebSocket:    ws://localhost:9999/ (Web UI, real-time apps)
+  Protocol:     JSON-RPC 2.0 over both transports
+
+Both transports expose the same set of RPC methods.
+
+## Data Model
+
+### Message
+
+  message_id      string    Unique ID (format: msg_ + ULID)
+  thread_id       string    Optional thread association
+  agent_id        string    Author agent ID
+  session_id      string    Author session ID
+  body.format     string    "markdown" | "plain" | "json"
+  body.content    string    Message text content
+  body.structured string    Optional JSON payload
+  scopes          []Scope   Routing metadata (type:value pairs)
+  refs            []Ref     References (type:value pairs, includes mentions)
+  created_at      string    ISO 8601 timestamp
+  updated_at      string    ISO 8601 timestamp (set on edit)
+  deleted         bool      Soft-delete flag
+  deleted_at      string    Deletion timestamp
+  authored_by     string    Actual author if impersonating (users only)
+  disclosed       bool      Whether to show impersonation in UI
+
+### Agent
+
+  agent_id        string    Deterministic ID (format: agent:role:hash)
+  kind            string    "agent" or "user"
+  role            string    Agent function (e.g., implementer, reviewer)
+  module          string    Component responsibility (e.g., auth, db)
+  display         string    Human-readable display name
+  registered_at   string    ISO 8601 timestamp
+  last_seen_at    string    ISO 8601 timestamp (updated by heartbeat)
+
+### Session
+
+  session_id      string    Unique ID (format: ses_ + ULID)
+  agent_id        string    Owning agent
+  started_at      string    ISO 8601 timestamp
+  ended_at        string    ISO 8601 timestamp (null if active)
+  end_reason      string    "normal" | "crash" | "crash_recovered" | "superseded"
+  last_seen_at    string    Updated by heartbeat
+
+### Work Context (per session)
+
+  session_id          string    Session this context belongs to
+  agent_id            string    Agent this context belongs to
+  branch              string    Current git branch
+  worktree_path       string    Path to git worktree
+  unmerged_commits    []CommitSummary  Commits not merged to main
+  uncommitted_files   []string  Files with uncommitted changes
+  changed_files       []string  All changed files
+  git_updated_at      string    When git context was last extracted
+  current_task        string    Task identifier (e.g., beads:thrum-xyz)
+  task_updated_at     string    When task was last set
+  intent              string    Free-text work intent
+  intent_updated_at   string    When intent was last set
+
+### CommitSummary
+
+  sha       string    Short commit hash
+  message   string    Commit message
+  files     []string  Files changed in commit
+
+### Scope
+
+  type    string    Category (e.g., "module", "team", "project")
+  value   string    Specific value (e.g., "auth", "backend")
+
+### Ref
+
+  type    string    Reference type (e.g., "pr", "issue", "mention", "file")
+  value   string    Reference value (e.g., "42", "reviewer", "auth.go")
+
+### Subscription
+
+  id              int       Auto-increment ID
+  session_id      string    Owning session
+  scope_type      string    Optional scope filter type
+  scope_value     string    Optional scope filter value
+  mention_role    string    Optional mention filter role
+  all             bool      True if firehose subscription
+  created_at      string    ISO 8601 timestamp
+
+### Group
+
+  name            string    Group name (e.g., "backend-team")
+  description     string    Optional description
+  created_by      string    Agent ID of creator
+  created_at      string    ISO 8601 timestamp
+
+### Group Member
+
+  group_name      string    Parent group name
+  member_type     string    "agent" | "role" | "group"
+  member_value    string    Agent name, role name, or nested group name
+
+### ID Formats
+
+  Repo:     r_ + base32(sha256(normalized_origin_url))[:12]
+  Agent:    agent: + role + : + base32(sha256(repo_id|role|module))[:10]
+  User:     user: + username
+  Session:  ses_ + ULID
+  Message:  msg_ + ULID
+
+Repo and Agent IDs are deterministic (same inputs = same ID).
+Session and Message IDs use ULID (time-ordered, unique).
+
+## Global Flags
+
+All commands accept:
+
+  --role VALUE        Agent role (or THRUM_ROLE env var)
+  --module VALUE      Agent module (or THRUM_MODULE env var)
+  --repo PATH         Repository path (default: ".")
+  --json              JSON output for scripting
+  --quiet             Suppress non-essential output
+  --verbose           Debug output
+
+## All Commands (Detailed)
+
+### thrum init
+
+  Usage:    thrum init [flags]
+  Flags:    --force              Force reinitialization / overwrite existing files
+            --stealth            Write exclusions to .git/info/exclude instead of .gitignore
+            --runtime STRING     Generate runtime-specific configs (claude|codex|cursor|gemini|cli-only|all)
+            --dry-run            Preview changes without writing files
+            --agent-name STRING  Agent name for templates (default: default_agent)
+            --agent-role STRING  Agent role for templates (default: implementer)
+            --agent-module STRING Agent module for templates (default: main)
+  Action:   Creates .thrum/ directory structure, sets up .git/thrum-sync/a-sync as a git
+            worktree on the `a-sync` orphan branch, creates identities/ directory,
+            updates .gitignore (or .git/info/exclude with --stealth) to ignore .thrum/.
+            Writes config.json with local_only: true by default. Optionally detects
+            installed AI runtimes and generates runtime-specific config files.
+  Errors:   Fails if .thrum/ exists (unless --force). Fails if not a git repo.
+  Related:  `thrum migrate` upgrades repos from the old tracked-on-main layout.
+            `thrum setup` configures .thrum/ in feature worktrees (creates redirect).
+
+
+### thrum setup claude-md
+
+  Usage:    thrum setup claude-md [flags]
+  Flags:    --apply     Append to CLAUDE.md (create if missing)
+            --force     Overwrite existing Thrum section
+  Action:   Generates comprehensive Thrum agent coordination instructions for CLAUDE.md.
+            Prints to stdout by default. Use --apply to append to CLAUDE.md (with
+            duplicate detection). Use --force with --apply to replace existing Thrum
+            section. Includes registration, messaging protocols, MCP configuration,
+            background listener setup, and group management instructions.
+
+
+### thrum quickstart
+
+  Usage:    thrum quickstart --name <agent-name> --role ROLE --module MODULE [flags]
+  Flags:    --name STRING         Human-readable agent name (optional, defaults to role_hash)
+            --role STRING         Agent role (or THRUM_ROLE env var)
+            --module STRING       Agent module (or THRUM_MODULE env var)
+            --display STRING      Display name for the agent
+            --intent STRING       Initial work intent
+            --runtime STRING      Runtime preset (claude, codex, cursor, gemini, auggie, cli-only)
+            --dry-run             Preview changes without writing files or registering
+            --force               Overwrite existing runtime config files
+            --no-init             Skip runtime config generation, just register agent
+            --preamble-file STRING Custom preamble file to compose with default preamble
+  Action:   Chains: runtime detect -> config generate -> agent register -> session start
+            -> set intent (if provided). Auto-retries with re-register on conflict.
+  Requires: Daemon running. --role and --module required.
+  Output:   Agent ID, session ID, intent confirmation.
+
+### thrum overview
+
+  Usage:    thrum overview [--json]
+  Action:   Fetches health, identity (whoami), work context, team contexts,
+            inbox counts, and sync state. Combines into single orientation view.
+  Requires: Daemon running. Shows "Not registered" if no agent identity.
+
+### thrum status
+
+  Usage:    thrum status [--json]
+  Action:   Shows agent identity, session info, WebSocket port.
+  Requires: Daemon running.
+  Output:   Agent ID, role, module, session ID, session start time, WebSocket port.
+
+### thrum whoami
+
+  Usage:    thrum whoami [--json]
+  Action:   Shows current agent identity. Lightweight alternative to `thrum status` --
+            reads directly from .thrum/identities/*.json, no daemon required.
+  Output:   Agent ID, name, role, module, display, source.
+
+### thrum version
+
+  Usage:    thrum version
+  Action:   Shows version number, build hash, repository URL, and documentation URL.
+
+### thrum completion
+
+  Usage:    thrum completion [bash|fish|powershell|zsh]
+  Action:   Generates shell autocompletion scripts for the specified shell.
+
+### thrum send
+
+  Usage:    thrum send MESSAGE [flags]
+  Flags:    --scope type:value      Add scope (repeatable)
+            --ref type:value        Add reference (repeatable)
+            --mention @role         Mention a role (repeatable, stored as ref type "mention")
+            --thread ID             Reply to thread
+            --to @role              Direct recipient (also accepts @group names)
+            --everyone              Alias for --to @everyone (broadcast to all agents)
+            --broadcast, -b         Send to all agents (alias for --to @everyone)
+            --format markdown|plain|json  Message format (default: markdown)
+            --structured JSON       Structured payload
+  Requires: Daemon running, active session.
+  Output:   Message ID, thread ID (if set), created timestamp.
+  Errors:   No active session. Empty content.
+
+### thrum reply
+
+  Usage:    thrum reply MSG_ID TEXT [--format markdown|plain|json]
+  Flags:    --format   Message format (default: markdown)
+  Action:   Replies to a message. Copies the parent message's audience (mentions/scopes).
+            Includes a reply_to reference to the parent message. Creates a thread if the
+            message has no thread. Auto-marks the replied-to message as read.
+  Requires: Daemon running, active session.
+  Output:   Reply message ID, thread ID.
+
+### thrum inbox
+
+  Usage:    thrum inbox [flags]
+  Flags:    --scope type:value   Filter by scope
+            --mentions           Only messages mentioning current agent
+            --unread             Only unread messages
+            --all, -a            Show all messages (disable auto-filtering)
+            --page-size N        Results per page (default: 10)
+            --limit N            Alias for --page-size
+            --page N             Page number (default: 1)
+  Action:   Lists messages. By default auto-filters to messages addressed to you (via --to)
+            plus broadcasts and general messages. Use --all to see everything.
+            Auto-marks displayed messages as read (unless --unread).
+  Requires: Daemon running, active session.
+  Output:   Paginated message list with sender, content preview, timestamps.
+
+### thrum sent
+
+  Usage:    thrum sent [flags]
+            thrum sent show MSG_ID
+  Flags:    --to @agent|@role|@group|@everyone  Filter by recipient or audience
+            --unread                            Only messages with unread recipients
+            --page-size N, --limit N           Results per page
+            --page N                           Page number
+  Action:   Lists messages you authored, including resolved recipients and
+            durable delivery/read state.
+  Requires: Daemon running, active session.
+  Output:   Paginated sent message list with recipients and receipt status.
+
+### thrum wait
+
+  Usage:    thrum wait [flags]
+  Flags:    --timeout DURATION   Max wait time (default: 30s, e.g., 30s, 5m)
+            --scope type:value   Filter by scope
+            --mention @role      Wait for mentions of role
+            --all                Subscribe to all messages (broadcasts + directed)
+            --after OFFSET       Relative time offset (sign convention: negative e.g. -30s = include messages sent up to N ago; positive e.g. +60s = only messages N in the future; omit = "now")
+  Action:   Blocks until a matching message arrives or timeout.
+            When --all is used without --after, defaults to "now" (only new messages).
+  Exit codes: 0 = message received, 1 = timeout, 2 = error.
+  Requires: Daemon running, active session.
+
+### thrum message get
+
+  Usage:    thrum message get MSG_ID
+  Action:   Retrieves full message details including scopes, refs, metadata.
+            Auto-marks message as read.
+  Requires: Daemon running.
+  Output:   Full message with author, body, scopes, refs, timestamps, edit/delete info.
+
+### thrum message edit
+
+  Usage:    thrum message edit MSG_ID TEXT
+  Action:   Replaces message content entirely. Only author can edit.
+  Requires: Daemon running, active session.
+  Errors:   Not found, already deleted, not the author.
+  Output:   Message ID, updated timestamp, edit version number.
+
+### thrum message delete
+
+  Usage:    thrum message delete MSG_ID --force
+  Flags:    --force   Required to confirm deletion
+  Action:   Soft-deletes a message.
+  Requires: Daemon running.
+  Errors:   Not found, already deleted, --force not specified.
+
+### thrum message read
+
+  Usage:    thrum message read [MSG_ID...] [--all]
+  Flags:    --all    Mark all unread messages as read
+  Action:   Marks one or more messages as read for the current agent/session.
+            Use --all to mark every unread message as read.
+  Requires: Daemon running, active session.
+  Output:   Count of marked messages. Also shows other agents who read the same messages.
+
+### thrum purge
+
+  Usage:    thrum purge --before DURATION|DATE [--confirm]
+            thrum purge --all [--confirm]
+  Flags:    --before string   Cutoff: duration (2d, 24h), date (2026-03-15), or RFC 3339
+            --all             Purge all messages, sessions, and events
+            --confirm         Execute the purge (without this, only shows a preview)
+  Action:   Removes messages, sessions, and events before the cutoff date from both
+            SQLite and sync JSONL files. Agents, groups, and subscriptions are not
+            touched. --before and --all are mutually exclusive.
+  Requires: Daemon running.
+  Output:   Preview (counts) without --confirm. Deletion summary with --confirm.
+
+### thrum agent register
+
+  Usage:    thrum agent register --role ROLE --module MODULE [--name NAME] [flags]
+  Flags:    --name NAME       Agent name (e.g., "furiosa")
+            --display NAME    Display name
+            --force           Force override existing agent
+            --re-register     Re-register same agent (update)
+  Action:   Registers agent identity. Saves to .thrum/identities/{name}.json.
+  Identity: Priority: THRUM_NAME env var (highest) > --name flag > THRUM_ROLE/THRUM_MODULE env > identity file.
+  Errors:   Conflict if different agent exists with same role+module (use --force).
+  Output:   Agent ID, status (registered | updated | conflict).
+
+### thrum agent whoami
+
+  Usage:    thrum agent whoami
+  Action:   Shows current agent identity and active session.
+  Identity resolution:
+    1. CLI flags (--name, --role, --module)
+    2. Environment variables (THRUM_NAME, THRUM_ROLE, THRUM_MODULE)
+    3. Identity files in .thrum/identities/ directory
+  Output:   Agent ID, role, module, display, source, session ID, session start.
+
+### thrum agent list
+
+  Usage:    thrum agent list [--role ROLE] [--module MODULE] [--context]
+  Flags:    --role ROLE      Filter by role
+            --module MODULE  Filter by module
+            --context        Show work context (branch, commits, intent)
+  Action:   Lists all registered agents. With --context, shows work context table.
+  Requires: Daemon running.
+
+### thrum agent context
+
+  Usage:    thrum agent context [AGENT] [--agent ROLE] [--branch NAME] [--file PATH]
+  Flags:    --agent ROLE     Filter by agent role
+            --branch NAME    Filter by branch name
+            --file PATH      Filter by file in changed/uncommitted files
+  Action:   Without args, lists all active work contexts (table view).
+            With agent arg (e.g., @planner), shows detailed context.
+  Requires: Daemon running.
+
+### thrum agent delete
+
+  Usage:    thrum agent delete <name>
+  Action:   Deletes an agent and all associated data: identity file
+            (identities/<name>.json), message file (messages/<name>.jsonl),
+            and database record.
+  Requires: Daemon running.
+
+### thrum agent cleanup
+
+  Usage:    thrum agent cleanup [--dry-run] [--force] [--threshold DAYS]
+  Flags:    --dry-run         List orphans without deleting
+            --force           Delete all orphans without prompting
+            --threshold DAYS  Days since last seen to consider stale (default: 30)
+  Action:   Scans registered agents and identifies orphans (missing worktree,
+            missing branch, or stale). Interactive by default.
+  Requires: Daemon running.
+
+### thrum agent start | end | set-intent | set-task | heartbeat
+
+  These are aliases for the corresponding `thrum session` commands:
+    thrum agent start                  -> thrum session start
+    thrum agent end [--reason] [--session-id]  -> thrum session end
+    thrum agent set-intent TEXT        -> thrum session set-intent
+    thrum agent set-task TASK          -> thrum session set-task
+    thrum agent heartbeat [--add-scope] [--remove-scope] [--add-ref] [--remove-ref]
+                                       -> thrum session heartbeat
+
+### thrum session start
+
+  Usage:    thrum session start
+  Action:   Starts a new work session. Auto-recovers orphaned sessions
+            (marks as crash_recovered). Agent must be registered.
+  Output:   Session ID, agent ID, start timestamp.
+
+### thrum session end
+
+  Usage:    thrum session end [--reason normal|crash] [--session-id ID]
+  Action:   Ends the session. Syncs work contexts to JSONL.
+  Defaults: --reason normal, --session-id from whoami.
+
+### thrum session list
+
+  Usage:    thrum session list [--active] [--agent AGENT_ID]
+  Flags:    --active         Show only active sessions
+            --agent STRING   Filter by agent ID
+  Action:   Lists all sessions (active and ended).
+  Requires: Daemon running.
+
+### thrum session heartbeat
+
+  Usage:    thrum session heartbeat [--add-scope type:value] [--remove-scope type:value] [--add-ref type:value] [--remove-ref type:value]
+  Action:   Updates last_seen_at. Extracts git work context (branch, commits,
+            changed files). Manages session scopes and refs.
+
+### thrum session set-intent
+
+  Usage:    thrum session set-intent TEXT
+  Action:   Sets work intent (free text). Pass "" to clear.
+
+### thrum session set-task
+
+  Usage:    thrum session set-task TASK
+  Action:   Sets current task identifier (e.g., beads:thrum-xyz). Pass "" to clear.
+
+### thrum subscribe
+
+  Usage:    thrum subscribe --scope type:value
+            thrum subscribe --mention @role
+            thrum subscribe --all
+  Action:   Subscribe to push notifications. Options are mutually exclusive.
+  Output:   Subscription ID, session ID, created timestamp.
+
+### thrum unsubscribe
+
+  Usage:    thrum unsubscribe SUBSCRIPTION_ID
+  Action:   Removes subscription (only if it belongs to current session).
+
+### thrum subscriptions
+
+  Usage:    thrum subscriptions
+  Action:   Lists all active subscriptions for the current session.
+
+### thrum group create
+
+  Usage:    thrum group create NAME [--description TEXT]
+  Action:   Creates a named messaging group. The @everyone group is auto-created.
+  Output:   Group name, description, created timestamp.
+
+### thrum group delete
+
+  Usage:    thrum group delete NAME
+  Action:   Deletes a group. Cannot delete the built-in @everyone group.
+
+### thrum group add
+
+  Usage:    thrum group add GROUP MEMBER [--role ROLE]
+  Flags:    --role STRING   Add a role-based member instead of agent
+  Action:   Adds a member to a group. By default treats MEMBER as agent name
+            (strips @ prefix). Use --role to add all agents matching a role.
+  Examples: thrum group add reviewers @alice
+            thrum group add reviewers --role reviewer
+
+### thrum group remove
+
+  Usage:    thrum group remove GROUP MEMBER [--role ROLE]
+  Flags:    --role STRING   Remove a role-based member
+  Action:   Removes a member from a group.
+
+### thrum group list
+
+  Usage:    thrum group list [--json]
+  Action:   Lists all groups with member counts.
+
+### thrum group info
+
+  Usage:    thrum group info NAME [--json]
+  Action:   Shows detailed group information.
+
+### thrum group members
+
+  Usage:    thrum group members NAME [--expand] [--json]
+  Flags:    --expand   Resolve nested groups and roles to individual agent IDs
+  Action:   Lists group members. Without --expand, shows raw membership entries.
+            With --expand, resolves role-based and nested group members to agent IDs.
+
+### thrum team
+
+  Usage:    thrum team [--all] [--json]
+  Flags:    --all    Include offline agents
+  Action:   Shows rich, multi-line status for every active agent. Displays session info,
+            work context, inbox counts, branch status, and per-file change details.
+  Requires: Daemon running.
+
+### thrum context save
+
+  Usage:    thrum context save [--file PATH] [--agent NAME]
+  Flags:    --file STRING    Read context from file (default: stdin)
+            --agent STRING   Override agent name
+  Action:   Saves context for the current agent (or specified agent).
+
+### thrum context show
+
+  Usage:    thrum context show [--agent NAME] [--raw] [--no-preamble]
+  Aliases:  thrum context load
+  Flags:    --agent STRING   Override agent name
+            --raw            Raw output with file boundary markers, no header
+            --no-preamble    Exclude preamble from output
+  Action:   Displays saved context for the current agent.
+
+### thrum context clear
+
+  Usage:    thrum context clear [--agent NAME]
+  Flags:    --agent STRING   Override agent name
+  Action:   Clears saved context for the current agent.
+
+### thrum context preamble
+
+  Usage:    thrum context preamble [--init] [--file PATH] [--agent NAME]
+  Flags:    --init           Create or reset to default preamble
+            --file STRING    Set preamble from file
+            --agent STRING   Override agent name
+  Action:   Shows current preamble (no flags), creates/resets preamble (--init),
+            or sets preamble from file (--file). The preamble is a stable, user-editable
+            header prepended when showing context.
+
+### thrum context prime
+
+  Usage:    thrum context prime [--json]
+  Action:   Collects all context needed for agent session initialization or recovery.
+            Gathers identity, session info, agent list, unread messages, and git
+            work context into a single output. Gracefully handles missing sections.
+
+### thrum context sync
+
+  Usage:    thrum context sync [--agent NAME]
+  Flags:    --agent STRING   Override agent name
+  Action:   Copies context file to the a-sync branch for sharing across worktrees.
+            Commits and pushes. No-op when no remote is configured (local-only mode).
+
+### thrum who-has
+
+  Usage:    thrum who-has FILE
+  Action:   Shows which agents have the file in their uncommitted or changed files.
+
+### thrum ping
+
+  Usage:    thrum ping AGENT
+  Action:   Checks agent presence (with or without @ prefix). Shows intent, task, branch.
+
+### thrum sync status
+
+  Usage:    thrum sync status
+  Action:   Shows sync loop state, last sync time, mode (local-only or normal), errors.
+
+### thrum sync force
+
+  Usage:    thrum sync force
+  Action:   Triggers immediate sync (non-blocking).
+
+### thrum peer add
+
+  Usage:    thrum peer add
+  Action:   Starts a Tailscale pairing session and displays a 4-digit code.
+            Blocks until a peer connects or the session times out (5 minutes).
+
+### thrum peer join
+
+  Usage:    thrum peer join <address>
+  Action:   Connects to a remote daemon at the given Tailscale address.
+            Prompts for the 4-digit pairing code displayed on the other machine.
+
+### thrum peer list
+
+  Usage:    thrum peer list
+  Action:   Lists all paired Tailscale sync peers.
+
+### thrum peer remove
+
+  Usage:    thrum peer remove <name>
+  Action:   Removes a paired peer.
+
+### thrum peer status
+
+  Usage:    thrum peer status
+  Action:   Shows detailed sync status for all peers.
+
+### thrum runtime list
+
+  Usage:    thrum runtime list
+  Action:   Lists all available runtime presets (claude, codex, cursor, gemini, auggie, amp, cli-only).
+
+### thrum runtime show
+
+  Usage:    thrum runtime show <name>
+  Action:   Shows details for a specific runtime preset including config files it generates.
+
+### thrum runtime set-default
+
+  Usage:    thrum runtime set-default <name>
+  Action:   Sets the default runtime preset for the repository.
+
+### thrum roles list
+
+  Usage:    thrum roles list
+  Action:   Lists all role templates in .thrum/role_templates/ and shows which
+            registered agents match each template.
+  Output:   coordinator.md    (2 agents: coord_main, coord_api)
+            implementer.md    (3 agents: impl_auth, impl_payments, impl_ui)
+
+### thrum roles deploy
+
+  Usage:    thrum roles deploy [--agent NAME] [--dry-run]
+  Action:   Re-renders preambles for all registered agents from role templates.
+            Templates in .thrum/role_templates/ are rendered with each agent's
+            identity data and written to .thrum/context/{agent}_preamble.md.
+            Full overwrite — templates are the source of truth.
+  Flags:    --agent NAME    Deploy for a specific agent only
+            --dry-run       Preview changes without writing files
+
+### thrum config show
+
+  Usage:    thrum config show [--json]
+  Action:   Shows effective Thrum configuration from all sources (config.json,
+            environment variables, defaults, auto-detected values). Shows the source
+            of each config value. Works whether the daemon is running or not.
+
+### thrum daemon start | stop | status | restart
+
+  thrum daemon start [--local]  Start daemon in background (10s socket wait)
+                                --local disables remote git sync (local-only mode)
+  thrum daemon stop      SIGTERM graceful shutdown (10s wait)
+  thrum daemon status    Running state, PID, uptime, version, sync state
+  thrum daemon restart   Stop + 500ms + start
+
+## RPC Methods
+
+All methods use JSON-RPC 2.0 protocol.
+
+### health
+
+  Request:   {} (no params)
+  Response:  { status, uptime_ms, version, repo_id, sync_state }
+  Notes:     sync_state is "ok", "synced", "pending", or "error".
+
+### agent.register
+
+  Request:   { role, module, display?, force?, re_register? }
+  Response:  { agent_id, status, conflict? }
+  Status:    "registered" | "updated" | "conflict"
+  Conflict:  { existing_agent_id, registered_at, last_seen_at }
+
+### agent.list
+
+  Request:   { role?, module? }
+  Response:  { agents: [{ agent_id, kind, role, module, display, registered_at, last_seen_at }] }
+
+### agent.whoami
+
+  Request:   {} (identity from env/config)
+  Response:  { agent_id, role, module, display, source, session_id?, session_start? }
+  Source:    "environment" | "identity_file"
+
+### agent.listContext
+
+  Request:   { agent_id?, branch?, file? }
+  Response:  { contexts: [{ session_id, agent_id, branch, worktree_path,
+               unmerged_commits, uncommitted_files, changed_files, git_updated_at,
+               current_task, task_updated_at, intent, intent_updated_at }] }
+
+### agent.delete
+
+  Request:   { name }
+  Response:  { agent_id, deleted }
+  Notes:     Removes identity file, message JSONL file, and database record.
+
+### agent.cleanup
+
+  Request:   { force?, dry_run?, threshold? }
+  Response:  { orphans: [{ agent_id, name, reason }], deleted_count }
+  Notes:     threshold is days since last seen (default: 30).
+
+### team.list
+
+  Request:   { all? }
+  Response:  { agents: [{ agent_id, role, module, display, session, context, inbox }] }
+  Notes:     Returns rich status for each agent. all=true includes offline agents.
+
+### context.save
+
+  Request:   { agent_name?, content }
+  Response:  { agent_name, saved_at }
+
+### context.show
+
+  Request:   { agent_name?, raw?, no_preamble? }
+  Response:  { agent_name, content, preamble? }
+
+### context.clear
+
+  Request:   { agent_name? }
+  Response:  { agent_name, cleared }
+
+### context.preamble.show
+
+  Request:   { agent_name? }
+  Response:  { agent_name, content }
+
+### context.preamble.save
+
+  Request:   { agent_name?, content }
+  Response:  { agent_name, saved_at }
+
+### session.start
+
+  Request:   { agent_id, scopes?, refs? }
+  Response:  { session_id, agent_id, started_at }
+  Notes:     Auto-recovers orphaned sessions (marks as crash_recovered).
+
+### session.end
+
+  Request:   { session_id, reason? }
+  Response:  { session_id, ended_at, duration_ms }
+  Reason:    "normal" (default) | "crash" | "superseded"
+
+### session.list
+
+  Request:   { active?, agent_id? }
+  Response:  { sessions: [{ session_id, agent_id, started_at, ended_at, end_reason, last_seen_at }] }
+
+### session.heartbeat
+
+  Request:   { session_id, add_scopes?, remove_scopes?, add_refs?, remove_refs? }
+  Response:  { session_id, last_seen_at }
+  Notes:     Extracts git work context. Updates last_seen_at in sessions table.
+
+### session.setIntent
+
+  Request:   { session_id, intent }
+  Response:  { session_id, intent, intent_updated_at }
+
+### session.setTask
+
+  Request:   { session_id, current_task }
+  Response:  { session_id, current_task, task_updated_at }
+
+### group.create
+
+  Request:   { name, description? }
+  Response:  { name, created_at }
+
+### group.delete
+
+  Request:   { name }
+  Response:  { name, deleted }
+  Notes:     Cannot delete the @everyone built-in group.
+
+### group.member.add
+
+  Request:   { group, member, member_type? }
+  Response:  { group, member, member_type }
+  Notes:     member_type: "agent" (default) | "role" | "group"
+
+### group.member.remove
+
+  Request:   { group, member, member_type? }
+  Response:  { group, member, removed }
+
+### group.list
+
+  Request:   {} (no params)
+  Response:  { groups: [{ name, description, member_count, created_at }] }
+
+### group.info
+
+  Request:   { name }
+  Response:  { name, description, created_by, created_at, members }
+
+### group.members
+
+  Request:   { name, expand? }
+  Response:  { name, members: [{ member_type, member_value }] }
+  Notes:     expand=true resolves role-based and nested group members to agent IDs.
+
+### message.send
+
+  Request:   { content, format?, structured?, thread_id?, scopes?, refs?,
+               mentions?, tags?, acting_as?, disclose? }
+  Response:  { message_id, thread_id?, created_at }
+  Format:    "markdown" (default) | "plain" | "json"
+  Mentions:  Converted to refs with type "mention".
+  acting_as: For user impersonation of agents (WebSocket users only).
+  Notes:     Triggers subscription notifications for matching subscriptions.
+
+### message.get
+
+  Request:   { message_id }
+  Response:  { message: { message_id, thread_id?, author: { agent_id, session_id },
+               body: { format, content, structured? }, scopes, refs,
+               metadata: { deleted_at?, delete_reason? }, created_at, updated_at?, deleted } }
+
+### message.list
+
+  Request:   { scope?, ref?, thread_id?, author_id?, mentions?, unread?,
+               page_size?, page?, sort_by?, sort_order? }
+  Response:  { messages: [{ message_id, thread_id?, agent_id, body, created_at,
+               deleted, is_read }], total, unread, page, page_size, total_pages }
+  sort_by:   "created_at" (default) | "updated_at"
+  sort_order: "asc" | "desc" (default)
+  Page size: Default 10, max 100.
+
+### message.edit
+
+  Request:   { message_id, content?, structured? }
+  Response:  { message_id, updated_at, version }
+  Notes:     Only the message author can edit. Triggers subscription notifications.
+
+### message.delete
+
+  Request:   { message_id, reason? }
+  Response:  { message_id, deleted_at }
+  Notes:     Soft-delete. Message must exist and not already be deleted.
+
+### message.markRead
+
+  Request:   { message_ids: [string] }
+  Response:  { marked_count, also_read_by? }
+  Notes:     Batch support. also_read_by maps message_id to list of other agent_ids
+             that also read the message.
+
+### subscribe
+
+  Request:   { scope?, mention_role?, all? }
+  Response:  { subscription_id, session_id, created_at }
+  Notes:     At least one of scope, mention_role, or all must be specified.
+
+### unsubscribe
+
+  Request:   { subscription_id }
+  Response:  { removed: bool }
+  Notes:     Only removes if subscription belongs to current session.
+
+### subscriptions.list
+
+  Request:   {} (no params)
+  Response:  { subscriptions: [{ id, scope_type?, scope_value?, mention_role?, all?, created_at }] }
+
+### sync.force
+
+  Request:   {} (no params)
+  Response:  { triggered, last_sync_at, sync_state }
+  sync_state: "synced" | "idle" | "error" | "stopped"
+
+### sync.status
+
+  Request:   {} (no params)
+  Response:  { running, last_sync_at, last_error?, sync_state }
+
+### Tailscale Peer Sync RPC Methods
+
+### tsync.force
+
+  Request:   {} (no params)
+  Action:    Triggers immediate Tailscale peer sync.
+
+### tsync.peers.list
+
+  Request:   {} (no params)
+  Response:  List of paired Tailscale peers.
+
+### tsync.peers.add
+
+  Request:   { address }
+  Response:  Peer pairing information.
+
+### peer.start_pairing
+
+  Request:   {} (no params)
+  Response:  { code }
+  Notes:     Returns a 4-digit pairing code. Starts a pairing listener.
+
+### peer.wait_pairing
+
+  Request:   { timeout? }
+  Response:  { peer_id, address }
+  Notes:     Blocks until a peer connects using the pairing code.
+
+### peer.join
+
+  Request:   { address, code }
+  Response:  { peer_id, status }
+  Notes:     Connects to a remote daemon using the pairing code.
+
+### peer.list
+
+  Request:   {} (no params)
+  Response:  { peers: [{ name, address, last_sync, status }] }
+
+### peer.remove
+
+  Request:   { name }
+  Response:  { name, removed }
+
+### peer.status
+
+  Request:   {} (no params)
+  Response:  { peers: [{ name, address, status, last_sync, events_synced }] }
+
+### user.register (WebSocket only)
+
+  Request:   { username, display? }
+  Response:  { user_id, token, status }
+  Notes:     Only available via WebSocket transport. Username must be alphanumeric,
+             underscore, or hyphen (1-32 chars). Cannot start with "agent:".
+
+### user.identify (WebSocket only)
+
+  Request:   {} (no params)
+  Response:  { username, email, display }
+  Notes:     Returns the git user.name and user.email from the repo's git config.
+             Username is sanitized (lowercase, alphanumeric + hyphens).
+
+## Event Types (JSONL)
+
+Events stored in sharded JSONL files within `.git/thrum-sync/a-sync` worktree:
+
+  sync/events.jsonl (agent lifecycle):
+    agent.register        Agent/user registration
+    agent.session.start   Session begins
+    agent.session.end     Session ends
+    agent.cleanup         Agent deletion
+
+  sync/messages/{agent_name}.jsonl (per-agent):
+    message.create        New message
+    message.edit          Message content update
+    message.delete        Message soft-deletion
+    agent.update          Work context snapshot
+    group.create          Group created
+    group.delete          Group deleted
+    group.member.add      Member added to group
+    group.member.remove   Member removed from group
+
+All events have: { type, timestamp, ...event-specific-fields }
+Unknown event types are silently ignored (forward compatibility).
+
+## Extended Workflows
+
+### Multi-agent project coordination
+
+  # Agent 1: Planner
+  thrum quickstart --name <agent-name> --role planner --module core --intent "Planning sprint"
+  thrum send "Sprint plan: @implementer handles auth, @reviewer reviews" \
+    --scope module:core --mention @implementer --mention @reviewer
+
+  # Agent 2: Implementer
+  thrum quickstart --name <agent-name> --role implementer --module auth --intent "Building auth flow"
+  thrum subscribe --scope module:auth
+  thrum subscribe --mention @implementer
+  thrum inbox --mentions
+  thrum sent --to @planner --unread
+  thrum reply msg_01HXE... "Acknowledged, starting on auth module"
+  thrum agent set-intent "Implementing OAuth2 flow"
+
+  # Agent 3: Reviewer
+  thrum quickstart --name <agent-name> --role reviewer --module auth
+  thrum subscribe --mention @reviewer
+  thrum wait --mention @reviewer --timeout 10m
+
+### Cross-machine messaging via Git sync
+
+  # Machine A (has remote configured)
+  thrum init
+  thrum daemon start
+  thrum quickstart --name <agent-name> --role agent-a --module backend
+  thrum send "Backend API ready" --scope module:backend
+
+  # Machine B (same remote)
+  thrum init
+  thrum daemon start
+  thrum quickstart --name <agent-name> --role agent-b --module frontend
+  # After sync (auto every 60s, or force):
+  thrum sync force
+  thrum inbox
+  thrum sent
+  # Sees message from agent-a
+
+### Cross-machine messaging via Tailscale
+
+  # Machine A
+  thrum init && thrum daemon start
+  thrum quickstart --name <agent-name> --role agent-a --module backend
+  thrum peer add           # Displays pairing code, e.g., 4821
+
+  # Machine B (same Tailscale network)
+  thrum init && thrum daemon start
+  thrum quickstart --name <agent-name> --role agent-b --module frontend
+  thrum peer join 100.x.y.z  # Enter code 4821
+  # Direct sync established, no Git remote needed
+
+  thrum send "Ready for integration" --to @everyone
+  # Message arrives on Machine A within seconds
+
+### Session lifecycle management
+
+  # Start
+  thrum agent register --role impl --module auth
+  thrum session start
+  thrum agent set-intent "Working on OAuth"
+  thrum agent set-task "beads:auth-oauth"
+
+  # During work (periodically)
+  thrum agent heartbeat
+  thrum agent heartbeat --add-scope module:auth
+  thrum agent set-intent "Debugging token refresh"
+
+  # End
+  thrum session end --reason normal
+
+  # Crash recovery (automatic on next session start)
+  thrum session start
+  # Previous orphaned session auto-closed as crash_recovered
+
+### Group messaging
+
+  # Create a team group
+  thrum group create backend-team --description "Backend developers"
+  thrum group add backend-team @alice
+  thrum group add backend-team @bob
+  thrum group add backend-team --role implementer
+
+  # Send to the group
+  thrum send "Deploying v2.0 in 10 minutes" --to @backend-team
+
+  # List groups and members
+  thrum group list
+  thrum group members backend-team --expand
+
+### Context save and recovery
+
+  # Save context before ending session
+  thrum context save --file session-notes.md
+
+  # In new session, recover context
+  thrum context prime          # Gather all context
+  thrum context show           # Show saved context
+
+  # Manage preamble (stable header)
+  thrum context preamble --init
+  thrum context preamble --file custom-header.md
+
+  # Sync context across worktrees
+  thrum context sync
+
+### File coordination with who-has
+
+  # Before editing a shared file
+  thrum who-has internal/db/schema.go
+  # Output shows which agents have that file in their changes
+
+  # Check overall team activity
+  thrum team
+  thrum agent context @implementer
+
+### Notification subscriptions
+
+  # Subscribe to relevant channels
+  thrum subscribe --scope module:auth
+  thrum subscribe --mention @reviewer
+
+  # List active subscriptions
+  thrum subscriptions
+
+  # Remove a subscription
+  thrum unsubscribe 3
+
+  # Subscribe to everything (firehose)
+  thrum subscribe --all
+
+### Runtime configuration
+
+  # List available runtimes
+  thrum runtime list
+
+  # Generate config for a specific runtime
+  thrum init --runtime claude
+
+  # Quickstart with runtime
+  thrum quickstart --name <agent-name> --role impl --module auth --runtime codex
+
+  # Set default runtime for the repo
+  thrum runtime set-default claude
+
+## Daemon Details
+
+### Socket Path Resolution
+
+  Default: .thrum/var/thrum.sock (relative to --repo flag, default ".")
+  Absolute: Resolved from repo path at daemon start.
+
+### Auto-start
+
+  The daemon does not auto-start. You must run `thrum daemon start` explicitly.
+  Most commands that require the daemon will fail with a connection error if it
+  is not running.
+
+### WebSocket Server
+
+  Default port: 9999 (override with THRUM_WS_PORT env var)
+  Address: ws://localhost:{port}/
+  Actual port written to .thrum/var/ws.port
+  Supports same RPC methods as Unix socket.
+
+### WebSocket Events (Push Notifications)
+
+  notification.message     Sent when a message matches a subscription
+    { message_id, preview, matched_subscription: { match_type } }
+
+### Health Endpoint
+
+  Method: "health" (via RPC)
+  Returns: status, uptime_ms, version, repo_id, sync_state
+
+### Process Management
+
+  PID file:    .thrum/var/thrum.pid
+  Start:       Forks background process, waits for socket (10s timeout)
+  Stop:        SIGTERM, waits for exit (10s timeout)
+  Restart:     Stop (best-effort) + 500ms delay + Start
+
+### Sync Loop
+
+  Interval:    60 seconds
+  Worktree:    .git/thrum-sync/a-sync (checked out on `a-sync` orphan branch)
+  Process:
+    1. Acquire lock (.thrum/var/sync.lock)
+    2. Fetch remote in worktree (git -C .git/thrum-sync/a-sync fetch origin a-sync)
+    3. Merge remote into worktree (fast-forward or JSONL dedup merge)
+    4. Project new events into SQLite
+    5. Notify subscribers of new events
+    6. Commit local changes in worktree
+    7. Push worktree to remote
+    8. Release lock
+  No branch switching -- all git operations happen in .git/thrum-sync/a-sync worktree
+  Force sync:  thrum sync force (non-blocking trigger)
+
+### Stale Context Cleanup
+
+  On daemon start, stale work contexts are cleaned up automatically.
+  Contexts are considered stale when their session has ended or the
+  git_updated_at timestamp is too old.
+
+## Configuration
+
+### Environment Variables
+
+  THRUM_NAME        Agent name (highest priority for identity resolution)
+  THRUM_ROLE        Agent role (e.g., implementer, reviewer, planner)
+  THRUM_MODULE      Agent module/component (e.g., auth, db, ui)
+  THRUM_DISPLAY     Human-readable display name
+  THRUM_LOCAL       Enable local-only mode (disables remote sync) -- set to "1"
+  THRUM_WS_PORT     WebSocket port (default: 9999)
+
+### Identity Resolution Chain
+
+  Priority (highest to lowest):
+    1. THRUM_NAME env var (for name -- overrides even --name CLI flag)
+    2. CLI flags: --name, --role, --module
+    3. Environment variables: THRUM_ROLE, THRUM_MODULE, THRUM_DISPLAY
+    4. Identity files in .thrum/identities/ directory
+
+### Identity File (.thrum/identities/{name}.json)
+
+  {
+    "version": 2,
+    "repo_id": "r_7K2Q1X9M3P0B",
+    "agent": {
+      "kind": "agent",
+      "name": "furiosa",
+      "role": "implementer",
+      "module": "auth",
+      "display": "Auth Implementer"
+    },
+    "worktree": "auth",
+    "confirmed_by": "human:leon",
+    "updated_at": "2026-02-03T18:02:10.000Z"
+  }
+
+  Created/updated by `thrum agent register`. Each agent gets a separate file named
+  after the agent name (e.g., furiosa.json). Unnamed agents use {role}_{hash}.json.
+
+### Init Options
+
+  thrum init creates:
+    .thrum/                   Top-level directory (gitignored entirely)
+    .git/thrum-sync/a-sync/              Git worktree on `a-sync` orphan branch
+    .git/thrum-sync/a-sync/events.jsonl  Empty agent lifecycle event log
+    .git/thrum-sync/a-sync/messages/     Per-agent message logs directory
+    .thrum/identities/        Agent identity files directory
+    .thrum/var/               Runtime directory
+    a-sync branch             Orphan branch for message sync
+
+  Updates .gitignore with:
+    .thrum/
+
+  Related commands:
+    thrum migrate             Upgrades repos from old tracked-on-main layout
+    thrum setup               Configures .thrum/ in feature worktrees (creates redirect)
+
+## MCP Server
+
+  thrum mcp serve [--agent-id NAME]
+
+  Starts an MCP server on stdin/stdout for native tool-based messaging. Requires
+  the Thrum daemon to be running. Use --agent-id to select an identity file from
+  .thrum/identities/.
+
+  Configure in Claude Code's .claude/settings.json:
+    {
+      "mcpServers": {
+        "thrum": {
+          "type": "stdio",
+          "command": "thrum",
+          "args": ["mcp", "serve"]
+        }
+      }
+    }
+
+  MCP Tools:
+    send_message        Send a message to another agent (to: "@role" or "@group")
+    check_messages      Poll for unread messages mentioning this agent, auto-marks read
+    wait_for_message    Block until a message arrives (WebSocket push) or timeout
+    list_agents         List registered agents with active/offline status
+    broadcast_message   Send to all agents (convenience wrapper around send_message to @everyone)
+    create_group        Create a named group
+    delete_group        Delete a group
+    add_group_member    Add member to group (agent, role, or nested group)
+    remove_group_member Remove member from group
+    list_groups         List all groups
+    get_group           Get group details (supports expand=true for nested resolution)
+
+## Local-Only Mode
+
+  Disables all git push/fetch in the sync loop. Use for public repos where
+  you don't want to expose agent messages to origin.
+
+  Enable via:
+    thrum daemon start --local             CLI flag (highest priority)
+    THRUM_LOCAL=1 thrum daemon start       Environment variable
+    .thrum/config.json: { "local_only": true }   Config file (auto-persisted)
+
+  Priority: CLI flag > env var > config file > default (false)
+  Check status: thrum sync status (shows "Mode: local-only" or "Mode: normal")
+
+  When enabled:
+    - Sync loop skips fetch/push to origin
+    - Messages stay local to the machine
+    - SQLite projection and JSONL logs still work normally
+    - Setting persists across daemon restarts via .thrum/config.json
+
+## Worktree Setup Scripts
+
+  Scripts for batch-configuring redirect files across all git worktrees:
+
+  ./scripts/setup-worktree-thrum.sh              Auto-detect all worktrees
+  ./scripts/setup-worktree-thrum.sh PATH          Single worktree
+  ./scripts/setup-worktree-beads.sh              Auto-detect all worktrees
+  ./scripts/setup-worktree-beads.sh PATH          Single worktree
+
+  Creates .thrum/redirect and .beads/redirect pointing to the main repo's
+  .thrum/ and .beads/ directories. Idempotent -- skips already-configured
+  worktrees.
+
+  Redirect files allow feature worktrees to share the same daemon, message
+  database, and issue tracker as the main repo without separate initialization.
+
+## Toolkit
+
+  Ready-to-use agent configurations and workflow templates in toolkit/:
+
+  toolkit/agents/                 Claude Code agent definitions
+    thrum-agent.md                Thrum messaging coordination guide
+    (Beads plugin)                Install via /install-plugin beads (recommended over agent file)
+    message-listener.md           Background message polling agent (Haiku model)
+    README.md                     Installation and usage instructions
+
+  toolkit/templates/agent-dev-workflow/   Four-phase skill pipeline templates
+    implementation-agent.md       Active: prompt template filled by project-setup, given to agents
+    philosophy-template.md        Active: reusable anti-patterns template for implementation standards
+    planning-agent.md             Reference: superseded by brainstorming + writing-plans skills
+    worktree-setup.md             Reference: superseded by project-setup Phase 3
+    CLAUDE.md                     Overview of the 4-phase Design/Plan/Setup/Implement workflow
+    README.md                     Template customization guide
+
+  Install agents:  cp toolkit/agents/thrum-agent.md toolkit/agents/message-listener.md your-project/.claude/agents/
+  Install templates: cp toolkit/templates/agent-dev-workflow/*.md your-project/docs/templates/
+
+## Beads + Thrum Integration
+
+  Beads (task tracking) and Thrum (messaging) together provide complete agent
+  memory and coordination:
+
+  Beads: what agents were doing -- tasks, status, dependencies, context recovery
+  Thrum: what agents said -- messages, presence, notifications, session tracking
+
+  Both use Git as persistence layer. State survives session boundaries,
+  context compaction, and machine changes.
+
+  Unified workflow:
+    1. bd create --title "Feature X"           Create task in Beads
+    2. thrum send "Starting Feature X"         Announce via Thrum
+    3. thrum agent set-task "beads:thrum-xyz"   Link session to task
+    4. bd close thrum-xyz                       Complete task
+    5. thrum send "Feature X done"              Notify team
+
+## Database Tables (SQLite)
+
+  messages            All messages with body, author, timestamps, soft-delete
+  message_scopes      Message scope associations (many-to-many)
+  message_refs        Message reference associations (many-to-many)
+  message_reads       Read receipts (per message, per session/agent)
+  message_edits       Edit history
+  agents              Registered agents and users
+  sessions            Agent work sessions
+  session_scopes      Session scope associations
+  session_refs        Session reference associations
+  subscriptions       Push notification subscriptions
+  agent_work_contexts Git work context per session (branch, files, commits, intent, task)
+  groups              Named messaging groups
+  group_members       Group membership (agent, role, or nested group)
+  schema_version      Migration tracking

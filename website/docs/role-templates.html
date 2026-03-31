@@ -120,6 +120,8 @@ template with the agent&#39;s identity data and saves it as the agent&#39;s prea
 
 ## Idle Behavior
 
+## Anti-Patterns
+
 ## Project-Specific Rules</code></pre>
 <h2>Shipped Examples</h2>
 <p>Reference templates in <code>toolkit/templates/roles/</code>:</p>
@@ -161,6 +163,46 @@ template with the agent&#39;s identity data and saves it as the agent&#39;s prea
 <tr>
 <td><code>researcher-autonomous.md</code></td>
 <td>Can proactively research when idle</td>
+</tr>
+<tr>
+<td><code>reviewer-strict.md</code></td>
+<td>Reviews only assigned PRs/changes</td>
+</tr>
+<tr>
+<td><code>reviewer-autonomous.md</code></td>
+<td>Can pick up review requests proactively</td>
+</tr>
+<tr>
+<td><code>tester-strict.md</code></td>
+<td>Runs tests on request, reports results</td>
+</tr>
+<tr>
+<td><code>tester-autonomous.md</code></td>
+<td>Can proactively run tests on changed files</td>
+</tr>
+<tr>
+<td><code>deployer-strict.md</code></td>
+<td>Deploys only on explicit coordinator approval</td>
+</tr>
+<tr>
+<td><code>deployer-autonomous.md</code></td>
+<td>Can deploy to non-production environments freely</td>
+</tr>
+<tr>
+<td><code>documenter-strict.md</code></td>
+<td>Documents only assigned areas</td>
+</tr>
+<tr>
+<td><code>documenter-autonomous.md</code></td>
+<td>Can proactively update docs when code changes</td>
+</tr>
+<tr>
+<td><code>monitor-strict.md</code></td>
+<td>Reports alerts, takes no remediation action</td>
+</tr>
+<tr>
+<td><code>monitor-autonomous.md</code></td>
+<td>Can restart services and open issues on alerts</td>
 </tr>
 </tbody></table>
 <h2>CLI Commands</h2>
@@ -219,6 +261,9 @@ role templates plug into for implementation agents</li>
 </ul>
 
 </main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#role-templates.html')}</script>
 </body>
 </html>

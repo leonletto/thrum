@@ -325,8 +325,6 @@ messaging tools (`send_message`, `check_messages`, `wait_for_message`,
 See [MCP Server](mcp-server.md) for the complete tools reference, configuration,
 and setup instructions.
 
----
-
 ## Foundation Packages
 
 The sections below describe the internal packages that implement the

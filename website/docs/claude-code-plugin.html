@@ -260,11 +260,16 @@ Copy and run it to start background message monitoring:</p>
     WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 8m --after -15s --json&quot;
 )</code></pre>
 <p><code>--after -15s</code> means include messages sent up to 1 second ago (negative = &quot;N
-ago&quot;; prevents stale replay on restart). The listener runs 6 cycles of 15
-minutes each (~90 min coverage), blocks on <code>thrum wait</code> (no polling), returns
-when messages arrive, and costs ~$0.00003/cycle on Haiku. Re-arm after
-processing each batch. See the <code>LISTENER_PATTERN.md</code> resource for the full
-template.</p>
+ago&quot;; prevents stale replay on restart). The listener runs up to 30 cycles (<del>4
+hours of coverage), blocks on <code>thrum wait</code> (no polling), returns when messages
+arrive, and costs ~$0.00003/cycle on Haiku (</del>65% fewer tokens than the old
+pattern). No manual re-arming needed — set up a cron watchdog to auto-respawn
+the listener every 30 min if it stops:</p>
+<pre><code>CronCreate(cron=&quot;*/30 * * * *&quot;,
+  prompt=&quot;If there is no background message listener running, spawn one now:
+    Task(subagent_type=&#39;message-listener&#39;, model=&#39;haiku&#39;, run_in_background=true,
+      prompt=&#39;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 8m --after -15s --json&#39;)&quot;)</code></pre>
+<p>See the <code>LISTENER_PATTERN.md</code> resource for the full template.</p>
 <h2>Plugin vs Manual Agent Definitions</h2>
 <table>
 <thead>
@@ -333,6 +338,9 @@ worktree setup</li>
 </ul>
 
 </main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#claude-code-plugin.html')}</script>
 </body>
 </html>
