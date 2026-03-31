@@ -305,6 +305,9 @@ ${sitemapNav}</nav>
 <main>
 ${html}
 </main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="${doc.path.includes('/') ? '../' : ''}../llms.txt">llms.txt</a> | <a href="${doc.path.includes('/') ? '../' : ''}../llms-full.txt">llms-full.txt</a> | <a href="${doc.path.includes('/') ? '../' : ''}../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('${doc.path.includes('/') ? '../' : ''}../docs.html#${doc.path}')}</script>
 </body>
 </html>`;

@@ -121,9 +121,10 @@ state.
 
 ## Background Message Listener
 
-ALWAYS keep a background listener running. Spawn on session start, re-arm every
-time it returns (both MESSAGES_RECEIVED and timeout). Run `thrum prime` to get
-the spawn command with the correct repo path pre-filled.</code></pre>
+ALWAYS keep a background listener running. Spawn on session start; it loops
+automatically for up to 4 hours — no manual re-arming needed. Set up a cron
+watchdog (`CronCreate`, every 30 min) to auto-respawn it if it stops. Run
+`thrum prime` to get the spawn command with the correct repo path pre-filled.</code></pre>
 <p><strong>Customization examples:</strong></p>
 <p>You can edit the preamble to add project conventions, role-specific
 instructions, team rosters, or boot sequences:</p>
@@ -340,6 +341,12 @@ thrum context preamble --file my-preamble.md
 
 # Show preamble for a different agent
 thrum context preamble --agent furiosa</code></pre>
+<p><strong>Role-aware <code>--init</code>:</strong> When a role template exists in
+<code>.thrum/role_templates/{role}.md</code>, <code>--init</code> uses it instead of the generic
+default. The template is rendered with the agent&#39;s identity data (name, role,
+module, worktree path) to produce a role-specific preamble. If no role template
+is found, the default thrum quick-reference preamble is used as a fallback. See
+<a href="role-templates.html">Role-Based Preamble Templates</a> for details.</p>
 <hr>
 <h3>thrum context prime</h3>
 <p>Collect all context needed for agent session initialization or recovery. This is
@@ -647,6 +654,9 @@ including context handoff between agents</li>
 </ul>
 
 </main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#context.html')}</script>
 </body>
 </html>
