@@ -154,13 +154,20 @@ incoming messages and notifies the main agent when they arrive.</p>
 <li>The listener uses <code>thrum wait</code> (blocks until message arrives or timeout)</li>
 <li>When a message arrives, the listener returns immediately with the message
 content</li>
-<li>The main agent processes the message and re-arms the listener</li>
+<li>The main agent processes the message; the listener continues looping
+automatically (no manual re-arming needed)</li>
+<li>A cron watchdog respawns the listener every 30 min if it is not running</li>
 </ol>
 <p><strong>Recommended approach:</strong> Use <code>thrum wait</code> which blocks until a message arrives
 or times out. This is more efficient than polling loops with sleep intervals.
 Use <code>--after -15s</code> to include messages sent up to 1 second ago (<code>--after</code>
 negative value = &quot;N ago&quot;). Omit <code>--after</code> to receive only messages that arrive
 after the wait starts.</p>
+<p><strong>Cron watchdog:</strong> Set up a cron job to auto-respawn the listener if it stops:</p>
+<pre><code>CronCreate(cron=&quot;*/30 * * * *&quot;,
+  prompt=&quot;If there is no background message listener running, spawn one now:
+    Task(subagent_type=&#39;message-listener&#39;, model=&#39;haiku&#39;, run_in_background=true,
+      prompt=&#39;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 8m --after -15s --json&#39;)&quot;)</code></pre>
 <h3>Return Format</h3>
 <p>When messages are received:</p>
 <pre><code>MESSAGES_RECEIVED
@@ -173,8 +180,8 @@ TIMESTAMP: [timestamp]
 <pre><code>NO_MESSAGES_TIMEOUT</code></pre>
 <h3>Context Management</h3>
 <ul>
-<li>Re-arm the listener after processing messages (the listener exits after
-returning)</li>
+<li>The listener loops for up to 4 hours (30 cycles of ~8 min each) before
+stopping; the cron watchdog will respawn it automatically</li>
 <li>After 5 consecutive timeouts with no pending work, send status to the
 coordinator and stop the listener</li>
 <li>The listener is read-only; it never sends messages</li>
@@ -338,7 +345,7 @@ thrum session end</code></pre>
 <ul>
 <li><strong>Don&#39;t use Thrum for task management</strong> -- use Beads for that</li>
 <li><strong>Don&#39;t spam messages</strong> -- batch updates when possible</li>
-<li><strong>Don&#39;t forget to re-arm the listener</strong> -- after processing messages</li>
+<li><strong>Don&#39;t skip the cron watchdog</strong> -- it auto-respawns the listener if it stops</li>
 <li><strong>Don&#39;t ignore critical messages</strong> -- stop work and respond</li>
 <li><strong>Don&#39;t skip registration</strong> -- the system won&#39;t route messages correctly</li>
 <li><strong>Don&#39;t leave sessions open</strong> -- end them when done to avoid stale status</li>
@@ -409,6 +416,9 @@ environments</li>
 </ul>
 
 </main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#agent-coordination.html')}</script>
 </body>
 </html>

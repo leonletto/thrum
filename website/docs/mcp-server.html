@@ -920,9 +920,10 @@ Haiku sub-agent that blocks on <code>wait_for_message</code>. This is defined in
 <li>The listener calls <code>check_messages</code> to drain any backlog</li>
 <li>If messages are found, it returns them immediately</li>
 <li>If none, it calls <code>wait_for_message(timeout=300)</code> and blocks</li>
-<li>When a message arrives or timeout occurs, the listener returns to the main
-agent</li>
-<li>The main agent processes the result and re-arms the listener</li>
+<li>When a message arrives or timeout occurs, the listener loops automatically
+for up to 4 hours (30 cycles) — no manual re-arming needed</li>
+<li>A cron watchdog (<code>CronCreate</code>, every 30 min) auto-respawns the listener if it
+is not running, reducing token usage by ~65% compared to the old pattern</li>
 </ol>
 <p><strong>Return format:</strong></p>
 <p>When messages are received:</p>
@@ -935,6 +936,8 @@ TIMESTAMP: [timestamp]</code></pre>
 <p><strong>Cost:</strong> Approximately $0.00003 per cycle (Haiku-class model).</p>
 <h3>Context Management</h3>
 <ul>
+<li>The listener runs up to 30 cycles (~4 hours) before stopping; the cron
+watchdog respawns it automatically every 30 min if needed</li>
 <li>Compact after 10+ message cycles to prevent context overflow</li>
 <li>After 5 consecutive timeouts with no pending work, send status to the
 coordinator and stop the listener</li>
@@ -1042,6 +1045,9 @@ not registered; run <code>thrum quickstart</code> first</li>
 </ul>
 
 </main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#mcp-server.html')}</script>
 </body>
 </html>
