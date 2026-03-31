@@ -1,18 +1,18 @@
 {
   "name": "thrum",
-  "description": "Thrum Cursor plugin marketplace",
+  "description": "Thrum Cursor plugin marketplace (scaffold in progress; not install-ready)",
   "owner": {
     "name": "Leon Letto",
     "url": "https://github.com/leonletto"
   },
   "metadata": {
-    "description": "Git-backed messaging for AI agent coordination across sessions, worktrees, and machines."
+    "description": "Scaffold-in-progress marketplace entry for the Thrum Cursor plugin; not ready for installation yet."
   },
   "plugins": [
     {
       "name": "thrum",
       "source": "./cursor-plugin",
-      "description": "Git-backed messaging for AI agent coordination across sessions, worktrees, and machines.",
+      "description": "Scaffold-in-progress Cursor plugin for Git-backed AI agent coordination; not ready for installation yet.",
       "version": "0.6.3",
       "author": {
         "name": "Leon Letto"
