@@ -52,25 +52,21 @@ Delegate to a **general-purpose subagent** that will:
 1. Save via: `echo "$CONTENT" | thrum context save`
 1. Return a brief summary of what was updated
 
-### Subagent Prompt Template
+### Suggested Delegate Prompt
+
+If you hand this off to another agent, give it a prompt like this:
 
 ```text
-Task(
-  subagent_type: "general-purpose",
-  description: "Update agent context",
-  prompt: """
-    You are updating agent context for a thrum-managed project.
+You are updating agent context for a thrum-managed project.
 
-    ## Agent's Session Summary
-    <paste your narrative from Step 1 here>
+## Agent's Session Summary
+<paste your narrative from Step 1 here>
 
-    ## Your Job
-    1. Run git commands to gather repo state
-    2. Run beads commands if available (skip if bd not found)
-    3. Run `thrum context show` to read existing context
-    4. Compose structured markdown merging session summary with gathered state
-    5. Pipe result to `thrum context save`
-    6. Return brief summary of what was saved
-  """
-)
+## Your Job
+1. Run git commands to gather repo state
+2. Run beads commands if available (skip if `bd` is not found)
+3. Run `thrum context show` to read existing context
+4. Compose structured markdown merging the session summary with gathered state
+5. Pipe the result to `thrum context save`
+6. Return a brief summary of what was saved
 ```
