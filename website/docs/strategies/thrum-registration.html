@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="../web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="../subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../cursor-plugin.html">Cursor Plugin</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a> | <a href="../telegram-bridge.html">Telegram Bridge</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../configuration.html">Configuration</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a> | <a href="../telegram-bridge.html">Telegram Bridge</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../messaging.html">Messaging</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="../event-streaming.html">Event Streaming</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../rpc-api.html">RPC API</a> | <a href="../api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="../daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="../sync.html">Sync Protocol</a><br>
@@ -97,13 +97,8 @@ want. Use the agent name instead.</p>
 <h3>Message Listener Pattern</h3>
 <p>Spawn a background listener so you receive async notifications without polling:</p>
 <pre><code>thrum wait --timeout 8m --after -15s --json</code></pre>
-<p>The listener loops automatically for up to 4 hours (30 cycles) — no manual
-re-arming needed. Set up a cron watchdog at session start to auto-respawn it
-every 30 min if it stops:</p>
-<pre><code>CronCreate(cron=&quot;*/30 * * * *&quot;,
-  prompt=&quot;If there is no background message listener running, spawn one now:
-    Task(subagent_type=&#39;message-listener&#39;, model=&#39;haiku&#39;, run_in_background=true,
-      prompt=&#39;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 8m --after -15s --json&#39;)&quot;)</code></pre>
+<p>Re-arm the listener every time it returns — both when messages arrive and when
+it times out. This keeps you reachable throughout your session.</p>
 <h3>Completion and Blocker Messages</h3>
 <p>When your work is complete:</p>
 <pre><code>thrum send &quot;Completed &lt;task&gt;. All tasks done, tests passing.&quot; --to @&lt;coordinator-name&gt;</code></pre>

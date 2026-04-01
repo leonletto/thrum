@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -920,10 +920,9 @@ Haiku sub-agent that blocks on <code>wait_for_message</code>. This is defined in
 <li>The listener calls <code>check_messages</code> to drain any backlog</li>
 <li>If messages are found, it returns them immediately</li>
 <li>If none, it calls <code>wait_for_message(timeout=300)</code> and blocks</li>
-<li>When a message arrives or timeout occurs, the listener loops automatically
-for up to 4 hours (30 cycles) — no manual re-arming needed</li>
-<li>A cron watchdog (<code>CronCreate</code>, every 30 min) auto-respawns the listener if it
-is not running, reducing token usage by ~65% compared to the old pattern</li>
+<li>When a message arrives or timeout occurs, the listener returns to the main
+agent</li>
+<li>The main agent processes the result and re-arms the listener</li>
 </ol>
 <p><strong>Return format:</strong></p>
 <p>When messages are received:</p>
@@ -936,8 +935,6 @@ TIMESTAMP: [timestamp]</code></pre>
 <p><strong>Cost:</strong> Approximately $0.00003 per cycle (Haiku-class model).</p>
 <h3>Context Management</h3>
 <ul>
-<li>The listener runs up to 30 cycles (~4 hours) before stopping; the cron
-watchdog respawns it automatically every 30 min if needed</li>
 <li>Compact after 10+ message cycles to prevent context overflow</li>
 <li>After 5 consecutive timeouts with no pending work, send status to the
 coordinator and stop the listener</li>

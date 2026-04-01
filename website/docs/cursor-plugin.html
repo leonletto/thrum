@@ -63,9 +63,9 @@ commands, skills, rules, agents, and <code>SessionStart</code> hook wiring). The
 preview</strong>: verify behavior in your Cursor version before relying on it in
 critical workflows.</p>
 <p>For the lightest-weight Cursor path today, <code>thrum init --skills --runtime cursor</code>
-still installs the standalone Thrum skill under <code>.cursor/skills/thrum/</code>. The
-plugin is the fuller, repo-packaged alternative once you symlink or copy it into
-Cursor’s local plugins directory (see <a href="#installation">Installation</a>).</p>
+still installs the standalone Thrum skill under <code>.cursor/skills/thrum/</code>. Until
+the plugin packaging is declared ready, that skill install remains the safer
+supported path for regular Cursor use.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li><strong>Thrum CLI</strong> installed and on <code>PATH</code> (see <a href="quickstart.html">Quickstart</a>)</li>
@@ -78,35 +78,28 @@ version)</li>
 <pre><code>thrum daemon status</code></pre>
 <h2>Installation</h2>
 <p>There is <strong>no</strong> documented one-command marketplace install for this package yet
-comparable to Claude’s <code>claude plugin marketplace add</code> flow. Use a <strong>local
-development install</strong> from a clone of Thrum:</p>
+comparable to Claude’s <code>claude plugin marketplace add</code> flow, and the repo
+README still takes the more conservative stance that the Cursor package should
+be treated as <strong>not yet installable as a normal supported plugin</strong>.</p>
+<p>For now, treat this section as a <strong>developer preview / inspection workflow</strong>:</p>
 <ol>
-<li><p>Clone or update the Thrum repository (branch that contains <code>cursor-plugin/</code>
-with the manifest you want).</p>
-</li>
-<li><p>Copy or symlink the plugin directory into Cursor’s local plugins location,
-for example:</p>
-<pre><code>mkdir -p ~/.cursor/plugins/local
-ln -sf /path/to/thrum/cursor-plugin ~/.cursor/plugins/local/thrum</code></pre>
-<p>Alternatively, copy the folder instead of symlinking if you prefer an
-isolated snapshot.</p>
-</li>
-<li><p><strong>Restart Cursor</strong> so it reloads plugin metadata (<code>plugin.json</code>), commands,
-skills, rules, and hooks.</p>
-</li>
+<li>Read the files under <code>cursor-plugin/</code> to inspect the manifest, commands,
+skills, rules, hooks, and agents that are being ported for Cursor.</li>
+<li>If you are actively developing or validating the package, you may
+temporarily symlink or copy <code>cursor-plugin/</code> into Cursor&#39;s local plugins
+directory and restart Cursor to observe how your current Cursor build reacts.</li>
+<li>Use that only for <strong>experimental validation</strong>. Do not present it to other
+users as a stable or generally supported install path yet.</li>
 </ol>
-<p>The in-repo <a href="https://github.com/leonletto/thrum/blob/main/cursor-plugin/README.html">cursor-plugin README</a> reiterates
-that the package was historically described as scaffold-in-progress; the tree
-now includes real commands and skills, but <strong>install and marketplace readiness
-are still evolving</strong>—validate in your environment after each update.</p>
-<h3>Verify installation</h3>
+<p>If you do run a local experiment, validate conservatively:</p>
 <ul>
-<li>Open the project in Cursor and confirm Thrum commands appear in the command
-palette or slash UI (exact surfacing depends on Cursor version).</li>
-<li>Start a new chat or agent session and confirm identity or inbox context when
-hooks run (if your Cursor build invokes <code>SessionStart</code> hooks for that session
-type).</li>
+<li>Check whether the plugin surfaces commands at all in your Cursor version.</li>
+<li>Confirm whether <code>SessionStart</code> actually runs for the session type you use.</li>
+<li>Expect rough edges, missing parity with Claude hooks, and packaging changes as
+the Cursor plugin work continues.</li>
 </ul>
+<p>For day-to-day Cursor usage today, prefer <code>thrum init --skills --runtime cursor</code>
+instead of treating <code>cursor-plugin/</code> as production-ready.</p>
 <h2>Included Components</h2>
 <p>Paths are relative to <code>cursor-plugin/</code> in the Thrum repository.</p>
 <table>
@@ -213,8 +206,8 @@ section or file an issue/upstream fix in the Thrum repo.</p>
 </thead>
 <tbody><tr>
 <td><strong>Cursor</strong> as the primary IDE agent</td>
-<td><strong>Cursor plugin</strong> (local install) or <strong><code>thrum init --skills --runtime cursor</code></strong></td>
-<td>Native Cursor commands, rules, and skills; plugin is the fuller packaged layout when symlinked locally.</td>
+<td><strong><code>thrum init --skills --runtime cursor</code></strong> first; inspect the <strong>Cursor plugin</strong> only for preview validation</td>
+<td>The skill install is the safer current path; the plugin package is useful for development and experimental Cursor-native validation.</td>
 </tr>
 <tr>
 <td><strong>Claude Code</strong> with marketplace support</td>
@@ -235,7 +228,7 @@ section or file an issue/upstream fix in the Thrum repo.</p>
 <p><strong>Honest scope notes:</strong></p>
 <ul>
 <li><strong>Marketplace / one-click install:</strong> Claude plugin is ahead; Cursor plugin is
-local-from-repo today.</li>
+still preview/scaffold territory rather than a normal supported install.</li>
 <li><strong>Hooks:</strong> Claude plugin’s PreCompact story is stronger on paper; Cursor
 plugin currently emphasizes SessionStart only in <code>hooks.json</code>.</li>
 <li><strong>Skills:</strong> Codex and Cursor both use split skills; Claude leans on slash
