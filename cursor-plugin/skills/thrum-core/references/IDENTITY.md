@@ -17,7 +17,7 @@ This registers the agent, starts a session, and sets the work intent.
   `coordinator`
 - **Module** — Work area: `auth`, `website`, `api`, `testing`, etc.
 - **Agent ID** — Format: `<name>:<role>:<module>` (e.g.,
-  `claude_impl:implementer:auth`)
+  `cursor_impl:implementer:auth`)
 
 ## Identity Storage
 

@@ -46,11 +46,12 @@ needed. The UI groups conversations by `thread_id`.
 - Git context (branch, uncommitted files)
 - Daemon health and sync state
 
-Plugin hooks auto-run `thrum prime` on **SessionStart** and **PreCompact**.
+Some runtimes or local project automation may run `thrum prime` on session start or before compaction. In Cursor, do not assume this exists; run `thrum prime` explicitly when starting or resuming work.
 
 ### After Compaction
 
-Context auto-recovers via the PreCompact hook. The agent sees:
+After compaction or context loss, re-run `thrum prime` (or `thrum context show`)
+to restore working context. Typical recovery includes:
 
 1. Their identity and session state
 2. Any unread messages accumulated during compaction

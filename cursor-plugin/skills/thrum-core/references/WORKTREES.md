@@ -8,29 +8,26 @@ daemon and git-backed message storage.
 Use the setup script to create worktrees with all required configuration:
 
 ```bash
-# Full setup: creates worktree, branch, thrum redirect, .claude/settings.json, and identity
+# Full setup: creates worktree, branch, thrum redirect, local runtime config, and identity
 ./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/feature feature/my-feature \
   --identity feature_impl --role implementer
 
-# Existing worktree: adds thrum redirect and .claude/settings.json
+# Existing worktree: refreshes thrum redirects and any local runtime config
 ./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/feature
 
-# Auto-detect: fixes all worktrees missing redirects or settings
+# Auto-detect: fixes worktrees missing redirects or local runtime setup
 ./scripts/setup-worktree-thrum.sh
 ```
 
-### Critical: `.claude/settings.json`
+### Critical: per-worktree local config
 
-This file is **gitignored** — each worktree needs its own copy. It registers the
-`SessionStart` hook that runs `scripts/thrum-startup.sh` (agent registration,
-daemon check, env vars). Without it, Claude Code sessions in the worktree won't
-auto-register with Thrum.
-
-The setup script copies it automatically from the main repo. If a worktree is
-missing it, either re-run the setup script or copy manually:
+Some runtimes use gitignored per-worktree local settings. Re-run the setup
+script for the target worktree so it refreshes any local runtime configuration
+Thrum expects there.
 
 ```bash
-cp /path/to/main-repo/.claude/settings.json ~/.workspaces/thrum/feature/.claude/settings.json
+# Refresh redirects + runtime-local config for an existing worktree
+./scripts/setup-worktree-thrum.sh ~/.workspaces/thrum/feature
 ```
 
 ### Manual identity setup

@@ -15,9 +15,9 @@ Before delegating, write a brief narrative from your own memory covering:
 - **What a future session needs to know** — gotchas, incomplete work, important
   context
 
-### Step 2: Spawn the Update Agent
+### Step 2: Launch the Update Agent
 
-Delegate to a **general-purpose subagent** that will:
+Delegate to a general-purpose agent or delegated subagent that will:
 
 1. Gather mechanical state: `git log --oneline -10`, `git status --short`,
    `git branch --show-current`, `bd stats`, `bd list --status=in_progress`,
@@ -54,22 +54,18 @@ Delegate to a **general-purpose subagent** that will:
 ### Subagent Prompt Template
 
 ```text
-Task(
-  subagent_type: "general-purpose",
-  description: "Update agent context",
-  prompt: """
-    You are updating agent context for a thrum-managed project.
+Launch a general-purpose agent with a prompt like:
 
-    ## Agent's Session Summary
-    <paste your narrative from Step 1 here>
+You are updating agent context for a thrum-managed project.
 
-    ## Your Job
-    1. Run git commands to gather repo state
-    2. Run beads commands if available (skip if bd not found)
-    3. Run `thrum context show` to read existing context
-    4. Compose structured markdown merging session summary with gathered state
-    5. Pipe result to `thrum context save`
-    6. Return brief summary of what was saved
-  """
-)
+## Agent's Session Summary
+<paste your narrative from Step 1 here>
+
+## Your Job
+1. Run git commands to gather repo state
+2. Run beads commands if available (skip if bd not found)
+3. Run `thrum context show` to read existing context
+4. Compose structured markdown merging session summary with gathered state
+5. Pipe result to `thrum context save`
+6. Return a brief summary of what was saved
 ```

@@ -2,17 +2,16 @@
 
 The message-listener is a background sub-agent that blocks on `thrum wait` and
 returns when messages arrive. It updates a heartbeat in the agent's identity
-file so the Stop hook can detect if the listener dies and prompt a restart.
+file so a local watchdog or session-end reminder can detect if the listener dies and prompt a restart.
 
 ## Quick Start
 
 ```text
-Task(
-  subagent_type="message-listener",
-  model="haiku",
-  run_in_background=true,
-  prompt="Listen for Thrum messages.\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -15s"
-)
+Launch a background agent (or delegated subagent) with a prompt like:
+
+Listen for Thrum messages.
+STEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat
+STEP_2: thrum wait --timeout 8m --after -15s
 ```
 
 Replace `/path/to/repo` with the actual repo path. When using the Thrum plugin,
@@ -20,12 +19,12 @@ Replace `/path/to/repo` with the actual repo path. When using the Thrum plugin,
 
 ## How It Works
 
-1. **Spawn** — Launch as background Task with `run_in_background: true`
+1. **Spawn** — Launch as a background agent in your runtime
 2. **Heartbeat** — Listener calls
    `scripts/thrum-startup.sh --listener-heartbeat` to update its heartbeat in
    the identity file
 3. **Block** — Listener runs `thrum wait --timeout 8m` which blocks until
-   message or timeout (stays under Bash 600s limit)
+   message or timeout (keeps each wait cycle bounded)
 4. **Return or loop** — If message received, output JSON and stop. If timeout,
    go back to step 2.
 
@@ -45,40 +44,37 @@ The listener updates `.thrum/identities/<agent>.json` with a `listener` key:
 }
 ```
 
-The Stop hook reads this heartbeat. If it's missing, stale (>10 min), or from a
-different session, the hook tells Claude to restart the listener.
+A local watchdog or session-end reminder can read this heartbeat. If it is
+missing, stale (>10 min), or from a different session, restart the listener.
 
 ## Wait Command Flags
 
 | Flag           | Purpose                                                                         |
 | -------------- | ------------------------------------------------------------------------------- |
-| `--timeout 8m` | Block up to 8 min per cycle (under Bash 600s limit)                             |
+| `--timeout 8m` | Block up to 8 min per cycle while keeping each wait cycle bounded               |
 | `--after -15s` | Include messages sent up to 15s ago (covers re-arm gap between listener cycles) |
 | `--json`       | Machine-readable output (not used by listener)                                  |
 
-## Cron Watchdog (Recommended)
+## Optional Watchdog Automation
 
-Use a cron job to automatically respawn the listener if it dies, times out, or
-is lost after compaction. This eliminates manual re-arming entirely.
+If your environment supports scheduled automation, add a 30-minute watchdog
+that checks for a healthy listener heartbeat and starts a new background
+listener when needed.
 
-```text
-CronCreate(
-  cron="*/30 * * * *",
-  prompt="If there is no background message listener running, spawn one now:\n\nAgent(subagent_type=\"message-listener\", model=\"haiku\", run_in_background=true, prompt=\"Listen for Thrum messages.\\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")"
-)
-```
+Recommended behavior:
 
-The cron fires every 30 minutes. If a listener is already running, it skips. If
-the listener has died or expired, it spawns a new one. Combined with the 4-hour
-listener budget, this provides continuous coverage with minimal overhead.
+1. Check whether the listener heartbeat is present and recent.
+2. If it is missing or stale, launch a new background listener using the prompt
+   from the quick-start section above.
+3. If a healthy listener is already running, do nothing.
 
-**Setup:** Spawn the initial listener on session start, then create the cron
-watchdog. The cron handles all subsequent re-arming automatically.
+**Setup:** Start one listener at session start, then let the watchdog handle
+future re-arming if your workflow supports it.
 
 ## Key Rules
 
 - **Return immediately** when messages arrive (don't wait for more)
 - **Read-only** — the listener never sends messages
-- **Heartbeat before each wait** — keeps the Stop hook informed
-- **Cost-efficient** — runs on Haiku, blocks instead of polling
-- Listener uses CLI only (`Bash` tool), not MCP tools
+- **Heartbeat before each wait** — keeps the watchdog/reminder informed
+- **Cost-efficient** — use a low-cost model and block instead of polling
+- Listener uses CLI only through the shell/terminal tool, not MCP tools

@@ -490,7 +490,7 @@ Note: `--foreground` flag does NOT exist. Daemon always starts in background.
 
 ```bash
 thrum init                                     # Init + interactive runtime selection (also starts daemon)
-thrum init --runtime claude                    # Init + generate Claude configs
+thrum init --runtime cursor                    # Init + generate Cursor configs
 thrum init --runtime codex --force             # Init + overwrite Codex configs
 thrum init --runtime all --dry-run             # Preview all runtime configs
 thrum init --stealth                           # Zero tracked-file footprint
@@ -741,7 +741,7 @@ thrum mcp serve --agent-id alice               # Override agent identity
 --agent-id string   Override agent identity (selects .thrum/identities/{name}.json)
 ```
 
-Configure in `.claude/settings.json`:
+If you are wiring the MCP server manually in an MCP-capable runtime, add an equivalent entry to that runtime's local MCP configuration:
 
 ```json
 {

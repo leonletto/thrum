@@ -35,13 +35,13 @@ Thrum provides both an MCP server (`thrum mcp serve`) and CLI commands.
 
 | MCP Server                             | CLI (`thrum` commands)         |
 | -------------------------------------- | ------------------------------ |
-| Native tool integration in Claude Code | Shell-out via Bash             |
+| Native tool integration in MCP-capable runtimes | Shell-out via shell/terminal |
 | Real-time subscriptions                | `thrum wait` for blocking      |
 | Structured JSON responses              | Human-readable + `--json` flag |
 | Requires MCP support in runtime        | Works everywhere               |
 
-**Rule of thumb:** Use CLI via `Bash(thrum:*)`. The SKILL.md `allowed-tools` is
-set to `Bash(thrum:*)` — all data is accessed via CLI output, not file reads.
+**Rule of thumb:** Use the `thrum` CLI via your runtime's shell/terminal tool.
+Prefer CLI output over reading Thrum data files directly.
 
 ## Decision Flowchart
 

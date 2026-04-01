@@ -21,7 +21,8 @@ re-arming. **Right:** After processing listener results, always spawn a new
 message-listener:
 
 ```text
-Task(subagent_type="message-listener", run_in_background=true, prompt="...")
+Launch a new background message-listener agent with the listener prompt from
+`LISTENER_PATTERN.md`.
 ```
 
 ## 4. Broadcasting Without the @everyone Group
@@ -60,9 +61,9 @@ Specific intents help other agents understand what you're doing via
 
 ## 8. Reading Files Instead of Using CLI
 
-**Wrong:** Reading `.git/thrum-sync/` files directly with the Read tool.
-**Right:** Use `thrum inbox`, `thrum status`, `thrum prime`. The SKILL.md
-`allowed-tools` is `Bash(thrum:*)` — no Read permission needed.
+**Wrong:** Reading `.git/thrum-sync/` files directly.
+**Right:** Use `thrum inbox`, `thrum status`, and `thrum prime` through your
+runtime's shell/terminal tool instead of inspecting Thrum internals by hand.
 
 ## 9. Sending Messages to Yourself
 

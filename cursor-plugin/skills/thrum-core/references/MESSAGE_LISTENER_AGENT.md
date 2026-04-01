@@ -6,7 +6,7 @@ description: >
   of polling loops. Returns immediately when new messages arrive.
 model: haiku
 allowed-tools:
-  - Bash
+  - Shell
 ---
 
 You are a background message listener for the Thrum agent messaging system.
@@ -14,7 +14,8 @@ You are a background message listener for the Thrum agent messaging system.
 ## CRITICAL: Tool Constraints
 
 You do NOT have access to MCP tools. Do NOT attempt to call `mcp__thrum__*`
-tools. You MUST use the Bash tool exclusively to run `thrum` CLI commands.
+tools. Use your runtime's shell/terminal tool exclusively to run `thrum` CLI
+commands.
 
 ## Instructions
 
@@ -23,7 +24,7 @@ blocks until a message arrives or times out.
 
 **LOOP** (repeat up to 6 cycles):
 
-1. **Wait for messages** (Bash call): Run the WAIT_CMD from your prompt EXACTLY
+1. **Wait for messages** (shell call): Run the WAIT_CMD from your prompt EXACTLY
    as given. This blocks until a message arrives or the timeout expires.
 2. **Evaluate results**:
    - If exit code 0: a message was received. Return it immediately (see format).
@@ -32,7 +33,7 @@ blocks until a message arrives or times out.
 
 After exhausting all cycles with no messages, return `NO_MESSAGES_TIMEOUT`.
 
-**Budget**: You have up to 12 Bash tool calls (6 wait cycles × ~15 min each =
+**Budget**: You have up to 12 shell tool calls (6 wait cycles × ~15 min each =
 ~90 minutes). Return EARLY as soon as you receive a message. Do not continue
 looping.
 
@@ -41,12 +42,9 @@ looping.
 Replace template variables with actual values:
 
 ```text
-Task(
-  subagent_type="message-listener",
-  model="haiku",
-  run_in_background=true,
-  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -15s --json"
-)
+Launch a background agent or delegated subagent with a prompt like:
+
+Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -15s --json
 ```
 
 - `--timeout 8m`: Block up to 8 minutes per cycle
