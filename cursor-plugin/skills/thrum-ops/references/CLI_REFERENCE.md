@@ -741,7 +741,8 @@ thrum mcp serve --agent-id alice               # Override agent identity
 --agent-id string   Override agent identity (selects .thrum/identities/{name}.json)
 ```
 
-If you are wiring the MCP server manually in an MCP-capable runtime, add an equivalent entry to that runtime's local MCP configuration:
+If you wire the MCP server manually in an MCP-capable runtime, add an
+equivalent entry to that runtime's local MCP configuration:
 
 ```json
 {

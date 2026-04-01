@@ -46,7 +46,9 @@ needed. The UI groups conversations by `thread_id`.
 - Git context (branch, uncommitted files)
 - Daemon health and sync state
 
-Some runtimes or local project automation may run `thrum prime` on session start or before compaction. In Cursor, do not assume this exists; run `thrum prime` explicitly when starting or resuming work.
+Some runtimes or local project automation may run `thrum prime` on session
+start or before compaction. In Cursor, do not assume this exists; run
+`thrum prime` explicitly when starting or resuming work.
 
 ### After Compaction
 

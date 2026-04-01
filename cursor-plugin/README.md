@@ -1,21 +1,37 @@
 # Thrum Cursor Plugin
 
-Thrum for Cursor packages commands, skills, rules, and agents for durable multi-agent coordination.
+Thrum for Cursor packages commands, skills, rules, agents, hooks, and helper
+scripts for durable multi-agent coordination.
 
-This folder is currently a scaffold-in-progress for the Cursor plugin package. Do not install it yet; the remaining plugin assets still need to be added in later tasks.
+This package is a **local developer preview**: installable and testable on your
+machine, but not marketplace-polished. Expect rough edges and behavior that may
+change.
+
+## What is included
+
+- Slash commands under `commands/`
+- Agent skills under `skills/`
+- Session rules under `rules/`
+- Agent definitions under `agents/`
+- Hooks in `hooks/hooks.json` (parity with Claude Code hooks is **incomplete**;
+  some behaviors do not map 1:1 to Cursor)
+- Scripts under `scripts/` (assert versions, sync from Claude plugin, etc.)
 
 ## Prerequisites
 
 - `thrum` installed and on `PATH`
 - `thrum init` already run in the repository
 
-## Development install
+## Local install
 
-- When the remaining plugin assets are added in later tasks, copy or symlink this folder into `~/.cursor/plugins/local/thrum/`.
-- Restart Cursor after updates so the local plugin is reloaded.
-- Until those assets exist, treat this package as scaffold-only and not yet installable.
+1. Copy or symlink this `cursor-plugin` folder to
+   `~/.cursor/plugins/local/thrum/` (so Cursor loads it as the `thrum` local
+   plugin).
+2. Restart Cursor after updates so the plugin reloads.
 
 ## Notes
 
-- Some Claude hook behaviors may not map 1:1 to Cursor.
-- Later tasks will add the real rules, commands, skills, and agents for Cursor support where hooks do not map cleanly.
+- Treat this as **experimental**; validate behavior in your workflow before
+  relying on it.
+- Hook and automation parity with the Claude plugin is incomplete; use explicit
+  `thrum` commands where automation is missing.
