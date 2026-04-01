@@ -13,6 +13,7 @@ last_updated: "2026-02-13"
 ## Claude Code Plugin
 
 > See also: [Quickstart Guide](quickstart.md) for basic Thrum setup,
+> [Cursor Plugin](cursor-plugin.md) for the Cursor-native plugin package,
 > [Codex Plugin](codex-plugin.md) for Codex skill-based integration,
 > [Agent Configurations](agent-configs.md) for manual agent definitions,
 > [MCP Server](mcp-server.md) for the native MCP transport,
@@ -290,6 +291,8 @@ See [Identity System](identity.md) for details.
 
 - [MCP Server](mcp-server.md) — the MCP server the plugin configures, including
   the full 11-tool reference
+- [Cursor Plugin](cursor-plugin.md) — the Cursor-native plugin (local install;
+  hooks and marketplace differ from Claude)
 - [Codex Plugin](codex-plugin.md) — the equivalent skill bundle for Codex users
   instead of Claude Code
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows

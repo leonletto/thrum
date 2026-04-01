@@ -13,6 +13,9 @@ last_updated: "2026-02-24"
 
 > **Prerequisites:** Thrum installed and initialized (`thrum init`), and Codex
 > installed with a local skills directory (`~/.codex/skills`).
+>
+> **Cursor users:** see [Cursor Plugin](cursor-plugin.md) for the Cursor-native
+> package (commands, skills, rules); Codex uses a separate skill directory layout.
 
 ## Overview
 
@@ -149,6 +152,8 @@ cp -R codex-plugin/skills/project-setup "${CODEX_HOME:-$HOME/.codex}/skills/"
 
 ## Next Steps
 
+- [Cursor Plugin](cursor-plugin.md) — Cursor-native plugin (local install from
+  `cursor-plugin/`)
 - [Claude Code Plugin](claude-code-plugin.md) — the equivalent plugin for Claude
   Code users, with slash commands and automatic hooks
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows

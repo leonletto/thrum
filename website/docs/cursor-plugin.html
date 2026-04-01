@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cursor Plugin — Thrum</title>
+<meta name="description" content="Install and use the Thrum Cursor plugin — commands, focused skills, safety rules, and Cursor-native packaging.">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#cursor-plugin.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Cursor Plugin
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <strong>Cursor Plugin</strong> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>strategies</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
+<h2>Cursor Plugin</h2>
+<blockquote>
+<p>See also: <a href="quickstart.html">Quickstart Guide</a> for basic Thrum setup,
+<a href="claude-code-plugin.html">Claude Code Plugin</a> for the Claude marketplace plugin,
+<a href="codex-plugin.html">Codex Plugin</a> for the Codex skill bundle,
+<a href="agent-configs.html">Agent Configurations</a> for manual agent definitions,
+<a href="mcp-server.html">MCP Server</a> for native MCP transport,
+<a href="multi-agent.html">Multi-Agent Support</a> for coordination patterns.</p>
+</blockquote>
+<h2>Overview</h2>
+<p>The Thrum <strong>Cursor plugin</strong> is a Cursor-native package under <code>cursor-plugin/</code> in
+the Thrum repository. It bundles <strong>slash-style commands</strong>, <strong>focused skills</strong>
+(<code>thrum-core</code>, <code>thrum-ops</code>, <code>thrum-role-config</code>, <code>project-setup</code>), <strong>project
+rules</strong> (<code>thrum-session</code>, <code>thrum-safety</code>), a <strong>message-listener agent</strong> template,
+and a minimal <strong>hooks</strong> configuration so agents can use the same coordination
+workflows as elsewhere in Thrum.</p>
+<p><strong>Current status:</strong> The tree contains scaffolded and ported assets (manifest,
+commands, skills, rules, agents, and <code>SessionStart</code> hook wiring). The package is
+<strong>not</strong> yet published to a Cursor marketplace flow comparable to
+<code>claude plugin install</code>, and <strong>hook parity with Claude Code is incomplete</strong> (see
+<a href="#hook-limitations">Hook Limitations</a>). Treat local installation as <strong>developer
+preview</strong>: verify behavior in your Cursor version before relying on it in
+critical workflows.</p>
+<p>For the lightest-weight Cursor path today, <code>thrum init --skills --runtime cursor</code>
+still installs the standalone Thrum skill under <code>.cursor/skills/thrum/</code>. The
+plugin is the fuller, repo-packaged alternative once you symlink or copy it into
+Cursor’s local plugins directory (see <a href="#installation">Installation</a>).</p>
+<h2>Prerequisites</h2>
+<ul>
+<li><strong>Thrum CLI</strong> installed and on <code>PATH</code> (see <a href="quickstart.html">Quickstart</a>)</li>
+<li><strong><code>thrum init</code></strong> run in the repository you open in Cursor (daemon, identity,
+sync worktree)</li>
+<li><strong>Cursor</strong> with support for local plugin folders (see Cursor docs for your
+version)</li>
+</ul>
+<p>Verify the daemon before relying on messaging:</p>
+<pre><code>thrum daemon status</code></pre>
+<h2>Installation</h2>
+<p>There is <strong>no</strong> documented one-command marketplace install for this package yet
+comparable to Claude’s <code>claude plugin marketplace add</code> flow. Use a <strong>local
+development install</strong> from a clone of Thrum:</p>
+<ol>
+<li><p>Clone or update the Thrum repository (branch that contains <code>cursor-plugin/</code>
+with the manifest you want).</p>
+</li>
+<li><p>Copy or symlink the plugin directory into Cursor’s local plugins location,
+for example:</p>
+<pre><code>mkdir -p ~/.cursor/plugins/local
+ln -sf /path/to/thrum/cursor-plugin ~/.cursor/plugins/local/thrum</code></pre>
+<p>Alternatively, copy the folder instead of symlinking if you prefer an
+isolated snapshot.</p>
+</li>
+<li><p><strong>Restart Cursor</strong> so it reloads plugin metadata (<code>plugin.json</code>), commands,
+skills, rules, and hooks.</p>
+</li>
+</ol>
+<p>The in-repo <a href="https://github.com/leonletto/thrum/blob/main/cursor-plugin/README.html">cursor-plugin README</a> reiterates
+that the package was historically described as scaffold-in-progress; the tree
+now includes real commands and skills, but <strong>install and marketplace readiness
+are still evolving</strong>—validate in your environment after each update.</p>
+<h3>Verify installation</h3>
+<ul>
+<li>Open the project in Cursor and confirm Thrum commands appear in the command
+palette or slash UI (exact surfacing depends on Cursor version).</li>
+<li>Start a new chat or agent session and confirm identity or inbox context when
+hooks run (if your Cursor build invokes <code>SessionStart</code> hooks for that session
+type).</li>
+</ul>
+<h2>Included Components</h2>
+<p>Paths are relative to <code>cursor-plugin/</code> in the Thrum repository.</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Manifest</strong></td>
+<td><code>.cursor-plugin/plugin.json</code> — name <code>thrum</code>, version aligned with the repo release line, pointers to <code>commands</code>, <code>skills</code>, <code>rules</code>, <code>agents</code>, and <code>hooks/hooks.json</code>.</td>
+</tr>
+<tr>
+<td><strong>Commands</strong></td>
+<td><code>commands/*.md</code> — operational entry points such as quickstart, send, inbox, reply, prime, overview, group, team, wait, load-context, update-context (Cursor-native command docs).</td>
+</tr>
+<tr>
+<td><strong>Skills</strong></td>
+<td><code>skills/thrum-core</code>, <code>skills/thrum-ops</code>, <code>skills/thrum-role-config</code>, <code>skills/project-setup</code> — same conceptual split as Codex: core coordination, CLI operations, role templates, plan → beads workflow.</td>
+</tr>
+<tr>
+<td><strong>Rules</strong></td>
+<td><code>rules/thrum-session.mdc</code>, <code>rules/thrum-safety.mdc</code> — session and safety guidance for the agent.</td>
+</tr>
+<tr>
+<td><strong>Agents</strong></td>
+<td><code>agents/message-listener.md</code> — template for background listening patterns.</td>
+</tr>
+<tr>
+<td><strong>Hooks</strong></td>
+<td><code>hooks/hooks.json</code> — see <a href="#hook-limitations">Hook Limitations</a>.</td>
+</tr>
+<tr>
+<td><strong>Scripts</strong></td>
+<td><code>scripts/</code> — helper shell scripts (e.g. sync from Claude sources, guardrails, pre-compact helpers); some are intended for parity or future hook wiring, not all are active in every Cursor session type.</td>
+</tr>
+</tbody></table>
+<p>Skill reference markdown under <code>skills/*/references/</code> is populated from the
+Claude plugin resources and command docs (via the sync script below), so
+wording may still mention Claude-specific paths in places; prefer the Cursor
+plugin layout when following file paths in Cursor.</p>
+<h2>Hook Limitations</h2>
+<ul>
+<li><strong>What is wired today:</strong> <code>hooks/hooks.json</code> defines a <strong>SessionStart</strong> hook
+that runs <code>thrum prime</code> (with a fallback message if Thrum is not initialized).</li>
+<li><strong>Claude Code parity:</strong> The Claude plugin also uses a <strong>PreCompact</strong> hook to
+re-inject context before compaction. That event <strong>is not</strong> mirrored in the
+current Cursor <code>hooks.json</code>; behavior depends on whether Cursor exposes an
+equivalent lifecycle hook in your product version.</li>
+<li><strong>Semantic differences:</strong> Cursor’s hook and session model may not run the
+same triggers as Claude Code (e.g. per-chat vs per-workspace). Do not assume
+identical timing or stderr handling.</li>
+<li><strong>MCP:</strong> Hook behavior is separate from <a href="mcp-server.html">MCP Server</a>
+configuration. You can still run <code>thrum mcp serve</code> and wire it in Cursor MCP
+settings if your workflow needs tool-based messaging.</li>
+</ul>
+<p>If automatic prime does not run, use the <strong>prime</strong> command from the plugin (or
+run <code>thrum prime</code> in the terminal) at session start.</p>
+<h2>Development Sync Workflow</h2>
+<p>When you maintain Thrum’s Claude plugin as the source of truth for shared
+markdown, refresh Cursor skill references and Cursor-specific substitutions from
+the repo root:</p>
+<pre><code>./cursor-plugin/scripts/sync-from-claude.sh</code></pre>
+<p>The script copies Claude skill resources and command files into
+<code>cursor-plugin/skills/*/references/</code> and applies targeted text replacements for
+Cursor-oriented instructions (for example worktree and settings paths).</p>
+<p>After syncing, restart Cursor or reload the plugin as needed, and run your usual
+tests or manual smoke checks. Optional: <code>cursor-plugin/scripts/assert-plugin-versions.sh</code>
+can help catch version drift when invoked as part of your workflow.</p>
+<p>Contributors should commit updated reference files when the Claude-side sources
+change, so the Cursor package stays aligned.</p>
+<h2>Troubleshooting</h2>
+<h3>“Thrum not initialized” or empty prime output</h3>
+<p>Run <code>thrum init</code> in the repository root and ensure you opened that root (or a
+configured worktree with redirect) in Cursor.</p>
+<h3>Commands or skills do not appear</h3>
+<ul>
+<li>Confirm the plugin path is under <code>~/.cursor/plugins/local/</code> (or the path your
+Cursor build documents).</li>
+<li>Fully quit and restart Cursor after copying or symlinking.</li>
+<li>Check that <code>.cursor-plugin/plugin.json</code> is present and valid JSON.</li>
+</ul>
+<h3>Hooks never seem to run</h3>
+<p>Cursor may not invoke hooks for all session types, or your version may differ.
+Rely on manual <code>thrum prime</code> or the plugin’s prime command until you confirm
+hook support.</p>
+<h3>Messaging or sync errors</h3>
+<p>Use <code>thrum daemon status</code>, <code>thrum status</code>, and <code>thrum sync status</code> as in
+<a href="quickstart.html#troubleshooting">Quickstart troubleshooting</a>. Plugin packaging
+does not replace a healthy daemon or Git sync setup.</p>
+<h3>Stale documentation inside reference files</h3>
+<p>References are synced from Claude plugin sources; if you see <code>.claude/</code> paths in
+a reference file, check whether <code>sync-from-claude.sh</code> replacements cover that
+section or file an issue/upstream fix in the Thrum repo.</p>
+<h2>When To Use Cursor vs Claude vs Codex</h2>
+<table>
+<thead>
+<tr>
+<th>You are using…</th>
+<th>Prefer…</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Cursor</strong> as the primary IDE agent</td>
+<td><strong>Cursor plugin</strong> (local install) or <strong><code>thrum init --skills --runtime cursor</code></strong></td>
+<td>Native Cursor commands, rules, and skills; plugin is the fuller packaged layout when symlinked locally.</td>
+</tr>
+<tr>
+<td><strong>Claude Code</strong> with marketplace support</td>
+<td><strong><a href="claude-code-plugin.html">Claude Code Plugin</a></strong></td>
+<td>Official self-hosted marketplace install, SessionStart + PreCompact hooks, mature slash-command set.</td>
+</tr>
+<tr>
+<td><strong>OpenAI Codex</strong> (CLI / skills dir)</td>
+<td><strong><a href="codex-plugin.html">Codex Plugin</a></strong></td>
+<td>Skill bundle under <code>~/.codex/skills</code>; no Cursor or Claude plugin runtime.</td>
+</tr>
+<tr>
+<td><strong>Multiple products</strong></td>
+<td><strong>Thrum CLI + MCP</strong> everywhere, product-specific bundles where they add UX</td>
+<td>Same Git-backed store; plugins bundle ergonomics, not a different protocol.</td>
+</tr>
+</tbody></table>
+<p><strong>Honest scope notes:</strong></p>
+<ul>
+<li><strong>Marketplace / one-click install:</strong> Claude plugin is ahead; Cursor plugin is
+local-from-repo today.</li>
+<li><strong>Hooks:</strong> Claude plugin’s PreCompact story is stronger on paper; Cursor
+plugin currently emphasizes SessionStart only in <code>hooks.json</code>.</li>
+<li><strong>Skills:</strong> Codex and Cursor both use split skills; Claude leans on slash
+commands plus resource docs inside its plugin.</li>
+</ul>
+<h2>Next Steps</h2>
+<ul>
+<li><a href="claude-code-plugin.html">Claude Code Plugin</a> — marketplace install and full hook
+story for Claude Code</li>
+<li><a href="codex-plugin.html">Codex Plugin</a> — skill-only install for Codex</li>
+<li><a href="agent-coordination.html">Agent Coordination</a> — workflows that apply across
+tools</li>
+<li><a href="mcp-server.html">MCP Server</a> — optional native tools alongside any plugin</li>
+</ul>
+
+</main>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#cursor-plugin.html')}</script>
+</body>
+</html>

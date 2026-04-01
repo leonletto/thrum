@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <strong>Telegram Bridge</strong> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <strong>Telegram Bridge</strong> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -52,8 +52,8 @@ polls Telegram for inbound messages.</p>
 <pre><code>Telegram ←→ Bridge Goroutine ←→ Daemon WebSocket ←→ Agents
               (inside daemon)    (JSON-RPC 2.0)</code></pre>
 <ul>
-<li><strong>Inbound:</strong> Telegram message → bridge registers as your user identity →
-sends via <code>message.send</code> RPC to the target agent</li>
+<li><strong>Inbound:</strong> Telegram message → bridge registers as your user identity → sends
+via <code>message.send</code> RPC to the target agent</li>
 <li><strong>Outbound:</strong> Agent sends message to your inbox → bridge receives via
 WebSocket notification → forwards to your Telegram chat</li>
 <li><strong>Threading:</strong> Telegram replies map to Thrum <code>reply_to</code>; new messages create
@@ -68,14 +68,22 @@ never imports internal daemon packages.</p>
 <li>Send <code>/newbot</code> and follow the prompts</li>
 <li>Copy the bot token (looks like <code>123456789:AAH...</code>)</li>
 </ol>
-<h4>2. Find Your Telegram User ID</h4>
-<p>Message <a href="https://t.me/userinfobot">@userinfobot</a> on Telegram. It replies with
-your numeric user ID (e.g., <code>7747509251</code>).</p>
-<h4>3. Configure the Bridge</h4>
+<h4>2. Configure and Pair</h4>
+<p>Run <code>configure</code> with your bot token. The command writes the config, restarts the
+daemon, and enters a pairing flow that captures your Telegram user ID
+automatically:</p>
 <pre><code>thrum telegram configure \
   --token &quot;123456789:AAHyour-token-here&quot; \
   --target &quot;@coordinator_main&quot; \
   --user &quot;your-username&quot;</code></pre>
+<p>After writing the config, it prompts you to send a message from Telegram:</p>
+<pre><code>Pairing — send any message to your bot from Telegram (timeout: 60s)...
+
+Message from: Jane Doe (ID: 123456789)
+  Allow this user? [y/n]: y
+
+Paired! Allowed users: [123456789]
+  Bridge is live — no further restart needed.</code></pre>
 <table>
 <thead>
 <tr>
@@ -93,28 +101,43 @@ your numeric user ID (e.g., <code>7747509251</code>).</p>
 </tr>
 <tr>
 <td><code>--user</code></td>
-<td>Your Thrum username (e.g., <code>leon-letto</code>)</td>
+<td>Your Thrum username (e.g., <code>your-username</code>)</td>
+</tr>
+<tr>
+<td><code>--allow-from</code></td>
+<td>Skip pairing — set Telegram user ID directly</td>
+</tr>
+<tr>
+<td><code>--chat-id</code></td>
+<td>Telegram chat ID for outbound (defaults to --allow-from)</td>
+</tr>
+<tr>
+<td><code>--pair-timeout</code></td>
+<td>How long to wait for pairing message (default: 60s)</td>
+</tr>
+<tr>
+<td><code>--skip-pair</code></td>
+<td>Write config only, don&#39;t pair</td>
 </tr>
 </tbody></table>
-<h4>4. Add Your Telegram User ID to the Allow List</h4>
-<p>Edit <code>.thrum/config.json</code> and add your Telegram user ID to <code>allow_from</code>, plus
-set <code>chat_id</code> to the same value (for DMs, chat ID equals user ID):</p>
-<pre><code>{
-  &quot;telegram&quot;: {
-    &quot;token&quot;: &quot;123456789:AAH...&quot;,
-    &quot;target&quot;: &quot;@coordinator_main&quot;,
-    &quot;user_id&quot;: &quot;leon-letto&quot;,
-    &quot;chat_id&quot;: 7747509251,
-    &quot;allow_from&quot;: [7747509251]
-  }
-}</code></pre>
-<h4>5. Restart the Daemon</h4>
+<h4>Re-pairing</h4>
+<p>If you need to pair again (e.g., after resetting the allow list), use the
+standalone pair command:</p>
+<pre><code>thrum telegram pair</code></pre>
+<p>This connects to the running daemon and waits for a Telegram message to capture
+your user ID.</p>
+<h4>Manual Setup (alternative)</h4>
+<p>If you already know your Telegram user ID, skip the interactive pairing:</p>
+<pre><code>thrum telegram configure \
+  --token &quot;123456789:AAHyour-token-here&quot; \
+  --target &quot;@coordinator_main&quot; \
+  --user &quot;your-username&quot; \
+  --allow-from 123456789</code></pre>
+<p>Then restart the daemon:</p>
 <pre><code>thrum daemon restart</code></pre>
-<p>The startup banner will show:</p>
-<pre><code>Telegram:    bridge enabled (target: @coordinator_main)</code></pre>
-<h4>6. Test It</h4>
-<p>Send a message from Telegram to your bot. It should appear in the target
-agent&#39;s inbox:</p>
+<h4>3. Test It</h4>
+<p>Send a message from Telegram to your bot. It should appear in the target agent&#39;s
+inbox:</p>
 <pre><code>thrum inbox --unread</code></pre>
 <p>Send a message back:</p>
 <pre><code>thrum send &quot;Hello from the terminal!&quot; --to @your-username</code></pre>
@@ -126,8 +149,8 @@ agent&#39;s inbox:</p>
     &quot;token&quot;: &quot;123456789:AAH...&quot;,
     &quot;target&quot;: &quot;@coordinator_main&quot;,
     &quot;user_id&quot;: &quot;leon-letto&quot;,
-    &quot;chat_id&quot;: 7747509251,
-    &quot;allow_from&quot;: [7747509251, 412587349],
+    &quot;chat_id&quot;: 123456789,
+    &quot;allow_from&quot;: [123456789, 412587349],
     &quot;allow_all&quot;: false,
     &quot;enabled&quot;: true
   }
@@ -177,8 +200,14 @@ agent&#39;s inbox:</p>
 </tr>
 </tbody></table>
 <h3>CLI Commands</h3>
-<pre><code># Configure the bridge
+<pre><code># Configure the bridge (interactive pairing)
 thrum telegram configure --token &lt;token&gt; --target &lt;agent&gt; --user &lt;username&gt;
+
+# Configure with known user ID (skip pairing)
+thrum telegram configure --token &lt;token&gt; --target &lt;agent&gt; --user &lt;username&gt; --allow-from &lt;id&gt;
+
+# Pair your Telegram account (bridge must be configured and daemon running)
+thrum telegram pair
 
 # Check bridge status
 thrum telegram status
@@ -189,14 +218,24 @@ thrum telegram status --json</code></pre>
 <p>The bridge follows a defense-in-depth security model:</p>
 <p><strong>Access control:</strong></p>
 <ul>
-<li><strong>Fail-closed:</strong> Empty <code>allow_from</code> with <code>allow_all: false</code> blocks all
-inbound messages. You must explicitly add Telegram user IDs.</li>
+<li><strong>Fail-closed:</strong> Empty <code>allow_from</code> with <code>allow_all: false</code> blocks all inbound
+messages. You must explicitly add Telegram user IDs.</li>
 <li><strong>Gate ordering:</strong> The access check runs before any message processing — a
 blocked sender produces zero observable side effects (no error reply, no
 typing indicator).</li>
-<li><strong>Bot blocking:</strong> Messages from other Telegram bots (<code>from.is_bot</code>) are
-always dropped, even if the bot&#39;s ID is in <code>allow_from</code>.</li>
+<li><strong>Bot blocking:</strong> Messages from other Telegram bots (<code>from.is_bot</code>) are always
+dropped, even if the bot&#39;s ID is in <code>allow_from</code>.</li>
 <li><strong>Rate limiting:</strong> Allowed users have per-user rate limits to prevent abuse.</li>
+</ul>
+<p><strong>Pairing security:</strong></p>
+<ul>
+<li>During pairing, the bridge temporarily accepts messages from any Telegram user
+for up to 60 seconds (configurable, max 5 minutes).</li>
+<li>The user must explicitly confirm the sender via a <code>[y/n]</code> prompt.</li>
+<li>Only one pairing session can be active at a time.</li>
+<li>The pairing message is consumed and never relayed to Thrum agents.</li>
+<li>No persistent state changes occur during pairing — a crash reverts to the
+prior access control state (block all).</li>
 </ul>
 <p><strong>Token hygiene:</strong></p>
 <ul>
@@ -208,8 +247,8 @@ the Telegram API at startup and is not retained.</li>
 </ul>
 <p><strong>Isolation:</strong></p>
 <ul>
-<li>The bridge connects via the daemon&#39;s WebSocket RPC — it never imports
-internal daemon packages.</li>
+<li>The bridge connects via the daemon&#39;s WebSocket RPC — it never imports internal
+daemon packages.</li>
 <li>The WebSocket client validates the URL is a loopback address before
 connecting.</li>
 <li>Outbound messages are restricted to the configured <code>chat_id</code> only.</li>

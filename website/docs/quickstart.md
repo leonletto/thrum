@@ -6,7 +6,7 @@ description:
 category: "quickstart"
 order: 1
 tags: ["quickstart", "getting-started", "installation", "setup", "tutorial"]
-last_updated: "2026-03-13"
+last_updated: "2026-03-31"
 ---
 
 ## Thrum Quickstart Guide
@@ -114,6 +114,15 @@ claude plugin install thrum
 The plugin already includes the skill — `thrum init --skills` will detect the
 plugin and skip the install. See [Claude Code Plugin](claude-code-plugin.md) for
 details.
+
+**Cursor full plugin (optional, developer preview):** Thrum also ships a
+**Cursor plugin** tree under `cursor-plugin/` in the repository—commands,
+skills, rules, agents, and a minimal `SessionStart` hook. It is **not** yet a
+one-click marketplace install like Claude’s plugin; you typically symlink or copy
+it into `~/.cursor/plugins/local/` and restart Cursor. Hook parity (for example
+PreCompact) and install polish still lag Claude Code. See
+[Cursor Plugin](cursor-plugin.md) for installation, limitations, and when to use
+`thrum init --skills --runtime cursor` instead.
 
 ### 3. Generate CLAUDE.md Coordination Instructions
 
@@ -486,6 +495,8 @@ tool integration. The CLI works everywhere — MCP is an alternative transport.
 
 ## Next Steps
 
+- [Cursor Plugin](cursor-plugin.md) — full Cursor package from `cursor-plugin/`
+  (local install; compare to `thrum init --skills --runtime cursor`)
 - [Why Thrum Exists](philosophy.md) — understand the philosophy behind
   human-directed agent coordination before going deeper
 - [CLI Reference](cli.md) — complete documentation for every command and flag

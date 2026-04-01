@@ -266,6 +266,21 @@
     "lastUpdated": "2026-02-24"
   },
   {
+    "path": "cursor-plugin.html",
+    "title": "Cursor Plugin",
+    "description": "Install and use the Thrum Cursor plugin — commands, focused skills, safety rules, and Cursor-native packaging.",
+    "category": "guides",
+    "order": 5,
+    "tags": [
+      "cursor",
+      "plugin",
+      "skills",
+      "commands",
+      "agent-coordination"
+    ],
+    "lastUpdated": "2026-03-31"
+  },
+  {
     "path": "guides/coordinate-two-agents.html",
     "title": "Coordinate Two Agents",
     "description": "Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case",
@@ -327,7 +342,7 @@
       "notifications",
       "integration"
     ],
-    "lastUpdated": "2026-03-20"
+    "lastUpdated": "2026-03-24"
   },
   {
     "path": "claude-agent-integration.html",
@@ -433,7 +448,7 @@
       "setup",
       "tutorial"
     ],
-    "lastUpdated": "2026-03-13"
+    "lastUpdated": "2026-03-31"
   },
   {
     "path": "cli.html",

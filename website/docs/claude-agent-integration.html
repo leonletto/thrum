@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <strong>Claude Code Agent Integration</strong> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <strong>Claude Code Agent Integration</strong> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -93,8 +93,9 @@ Add to .claude/settings.json:
 
 ### 3. Launch Background Listener
 
-Spawn a message-listener sub-agent to get async notifications. Re-arm it every
-time it returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
+Spawn a message-listener sub-agent to get async notifications. The listener
+loops automatically for up to 4 hours — no manual re-arming needed. Set up a
+cron watchdog to auto-respawn it every 30 min if it stops.
 
 ### 4. Communicate
 
@@ -143,10 +144,11 @@ thrum session end</code></pre>
 <h2>message-listener</h2>
 <p>A lightweight background agent (runs on Haiku for <del>$0.00003/cycle) that uses
 <code>thrum wait</code> for efficient blocking until messages arrive — no polling loops or
-sleep intervals needed. It loops up to ~6 cycles (</del>90 minutes of coverage),
-returning immediately when new messages arrive.</p>
-<p><strong>Usage:</strong> Spawn at the start of every coordination session. Re-arm immediately
-when it returns.</p>
+sleep intervals needed. It loops up to 30 cycles (</del>4 hours of coverage),
+returning immediately when new messages arrive. A cron watchdog auto-respawns it
+every 30 min if it stops — no manual re-arming needed.</p>
+<p><strong>Usage:</strong> Spawn at the start of every coordination session. Set up a cron
+watchdog to keep it running automatically.</p>
 <details>
 <summary>message-listener.md</summary>
 
@@ -176,7 +178,7 @@ loops needed — `thrum wait` uses the daemon&#39;s WebSocket push internally.
 Your prompt contains the EXACT command to use after &quot;WAIT_CMD=&quot;. Use that
 command verbatim.
 
-**LOOP** (repeat up to 6 cycles, ~90 min coverage):
+**LOOP** (repeat up to 30 cycles, ~4 hour coverage):
 
 1. Run the WAIT_CMD from your prompt EXACTLY as given (Bash).
 2. If messages found (exit code 0), return them immediately.
@@ -201,8 +203,8 @@ NO_MESSAGES_TIMEOUT
 
 Always end with:
 
-RE-ARM: This listener has stopped. Spawn a new message-listener agent to
-continue listening.</code></pre>
+LISTENER_STOPPED: This listener has exhausted its cycles. The cron watchdog will
+respawn it automatically within 30 minutes.</code></pre>
 </details>
 
 <h2>Setup</h2>
