@@ -87,7 +87,7 @@ echo "$MERGED" | thrum context save 2>/dev/null || true
 # Also write to /tmp as backup (in case thrum context save fails)
 # Include agent identity + epoch in filename for multi-agent disambiguation
 WHOAMI_JSON=$(thrum whoami --json 2>/dev/null || echo "{}")
-AGENT_NAME=$(echo "$WHOAMI_JSON" | grep '"agent_id"' | sed 's/.*"agent_id": *"\([^"]*\)".*/\1/' || echo "unknown")
+AGENT_NAME=$(echo "$WHOAMI_JSON" | grep '"name"' | sed 's/.*"name": *"\([^"]*\)".*/\1/' || echo "unknown")
 AGENT_ROLE=$(echo "$WHOAMI_JSON" | grep '"role"' | sed 's/.*"role": *"\([^"]*\)".*/\1/' || echo "unknown")
 AGENT_MODULE=$(echo "$WHOAMI_JSON" | grep '"module"' | sed 's/.*"module": *"\([^"]*\)".*/\1/' || echo "unknown")
 EPOCH=$(date +%s)

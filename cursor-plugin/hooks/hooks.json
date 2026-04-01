@@ -1,12 +1,14 @@
 {
-  "SessionStart": [
-    {
-      "hooks": [
-        {
-          "type": "command",
-          "command": "thrum prime 2>/dev/null || echo 'Thrum not initialized (run: thrum init)'"
-        }
-      ]
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "thrum prime 2>/dev/null || echo 'Thrum not initialized (run: thrum init)'"
+          }
+        ]
+      }
+    ]
+  }
 }
