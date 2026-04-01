@@ -1,0 +1,9 @@
+---
+description: Prevent work in the shared Thrum sync worktree and keep agents inside the intended repo worktree.
+alwaysApply: true
+---
+
+# Thrum safety
+
+Never run `cd` or write operations inside `.git/thrum-sync/a-sync`.
+If the current task involves Thrum sync internals, inspect read-only unless the user explicitly asks for sync maintenance.

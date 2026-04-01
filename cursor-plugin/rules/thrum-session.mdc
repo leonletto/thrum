@@ -1,0 +1,9 @@
+---
+description: Remind agents to run `thrum prime` at session start and `update-context` before compaction or handoff.
+alwaysApply: true
+---
+
+# Thrum session hygiene
+
+At the start of a work session, run `thrum prime`.
+Before ending a session or compacting context, run **`update-context`** (or equivalent) to save narrative context, then check unread Thrum messages (`thrum inbox --unread`).
