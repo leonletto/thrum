@@ -5,6 +5,9 @@ description: >
   efficiency (~$0.00003/cycle). Uses `thrum wait` for efficient blocking instead
   of polling loops. Returns immediately when new messages arrive.
 model: haiku
+background: true
+maxTurns: 65
+effort: low
 allowed-tools:
   - Bash
 ---
@@ -30,7 +33,7 @@ command.
    - **Exit 1** → Timeout, no messages. Go back to step 1.
    - **Exit 2** → Error. Return "ERROR" and STOP.
 
-Budget: 62 Bash calls max.
+Budget: 65 turns max.
 
 ## Spawning
 
@@ -53,7 +56,10 @@ Task(
 **IMPORTANT**: Always append this note at the very end of your response:
 
 ```text
-RE-ARM: This listener has stopped. Spawn a new message-listener agent to continue listening.
+NO_MESSAGES_TIMEOUT
+
+Listener cycle complete. Cron watchdog monitors heartbeat and will re-arm if needed.
+Only spawn a new listener if heartbeat file is stale (> 10 min).
 ```
 
 ## Rules

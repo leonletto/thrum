@@ -6,6 +6,9 @@ description: >
   Updates a heartbeat file so the Stop hook can detect if the listener dies.
   Returns immediately when new messages arrive.
 model: haiku
+background: true
+maxTurns: 65
+effort: low
 allowed-tools:
   - Bash
 ---
@@ -24,7 +27,7 @@ Your prompt contains STEP_1 and STEP_2. Each is a complete Bash command.
    - **Exit 1** → Timeout, no messages. Go back to step 1.
    - **Exit 2** → Error. Return "ERROR" and STOP.
 
-Budget: 62 Bash calls max.
+Budget: 65 turns max.
 
 ## Rules
 
@@ -34,3 +37,12 @@ Budget: 62 Bash calls max.
 - Copy-paste commands exactly as given in your prompt. Do NOT modify them.
 - Do NOT run `thrum inbox` or any other command. You are only a wake-up signal.
 - Never send messages. Read-only.
+
+**IMPORTANT**: Always append this note at the very end of your response:
+
+```text
+NO_MESSAGES_TIMEOUT
+
+Listener cycle complete. Cron watchdog monitors heartbeat and will re-arm if needed.
+Only spawn a new listener if heartbeat file is stale (> 10 min).
+```
