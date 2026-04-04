@@ -379,6 +379,136 @@ func TestFormatPrimeContext_NoListenerInstruction_NoIdentity(t *testing.T) {
 	}
 }
 
+// setupPrimeTestFiles creates the .thrum directory structure needed for prime tests.
+func setupPrimeTestFiles(t *testing.T, repoPath string) {
+	t.Helper()
+	thrumDir := repoPath + "/.thrum"
+	os.MkdirAll(thrumDir+"/context", 0750)
+	os.MkdirAll(thrumDir+"/identities", 0750)
+
+	// Create a preamble file
+	os.WriteFile(thrumDir+"/context/test_agent_preamble.md",
+		[]byte("## Test Preamble\nTest instructions."), 0644)
+
+	// Create project_state.md
+	os.WriteFile(thrumDir+"/context/project_state.md",
+		[]byte("# Project State — test\n\n**Version:** v1.0.0\n"), 0644)
+
+	// Create an identity file (so listener section triggers in multi-agent)
+	os.WriteFile(thrumDir+"/identities/test_agent.json",
+		[]byte(`{"agent_id":"test_agent"}`), 0644)
+}
+
+func TestPrimeOutputMultiAgent(t *testing.T) {
+	repoPath := t.TempDir()
+	setupPrimeTestFiles(t, repoPath)
+	ctx := &PrimeContext{
+		Identity:        &WhoamiResult{AgentID: "test_agent", Role: "coordinator"},
+		Runtime:         "claude",
+		RepoPath:        repoPath,
+		SingleAgentMode: false,
+	}
+
+	output := FormatPrimeContext(ctx)
+	if !strings.Contains(output, "Agent Instructions") {
+		t.Error("missing Agent Instructions section")
+	}
+	if !strings.Contains(output, "Project State") {
+		t.Error("missing Project State section")
+	}
+	if !strings.Contains(output, "Multi-Agent Messaging Protocol") {
+		t.Error("missing Multi-Agent Messaging Protocol section")
+	}
+	if !strings.Contains(output, "Listener Rules") {
+		t.Error("missing Listener Rules section")
+	}
+	if !strings.Contains(output, "message-listener") {
+		t.Error("missing message-listener spawn instruction")
+	}
+}
+
+func TestPrimeOutputSingleAgent(t *testing.T) {
+	repoPath := t.TempDir()
+	setupPrimeTestFiles(t, repoPath)
+	ctx := &PrimeContext{
+		Identity:        &WhoamiResult{AgentID: "test_agent", Role: "coordinator"},
+		Runtime:         "claude",
+		RepoPath:        repoPath,
+		SingleAgentMode: true,
+	}
+
+	output := FormatPrimeContext(ctx)
+	if !strings.Contains(output, "Agent Instructions") {
+		t.Error("missing Agent Instructions section")
+	}
+	if !strings.Contains(output, "Project State") {
+		t.Error("missing Project State section")
+	}
+	if strings.Contains(output, "Multi-Agent Messaging Protocol") {
+		t.Error("should not contain Multi-Agent Messaging Protocol in single-agent mode")
+	}
+	if strings.Contains(output, "Listener Rules") {
+		t.Error("should not contain Listener Rules in single-agent mode")
+	}
+	if strings.Contains(output, "Start Background Message Listener") {
+		t.Error("should not contain listener spawn in single-agent mode")
+	}
+}
+
+func TestPrimeOutputInlinesSessionContext(t *testing.T) {
+	repoPath := t.TempDir()
+	setupPrimeTestFiles(t, repoPath)
+	ctx := &PrimeContext{
+		Identity:            &WhoamiResult{AgentID: "test_agent", Role: "coordinator"},
+		Runtime:             "claude",
+		RepoPath:            repoPath,
+		SingleAgentMode:     true,
+		SavedSessionContext: "## Working on feature X\nNext: finish tests",
+	}
+
+	output := FormatPrimeContext(ctx)
+	if !strings.Contains(output, "Session Context") {
+		t.Error("missing Session Context section")
+	}
+	if !strings.Contains(output, "Working on feature X") {
+		t.Error("session context content not inlined")
+	}
+}
+
+func TestPrimeOutputInlinesPreambleFromFile(t *testing.T) {
+	repoPath := t.TempDir()
+	setupPrimeTestFiles(t, repoPath)
+	ctx := &PrimeContext{
+		Identity: &WhoamiResult{AgentID: "test_agent", Role: "coordinator"},
+		Runtime:  "claude",
+		RepoPath: repoPath,
+	}
+
+	output := FormatPrimeContext(ctx)
+	// Should contain the preamble from the file
+	if !strings.Contains(output, "Test Preamble") {
+		t.Error("preamble file content not inlined in prime output")
+	}
+}
+
+func TestPrimeOutputInlinesProjectState(t *testing.T) {
+	repoPath := t.TempDir()
+	setupPrimeTestFiles(t, repoPath)
+	ctx := &PrimeContext{
+		Identity: &WhoamiResult{AgentID: "test_agent", Role: "coordinator"},
+		Runtime:  "claude",
+		RepoPath: repoPath,
+	}
+
+	output := FormatPrimeContext(ctx)
+	if !strings.Contains(output, "Project State — test") {
+		t.Error("project_state.md content not inlined in prime output")
+	}
+	if !strings.Contains(output, "**Version:** v1.0.0") {
+		t.Error("project state version not present")
+	}
+}
+
 func TestGetGitWorkContext(t *testing.T) {
 	// This test runs in the actual repo, so it should find git context
 	wc := getGitWorkContext()
