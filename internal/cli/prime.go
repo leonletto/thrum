@@ -8,20 +8,23 @@ import (
 	"strings"
 	"time"
 
+	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/runtime"
 )
 
 // PrimeContext contains all context sections gathered by `thrum prime`.
 type PrimeContext struct {
-	Identity    *WhoamiResult    `json:"identity,omitempty"`
-	Session     *SessionInfo     `json:"session,omitempty"`
-	Agents      *AgentsInfo      `json:"agents,omitempty"`
-	Messages    *MessagesInfo    `json:"messages,omitempty"`
-	WorkContext *WorkContextInfo `json:"work_context,omitempty"`
-	SyncState   *PrimeSyncInfo   `json:"sync_state,omitempty"`
-	RepoPath    string           `json:"repo_path,omitempty"`
-	Runtime     string           `json:"runtime,omitempty"`
+	Identity            *WhoamiResult    `json:"identity,omitempty"`
+	Session             *SessionInfo     `json:"session,omitempty"`
+	Agents              *AgentsInfo      `json:"agents,omitempty"`
+	Messages            *MessagesInfo    `json:"messages,omitempty"`
+	WorkContext         *WorkContextInfo `json:"work_context,omitempty"`
+	SyncState           *PrimeSyncInfo   `json:"sync_state,omitempty"`
+	RepoPath            string           `json:"repo_path,omitempty"`
+	Runtime             string           `json:"runtime,omitempty"`
+	SingleAgentMode     bool             `json:"single_agent_mode,omitempty"`
+	SavedSessionContext string           `json:"saved_session_context,omitempty"`
 }
 
 // PrimeSyncInfo contains sync health for prime output.
@@ -294,18 +297,64 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 		}
 	}
 
+	// Section 2: Preamble (role instructions)
+	if ctx.RepoPath != "" && ctx.Identity != nil {
+		thrumDir := filepath.Join(ctx.RepoPath, ".thrum")
+		agentName := ctx.Identity.AgentID
+		preamble, err := agentcontext.LoadPreamble(thrumDir, agentName)
+		if err == nil && len(preamble) > 0 {
+			out.WriteString("\n# Agent Instructions\n\n")
+			out.Write(preamble)
+			if preamble[len(preamble)-1] != '\n' {
+				out.WriteString("\n")
+			}
+		} else {
+			// Fallback: generate in-memory from role
+			out.WriteString("\n# Agent Instructions\n\n")
+			out.Write(agentcontext.DefaultPreamble())
+			out.WriteString("\n")
+		}
+	}
+
+	// Section 3: Project State
+	if ctx.RepoPath != "" {
+		projectStatePath := filepath.Join(ctx.RepoPath, ".thrum", "context", "project_state.md")
+		if data, err := os.ReadFile(projectStatePath); err == nil && len(data) > 0 { // #nosec G304 -- internal context file
+			out.WriteString("\n# Project State\n\n")
+			out.WriteString("The following is the current project state that is being maintained ")
+			out.WriteString("to give you a full understanding of where you are and what's next.\n\n")
+			out.Write(data)
+			if data[len(data)-1] != '\n' {
+				out.WriteString("\n")
+			}
+		}
+	}
+
+	// Section 4: Session Context (if saved)
+	if ctx.SavedSessionContext != "" {
+		out.WriteString("\n# Session Context\n\n")
+		out.WriteString(ctx.SavedSessionContext)
+		if ctx.SavedSessionContext[len(ctx.SavedSessionContext)-1] != '\n' {
+			out.WriteString("\n")
+		}
+	}
+
 	// Quick command reference
 	out.WriteString("\nCommands:\n")
-	out.WriteString("  thrum send \"msg\" --to @name    Send direct message\n")
-	out.WriteString("  thrum inbox                    Check messages (auto-marks read)\n")
-	out.WriteString("  thrum inbox --unread           Peek without marking read\n")
-	out.WriteString("  thrum sent                     Sent messages & receipts\n")
-	out.WriteString("  thrum message read --all       Mark all messages as read\n")
-	out.WriteString("  thrum reply <id> \"msg\"         Reply to message\n")
-	out.WriteString("  thrum send \"msg\" --to @everyone Broadcast to all\n")
+	if !ctx.SingleAgentMode {
+		out.WriteString("  thrum send \"msg\" --to @name    Send direct message\n")
+		out.WriteString("  thrum inbox                    Check messages (auto-marks read)\n")
+		out.WriteString("  thrum inbox --unread           Peek without marking read\n")
+		out.WriteString("  thrum sent                     Sent messages & receipts\n")
+		out.WriteString("  thrum message read --all       Mark all messages as read\n")
+		out.WriteString("  thrum reply <id> \"msg\"         Reply to message\n")
+		out.WriteString("  thrum send \"msg\" --to @everyone Broadcast to all\n")
+	}
 	out.WriteString("  thrum status                   Agent/daemon status\n")
 	out.WriteString("  thrum team                     List team members\n")
-	out.WriteString("  thrum wait                     Block until message arrives\n")
+	if !ctx.SingleAgentMode {
+		out.WriteString("  thrum wait                     Block until message arrives\n")
+	}
 	out.WriteString("  thrum <cmd> --help             Detailed command usage\n")
 
 	// Tip: suggest thrum setup claude-md if CLAUDE.md lacks thrum section
@@ -323,25 +372,49 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 		}
 	}
 
-	// Listener auto-spawn instruction for Claude Code sessions with active identity
-	if ctx.Identity != nil && ctx.Runtime == "claude" {
+	// Sections 5-6: Multi-agent only
+	if !ctx.SingleAgentMode && ctx.Identity != nil && ctx.Runtime == "claude" {
 		repoPath := ctx.RepoPath
 		if repoPath == "" {
 			repoPath = "."
 		}
-		// Check for identity file on disk as extra confirmation
 		identDir := filepath.Join(repoPath, ".thrum", "identities")
 		if entries, err := os.ReadDir(identDir); err == nil && len(entries) > 0 {
-			out.WriteString("\n⚠ ACTION REQUIRED: Start background message listener now:\n")
-			fmt.Fprintf(&out, "  Task(subagent_type=\"message-listener\", model=\"haiku\", run_in_background=true,\n")
-			fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages.\\nSTEP_1: %s/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")\n", repoPath)
+			// Section 5: Messaging protocol
+			out.WriteString("\n# Multi-Agent Messaging Protocol\n\n")
+			out.WriteString("## Listener Rules\n\n")
+			out.WriteString("1. **ALWAYS keep a background message listener running.** ")
+			out.WriteString("Missing messages = broken coordination.\n")
+			out.WriteString("2. **Check inbox before starting work and at every breakpoint.** ")
+			out.WriteString("`thrum inbox --unread`\n")
+			out.WriteString("3. **Send to agent NAMES, never role names.** ")
+			out.WriteString("Run `thrum team` first.\n")
+			out.WriteString("4. **Save context before compaction.** ")
+			out.WriteString("Use `/thrum:update-context` skill.\n\n")
+			// Command reference
+			out.WriteString("## Commands\n\n")
+			out.WriteString("**Check messages:** `thrum inbox --unread`\n")
+			out.WriteString("**Send message:** `thrum send \"message\" --to @<agent_name>`\n")
+			out.WriteString("**Reply:** `thrum reply <MSG_ID> \"response\"`\n")
+			out.WriteString("**Who's online:** `thrum team`\n")
+			out.WriteString("**Mark all read:** `thrum message read --all`\n\n")
+			// Priority handling
+			out.WriteString("## Priority Handling\n\n")
+			out.WriteString("| Priority | Action |\n")
+			out.WriteString("|----------|--------|\n")
+			out.WriteString("| `critical` | Stop current work immediately |\n")
+			out.WriteString("| `high` | Process at next breakpoint |\n")
+			out.WriteString("| `normal` | Process when current sub-task completes |\n")
+			out.WriteString("| `low` | Queue, process when convenient |\n\n")
+			// Anti-patterns
+			out.WriteString("## Anti-Patterns\n\n")
+			out.WriteString("- **Deaf Agent** — No listener running. You miss messages.\n")
+			out.WriteString("- **Silent Agent** — Never sends status updates.\n\n")
 
-			// Check for saved context and prompt agent to load it
-			contextDir := filepath.Join(repoPath, ".thrum", "context")
-			if ctxEntries, err := os.ReadDir(contextDir); err == nil && len(ctxEntries) > 0 {
-				out.WriteString("\n⚠ ACTION REQUIRED: Load saved work context:\n")
-				out.WriteString("  Run `thrum context show` to restore previous session context (decisions, next steps, work-in-progress).\n")
-			}
+			// Section 6: Listener spawn instructions
+			out.WriteString("\n## Start Background Message Listener\n\n")
+			fmt.Fprintf(&out, "  Task(subagent_type=\"message-listener\", model=\"haiku\",\n")
+			fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages.\\nSTEP_1: %s/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")\n", repoPath)
 		}
 	}
 

@@ -3880,6 +3880,21 @@ Examples:
 			}
 			result := cli.ContextPrime(client, agentID)
 
+			// Wire SingleAgentMode from config
+			if result.RepoPath != "" {
+				thrumDir := filepath.Join(result.RepoPath, ".thrum")
+				if cfg, err := config.LoadThrumConfig(thrumDir); err == nil {
+					result.SingleAgentMode = cfg.Daemon.SingleAgentMode
+				}
+				// Wire SavedSessionContext
+				if result.Identity != nil {
+					ctxPath := filepath.Join(thrumDir, "context", result.Identity.AgentID+".md")
+					if data, err := os.ReadFile(ctxPath); err == nil { // #nosec G304 -- internal context file
+						result.SavedSessionContext = string(data)
+					}
+				}
+			}
+
 			if flagJSON {
 				output, _ := json.MarshalIndent(result, "", "  ")
 				fmt.Println(string(output))

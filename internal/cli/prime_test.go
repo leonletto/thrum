@@ -276,7 +276,7 @@ func TestFormatPrimeContext_ListenerInstruction_ClaudeRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Also create a context file to test context show directive
+	// Also create a context file to test session context inlining
 	contextDir := tmpDir + "/.thrum/context"
 	if err := os.MkdirAll(contextDir, 0750); err != nil {
 		t.Fatal(err)
@@ -291,19 +291,20 @@ func TestFormatPrimeContext_ListenerInstruction_ClaudeRuntime(t *testing.T) {
 			Role:    "impl",
 			Module:  "auth",
 		},
-		RepoPath: tmpDir,
-		Runtime:  "claude",
+		RepoPath:            tmpDir,
+		Runtime:             "claude",
+		SavedSessionContext: "# Context",
 	}
 
 	output := FormatPrimeContext(ctx)
 
 	checks := []string{
-		"ACTION REQUIRED",
-		"Start background message listener",
+		"Multi-Agent Messaging Protocol",
+		"Start Background Message Listener",
 		"message-listener",
 		"--timeout 8m",
 		tmpDir,
-		"thrum context show",
+		"Session Context",
 	}
 	for _, check := range checks {
 		if !strings.Contains(output, check) {
@@ -312,8 +313,8 @@ func TestFormatPrimeContext_ListenerInstruction_ClaudeRuntime(t *testing.T) {
 	}
 }
 
-func TestFormatPrimeContext_NoContextDirective_WhenNoContextFiles(t *testing.T) {
-	// Create temp dir with identity but NO context files
+func TestFormatPrimeContext_NoListenerInSingleAgentMode(t *testing.T) {
+	// Create temp dir with identity but single-agent mode enabled
 	tmpDir := t.TempDir()
 	identDir := tmpDir + "/.thrum/identities"
 	if err := os.MkdirAll(identDir, 0750); err != nil {
@@ -329,19 +330,23 @@ func TestFormatPrimeContext_NoContextDirective_WhenNoContextFiles(t *testing.T) 
 			Role:    "impl",
 			Module:  "auth",
 		},
-		RepoPath: tmpDir,
-		Runtime:  "claude",
+		RepoPath:        tmpDir,
+		Runtime:         "claude",
+		SingleAgentMode: true,
 	}
 
 	output := FormatPrimeContext(ctx)
 
-	// Should have listener instruction but NOT context show
-	if !strings.Contains(output, "message-listener") {
-		t.Errorf("output should contain listener instruction:\n%s", output)
+	// Should NOT have multi-agent protocol section (sections 5-6)
+	if strings.Contains(output, "Multi-Agent Messaging Protocol") {
+		t.Errorf("output should not contain messaging protocol in single-agent mode:\n%s", output)
 	}
-	if strings.Contains(output, "thrum context show") {
-		t.Errorf("output should not contain context show when no context files exist:\n%s", output)
+	// The "Start Background Message Listener" heading is section 6 — should be absent
+	if strings.Contains(output, "Start Background Message Listener") {
+		t.Errorf("output should not contain listener spawn section in single-agent mode:\n%s", output)
 	}
+	// Note: DefaultPreamble still contains "message-listener" until Task 9 strips it.
+	// That's fine — the preamble is section 2, not sections 5-6.
 }
 
 func TestFormatPrimeContext_NoListenerInstruction_NonClaudeRuntime(t *testing.T) {
