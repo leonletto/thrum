@@ -23,6 +23,20 @@ if ! thrum daemon status &>/dev/null; then
 fi
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+THRUM_CONFIG="${PROJECT_DIR}/.thrum/config.json"
+
+# Early exit: no thrum workspace
+if [ ! -f "$THRUM_CONFIG" ]; then
+  exit 0
+fi
+
+# Early exit: single-agent mode
+if command -v jq >/dev/null 2>&1; then
+  SAM=$(jq -r '.daemon.single_agent_mode // false' "$THRUM_CONFIG" 2>/dev/null)
+  if [ "$SAM" = "true" ]; then
+    exit 0
+  fi
+fi
 
 # Phase 1: Check for unread messages first (instant check)
 existing=$(cd "$PROJECT_DIR" && thrum inbox --unread --json 2>/dev/null)
