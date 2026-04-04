@@ -3562,6 +3562,8 @@ func contextShowCmd() *cobra.Command {
 	var flagAgent string
 	var flagRaw bool
 	var flagNoPreamble bool
+	var flagProject bool
+	var flagSession bool
 
 	cmd := &cobra.Command{
 		Use:     "show",
@@ -3571,8 +3573,9 @@ func contextShowCmd() *cobra.Command {
 Also available as 'thrum context load'.
 
 Examples:
-  thrum context show
-  thrum context load
+  thrum context show                # Show both project state and session context
+  thrum context show --project      # Show project state only
+  thrum context show --session      # Show session context only
   thrum context show --agent coordinator
   thrum context show --raw
   thrum context show --no-preamble`,
@@ -3586,7 +3589,46 @@ Examples:
 			}
 
 			absRepo, _ := filepath.Abs(flagRepo)
+			thrumDir := filepath.Join(absRepo, ".thrum")
 
+			// Determine what to show: default is both
+			showProject := flagProject || (!flagProject && !flagSession)
+			showSession := flagSession || (!flagProject && !flagSession)
+
+			// Show project state
+			if showProject {
+				projectPath := filepath.Join(thrumDir, "context", "project_state.md")
+				if data, err := os.ReadFile(projectPath); err == nil && len(data) > 0 { // #nosec G304 -- internal context file
+					if flagRaw {
+						fmt.Println("<!-- project_state: .thrum/context/project_state.md -->")
+						fmt.Print(string(data))
+						if data[len(data)-1] != '\n' {
+							fmt.Println()
+						}
+						fmt.Println("<!-- end project_state -->")
+					} else {
+						fmt.Println("--- Project State ---")
+						fmt.Println()
+						fmt.Print(string(data))
+						if data[len(data)-1] != '\n' {
+							fmt.Println()
+						}
+					}
+					if showSession {
+						fmt.Println()
+					}
+				} else if flagProject {
+					// Only show missing message if --project was explicitly requested
+					fmt.Println("No project state found (.thrum/context/project_state.md)")
+					return nil
+				}
+			}
+
+			if !showSession {
+				return nil
+			}
+
+			// Show session context (existing behavior)
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
@@ -3604,7 +3646,9 @@ Examples:
 			}
 
 			if !resp.HasContext && !resp.HasPreamble {
-				fmt.Printf("No context saved for %s\n", resp.AgentName)
+				if !showProject {
+					fmt.Printf("No context saved for %s\n", resp.AgentName)
+				}
 				return nil
 			}
 
@@ -3626,6 +3670,10 @@ Examples:
 				}
 			} else {
 				// Normal mode: header + seamless content
+				if showProject {
+					fmt.Println("--- Session Context ---")
+					fmt.Println()
+				}
 				if resp.HasContext {
 					fmt.Printf("# Context for %s (%d bytes, updated %s)\n\n", resp.AgentName, resp.Size, resp.UpdatedAt)
 				} else {
@@ -3651,6 +3699,8 @@ Examples:
 	cmd.Flags().StringVar(&flagAgent, "agent", "", "Override agent name")
 	cmd.Flags().BoolVar(&flagRaw, "raw", false, "Raw output with file boundary markers, no header")
 	cmd.Flags().BoolVar(&flagNoPreamble, "no-preamble", false, "Exclude preamble from output")
+	cmd.Flags().BoolVar(&flagProject, "project", false, "Show project state only")
+	cmd.Flags().BoolVar(&flagSession, "session", false, "Show session context only")
 
 	return cmd
 }
