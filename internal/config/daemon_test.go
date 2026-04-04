@@ -414,6 +414,60 @@ func TestLoadThrumConfig_ScheduleFromJSON(t *testing.T) {
 	}
 }
 
+func TestSingleAgentModeConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	// Write config with single_agent_mode
+	cfgJSON := `{"daemon":{"single_agent_mode":true,"local_only":true}}`
+	if err := os.WriteFile(configPath, []byte(cfgJSON), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.Daemon.SingleAgentMode {
+		t.Error("expected SingleAgentMode=true")
+	}
+	if !cfg.Daemon.LocalOnly {
+		t.Error("expected LocalOnly=true")
+	}
+}
+
+func TestSingleAgentModeConfig_DefaultFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Daemon.SingleAgentMode {
+		t.Error("expected SingleAgentMode=false when no config file exists")
+	}
+}
+
+func TestSingleAgentModeConfig_RoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.ThrumConfig{
+		Daemon: config.DaemonConfig{
+			LocalOnly:       true,
+			SingleAgentMode: true,
+		},
+	}
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	loaded, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !loaded.Daemon.SingleAgentMode {
+		t.Error("expected SingleAgentMode=true after round-trip")
+	}
+}
+
 func TestSaveThrumConfig_PreservesUnknownKeys(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")

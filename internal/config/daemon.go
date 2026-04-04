@@ -67,9 +67,10 @@ type RuntimeConfig struct {
 
 // DaemonConfig holds daemon-specific settings.
 type DaemonConfig struct {
-	LocalOnly    bool   `json:"local_only,omitempty"`
-	SyncInterval int    `json:"sync_interval,omitempty"` // seconds; 0 means use default (60)
-	WSPort       string `json:"ws_port,omitempty"`       // "auto" or specific port number
+	LocalOnly       bool   `json:"local_only,omitempty"`
+	SyncInterval    int    `json:"sync_interval,omitempty"`    // seconds; 0 means use default (60)
+	WSPort          string `json:"ws_port,omitempty"`          // "auto" or specific port number
+	SingleAgentMode bool   `json:"single_agent_mode,omitempty"`
 }
 
 // BackupConfig holds backup-related settings.
