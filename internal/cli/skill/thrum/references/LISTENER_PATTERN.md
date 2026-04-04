@@ -10,7 +10,6 @@ file so the Stop hook can detect if the listener dies and prompt a restart.
 Task(
   subagent_type="message-listener",
   model="haiku",
-  run_in_background=true,
   prompt="Listen for Thrum messages.\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -15s"
 )
 ```
@@ -18,9 +17,12 @@ Task(
 Replace `/path/to/repo` with the actual repo path. When using the Thrum plugin,
 `thrum prime` outputs a ready-to-use spawn instruction with the correct path.
 
+Note: `background: true` is set in the agent frontmatter, so `run_in_background`
+is not needed in the spawn call.
+
 ## How It Works
 
-1. **Spawn** — Launch as background Task with `run_in_background: true`
+1. **Spawn** — Launch as background Task (frontmatter sets `background: true`)
 2. **Heartbeat** — Listener calls
    `scripts/thrum-startup.sh --listener-heartbeat` to update its heartbeat in
    the identity file
@@ -65,7 +67,7 @@ to avoid duplicates.
 ```text
 CronCreate(
   cron="*/30 * * * *",
-  prompt="Check the listener heartbeat file at .thrum/identities/<agent_id>.json.\nExtract the .listener.heartbeat timestamp. If it is missing or older than\n10 minutes, spawn a new listener:\n\nAgent(subagent_type=\"message-listener\", model=\"haiku\", run_in_background=true, prompt=\"Listen for Thrum messages.\\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")"
+  prompt="Check the listener heartbeat file at .thrum/identities/<agent_id>.json.\nExtract the .listener.heartbeat timestamp. If it is missing or older than\n10 minutes, spawn a new listener:\n\nAgent(subagent_type=\"message-listener\", model=\"haiku\", prompt=\"Listen for Thrum messages.\\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")"
 )
 ```
 
