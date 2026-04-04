@@ -320,6 +320,7 @@ Examples:
 					cfg = &config.ThrumConfig{}
 				}
 				cfg.Runtime.Primary = selectedRuntime
+				cfg.Daemon.SingleAgentMode = true // Default: single-agent mode
 				if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
 					return fmt.Errorf("failed to save config: %w", err)
 				}
