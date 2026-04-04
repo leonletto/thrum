@@ -105,8 +105,11 @@ thrum --repo "$THRUM_HOME" quickstart \
   --intent "$AGENT_INTENT" \
   --json
 
-# 4. Check inbox and output context
-thrum --repo "$THRUM_HOME" inbox --unread --json
+# 4. Check inbox (multi-agent only)
+SAM=$(jq -r '.daemon.single_agent_mode // false' "$THRUM_HOME/.thrum/config.json" 2>/dev/null)
+if [ "$SAM" != "true" ]; then
+  thrum --repo "$THRUM_HOME" inbox --unread --json
+fi
 
 # 5. Optional: Announce presence
 if [ "${THRUM_ANNOUNCE:-false}" = "true" ]; then
