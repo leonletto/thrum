@@ -327,6 +327,36 @@ Examples:
 				}
 			}
 
+			// Step 3b: Generate project_state.md if it doesn't exist
+			if !dryRun {
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+				projectStatePath := filepath.Join(thrumDir, "context", "project_state.md")
+				_ = os.MkdirAll(filepath.Dir(projectStatePath), 0750)
+				if _, err := os.Stat(projectStatePath); os.IsNotExist(err) {
+					repoName := filepath.Base(flagRepo)
+					branch, _ := exec.Command("git", "-C", flagRepo, "branch", "--show-current").Output()
+					version, _ := exec.Command("git", "-C", flagRepo, "describe", "--tags", "--abbrev=0").Output()
+					beads := ""
+					if _, err := os.Stat(filepath.Join(flagRepo, ".beads")); err == nil {
+						if out, err := exec.Command("bd", "stats", "--short").Output(); err == nil {
+							beads = strings.TrimSpace(string(out))
+						}
+					}
+					opts := &agentcontext.ProjectStateOpts{
+						RepoName: repoName,
+						Language: agentcontext.DetectLanguage(flagRepo),
+						Version:  strings.TrimSpace(string(version)),
+						Branch:   strings.TrimSpace(string(branch)),
+						Beads:    beads,
+					}
+					content := agentcontext.GenerateProjectState(opts)
+					_ = os.WriteFile(projectStatePath, content, 0644) //#nosec G306 -- markdown file
+					if !flagQuiet {
+						fmt.Println("✓ Generated .thrum/context/project_state.md")
+					}
+				}
+			}
+
 			// Step 4: Runtime config generation (if not cli-only)
 			if selectedRuntime != "" && selectedRuntime != "cli-only" {
 				rtOpts := cli.RuntimeInitOptions{

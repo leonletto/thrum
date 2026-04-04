@@ -587,6 +587,96 @@ func TestRoleAwarePreambleUnknownRole(t *testing.T) {
 	}
 }
 
+func TestGenerateProjectState(t *testing.T) {
+	opts := &ProjectStateOpts{
+		RepoName: "test-project",
+		Language: "Go",
+		Version:  "v1.2.3",
+		Branch:   "main",
+	}
+	content := GenerateProjectState(opts)
+	s := string(content)
+	if !strings.Contains(s, "# Project State — test-project") {
+		t.Error("missing header")
+	}
+	if !strings.Contains(s, "**Codebase:** Go") {
+		t.Error("missing language")
+	}
+	if !strings.Contains(s, "**Version:** v1.2.3") {
+		t.Error("missing version")
+	}
+	if !strings.Contains(s, "## Recent Sessions") {
+		t.Error("missing Recent Sessions section")
+	}
+	if !strings.Contains(s, "## Key Architecture Files") {
+		t.Error("missing Key Architecture Files section")
+	}
+}
+
+func TestGenerateProjectStateMinimal(t *testing.T) {
+	opts := &ProjectStateOpts{
+		RepoName: "bare-repo",
+		Branch:   "develop",
+	}
+	content := GenerateProjectState(opts)
+	s := string(content)
+	if !strings.Contains(s, "# Project State — bare-repo") {
+		t.Error("missing header")
+	}
+	if !strings.Contains(s, "**Branch:** develop") {
+		t.Error("missing branch")
+	}
+	// Blank codebase/version lines should still be present
+	if !strings.Contains(s, "**Codebase:**") {
+		t.Error("missing codebase line")
+	}
+	if !strings.Contains(s, "**Version:**") {
+		t.Error("missing version line")
+	}
+}
+
+func TestGenerateProjectStateWithBeads(t *testing.T) {
+	opts := &ProjectStateOpts{
+		RepoName: "thrum",
+		Language: "Go + Node.js",
+		Version:  "v0.6.3",
+		Branch:   "main",
+		Beads:    "32 open, 245 closed",
+	}
+	content := GenerateProjectState(opts)
+	s := string(content)
+	if !strings.Contains(s, "**Beads:** 32 open, 245 closed") {
+		t.Error("missing beads stats")
+	}
+}
+
+func TestDetectLanguage(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644)
+	lang := DetectLanguage(dir)
+	if lang != "Go" {
+		t.Errorf("expected Go, got %q", lang)
+	}
+}
+
+func TestDetectLanguageMultiple(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644)
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0644)
+	lang := DetectLanguage(dir)
+	if lang != "Go + Node.js" {
+		t.Errorf("expected 'Go + Node.js', got %q", lang)
+	}
+}
+
+func TestDetectLanguageNone(t *testing.T) {
+	dir := t.TempDir()
+	lang := DetectLanguage(dir)
+	if lang != "" {
+		t.Errorf("expected empty string, got %q", lang)
+	}
+}
+
 func TestWriteStrategies(t *testing.T) {
 	thrumDir := t.TempDir()
 

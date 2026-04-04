@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/leonletto/thrum/internal/config"
 )
@@ -127,6 +128,81 @@ func SavePreamble(thrumDir, agentName string, content []byte) error {
 	}
 
 	return nil
+}
+
+// ProjectStateOpts controls what gets auto-filled in the skeleton.
+type ProjectStateOpts struct {
+	RepoName string
+	Language string // Auto-detected: "Go", "Python", "Node.js", etc.
+	Version  string // From latest git tag
+	Branch   string
+	Beads    string // e.g. "32 open, 245 closed" or empty
+}
+
+// GenerateProjectState creates the project_state.md skeleton with auto-detected fields.
+func GenerateProjectState(opts *ProjectStateOpts) []byte {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "# Project State — %s\n\n", opts.RepoName)
+	fmt.Fprintf(&buf, "**Last Updated:** %s\n", time.Now().Format("2006-01-02"))
+	buf.WriteString("**Phase:**\n\n---\n\n")
+	buf.WriteString("## Current State Summary\n\n")
+	if opts.Language != "" {
+		fmt.Fprintf(&buf, "**Codebase:** %s\n", opts.Language)
+	} else {
+		buf.WriteString("**Codebase:**\n")
+	}
+	if opts.Version != "" {
+		fmt.Fprintf(&buf, "**Version:** %s\n", opts.Version)
+	} else {
+		buf.WriteString("**Version:**\n")
+	}
+	fmt.Fprintf(&buf, "**Branch:** %s\n", opts.Branch)
+	if opts.Beads != "" {
+		fmt.Fprintf(&buf, "**Beads:** %s\n", opts.Beads)
+	}
+	buf.WriteString("\n### Architecture Health\n\n")
+	buf.WriteString("| Component | Status | Details |\n")
+	buf.WriteString("|-----------|--------|--------|\n")
+	buf.WriteString("| | | |\n")
+	buf.WriteString("\n### Key Architecture Decisions\n\n-\n")
+	buf.WriteString("\n---\n\n## Recent Sessions\n")
+	buf.WriteString("\n---\n\n## Open Epics / Active Work\n")
+	buf.WriteString("\n---\n\n## What's Queued / Next Steps\n\n1.\n")
+	buf.WriteString("\n---\n\n## Key Architecture Files\n\n")
+	buf.WriteString("| File/Dir | Purpose |\n")
+	buf.WriteString("|----------|---------|\n")
+	buf.WriteString("| | |\n")
+	return buf.Bytes()
+}
+
+// DetectLanguage checks for common project files and returns detected languages.
+func DetectLanguage(repoRoot string) string {
+	checks := []struct {
+		file string
+		lang string
+	}{
+		{"go.mod", "Go"},
+		{"Cargo.toml", "Rust"},
+		{"package.json", "Node.js"},
+		{"pyproject.toml", "Python"},
+		{"setup.py", "Python"},
+		{"pom.xml", "Java"},
+		{"build.gradle", "Java"},
+	}
+	var found []string
+	seen := map[string]bool{}
+	for _, c := range checks {
+		if _, err := os.Stat(filepath.Join(repoRoot, c.file)); err == nil {
+			if !seen[c.lang] {
+				found = append(found, c.lang)
+				seen[c.lang] = true
+			}
+		}
+	}
+	if len(found) == 0 {
+		return ""
+	}
+	return strings.Join(found, " + ")
 }
 
 // DefaultPreamble returns the default preamble template with basic thrum commands.
