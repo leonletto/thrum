@@ -60,6 +60,18 @@
           }
         ]
       }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/post-compact-recover.sh",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
