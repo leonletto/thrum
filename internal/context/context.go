@@ -205,59 +205,29 @@ func DetectLanguage(repoRoot string) string {
 	return strings.Join(found, " + ")
 }
 
-// DefaultPreamble returns the default preamble template with basic thrum commands.
+// DefaultPreamble returns the default mode-independent preamble.
+// Messaging and listener content lives in FormatPrimeContext() section 5 (multi-agent only).
 func DefaultPreamble() []byte {
 	return []byte(`## Thrum Quick Reference
 
+**Save session context:** ` + "`/thrum:update-context`" + ` — saves ephemeral work state
+**Update project state:** ` + "`/thrum:update-project`" + ` — updates durable project state
+**Load full briefing:** ` + "`thrum prime`" + ` — identity, preamble, project state, session context
+**Show context:** ` + "`thrum context show`" + ` — both project state + session context
+**Show project only:** ` + "`thrum context show --project`" + `
+**Show session only:** ` + "`thrum context show --session`" + `
+
 ## Operating Principles
 
-1. **ALWAYS keep a background message listener running.** [LISTENER RULE #1]
-   Missing messages = broken coordination. Spawn on start, use cron watchdog for auto-recovery.
-2. **Check inbox before starting work and at every breakpoint.**
-   ` + "`thrum inbox --unread`" + ` — never assume you have the full picture.
-3. **Send to agent NAMES, never role names.**
-   ` + "`thrum send \"msg\" --to @coordinator_main`" + ` not ` + "`--to @coordinator`" + `.
-   Role names fan out to ALL agents with that role. Run ` + "`thrum team`" + ` first.
-4. **Save context before compaction.**
-   Use ` + "`/thrum:update-context`" + ` skill. **NEVER run ` + "`thrum context save`" + ` manually** — it overwrites accumulated session state.
-
-## Startup Protocol
-
-1. Run ` + "`thrum prime`" + ` — get spawn command with correct repo path pre-filled
-2. Spawn background listener + cron watchdog (see below) [LISTENER RULE #2]
-3. Check inbox: ` + "`thrum inbox --unread`" + `
-4. Check team: ` + "`thrum team`" + `
+1. **Save context before compaction.**
+   Use ` + "`/thrum:update-context`" + ` skill for ephemeral state.
+   Use ` + "`/thrum:update-project`" + ` skill for durable project state.
+2. **Run ` + "`thrum prime`" + ` on session start or after compaction** — it loads everything you need.
+3. **Keep project_state.md current** — update it at session end so the next session starts informed.
 
 ## Anti-Patterns
 
-` + "❌" + ` **Deaf Agent** — No listener running. You miss messages, block coordination, leave teammates waiting.
-` + "❌" + ` **Silent Agent** — Never sends status updates. Coordinator cannot track progress or unblock dependencies.
 ` + "❌" + ` **Context Hog** — Reads entire files into context. Use ` + "`auggie-mcp codebase-retrieval`" + ` instead.
-
-## Background Message Listener [LISTENER RULE #2]
-
-On session start, spawn a background listener AND a cron watchdog. The listener
-blocks on ` + "`thrum wait`" + ` for up to 4 hours (~30 cycles of 8 min). The cron watchdog
-checks every 30 minutes and respawns the listener if it has died. This eliminates
-manual re-arming entirely.
-
-**Step 1 — Spawn initial listener:**
-
-` + "```text" + `
-Task(subagent_type="message-listener", model="haiku", run_in_background=true,
-  prompt="Listen for Thrum messages.\nSTEP_1: <repo>/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -15s")
-` + "```" + `
-
-Replace ` + "`<repo>`" + ` with the actual repo path (shown in ` + "`thrum prime`" + ` output).
-
-**Step 2 — Create cron watchdog:**
-
-` + "```text" + `
-CronCreate(cron="*/30 * * * *",
-  prompt="If there is no background message listener running, spawn one now:\n\nAgent(subagent_type=\"message-listener\", model=\"haiku\", run_in_background=true, prompt=\"Listen for Thrum messages.\\nSTEP_1: <repo>/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")")
-` + "```" + `
-
-The cron fires every 30 min. If a listener is running, it skips. If not, it spawns one.
 
 ## Agent Strategies
 
@@ -266,18 +236,6 @@ Read these strategy files for operational patterns. They are in ` + "`.thrum/str
 - ` + "`.thrum/strategies/sub-agent-strategy.md`" + ` — When and how to delegate work to sub-agents
 - ` + "`.thrum/strategies/thrum-registration.md`" + ` — Registration, messaging, and coordination patterns
 - ` + "`.thrum/strategies/resume-after-context-loss.md`" + ` — How to resume work after compaction or session restart
-
-## Command Reference
-
-**Check messages:** ` + "`thrum inbox --unread`" + ` (does not mark as read)
-**Check sent status:** ` + "`thrum sent --unread`" + ` (messages with unread recipients)
-**Mark all read:** ` + "`thrum message read --all`" + `
-**Send message:** ` + "`thrum send \"message\" --to @<agent_name>`" + ` — ALWAYS use the specific agent name (e.g., ` + "`@coordinator_main`" + `), NEVER the role (e.g., ` + "`@coordinator`" + `). Role names fan out to ALL agents with that role. Run ` + "`thrum team`" + ` to find exact names.
-**Reply:** ` + "`thrum reply <MSG_ID> \"response\"`" + `
-**Status:** ` + "`thrum status`" + `
-**Who's online:** ` + "`thrum team`" + `
-
-` + "⚠" + ` **REMINDER: Is your listener + cron watchdog running? If not, set them up now.** [LISTENER RULE #3]
 `)
 }
 

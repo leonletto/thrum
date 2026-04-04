@@ -311,26 +311,37 @@ func TestDefaultPreambleContent(t *testing.T) {
 		t.Fatal("DefaultPreamble should not be empty")
 	}
 	s := string(content)
+
+	// Mode-independent content MUST be present
 	for _, keyword := range []string{
-		"thrum inbox", "thrum send", "thrum reply", "thrum status",
-		"thrum team", "thrum context save",
-		"NEVER the role",
-		"thrum message read --all",
-		"Background Message Listener",
-		"message-listener",
-		"thrum-startup.sh --listener-heartbeat",
+		"thrum context",
+		"thrum prime",
 		".thrum/strategies/sub-agent-strategy.md",
 		".thrum/strategies/thrum-registration.md",
 		".thrum/strategies/resume-after-context-loss.md",
 		"Operating Principles",
-		"Startup Protocol",
 		"Anti-Patterns",
-		"Deaf Agent",
-		"Silent Agent",
 		"Context Hog",
 	} {
 		if !strings.Contains(s, keyword) {
-			t.Errorf("DefaultPreamble missing keyword %q", keyword)
+			t.Errorf("DefaultPreamble missing mode-independent keyword %q", keyword)
+		}
+	}
+
+	// Messaging/listener content MUST be absent (moved to prime section 5)
+	for _, keyword := range []string{
+		"LISTENER RULE",
+		"thrum inbox",
+		"thrum send",
+		"CronCreate",
+		"Deaf Agent",
+		"Silent Agent",
+		"Background Message Listener",
+		"message-listener",
+		"Startup Protocol",
+	} {
+		if strings.Contains(s, keyword) {
+			t.Errorf("DefaultPreamble should not contain messaging keyword %q", keyword)
 		}
 	}
 }
@@ -558,8 +569,8 @@ func TestRoleAwarePreamble(t *testing.T) {
 			if !strings.Contains(s, "Operating Principles") {
 				t.Errorf("RoleAwarePreamble(%q): missing base preamble content", tc.role)
 			}
-			if !strings.Contains(s, "thrum inbox") {
-				t.Errorf("RoleAwarePreamble(%q): missing command reference", tc.role)
+			if !strings.Contains(s, "thrum prime") {
+				t.Errorf("RoleAwarePreamble(%q): missing context command reference", tc.role)
 			}
 		})
 	}
