@@ -127,6 +127,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(pingCmd())
 
 	// Configuration
+	rootCmd.AddCommand(singleAgentModeCmd())
 	rootCmd.AddCommand(configGroupCmd())
 
 	// Subcommand groups
@@ -715,6 +716,59 @@ func runSkillsInstall(repoPath, runtimeFlag string, force, dryRun bool) error {
 // isInteractive returns true if stdin is a terminal (not piped/redirected).
 func isInteractive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd())) // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
+}
+
+func singleAgentModeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "single-agent-mode [true|false]",
+		Short: "Enable or disable single-agent mode",
+		Long: `Toggle single-agent mode. When enabled, Thrum skips all messaging
+infrastructure (listener, inbox, stop hook checks) and focuses on
+context management features only.
+
+Examples:
+  thrum single-agent-mode true    # Enable (no listener, no messaging)
+  thrum single-agent-mode false   # Disable (full multi-agent messaging)
+  thrum single-agent-mode         # Show current mode`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			if _, err := os.Stat(thrumDir); os.IsNotExist(err) {
+				return fmt.Errorf("not in a thrum workspace (run thrum init first)")
+			}
+			cfg, err := config.LoadThrumConfig(thrumDir)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			if len(args) == 0 {
+				if cfg.Daemon.SingleAgentMode {
+					fmt.Println("single-agent mode: enabled")
+				} else {
+					fmt.Println("single-agent mode: disabled (multi-agent)")
+				}
+				fmt.Println("\nUsage: thrum single-agent-mode [true|false]")
+				return nil
+			}
+			switch strings.ToLower(args[0]) {
+			case "true", "on", "1":
+				cfg.Daemon.SingleAgentMode = true
+			case "false", "off", "0":
+				cfg.Daemon.SingleAgentMode = false
+			default:
+				return fmt.Errorf("expected true or false, got %q", args[0])
+			}
+			if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+				return fmt.Errorf("failed to save config: %w", err)
+			}
+			if cfg.Daemon.SingleAgentMode {
+				fmt.Println("Single-agent mode enabled. Messaging infrastructure disabled.")
+			} else {
+				fmt.Println("Single-agent mode disabled. Full messaging active on next thrum prime.")
+			}
+			return nil
+		},
+	}
+	return cmd
 }
 
 func configGroupCmd() *cobra.Command {
