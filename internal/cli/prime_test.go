@@ -235,18 +235,25 @@ func TestFormatPrimeContext_SyncState(t *testing.T) {
 }
 
 func TestFormatPrimeContext_CommandReference(t *testing.T) {
-	ctx := &PrimeContext{}
+	// Commands now only appear in multi-agent section 5
+	tmpDir := t.TempDir()
+	identDir := tmpDir + "/.thrum/identities"
+	os.MkdirAll(identDir, 0750)
+	os.WriteFile(identDir+"/test_agent.json", []byte(`{"version":1}`), 0600)
+
+	ctx := &PrimeContext{
+		Identity: &WhoamiResult{AgentID: "test_agent", Role: "impl"},
+		RepoPath: tmpDir,
+		Runtime:  "claude",
+	}
 	output := FormatPrimeContext(ctx)
 
-	// Quick command reference should always appear
 	checks := []string{
-		"Commands:",
 		"thrum send",
 		"thrum inbox",
 		"thrum reply",
 		"thrum status",
-		"thrum wait",
-		"thrum <cmd> --help",
+		"thrum team",
 	}
 	for _, check := range checks {
 		if !strings.Contains(output, check) {

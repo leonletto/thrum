@@ -339,24 +339,6 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 		}
 	}
 
-	// Quick command reference
-	out.WriteString("\nCommands:\n")
-	if !ctx.SingleAgentMode {
-		out.WriteString("  thrum send \"msg\" --to @name    Send direct message\n")
-		out.WriteString("  thrum inbox                    Check messages (auto-marks read)\n")
-		out.WriteString("  thrum inbox --unread           Peek without marking read\n")
-		out.WriteString("  thrum sent                     Sent messages & receipts\n")
-		out.WriteString("  thrum message read --all       Mark all messages as read\n")
-		out.WriteString("  thrum reply <id> \"msg\"         Reply to message\n")
-		out.WriteString("  thrum send \"msg\" --to @everyone Broadcast to all\n")
-	}
-	out.WriteString("  thrum status                   Agent/daemon status\n")
-	out.WriteString("  thrum team                     List team members\n")
-	if !ctx.SingleAgentMode {
-		out.WriteString("  thrum wait                     Block until message arrives\n")
-	}
-	out.WriteString("  thrum <cmd> --help             Detailed command usage\n")
-
 	// Tip: suggest thrum setup claude-md if CLAUDE.md lacks thrum section
 	if ctx.RepoPath != "" {
 		claudeMdPath := filepath.Join(ctx.RepoPath, "CLAUDE.md")
@@ -397,6 +379,7 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 			out.WriteString("**Send message:** `thrum send \"message\" --to @<agent_name>`\n")
 			out.WriteString("**Reply:** `thrum reply <MSG_ID> \"response\"`\n")
 			out.WriteString("**Who's online:** `thrum team`\n")
+			out.WriteString("**Agent/daemon status:** `thrum status`\n")
 			out.WriteString("**Mark all read:** `thrum message read --all`\n\n")
 			// Priority handling
 			out.WriteString("## Priority Handling\n\n")
