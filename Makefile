@@ -297,6 +297,7 @@ sync-skills:
 	@test -f toolkit/resources/LISTENER_PATTERN.md && cp toolkit/resources/LISTENER_PATTERN.md claude-plugin/skills/thrum/resources/LISTENER_PATTERN.md || true
 	@test -d codex-plugin/skills/thrum-core/references && test -f toolkit/resources/LISTENER_PATTERN.md && cp toolkit/resources/LISTENER_PATTERN.md codex-plugin/skills/thrum-core/references/LISTENER_PATTERN.md || true
 	@test -d internal/cli/skill/thrum/references && test -f toolkit/resources/LISTENER_PATTERN.md && cp toolkit/resources/LISTENER_PATTERN.md internal/cli/skill/thrum/references/LISTENER_PATTERN.md || true
+	@cp toolkit/agents/message-listener.md claude-plugin/agents/message-listener.md
 	@echo "Assets synced."
 
 # Setup git hook chaining
