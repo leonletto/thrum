@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTelegramStatus, useTelegramConfigure } from '@thrum/shared-logic';
+import { TelegramAllowList } from './TelegramAllowList';
 
 export function TelegramSettings() {
   const { data: status, isLoading, error } = useTelegramStatus();
@@ -247,6 +248,14 @@ export function TelegramSettings() {
                 />
               </button>
             </div>
+
+            {/* Allow list */}
+            {status && (
+              <TelegramAllowList
+                status={status}
+                onConfigure={(config) => configure.mutate(config as Record<string, unknown>)}
+              />
+            )}
 
             {/* Save result message */}
             {saveMessage && (
