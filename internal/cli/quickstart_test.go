@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/process"
 )
 
@@ -283,6 +284,44 @@ func TestQuickstartConflict_ZeroPIDAllowsRetry(t *testing.T) {
 	// Zero PID → quickstart would skip liveness check and proceed with re-register
 	if conflict.ConflictPID > 0 {
 		t.Fatal("ConflictPID should be zero for pre-v0.7 agents")
+	}
+}
+
+func TestEnsurePreamble_CreatesFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	contextDir := filepath.Join(thrumDir, "context")
+	if err := os.MkdirAll(contextDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	agentName := "test_agent"
+	preamblePath := filepath.Join(contextDir, agentName+"_preamble.md")
+
+	// Should not exist before
+	if _, err := os.Stat(preamblePath); err == nil {
+		t.Fatal("preamble should not exist before")
+	}
+
+	// Call EnsurePreamble
+	err := agentcontext.EnsurePreamble(thrumDir, agentName)
+	if err != nil {
+		t.Fatalf("EnsurePreamble failed: %v", err)
+	}
+
+	// Should exist after
+	data, err := os.ReadFile(preamblePath)
+	if err != nil {
+		t.Fatalf("preamble should exist: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("preamble should not be empty")
+	}
+
+	// Idempotent — calling again should not error
+	err = agentcontext.EnsurePreamble(thrumDir, agentName)
+	if err != nil {
+		t.Fatalf("second call should succeed: %v", err)
 	}
 }
 

@@ -2,10 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
+	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/types"
@@ -182,6 +184,15 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 
 		if changed {
 			_ = config.SaveIdentityFile(thrumDir, idFile)
+		}
+	}
+
+	// Ensure preamble exists for this agent
+	if repoPath != "" {
+		thrumDir := filepath.Join(repoPath, ".thrum")
+		if err := agentcontext.EnsurePreamble(thrumDir, regResult.AgentID); err != nil {
+			// Non-fatal — log but don't fail quickstart
+			fmt.Fprintf(os.Stderr, "Warning: failed to create preamble: %v\n", err)
 		}
 	}
 
