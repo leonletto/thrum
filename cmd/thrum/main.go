@@ -2033,15 +2033,20 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 		Short: "Join a remote peer using a peercode",
 		Long: `Connects to a remote peer using the peercode from 'thrum peer add'.
 
-Four input methods:
+Five input methods:
   thrum peer join name:ip:port:code              (positional argument)
   thrum peer join --peercode name:ip:port:code   (flag)
-  echo "name:ip:port:code" | thrum peer join     (piped via stdin)
+  echo "name:ip:port:code" | thrum peer join     (pipe, no flag)
+  thrum peer join --peercode -                   (pipe via stdin flag)
   thrum peer join                                 (interactive prompt)`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Resolve peercode: flag > positional arg > stdin > prompt
 			code := peerCode
+			// Treat "--peercode -" as "read from stdin" (Unix convention)
+			if code == "-" {
+				code = ""
+			}
 			if code == "" && len(args) > 0 {
 				code = strings.TrimSpace(args[0])
 			}
@@ -5175,6 +5180,12 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		wsRegistry.Register("sync.force", websocket.Handler(syncForceHandler.Handle))
 		wsRegistry.Register("sync.status", websocket.Handler(syncStatusHandler.Handle))
 	}
+
+	// Always register telegram RPC handlers on WebSocket registry (settings UI
+	// needs them even when the bridge is not yet configured).
+	wsRegistry.Register("telegram.configure", websocket.Handler(telegramHandler.HandleConfigure))
+	wsRegistry.Register("telegram.status", websocket.Handler(telegramHandler.HandleStatus))
+	wsRegistry.Register("telegram.pair", websocket.Handler(telegramHandler.HandlePair))
 
 	// Resolve UI filesystem (embedded or dev mode)
 	var uiFS fs.FS
