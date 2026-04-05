@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/leonletto/thrum/internal/process"
 )
 
 // TestDaemonConfig holds options for StartTestDaemon.
@@ -100,7 +102,7 @@ func StartTestDaemon(t *testing.T, cfg *TestDaemonConfig) *TestDaemon {
 		case <-time.After(3 * time.Second):
 			// Force kill via PID
 			pidInfo, err := ReadPIDFileJSON(pidPath)
-			if err == nil && isProcessRunning(pidInfo.PID) {
+			if err == nil && process.IsRunning(pidInfo.PID) {
 				if proc, err := os.FindProcess(pidInfo.PID); err == nil {
 					_ = proc.Kill() // SIGKILL
 				}
