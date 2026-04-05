@@ -291,7 +291,7 @@ fi
 
 if [[ -n "$IDENTITY" ]]; then
     echo "  Identity: $IDENTITY (.thrum/identities/$IDENTITY.json)"
-    echo "  Context:  .thrum/context/$IDENTITY.md (empty, use /update-context)"
+    echo "  Context:  .thrum/context/$IDENTITY.md (empty, use /thrum:update-project)"
 fi
 
 # Step 6: Reminder

@@ -429,7 +429,7 @@ thrum context preamble                         # Show current preamble
 thrum context preamble --init                  # Create/reset to default preamble
 thrum context preamble --file path.md          # Set preamble from file
 thrum context preamble --agent coordinator
-thrum context update                           # Delegates to /update-context skill
+thrum context update                           # Delegates to /thrum:update-project skill
 ```
 
 `context show` flags:

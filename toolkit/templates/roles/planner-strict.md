@@ -179,7 +179,7 @@ bd dep add <child> <parent>          # Set up dependencies
 bd close <id>                        # Mark planning task complete
 ```text
 
-**Save context:** Use `/thrum:update-context` skill. **NEVER run
+**Save context:** Use `/thrum:update-project` skill. **NEVER run
 `thrum context save` manually** — it overwrites accumulated session state.
 
 ## Agent Strategies (Read Before Any Work)

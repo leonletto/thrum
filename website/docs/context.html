@@ -53,7 +53,7 @@ state so agents can pick up where they left off.</p>
 <p><strong>Why this exists:</strong> When an agent session ends (context compacted, Claude Code
 restarted, new worktree), the work-in-progress state vanishes. Context files
 capture that state so the next session can continue seamlessly.</p>
-<p><strong>Primary use case:</strong> The <code>/update-context</code> skill in Claude Code uses this
+<p><strong>Primary use case:</strong> The <code>/thrum:update-project</code> skill in Claude Code uses this
 system to save session summaries before compaction or session end.</p>
 <p><strong>Storage:</strong> Context files live in <code>.thrum/context/</code> (gitignored by default).
 Each agent gets two files:</p>
@@ -115,7 +115,7 @@ read:** `thrum message read --all` **Send message:**
 (e.g., `@coordinator_main`), NEVER the role (e.g., `@coordinator`). Role names
 fan out to ALL agents with that role. Run `thrum team` to find exact names.
 **Reply:** `thrum reply &lt;MSG_ID&gt; &quot;response&quot;` **Status:** `thrum status` **Who&#39;s
-online:** `thrum team` **Save context:** Use `/thrum:update-context` skill.
+online:** `thrum team` **Save context:** Use `/thrum:update-project` skill.
 **NEVER run `thrum context save` manually** — it overwrites accumulated session
 state.
 
@@ -176,7 +176,7 @@ echo &quot;Working on auth module&quot; | thrum context save
 
 # Save for a different agent
 thrum context save --agent coordinator --file notes.md</code></pre>
-<p><strong>Agent safety note:</strong> Agents should use the <code>/thrum:update-context</code> skill
+<p><strong>Agent safety note:</strong> Agents should use the <code>/thrum:update-project</code> skill
 instead of running <code>thrum context save</code> directly. The skill composes a
 structured context (decisions, next steps, work-in-progress) before saving,
 whereas running the command manually with arbitrary input can overwrite
@@ -394,12 +394,12 @@ thrum context prime --json</code></pre>
 <code>thrum context prime</code> is an alias for it. The PreCompact hook automatically
 saves context before compaction to <code>.thrum/context/{name}.md</code> and
 <code>/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md</code>, but the
-agent-initiated <code>/update-context</code> skill captures richer context including
+agent-initiated <code>/thrum:update-project</code> skill captures richer context including
 decisions and rationale.</p>
 <hr>
-<h2>The /update-context Skill</h2>
-<p>The <code>/update-context</code> skill is a Claude Code plugin slash command defined in
-<code>claude-plugin/commands/update-context.md</code>. It does <strong>not</strong> use MCP messaging —
+<h2>The /thrum:update-project Skill</h2>
+<p>The <code>/thrum:update-project</code> skill is a Claude Code plugin slash command defined in
+<code>claude-plugin/commands/update-project.md</code>. It does <strong>not</strong> use MCP messaging —
 it works entirely through local shell commands and a spawned sub-agent.</p>
 <p><strong>What it does:</strong></p>
 <ol>
@@ -407,23 +407,22 @@ it works entirely through local shell commands and a spawned sub-agent.</p>
 decisions made, current state, and what the next session needs to know.</li>
 <li>The skill spawns a <strong>general-purpose sub-agent</strong> that:<ul>
 <li>Runs <code>git log</code>, <code>git status</code>, <code>git branch</code> to gather repo state</li>
-<li>Runs <code>bd stats</code>, <code>bd list --status=in_progress</code>, <code>bd ready</code> if available</li>
-<li>Reads existing context via <code>thrum context show</code></li>
-<li>Merges your narrative with the gathered state into structured markdown</li>
-<li>Saves the result via <code>echo &quot;$CONTENT&quot; | thrum context save</code></li>
+<li>Runs <code>bd stats</code>, open epics, and ready issues if available</li>
+<li>Reads the existing <code>project_state.md</code></li>
+<li>Merges your narrative with the gathered state via targeted edits</li>
 </ul>
 </li>
-<li>The sub-agent returns a brief summary of what was saved.</li>
+<li>The sub-agent returns a brief summary of what was updated.</li>
 </ol>
 <p><strong>Example:</strong></p>
-<pre><code>User: /update-context
+<pre><code>User: /thrum:update-project
 Agent: Please write a brief narrative of what you worked on this session,
        key decisions, current state, and what the next session needs to know.
 User: We&#39;re refactoring the auth module. Decided to use JWT with
       refresh tokens. Need to add rate limiting tests.
-Agent: [Spawns sub-agent to gather git/task state and merge with narrative]
-      ✓ Context saved (248 bytes)</code></pre>
-<p>The skill reduces the friction of updating context and ensures consistent
+Agent: [Spawns sub-agent to gather git/task state and update project_state.md]
+      ✓ Project state updated (5 sections edited)</code></pre>
+<p>The skill reduces the friction of updating project state and ensures consistent
 formatting by combining your narrative with automatically gathered repo and task
 state.</p>
 <hr>
@@ -634,9 +633,9 @@ or reach a natural breakpoint.</p>
 <li>Before switching to a different task</li>
 <li>At the end of a work session</li>
 </ul>
-<h3>Use the /update-context Skill</h3>
-<p>The skill provides a consistent, low-friction workflow for updating context.
-Install it and use it regularly.</p>
+<h3>Use the /thrum:update-project Skill</h3>
+<p>The skill provides a consistent, low-friction workflow for updating project state.
+Install the thrum Claude Code plugin and use it regularly.</p>
 <h3>Sync Selectively</h3>
 <p>Only sync context that is useful to other agents or future sessions on different
 machines. Local notes and WIP context can stay local.</p>

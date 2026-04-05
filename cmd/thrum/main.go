@@ -3468,56 +3468,26 @@ func contextCmd() *cobra.Command {
 func contextUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update agent context (delegates to /update-context skill)",
+		Short: "Update agent context (delegates to /thrum:update-project skill)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Determine search paths for the skill file
-			var searchPaths []string
-
-			// Project-level: relative to repo root (.thrum/ directory)
-			cwd, err := os.Getwd()
-			if err == nil {
-				if repoRoot, err := paths.FindThrumRoot(cwd); err == nil {
-					searchPaths = append(searchPaths, filepath.Join(repoRoot, ".claude", "commands", "update-context.md"))
-				}
-			}
-
-			// Global: ~/.claude/commands/
-			if homeDir, err := os.UserHomeDir(); err == nil {
-				searchPaths = append(searchPaths, filepath.Join(homeDir, ".claude", "commands", "update-context.md"))
-			}
-
-			for _, p := range searchPaths {
-				if _, err := os.Stat(p); err == nil {
-					fmt.Printf("Context update skill found at %s\n", p)
-					fmt.Println("Run /update-context in Claude Code to update your agent context.")
-					return nil
-				}
-			}
-
-			// Check if the thrum plugin is installed (provides /thrum:update-context)
+			// Check if the thrum plugin is installed (provides /thrum:update-project)
 			if homeDir, err := os.UserHomeDir(); err == nil {
 				pluginPath := filepath.Join(homeDir, ".claude", "plugins", "cache", "thrum-marketplace", "thrum")
-				if matches, _ := filepath.Glob(pluginPath + "/*/commands/update-context.md"); len(matches) > 0 {
-					fmt.Println("The thrum plugin provides /thrum:update-context.")
-					fmt.Println("Run /thrum:update-context in Claude Code to update your agent context.")
+				if matches, _ := filepath.Glob(pluginPath + "/*/commands/update-project.md"); len(matches) > 0 {
+					fmt.Println("The thrum plugin provides /thrum:update-project.")
+					fmt.Println("Run /thrum:update-project in Claude Code to update your agent context.")
 					return nil
 				}
 			}
 
-			// Not found — print installation instructions
-			fmt.Println("The /update-context skill is not installed.")
+			// Not found — print instructions
+			fmt.Println("The thrum Claude Code plugin is not installed.")
 			fmt.Println()
-			fmt.Println("If the thrum Claude Code plugin is installed, use /thrum:update-context instead.")
+			fmt.Println("Install the thrum plugin to get /thrum:update-project for guided context updates.")
 			fmt.Println()
-			fmt.Println("Otherwise, install the standalone skill from the thrum toolkit:")
+			fmt.Println("Alternatively, use thrum context save directly:")
 			fmt.Println()
-			fmt.Println("  # Project-level (this repo only)")
-			fmt.Println("  mkdir -p .claude/commands")
-			fmt.Println("  cp toolkit/commands/update-context.md .claude/commands/")
-			fmt.Println()
-			fmt.Println("  # Global (all projects)")
-			fmt.Println("  mkdir -p ~/.claude/commands")
-			fmt.Println("  cp toolkit/commands/update-context.md ~/.claude/commands/")
+			fmt.Println("  echo '$CONTEXT' | thrum context save")
 			return nil
 		},
 	}

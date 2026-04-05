@@ -14,7 +14,7 @@ thrum context show
 If the context is empty, check for a `/tmp` backup. Backups are named with the
 agent's identity (`name-role-module`) and an epoch timestamp. Find YOUR backup
 and **skip it if older than 30 minutes** (it predates a more recent
-`/thrum:update-context` save):
+`/thrum:update-project` save):
 
 ```bash
 # Get your identity to find the right backup
@@ -37,4 +37,4 @@ fi
 
 After reviewing the context, update your thrum context with a fresh narrative
 summary reflecting your current understanding — follow the same process as
-`/thrum:update-context`.
+`/thrum:update-project`.

@@ -210,7 +210,6 @@ func DetectLanguage(repoRoot string) string {
 func DefaultPreamble() []byte {
 	return []byte(`## Thrum Quick Reference
 
-**Save session context:** ` + "`/thrum:update-context`" + ` — saves ephemeral work state
 **Update project state:** ` + "`/thrum:update-project`" + ` — updates durable project state
 **Load full briefing:** ` + "`thrum prime`" + ` — identity, preamble, project state, session context
 **Show context:** ` + "`thrum context show`" + ` — both project state + session context
@@ -220,7 +219,6 @@ func DefaultPreamble() []byte {
 ## Operating Principles
 
 1. **Save context before compaction.**
-   Use ` + "`/thrum:update-context`" + ` skill for ephemeral state.
    Use ` + "`/thrum:update-project`" + ` skill for durable project state.
 2. **Run ` + "`thrum prime`" + ` on session start or after compaction** — it loads everything you need.
 3. **Keep project_state.md current** — update it at session end so the next session starts informed.

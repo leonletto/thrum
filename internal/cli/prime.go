@@ -358,7 +358,7 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 			out.WriteString("2. **Send to agent NAMES, never role names.** ")
 			out.WriteString("Run `thrum team` first.\n")
 			out.WriteString("3. **Save context before compaction.** ")
-			out.WriteString("Use `/thrum:update-context` skill.\n\n")
+			out.WriteString("Use `/thrum:update-project` skill.\n\n")
 			// Command reference
 			out.WriteString("## Commands\n\n")
 			out.WriteString("**Check messages:** `thrum inbox --unread`\n")
