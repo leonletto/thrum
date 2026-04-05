@@ -20,8 +20,8 @@ var (
 	// Use Crockford's base32 alphabet (no padding, case-insensitive).
 	crockfordBase32 = base32.NewEncoding("0123456789ABCDEFGHJKMNPQRSTVWXYZ").WithPadding(base32.NoPadding)
 
-	// AgentNameRegex defines valid agent names: lowercase alphanumeric, underscores, and hyphens.
-	agentNameRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
+	// AgentNameRegex defines valid agent names: lowercase alphanumeric, underscores, hyphens, and colons (for proxy agents like "prefix:name").
+	agentNameRegex = regexp.MustCompile(`^[a-z0-9_:-]+$`)
 
 	// ReservedNames are names that cannot be used for agents.
 	reservedNames = map[string]bool{
@@ -221,7 +221,7 @@ func ValidateAgentName(name string) error {
 
 	// Check character set
 	if !agentNameRegex.MatchString(name) {
-		return fmt.Errorf("agent name '%s' contains invalid characters; only lowercase letters (a-z), digits (0-9), underscores (_), and hyphens (-) are allowed", name)
+		return fmt.Errorf("agent name '%s' contains invalid characters; only lowercase letters (a-z), digits (0-9), underscores (_), hyphens (-), and colons (:) are allowed", name)
 	}
 
 	return nil

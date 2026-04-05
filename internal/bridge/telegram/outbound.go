@@ -91,6 +91,45 @@ func (r *OutboundRelay) handleNotification(ctx context.Context, params json.RawM
 		return
 	}
 
+	// Group path — check if any recipient is a mirrored Thrum group (before DM
+	// path, because group messages also include the bridge user as a recipient)
+	for _, recip := range full.Message.Recipients {
+		if chatID := r.findGroupChatID(recip.AgentID); chatID != 0 {
+			content := formatForTelegram(data.Author.Name, full.Message.Body.Content)
+			teleMsgID, err := r.bot.SendMessage(chatID, content, nil)
+			if err == nil {
+				r.msgMap.Store(chatID, teleMsgID, data.MessageID)
+			}
+			return
+		}
+	}
+
+	// Reply-to-group path — if this message replies to one that came from a
+	// Telegram group, route the reply back to the same group with threading.
+	if full.Message.ReplyTo != "" {
+		if chatID, teleID, ok := r.msgMap.TeleID(full.Message.ReplyTo); ok && chatID < 0 {
+			content := formatForTelegram(data.Author.Name, full.Message.Body.Content)
+			replyTo := teleID
+			teleMsgID, err := r.bot.SendMessage(chatID, content, &replyTo)
+			if err == nil {
+				r.msgMap.Store(chatID, teleMsgID, data.MessageID)
+			}
+			return
+		}
+	}
+
+	// Proxy agent path
+	for _, recip := range full.Message.Recipients {
+		if agent, chatID := r.findProxyRoute(recip.AgentID); agent != nil {
+			content := fmt.Sprintf("%s @%s: %s", agent.Bot, data.Author.Name, full.Message.Body.Content)
+			teleMsgID, err := r.bot.SendMessage(chatID, content, nil)
+			if err == nil {
+				r.msgMap.Store(chatID, teleMsgID, data.MessageID)
+			}
+			return
+		}
+	}
+
 	// DM path — forward messages where the bridge user is a recipient
 	if r.isForUser(full) {
 		// Format for Telegram: "@agent_name: message content"
@@ -120,30 +159,6 @@ func (r *OutboundRelay) handleNotification(ctx context.Context, params json.RawM
 			"caller_agent_id": r.userID,
 		})
 		return
-	}
-
-	// Group path — check if any recipient is a mirrored Thrum group
-	for _, recip := range full.Message.Recipients {
-		if chatID := r.findGroupChatID(recip.AgentID); chatID != 0 {
-			content := formatForTelegram(data.Author.Name, full.Message.Body.Content)
-			teleMsgID, err := r.bot.SendMessage(chatID, content, nil)
-			if err == nil {
-				r.msgMap.Store(chatID, teleMsgID, data.MessageID)
-			}
-			return
-		}
-	}
-
-	// Proxy agent path
-	for _, recip := range full.Message.Recipients {
-		if agent, chatID := r.findProxyRoute(recip.AgentID); agent != nil {
-			content := fmt.Sprintf("%s @%s: %s", agent.Bot, data.Author.Name, full.Message.Body.Content)
-			teleMsgID, err := r.bot.SendMessage(chatID, content, nil)
-			if err == nil {
-				r.msgMap.Store(chatID, teleMsgID, data.MessageID)
-			}
-			return
-		}
 	}
 }
 

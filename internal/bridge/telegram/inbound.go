@@ -45,6 +45,7 @@ func (r *InboundRelay) Run(ctx context.Context, messages <-chan InboundMessage) 
 // Relay routes an inbound message to the correct handler based on whether it is
 // a group message (GroupChatID < 0) or a direct message.
 func (r *InboundRelay) Relay(ctx context.Context, msg InboundMessage) error {
+	log.Printf("telegram inbound: Relay called — GroupChatID=%d, text=%q", msg.GroupChatID, msg.Text)
 	if msg.GroupChatID < 0 {
 		return r.relayGroup(ctx, msg)
 	}
@@ -76,9 +77,10 @@ func (r *InboundRelay) findGroup(chatID int64) *config.TelegramGroup {
 func (r *InboundRelay) relayGroup(ctx context.Context, msg InboundMessage) error {
 	grp := r.findGroup(msg.GroupChatID)
 	if grp == nil {
-		// No config for this group — ignore
+		log.Printf("telegram inbound: no group config for chat_id %d — dropping", msg.GroupChatID)
 		return nil
 	}
+	log.Printf("telegram inbound: matched group %q for chat_id %d", grp.Name, msg.GroupChatID)
 
 	// @mention routing: check if message mentions our bot or another bot.
 	mentions := ParseMentions(msg.Text)
@@ -110,8 +112,8 @@ func (r *InboundRelay) relayGroup(ctx context.Context, msg InboundMessage) error
 
 	sendReq := map[string]any{
 		"content":         content,
-		"group":           thrumGroup,
-		"caller_agent_id": senderIdentity(msg),
+		"mentions":        []string{thrumGroup},
+		"caller_agent_id": r.userID,
 		"structured":      structured,
 	}
 

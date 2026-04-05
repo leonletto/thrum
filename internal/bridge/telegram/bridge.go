@@ -347,14 +347,18 @@ func (b *Bridge) ensureGroups(ctx context.Context, ws *WSClient, userID string) 
 				"display": ra.Prefix + " " + ra.Name + " (via Telegram)",
 			})
 
-			// Only add to group if registration succeeded
-			if regErr == nil {
-				_, _ = ws.Call(ctx, "group.member.add", map[string]any{
+			if regErr != nil {
+				b.logger.Printf("group %s: failed to register proxy agent %s: %v", grp.Name, proxyName, regErr)
+			} else {
+				_, addErr := ws.Call(ctx, "group.member.add", map[string]any{
 					"group":           thrumGroupName,
 					"member_type":     "agent",
 					"member_value":    proxyName,
 					"caller_agent_id": userID,
 				})
+				if addErr != nil {
+					b.logger.Printf("group %s: failed to add proxy agent %s to group: %v", grp.Name, proxyName, addErr)
+				}
 			}
 		}
 

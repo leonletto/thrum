@@ -134,8 +134,11 @@ func (b *Bot) Poll(ctx context.Context) {
 			// SECURITY: Gate check FIRST — before any extraction, logging of content,
 			// or other processing. Blocked senders produce zero observable side effects.
 
+			log.Printf("telegram: poll received update from user %d (bot=%v) in chat %d", from.ID, from.IsBot, msg.Chat.ID)
+
 			// Echo prevention: ignore our own messages.
 			if from.ID == b.api.Self.ID {
+				log.Printf("telegram: dropping echo (own message)")
 				continue
 			}
 
@@ -143,8 +146,9 @@ func (b *Bot) Poll(ctx context.Context) {
 			if from.IsBot {
 				// Allow trusted bots in configured groups
 				if msg.Chat != nil && b.config.IsTrustedBot(msg.Chat.ID, from.ID) {
-					// Trusted bot — allow through
+					log.Printf("telegram: trusted bot %d in group %d — allowing", from.ID, msg.Chat.ID)
 				} else {
+					log.Printf("telegram: dropping untrusted bot %d", from.ID)
 					continue // Drop untrusted bot messages
 				}
 			}
@@ -170,8 +174,11 @@ func (b *Bot) Poll(ctx context.Context) {
 
 			// Fail-closed access check using config.IsAllowed.
 			if !b.config.IsAllowed(from.ID) {
+				log.Printf("telegram: dropping message from user %d — not in allow_from", from.ID)
 				continue
 			}
+
+			log.Printf("telegram: message accepted from user %d in chat %d, group=%v", from.ID, msg.Chat.ID, msg.Chat.ID < 0)
 
 			// Rate limit: drop silently if user exceeds max messages per window.
 			if !b.rateLimit.allow(from.ID) {
