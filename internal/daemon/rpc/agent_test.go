@@ -1293,6 +1293,67 @@ func TestHandleRegister_StoresClaudePID(t *testing.T) {
 	}
 }
 
+func TestHandleRegister_RoleModuleConflictWithPID(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_pid_conflict", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	// Insert an existing agent with a known claude_pid directly into the DB.
+	// Using a hash-style agent_id so it differs from the name-based ID the second
+	// registration will generate.
+	_, err = s.RawDB().Exec(`
+		INSERT INTO agents (agent_id, kind, role, module, display, hostname, claude_pid, registered_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, "existing_agent_pid", "agent", "implementer", "auth", "", "", 111, "2026-01-01T00:00:00Z")
+	if err != nil {
+		t.Fatalf("insert existing agent: %v", err)
+	}
+
+	handler := NewAgentHandler(s)
+
+	// Register a different agent with the same role+module but different name,
+	// so GenerateAgentID produces a different agent_id → role+module conflict path.
+	req := RegisterRequest{
+		Name:      "different_agent",
+		Role:      "implementer",
+		Module:    "auth",
+		ClaudePID: 222,
+	}
+	reqJSON, _ := json.Marshal(req)
+	resp, err := handler.HandleRegister(context.Background(), reqJSON)
+
+	// The role+module conflict returns a response with nil error.
+	if err != nil {
+		t.Logf("HandleRegister returned error (unexpected): %v", err)
+	}
+	if resp == nil {
+		t.Fatalf("expected response, got nil (err: %v)", err)
+	}
+
+	regResp, ok := resp.(*RegisterResponse)
+	if !ok {
+		t.Fatalf("response type = %T, want *RegisterResponse", resp)
+	}
+
+	if regResp.Status != "conflict" {
+		t.Errorf("Status = %s, want conflict", regResp.Status)
+	}
+	if regResp.Conflict == nil {
+		t.Fatal("Conflict info should be populated")
+	}
+	if regResp.Conflict.ConflictPID != 111 {
+		t.Errorf("ConflictPID = %d, want 111", regResp.Conflict.ConflictPID)
+	}
+	if regResp.Conflict.ExistingAgentID != "existing_agent_pid" {
+		t.Errorf("ExistingAgentID = %s, want existing_agent_pid", regResp.Conflict.ExistingAgentID)
+	}
+}
+
 func TestHandleRegister_SamePID_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
