@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 15
+const CurrentVersion = 16
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -139,6 +139,7 @@ func createTables(tx *sql.Tx) error {
 			module     TEXT NOT NULL,
 			display    TEXT NOT NULL DEFAULT '',
 			hostname   TEXT NOT NULL DEFAULT '',
+			claude_pid INTEGER NOT NULL DEFAULT 0,
 			registered_at TEXT NOT NULL,
 			last_seen_at TEXT NOT NULL DEFAULT ''
 		)`,
@@ -695,6 +696,18 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		)`)
 		if err != nil {
 			return fmt.Errorf("migration 14→15: %w", err)
+		}
+	}
+
+	// Migration from version 15 to 16: Add claude_pid column to agents table
+	if startVersion < 16 && endVersion >= 16 {
+		// Only ALTER if agents table exists (it may not in partial-schema test DBs)
+		var agentsExists string
+		if err := tx.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='agents'").Scan(&agentsExists); err == nil {
+			_, err = tx.Exec(`ALTER TABLE agents ADD COLUMN claude_pid INTEGER NOT NULL DEFAULT 0`)
+			if err != nil {
+				return fmt.Errorf("migration 15→16: %w", err)
+			}
 		}
 	}
 
