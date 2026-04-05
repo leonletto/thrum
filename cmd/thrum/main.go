@@ -5181,12 +5181,6 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		wsRegistry.Register("sync.status", websocket.Handler(syncStatusHandler.Handle))
 	}
 
-	// Always register telegram RPC handlers on WebSocket registry (settings UI
-	// needs them even when the bridge is not yet configured).
-	wsRegistry.Register("telegram.configure", websocket.Handler(telegramHandler.HandleConfigure))
-	wsRegistry.Register("telegram.status", websocket.Handler(telegramHandler.HandleStatus))
-	wsRegistry.Register("telegram.pair", websocket.Handler(telegramHandler.HandlePair))
-
 	// Resolve UI filesystem (embedded or dev mode)
 	var uiFS fs.FS
 	if devPath := os.Getenv("THRUM_UI_DEV"); devPath != "" {
@@ -5414,6 +5408,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("telegram.configure", telegramHandler.HandleConfigure)
 	server.RegisterHandler("telegram.status", telegramHandler.HandleStatus)
 	server.RegisterHandler("telegram.pair", telegramHandler.HandlePair)
+	// Also register on WebSocket registry so the web UI settings panel can
+	// call telegram.status even when the bridge is not yet configured.
+	wsRegistry.Register("telegram.configure", websocket.Handler(telegramHandler.HandleConfigure))
+	wsRegistry.Register("telegram.status", websocket.Handler(telegramHandler.HandleStatus))
+	wsRegistry.Register("telegram.pair", websocket.Handler(telegramHandler.HandlePair))
 
 	if thrumCfg.Telegram.TelegramEnabled() {
 		tgBridge := telegram.New(thrumCfg.Telegram, wsPort)
