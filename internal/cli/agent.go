@@ -17,6 +17,7 @@ type RegisterRequest struct {
 	Display    string `json:"display,omitempty"`
 	Force      bool   `json:"force,omitempty"`
 	ReRegister bool   `json:"re_register,omitempty"`
+	ClaudePID  int    `json:"claude_pid,omitempty"`
 }
 
 // RegisterResponse represents the response from agent.register RPC.
@@ -64,6 +65,7 @@ type AgentRegisterOptions struct {
 	Display    string
 	Force      bool
 	ReRegister bool
+	ClaudePID  int
 }
 
 // AgentListOptions contains options for listing agents.

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/types"
 )
@@ -83,6 +84,9 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		return result, nil
 	}
 
+	// Capture Claude PID for identity resolution
+	claudePID := process.FindClaudeAncestor()
+
 	// Step 1: Register agent
 	regOpts := AgentRegisterOptions{
 		Name:       opts.Name,
@@ -90,6 +94,7 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		Module:     opts.Module,
 		Display:    opts.Display,
 		ReRegister: opts.ReRegister,
+		ClaudePID:  claudePID,
 	}
 
 	regResult, err := AgentRegister(client, regOpts)
@@ -97,8 +102,15 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		return nil, fmt.Errorf("register failed: %w", err)
 	}
 
-	// If conflict, try re-register automatically
+	// If conflict, check PID liveness before retrying
 	if regResult.Status == "conflict" {
+		if regResult.Conflict != nil {
+			conflictPID := regResult.Conflict.ConflictPID
+			if conflictPID > 0 && process.IsRunning(conflictPID) && process.IsClaudeProcess(conflictPID) {
+				return nil, fmt.Errorf("cannot register as %q: name is held by a running Claude session (PID %d)", opts.Name, conflictPID)
+			}
+		}
+		// Dead or non-claude PID — safe to retry
 		regOpts.ReRegister = true
 		regResult, err = AgentRegister(client, regOpts)
 		if err != nil {
