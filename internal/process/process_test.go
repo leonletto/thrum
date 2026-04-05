@@ -30,6 +30,10 @@ func TestIsClaudeProcess_NotClaude(t *testing.T) {
 	if IsClaudeProcess(os.Getpid()) {
 		t.Skip("running as claude process")
 	}
+	// Explicitly assert false for non-claude process
+	if IsClaudeProcess(os.Getpid()) {
+		t.Error("test process should not be identified as claude")
+	}
 }
 
 func TestIsClaudeProcess_DeadPID(t *testing.T) {
