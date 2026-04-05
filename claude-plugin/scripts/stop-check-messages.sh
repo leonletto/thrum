@@ -39,22 +39,24 @@ if command -v jq >/dev/null 2>&1; then
   fi
 fi
 
-# Phase 1: Check unread messages
-INBOX_JSON=$(cd "$PROJECT_DIR" && thrum inbox --unread --json 2>/dev/null) || exit 0
+# Phase 1: Resolve agent identity — must happen before inbox check so the
+# query is scoped to this agent only (resolveLocalAgentID checks THRUM_AGENT_ID).
+AGENT_ID="${THRUM_AGENT_ID:-${THRUM_NAME:-}}"
+if [ -z "$AGENT_ID" ]; then
+  exit 0
+fi
+
+# Phase 2: Check unread messages scoped to this agent
+INBOX_JSON=$(cd "$PROJECT_DIR" && THRUM_AGENT_ID="$AGENT_ID" thrum inbox --unread --json 2>/dev/null) || exit 0
 MSG_COUNT=$(echo "$INBOX_JSON" | jq -r '.unread // 0')
 if [ "$MSG_COUNT" -gt 0 ]; then
   echo "ACTION REQUIRED: You have $MSG_COUNT unread message(s). Run \`thrum inbox --unread\` now to read and respond to them. Then run \`thrum message read --all\` to mark them read so this hook doesn't fire again on old messages." >&2
   exit 2
 fi
 
-# Phase 2: Check if listener process is alive via PID file
-AGENT_ID="${THRUM_AGENT_ID:-${THRUM_NAME:-}}"
+# Phase 3: Check if listener process is alive via PID file
 THRUM_DIR="${THRUM_HOME:-$PROJECT_DIR}"
 PID_FILE="$THRUM_DIR/.thrum/var/${AGENT_ID}-listener.pid"
-
-if [ -z "$AGENT_ID" ]; then
-  exit 0
-fi
 
 if [ ! -f "$PID_FILE" ]; then
   echo "Your background message listener is not running. Start it now." >&2
