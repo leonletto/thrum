@@ -42,3 +42,25 @@ export function useTelegramConfigure() {
     },
   });
 }
+
+export interface TelegramPairResponse {
+  telegram_user_id: number;
+  telegram_username: string;
+  first_name: string;
+  last_name: string;
+  chat_id: number;
+  message_text: string;
+}
+
+export function useTelegramPair() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (opts: { timeout?: number }) => {
+      await ensureConnected();
+      return wsClient.call<TelegramPairResponse>('telegram.pair', {
+        timeout_seconds: opts.timeout || 60,
+      });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['telegram'] }),
+  });
+}
