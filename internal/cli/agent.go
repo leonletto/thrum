@@ -44,6 +44,7 @@ type AgentInfo struct {
 	Display      string `json:"display"`
 	RegisteredAt string `json:"registered_at"`
 	LastSeenAt   string `json:"last_seen_at,omitempty"`
+	ClaudePID    int    `json:"claude_pid,omitempty"`
 }
 
 // ListAgentsRequest represents the request for agent.list RPC.
