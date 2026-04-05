@@ -241,7 +241,7 @@ func (b *Bridge) run(ctx context.Context) error {
 	// 5. Create message map and relays
 	msgMap := NewMessageMap(10000)
 	inbound := NewInboundRelay(ws, msgMap, userID, b.cfg.Target, b.cfg.Groups, bot.BotUsername())
-	outbound := NewOutboundRelay(ws, bot, msgMap, userID, b.cfg.ChatID)
+	outbound := NewOutboundRelay(ws, bot, msgMap, userID, b.cfg.ChatID, b.cfg.Groups)
 
 	// 6. Mark running BEFORE launching goroutines so Pair() sees accurate state.
 	// b.bot.Store(bot) was set above — Pair() checks running first, then loads bot.
