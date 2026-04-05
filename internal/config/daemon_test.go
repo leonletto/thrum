@@ -514,6 +514,43 @@ func TestTelegramConfig_GroupNames(t *testing.T) {
 	}
 }
 
+func TestSaveThrumConfig_PersistsGroups(t *testing.T) {
+	dir := t.TempDir()
+	thrumDir := filepath.Join(dir, ".thrum")
+	os.MkdirAll(thrumDir, 0o755)
+
+	cfg := config.ThrumConfig{
+		Telegram: config.TelegramConfig{
+			Token: "test-token",
+			Groups: []config.TelegramGroup{
+				{ChatID: -100123, Name: "cross-repo", TrustedBots: []int64{111},
+					RemoteAgents: []config.RemoteAgent{{Name: "coord", Prefix: "falcon", Bot: "@falcon_bot"}}},
+			},
+		},
+	}
+
+	err := config.SaveThrumConfig(thrumDir, &cfg)
+	if err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+
+	loaded, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+
+	if len(loaded.Telegram.Groups) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(loaded.Telegram.Groups))
+	}
+	g := loaded.Telegram.Groups[0]
+	if g.Name != "cross-repo" || g.ChatID != -100123 {
+		t.Errorf("group mismatch: %+v", g)
+	}
+	if len(g.RemoteAgents) != 1 || g.RemoteAgents[0].Prefix != "falcon" {
+		t.Errorf("remote agents mismatch: %+v", g.RemoteAgents)
+	}
+}
+
 func TestSaveThrumConfig_PreservesUnknownKeys(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
