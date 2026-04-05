@@ -106,7 +106,7 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	if regResult.Status == "conflict" {
 		if regResult.Conflict != nil {
 			conflictPID := regResult.Conflict.ConflictPID
-			if conflictPID > 0 && process.IsRunning(conflictPID) && process.IsClaudeProcess(conflictPID) {
+			if conflictPID > 0 && conflictPID != claudePID && process.IsRunning(conflictPID) && process.IsClaudeProcess(conflictPID) {
 				return nil, fmt.Errorf("cannot register as %q: name is held by a running Claude session (PID %d)", opts.Name, conflictPID)
 			}
 		}
