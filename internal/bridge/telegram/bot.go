@@ -101,6 +101,11 @@ func (b *Bot) Messages() <-chan InboundMessage {
 	return b.messages
 }
 
+// BotUsername returns the bot's Telegram username (without @).
+func (b *Bot) BotUsername() string {
+	return b.api.Self.UserName
+}
+
 // Poll long-polls Telegram for updates and forwards allowed messages to the messages channel.
 // It runs until ctx is canceled.
 func (b *Bot) Poll(ctx context.Context) {

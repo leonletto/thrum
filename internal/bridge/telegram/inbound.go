@@ -5,19 +5,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+
+	"github.com/leonletto/thrum/internal/config"
 )
 
 // InboundRelay converts Telegram messages to Thrum messages via WebSocket RPC.
 type InboundRelay struct {
-	ws     *WSClient
-	msgMap *MessageMap
-	userID string // "user:leon-letto" — CallerAgentID for RPC calls
-	target string // "@coordinator_main" — mention target for messages
+	ws      *WSClient
+	msgMap  *MessageMap
+	userID  string // "user:leon-letto" — CallerAgentID for RPC calls
+	target  string // "@coordinator_main" — mention target for messages
+	groups  []config.TelegramGroup
+	botName string // our bot's username (without @)
 }
 
 // NewInboundRelay creates a relay that sends Telegram messages to Thrum.
-func NewInboundRelay(ws *WSClient, msgMap *MessageMap, userID, target string) *InboundRelay {
-	return &InboundRelay{ws: ws, msgMap: msgMap, userID: userID, target: target}
+func NewInboundRelay(ws *WSClient, msgMap *MessageMap, userID, target string, groups []config.TelegramGroup, botName string) *InboundRelay {
+	return &InboundRelay{ws: ws, msgMap: msgMap, userID: userID, target: target, groups: groups, botName: botName}
 }
 
 // Run reads from the bot's message channel and relays each to Thrum.
@@ -36,6 +40,101 @@ func (r *InboundRelay) Run(ctx context.Context, messages <-chan InboundMessage) 
 			}
 		}
 	}
+}
+
+// Relay routes an inbound message to the correct handler based on whether it is
+// a group message (GroupChatID < 0) or a direct message.
+func (r *InboundRelay) Relay(ctx context.Context, msg InboundMessage) error {
+	if msg.GroupChatID < 0 {
+		return r.relayGroup(ctx, msg)
+	}
+	return r.relay(ctx, msg)
+}
+
+// senderIdentity returns "user:{username}" for humans and "bot:{bot_username}"
+// for bots.
+func senderIdentity(msg InboundMessage) string {
+	if msg.IsBotSender {
+		return "bot:" + msg.BotUsername
+	}
+	return "user:" + msg.Username
+}
+
+// findGroup looks up a group config by Telegram chat ID.
+func (r *InboundRelay) findGroup(chatID int64) *config.TelegramGroup {
+	for i := range r.groups {
+		if r.groups[i].ChatID == chatID {
+			return &r.groups[i]
+		}
+	}
+	return nil
+}
+
+// relayGroup handles messages from Telegram group chats.
+// It applies @mention routing: messages that mention our bot (or have no
+// @mention) are forwarded; messages that mention a different bot are dropped.
+func (r *InboundRelay) relayGroup(ctx context.Context, msg InboundMessage) error {
+	grp := r.findGroup(msg.GroupChatID)
+	if grp == nil {
+		// No config for this group — ignore
+		return nil
+	}
+
+	// @mention routing: check if message mentions our bot or another bot.
+	mentions := ParseMentions(msg.Text)
+	if len(mentions) > 0 {
+		mentionsUs := false
+		for _, m := range mentions {
+			if m == r.botName {
+				mentionsUs = true
+				break
+			}
+		}
+		if !mentionsUs {
+			// Mentions something other than us — ignore
+			return nil
+		}
+	}
+	// Strip our bot's @mention from the content so Thrum agents see clean text.
+	content := StripMention(msg.Text, r.botName)
+
+	thrumGroup := "tg:" + grp.Name
+	structured := map[string]any{
+		"source":           "telegram",
+		"chat_id":          msg.GroupChatID,
+		"message_id":       msg.MessageID,
+		"telegram_user":    msg.Username,
+		"telegram_user_id": msg.UserID,
+		"group_name":       grp.Name,
+	}
+
+	sendReq := map[string]any{
+		"content":         content,
+		"group":           thrumGroup,
+		"caller_agent_id": senderIdentity(msg),
+		"structured":      structured,
+	}
+
+	// Threading: if Telegram message is a reply, look up the Thrum message_id
+	if msg.ReplyToMsgID != nil {
+		if thrumID, ok := r.msgMap.ThrumID(msg.GroupChatID, *msg.ReplyToMsgID); ok {
+			sendReq["reply_to"] = thrumID
+		}
+	}
+
+	result, err := r.ws.Call(ctx, "message.send", sendReq)
+	if err != nil {
+		return fmt.Errorf("group message.send: %w", err)
+	}
+
+	var resp struct {
+		MessageID string `json:"message_id"`
+	}
+	if err := json.Unmarshal(result, &resp); err == nil && resp.MessageID != "" {
+		r.msgMap.Store(msg.GroupChatID, msg.MessageID, resp.MessageID)
+	}
+
+	return nil
 }
 
 // relay sends a single Telegram message to Thrum via message.send RPC.

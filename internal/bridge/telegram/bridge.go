@@ -240,7 +240,7 @@ func (b *Bridge) run(ctx context.Context) error {
 
 	// 5. Create message map and relays
 	msgMap := NewMessageMap(10000)
-	inbound := NewInboundRelay(ws, msgMap, userID, b.cfg.Target)
+	inbound := NewInboundRelay(ws, msgMap, userID, b.cfg.Target, b.cfg.Groups, bot.BotUsername())
 	outbound := NewOutboundRelay(ws, bot, msgMap, userID, b.cfg.ChatID)
 
 	// 6. Mark running BEFORE launching goroutines so Pair() sees accurate state.
@@ -272,7 +272,7 @@ func (b *Bridge) run(ctx context.Context) error {
 				return nil
 			}
 			b.inboundCount.Add(1)
-			if err := inbound.relay(ctx, msg); err != nil {
+			if err := inbound.Relay(ctx, msg); err != nil {
 				b.logger.Printf("inbound relay error: %v", err)
 			}
 		}
