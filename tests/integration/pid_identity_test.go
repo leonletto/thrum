@@ -215,7 +215,7 @@ func TestPIDIdentity_SamePIDIdempotent(t *testing.T) {
 	}
 }
 
-func TestPIDIdentity_ConflictOnDifferentPID(t *testing.T) {
+func TestPIDIdentity_ReRegisterUpdatesPID(t *testing.T) {
 	_, socketPath := startTestDaemon(t)
 
 	// Register with PID 111
@@ -231,31 +231,29 @@ func TestPIDIdentity_ConflictOnDifferentPID(t *testing.T) {
 		t.Fatalf("first register: expected registered, got %s", result1.Status)
 	}
 
-	// Try to register same name with different PID — should get conflict
-	// Note: same role+module generates same agentID, so it won't be a name conflict.
-	// Instead it returns "registered" because the agentID matches.
-	// To test PID conflict properly, we need different role/module to get a different agentID
-	// but same name.
-	raw, err := rpcCallRaw(socketPath, "agent.register", map[string]any{
-		"name":       "test_agent",
-		"role":       "reviewer",  // different role → different agentID
-		"module":     "review",    // different module
-		"claude_pid": 222,
-	})
-
-	// The RPC may return an error (conflict) or a response with status=conflict
-	if err != nil {
-		// Expected — conflict returns as RPC error
-		t.Logf("Got expected conflict error: %v", err)
-		return
-	}
-
+	// Re-register same name with different PID (simulating new session taking over)
 	var result2 rpc.RegisterResponse
-	if err := json.Unmarshal(raw, &result2); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	rpcCall(t, socketPath, "agent.register", map[string]any{
+		"name":        "test_agent",
+		"role":        "implementer",
+		"module":      "test",
+		"claude_pid":  os.Getpid(),
+		"re_register": true,
+	}, &result2)
+
+	if result2.Status != "updated" {
+		t.Fatalf("re-register: expected updated, got %s", result2.Status)
 	}
-	if result2.Status != "conflict" {
-		t.Logf("Note: got status=%s (conflict detection may use agentID matching, not PID)", result2.Status)
+
+	// Verify PID was updated in the agent list
+	var listResult rpc.ListAgentsResponse
+	rpcCall(t, socketPath, "agent.list", map[string]any{}, &listResult)
+
+	if len(listResult.Agents) != 1 {
+		t.Fatalf("expected 1 agent, got %d", len(listResult.Agents))
+	}
+	if listResult.Agents[0].ClaudePID != os.Getpid() {
+		t.Errorf("expected updated claude_pid=%d, got %d", os.Getpid(), listResult.Agents[0].ClaudePID)
 	}
 }
 
