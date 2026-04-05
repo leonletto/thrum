@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Single-Agent Mode — Thrum</title>
+<meta name="description" content="Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#single-agent-mode.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Overview &rsaquo; Single-Agent Mode
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <strong>Single-Agent Mode</strong><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Cross-Repo Communication</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>strategies</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
+<h2>What Changed</h2>
+<p>Thrum started as a messaging system. You run multiple agents, they need to talk
+to each other, Thrum handles that. But over the past few months I&#39;ve watched
+people install Thrum for a single agent in a single repo — and immediately get
+hit with listener warnings, cron watchdog prompts, stop hooks blocking their
+session exit to check for unread messages. All of that infrastructure exists to
+support multi-agent coordination. If you&#39;re running one agent, it&#39;s pure
+overhead.</p>
+<p>So v0.7.0 changes the default. <code>thrum init</code> now sets <code>single_agent_mode: true</code>.
+You get Thrum&#39;s context management — project state tracking, session persistence
+across compaction, <code>thrum prime</code> for orientation — without the messaging layer.
+When you need multi-agent coordination, toggle it on: <code>thrum single-agent-mode false</code>. Everything else activates automatically.</p>
+<p>The other half of this release is the three-tier context model. If you&#39;ve been
+manually maintaining a continuation prompt document to give your agent project
+context across sessions, that pattern is now built into Thrum. Three files, three
+purposes, clean separation. And <code>thrum prime</code> now delivers all of it in one
+call — no more two-step &quot;run prime, then run context show.&quot;</p>
+<hr>
+<h2>Single-Agent Mode</h2>
+<h3>The Problem</h3>
+<p>Every Thrum installation used to assume you were running multiple agents. That
+meant:</p>
+<ul>
+<li>A background message-listener agent running on Haiku (~$0.00003/cycle, but it
+adds up)</li>
+<li>A cron watchdog checking every 30 minutes to respawn the listener if it died</li>
+<li>A stop hook that blocked session exit to warn about unread messages</li>
+<li>~1,500 tokens of messaging protocol instructions injected into every session
+preamble</li>
+</ul>
+<p>For a single agent, none of that does anything useful.</p>
+<h3>What Changed</h3>
+<p><code>thrum init</code> now defaults to <code>single_agent_mode: true</code> in
+<code>.thrum/config.json</code>. In this mode:</p>
+<ul>
+<li>No background listener spawned</li>
+<li>No cron watchdog created</li>
+<li>No stop hook checks for unread messages</li>
+<li>No messaging protocol in the preamble</li>
+<li><code>thrum inbox</code>, <code>thrum send</code>, <code>thrum reply</code>, <code>thrum wait</code> — all still work if
+you call them, but nothing prompts you to use them</li>
+</ul>
+<p>What you still get:</p>
+<ul>
+<li><code>thrum prime</code> — full session briefing with identity, daemon health, project
+state, and session context</li>
+<li>Project state tracking via <code>/thrum:update-project</code></li>
+<li>PostCompact recovery — if the agent&#39;s context gets compacted mid-session,
+Thrum auto-saves state beforehand and restores it after</li>
+<li>Agent registration and sessions</li>
+</ul>
+<h3>When to Switch to Multi-Agent</h3>
+<p>Single-agent mode is the right default for most repos. But some features only
+make sense when the messaging layer is active. You&#39;ll know it&#39;s time to switch
+when you want to:</p>
+<ul>
+<li><strong>Run multiple agents in parallel</strong> — a coordinator on <code>main</code> and
+implementers on worktree branches, messaging each other as they work</li>
+<li><strong>Enable the Telegram bridge</strong> — Telegram integration relays messages between
+your phone and your agents, which requires the messaging layer to be running</li>
+<li><strong>Use cross-machine sync</strong> — agents on different machines communicating
+through Git-synced messages</li>
+<li><strong>Have agents coordinate on dependencies</strong> — one agent finishing a task and
+notifying another that its blocker is resolved</li>
+</ul>
+<p>Switching is one command:</p>
+<pre><code># Check current mode
+thrum single-agent-mode
+
+# Switch to multi-agent
+thrum single-agent-mode false</code></pre>
+<p>That&#39;s it. Next time <code>thrum prime</code> runs, it includes the messaging protocol
+and listener spawn instructions. The cron watchdog and stop hook activate
+automatically. You don&#39;t need to re-init or restart the daemon.</p>
+<p>If you later decide you don&#39;t need coordination anymore:</p>
+<pre><code>thrum single-agent-mode true</code></pre>
+<p>The listener stops getting spawned, the stop hook exits early, and the
+messaging protocol drops out of your preamble. Everything is read at runtime —
+no files get rewritten in either direction.</p>
+<hr>
+<h2>Context That Survives Between Sessions</h2>
+<h3>Why This Matters</h3>
+<p>If you&#39;ve used AI coding agents for any serious project, you know the problem.
+You close a session, open a new one, and the agent has no idea what you were
+doing. It doesn&#39;t know the architecture. It doesn&#39;t remember the decisions you
+made yesterday. It doesn&#39;t know which epic is half-finished. So you spend the
+first ten minutes of every session re-explaining your project.</p>
+<p>The workaround most people land on is a &quot;continuation prompt&quot; — a document you
+maintain by hand that tells the agent about the project. I used one for months.
+It works, but it&#39;s tedious. You forget to update it. Session-level stuff (&quot;I&#39;m
+halfway through the auth refactor&quot;) gets mixed in with project-level stuff
+(&quot;we use SQLite for the event store&quot;) and you end up with a document that&#39;s
+either stale or bloated.</p>
+<p>Thrum v0.7.0 builds this pattern in. Your agent gets full project context on
+every session start, automatically. No manual document maintenance. No
+copy-pasting. Run <code>thrum prime</code> and your agent knows where it is, what the
+project looks like, and what it was doing before.</p>
+<h3>What You Get</h3>
+<p><strong>Your agent remembers the project.</strong> <code>thrum init</code> generates a project state
+file with auto-detected language, framework, version, and branch. As you work,
+the <code>/thrum:update-project</code> skill keeps it current — architecture decisions,
+open epics, session history. You don&#39;t maintain this by hand. The agent updates
+it at session boundaries from git and beads data plus a brief narrative of what
+happened.</p>
+<p><strong>Your agent remembers what it was doing.</strong> Session context — in-progress work,
+blockers, next steps — is saved automatically before context compaction and
+restored after. If your session gets compacted mid-task, the agent picks up
+where it left off.</p>
+<p><strong>Your agent knows how to behave.</strong> Role instructions, behavioral rules, which
+commands to use — these are set once when the agent is created and rarely
+change. They&#39;re not mixed in with the stuff that changes every session.</p>
+<p><strong>One command gets everything.</strong> <code>thrum prime</code> used to give you identity and
+daemon status, then tell you to run <code>thrum context show</code> as a separate step.
+Now it delivers the complete briefing — identity, role instructions, project
+state, and session context — in a single call. The agent is oriented and ready
+to work immediately.</p>
+<h3>How It&#39;s Structured</h3>
+<p>Under the hood, this is three files with distinct purposes and lifecycles. The
+separation is what makes it work — project knowledge doesn&#39;t get overwritten
+when session state updates, and role instructions don&#39;t drift when the project
+evolves. For the full technical details on the three-tier model, file paths,
+and update mechanics, see the <a href="context.html">Context Management</a> docs.</p>
+<hr>
+<h2>Listener Improvements</h2>
+<p>If you&#39;re using multi-agent mode, the listener infrastructure is more reliable
+in v0.7.0. If you&#39;re in single-agent mode, you can skip this section entirely.</p>
+<h3>Heartbeat-Gated Spawning</h3>
+<p>The main problem with the old listener was accumulation. Three different code
+paths could spawn a listener: the cron watchdog, the PostCompact hook, and the
+parent agent responding to the listener&#39;s &quot;RE-ARM&quot; completion message. None of
+them checked whether a listener was already running. Sessions routinely ended up
+with 3+ duplicate listeners burning Haiku tokens for no reason.</p>
+<p>Now every spawn path checks the heartbeat file first. The heartbeat is a
+timestamp in the agent&#39;s identity JSON, updated every cycle by the running
+listener. Rule: if the heartbeat is less than 10 minutes old, a listener is
+alive — don&#39;t spawn another one.</p>
+<table>
+<thead>
+<tr>
+<th>Spawn Path</th>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Cron watchdog</td>
+<td>Prompt said &quot;if no listener&quot; — no actual check</td>
+<td>Reads heartbeat age, skips if &lt; 10 min</td>
+</tr>
+<tr>
+<td>PostCompact</td>
+<td>Didn&#39;t exist</td>
+<td>Checks heartbeat, spawns if stale + multi-agent</td>
+</tr>
+<tr>
+<td>Listener completion</td>
+<td>&quot;RE-ARM NOW&quot; triggered reflexive spawn</td>
+<td>Non-urgent message referencing cron watchdog</td>
+</tr>
+</tbody></table>
+<h3>Non-Urgent Completion</h3>
+<p>When a listener finishes its cycle, it used to print:</p>
+<pre><code>RE-ARM: This listener has stopped. Spawn a new message-listener
+agent to continue listening.</code></pre>
+<p>That message caused the parent agent to immediately spawn a new listener —
+whether one was needed or not. Now it prints:</p>
+<pre><code>Listener cycle complete. Cron watchdog monitors heartbeat and
+will re-arm if needed.</code></pre>
+<p>The cron watchdog handles re-arming. The parent agent doesn&#39;t need to react.</p>
+<h3>PostCompact Hook</h3>
+<p>New hook. When context compaction happens:</p>
+<ul>
+<li><strong>Both modes:</strong> Emits an orientation prompt telling the agent to run
+<code>thrum prime</code> to restore context.</li>
+<li><strong>Multi-agent mode:</strong> Also checks the heartbeat and respawns the listener if
+it&#39;s stale.</li>
+</ul>
+<p>This pairs with the existing PreCompact hook that saves session context before
+compaction. PreCompact saves, PostCompact recovers.</p>
+<hr>
+<h2>Migration</h2>
+<p><strong>Existing multi-agent repos:</strong> Nothing breaks. Your <code>.thrum/config.json</code>
+already exists and doesn&#39;t have <code>single_agent_mode</code> set, so the daemon treats
+it as <code>false</code> (multi-agent). Everything works exactly as before. The listener
+improvements apply automatically.</p>
+<p><strong>New repos:</strong> <code>thrum init</code> defaults to single-agent mode. If you want
+multi-agent coordination, run <code>thrum single-agent-mode false</code> after init.</p>
+<p><strong>Upgrading the binary:</strong> Standard process — pull the latest, rebuild, restart
+your daemon. The new context files are created on first <code>thrum init</code> or
+<code>thrum prime</code>. They don&#39;t interfere with existing files.</p>
+<p><strong>Already have a continuation prompt?</strong> If you&#39;ve been maintaining a project
+state document manually, you don&#39;t lose that work. Ask your agent to look at
+the new project state format (<code>/thrum:update-project</code>) and import your
+existing content into it. From then on, Thrum maintains it for you.</p>
+<hr>
+<h2>What&#39;s Next</h2>
+<p>Right now, Thrum coordinates agents within a single repo. That covers most
+workflows. But if you work with multiple related repos — a primary service and
+a couple of microservices, or a monorepo with satellite projects — you&#39;ve
+probably hit the wall where a change in one repo requires a corresponding
+change in another. Today you handle that manually: figure out the dependency,
+switch to the other repo, explain the context to a different agent, and hope
+you don&#39;t miss anything.</p>
+<p>Cross-project agent coordination shipped in the same release. The approach
+turned out simpler than daemon-to-daemon communication — a shared Telegram
+group acts as the transport layer between repos, no network configuration
+needed. Your agent in the primary repo makes a breaking API change and sends a
+message to the other repo&#39;s coordinator through the Telegram group. The agents
+coordinate directly instead of you relaying the context manually.</p>
+<p>See <a href="telegram-groups.html">Cross-Repo Communication</a> for the full setup.</p>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#single-agent-mode.html')}</script>
+</body>
+</html>

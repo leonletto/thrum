@@ -5,6 +5,7 @@
   "scripts": {
     "build-docs": "node scripts/build-docs.js",
     "serve": "npx http-server . -p 8080 -o",
+    "dev": "concurrently -k \"chokidar 'docs/**/*.md' -c 'node scripts/build-docs.js' -d 500 --initial\" \"npx http-server . -p 8080 -o\"",
     "deploy": "npm run build-docs && echo 'Ready for deployment'"
   },
   "keywords": [
@@ -17,10 +18,12 @@
   "author": "Leon Letto",
   "license": "MIT",
   "devDependencies": {
+    "chokidar-cli": "^3.0.0",
+    "concurrently": "^9.2.1",
+    "fs-extra": "^11.3.0",
     "gray-matter": "^4.0.3",
-    "marked": "^16.1.1",
     "highlight.js": "^11.11.1",
-    "minisearch": "^7.2.0",
-    "fs-extra": "^11.3.0"
+    "marked": "^16.1.1",
+    "minisearch": "^7.2.0"
   }
 }
