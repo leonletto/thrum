@@ -11,6 +11,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
+	"github.com/leonletto/thrum/internal/process"
 )
 
 // Config represents the resolved configuration for the thrum agent.
@@ -181,21 +182,33 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 		return loadIdentityFile(identityPath)
 	}
 
-	// Collect available identity names for error messages
+	// Load all identities for multi-pass resolution
+	var identities []*IdentityFile
 	available := make([]string, 0, len(jsonFiles))
 	for _, f := range jsonFiles {
 		available = append(available, strings.TrimSuffix(f, ".json"))
+		id, err := loadIdentityFile(filepath.Join(dirPath, f))
+		if err != nil {
+			continue
+		}
+		identities = append(identities, id)
 	}
 
-	// Multiple identity files - try worktree-based filtering
+	// Pass 0: PID-first resolution — match by Claude PID
+	claudePID := process.FindClaudeAncestor()
+	if claudePID > 0 {
+		for _, id := range identities {
+			if id.ClaudePID == claudePID && process.IsRunning(claudePID) {
+				return id, nil
+			}
+		}
+	}
+
+	// Pass 1: Worktree-based filtering (existing logic)
 	currentWT := detectCurrentWorktree(dirPath)
 	if currentWT != "" {
 		var matches []*IdentityFile
-		for _, f := range jsonFiles {
-			id, err := loadIdentityFile(filepath.Join(dirPath, f))
-			if err != nil {
-				continue
-			}
+		for _, id := range identities {
 			if id.Worktree == currentWT {
 				matches = append(matches, id)
 			}
@@ -204,7 +217,7 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 			return matches[0], nil
 		}
 		if len(matches) > 1 {
-			// Most-recent-wins: pick the identity with the latest UpdatedAt
+			// Pass 2: Most-recent-wins among worktree matches
 			best := matches[0]
 			for _, m := range matches[1:] {
 				if m.UpdatedAt.After(best.UpdatedAt) {

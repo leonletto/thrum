@@ -1002,3 +1002,64 @@ func TestSaveIdentityFile_BumpsVersionTo3(t *testing.T) {
 		t.Errorf("Version after save = %d, want 3", loaded.Version)
 	}
 }
+
+// writeTestIdentity writes an identity file directly to the identities dir,
+// preserving explicit field values (unlike SaveIdentityFile which overwrites UpdatedAt).
+func writeTestIdentity(t *testing.T, dir, name string, id config.IdentityFile) {
+	t.Helper()
+	data, err := json.Marshal(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name+".json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestLoad_PIDFirstResolution_ZeroPIDFallsThrough verifies that when no Claude
+// ancestor process is found (PID=0), the PID pass is skipped and the existing
+// worktree / ambiguous-error logic still applies correctly.
+func TestLoad_PIDFirstResolution_ZeroPIDFallsThrough(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
+
+	tmpDir := t.TempDir()
+	identitiesDir := filepath.Join(tmpDir, ".thrum", "identities")
+	if err := os.MkdirAll(identitiesDir, 0750); err != nil {
+		t.Fatalf("Failed to create identities dir: %v", err)
+	}
+
+	// Two identities with ClaudePID=0 (no PID stored) and non-matching worktrees.
+	// Pass 0 should skip (no PID match), Pass 1 should find no worktree match,
+	// and the function should return the "cannot auto-select" error.
+	agent1 := config.IdentityFile{
+		Version:   3,
+		RepoID:    "r_TEST",
+		ClaudePID: 0,
+		Worktree:  "worktree_x",
+		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_x", Role: "implementer", Module: "test"},
+		UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	agent2 := config.IdentityFile{
+		Version:   3,
+		RepoID:    "r_TEST",
+		ClaudePID: 0,
+		Worktree:  "worktree_y",
+		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_y", Role: "tester", Module: "test"},
+		UpdatedAt: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+	}
+
+	writeTestIdentity(t, identitiesDir, "agent_x", agent1)
+	writeTestIdentity(t, identitiesDir, "agent_y", agent2)
+
+	_, err := config.LoadWithPath(tmpDir, "", "")
+	if err == nil {
+		t.Fatal("Expected error when PID=0 and no worktree match, got nil")
+	}
+	if !strings.Contains(err.Error(), "cannot auto-select identity") {
+		t.Errorf("Expected 'cannot auto-select identity' error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "agent_x") || !strings.Contains(err.Error(), "agent_y") {
+		t.Errorf("Error should list available identities, got: %v", err)
+	}
+}
