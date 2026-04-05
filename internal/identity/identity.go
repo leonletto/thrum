@@ -301,9 +301,13 @@ func ParseAgentID(agentID string) (role, hash string) {
 func isBase32Hash(s string) bool {
 	// Crockford base32 alphabet: 0-9, A-Z except I, L, O, U
 	for _, c := range s {
-		if (c < '0' || c > '9') && (c < 'A' || c > 'Z') {
-			return false
+		if c >= '0' && c <= '9' {
+			continue
 		}
+		if c >= 'A' && c <= 'Z' && c != 'I' && c != 'L' && c != 'O' && c != 'U' {
+			continue
+		}
+		return false
 	}
 	return true
 }

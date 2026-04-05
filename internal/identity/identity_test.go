@@ -394,6 +394,36 @@ func TestValidateAgentName_Reserved(t *testing.T) {
 	}
 }
 
+func TestParseAgentID_CrockfordExclusions(t *testing.T) {
+	// Crockford base32 excludes I, L, O, U — names containing these
+	// should be treated as named agents, not unnamed hash-based agents.
+	tests := []struct {
+		agentID  string
+		wantRole string
+		wantHash string
+		desc     string
+	}{
+		{"coord_1B9K33T6RK", "coord", "1B9K33T6RK", "valid Crockford hash"},
+		{"coord_ABCDEFGH12", "coord", "ABCDEFGH12", "valid uppercase + digits"},
+		{"coord_ABCDEFGHIJ", "", "", "contains I — not Crockford, treat as named"},
+		{"coord_ABCDEFGHLK", "", "", "contains L — not Crockford, treat as named"},
+		{"coord_ABCDEFGHOK", "", "", "contains O — not Crockford, treat as named"},
+		{"coord_ABCDEFGHUK", "", "", "contains U — not Crockford, treat as named"},
+		{"my_named_agent", "", "", "named agent with underscores"},
+		{"coordinator_main", "", "", "named agent — suffix too long for hash"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			role, hash := identity.ParseAgentID(tt.agentID)
+			if role != tt.wantRole || hash != tt.wantHash {
+				t.Errorf("ParseAgentID(%q) = (%q, %q), want (%q, %q)",
+					tt.agentID, role, hash, tt.wantRole, tt.wantHash)
+			}
+		})
+	}
+}
+
 func TestSanitizeAgentName(t *testing.T) {
 	tests := []struct {
 		input string
