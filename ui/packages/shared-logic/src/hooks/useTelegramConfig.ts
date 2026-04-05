@@ -1,6 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ensureConnected, wsClient } from '../api/client';
 
+export interface RemoteAgent {
+  name: string;
+  prefix: string;
+  bot: string;
+}
+
+export interface TelegramGroup {
+  chat_id: number;
+  name: string;
+  trusted_bots?: number[];
+  remote_agents?: RemoteAgent[];
+}
+
 export interface TelegramStatusResponse {
   configured: boolean;
   enabled: boolean;
@@ -14,6 +27,7 @@ export interface TelegramStatusResponse {
   connected_at?: string;
   inbound_count: number;
   error?: string;
+  groups?: TelegramGroup[];
 }
 
 export function useTelegramStatus() {

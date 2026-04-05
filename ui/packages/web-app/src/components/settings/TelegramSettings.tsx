@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTelegramStatus, useTelegramConfigure, useTelegramPair } from '@thrum/shared-logic';
 import { TelegramAllowList } from './TelegramAllowList';
+import { TelegramGroups } from './TelegramGroups';
 
 // Step-by-step setup guide shown when bot is not yet configured
 function SetupWizard({ defaultOpen }: { defaultOpen: boolean }) {
@@ -473,6 +474,14 @@ export function TelegramSettings() {
               <TelegramAllowList
                 status={status}
                 onConfigure={(config) => configure.mutate(config as Record<string, unknown>)}
+              />
+            )}
+
+            {/* Groups */}
+            {status && (
+              <TelegramGroups
+                status={status}
+                onConfigure={(config) => configure.mutate(config)}
               />
             )}
 
