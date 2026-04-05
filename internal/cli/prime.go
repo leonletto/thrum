@@ -395,9 +395,10 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 			out.WriteString("- **Silent Agent** — Never sends status updates.\n\n")
 
 			// Section 6: Listener spawn instructions
+			agentID := ctx.Identity.AgentID
 			out.WriteString("\n## Start Background Message Listener\n\n")
 			fmt.Fprintf(&out, "  Task(subagent_type=\"message-listener\", model=\"haiku\",\n")
-			fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages.\\nSTEP_1: %s/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")\n", repoPath)
+			fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages.\\nSTEP_1: %s/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s --agent-name %s\")\n", repoPath, agentID)
 		}
 	}
 

@@ -10,15 +10,18 @@ file so the Stop hook can detect if the listener dies and prompt a restart.
 Task(
   subagent_type="message-listener",
   model="haiku",
-  prompt="Listen for Thrum messages.\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -15s"
+  prompt="Listen for Thrum messages.\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -15s --agent-name <agent_id>"
 )
 ```
 
-Replace `/path/to/repo` with the actual repo path. When using the Thrum plugin,
-`thrum prime` outputs a ready-to-use spawn instruction with the correct path.
+Replace `/path/to/repo` with the actual repo path and `<agent_id>` with your
+agent name. `thrum prime` outputs a ready-to-use spawn instruction with both
+pre-filled.
 
 Note: `background: true` is set in the agent frontmatter, so `run_in_background`
-is not needed in the spawn call.
+is not needed in the spawn call. The `--agent-name` flag enables PID file
+coordination — `thrum wait` writes `.thrum/var/<agent_id>-listener.pid` to
+prevent duplicate listeners.
 
 ## How It Works
 
@@ -67,7 +70,7 @@ to avoid duplicates.
 ```text
 CronCreate(
   cron="*/30 * * * *",
-  prompt="Check the listener heartbeat file at .thrum/identities/<agent_id>.json.\nExtract the .listener.heartbeat timestamp. If it is missing or older than\n10 minutes, spawn a new listener:\n\nAgent(subagent_type=\"message-listener\", model=\"haiku\", prompt=\"Listen for Thrum messages.\\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")"
+  prompt="Check the listener PID file at .thrum/var/<agent_id>-listener.pid.\nIf the file does not exist, or if kill -0 <pid> fails (process not running),\nspawn a new listener:\n\nAgent(subagent_type=\"message-listener\", model=\"haiku\", prompt=\"Listen for Thrum messages.\\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s --agent-name <agent_id>\")"
 )
 ```
 
