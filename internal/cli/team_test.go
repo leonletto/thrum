@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -297,4 +298,58 @@ func TestFormatTeam_SharedMessages(t *testing.T) {
 			t.Errorf("should not have shared section when no shared messages, got: %s", result)
 		}
 	})
+}
+
+func TestFormatTeam_LiveIndicator(t *testing.T) {
+	resp := &TeamListResponse{
+		Members: []TeamMember{
+			{
+				AgentID:   "test_agent",
+				Role:      "implementer",
+				Module:    "test",
+				ClaudePID: os.Getpid(), // current process = alive
+				Status:    "active",
+			},
+		},
+	}
+	output := FormatTeam(resp)
+	if !strings.Contains(output, "[live]") {
+		t.Errorf("expected [live] indicator, got: %s", output)
+	}
+}
+
+func TestFormatTeam_StaleIndicator(t *testing.T) {
+	resp := &TeamListResponse{
+		Members: []TeamMember{
+			{
+				AgentID:   "test_agent",
+				Role:      "implementer",
+				Module:    "test",
+				ClaudePID: 999999, // dead PID
+				Status:    "active",
+			},
+		},
+	}
+	output := FormatTeam(resp)
+	if !strings.Contains(output, "[stale]") {
+		t.Errorf("expected [stale] indicator, got: %s", output)
+	}
+}
+
+func TestFormatTeam_NoPIDNoIndicator(t *testing.T) {
+	resp := &TeamListResponse{
+		Members: []TeamMember{
+			{
+				AgentID:   "test_agent",
+				Role:      "implementer",
+				Module:    "test",
+				ClaudePID: 0, // no PID
+				Status:    "active",
+			},
+		},
+	}
+	output := FormatTeam(resp)
+	if strings.Contains(output, "[live]") || strings.Contains(output, "[stale]") {
+		t.Errorf("expected no PID indicator for zero PID, got: %s", output)
+	}
 }
