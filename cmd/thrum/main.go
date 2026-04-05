@@ -1825,6 +1825,24 @@ Exit codes:
 				Quiet:         flagQuiet || flagJSON,
 			}
 
+			// Resolve PID file path for spawn coordination
+			agentName, _ := cmd.Flags().GetString("agent-name")
+			if agentName == "" {
+				agentName = os.Getenv("THRUM_AGENT_ID")
+				if agentName == "" {
+					agentName = os.Getenv("THRUM_NAME")
+				}
+			}
+			if agentName != "" {
+				thrumDir, err := paths.ResolveThrumDir(flagRepo)
+				if err != nil {
+					thrumDir = filepath.Join(flagRepo, ".thrum")
+				}
+				varDir := filepath.Join(thrumDir, "var")
+				_ = os.MkdirAll(varDir, 0o750)
+				opts.PIDFilePath = filepath.Join(varDir, agentName+"-listener.pid")
+			}
+
 			if flagVerbose && !afterTime.IsZero() {
 				fmt.Fprintf(os.Stderr, "Listening for messages after %s\n", afterTime.Format(time.RFC3339))
 			}
@@ -1864,6 +1882,7 @@ Exit codes:
 	cmd.Flags().String("scope", "", "Filter by scope (format: type:value)")
 	cmd.Flags().String("mention", "", "Wait for mentions of role (format: @role)")
 	cmd.Flags().String("after", "", "Only return messages after this relative time (e.g., -30s, -5m, +60s)")
+	cmd.Flags().String("agent-name", "", "Agent name for listener PID file (enables spawn coordination)")
 
 	return cmd
 }

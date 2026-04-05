@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon"
 )
 
 func TestWait_MessageReceived(t *testing.T) {
@@ -754,5 +756,39 @@ func TestWait_ReconnectAfterDaemonRestart(t *testing.T) {
 
 	if message.MessageID != "msg_post_restart" {
 		t.Errorf("Expected message_id 'msg_post_restart', got %s", message.MessageID)
+	}
+}
+
+func TestWaitWritesPIDFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	pidPath := filepath.Join(tmpDir, "test-listener.pid")
+
+	// Write a PID file manually to test the read/check pattern
+	info := daemon.PIDInfo{PID: os.Getpid(), StartedAt: time.Now()}
+	err := daemon.WritePIDFileJSON(pidPath, info)
+	if err != nil {
+		t.Fatalf("WritePIDFileJSON: %v", err)
+	}
+
+	// Check it
+	running, readInfo, err := daemon.CheckPIDFileJSON(pidPath)
+	if err != nil {
+		t.Fatalf("CheckPIDFileJSON: %v", err)
+	}
+	if !running {
+		t.Error("expected process to be running")
+	}
+	if readInfo.PID != os.Getpid() {
+		t.Errorf("expected PID %d, got %d", os.Getpid(), readInfo.PID)
+	}
+
+	// Clean up
+	_ = daemon.RemovePIDFile(pidPath)
+	running, _, err = daemon.CheckPIDFileJSON(pidPath)
+	if err != nil {
+		t.Fatalf("CheckPIDFileJSON after remove: %v", err)
+	}
+	if running {
+		t.Error("expected process to not be running after PID file removed")
 	}
 }

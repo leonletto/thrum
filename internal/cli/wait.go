@@ -3,8 +3,12 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon"
 )
 
 // WaitOptions contains options for waiting for messages.
@@ -17,6 +21,7 @@ type WaitOptions struct {
 	ForAgent      string    // Filter to messages for this agent
 	ForAgentRole  string    // Filter to messages for this agent's role
 	Quiet         bool      // Suppress stderr status messages
+	PIDFilePath   string    // Path to write listener PID file (empty = no PID file)
 }
 
 // reconnectTimeout is how long to keep trying to reconnect to the daemon
@@ -106,6 +111,28 @@ func Wait(socketPath string, opts WaitOptions) (*Message, error) {
 		}
 	}
 
+	// Write PID file for spawn coordination
+	if opts.PIDFilePath != "" {
+		pidInfo := daemon.PIDInfo{
+			PID:       os.Getpid(),
+			StartedAt: time.Now(),
+		}
+		if err := daemon.WritePIDFileJSON(opts.PIDFilePath, pidInfo); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to write PID file: %v\n", err)
+		} else {
+			defer daemon.RemovePIDFile(opts.PIDFilePath) //nolint:errcheck
+
+			// Signal handler for cleanup on SIGTERM/SIGINT
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+			go func() {
+				<-sigCh
+				_ = daemon.RemovePIDFile(opts.PIDFilePath)
+				os.Exit(1)
+			}()
+		}
+	}
+
 	// Poll for new messages
 	for {
 		select {
@@ -146,6 +173,14 @@ func Wait(socketPath string, opts WaitOptions) (*Message, error) {
 				}
 			}
 			listParams["exclude_self"] = true
+
+			// Update PID file timestamp (heartbeat)
+			if opts.PIDFilePath != "" {
+				_ = daemon.WritePIDFileJSON(opts.PIDFilePath, daemon.PIDInfo{
+					PID:       os.Getpid(),
+					StartedAt: time.Now(),
+				})
+			}
 
 			if err := client.Call("message.list", listParams, &inbox); err != nil {
 				// Connection failed — daemon may have restarted.
