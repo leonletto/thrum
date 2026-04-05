@@ -7,7 +7,6 @@ import type { TelegramStatusResponse } from '@thrum/shared-logic';
 
 export interface TelegramConfig {
   allow_from?: number[];
-  allow_all?: boolean;
 }
 
 interface TelegramAllowListProps {
@@ -20,7 +19,6 @@ export function TelegramAllowList({ status, onConfigure }: TelegramAllowListProp
   const [inputError, setInputError] = useState<string | null>(null);
 
   const allowFrom: number[] = status.allow_from ?? [];
-  const allowAll: boolean = status.allow_all ?? false;
 
   function handleAddUserId() {
     const trimmed = newUserId.trim();
@@ -43,10 +41,6 @@ export function TelegramAllowList({ status, onConfigure }: TelegramAllowListProp
 
   function handleRemoveUserId(id: number) {
     onConfigure({ allow_from: allowFrom.filter((existing) => existing !== id) });
-  }
-
-  function handleToggleAllowAll() {
-    onConfigure({ allow_all: !allowAll });
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -99,16 +93,13 @@ export function TelegramAllowList({ status, onConfigure }: TelegramAllowListProp
           ))}
         </div>
       ) : (
-        !allowAll && (
-          <p className="text-xs font-mono italic" style={{ color: 'var(--muted-foreground)' }}>
-            No user IDs in the allow list.
-          </p>
-        )
+        <p className="text-xs font-mono italic" style={{ color: 'var(--muted-foreground)' }}>
+          No user IDs in the allow list.
+        </p>
       )}
 
       {/* Add new user ID */}
-      {!allowAll && (
-        <div className="space-y-1">
+      <div className="space-y-1">
           <div className="flex gap-2">
             <Input
               type="text"
@@ -140,64 +131,7 @@ export function TelegramAllowList({ status, onConfigure }: TelegramAllowListProp
             </p>
           )}
         </div>
-      )}
 
-      {/* Allow-all toggle */}
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <Label
-            htmlFor="tg-allow-all"
-            className="text-xs font-mono cursor-pointer"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            Allow all users
-          </Label>
-          <button
-            id="tg-allow-all"
-            type="button"
-            role="switch"
-            aria-checked={allowAll}
-            onClick={handleToggleAllowAll}
-            className="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)]"
-            style={{
-              backgroundColor: allowAll ? 'var(--accent-color)' : 'var(--border)',
-            }}
-          >
-            <span
-              className="inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform"
-              style={{ transform: allowAll ? 'translateX(1rem)' : 'translateX(0)' }}
-              aria-hidden="true"
-            />
-          </button>
-        </div>
-
-        {allowAll && (
-          <div
-            className="flex items-start gap-2 px-3 py-2 rounded border text-xs font-mono"
-            style={{
-              borderColor: 'var(--destructive)',
-              color: 'var(--destructive)',
-              background: 'var(--accent-subtle-bg)',
-            }}
-            role="alert"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              className="w-4 h-4 flex-shrink-0 mt-0.5"
-              aria-hidden="true"
-            >
-              <path
-                fillRule="evenodd"
-                d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <span>Warning: allows ANY Telegram user to send messages to this bridge.</span>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
