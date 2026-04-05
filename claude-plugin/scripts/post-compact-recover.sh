@@ -16,27 +16,22 @@ if [ -f "$THRUM_CONFIG" ] && command -v jq >/dev/null 2>&1; then
   fi
 fi
 
-# Multi-agent: check heartbeat and re-arm listener if stale
+# Multi-agent: check if listener is alive via PID file
 AGENT_ID="${THRUM_AGENT_ID:-${THRUM_NAME:-}}"
 if [ -z "$AGENT_ID" ]; then
   exit 0
 fi
 
-IDENT_FILE="$THRUM_HOME/.thrum/identities/${AGENT_ID}.json"
-if [ ! -f "$IDENT_FILE" ]; then
-  echo "Listener may need re-arming — check with \`thrum prime\`." >&2
+PID_FILE="$THRUM_HOME/.thrum/var/${AGENT_ID}-listener.pid"
+if [ ! -f "$PID_FILE" ]; then
+  echo "No listener running. Spawn a new listener." >&2
   exit 0
 fi
 
-HEARTBEAT=$(jq -r '.listener.heartbeat // empty' "$IDENT_FILE" 2>/dev/null)
-if [ -z "$HEARTBEAT" ]; then
-  echo "No listener heartbeat found. Spawn a new listener." >&2
-  exit 0
-fi
-
-AGE=$(echo "null" | jq --arg hb "$HEARTBEAT" '($hb | fromdate) as $t | (now - $t) | floor' 2>/dev/null || echo 9999)
-if [ "$AGE" -gt 600 ]; then
-  echo "Listener heartbeat is stale (${AGE}s ago). Spawn a new listener." >&2
+LISTENER_PID=$(jq -r '.pid // empty' "$PID_FILE" 2>/dev/null)
+if [ -z "$LISTENER_PID" ] || ! kill -0 "$LISTENER_PID" 2>/dev/null; then
+  echo "Listener process dead. Spawn a new listener." >&2
+  rm -f "$PID_FILE"
 fi
 
 exit 0

@@ -47,32 +47,29 @@ if [ "$MSG_COUNT" -gt 0 ]; then
   exit 2
 fi
 
-# Phase 2: Check listener heartbeat
+# Phase 2: Check if listener process is alive via PID file
 AGENT_ID="${THRUM_AGENT_ID:-${THRUM_NAME:-}}"
 THRUM_DIR="${THRUM_HOME:-$PROJECT_DIR}"
-IDENT_FILE="$THRUM_DIR/.thrum/identities/${AGENT_ID}.json"
+PID_FILE="$THRUM_DIR/.thrum/var/${AGENT_ID}-listener.pid"
 
-if [ -z "$AGENT_ID" ] || [ ! -f "$IDENT_FILE" ]; then
+if [ -z "$AGENT_ID" ]; then
   exit 0
 fi
 
-HEARTBEAT=$(jq -r '.listener.heartbeat // empty' "$IDENT_FILE" 2>/dev/null)
-if [ -z "$HEARTBEAT" ]; then
+if [ ! -f "$PID_FILE" ]; then
   echo "Your background message listener is not running. Start it now." >&2
   exit 2
 fi
 
-LISTENER_SESSION=$(jq -r '.listener.session_id // empty' "$IDENT_FILE" 2>/dev/null)
-CURRENT_SESSION=$(jq -r '.data.session_id // empty' "$IDENT_FILE" 2>/dev/null)
-
-if [ "$LISTENER_SESSION" != "$CURRENT_SESSION" ]; then
-  echo "Your background message listener is from a previous session. Restart it." >&2
+LISTENER_PID=$(jq -r '.pid // empty' "$PID_FILE" 2>/dev/null)
+if [ -z "$LISTENER_PID" ]; then
+  echo "Your background message listener is not running (invalid PID file). Start it now." >&2
   exit 2
 fi
 
-AGE=$(echo "null" | jq --arg hb "$HEARTBEAT" '($hb | fromdate) as $t | (now - $t) | floor' 2>/dev/null || echo 9999)
-if [ "$AGE" -gt 600 ]; then
-  echo "Your background message listener has stopped (last heartbeat ${AGE}s ago). Restart it." >&2
+if ! kill -0 "$LISTENER_PID" 2>/dev/null; then
+  echo "Your background message listener has stopped (stale PID file). Restart it." >&2
+  rm -f "$PID_FILE"
   exit 2
 fi
 
