@@ -267,3 +267,9 @@ thrum telegram status
 
 - This confirmation appears when reconfiguring with a different token. Use
   `--yes` to bypass in scripts.
+
+### Next: Cross-Repo Communication
+
+Once your DM bridge is working, you can connect agents across multiple repos
+using shared Telegram groups. See [Cross-Repo Communication](telegram-groups.md)
+for setup and proxy agent configuration.
