@@ -174,14 +174,6 @@ func Wait(socketPath string, opts WaitOptions) (*Message, error) {
 			}
 			listParams["exclude_self"] = true
 
-			// Update PID file timestamp (heartbeat)
-			if opts.PIDFilePath != "" {
-				_ = daemon.WritePIDFileJSON(opts.PIDFilePath, daemon.PIDInfo{
-					PID:       os.Getpid(),
-					StartedAt: time.Now(),
-				})
-			}
-
 			if err := client.Call("message.list", listParams, &inbox); err != nil {
 				// Connection failed — daemon may have restarted.
 				// Try to reconnect for up to reconnectTimeout.
@@ -192,6 +184,15 @@ func Wait(socketPath string, opts WaitOptions) (*Message, error) {
 					return nil, err
 				}
 				continue
+			}
+
+			// Update PID file timestamp (heartbeat) after a successful RPC call
+			// so that a failed call does not refresh the timestamp.
+			if opts.PIDFilePath != "" {
+				_ = daemon.WritePIDFileJSON(opts.PIDFilePath, daemon.PIDInfo{
+					PID:       os.Getpid(),
+					StartedAt: time.Now(),
+				})
 			}
 
 			// Return the first unseen message (newest first due to DESC sort)
