@@ -326,6 +326,37 @@ func TestRateLimiterDropsSilently(t *testing.T) {
 	}
 }
 
+// TestBot_EchoPreventionField verifies that IsSelf can be set on InboundMessage.
+func TestBot_EchoPreventionField(t *testing.T) {
+	t.Parallel()
+	msg := InboundMessage{
+		Text:        "hello",
+		IsSelf:      true,
+		GroupChatID: -100123,
+	}
+	if !msg.IsSelf {
+		t.Error("IsSelf should be true")
+	}
+}
+
+// TestBot_GroupChatIDField verifies that GroupChatID, IsBotSender, and BotUsername
+// fields are correctly set on InboundMessage.
+func TestBot_GroupChatIDField(t *testing.T) {
+	t.Parallel()
+	msg := InboundMessage{
+		Text:        "hello",
+		GroupChatID: -100123,
+		IsBotSender: true,
+		BotUsername: "falcon_bot",
+	}
+	if msg.GroupChatID >= 0 {
+		t.Error("GroupChatID should be negative for groups")
+	}
+	if !msg.IsBotSender {
+		t.Error("IsBotSender should be true")
+	}
+}
+
 // TestBot_PairModeAtomicPlumbing verifies that pairMode and pairCh atomic fields
 // on Bot work correctly: store channel, set pairMode, load and send, receive,
 // then verify teardown resets both fields.

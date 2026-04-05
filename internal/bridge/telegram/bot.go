@@ -21,6 +21,12 @@ type InboundMessage struct {
 	Username     string
 	UserID       int64
 	ReplyToMsgID *int
+
+	// Group support
+	GroupChatID int64  // Negative if from a group, 0 if DM
+	IsSelf      bool   // True if message was sent by our own bot
+	IsBotSender bool   // True if sender is a bot (trusted)
+	BotUsername string // Sender's bot username (if IsBotSender)
 }
 
 const (
@@ -123,9 +129,19 @@ func (b *Bot) Poll(ctx context.Context) {
 			// SECURITY: Gate check FIRST — before any extraction, logging of content,
 			// or other processing. Blocked senders produce zero observable side effects.
 
-			// Drop bot messages — bots are never allowed, even if ID is in AllowFrom.
-			if from.IsBot {
+			// Echo prevention: ignore our own messages.
+			if from.ID == b.api.Self.ID {
 				continue
+			}
+
+			// Bot message gate: drop untrusted bots; allow trusted bots in configured groups.
+			if from.IsBot {
+				// Allow trusted bots in configured groups
+				if msg.Chat != nil && b.config.IsTrustedBot(msg.Chat.ID, from.ID) {
+					// Trusted bot — allow through
+				} else {
+					continue // Drop untrusted bot messages
+				}
 			}
 
 			// Pair mode: intercept message for pairing handshake.
@@ -159,6 +175,15 @@ func (b *Bot) Poll(ctx context.Context) {
 
 			// Access granted — now extract the message.
 			im := extractMessage(msg)
+
+			// Set group fields (extractMessage doesn't have Bot context).
+			if msg.Chat != nil && msg.Chat.ID < 0 {
+				im.GroupChatID = msg.Chat.ID
+			}
+			im.IsBotSender = from.IsBot
+			if from.IsBot {
+				im.BotUsername = from.UserName
+			}
 
 			select {
 			case b.messages <- im:
