@@ -40,6 +40,7 @@ type IdentityFile struct {
 	SessionID   string      `json:"session_id,omitempty"`
 	ConfirmedBy string      `json:"confirmed_by,omitempty"`
 	ContextFile string      `json:"context_file,omitempty"`
+	ClaudePID   int         `json:"claude_pid,omitempty"`
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 

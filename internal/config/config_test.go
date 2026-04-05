@@ -941,6 +941,44 @@ func TestIdentityV1RoundTrip(t *testing.T) {
 	}
 }
 
+func TestIdentityFile_ClaudePID_Serialization(t *testing.T) {
+	identity := config.IdentityFile{
+		Version:   3,
+		ClaudePID: 12345,
+		Agent:     config.AgentConfig{Name: "test"},
+	}
+	data, err := json.Marshal(identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded config.IdentityFile
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.ClaudePID != 12345 {
+		t.Errorf("ClaudePID = %d, want 12345", decoded.ClaudePID)
+	}
+}
+
+func TestIdentityFile_ClaudePID_OmittedWhenZero(t *testing.T) {
+	identity := config.IdentityFile{Version: 3, Agent: config.AgentConfig{Name: "test"}}
+	data, _ := json.Marshal(identity)
+	if strings.Contains(string(data), "claude_pid") {
+		t.Error("claude_pid should be omitted when zero")
+	}
+}
+
+func TestIdentityFile_BackwardCompat_NoPIDField(t *testing.T) {
+	old := `{"version":3,"repo_id":"r_ABC","agent":{"Name":"test"},"updated_at":"2026-01-01T00:00:00Z"}`
+	var identity config.IdentityFile
+	if err := json.Unmarshal([]byte(old), &identity); err != nil {
+		t.Fatal(err)
+	}
+	if identity.ClaudePID != 0 {
+		t.Errorf("ClaudePID should default to 0, got %d", identity.ClaudePID)
+	}
+}
+
 func TestSaveIdentityFile_BumpsVersionTo3(t *testing.T) {
 	t.Setenv("THRUM_HOME", "")
 	t.Setenv("THRUM_NAME", "")
