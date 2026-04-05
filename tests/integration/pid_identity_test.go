@@ -50,6 +50,7 @@ func startTestDaemon(t *testing.T) (string, string) {
 	agentHandler := rpc.NewAgentHandler(st)
 	server.RegisterHandler("agent.register", agentHandler.HandleRegister)
 	server.RegisterHandler("agent.list", agentHandler.HandleList)
+	server.RegisterHandler("agent.whoami", agentHandler.HandleWhoami)
 
 	if err := server.Start(context.Background()); err != nil {
 		st.Close()
@@ -303,5 +304,82 @@ func TestPIDIdentity_DeadPIDReclaim(t *testing.T) {
 	}
 	if !found {
 		t.Error("re-registered agent not found in list")
+	}
+}
+
+func TestPIDIdentity_WhoamiResolvesByCallerID(t *testing.T) {
+	_, socketPath := startTestDaemon(t)
+
+	// Register agent with PID
+	var regResult rpc.RegisterResponse
+	rpcCall(t, socketPath, "agent.register", map[string]any{
+		"name":       "pid_agent",
+		"role":       "implementer",
+		"module":     "test",
+		"claude_pid": os.Getpid(),
+	}, &regResult)
+
+	if regResult.Status != "registered" {
+		t.Fatalf("register: expected registered, got %s", regResult.Status)
+	}
+
+	// Call whoami with the registered agent's ID
+	var whoamiResult rpc.WhoamiResponse
+	rpcCall(t, socketPath, "agent.whoami", map[string]any{
+		"caller_agent_id": regResult.AgentID,
+	}, &whoamiResult)
+
+	if whoamiResult.AgentID != regResult.AgentID {
+		t.Errorf("whoami agent_id = %s, want %s", whoamiResult.AgentID, regResult.AgentID)
+	}
+	if whoamiResult.Role != "implementer" {
+		t.Errorf("whoami role = %s, want implementer", whoamiResult.Role)
+	}
+}
+
+func TestPIDIdentity_RawConflictWithoutReRegister(t *testing.T) {
+	_, socketPath := startTestDaemon(t)
+
+	// Register first agent
+	var result1 rpc.RegisterResponse
+	rpcCall(t, socketPath, "agent.register", map[string]any{
+		"name":       "agent_alpha",
+		"role":       "implementer",
+		"module":     "test",
+		"claude_pid": os.Getpid(),
+	}, &result1)
+
+	if result1.Status != "registered" {
+		t.Fatalf("first register: expected registered, got %s", result1.Status)
+	}
+
+	// Try to register different name with same role+module (no re_register, no force)
+	// This should return a conflict since role+module is already taken
+	raw, err := rpcCallRaw(socketPath, "agent.register", map[string]any{
+		"name":       "agent_beta",
+		"role":       "implementer",
+		"module":     "test",
+		"claude_pid": 999998,
+	})
+
+	if err != nil {
+		// Conflict may come as RPC error
+		t.Logf("Got conflict error (expected): %v", err)
+		return
+	}
+
+	var result2 rpc.RegisterResponse
+	if err := json.Unmarshal(raw, &result2); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if result2.Status != "conflict" {
+		t.Fatalf("expected conflict, got %s", result2.Status)
+	}
+	if result2.Conflict == nil {
+		t.Fatal("expected conflict info")
+	}
+	if result2.Conflict.ConflictPID != os.Getpid() {
+		t.Errorf("ConflictPID = %d, want %d", result2.Conflict.ConflictPID, os.Getpid())
 	}
 }
