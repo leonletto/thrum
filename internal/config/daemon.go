@@ -19,13 +19,29 @@ type ThrumConfig struct {
 // TelegramConfig holds Telegram bridge settings.
 // The bridge is disabled when Token is empty.
 type TelegramConfig struct {
-	Token     string  `json:"token,omitempty"`      // BotFather token (e.g., "123456789:AAH...")
-	Target    string  `json:"target,omitempty"`     // Target agent mention (e.g., "@coordinator_main")
-	UserID    string  `json:"user_id,omitempty"`    // Thrum username (e.g., "leon-letto")
-	ChatID    int64   `json:"chat_id,omitempty"`    // Telegram chat ID for outbound messages
-	Enabled   *bool   `json:"enabled,omitempty"`    // Explicit enable/disable; nil = enabled if token set
-	AllowFrom []int64 `json:"allow_from,omitempty"` // Allowed Telegram user IDs; empty = block all
-	AllowAll  bool    `json:"allow_all,omitempty"`  // If true, allow all users (overrides AllowFrom)
+	Token     string          `json:"token,omitempty"`      // BotFather token (e.g., "123456789:AAH...")
+	Target    string          `json:"target,omitempty"`     // Target agent mention (e.g., "@coordinator_main")
+	UserID    string          `json:"user_id,omitempty"`    // Thrum username (e.g., "leon-letto")
+	ChatID    int64           `json:"chat_id,omitempty"`    // Telegram chat ID for outbound messages
+	Enabled   *bool           `json:"enabled,omitempty"`    // Explicit enable/disable; nil = enabled if token set
+	AllowFrom []int64         `json:"allow_from,omitempty"` // Allowed Telegram user IDs; empty = block all
+	AllowAll  bool            `json:"allow_all,omitempty"`  // If true, allow all users (overrides AllowFrom)
+	Groups    []TelegramGroup `json:"groups,omitempty"`     // Group bridge configs
+}
+
+// TelegramGroup holds per-group bridge settings.
+type TelegramGroup struct {
+	ChatID       int64         `json:"chat_id"`
+	Name         string        `json:"name"`
+	TrustedBots  []int64       `json:"trusted_bots,omitempty"`
+	RemoteAgents []RemoteAgent `json:"remote_agents,omitempty"`
+}
+
+// RemoteAgent describes an agent in a remote repo reachable via the group bridge.
+type RemoteAgent struct {
+	Name   string `json:"name"`
+	Prefix string `json:"prefix"`
+	Bot    string `json:"bot"`
 }
 
 // TelegramEnabled returns whether the bridge should run.
@@ -46,6 +62,34 @@ func (t TelegramConfig) IsAllowed(userID int64) bool {
 		return true
 	}
 	return slices.Contains(t.AllowFrom, userID)
+}
+
+// FindGroup returns the TelegramGroup for the given chatID, or nil if not found.
+func (t TelegramConfig) FindGroup(chatID int64) *TelegramGroup {
+	for i := range t.Groups {
+		if t.Groups[i].ChatID == chatID {
+			return &t.Groups[i]
+		}
+	}
+	return nil
+}
+
+// IsTrustedBot returns true if botUserID is listed as trusted in the given group.
+func (t TelegramConfig) IsTrustedBot(chatID int64, botUserID int64) bool {
+	g := t.FindGroup(chatID)
+	if g == nil {
+		return false
+	}
+	return slices.Contains(g.TrustedBots, botUserID)
+}
+
+// GroupNames returns the names of all configured groups in order.
+func (t TelegramConfig) GroupNames() []string {
+	names := make([]string, len(t.Groups))
+	for i, g := range t.Groups {
+		names[i] = g.Name
+	}
+	return names
 }
 
 // MaskedToken returns the token masked to the first 10 characters.
@@ -228,7 +272,7 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 	}
 
 	// Marshal and merge the telegram section (only if token is set or explicitly configured)
-	if cfg.Telegram.Token != "" || cfg.Telegram.Enabled != nil || cfg.Telegram.AllowAll || len(cfg.Telegram.AllowFrom) > 0 {
+	if cfg.Telegram.Token != "" || cfg.Telegram.Enabled != nil || cfg.Telegram.AllowAll || len(cfg.Telegram.AllowFrom) > 0 || len(cfg.Telegram.Groups) > 0 {
 		telegramBytes, err := json.Marshal(cfg.Telegram)
 		if err != nil {
 			return err

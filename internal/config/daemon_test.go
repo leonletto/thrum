@@ -468,6 +468,52 @@ func TestSingleAgentModeConfig_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestTelegramConfig_FindGroup(t *testing.T) {
+	cfg := config.TelegramConfig{
+		Groups: []config.TelegramGroup{
+			{ChatID: -100123, Name: "cross-repo", TrustedBots: []int64{111, 222}},
+			{ChatID: -100456, Name: "other-group", TrustedBots: []int64{333}},
+		},
+	}
+	g := cfg.FindGroup(-100123)
+	if g == nil || g.Name != "cross-repo" {
+		t.Errorf("FindGroup(-100123) = %v, want cross-repo", g)
+	}
+	if cfg.FindGroup(-999) != nil {
+		t.Error("FindGroup(-999) should return nil")
+	}
+}
+
+func TestTelegramConfig_IsTrustedBot(t *testing.T) {
+	cfg := config.TelegramConfig{
+		Groups: []config.TelegramGroup{
+			{ChatID: -100123, Name: "cross-repo", TrustedBots: []int64{111, 222}},
+		},
+	}
+	if !cfg.IsTrustedBot(-100123, 111) {
+		t.Error("bot 111 should be trusted in group -100123")
+	}
+	if cfg.IsTrustedBot(-100123, 999) {
+		t.Error("bot 999 should not be trusted")
+	}
+	if cfg.IsTrustedBot(-999, 111) {
+		t.Error("bot 111 should not be trusted in unknown group")
+	}
+}
+
+func TestTelegramConfig_GroupNames(t *testing.T) {
+	cfg := config.TelegramConfig{
+		Groups: []config.TelegramGroup{
+			{ChatID: -100123, Name: "cross-repo"},
+			{ChatID: -100456, Name: "other"},
+		},
+	}
+	names := cfg.GroupNames()
+	if len(names) != 2 || names[0] != "cross-repo" {
+		t.Errorf("GroupNames() = %v, want [cross-repo, other]", names)
+	}
+}
+
 func TestSaveThrumConfig_PreservesUnknownKeys(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
