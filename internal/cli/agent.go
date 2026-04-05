@@ -31,6 +31,7 @@ type ConflictInfo struct {
 	ExistingAgentID string `json:"existing_agent_id"`
 	RegisteredAt    string `json:"registered_at"`
 	LastSeenAt      string `json:"last_seen_at"`
+	ConflictPID     int    `json:"conflict_pid,omitempty"` // PID of the conflicting agent
 }
 
 // AgentInfo represents information about a registered agent.
