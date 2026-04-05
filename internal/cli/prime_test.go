@@ -189,6 +189,71 @@ func TestFormatPrimeContext_HumanReadable(t *testing.T) {
 	}
 }
 
+func TestFormatPrimeContext_AllReadSuppressesRecent(t *testing.T) {
+	ctx := &PrimeContext{
+		Messages: &MessagesInfo{
+			Unread: 0,
+			Total:  15,
+			Recent: []Message{
+				{
+					MessageID: "msg_1",
+					AgentID:   "test:coordinator:main",
+					Body: struct {
+						Format     string `json:"format"`
+						Content    string `json:"content"`
+						Structured string `json:"structured,omitempty"`
+					}{
+						Content: "This should not appear in output",
+					},
+				},
+			},
+		},
+	}
+
+	output := FormatPrimeContext(ctx)
+
+	if !strings.Contains(output, "15 messages (all read)") {
+		t.Errorf("expected '15 messages (all read)' in output:\n%s", output)
+	}
+	if strings.Contains(output, "This should not appear") {
+		t.Errorf("recent messages should be suppressed when all read:\n%s", output)
+	}
+	if strings.Contains(output, "@coordinator") {
+		t.Errorf("message sender should not appear when all read:\n%s", output)
+	}
+}
+
+func TestFormatPrimeContext_UnreadShowsRecent(t *testing.T) {
+	ctx := &PrimeContext{
+		Messages: &MessagesInfo{
+			Unread: 2,
+			Total:  10,
+			Recent: []Message{
+				{
+					MessageID: "msg_1",
+					AgentID:   "test:coordinator:main",
+					Body: struct {
+						Format     string `json:"format"`
+						Content    string `json:"content"`
+						Structured string `json:"structured,omitempty"`
+					}{
+						Content: "Please review PR #42",
+					},
+				},
+			},
+		},
+	}
+
+	output := FormatPrimeContext(ctx)
+
+	if !strings.Contains(output, "2 unread") {
+		t.Errorf("expected '2 unread' in output:\n%s", output)
+	}
+	if !strings.Contains(output, "Please review PR #42") {
+		t.Errorf("expected recent message content when unread > 0:\n%s", output)
+	}
+}
+
 func TestFormatPrimeContext_NotRegistered(t *testing.T) {
 	ctx := &PrimeContext{}
 	output := FormatPrimeContext(ctx)

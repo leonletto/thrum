@@ -247,20 +247,20 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 		}
 	}
 
-	// Messages
+	// Messages — only show recent messages when there are unread ones
 	if ctx.Messages != nil {
 		if ctx.Messages.Unread > 0 {
 			fmt.Fprintf(&out, "\nInbox: %d unread (%d total) — process these before starting new work\n", ctx.Messages.Unread, ctx.Messages.Total)
+			for _, msg := range ctx.Messages.Recent {
+				from := extractRole(msg.AgentID)
+				content := msg.Body.Content
+				if len(content) > 60 {
+					content = content[:57] + "..."
+				}
+				fmt.Fprintf(&out, "  @%s: %s\n", from, content)
+			}
 		} else {
 			fmt.Fprintf(&out, "\nInbox: %d messages (all read)\n", ctx.Messages.Total)
-		}
-		for _, msg := range ctx.Messages.Recent {
-			from := extractRole(msg.AgentID)
-			content := msg.Body.Content
-			if len(content) > 60 {
-				content = content[:57] + "..."
-			}
-			fmt.Fprintf(&out, "  @%s: %s\n", from, content)
 		}
 	}
 
@@ -336,21 +336,6 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 		out.WriteString(ctx.SavedSessionContext)
 		if ctx.SavedSessionContext[len(ctx.SavedSessionContext)-1] != '\n' {
 			out.WriteString("\n")
-		}
-	}
-
-	// Tip: suggest thrum setup claude-md if CLAUDE.md lacks thrum section
-	if ctx.RepoPath != "" {
-		claudeMdPath := filepath.Join(ctx.RepoPath, "CLAUDE.md")
-		showTip := false
-		content, err := os.ReadFile(filepath.Clean(claudeMdPath))
-		if err != nil {
-			showTip = true // No CLAUDE.md at all
-		} else if !hasThrumSection(string(content)) {
-			showTip = true
-		}
-		if showTip {
-			out.WriteString("\nTip: Run 'thrum setup claude-md --apply' to add agent coordination instructions to your CLAUDE.md\n")
 		}
 	}
 

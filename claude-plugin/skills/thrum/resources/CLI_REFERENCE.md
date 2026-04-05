@@ -519,22 +519,12 @@ Flags:
 ```bash
 thrum setup worktree                           # Set up redirect in feature worktree (default)
 thrum setup worktree --main-repo /path/to/main
-thrum setup claude-md                          # Generate CLAUDE.md content (stdout)
-thrum setup claude-md --apply                  # Append to CLAUDE.md
-thrum setup claude-md --apply --force          # Overwrite existing Thrum section
 ```
 
 `setup worktree` flags:
 
 ```text
 --main-repo string   Path to the main repository (where daemon runs) (default ".")
-```
-
-`setup claude-md` flags:
-
-```text
---apply   Append to CLAUDE.md (create if missing)
---force   Overwrite existing Thrum section
 ```
 
 ---

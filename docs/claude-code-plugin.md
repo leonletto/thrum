@@ -43,10 +43,6 @@ generates CLAUDE.md coordination instructions, starts the daemon, registers your
 agent, and starts a session. For manual control, you can still run individual
 steps:
 
-```bash
-thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
-```
-
 Verify the daemon is running:
 
 ```bash

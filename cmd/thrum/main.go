@@ -897,12 +897,11 @@ Examples:
 func setupCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Set up Thrum in a worktree or generate CLAUDE.md",
+		Short: "Set up Thrum in a worktree",
 		Long: `Set up Thrum for your development environment.
 
 Subcommands:
   worktree   Set up redirect for a feature worktree (default)
-  claude-md  Generate recommended CLAUDE.md content for thrum
 
 When no subcommand is given, defaults to worktree setup for backwards compatibility.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -928,7 +927,7 @@ When no subcommand is given, defaults to worktree setup for backwards compatibil
 
 	cmd.Flags().String("main-repo", ".", "Path to the main repository (where daemon runs)")
 
-	cmd.AddCommand(setupWorktreeCmd(), setupClaudeMdCmd())
+	cmd.AddCommand(setupWorktreeCmd())
 
 	return cmd
 }
@@ -963,50 +962,6 @@ and a local .thrum/identities/ directory for per-worktree agent identities.`,
 	}
 
 	cmd.Flags().String("main-repo", ".", "Path to the main repository (where daemon runs)")
-
-	return cmd
-}
-
-func setupClaudeMdCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "claude-md",
-		Short: "Generate recommended CLAUDE.md content for thrum",
-		Long: `Generates Thrum agent coordination instructions for your CLAUDE.md.
-Prints to stdout by default. Use --apply to append to CLAUDE.md.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			apply, _ := cmd.Flags().GetBool("apply")
-			force, _ := cmd.Flags().GetBool("force")
-
-			opts := cli.ClaudeMdOptions{
-				RepoPath: flagRepo,
-				Apply:    apply,
-				Force:    force,
-			}
-
-			result, err := cli.GenerateClaudeMd(opts)
-			if err != nil {
-				return err
-			}
-
-			if result.Skipped {
-				fmt.Fprintf(os.Stderr, "Skipped: %s\n", result.SkipReason)
-				return nil
-			}
-
-			if result.Applied {
-				if !flagQuiet {
-					fmt.Fprintf(os.Stderr, "✓ Thrum section written to %s\n", result.FilePath)
-				}
-			} else {
-				fmt.Print(result.Content)
-			}
-
-			return nil
-		},
-	}
-
-	cmd.Flags().Bool("apply", false, "Append to CLAUDE.md (create if missing)")
-	cmd.Flags().Bool("force", false, "Overwrite existing Thrum section")
 
 	return cmd
 }
