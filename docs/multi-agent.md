@@ -150,6 +150,8 @@ mcp__thrum__add_group_member(group="backend", member_type="role", member_value="
 mcp__thrum__send_message(to="@backend", content="API changes merged")
 ```
 
+---
+
 ## Runtime Presets
 
 Thrum supports multiple AI coding platforms through a runtime preset system.
@@ -270,6 +272,8 @@ Add custom runtime presets via `~/.config/thrum/runtimes.json` (XDG-aware):
 
 Custom runtimes appear alongside built-in presets in `thrum runtime list`.
 
+---
+
 ## Context Prime
 
 `thrum context prime` gathers identity, session info, team status, unread
@@ -283,6 +287,8 @@ thrum context prime --json # Structured JSON for LLM consumption
 
 See [Context Management](context.md) for full documentation including output
 format, graceful degradation behavior, and use cases.
+
+---
 
 ## Multi-Worktree Coordination
 
@@ -379,6 +385,8 @@ THRUM_NAME=furiosa thrum send "Implementation complete"
 THRUM_NAME=reviewer thrum send "LGTM, approved"
 ```
 
+---
+
 ## Coordination Tools
 
 ### who-has: File Ownership
@@ -447,6 +455,8 @@ thrum wait --mention @reviewer --timeout 5m
 - `0` -- message received
 - `1` -- timeout (no messages)
 - `2` -- error
+
+---
 
 ## Complete Workflows
 
@@ -536,6 +546,8 @@ thrum inbox --unread
 thrum sent --to @coord_main
 thrum send "Auth complete, 15 tests passing" --to @coord_main
 ```
+
+---
 
 ## Best Practices
 

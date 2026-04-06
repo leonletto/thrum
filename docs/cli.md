@@ -368,6 +368,7 @@ Example:
 ```text
 $ thrum team
 @implementer [active]
+  PID:      12345 [live]
   Module:   auth
   Worktree: auth-fix
   Session:  ses_01HXF2A9... (duration: 2h15m)
@@ -380,6 +381,11 @@ $ thrum team
 
 $ thrum team --all     # Include agents with no active session
 ```
+
+The `PID` line shows the agent's Claude process ID with a liveness indicator:
+`[live]` if the process is running, `[stale]` if it has exited. Agents without a
+`claude_pid` skip this line. See
+[PID Liveness Indicators](identity.md#pid-liveness-indicators) for details.
 
 ## Messaging
 
@@ -2055,6 +2061,8 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
   "updated_at": "2026-02-03T10:00:00Z"
 }
 ```
+
+---
 
 _The section below covers storage internals. You don't need it for normal use._
 

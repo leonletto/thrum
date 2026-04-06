@@ -16,8 +16,8 @@ import (
 type BridgeConfig struct {
 	LocalWSPort  string
 	PeerName     string
-	PeerAddress  string   // For network peers (mutually exclusive with PeerRepoPath)
-	PeerRepoPath string   // For local peers (mutually exclusive with PeerAddress)
+	PeerAddress  string // For network peers (mutually exclusive with PeerRepoPath)
+	PeerRepoPath string // For local peers (mutually exclusive with PeerAddress)
 	PeerToken    string
 	BridgeUserID string   // e.g. "user:peer-mock-sf"
 	ProxyPrefix  string   // e.g. "mock-sf"

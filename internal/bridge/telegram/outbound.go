@@ -16,8 +16,8 @@ type OutboundRelay struct {
 	ws     *WSClient
 	bot    *Bot
 	msgMap *MessageMap
-	userID string               // "user:leon-letto" — messages TO this user get forwarded
-	chatID int64                // Telegram chat to send to; outbound restricted to this chat only
+	userID string                 // "user:leon-letto" — messages TO this user get forwarded
+	chatID int64                  // Telegram chat to send to; outbound restricted to this chat only
 	groups []config.TelegramGroup // Group bridge configs for group/proxy routing
 }
 

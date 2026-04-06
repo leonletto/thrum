@@ -534,7 +534,8 @@ All commands accept:
   Usage:    thrum team [--all] [--json]
   Flags:    --all    Include offline agents
   Action:   Shows rich, multi-line status for every active agent. Displays session info,
-            work context, inbox counts, branch status, and per-file change details.
+            work context, inbox counts, branch status, per-file change details, and
+            PID liveness ([live]/[stale]) based on claude_pid process-tree check.
   Requires: Daemon running.
 
 ### thrum context save

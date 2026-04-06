@@ -3,10 +3,10 @@
 ## The PID Identity Problem
 
 Thrum resolves agent identity by walking the process tree to find a `claude`
-ancestor. When E2E tests run thrum commands from within a developer's Claude Code
-session, the thrum binary finds the developer's Claude process and adopts the
-wrong identity. This causes tests to register agents in the wrong daemon, create
-identity files with wrong names, and produce silent failures.
+ancestor. When E2E tests run thrum commands from within a developer's Claude
+Code session, the thrum binary finds the developer's Claude process and adopts
+the wrong identity. This causes tests to register agents in the wrong daemon,
+create identity files with wrong names, and produce silent failures.
 
 ## The Fix: tmux Isolation
 
@@ -24,20 +24,24 @@ Use the helpers in `helpers/thrum-cli.ts`. Never call `execFileSync` or `spawn`
 with the thrum binary directly.
 
 ```typescript
-import { thrum, thrumIn, thrumJson } from './helpers/thrum-cli.js';
+import { thrum, thrumIn, thrumJson } from "./helpers/thrum-cli.js";
 
 // Run as default coordinator identity (e2e_coordinator)
-thrum(['send', 'hello', '--to', '@e2e_implementer']);
+thrum(["send", "hello", "--to", "@e2e_implementer"]);
 
 // Run as a specific identity
-const myEnv = { THRUM_NAME: 'my_agent', THRUM_ROLE: 'tester', THRUM_MODULE: 'all' };
-thrum(['status'], 10_000, myEnv);
+const myEnv = {
+  THRUM_NAME: "my_agent",
+  THRUM_ROLE: "tester",
+  THRUM_MODULE: "all",
+};
+thrum(["status"], 10_000, myEnv);
 
 // Run in a specific worktree
-thrumIn(getImplementerRoot(), ['agent', 'whoami'], 10_000, implEnv);
+thrumIn(getImplementerRoot(), ["agent", "whoami"], 10_000, implEnv);
 
 // Parse JSON output
-const team = thrumJson<{ members: Agent[] }>(['team']);
+const team = thrumJson<{ members: Agent[] }>(["team"]);
 ```
 
 ## How It Works Under the Hood
@@ -63,10 +67,10 @@ const team = thrumJson<{ members: Agent[] }>(['team']);
 
 ## File Structure
 
-| File | Purpose |
-|------|---------|
+| File                   | Purpose                                                             |
+| ---------------------- | ------------------------------------------------------------------- |
 | `helpers/tmux-exec.ts` | Low-level tmux primitives (tmuxExec, tmuxExecAsync, tmuxKillServer) |
-| `helpers/thrum-cli.ts` | High-level wrappers (thrum, thrumIn, thrumJson, env helpers) |
-| `helpers/fixtures.ts` | Agent registration helpers (registerAgent, quickstartAgent, etc.) |
-| `global-setup.ts` | Creates test repo, daemon, agents; cleans THRUM_* env |
-| `global-teardown.ts` | Preserves artifacts for inspection |
+| `helpers/thrum-cli.ts` | High-level wrappers (thrum, thrumIn, thrumJson, env helpers)        |
+| `helpers/fixtures.ts`  | Agent registration helpers (registerAgent, quickstartAgent, etc.)   |
+| `global-setup.ts`      | Creates test repo, daemon, agents; cleans THRUM\_\* env             |
+| `global-teardown.ts`   | Preserves artifacts for inspection                                  |

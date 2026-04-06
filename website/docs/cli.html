@@ -675,6 +675,7 @@ ahead of the default branch, and the list of changed files on each heartbeat.</p
 <p>Example:</p>
 <pre><code>$ thrum team
 @implementer [active]
+  PID:      12345 [live]
   Module:   auth
   Worktree: auth-fix
   Session:  ses_01HXF2A9... (duration: 2h15m)
@@ -686,6 +687,10 @@ ahead of the default branch, and the list of changed files on each heartbeat.</p
     internal/auth/refresh.go      5m ago   +15 -3
 
 $ thrum team --all     # Include agents with no active session</code></pre>
+<p>The <code>PID</code> line shows the agent&#39;s Claude process ID with a liveness indicator:
+<code>[live]</code> if the process is running, <code>[stale]</code> if it has exited. Agents without a
+<code>claude_pid</code> skip this line. See
+<a href="identity.html#pid-liveness-indicators">PID Liveness Indicators</a> for details.</p>
 <h2>Messaging</h2>
 <h3>thrum send</h3>
 <p>Send a message to the messaging system. The daemon must be running and you must

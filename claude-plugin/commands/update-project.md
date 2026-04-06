@@ -31,10 +31,10 @@ Delegate to a **general-purpose subagent** that will:
 3. Merge your narrative with gathered state via targeted edits
 4. Return a brief summary of what was updated
 
-Replace `SESSION_SUMMARY_HERE` with your composed summary from Step 1.
-Replace `REPO_ROOT` with the absolute path to the project root.
+Replace `SESSION_SUMMARY_HERE` with your composed summary from Step 1. Replace
+`REPO_ROOT` with the absolute path to the project root.
 
-~~~
+````
 Agent(
   subagent_type="general-purpose",
   description="Update project state",
@@ -117,7 +117,7 @@ Return ONLY a brief summary. Include:
 - Target total file size: 150-300 lines
 - Use ABSOLUTE paths for all file operations
 """)
-~~~
+````
 
 ### Step 3: Report Result
 

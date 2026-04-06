@@ -256,6 +256,38 @@ two sessions claiming the same identity.
 
 The `claude_pid` field is also in the SQLite `agents` table (schema v16).
 
+### PID Liveness Indicators
+
+`thrum team` uses the `claude_pid` field to show whether each agent's Claude
+process is still running:
+
+```text
+@implementer [active] auth — feature/auth
+PID:      12345 [live]
+Worktree: auth
+Session:  ses_01HXF2A9... (active 2h15m)
+Intent:   Fixing token refresh
+Inbox:    3 unread / 12 total
+Branch:   feature/auth (2 commits ahead)
+
+@reviewer [active] auth — feature/auth
+PID:      67890 [stale]
+Session:  ses_01HXF1B8... (active 45m)
+Intent:   Reviewing PR #42
+Inbox:    0 unread / 5 total
+```
+
+- **`[live]`** — The Claude process at that PID is running. The agent session is
+  genuinely active.
+- **`[stale]`** — The PID exists in the identity file but the process is no
+  longer running. The session ended without cleaning up, or the process crashed.
+
+Liveness is checked via the OS process table (`kill -0`), not heartbeats. It's
+instantaneous and doesn't require the agent to be responsive — just alive.
+
+Agents with no `claude_pid` (registered before v0.7.0 or not running under
+Claude) skip the PID line entirely.
+
 ### Identity Files
 
 Identity files are stored in `.thrum/identities/` as individual JSON files named
