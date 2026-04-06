@@ -112,8 +112,9 @@ func (r *InboundRelay) relayGroup(ctx context.Context, msg InboundMessage) error
 
 	sendReq := map[string]any{
 		"content":         content,
+		"group":           thrumGroup,
 		"mentions":        []string{thrumGroup},
-		"caller_agent_id": r.userID,
+		"caller_agent_id": senderIdentity(msg),
 		"structured":      structured,
 	}
 
