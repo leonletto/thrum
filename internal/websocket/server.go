@@ -34,20 +34,29 @@ func WithPeerAcceptHandler(fn func(token string)) ServerOption {
 	return func(s *Server) { s.peerAcceptFn = fn }
 }
 
+// WithPairingValidator sets a pairing code validation function on the server.
+// When set, WebSocket upgrade requests with a ?pairing_code= query parameter
+// are validated against this function instead of the token validator.
+// This allows pair.request connections to proceed without a token.
+func WithPairingValidator(fn func(string) bool) ServerOption {
+	return func(s *Server) { s.pairingValidator = fn }
+}
+
 // Server represents the WebSocket RPC server.
 type Server struct {
-	addr           string
-	httpServer     *http.Server
-	upgrader       websocket.Upgrader
-	registry       HandlerRegistry
-	clients        *ClientRegistry
-	onDisconnect   DisconnectFunc
-	tokenValidator func(string) bool
-	peerAcceptFn   func(token string)
-	mu             sync.RWMutex
-	shutdown        bool
-	wg             sync.WaitGroup
-	startTime      time.Time
+	addr             string
+	httpServer       *http.Server
+	upgrader         websocket.Upgrader
+	registry         HandlerRegistry
+	clients          *ClientRegistry
+	onDisconnect     DisconnectFunc
+	tokenValidator   func(string) bool
+	pairingValidator func(string) bool
+	peerAcceptFn     func(token string)
+	mu               sync.RWMutex
+	shutdown         bool
+	wg               sync.WaitGroup
+	startTime        time.Time
 }
 
 // NewServer creates a new WebSocket RPC server.
@@ -143,6 +152,14 @@ func (s *Server) handleSPA(uiFS fs.FS) http.HandlerFunc {
 // GetRegistry returns the handler registry used by this server.
 func (s *Server) GetRegistry() HandlerRegistry {
 	return s.registry
+}
+
+// HTTPHandler returns the http.Handler that handles WebSocket upgrades and
+// serves the UI (if configured). This is used when the caller wants to serve
+// the WebSocket endpoint on an existing listener (e.g., a tsnet listener)
+// instead of having the server bind its own TCP port.
+func (s *Server) HTTPHandler() http.Handler {
+	return s.httpServer.Handler
 }
 
 // GetClients returns the client registry for accessing connected WebSocket clients.
@@ -263,8 +280,18 @@ func isLoopbackAddr(remoteAddr string) bool {
 
 // handleWebSocket handles the WebSocket upgrade and connection.
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	// Token authentication: only enforced when a validator is configured.
-	if s.tokenValidator != nil {
+	// Pairing code check: runs before token validation.
+	// Connections with ?pairing_code= are for the pair.request flow and do not
+	// have a token yet — that is the whole point of pairing.
+	pairingCode := r.URL.Query().Get("pairing_code")
+	if pairingCode != "" {
+		if s.pairingValidator == nil || !s.pairingValidator(pairingCode) {
+			http.Error(w, "Invalid pairing code", http.StatusUnauthorized)
+			return
+		}
+		// Pairing connections proceed without token validation — fall through.
+	} else if s.tokenValidator != nil {
+		// Token authentication: only enforced when a validator is configured.
 		token := r.URL.Query().Get("token")
 		if token != "" {
 			if !s.tokenValidator(token) {

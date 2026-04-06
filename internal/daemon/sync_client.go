@@ -1,13 +1,12 @@
 package daemon
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
-	"net"
-	"sync/atomic"
 	"time"
 
+	"github.com/leonletto/thrum/internal/bridge"
 	"github.com/leonletto/thrum/internal/daemon/eventlog"
 )
 
@@ -21,7 +20,7 @@ type PullResponse struct {
 	MoreAvailable bool             `json:"more_available"`
 }
 
-// SyncClient connects to a peer daemon and pulls events.
+// SyncClient connects to a peer daemon via WebSocket and pulls events.
 type SyncClient struct {
 	timeout time.Duration
 }
@@ -31,43 +30,97 @@ func NewSyncClient() *SyncClient {
 	return &SyncClient{timeout: SyncClientTimeout}
 }
 
+// wsCall dials a WebSocket connection to wsURL, calls the given JSON-RPC method
+// with params, and returns the raw result. The connection is closed when done.
+func (c *SyncClient) wsCall(ctx context.Context, wsURL string, method string, params map[string]any) (json.RawMessage, error) {
+	client := bridge.NewWSClient(wsURL)
+
+	dialCtx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	if err := client.Connect(dialCtx); err != nil {
+		return nil, fmt.Errorf("connect to %s: %w", wsURL, err)
+	}
+	defer func() { _ = client.Close() }()
+
+	callCtx, callCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer callCancel()
+
+	return client.Call(callCtx, method, params)
+}
+
+// syncWSURL builds the WebSocket URL for a peer's sync endpoint using a token.
+// peerAddr is the "host:port" address stored in PeerInfo.Address.
+func syncWSURL(peerAddr, token string) string {
+	if token != "" {
+		return fmt.Sprintf("ws://%s/ws?token=%s", peerAddr, token)
+	}
+	return fmt.Sprintf("ws://%s/ws", peerAddr)
+}
+
+// pairingWSURL builds the WebSocket URL for a peer's pairing endpoint.
+func pairingWSURL(peerAddr, code string) string {
+	return fmt.Sprintf("ws://%s/ws?pairing_code=%s", peerAddr, code)
+}
+
 // PullEvents connects to a peer and pulls events after the given sequence number.
-// Token is included in the RPC params for authentication.
+// Token is included in the URL query string for authentication.
 func (c *SyncClient) PullEvents(peerAddr string, afterSeq int64, token string) (*PullResponse, error) {
-	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
+	ctx := context.Background()
+	wsURL := syncWSURL(peerAddr, token)
+
+	params := map[string]any{
+		"after_sequence": afterSeq,
+		"max_batch":      1000,
+	}
+
+	raw, err := c.wsCall(ctx, wsURL, "sync.pull", params)
 	if err != nil {
-		return nil, fmt.Errorf("connect to %s: %w", peerAddr, err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	// Set deadline for the entire exchange
-	if err := conn.SetDeadline(time.Now().Add(30 * time.Second)); err != nil {
-		return nil, fmt.Errorf("set deadline: %w", err)
+		return nil, fmt.Errorf("sync.pull from %s: %w", peerAddr, err)
 	}
 
-	return c.pullBatch(conn, afterSeq, 1000, token)
+	var resp PullResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal pull response: %w", err)
+	}
+	return &resp, nil
 }
 
 // PullAllEvents pulls all events from a peer in batches, continuing until no more are available.
-// Token is included in every RPC call for authentication.
+// Token is included in the URL query string for authentication.
 func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, token string, onBatch func(events []eventlog.Event, nextSeq int64) error) error {
-	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
-	if err != nil {
+	ctx := context.Background()
+	wsURL := syncWSURL(peerAddr, token)
+
+	// Open a single WebSocket connection and reuse it for all batches.
+	client := bridge.NewWSClient(wsURL)
+
+	dialCtx, dialCancel := context.WithTimeout(ctx, c.timeout)
+	if err := client.Connect(dialCtx); err != nil {
+		dialCancel()
 		return fmt.Errorf("connect to %s: %w", peerAddr, err)
 	}
-	defer func() { _ = conn.Close() }()
+	dialCancel()
+	defer func() { _ = client.Close() }()
 
 	currentSeq := afterSeq
 
 	for {
-		// Set deadline per batch
-		if err := conn.SetDeadline(time.Now().Add(30 * time.Second)); err != nil {
-			return fmt.Errorf("set deadline: %w", err)
+		params := map[string]any{
+			"after_sequence": currentSeq,
+			"max_batch":      1000,
 		}
 
-		resp, err := c.pullBatch(conn, currentSeq, 1000, token)
+		callCtx, callCancel := context.WithTimeout(ctx, 30*time.Second)
+		raw, err := client.Call(callCtx, "sync.pull", params)
+		callCancel()
 		if err != nil {
-			return fmt.Errorf("pull batch after seq %d: %w", currentSeq, err)
+			return fmt.Errorf("sync.pull batch after seq %d: %w", currentSeq, err)
+		}
+
+		var resp PullResponse
+		if err := json.Unmarshal(raw, &resp); err != nil {
+			return fmt.Errorf("unmarshal pull response: %w", err)
 		}
 
 		if len(resp.Events) == 0 {
@@ -87,53 +140,34 @@ func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, token string
 }
 
 // SendNotify sends a sync.notify RPC to a peer, signaling that new events are available.
-// Token is included for authentication. This is fire-and-forget.
+// Token is included in the URL query string for authentication. This is fire-and-forget.
 func (c *SyncClient) SendNotify(peerAddr string, daemonID string, latestSeq int64, eventCount int, token string) error {
-	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
-	if err != nil {
-		return fmt.Errorf("connect to %s: %w", peerAddr, err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
-		return fmt.Errorf("set deadline: %w", err)
-	}
+	ctx := context.Background()
+	wsURL := syncWSURL(peerAddr, token)
 
 	params := map[string]any{
-		"token":       token,
 		"daemon_id":   daemonID,
 		"latest_seq":  latestSeq,
 		"event_count": eventCount,
 	}
 
-	_, err = c.callRPC(conn, "sync.notify", params)
+	_, err := c.wsCall(ctx, wsURL, "sync.notify", params)
 	return err
 }
 
 // QueryPeerInfo calls sync.peer_info on a peer and returns daemon identity.
-// Token is included for authentication.
+// Token is included in the URL query string for authentication.
 func (c *SyncClient) QueryPeerInfo(peerAddr string, token string) (*PeerInfoResult, error) {
-	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
-	if err != nil {
-		return nil, fmt.Errorf("connect to %s: %w", peerAddr, err)
-	}
-	defer func() { _ = conn.Close() }()
+	ctx := context.Background()
+	wsURL := syncWSURL(peerAddr, token)
 
-	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
-		return nil, fmt.Errorf("set deadline: %w", err)
-	}
-
-	params := map[string]any{
-		"token": token,
-	}
-
-	resp, err := c.callRPC(conn, "sync.peer_info", params)
+	raw, err := c.wsCall(ctx, wsURL, "sync.peer_info", nil)
 	if err != nil {
 		return nil, err
 	}
 
 	var info PeerInfoResult
-	if err := json.Unmarshal(resp, &info); err != nil {
+	if err := json.Unmarshal(raw, &info); err != nil {
 		return nil, fmt.Errorf("unmarshal peer info: %w", err)
 	}
 	return &info, nil
@@ -153,115 +187,27 @@ type PairResult struct {
 	Name     string `json:"name"`
 }
 
-// RequestPairing sends a pair.request to a remote peer with the given code and local info.
+// RequestPairing sends a pair.request to a remote peer using the pairing code.
+// The connection uses ?pairing_code= (no token) since the goal is to obtain a token.
 func (c *SyncClient) RequestPairing(peerAddr, code, localDaemonID, localName, localAddress string) (*PairResult, error) {
-	conn, err := net.DialTimeout("tcp", peerAddr, c.timeout)
-	if err != nil {
-		return nil, fmt.Errorf("cannot reach %s: %w", peerAddr, err)
-	}
-	defer func() { _ = conn.Close() }()
+	ctx := context.Background()
+	wsURL := pairingWSURL(peerAddr, code)
 
-	if err := conn.SetDeadline(time.Now().Add(30 * time.Second)); err != nil {
-		return nil, fmt.Errorf("set deadline: %w", err)
-	}
-
-	params := map[string]string{
+	params := map[string]any{
 		"code":      code,
 		"daemon_id": localDaemonID,
 		"name":      localName,
 		"address":   localAddress,
 	}
 
-	resp, err := c.callRPC(conn, "pair.request", params)
+	raw, err := c.wsCall(ctx, wsURL, "pair.request", params)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("pair.request to %s: %w", peerAddr, err)
 	}
 
 	var result PairResult
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal pair result: %w", err)
 	}
 	return &result, nil
-}
-
-// pullBatch sends a sync.pull request on an existing connection and reads the response.
-func (c *SyncClient) pullBatch(conn net.Conn, afterSeq int64, maxBatch int, token string) (*PullResponse, error) {
-	params := map[string]any{
-		"token":          token,
-		"after_sequence": afterSeq,
-		"max_batch":      maxBatch,
-	}
-
-	respData, err := c.callRPC(conn, "sync.pull", params)
-	if err != nil {
-		return nil, err
-	}
-
-	var resp PullResponse
-	if err := json.Unmarshal(respData, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal pull response: %w", err)
-	}
-	return &resp, nil
-}
-
-// rpcRequest is the JSON-RPC 2.0 request format used by the sync client.
-type rpcRequest struct {
-	JSONRPC string `json:"jsonrpc"`
-	Method  string `json:"method"`
-	Params  any    `json:"params,omitempty"`
-	ID      int    `json:"id"`
-}
-
-// rpcResponse is the JSON-RPC 2.0 response format.
-type rpcResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *rpcError       `json:"error,omitempty"`
-	ID      int             `json:"id"`
-}
-
-// rpcError represents a JSON-RPC error in the client response.
-type rpcError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-var rpcIDCounter atomic.Int64
-
-// callRPC sends a JSON-RPC request and reads the response on an existing connection.
-func (c *SyncClient) callRPC(conn net.Conn, method string, params any) (json.RawMessage, error) {
-	id := rpcIDCounter.Add(1)
-	req := rpcRequest{
-		JSONRPC: "2.0",
-		Method:  method,
-		Params:  params,
-		ID:      int(id),
-	}
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-	data = append(data, '\n')
-
-	if _, err := conn.Write(data); err != nil {
-		return nil, fmt.Errorf("write request: %w", err)
-	}
-
-	reader := bufio.NewReader(conn)
-	line, err := reader.ReadBytes('\n')
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	var resp rpcResponse
-	if err := json.Unmarshal(line, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
-	}
-
-	if resp.Error != nil {
-		return nil, fmt.Errorf("RPC error %d: %s", resp.Error.Code, resp.Error.Message)
-	}
-
-	return resp.Result, nil
 }

@@ -5358,20 +5358,27 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			_ = syncRegistry.Register("pair.request", pairHandler.Handle)
 		}
 
-		// Accept loop for sync connections
-		go func() {
-			for {
-				conn, err := tsListener.Accept()
-				if err != nil {
-					return // Listener closed
-				}
-				go func(c net.Conn) {
-					defer func() { _ = c.Close() }()
-					peerID := c.RemoteAddr().String()
-					syncRegistry.ServeSyncRPC(ctx, c, peerID)
-				}(conn)
-			}
-		}()
+		// Build WebSocket server options for the Tailscale sync endpoint.
+		// Token auth validates that the connecting peer has a stored token.
+		// Pairing connections arrive with ?pairing_code= and must be allowed
+		// without a token — the pairing manager validates the code.
+		var tsWSOpts []websocket.ServerOption
+		if syncManager != nil {
+			tsWSOpts = append(tsWSOpts, websocket.WithTokenValidator(func(token string) bool {
+				return syncManager.PeerRegistry().FindPeerByToken(token) != nil
+			}))
+		}
+		if pairingMgr != nil {
+			tsWSOpts = append(tsWSOpts, websocket.WithPairingValidator(func(code string) bool {
+				return pairingMgr.HasActiveSession()
+			}))
+		}
+
+		// Serve WebSocket on the tsnet listener (replaces raw TCP accept loop).
+		// The SyncRegistry implements websocket.HandlerRegistry via GetHandler.
+		// NewServer with empty addr + nil uiFS registers the WS handler at "/".
+		tsWSServer := websocket.NewServer("", syncRegistry, nil, tsWSOpts...)
+		go tsListener.ServeHTTP(ctx, tsWSServer.HTTPHandler())
 
 		// Start periodic sync with Tailscale-optimized intervals
 		if syncManager != nil {

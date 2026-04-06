@@ -8,6 +8,7 @@ import (
 	"net"
 
 	"github.com/leonletto/thrum/internal/transport"
+	"github.com/leonletto/thrum/internal/websocket"
 )
 
 // SyncRegistry is a handler registry that only allows sync.* RPC methods.
@@ -58,6 +59,22 @@ func (r *SyncRegistry) Register(method string, handler Handler) error {
 	}
 	r.handlers[method] = handler
 	return nil
+}
+
+// GetHandler returns the handler for a given method and whether it was found.
+// This implements the websocket.HandlerRegistry interface so SyncRegistry can
+// be used as the registry for a WebSocket server on the Tailscale endpoint.
+// The security boundary is enforced: only whitelisted sync.*/pair.* methods
+// are accessible regardless of what has been registered.
+func (r *SyncRegistry) GetHandler(method string) (websocket.Handler, bool) {
+	if !allowedSyncMethods[method] {
+		return nil, false
+	}
+	h, ok := r.handlers[method]
+	if !ok {
+		return nil, false
+	}
+	return websocket.Handler(h), true
 }
 
 // ServeSyncRPC reads JSON-RPC requests from a connection and dispatches only to sync handlers.
