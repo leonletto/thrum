@@ -10,8 +10,18 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/runtime"
+	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 )
+
+// detectTmuxSession returns the current tmux pane target if running inside tmux,
+// or an empty string if not in tmux.
+func detectTmuxSession() (string, error) {
+	if !ttmux.InTmux() {
+		return "", nil
+	}
+	return ttmux.PaneTarget()
+}
 
 // QuickstartOptions contains options for the quickstart command.
 type QuickstartOptions struct {
@@ -180,6 +190,14 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 			repoName := GetRepoName(repoPath)
 			idFile.Intent = DefaultIntent(idFile.Agent.Role, repoName)
 			changed = true
+		}
+
+		// Detect tmux session and write to identity file
+		if tmuxTarget, err := detectTmuxSession(); err == nil && tmuxTarget != "" {
+			if idFile.TmuxSession != tmuxTarget {
+				idFile.TmuxSession = tmuxTarget
+				changed = true
+			}
 		}
 
 		if changed {

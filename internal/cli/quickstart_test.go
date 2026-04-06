@@ -350,6 +350,33 @@ func TestQuickstartConflict_SelfPIDAllowsRetry(t *testing.T) {
 	}
 }
 
+func TestQuickstart_DetectsTmux(t *testing.T) {
+	// Set $TMUX to simulate running inside tmux
+	t.Setenv("TMUX", "/tmp/tmux-501/default,12345,0")
+	t.Setenv("TMUX_PANE", "%0")
+
+	session, err := detectTmuxSession()
+	if err != nil {
+		// If tmux isn't installed in CI, skip
+		t.Skip("tmux not available")
+	}
+	if session == "" {
+		t.Error("detectTmuxSession should return non-empty when $TMUX is set")
+	}
+}
+
+func TestQuickstart_NoTmux(t *testing.T) {
+	t.Setenv("TMUX", "")
+
+	session, err := detectTmuxSession()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if session != "" {
+		t.Errorf("detectTmuxSession should return empty when not in tmux, got %q", session)
+	}
+}
+
 func TestFormatQuickstart_WithConflict(t *testing.T) {
 	result := &QuickstartResult{
 		Register: &RegisterResponse{
