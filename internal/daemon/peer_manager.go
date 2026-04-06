@@ -105,13 +105,6 @@ func (pm *PeerManager) startBridge(parentCtx context.Context, cfg peer.BridgeCon
 // AcceptPeer handles listener-side acceptance: when a remote peer connects to our WS,
 // the daemon can call this to spawn a reverse bridge if not already running.
 func (pm *PeerManager) AcceptPeer(ctx context.Context, peerInfo *PeerInfo) {
-	pm.mu.Lock()
-	if _, exists := pm.bridges[peerInfo.Name]; exists {
-		pm.mu.Unlock()
-		return
-	}
-	pm.mu.Unlock()
-
 	cfg := peer.BridgeConfig{
 		LocalWSPort:  pm.localWSPort,
 		PeerName:     peerInfo.Name,
