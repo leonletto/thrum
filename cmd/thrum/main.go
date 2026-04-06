@@ -4911,7 +4911,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("agent.cleanup", agentHandler.HandleCleanup)
 
 	// Team management
-	teamHandler := rpc.NewTeamHandler(st)
+	teamHandler := rpc.NewTeamHandler(st, thrumDir)
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
 	// Context management
@@ -6856,5 +6856,62 @@ func tmuxCmd() *cobra.Command {
 	captureCmd.Flags().Int("lines", 50, "Number of lines to capture")
 	cmd.AddCommand(captureCmd)
 
+	// check-pane (hidden — called by tmux silence hooks)
+	checkPaneCmd := &cobra.Command{
+		Use:    "check-pane <session>",
+		Short:  "Check a tmux pane for permission prompts or idle state (called by tmux hooks)",
+		Args:   cobra.ExactArgs(1),
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoPath, _ := cmd.Flags().GetString("repo")
+			if repoPath == "" {
+				repoPath = flagRepo
+			}
+
+			session := args[0]
+			target := session + ":0.0"
+
+			content, err := ttmux.CapturePane(target, 5)
+			if err != nil {
+				return err
+			}
+
+			reason := detectPaneState(content)
+			if reason == "" {
+				return nil // Normal state, nothing to report
+			}
+
+			// Connect to daemon and report
+			client, err := getClient()
+			if err != nil {
+				return nil // Daemon not running, silently skip
+			}
+			defer func() { _ = client.Close() }()
+
+			req := map[string]string{
+				"session": session,
+				"reason":  reason,
+				"content": content,
+			}
+			var result any
+			_ = client.Call("tmux.check-pane", req, &result)
+			return nil
+		},
+	}
+	checkPaneCmd.Flags().String("repo", "", "Repository path (baked in by tmux hook)")
+	cmd.AddCommand(checkPaneCmd)
+
 	return cmd
+}
+
+func detectPaneState(content string) string {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	for _, line := range lines {
+		lower := strings.ToLower(line)
+		if strings.Contains(lower, "allow") && (strings.Contains(lower, "y/n") ||
+			strings.Contains(lower, "yes") || strings.Contains(lower, "deny")) {
+			return "permission:" + strings.TrimSpace(line)
+		}
+	}
+	return ""
 }
