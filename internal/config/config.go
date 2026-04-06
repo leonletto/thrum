@@ -42,6 +42,8 @@ type IdentityFile struct {
 	ConfirmedBy string      `json:"confirmed_by,omitempty"`
 	ContextFile string      `json:"context_file,omitempty"`
 	ClaudePID   int         `json:"claude_pid,omitempty"`
+	TmuxSession string      `json:"tmux_session,omitempty"`
+	Runtime     string      `json:"runtime,omitempty"`
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
@@ -307,8 +309,8 @@ func SaveIdentityFile(thrumDir string, identity *IdentityFile) error {
 
 	identityPath := filepath.Join(identitiesDir, filename)
 
-	if identity.Version < 3 {
-		identity.Version = 3
+	if identity.Version < 4 {
+		identity.Version = 4
 	}
 	identity.UpdatedAt = time.Now().UTC()
 	data, err := json.MarshalIndent(identity, "", "  ")
