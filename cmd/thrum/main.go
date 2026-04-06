@@ -5251,7 +5251,21 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		}
 	}
 
-	wsServer := websocket.NewServer(wsAddr, wsRegistry, uiFS)
+	// Create PeerManager before the WS server so we can wire the accept handler.
+	var peerManager *daemon.PeerManager
+	var wsOpts []websocket.ServerOption
+	if peerRegistry != nil {
+		peerManager = daemon.NewPeerManager(peerRegistry, wsPort, nil)
+		defer peerManager.StopAll()
+		wsOpts = append(wsOpts, websocket.WithPeerAcceptHandler(func(token string) {
+			p := peerRegistry.FindPeerByToken(token)
+			if p != nil {
+				peerManager.AcceptPeer(ctx, p)
+			}
+		}))
+	}
+
+	wsServer := websocket.NewServer(wsAddr, wsRegistry, uiFS, wsOpts...)
 
 	// Wire the WebSocket client registry into the message handler so it can
 	// broadcast notification.message to ALL connected clients (including the
@@ -5472,6 +5486,14 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		telegramHandler.SetBridge(tgBridge)
 		go tgBridge.Run(ctx)
 		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)
+	}
+
+	// Auto-connect to dialer-role peers after the WS server is ready.
+	if peerManager != nil && thrumCfg.Peers.AutoConnect {
+		go func() {
+			time.Sleep(500 * time.Millisecond) // Wait for WS server to start
+			peerManager.ConnectAll(ctx)
+		}()
 	}
 
 	return lifecycle.Run(ctx)

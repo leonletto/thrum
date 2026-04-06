@@ -27,6 +27,13 @@ func WithTokenValidator(fn func(string) bool) ServerOption {
 	return func(s *Server) { s.tokenValidator = fn }
 }
 
+// WithPeerAcceptHandler registers a callback invoked when a non-loopback WebSocket
+// client connects with a valid token. The token is passed to fn so the daemon can
+// identify the peer and spawn a bridge for listener-side acceptance.
+func WithPeerAcceptHandler(fn func(token string)) ServerOption {
+	return func(s *Server) { s.peerAcceptFn = fn }
+}
+
 // Server represents the WebSocket RPC server.
 type Server struct {
 	addr           string
@@ -36,6 +43,7 @@ type Server struct {
 	clients        *ClientRegistry
 	onDisconnect   DisconnectFunc
 	tokenValidator func(string) bool
+	peerAcceptFn   func(token string)
 	mu             sync.RWMutex
 	shutdown        bool
 	wg             sync.WaitGroup
@@ -262,6 +270,10 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			if !s.tokenValidator(token) {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
+			}
+			// Non-loopback peer connected with a valid token — notify accept handler.
+			if s.peerAcceptFn != nil && !isLoopbackAddr(r.RemoteAddr) {
+				s.peerAcceptFn(token)
 			}
 		} else if !isLoopbackAddr(r.RemoteAddr) {
 			// No token and not from loopback → reject
