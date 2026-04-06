@@ -28,7 +28,7 @@ func TestTeamHandleList(t *testing.T) {
 	ctx := context.Background()
 	agentHandler := NewAgentHandler(s)
 	sessionHandler := NewSessionHandler(s)
-	teamHandler := NewTeamHandler(s)
+	teamHandler := NewTeamHandler(s, "")
 
 	// Register two agents
 	reg1 := RegisterRequest{Role: "implementer", Module: "auth"}
@@ -212,7 +212,7 @@ func TestTeamHandleList_EmptyDB(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	teamHandler := NewTeamHandler(s)
+	teamHandler := NewTeamHandler(s, "")
 	req := TeamListRequest{}
 	reqJSON, _ := json.Marshal(req)
 	resp, err := teamHandler.HandleList(context.Background(), reqJSON)

@@ -5,9 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 )
 
@@ -54,16 +58,19 @@ type TeamMember struct {
 	InboxTotal      int                `json:"inbox_total"`
 	InboxUnread     int                `json:"inbox_unread"`
 	Status          string             `json:"status"` // "active", "offline"
+	TmuxSession     string             `json:"tmux_session,omitempty"`
+	TmuxState       string             `json:"tmux_state,omitempty"` // alive, stale, dead, or empty
 }
 
 // TeamHandler handles team-related RPC methods.
 type TeamHandler struct {
-	state *state.State
+	state    *state.State
+	thrumDir string
 }
 
 // NewTeamHandler creates a new team handler.
-func NewTeamHandler(state *state.State) *TeamHandler {
-	return &TeamHandler{state: state}
+func NewTeamHandler(state *state.State, thrumDir string) *TeamHandler {
+	return &TeamHandler{state: state, thrumDir: thrumDir}
 }
 
 // HandleList handles the team.list RPC method.
@@ -170,6 +177,33 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate team members: %w", err)
+	}
+
+	// Enrich with tmux state from identity files
+	if h.thrumDir != "" {
+		for i, m := range members {
+			idPath := filepath.Join(h.thrumDir, "identities", m.AgentID+".json")
+			data, err := os.ReadFile(idPath) // #nosec G304 -- internal identity file path
+			if err != nil {
+				continue
+			}
+			var idFile config.IdentityFile
+			if err := json.Unmarshal(data, &idFile); err != nil {
+				continue
+			}
+			if idFile.TmuxSession == "" {
+				continue
+			}
+			members[i].TmuxSession = idFile.TmuxSession
+			session, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+			if !ttmux.HasSession(session) {
+				members[i].TmuxState = "dead"
+			} else if m.ClaudePID > 0 && !isProcessAlive(m.ClaudePID) {
+				members[i].TmuxState = "stale"
+			} else {
+				members[i].TmuxState = "alive"
+			}
+		}
 	}
 
 	// Query 2: Per-agent directed message counts (mentions only, not broadcasts/groups)

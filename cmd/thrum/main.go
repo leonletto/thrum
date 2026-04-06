@@ -35,6 +35,7 @@ import (
 	"github.com/leonletto/thrum/internal/subscriptions"
 	thrumSync "github.com/leonletto/thrum/internal/sync"
 	"github.com/leonletto/thrum/internal/timeparse"
+	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 	"github.com/leonletto/thrum/internal/web"
 	"github.com/leonletto/thrum/internal/websocket"
@@ -151,6 +152,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(rolesCmd())
 	rootCmd.AddCommand(purgeCmd())
 	rootCmd.AddCommand(telegramCmd())
+	rootCmd.AddCommand(tmuxCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -3933,6 +3935,24 @@ Examples:
 						result.SavedSessionContext = string(data)
 					}
 				}
+
+				// Detect tmux and write-back if needed
+				if ttmux.InTmux() {
+					if currentTarget, err := ttmux.PaneTarget(); err == nil && currentTarget != "" {
+						if idFile, _, err := config.LoadIdentityWithPath(result.RepoPath); err == nil {
+							if idFile.TmuxSession != currentTarget {
+								idFile.TmuxSession = currentTarget
+								_ = config.SaveIdentityFile(thrumDir, idFile)
+							}
+							result.TmuxMode = true
+						}
+					}
+				} else if idFile, _, err := config.LoadIdentityWithPath(result.RepoPath); err == nil && idFile.TmuxSession != "" {
+					sessionName, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+					if ttmux.HasSession(sessionName) {
+						result.TmuxMode = true
+					}
+				}
 			}
 
 			if flagJSON {
@@ -4891,7 +4911,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("agent.cleanup", agentHandler.HandleCleanup)
 
 	// Team management
-	teamHandler := rpc.NewTeamHandler(st)
+	teamHandler := rpc.NewTeamHandler(st, thrumDir)
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
 	// Context management
@@ -4922,7 +4942,8 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("group.members", groupHandler.HandleMembers)
 
 	// Message management
-	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher)
+	nudgeState := daemon.NewNudgeState()
+	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir, nudgeState)
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)
 	server.RegisterHandler("message.list", messageHandler.HandleList)
@@ -5510,6 +5531,16 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		go tgBridge.Run(ctx)
 		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)
 	}
+
+	// Tmux session management handlers
+	tmuxHandler := rpc.NewTmuxHandler(thrumDir)
+	server.RegisterHandler("tmux.create", tmuxHandler.HandleCreate)
+	server.RegisterHandler("tmux.launch", tmuxHandler.HandleLaunch)
+	server.RegisterHandler("tmux.status", tmuxHandler.HandleStatus)
+	server.RegisterHandler("tmux.kill", tmuxHandler.HandleKill)
+	server.RegisterHandler("tmux.send", tmuxHandler.HandleSend)
+	server.RegisterHandler("tmux.capture", tmuxHandler.HandleCapture)
+	server.RegisterHandler("tmux.check-pane", tmuxHandler.HandleCheckPane)
 
 	// Auto-connect to dialer-role peers after the WS server is ready.
 	if peerManager != nil && thrumCfg.Peers.AutoConnect {
@@ -6664,4 +6695,224 @@ func detectGitUser() string {
 	name = strings.ToLower(name)
 	name = strings.ReplaceAll(name, " ", "-")
 	return name
+}
+
+func tmuxCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "tmux",
+		Short: "Manage tmux sessions for agents",
+	}
+
+	// create
+	createCmd := &cobra.Command{
+		Use:   "create <name>",
+		Short: "Create a tmux session for an agent",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, _ := cmd.Flags().GetString("cwd")
+			if cwd == "" {
+				return fmt.Errorf("--cwd is required")
+			}
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
+				Name: args[0], Cwd: cwd,
+			})
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Print(cli.FormatTmuxCreate(result))
+			}
+			return nil
+		},
+	}
+	createCmd.Flags().String("cwd", "", "Working directory for the session")
+	cmd.AddCommand(createCmd)
+
+	// launch
+	launchCmd := &cobra.Command{
+		Use:   "launch <name>",
+		Short: "Start an AI tool inside a tmux session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rt, _ := cmd.Flags().GetString("runtime")
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxLaunch(client, cli.TmuxLaunchOptions{
+				Name: args[0], Runtime: rt,
+			})
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Printf("Launched %s in session %s\n", result.Runtime, result.Session)
+			}
+			return nil
+		},
+	}
+	launchCmd.Flags().String("runtime", "claude", "AI tool to launch (claude, opencode, shell)")
+	cmd.AddCommand(launchCmd)
+
+	// status (primary) + list (alias)
+	statusCmd := &cobra.Command{
+		Use:     "status",
+		Aliases: []string{"list"},
+		Short:   "Show tmux-managed sessions with state",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxStatus(client)
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Print(cli.FormatTmuxStatus(result))
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(statusCmd)
+
+	// kill
+	killCmd := &cobra.Command{
+		Use:   "kill <name>",
+		Short: "Tear down a tmux session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+			if err := cli.TmuxKill(client, args[0]); err != nil {
+				return err
+			}
+			if !flagQuiet {
+				fmt.Printf("Session %s killed\n", args[0])
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(killCmd)
+
+	// send
+	sendCmd := &cobra.Command{
+		Use:   "send <name> <text>",
+		Short: "Send text into a tmux session",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+			return cli.TmuxSend(client, args[0], args[1])
+		},
+	}
+	cmd.AddCommand(sendCmd)
+
+	// capture
+	captureCmd := &cobra.Command{
+		Use:   "capture <name>",
+		Short: "Capture pane content from a tmux session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			lines, _ := cmd.Flags().GetInt("lines")
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxCapture(client, args[0], lines)
+			if err != nil {
+				return err
+			}
+			fmt.Print(result.Content)
+			return nil
+		},
+	}
+	captureCmd.Flags().Int("lines", 50, "Number of lines to capture")
+	cmd.AddCommand(captureCmd)
+
+	// check-pane (hidden — called by tmux silence hooks)
+	checkPaneCmd := &cobra.Command{
+		Use:    "check-pane <session>",
+		Short:  "Check a tmux pane for permission prompts or idle state (called by tmux hooks)",
+		Args:   cobra.ExactArgs(1),
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoPath, _ := cmd.Flags().GetString("repo")
+			if repoPath == "" {
+				repoPath = flagRepo
+			}
+
+			session := args[0]
+			target := session + ":0.0"
+
+			content, err := ttmux.CapturePane(target, 5)
+			if err != nil {
+				return err
+			}
+
+			reason := detectPaneState(content)
+			if reason == "" {
+				return nil // Normal state, nothing to report
+			}
+
+			// Connect to daemon and report
+			client, err := getClient()
+			if err != nil {
+				return nil // Daemon not running, silently skip
+			}
+			defer func() { _ = client.Close() }()
+
+			req := map[string]string{
+				"session": session,
+				"reason":  reason,
+				"content": content,
+			}
+			var result any
+			_ = client.Call("tmux.check-pane", req, &result)
+			return nil
+		},
+	}
+	checkPaneCmd.Flags().String("repo", "", "Repository path (baked in by tmux hook)")
+	cmd.AddCommand(checkPaneCmd)
+
+	return cmd
+}
+
+func detectPaneState(content string) string {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	for _, line := range lines {
+		lower := strings.ToLower(line)
+		if strings.Contains(lower, "allow") && (strings.Contains(lower, "y/n") ||
+			strings.Contains(lower, "yes") || strings.Contains(lower, "deny")) {
+			return "permission:" + strings.TrimSpace(line)
+		}
+	}
+	return ""
 }

@@ -162,7 +162,7 @@ func registerAllHandlers(server *daemon.Server, st *state.State) {
 	server.RegisterHandler("session.setTask", sessionHandler.HandleSetTask)
 
 	dispatcher := subscriptions.NewDispatcher(st.DB())
-	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher)
+	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, "")
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)
 	server.RegisterHandler("message.list", messageHandler.HandleList)
@@ -182,7 +182,7 @@ func registerAllHandlers(server *daemon.Server, st *state.State) {
 	server.RegisterHandler("unsubscribe", subscriptionHandler.HandleUnsubscribe)
 	server.RegisterHandler("subscriptions.list", subscriptionHandler.HandleList)
 
-	teamHandler := rpc.NewTeamHandler(st)
+	teamHandler := rpc.NewTeamHandler(st, "")
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
 	contextHandler := rpc.NewContextHandler(st)

@@ -52,6 +52,8 @@ type TeamMember struct {
 	InboxTotal      int          `json:"inbox_total"`
 	InboxUnread     int          `json:"inbox_unread"`
 	Status          string       `json:"status"`
+	TmuxSession     string       `json:"tmux_session,omitempty"`
+	TmuxState       string       `json:"tmux_state,omitempty"`
 }
 
 // FileChange represents a changed file for team display.
@@ -93,6 +95,11 @@ func FormatTeam(resp *TeamListResponse) string {
 			} else {
 				fmt.Fprintf(&out, "PID:      %d [stale]\n", m.ClaudePID)
 			}
+		}
+
+		// Tmux state
+		if m.TmuxSession != "" {
+			fmt.Fprintf(&out, "Tmux:     %s [%s]\n", m.TmuxSession, m.TmuxState)
 		}
 
 		// Worktree and hostname as separate fields

@@ -24,6 +24,7 @@ type PrimeContext struct {
 	RepoPath            string           `json:"repo_path,omitempty"`
 	Runtime             string           `json:"runtime,omitempty"`
 	SingleAgentMode     bool             `json:"single_agent_mode,omitempty"`
+	TmuxMode            bool             `json:"tmux_mode,omitempty"`
 	SavedSessionContext string           `json:"saved_session_context,omitempty"`
 }
 
@@ -349,10 +350,19 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 		if entries, err := os.ReadDir(identDir); err == nil && len(entries) > 0 {
 			// Section 5: Messaging protocol
 			out.WriteString("\n# Multi-Agent Messaging Protocol\n\n")
-			out.WriteString("## Listener Rules\n\n")
-			out.WriteString("**Keep the listener running at all times.** Spawn it on session start ")
-			out.WriteString("and re-arm whenever it completes. The PID file prevents duplicates — ")
-			out.WriteString("spawning when one is already running is a no-op.\n\n")
+			if ctx.TmuxMode {
+				// Tmux-mode: no listener rules, direct notification delivery
+				out.WriteString("## Tmux-Managed Session\n\n")
+				out.WriteString("You are running in a tmux-managed session. Message notifications\n")
+				out.WriteString("are delivered directly to your input — do NOT spawn a background listener.\n\n")
+				out.WriteString("When you see a message notification, check your inbox:\n")
+				out.WriteString("  thrum inbox --unread\n\n")
+			} else {
+				out.WriteString("## Listener Rules\n\n")
+				out.WriteString("**Keep the listener running at all times.** Spawn it on session start ")
+				out.WriteString("and re-arm whenever it completes. The PID file prevents duplicates — ")
+				out.WriteString("spawning when one is already running is a no-op.\n\n")
+			}
 			out.WriteString("1. **Check inbox before starting work and at every breakpoint.** ")
 			out.WriteString("`thrum inbox --unread`\n")
 			out.WriteString("2. **Send to agent NAMES, never role names.** ")
@@ -377,14 +387,18 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 			out.WriteString("| `low` | Queue, process when convenient |\n\n")
 			// Anti-patterns
 			out.WriteString("## Anti-Patterns\n\n")
-			out.WriteString("- **Deaf Agent** — No listener running. You miss messages.\n")
+			if !ctx.TmuxMode {
+				out.WriteString("- **Deaf Agent** — No listener running. You miss messages.\n")
+			}
 			out.WriteString("- **Silent Agent** — Never sends status updates.\n\n")
 
-			// Section 6: Listener spawn instructions
-			agentID := ctx.Identity.AgentID
-			out.WriteString("\n## Start Background Message Listener\n\n")
-			fmt.Fprintf(&out, "  Task(subagent_type=\"message-listener\", model=\"haiku\",\n")
-			fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages.\\nSTEP_1: %s/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s --agent-name %s\")\n", repoPath, agentID)
+			// Section 6: Listener spawn instructions (legacy mode only)
+			if !ctx.TmuxMode {
+				agentID := ctx.Identity.AgentID
+				out.WriteString("\n## Start Background Message Listener\n\n")
+				fmt.Fprintf(&out, "  Task(subagent_type=\"message-listener\", model=\"haiku\",\n")
+				fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages.\\nSTEP_1: %s/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s --agent-name %s\")\n", repoPath, agentID)
+			}
 		}
 	}
 

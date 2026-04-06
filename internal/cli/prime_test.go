@@ -593,3 +593,53 @@ func TestGetGitWorkContext(t *testing.T) {
 		t.Error("expected branch to be set when no error")
 	}
 }
+
+func TestFormatPrimeContext_TmuxMode(t *testing.T) {
+	repoPath := t.TempDir()
+	setupPrimeTestFiles(t, repoPath)
+
+	ctx := &PrimeContext{
+		Identity: &WhoamiResult{AgentID: "test_agent"},
+		Runtime:  "claude",
+		TmuxMode: true,
+		RepoPath: repoPath,
+	}
+
+	output := FormatPrimeContext(ctx)
+
+	// Should NOT contain listener spawn instructions
+	if strings.Contains(output, "Background Message Listener") {
+		t.Error("tmux-mode should not include listener spawn instructions")
+	}
+	if strings.Contains(output, "message-listener") {
+		t.Error("tmux-mode should not reference message-listener subagent")
+	}
+
+	// Should contain tmux-mode instructions
+	if !strings.Contains(output, "tmux-managed session") {
+		t.Error("tmux-mode should include tmux-managed session notice")
+	}
+	if !strings.Contains(output, "do NOT spawn a background listener") {
+		t.Error("tmux-mode should explicitly say not to spawn listener")
+	}
+}
+
+func TestFormatPrimeContext_LegacyMode(t *testing.T) {
+	repoPath := t.TempDir()
+	setupPrimeTestFiles(t, repoPath)
+
+	ctx := &PrimeContext{
+		Identity:        &WhoamiResult{AgentID: "test_agent"},
+		Runtime:         "claude",
+		SingleAgentMode: false,
+		TmuxMode:        false,
+		RepoPath:        repoPath,
+	}
+
+	output := FormatPrimeContext(ctx)
+
+	// Legacy mode should still include listener instructions
+	if !strings.Contains(output, "Background Message Listener") {
+		t.Error("legacy mode should include listener spawn instructions")
+	}
+}

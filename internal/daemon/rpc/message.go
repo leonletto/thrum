@@ -18,6 +18,7 @@ import (
 	"github.com/leonletto/thrum/internal/groups"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/subscriptions"
+	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 )
 
@@ -253,11 +254,19 @@ type WSBroadcaster interface {
 }
 
 // MessageHandler handles message-related RPC methods.
+// NudgeDeduper provides nudge deduplication (implemented by daemon.NudgeState).
+type NudgeDeduper interface {
+	ShouldNudge(session, reason string) bool
+	RecordNudge(session, reason string)
+}
+
 type MessageHandler struct {
 	state         *state.State
 	dispatcher    *subscriptions.Dispatcher
 	groupResolver *groups.Resolver
 	wsBroadcaster WSBroadcaster // optional; nil if not wired
+	thrumDir      string        // for tmux nudge resolution
+	nudgeDeduper  NudgeDeduper  // optional; nil disables dedup
 }
 
 // SetWSBroadcaster configures a broadcaster that will be called after every
@@ -279,12 +288,17 @@ func NewMessageHandler(state *state.State) *MessageHandler {
 
 // NewMessageHandlerWithDispatcher creates a new message handler with a custom dispatcher.
 // The dispatcher should have the client notifier configured for push notifications.
-func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher) *MessageHandler {
-	return &MessageHandler{
+func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir string, nudgeDeduper ...NudgeDeduper) *MessageHandler {
+	h := &MessageHandler{
 		state:         state,
 		dispatcher:    dispatcher,
 		groupResolver: groups.NewResolver(state.DB()),
+		thrumDir:      thrumDir,
 	}
+	if len(nudgeDeduper) > 0 {
+		h.nudgeDeduper = nudgeDeduper[0]
+	}
+	return h
 }
 
 // HandleSend handles the message.send RPC method.
@@ -516,6 +530,34 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 
 	// Find matching subscriptions and push notifications to connected clients
 	_, _ = h.dispatcher.DispatchForMessage(ctx, msgInfo)
+
+	// Nudge tmux-managed recipients asynchronously
+	if h.thrumDir != "" {
+		senderName := agentID
+		for _, recipientName := range recipients {
+			go func(name string) {
+				target := resolveNudgeTarget(h.thrumDir, name)
+				if target == "" {
+					return
+				}
+				session, _, _ := ttmux.ParseTarget(target)
+				if !ttmux.HasSession(session) {
+					return
+				}
+				// Dedup: skip if same session was nudged recently for same reason
+				reason := "message"
+				if h.nudgeDeduper != nil {
+					if !h.nudgeDeduper.ShouldNudge(session, reason) {
+						return
+					}
+				}
+				_ = ttmux.Nudge(target, senderName)
+				if h.nudgeDeduper != nil {
+					h.nudgeDeduper.RecordNudge(session, reason)
+				}
+			}(recipientName)
+		}
+	}
 
 	// Broadcast to ALL connected WebSocket clients so the browser UI live feed
 	// receives events even though it never registers a subscription row in the DB.
@@ -2398,4 +2440,22 @@ func buildWSNotification(msg *subscriptions.MessageInfo) map[string]any {
 			},
 		},
 	}
+}
+
+// resolveNudgeTarget reads the identity file for an agent and returns the tmux target
+// if the agent is in a tmux session. Returns empty string otherwise.
+func resolveNudgeTarget(thrumDir, agentName string) string {
+	identityPath := filepath.Join(thrumDir, "identities", agentName+".json")
+	data, err := os.ReadFile(identityPath) // #nosec G304 -- path is .thrum/identities/<name>.json
+	if err != nil {
+		return ""
+	}
+	var idFile config.IdentityFile
+	if err := json.Unmarshal(data, &idFile); err != nil {
+		return ""
+	}
+	if idFile.TmuxSession == "" {
+		return ""
+	}
+	return idFile.TmuxSession
 }
