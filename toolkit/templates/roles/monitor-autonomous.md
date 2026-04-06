@@ -204,7 +204,7 @@ bd update <id> --claim               # Claim monitoring task
 bd close <id>         # Mark complete when monitoring period ends
 ```text
 
-**Save context:** Use `/thrum:update-context` skill. **NEVER run
+**Save context:** Use `/thrum:update-project` skill. **NEVER run
 `thrum context save` manually** — it overwrites accumulated session state.
 
 ## Agent Strategies (Read Before Any Work)

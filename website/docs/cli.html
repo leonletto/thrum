@@ -1512,7 +1512,7 @@ $ thrum ping planner
 # Save from stdin
 $ echo &quot;Working on auth module&quot; | thrum context save
 ✓ Context saved for furiosa (24 bytes)</code></pre>
-<p><strong>Agent safety note:</strong> Agents should use the <code>/thrum:update-context</code> skill
+<p><strong>Agent safety note:</strong> Agents should use the <code>/thrum:update-project</code> skill
 instead of running <code>thrum context save</code> directly. The skill composes a
 structured context (decisions, next steps, work-in-progress) before saving,
 whereas running the command manually with arbitrary input can overwrite

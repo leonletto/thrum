@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { tmuxKillServer, tmuxExec } from './helpers/tmux-exec';
 
 /** Source repo root — used for building and locating the binary. */
 const SOURCE_ROOT = path.resolve(__dirname, '../..');
@@ -41,8 +42,8 @@ async function waitForDaemon(cwd: string, maxAttempts = 30, intervalMs = 1000): 
   console.log('[global-setup] Waiting for daemon to be ready...');
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const output = execFileSync(BIN, ['daemon', 'status'], { cwd, encoding: 'utf-8', timeout: 5_000 });
-      if (output.includes('running')) { console.log('[global-setup] Daemon is ready.'); return; }
+      const result = tmuxExec(`${BIN} daemon status`, { cwd, timeoutMs: 5_000 });
+      if (result.stdout.includes('running')) { console.log('[global-setup] Daemon is ready.'); return; }
     } catch { /* not ready */ }
     await new Promise(resolve => setTimeout(resolve, intervalMs));
   }
@@ -50,9 +51,9 @@ async function waitForDaemon(cwd: string, maxAttempts = 30, intervalMs = 1000): 
 }
 
 function getDaemonPort(cwd: string): number {
-  const output = execFileSync(BIN, ['daemon', 'status', '--json'], { cwd, encoding: 'utf-8', timeout: 5_000 });
-  const status = JSON.parse(output);
-  if (!status.ws_port) throw new Error(`Daemon status missing ws_port: ${output}`);
+  const result = tmuxExec(`${BIN} daemon status --json`, { cwd, timeoutMs: 5_000 });
+  const status = JSON.parse(result.stdout);
+  if (!status.ws_port) throw new Error(`Daemon status missing ws_port: ${result.stdout}`);
   return status.ws_port;
 }
 
@@ -69,15 +70,16 @@ function createCoordinatorRepo(): void {
   execIn(COORDINATOR_DIR, 'git', ['commit', '-m', 'Initial commit']);
 
   // thrum init (repo structure only — auto-starts daemon)
-  execIn(COORDINATOR_DIR, BIN, ['init']);
+  // Use tmux to prevent PID-based identity resolution from finding the
+  // developer's Claude process and adopting the wrong identity.
+  // Pipe "1" to stdin to auto-select "Claude Code" as the runtime.
+  tmuxExec(`echo 1 | ${BIN} init`, { cwd: COORDINATOR_DIR, timeoutMs: 30_000 });
 
   // Register coordinator agent with quickstart
-  execIn(COORDINATOR_DIR, BIN, [
-    'quickstart',
-    '--role', 'coordinator', '--module', 'all',
-    '--name', 'e2e_coordinator',
-    '--intent', 'E2E test coordinator',
-  ]);
+  tmuxExec(
+    `${BIN} quickstart --role coordinator --module all --name e2e_coordinator --intent 'E2E test coordinator'`,
+    { cwd: COORDINATOR_DIR, timeoutMs: 30_000 },
+  );
 }
 
 function createImplementerWorktree(): void {
@@ -92,12 +94,10 @@ function createImplementerWorktree(): void {
   writeFileSync(path.join(implThrumDir, 'redirect'), path.join(COORDINATOR_DIR, '.thrum'));
 
   // Quickstart in implementer worktree (session + intent)
-  execIn(IMPLEMENTER_DIR, BIN, [
-    'quickstart',
-    '--role', 'implementer', '--module', 'main',
-    '--name', 'e2e_implementer',
-    '--intent', 'E2E test implementer',
-  ]);
+  tmuxExec(
+    `${BIN} quickstart --role implementer --module main --name e2e_implementer --intent 'E2E test implementer'`,
+    { cwd: IMPLEMENTER_DIR, timeoutMs: 30_000 },
+  );
 }
 
 function createBareRemote(): void {
@@ -112,15 +112,15 @@ function createBareRemote(): void {
 }
 
 export default async function globalSetup(): Promise<void> {
-  // Clear all thrum env vars so tests use the temp test repos and identities,
-  // not the developer's session state. THRUM_NAME is especially critical —
-  // it overrides --name in quickstartCmd, causing identity file name mismatches.
-  delete process.env.THRUM_HOME;
-  delete process.env.THRUM_NAME;
-  delete process.env.THRUM_ROLE;
-  delete process.env.THRUM_MODULE;
-  delete process.env.THRUM_AGENT_ID;
-  delete process.env.THRUM_INTENT;
+  // Clear ALL THRUM_* env vars BEFORE any tmux commands. The tmux server
+  // inherits process.env at startup — cleaning first means every tmux pane
+  // gets a pristine environment with no developer session state.
+  for (const key of Object.keys(process.env)) {
+    if (key.startsWith('THRUM_')) delete process.env[key];
+  }
+
+  // Kill any stale tmux test server from a prior crashed run.
+  tmuxKillServer();
 
   // Step 1: Build in source repo
   run('make', ['build-ui'], 'Building UI');
@@ -133,15 +133,16 @@ export default async function globalSetup(): Promise<void> {
     // Stop daemon from previous run — try graceful stop, then force-kill
     let stopped = false;
     try {
-      execIn(COORDINATOR_DIR, BIN, ['daemon', 'stop']);
+      tmuxExec(`${BIN} daemon stop`, { cwd: COORDINATOR_DIR, timeoutMs: 10_000 });
       stopped = true;
     } catch {
       // daemon stop failed (binary mismatch, wedged process, etc.)
       // Read PID file and force-kill the process
-      const pidFile = path.join(COORDINATOR_DIR, '.thrum', 'var', 'daemon.pid');
+      const pidFile = path.join(COORDINATOR_DIR, '.thrum', 'var', 'thrum.pid');
       if (existsSync(pidFile)) {
         try {
-          const pid = readFileSync(pidFile, 'utf-8').trim();
+          const pidData = JSON.parse(readFileSync(pidFile, 'utf-8'));
+          const pid = pidData.pid;
           console.log(`[global-setup] Force-killing stale daemon PID ${pid}`);
           process.kill(Number(pid), 'SIGKILL');
           stopped = true;
@@ -179,7 +180,7 @@ export default async function globalSetup(): Promise<void> {
     writeFileSync(WS_PORT_FILE, String(wsPort));
   } catch (err) {
     console.error('[global-setup] Setup failed, stopping daemon...');
-    try { execIn(COORDINATOR_DIR, BIN, ['daemon', 'stop']); } catch { /* best effort */ }
+    try { tmuxExec(`${BIN} daemon stop`, { cwd: COORDINATOR_DIR, timeoutMs: 10_000 }); } catch { /* best effort */ }
     throw err;
   }
 

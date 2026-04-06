@@ -66,6 +66,10 @@ func TestBridgeOnlyPublicRPCs(t *testing.T) {
 		"message.send":      true,
 		"message.get":       true,
 		"message.markRead":  true,
+		"group.list":        true,
+		"group.create":      true,
+		"group.member.add":  true,
+		"agent.register":    true,
 	}
 
 	// Parse all non-test Go files and find ws.Call / r.ws.Call invocations

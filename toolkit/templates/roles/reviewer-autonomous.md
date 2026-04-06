@@ -195,7 +195,7 @@ bd update <id> --claim               # Claim review task
 bd close <id>         # Mark review complete
 ```text
 
-**Save context:** Use `/thrum:update-context` skill. **NEVER run
+**Save context:** Use `/thrum:update-project` skill. **NEVER run
 `thrum context save` manually** — it overwrites accumulated session state.
 
 ## Agent Strategies (Read Before Any Work)

@@ -2,8 +2,7 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
-	"net"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -14,6 +13,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/types"
+	"github.com/leonletto/thrum/internal/websocket"
 )
 
 // newTestDaemonWithNotify creates a test daemon that supports sync.notify, sync.pull, and sync.peer_info.
@@ -41,29 +41,17 @@ func newTestDaemonWithNotify(t *testing.T, name string, notifyHandler rpc.SyncTr
 	_ = reg.Register("sync.peer_info", peerInfoHandler.Handle)
 	_ = reg.Register("sync.notify", syncNotifyHandler.Handle)
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen for %s: %v", name, err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
+	// Serve WebSocket on a random HTTP test server
+	ts := httptest.NewServer(websocket.NewServer("", reg, nil).HTTPHandler())
+	t.Cleanup(ts.Close)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go reg.ServeSyncRPC(ctx, conn, "test-peer")
-		}
-	}()
-
 	return &testDaemon{
-		state:    st,
-		listener: ln,
-		cancel:   cancel,
+		state:  st,
+		server: ts,
+		cancel: cancel,
 	}
 }
 
@@ -364,33 +352,24 @@ func TestPushSync_SendNotifyClient(t *testing.T) {
 }
 
 func TestPushSync_InvalidNotificationIgnored(t *testing.T) {
+	// Verify that a sync.notify with missing daemon_id does not trigger sync.
 	var triggered atomic.Int32
-	daemon := newTestDaemonWithNotify(t, "test", func(daemonID string) {
+	d := newTestDaemonWithNotify(t, "test", func(daemonID string) {
 		triggered.Add(1)
 	})
 
-	// Send raw invalid JSON to sync.notify
-	conn, err := net.DialTimeout("tcp", daemon.addr(), 5*time.Second)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	defer conn.Close()
-
-	// Send a sync.notify with missing daemon_id
-	req := map[string]any{
-		"jsonrpc": "2.0",
-		"method":  "sync.notify",
-		"params":  map[string]any{"latest_seq": 100},
-		"id":      1,
-	}
-	data, _ := json.Marshal(req)
-	data = append(data, '\n')
-	_, _ = conn.Write(data)
+	// Use the SyncClient to send a sync.notify with a missing daemon_id.
+	// The handler should return an error (ignored by fire-and-forget) without triggering sync.
+	client := NewSyncClient()
+	// SendNotify with empty daemonID — the handler will see daemon_id="" and not trigger
+	err := client.SendNotify(d.addr(), "", 100, 1, "")
+	// Errors are expected or not — what matters is sync is not triggered
+	_ = err
 
 	time.Sleep(100 * time.Millisecond)
 
 	if triggered.Load() != 0 {
-		t.Error("sync was triggered despite invalid notification")
+		t.Error("sync was triggered despite invalid notification (missing daemon_id)")
 	}
 }
 

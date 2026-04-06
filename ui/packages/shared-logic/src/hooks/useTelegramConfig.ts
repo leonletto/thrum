@@ -1,6 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ensureConnected, wsClient } from '../api/client';
 
+export interface RemoteAgent {
+  name: string;
+  prefix: string;
+  bot: string;
+}
+
+export interface TelegramGroup {
+  chat_id: number;
+  name: string;
+  trusted_bots?: number[];
+  remote_agents?: RemoteAgent[];
+}
+
 export interface TelegramStatusResponse {
   configured: boolean;
   enabled: boolean;
@@ -14,6 +27,7 @@ export interface TelegramStatusResponse {
   connected_at?: string;
   inbound_count: number;
   error?: string;
+  groups?: TelegramGroup[];
 }
 
 export function useTelegramStatus() {
@@ -40,5 +54,27 @@ export function useTelegramConfigure() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['telegram'] });
     },
+  });
+}
+
+export interface TelegramPairResponse {
+  telegram_user_id: number;
+  telegram_username: string;
+  first_name: string;
+  last_name: string;
+  chat_id: number;
+  message_text: string;
+}
+
+export function useTelegramPair() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (opts: { timeout?: number }) => {
+      await ensureConnected();
+      return wsClient.call<TelegramPairResponse>('telegram.pair', {
+        timeout_seconds: opts.timeout || 60,
+      });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['telegram'] }),
   });
 }

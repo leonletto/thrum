@@ -429,7 +429,7 @@ thrum context preamble                         # Show current preamble
 thrum context preamble --init                  # Create/reset to default preamble
 thrum context preamble --file path.md          # Set preamble from file
 thrum context preamble --agent coordinator
-thrum context update                           # Delegates to /update-context skill
+thrum context update                           # Delegates to /thrum:update-project skill
 ```
 
 `context show` flags:
@@ -519,22 +519,12 @@ Flags:
 ```bash
 thrum setup worktree                           # Set up redirect in feature worktree (default)
 thrum setup worktree --main-repo /path/to/main
-thrum setup claude-md                          # Generate CLAUDE.md content (stdout)
-thrum setup claude-md --apply                  # Append to CLAUDE.md
-thrum setup claude-md --apply --force          # Overwrite existing Thrum section
 ```
 
 `setup worktree` flags:
 
 ```text
 --main-repo string   Path to the main repository (where daemon runs) (default ".")
-```
-
-`setup claude-md` flags:
-
-```text
---apply   Append to CLAUDE.md (create if missing)
---force   Overwrite existing Thrum section
 ```
 
 ---

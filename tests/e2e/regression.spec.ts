@@ -240,7 +240,7 @@ test.describe('Bugfix Regressions', () => {
     } catch (err: any) {
       error1 = err.message || '';
     }
-    expect(error1.toLowerCase()).toMatch(/name.*cannot.*same.*role|name.*role/);
+    expect(error1.toLowerCase()).toMatch(/name[\s\S]*cannot[\s\S]*same[\s\S]*role|name[\s\S]*role/);
 
     // Re-registration with different name+role → OK (no error)
     const j13OkEnv = { ...process.env, THRUM_NAME: 'j13_gamma', THRUM_ROLE: 'j13_planner', THRUM_MODULE: 'all' };

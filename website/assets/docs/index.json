@@ -330,22 +330,6 @@
     "lastUpdated": "2026-03-24"
   },
   {
-    "path": "telegram-groups.html",
-    "title": "Cross-Repo Communication",
-    "description": "Connect agents across different repos using shared Telegram groups — proxy agents, @mention routing, and direct addressing without network configuration",
-    "category": "guides",
-    "order": 13,
-    "tags": [
-      "telegram",
-      "cross-repo",
-      "multi-repo",
-      "groups",
-      "proxy-agents",
-      "coordination"
-    ],
-    "lastUpdated": "2026-04-05"
-  },
-  {
     "path": "claude-agent-integration.html",
     "title": "Claude Code Agent Integration",
     "description": "Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup",
@@ -435,19 +419,6 @@
     "order": 1,
     "tags": [],
     "lastUpdated": "2026-03-13"
-  },
-  {
-    "path": "single-agent-mode.html",
-    "title": "Single-Agent Mode",
-    "description": "Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent",
-    "category": "overview",
-    "order": 2,
-    "tags": [
-      "single-agent",
-      "context",
-      "getting-started"
-    ],
-    "lastUpdated": "2026-04-04"
   },
   {
     "path": "quickstart.html",

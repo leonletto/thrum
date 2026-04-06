@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { ensureTestRepo } from './integration-setup';
+import { tmuxExec, shellEscape, buildEnvPrefix } from './tmux-exec';
 
 /** File written by global-setup with the implementer worktree path. */
 const IMPLEMENTER_REPO_FILE_PATH = path.join(
@@ -19,7 +20,7 @@ const BARE_REMOTE_FILE_PATH = path.join(
 
 /** Source repo root — for locating the built binary. */
 const SOURCE_ROOT = path.resolve(__dirname, '../../..');
-const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
+export const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
 
 /** File written by global-setup with the isolated test repo path. */
 const TEST_REPO_FILE = path.join(SOURCE_ROOT, 'node_modules', '.e2e-test-repo');
@@ -42,11 +43,22 @@ export function getWebUIUrl(): string {
 
 /**
  * Default test agent identity used by the global-setup daemon.
- * These env vars serve as fallback when identity file resolution fails
- * (e.g., when multiple identity files exist in .thrum/identities/).
  */
+export const TEST_AGENT_NAME = 'e2e_coordinator';
 export const TEST_AGENT_ROLE = 'tester';
 export const TEST_AGENT_MODULE = 'e2e';
+
+/**
+ * Default env object for coordinator identity.
+ * Used as the env parameter when no explicit env is passed.
+ */
+function defaultEnv(): NodeJS.ProcessEnv {
+  return {
+    THRUM_NAME: TEST_AGENT_NAME,
+    THRUM_ROLE: TEST_AGENT_ROLE,
+    THRUM_MODULE: TEST_AGENT_MODULE,
+  };
+}
 
 /**
  * Get the test repo root. Reads from the marker file written by global-setup.
@@ -82,41 +94,35 @@ export function getBareRemote(): string {
 }
 
 /**
- * Environment variables passed to all thrum CLI invocations.
- * THRUM_ROLE and THRUM_MODULE provide fallback identity resolution
- * so commands don't fail with "role not specified" when multiple
- * identity files exist.
+ * Build a shell command string with env prefix and escaped args.
  */
-function thrumEnv(): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    THRUM_ROLE: TEST_AGENT_ROLE,
-    THRUM_MODULE: TEST_AGENT_MODULE,
-  };
+function buildCmd(env: NodeJS.ProcessEnv | undefined, args: string[]): string {
+  const prefix = buildEnvPrefix(env ?? defaultEnv());
+  const escapedBin = shellEscape(BIN);
+  const escapedArgs = args.map(shellEscape).join(' ');
+  return prefix ? `${prefix} ${escapedBin} ${escapedArgs}` : `${escapedBin} ${escapedArgs}`;
 }
 
 /**
- * Execute a thrum CLI command safely (no shell injection).
+ * Execute a thrum CLI command inside an isolated tmux session.
  * Returns trimmed stdout. Commands run in the isolated test repo.
+ *
+ * tmux isolation prevents PID-based identity resolution from finding
+ * the developer's Claude process in the ancestry chain.
  *
  * @param args - CLI arguments
  * @param timeout - command timeout in ms (default 10s)
- * @param env - optional environment overrides
+ * @param env - optional environment overrides (only THRUM_* keys are used)
  */
 export function thrum(args: string[], timeout = 10_000, env?: NodeJS.ProcessEnv): string {
-  try {
-    return execFileSync(BIN, args, {
-      cwd: getTestRoot(),
-      encoding: 'utf-8',
-      timeout,
-      env: env ?? thrumEnv(),
-    }).trim();
-  } catch (err: any) {
-    const stderr = err.stderr?.toString() || '';
+  const cmd = buildCmd(env, args);
+  const result = tmuxExec(cmd, { cwd: getTestRoot(), timeoutMs: timeout });
+  if (result.exitCode !== 0) {
     throw new Error(
-      `thrum ${args.join(' ')} failed (exit ${err.status}):\n${stderr}`,
+      `thrum ${args.join(' ')} failed (exit ${result.exitCode}):\n${result.stdout}`,
     );
   }
+  return result.stdout.trim();
 }
 
 /**
@@ -142,17 +148,12 @@ export function thrumIn(
   timeout = 10_000,
   env?: NodeJS.ProcessEnv,
 ): string {
-  try {
-    return execFileSync(BIN, args, {
-      cwd,
-      encoding: 'utf-8',
-      timeout,
-      env: env ?? thrumEnv(),
-    }).trim();
-  } catch (err: any) {
-    const stderr = err.stderr?.toString() || '';
+  const cmd = buildCmd(env, args);
+  const result = tmuxExec(cmd, { cwd, timeoutMs: timeout });
+  if (result.exitCode !== 0) {
     throw new Error(
-      `thrum ${args.join(' ')} failed in ${cwd} (exit ${err.status}):\n${stderr}`,
+      `thrum ${args.join(' ')} failed in ${cwd} (exit ${result.exitCode}):\n${result.stdout}`,
     );
   }
+  return result.stdout.trim();
 }

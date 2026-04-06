@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leonletto/thrum/internal/config"
 )
 
 func TestOutboundSkipsOwnMessages(t *testing.T) {
@@ -76,7 +78,7 @@ func TestOutboundRelayChatIDRestriction(t *testing.T) {
 	// Verify that OutboundRelay only sends to the configured chatID,
 	// not to arbitrary chat IDs from the message map.
 	// This is a design test — the chatID is a fixed field, not derived from data.
-	relay := NewOutboundRelay(nil, nil, nil, "user:leon-letto", -100123456)
+	relay := NewOutboundRelay(nil, nil, nil, "user:leon-letto", -100123456, nil)
 	if relay.chatID != -100123456 {
 		t.Errorf("chatID = %d, want -100123456", relay.chatID)
 	}
@@ -126,7 +128,7 @@ func TestOutboundRelayThreading(t *testing.T) {
 	// The outbound relay uses bot.SendMessage which requires a real API client.
 	// Instead, we verify the threading lookup works correctly.
 
-	relay := NewOutboundRelay(client, mockBot, msgMap, "user:leon-letto", 12345)
+	relay := NewOutboundRelay(client, mockBot, msgMap, "user:leon-letto", 12345, nil)
 
 	// Verify TeleID lookup for threading
 	chatID, teleID, ok := msgMap.TeleID("msg_thrum_original")
@@ -183,5 +185,44 @@ func TestOutboundNoInternalMetadata(t *testing.T) {
 	}
 	if strings.Contains(result, "session") {
 		t.Error("session data leaked to outbound Telegram message")
+	}
+}
+
+func TestOutboundRelay_FindGroupChatID(t *testing.T) {
+	groups := []config.TelegramGroup{
+		{ChatID: -100123, Name: "cross-repo"},
+	}
+	r := &OutboundRelay{groups: groups}
+
+	if r.findGroupChatID("tg:cross-repo") != -100123 {
+		t.Error("should find group")
+	}
+	if r.findGroupChatID("tg:unknown") != 0 {
+		t.Error("unknown group should return 0")
+	}
+	if r.findGroupChatID("coordinator_main") != 0 {
+		t.Error("non-tg: prefix should return 0")
+	}
+}
+
+func TestOutboundRelay_FindProxyRoute(t *testing.T) {
+	groups := []config.TelegramGroup{
+		{
+			ChatID: -100123, Name: "cross-repo",
+			RemoteAgents: []config.RemoteAgent{
+				{Name: "coordinator_main", Prefix: "falcon", Bot: "@falcon_bot"},
+			},
+		},
+	}
+	r := &OutboundRelay{groups: groups}
+
+	agent, chatID := r.findProxyRoute("falcon:coordinator_main")
+	if agent == nil || chatID != -100123 {
+		t.Errorf("proxy route = %v, %d, want agent + -100123", agent, chatID)
+	}
+
+	agent, _ = r.findProxyRoute("coordinator_main")
+	if agent != nil {
+		t.Error("non-proxy should return nil")
 	}
 }

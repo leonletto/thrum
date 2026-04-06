@@ -83,11 +83,13 @@ func PeerWaitPairing(client *Client) (*PeerWaitPairingResult, error) {
 }
 
 // PeerJoin sends a pairing code to a remote peer.
-func PeerJoin(client *Client, address, code string) (*PeerJoinResult, error) {
+// repoPath is optional; if non-empty it is passed to the daemon to set Transport="local" and RepoPath.
+func PeerJoin(client *Client, address, code, repoPath string) (*PeerJoinResult, error) {
 	req := struct {
-		Address string `json:"address"`
-		Code    string `json:"code"`
-	}{Address: address, Code: code}
+		Address  string `json:"address"`
+		Code     string `json:"code"`
+		RepoPath string `json:"repo_path,omitempty"`
+	}{Address: address, Code: code, RepoPath: repoPath}
 
 	var result PeerJoinResult
 	if err := client.Call("peer.join", req, &result); err != nil {

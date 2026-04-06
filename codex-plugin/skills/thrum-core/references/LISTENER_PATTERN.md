@@ -1,8 +1,8 @@
 # Listener Pattern: Background Message Monitoring
 
 The message-listener is a background sub-agent that blocks on `thrum wait` and
-returns when messages arrive. Runs on Haiku for cost efficiency
-(~$0.00003/cycle).
+returns when messages arrive. A PID file (`.thrum/var/<agent_id>-listener.pid`)
+prevents duplicate listeners — spawning when one is already running is safe.
 
 ## Quick Start
 
@@ -10,90 +10,49 @@ returns when messages arrive. Runs on Haiku for cost efficiency
 Task(
   subagent_type="message-listener",
   model="haiku",
-  run_in_background=true,
-  prompt="Listen for Thrum messages. WAIT_CMD=cd /path/to/repo && thrum wait --timeout 8m --after -15s --json"
+  prompt="Listen for Thrum messages.\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\nSTEP_2: thrum wait --timeout 8m --after -15s --agent-name <agent_id>"
 )
 ```
 
-Replace `/path/to/repo` with the actual repo path. When using the Thrum plugin,
-`thrum prime` outputs a ready-to-use spawn instruction with the correct path.
+Replace `/path/to/repo` with the actual repo path and `<agent_id>` with your
+agent name. `thrum prime` outputs a ready-to-use spawn instruction with both
+pre-filled.
 
 ## How It Works
 
-1. **Spawn** — Launch as background Task with `run_in_background: true`
-2. **Block** — Listener runs `thrum wait` which blocks until message or timeout
-3. **Return** — Returns `MESSAGES_RECEIVED` (with message data) or
-   `NO_MESSAGES_TIMEOUT`
-4. **Re-arm** — After processing, spawn a new listener to continue monitoring
+1. **Spawn** — Launch as background Task (`background: true` in frontmatter)
+2. **PID file** — `thrum wait --agent-name` writes a PID file on start, updates
+   it each cycle, and removes it on exit (or signal). All spawn paths check this
+   file with `kill -0` before spawning.
+3. **Block** — `thrum wait --timeout 8m` blocks until message or timeout
+4. **Return or loop** — Message received → stop. Timeout → back to step 2.
 
-The listener loops internally (up to 30 cycles of 8 min each = ~4 hours max).
-
-## Processing Messages
-
-```text
-# When listener returns, check result
-listenerResult = TaskOutput(listener_id)
-
-if "MESSAGES_RECEIVED" in result:
-    # Read full messages
-    thrum inbox --unread
-    thrum sent --unread
-
-    # Re-arm listener
-    Task(subagent_type="message-listener", ...)
-else:
-    # Timeout, no messages — re-arm if still working
-    Task(subagent_type="message-listener", ...)
-```
+The listener loops internally (up to ~30 cycles of 8 min = ~4 hours max).
 
 ## Wait Command Flags
 
-| Flag                | Purpose                                                                        |
-| ------------------- | ------------------------------------------------------------------------------ |
-| `--timeout 8m`      | Block up to 8 minutes per cycle                                                |
-| `--after -15s`      | Include messages sent up to 1s ago (negative = "N ago"; prevents stale replay) |
-| `--json`            | Machine-readable output                                                        |
-| `--mention @<role>` | Only messages that mention the specified role                                  |
-
-## Return Format
-
-Messages received:
-
-```text
-MESSAGES_RECEIVED
----
-FROM: @coordinator
-CONTENT: Please review PR #42
-TIMESTAMP: 2026-02-13T10:30:00Z
----
-RE-ARM: This listener has stopped. Spawn a new message-listener agent to continue listening.
-```
-
-Timeout:
-
-```text
-NO_MESSAGES_TIMEOUT
-RE-ARM: This listener has stopped. Spawn a new message-listener agent to continue listening.
-```
+| Flag              | Purpose                                                   |
+| ----------------- | --------------------------------------------------------- |
+| `--timeout 8m`    | Block up to 8 min per cycle (under Bash 600s limit)       |
+| `--after -15s`    | Include messages sent up to 15s ago (covers re-arm gap)   |
+| `--agent-name ID` | Write PID file for spawn coordination                     |
 
 ## Cron Watchdog (Recommended)
 
-Use a cron job to automatically respawn the listener if it dies or times out.
-This eliminates manual re-arming entirely.
+Automatically respawn the listener if it dies or is lost after compaction.
 
 ```text
 CronCreate(
   cron="*/30 * * * *",
-  prompt="If there is no background message listener running, spawn one now:\n\nAgent(subagent_type=\"message-listener\", model=\"haiku\", run_in_background=true, prompt=\"Listen for Thrum messages.\\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s\")"
+  prompt="Check the listener PID file at .thrum/var/<agent_id>-listener.pid.\nIf the file does not exist, or if kill -0 <pid> fails (process not running),\nspawn a new listener:\n\nAgent(subagent_type=\"message-listener\", model=\"haiku\", prompt=\"Listen for Thrum messages.\\nSTEP_1: /path/to/repo/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s --agent-name <agent_id>\")"
 )
 ```
 
-The cron fires every 30 minutes. If a listener is already running, it skips. If
-not, it spawns one. Combined with the 4-hour listener budget, this provides
-continuous coverage with minimal overhead.
+Spawn the initial listener on session start, then create the cron watchdog.
 
 ## Key Rules
 
+- **Spawn freely** — PID file prevents duplicates
 - **Return immediately** when messages arrive (don't wait for more)
 - **Read-only** — the listener never sends messages
 - **Cost-efficient** — runs on Haiku, blocks instead of polling

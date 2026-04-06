@@ -11,6 +11,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
+	"github.com/leonletto/thrum/internal/process"
 )
 
 // Config represents the resolved configuration for the thrum agent.
@@ -40,6 +41,7 @@ type IdentityFile struct {
 	SessionID   string      `json:"session_id,omitempty"`
 	ConfirmedBy string      `json:"confirmed_by,omitempty"`
 	ContextFile string      `json:"context_file,omitempty"`
+	ClaudePID   int         `json:"claude_pid,omitempty"`
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
@@ -174,49 +176,85 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 		return nil, fmt.Errorf("no identity files found")
 	}
 
+	// Compute Claude PID once for all resolution paths
+	claudePID := process.FindClaudeAncestor()
+
 	// If exactly one identity file, load it (solo-agent worktree)
 	if len(jsonFiles) == 1 {
 		identityPath := filepath.Join(dirPath, jsonFiles[0])
-		return loadIdentityFile(identityPath)
+		id, err := loadIdentityFile(identityPath)
+		if err != nil {
+			return nil, err
+		}
+		return adoptIdentity(dirPath, id, claudePID), nil
 	}
 
-	// Collect available identity names for error messages
+	// Load all identities for multi-pass resolution
+	var identities []*IdentityFile
 	available := make([]string, 0, len(jsonFiles))
 	for _, f := range jsonFiles {
 		available = append(available, strings.TrimSuffix(f, ".json"))
+		id, err := loadIdentityFile(filepath.Join(dirPath, f))
+		if err != nil {
+			continue
+		}
+		identities = append(identities, id)
 	}
 
-	// Multiple identity files - try worktree-based filtering
+	// Pass 0: PID-first resolution — match by Claude PID
+	if claudePID > 0 {
+		for _, id := range identities {
+			if id.ClaudePID == claudePID && process.IsRunning(claudePID) {
+				return adoptIdentity(dirPath, id, claudePID), nil
+			}
+		}
+	}
+
+	// Pass 1: Worktree-based filtering
 	currentWT := detectCurrentWorktree(dirPath)
 	if currentWT != "" {
 		var matches []*IdentityFile
-		for _, f := range jsonFiles {
-			id, err := loadIdentityFile(filepath.Join(dirPath, f))
-			if err != nil {
-				continue
-			}
+		for _, id := range identities {
 			if id.Worktree == currentWT {
 				matches = append(matches, id)
 			}
 		}
 		if len(matches) == 1 {
-			return matches[0], nil
+			return adoptIdentity(dirPath, matches[0], claudePID), nil
 		}
 		if len(matches) > 1 {
-			// Most-recent-wins: pick the identity with the latest UpdatedAt
 			best := matches[0]
 			for _, m := range matches[1:] {
 				if m.UpdatedAt.After(best.UpdatedAt) {
 					best = m
 				}
 			}
-			return best, nil
+			return adoptIdentity(dirPath, best, claudePID), nil
 		}
 		// Zero matches: fall through to generic error
 	}
 
 	return nil, fmt.Errorf("cannot auto-select identity: %d identity files found in .thrum/identities/\n  Hint: set THRUM_NAME=<name> to select one, or run from the correct worktree\n  Available: %s",
 		len(jsonFiles), strings.Join(available, ", "))
+}
+
+// adoptIdentity updates the identity's ClaudePID if the current session should claim it.
+// Returns the identity unchanged if no adoption is needed.
+func adoptIdentity(dirPath string, id *IdentityFile, claudePID int) *IdentityFile {
+	if claudePID <= 0 || id.ClaudePID == claudePID {
+		return id // No adoption needed
+	}
+	if id.ClaudePID == 0 || !process.IsRunning(id.ClaudePID) {
+		// Dead or missing PID — silently adopt
+		id.ClaudePID = claudePID
+		_ = SaveIdentityFile(filepath.Dir(dirPath), id) // best-effort rewrite; dirPath is identities dir, SaveIdentityFile expects .thrum dir
+	} else if !process.IsClaudeProcess(id.ClaudePID) {
+		// Alive but not Claude — adopt
+		id.ClaudePID = claudePID
+		_ = SaveIdentityFile(filepath.Dir(dirPath), id)
+	}
+	// If alive + claude + different PID → genuine conflict, don't adopt
+	return id
 }
 
 // detectCurrentWorktree returns the current git worktree name, or "" if detection fails.

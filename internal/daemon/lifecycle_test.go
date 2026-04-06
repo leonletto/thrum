@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/leonletto/thrum/internal/process"
 )
 
 func TestLifecycleRun(t *testing.T) {
@@ -41,7 +43,7 @@ func TestLifecycleRun(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			// Force kill if needed
 			pidInfo, err := ReadPIDFileJSON(pidPath)
-			if err == nil && isProcessRunning(pidInfo.PID) {
+			if err == nil && process.IsRunning(pidInfo.PID) {
 				if proc, err := os.FindProcess(pidInfo.PID); err == nil {
 					_ = proc.Kill()
 				}
@@ -111,7 +113,7 @@ func TestLifecycleSignalHandling(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			// Force kill if needed
 			pidInfo, err := ReadPIDFileJSON(pidPath)
-			if err == nil && isProcessRunning(pidInfo.PID) {
+			if err == nil && process.IsRunning(pidInfo.PID) {
 				if proc, err := os.FindProcess(pidInfo.PID); err == nil {
 					_ = proc.Kill()
 				}

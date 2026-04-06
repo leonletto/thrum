@@ -43,10 +43,6 @@ generates CLAUDE.md coordination instructions, starts the daemon, registers your
 agent, and starts a session. For manual control, you can still run individual
 steps:
 
-```bash
-thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
-```
-
 Verify the daemon is running:
 
 ```bash
@@ -102,7 +98,7 @@ All commands live under the `/thrum:` namespace.
 | `/thrum:group`          | Create, manage, and message agent groups                     |
 | `/thrum:overview`       | Combined status + team + inbox view                          |
 | `/thrum:prime`          | Load full session context (identity, team, inbox, git)       |
-| `/thrum:update-context` | Guided workflow to save session narrative + state            |
+| `/thrum:update-project` | Guided workflow to update durable project state              |
 
 ### Common workflows
 

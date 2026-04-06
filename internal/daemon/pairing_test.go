@@ -26,8 +26,8 @@ func TestPairing_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartPairing: %v", err)
 	}
-	if len(code) != 4 {
-		t.Errorf("code length = %d, want 4", len(code))
+	if len(code) != 16 {
+		t.Errorf("code length = %d, want 16", len(code))
 	}
 
 	// Handle pair request with correct code
@@ -45,7 +45,7 @@ func TestPairing_HappyPath(t *testing.T) {
 		t.Errorf("name = %q, want %q", name, "local-machine")
 	}
 
-	// Verify peer was stored
+	// Verify peer was stored with listener role
 	peer := pm.peers.FindPeerByToken(token)
 	if peer == nil {
 		t.Fatal("peer should be stored after pairing")
@@ -58,6 +58,9 @@ func TestPairing_HappyPath(t *testing.T) {
 	}
 	if peer.DaemonID != "d_remote" {
 		t.Errorf("peer.DaemonID = %q, want %q", peer.DaemonID, "d_remote")
+	}
+	if peer.Role != "listener" {
+		t.Errorf("peer.Role = %q, want %q", peer.Role, "listener")
 	}
 
 	// Session should be cleared after successful pairing
@@ -238,26 +241,37 @@ func TestPairing_WaitContextCanceled(t *testing.T) {
 }
 
 func TestGeneratePairingCode(t *testing.T) {
-	codes := make(map[string]bool)
-	for i := 0; i < 100; i++ {
-		code, err := generatePairingCode()
-		if err != nil {
-			t.Fatalf("generatePairingCode: %v", err)
-		}
-		if len(code) != 4 {
-			t.Errorf("code length = %d, want 4", len(code))
-		}
-		// Should be all digits
-		for _, c := range code {
-			if c < '0' || c > '9' {
-				t.Errorf("code %q contains non-digit character %c", code, c)
+	for _, length := range []int{4, 8, 16} {
+		codes := make(map[string]bool)
+		for i := 0; i < 100; i++ {
+			code, err := generatePairingCode(length)
+			if err != nil {
+				t.Fatalf("generatePairingCode(%d): %v", length, err)
 			}
+			if len(code) != length {
+				t.Errorf("code length = %d, want %d", len(code), length)
+			}
+			// Should be all digits
+			for _, c := range code {
+				if c < '0' || c > '9' {
+					t.Errorf("code %q contains non-digit character %c", code, c)
+				}
+			}
+			codes[code] = true
 		}
-		codes[code] = true
+		// Should have some variety (not all the same)
+		if len(codes) < 10 {
+			t.Errorf("length=%d: only %d unique codes out of 100, expected more variety", length, len(codes))
+		}
 	}
-	// Should have some variety (not all the same)
-	if len(codes) < 10 {
-		t.Errorf("only %d unique codes out of 100, expected more variety", len(codes))
+}
+
+func TestGeneratePairingCode_InvalidLength(t *testing.T) {
+	for _, length := range []int{0, 3, 17, 100} {
+		_, err := generatePairingCode(length)
+		if err == nil {
+			t.Errorf("generatePairingCode(%d) should return error", length)
+		}
 	}
 }
 

@@ -188,7 +188,7 @@ bd blocked            # Check for blocked work
 bd stats              # Project health overview
 ```text
 
-**Save context:** Use `/thrum:update-context` skill. **NEVER run
+**Save context:** Use `/thrum:update-project` skill. **NEVER run
 `thrum context save` manually** — it overwrites accumulated session state.
 
 ## Agent Strategies (Read Before Any Work)

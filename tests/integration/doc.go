@@ -1,0 +1,3 @@
+// Package integration contains integration tests for thrum.
+// Run with: go test -tags=integration ./tests/integration/...
+package integration

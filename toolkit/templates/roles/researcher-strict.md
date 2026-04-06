@@ -165,7 +165,7 @@ bd show <id>                         # Read task details
 bd update <id> --claim               # Claim assigned task
 ```text
 
-**Save context:** Use `/thrum:update-context` skill. **NEVER run
+**Save context:** Use `/thrum:update-project` skill. **NEVER run
 `thrum context save` manually** — it overwrites accumulated session state.
 
 ## Agent Strategies (Read Before Any Work)

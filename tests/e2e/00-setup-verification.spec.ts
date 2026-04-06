@@ -78,15 +78,15 @@ test.describe('Setup Verification', () => {
   test('D4: Team roster shows both agents', async () => {
     const testRoot = getTestRoot();
 
-    // Agent list from coordinator worktree should contain both agents
-    // Agent list displays role names (@coordinator, @implementer), not identity file names
-    const agentList = thrumIn(testRoot, ['agent', 'list'], 10_000, coordEnv());
-    expect(agentList).toContain('@coordinator');
-    expect(agentList).toContain('@implementer');
-
-    // JSON team output is a valid object
+    // JSON team output should include both agent IDs
     const teamJson = thrumIn(testRoot, ['team', '--json'], 10_000, coordEnv());
     const parsed = JSON.parse(teamJson);
     expect(typeof parsed).toBe('object');
+
+    // Verify both agents exist in the roster (by agent_id, not role — roles
+    // may be overwritten by later registration tests)
+    const agentIds = JSON.stringify(parsed);
+    expect(agentIds).toContain('e2e_coordinator');
+    expect(agentIds).toContain('e2e_implementer');
   });
 });

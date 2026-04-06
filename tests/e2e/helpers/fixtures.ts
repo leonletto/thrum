@@ -124,7 +124,8 @@ export function ensureTestSessions(): void {
     if (!err.message?.toLowerCase().includes('already')) throw err;
   }
   try {
-    thrumIn(getImplementerRoot(), ['session', 'start']);
+    const implEnv: NodeJS.ProcessEnv = { THRUM_NAME: 'e2e_implementer', THRUM_ROLE: 'implementer', THRUM_MODULE: 'main' };
+    thrumIn(getImplementerRoot(), ['session', 'start'], 10_000, implEnv);
   } catch (err: any) {
     if (!err.message?.toLowerCase().includes('already')) throw err;
   }

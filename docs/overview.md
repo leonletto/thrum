@@ -22,18 +22,6 @@ you look at files.
 > behind the project, or the [Quickstart Guide](quickstart.md) to get running in
 > 5 minutes.
 
-## Quick Setup
-
-After `thrum init`, run one command to generate agent coordination instructions
-for your CLAUDE.md:
-
-```bash
-thrum setup claude-md --apply
-```
-
-`thrum prime` (or `thrum context prime`) checks for an existing Thrum section
-and suggests this if it's missing.
-
 ## Understanding the CLI
 
 Thrum has ~30 commands. Here's why that's not as many as it sounds.

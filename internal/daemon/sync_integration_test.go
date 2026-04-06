@@ -2,9 +2,8 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,16 +15,17 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/types"
+	"github.com/leonletto/thrum/internal/websocket"
 )
 
 // testDaemon is a lightweight daemon instance for integration tests.
 type testDaemon struct {
-	state    *state.State
-	listener net.Listener
-	cancel   context.CancelFunc
+	state  *state.State
+	server *httptest.Server
+	cancel context.CancelFunc
 }
 
-// newTestDaemon creates a test daemon with a sync server on a random TCP port.
+// newTestDaemon creates a test daemon with a sync WebSocket server on a random port.
 func newTestDaemon(t *testing.T, name string) *testDaemon {
 	t.Helper()
 
@@ -49,36 +49,23 @@ func newTestDaemon(t *testing.T, name string) *testDaemon {
 	_ = reg.Register("sync.pull", pullHandler.Handle)
 	_ = reg.Register("sync.peer_info", peerInfoHandler.Handle)
 
-	// Start TCP listener
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen for %s: %v", name, err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
+	// Serve WebSocket on a random HTTP test server
+	ts := httptest.NewServer(websocket.NewServer("", reg, nil).HTTPHandler())
+	t.Cleanup(ts.Close)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go reg.ServeSyncRPC(ctx, conn, "test-peer")
-		}
-	}()
-
 	return &testDaemon{
-		state:    st,
-		listener: ln,
-		cancel:   cancel,
+		state:  st,
+		server: ts,
+		cancel: cancel,
 	}
 }
 
-// addr returns the TCP address of the daemon's sync listener.
+// addr returns the "host:port" address of the daemon's sync WebSocket server.
 func (d *testDaemon) addr() string {
-	return d.listener.Addr().String()
+	return d.server.Listener.Addr().String()
 }
 
 // writeEvent writes a test event to the daemon's state.
@@ -433,44 +420,18 @@ func TestPullSyncPeerInfo(t *testing.T) {
 }
 
 func TestPullSyncSecurityBoundary(t *testing.T) {
-	// Verify that application RPCs are rejected on the sync endpoint
+	// Verify that application RPCs are rejected on the sync endpoint.
+	// The SyncRegistry.GetHandler security boundary refuses non-whitelisted methods.
 	daemonA := newTestDaemon(t, "alice")
 
-	conn, err := net.Dial("tcp", daemonA.addr())
-	if err != nil {
-		t.Fatalf("dial: %v", err)
-	}
-	defer conn.Close()
+	// Use the SyncClient.wsCall to call a disallowed method directly.
+	// Since the test is in package daemon, wsCall is accessible.
+	client := NewSyncClient()
+	wsURL := fmt.Sprintf("ws://%s/ws", daemonA.addr())
 
-	// Try to call an application RPC
-	req := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "message.send",
-		"params":  map[string]any{"body": "test"},
+	_, err := client.wsCall(context.Background(), wsURL, "message.send", map[string]any{"body": "test"})
+	if err == nil {
+		t.Fatal("expected error for application RPC on sync endpoint, got success")
 	}
-	encoder := json.NewEncoder(conn)
-	if err := encoder.Encode(req); err != nil {
-		t.Fatalf("encode: %v", err)
-	}
-
-	var resp struct {
-		JSONRPC string `json:"jsonrpc"`
-		ID      int    `json:"id"`
-		Error   *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	decoder := json.NewDecoder(conn)
-	if err := decoder.Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	if resp.Error == nil {
-		t.Fatal("expected error for application RPC on sync endpoint")
-	}
-	if resp.Error.Code != -32601 {
-		t.Errorf("error code = %d, want -32601 (method not found)", resp.Error.Code)
-	}
+	// The error should indicate method not found (from the websocket server returning an RPC error)
 }

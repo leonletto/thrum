@@ -10,7 +10,7 @@ export THRUM_HOME="${THRUM_HOME:-$DEFAULT_THRUM_HOME}"
 
 # --- Listener heartbeat mode ---
 # Usage: thrum-startup.sh --listener-heartbeat
-# Updates the listener heartbeat in the agent's identity file.
+# Verifies listener PID file exists (thrum wait manages the actual PID file).
 # Requires THRUM_NAME and THRUM_AGENT_ID to be set (from CLAUDE_ENV_FILE).
 if [ "$1" = "--listener-heartbeat" ]; then
   AGENT_ID="${THRUM_AGENT_ID:-${THRUM_NAME:-}}"
@@ -22,24 +22,12 @@ if [ "$1" = "--listener-heartbeat" ]; then
     exit 1
   fi
 
-  IDENT_FILE="$THRUM_HOME/.thrum/identities/${AGENT_ID}.json"
-  if [ ! -f "$IDENT_FILE" ]; then
-    echo "Error: Identity file not found: $IDENT_FILE" >&2
-    exit 1
+  PID_FILE="${THRUM_HOME:-.}/.thrum/var/${AGENT_ID}-listener.pid"
+  if [ -f "$PID_FILE" ]; then
+    echo "Listener PID file exists ($(jq -r '.pid // "?"' "$PID_FILE" 2>/dev/null))"
+  else
+    echo "No PID file — thrum wait will create one"
   fi
-
-  # Read session_id from identity file
-  SESSION_ID=$(jq -r '.session_id // ""' "$IDENT_FILE" 2>/dev/null || echo "")
-  HEARTBEAT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-  # Update identity file with listener heartbeat using jq for safe JSON manipulation
-  jq --arg agent_id "$AGENT_ID" \
-     --arg session_id "$SESSION_ID" \
-     --arg heartbeat "$HEARTBEAT" \
-     '.listener = {agent_id: $agent_id, session_id: $session_id, heartbeat: $heartbeat}' \
-     "$IDENT_FILE" > "${IDENT_FILE}.tmp" && mv "${IDENT_FILE}.tmp" "$IDENT_FILE"
-
-  echo "Listener heartbeat updated: $HEARTBEAT"
   exit 0
 fi
 

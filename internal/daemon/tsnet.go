@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
@@ -105,6 +106,26 @@ func (t *TsnetListener) ReachableAddr(configuredHostname string) string {
 	}
 
 	return configuredHostname
+}
+
+// ServeHTTP starts an HTTP server on the tsnet listener using the provided handler.
+// The server runs until the context is cancelled or the listener is closed.
+// This is used to serve WebSocket connections for sync RPC over Tailscale.
+func (t *TsnetListener) ServeHTTP(ctx context.Context, handler http.Handler) {
+	srv := &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
+
+	// Serve blocks until the listener is closed or Shutdown is called.
+	_ = srv.Serve(t.listener)
 }
 
 // Close stops the tsnet server and listener.

@@ -212,33 +212,6 @@ Connected to daemon
 ✓ Thrum worktree setup complete
 ```
 
-### thrum setup claude-md
-
-Generate Thrum agent coordination instructions for CLAUDE.md.
-
-```bash
-thrum setup claude-md              # Print to stdout
-thrum setup claude-md --apply      # Append to CLAUDE.md (creates if missing)
-thrum setup claude-md --apply --force  # Replace existing Thrum section
-```
-
-Flags:
-
-- `--apply` — Append generated content to CLAUDE.md (with duplicate detection)
-- `--force` — Replace existing Thrum section instead of skipping (used with
-  --apply)
-
-This command generates comprehensive agent coordination instructions including:
-
-- Registration and session management
-- Message protocols
-- MCP server configuration
-- Background listener setup
-- Group management
-
-The instructions are automatically injected by `thrum prime` when agents start
-sessions, providing immediate context on how to use Thrum for coordination.
-
 ### thrum migrate
 
 Migrate an existing Thrum repository from the old layout (JSONL files tracked on
@@ -1257,7 +1230,7 @@ $ echo "Working on auth module" | thrum context save
 ✓ Context saved for furiosa (24 bytes)
 ```
 
-**Agent safety note:** Agents should use the `/thrum:update-context` skill
+**Agent safety note:** Agents should use the `/thrum:update-project` skill
 instead of running `thrum context save` directly. The skill composes a
 structured context (decisions, next steps, work-in-progress) before saving,
 whereas running the command manually with arbitrary input can overwrite

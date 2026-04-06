@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon"
 )
 
 func TestWait_MessageReceived(t *testing.T) {
@@ -754,5 +756,142 @@ func TestWait_ReconnectAfterDaemonRestart(t *testing.T) {
 
 	if message.MessageID != "msg_post_restart" {
 		t.Errorf("Expected message_id 'msg_post_restart', got %s", message.MessageID)
+	}
+}
+
+func TestWaitWritesPIDFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	pidPath := filepath.Join(tmpDir, "test-listener.pid")
+
+	// Write a PID file manually to test the read/check pattern
+	info := daemon.PIDInfo{PID: os.Getpid(), StartedAt: time.Now()}
+	err := daemon.WritePIDFileJSON(pidPath, info)
+	if err != nil {
+		t.Fatalf("WritePIDFileJSON: %v", err)
+	}
+
+	// Check it
+	running, readInfo, err := daemon.CheckPIDFileJSON(pidPath)
+	if err != nil {
+		t.Fatalf("CheckPIDFileJSON: %v", err)
+	}
+	if !running {
+		t.Error("expected process to be running")
+	}
+	if readInfo.PID != os.Getpid() {
+		t.Errorf("expected PID %d, got %d", os.Getpid(), readInfo.PID)
+	}
+
+	// Clean up
+	_ = daemon.RemovePIDFile(pidPath)
+	running, _, err = daemon.CheckPIDFileJSON(pidPath)
+	if err != nil {
+		t.Fatalf("CheckPIDFileJSON after remove: %v", err)
+	}
+	if running {
+		t.Error("expected process to not be running after PID file removed")
+	}
+}
+
+// TestWait_PIDFilePath verifies that Wait() creates the PID file when
+// PIDFilePath is set and removes it when Wait returns.
+func TestWait_PIDFilePath(t *testing.T) {
+	mockDaemon, socketPath := newMockDaemon(t)
+	defer mockDaemon.stop()
+
+	tmpDir := t.TempDir()
+	pidPath := filepath.Join(tmpDir, "wait-listener.pid")
+
+	callCount := 0
+
+	// Channel to detect when the PID file is visible from within the poll loop
+	pidSeenCh := make(chan bool, 1)
+
+	mockDaemon.start(t, func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+
+		for {
+			var request map[string]any
+			if err := decoder.Decode(&request); err != nil {
+				return
+			}
+
+			callCount++
+
+			// On the first successful RPC call, the PID file should already exist
+			// (it is written before the poll loop begins). Signal that we observed it.
+			if callCount == 1 {
+				if _, statErr := os.Stat(pidPath); statErr == nil {
+					pidSeenCh <- true
+				} else {
+					pidSeenCh <- false
+				}
+			}
+
+			// Return a message on the second poll so Wait() exits promptly.
+			messages := []map[string]any{}
+			if callCount > 1 {
+				messages = append(messages, map[string]any{
+					"message_id": "msg_pid_test",
+					"agent_id":   "agent:tester:ABC",
+					"body": map[string]any{
+						"format":  "markdown",
+						"content": "PID file test message",
+					},
+					"created_at": time.Now().Format(time.RFC3339),
+				})
+			}
+
+			response := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      request["id"],
+				"result": map[string]any{
+					"messages":    messages,
+					"total":       len(messages),
+					"unread":      len(messages),
+					"page":        1,
+					"page_size":   10,
+					"total_pages": 1,
+				},
+			}
+
+			if err := encoder.Encode(response); err != nil {
+				return
+			}
+		}
+	})
+
+	time.Sleep(50 * time.Millisecond)
+
+	opts := WaitOptions{
+		Timeout:     5 * time.Second,
+		PIDFilePath: pidPath,
+		Quiet:       true,
+	}
+
+	msg, err := Wait(socketPath, opts)
+	if err != nil {
+		t.Fatalf("Wait failed: %v", err)
+	}
+	if msg == nil || msg.MessageID != "msg_pid_test" {
+		t.Fatalf("unexpected message: %v", msg)
+	}
+
+	// PID file must have been present during the first poll
+	select {
+	case seen := <-pidSeenCh:
+		if !seen {
+			t.Error("PID file was not present during the first RPC poll")
+		}
+	default:
+		t.Error("mock daemon never received an RPC call — test is broken")
+	}
+
+	// After Wait returns, the PID file must have been removed by the deferred cleanup
+	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
+		t.Errorf("PID file still exists after Wait returned: %v", err)
 	}
 }

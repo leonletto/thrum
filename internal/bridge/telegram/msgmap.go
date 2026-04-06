@@ -2,31 +2,19 @@ package telegram
 
 import (
 	"fmt"
-	"sync"
+
+	"github.com/leonletto/thrum/internal/bridge"
 )
 
-// MessageMap maintains a bidirectional mapping between Telegram message IDs
-// and Thrum message IDs. Used for threading: when a Telegram user replies
-// to a message, we look up the corresponding Thrum message_id to set reply_to,
-// and vice versa for outbound relay.
-//
-// Bounded at maxSize entries with FIFO eviction to prevent unbounded growth.
+// MessageMap wraps the shared bridge.MessageMap with Telegram-specific
+// int64/int key formatting.
 type MessageMap struct {
-	mu          sync.RWMutex
-	teleToThrum map[string]string // "chatID:msgID" → thrum_message_id
-	thrumToTele map[string]string // thrum_message_id → "chatID:msgID"
-	order       []string          // insertion order keys (teleToThrum keys) for eviction
-	maxSize     int
+	inner *bridge.MessageMap
 }
 
 // NewMessageMap creates a new bounded message ID map.
 func NewMessageMap(maxSize int) *MessageMap {
-	return &MessageMap{
-		teleToThrum: make(map[string]string, maxSize),
-		thrumToTele: make(map[string]string, maxSize),
-		order:       make([]string, 0, maxSize),
-		maxSize:     maxSize,
-	}
+	return &MessageMap{inner: bridge.NewMessageMap(maxSize)}
 }
 
 func teleKey(chatID int64, msgID int) string {
@@ -35,48 +23,17 @@ func teleKey(chatID int64, msgID int) string {
 
 // Store records a bidirectional mapping. Evicts the oldest entry if at capacity.
 func (m *MessageMap) Store(chatID int64, teleMsgID int, thrumMsgID string) {
-	key := teleKey(chatID, teleMsgID)
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// If key already exists, update the mapping without appending to order
-	if oldThrumID, exists := m.teleToThrum[key]; exists {
-		delete(m.thrumToTele, oldThrumID)
-		m.teleToThrum[key] = thrumMsgID
-		m.thrumToTele[thrumMsgID] = key
-		return
-	}
-
-	// Evict oldest if at capacity
-	if len(m.order) >= m.maxSize {
-		oldest := m.order[0]
-		m.order = m.order[1:]
-		if thrumID, ok := m.teleToThrum[oldest]; ok {
-			delete(m.thrumToTele, thrumID)
-		}
-		delete(m.teleToThrum, oldest)
-	}
-
-	m.teleToThrum[key] = thrumMsgID
-	m.thrumToTele[thrumMsgID] = key
-	m.order = append(m.order, key)
+	m.inner.Store(teleKey(chatID, teleMsgID), thrumMsgID)
 }
 
 // ThrumID looks up the Thrum message ID for a given Telegram message.
 func (m *MessageMap) ThrumID(chatID int64, teleMsgID int) (string, bool) {
-	key := teleKey(chatID, teleMsgID)
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	id, ok := m.teleToThrum[key]
-	return id, ok
+	return m.inner.ThrumID(teleKey(chatID, teleMsgID))
 }
 
 // TeleID looks up the Telegram chat ID and message ID for a given Thrum message.
 func (m *MessageMap) TeleID(thrumMsgID string) (chatID int64, msgID int, ok bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	key, found := m.thrumToTele[thrumMsgID]
+	key, found := m.inner.ExternalKey(thrumMsgID)
 	if !found {
 		return 0, 0, false
 	}
@@ -85,8 +42,4 @@ func (m *MessageMap) TeleID(thrumMsgID string) (chatID int64, msgID int, ok bool
 }
 
 // Len returns the current number of stored mappings.
-func (m *MessageMap) Len() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.teleToThrum)
-}
+func (m *MessageMap) Len() int { return m.inner.Len() }

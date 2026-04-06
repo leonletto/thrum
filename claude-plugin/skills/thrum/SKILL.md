@@ -71,7 +71,7 @@ thrum context prime                      Same as thrum prime
 thrum context show                       Show saved work context
 thrum context save --file <path>         Save context from file
 thrum overview                           Combined status + team + inbox
-/thrum:update-context                    Guided context save (narrative + state)
+/thrum:update-project                    Guided project state update (narrative + state)
 /thrum:load-context                      Restore work context after compaction
 ```
 

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/leonletto/thrum/internal/process"
 )
 
 // TeamListRequest represents the request for team.list RPC.
@@ -37,6 +39,7 @@ type TeamMember struct {
 	Module          string       `json:"module"`
 	Display         string       `json:"display,omitempty"`
 	Hostname        string       `json:"hostname,omitempty"`
+	ClaudePID       int          `json:"claude_pid,omitempty"`
 	WorktreePath    string       `json:"worktree,omitempty"`
 	SessionID       string       `json:"session_id,omitempty"`
 	SessionStart    string       `json:"session_start,omitempty"`
@@ -82,6 +85,15 @@ func FormatTeam(resp *TeamListResponse) string {
 			Status:  m.Status,
 		}
 		out.WriteString(FormatAgentSummaryCompact(summary) + "\n")
+
+		// PID liveness indicator
+		if m.ClaudePID > 0 {
+			if process.IsRunning(m.ClaudePID) {
+				fmt.Fprintf(&out, "PID:      %d [live]\n", m.ClaudePID)
+			} else {
+				fmt.Fprintf(&out, "PID:      %d [stale]\n", m.ClaudePID)
+			}
+		}
 
 		// Worktree and hostname as separate fields
 		if m.WorktreePath != "" {

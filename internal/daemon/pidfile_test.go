@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/leonletto/thrum/internal/process"
 )
 
 func TestWritePIDFile(t *testing.T) {
@@ -216,13 +218,13 @@ func TestPIDFileWorkflow(t *testing.T) {
 
 func TestIsProcessRunning(t *testing.T) {
 	// Test with current process (should be running)
-	running := isProcessRunning(os.Getpid())
+	running := process.IsRunning(os.Getpid())
 	if !running {
 		t.Fatal("expected current process to be running")
 	}
 
 	// Test with PID that doesn't exist
-	running = isProcessRunning(999999)
+	running = process.IsRunning(999999)
 	if running {
 		t.Fatal("expected non-existent process to not be running")
 	}
