@@ -2175,3 +2175,54 @@ func TestInboxGroupMembership(t *testing.T) {
 		}
 	})
 }
+
+func TestResolveNudgeTarget_WithTmux(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	os.MkdirAll(identitiesDir, 0750)
+
+	identity := map[string]any{
+		"version":      4,
+		"tmux_session": "implementer-api:0.0",
+		"agent":        map[string]string{"name": "impl_api", "role": "implementer", "module": "api"},
+		"claude_pid":   os.Getpid(),
+	}
+	data, _ := json.MarshalIndent(identity, "", "  ")
+	os.WriteFile(filepath.Join(identitiesDir, "impl_api.json"), data, 0600)
+
+	target := resolveNudgeTarget(thrumDir, "impl_api")
+	if target != "implementer-api:0.0" {
+		t.Errorf("resolveNudgeTarget = %q, want %q", target, "implementer-api:0.0")
+	}
+}
+
+func TestResolveNudgeTarget_NoTmux(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	os.MkdirAll(identitiesDir, 0750)
+
+	identity := map[string]any{
+		"version": 4,
+		"agent":   map[string]string{"name": "legacy_agent", "role": "coordinator", "module": "main"},
+	}
+	data, _ := json.MarshalIndent(identity, "", "  ")
+	os.WriteFile(filepath.Join(identitiesDir, "legacy_agent.json"), data, 0600)
+
+	target := resolveNudgeTarget(thrumDir, "legacy_agent")
+	if target != "" {
+		t.Errorf("resolveNudgeTarget should return empty for non-tmux agent, got %q", target)
+	}
+}
+
+func TestResolveNudgeTarget_NoFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750)
+
+	target := resolveNudgeTarget(thrumDir, "nonexistent")
+	if target != "" {
+		t.Errorf("resolveNudgeTarget should return empty for missing identity, got %q", target)
+	}
+}
