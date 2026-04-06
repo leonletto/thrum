@@ -34,7 +34,7 @@ Delegate to a **general-purpose subagent** that will:
 Replace `SESSION_SUMMARY_HERE` with your composed summary from Step 1. Replace
 `REPO_ROOT` with the absolute path to the project root.
 
-````
+````text
 Agent(
   subagent_type="general-purpose",
   description="Update project state",
