@@ -10,6 +10,8 @@
 #   tmux-exec create <name> [--cwd <dir>] [--clean]    Create a named session
 #   tmux-exec run <name> [--timeout <sec>] -- <cmd...>  Run a command in a session
 #   tmux-exec exec [--cwd <dir>] [--timeout <sec>] -- <cmd...>  One-shot (ephemeral)
+#   tmux-exec send <name> [--clear] <keys...>           Send keystrokes to a session
+#   tmux-exec capture <name> [--tail <N>]               Capture pane output
 #   tmux-exec destroy <name>                            Destroy a named session
 #   tmux-exec list                                      List active sessions
 #
@@ -17,18 +19,24 @@
 #   --cwd <dir>       Working directory for the session/command
 #   --timeout <sec>   Command timeout in seconds (default: 120)
 #   --clean           Strip all THRUM_* env vars from the session (for test isolation)
+#   --clear           (send) Clear the line before typing (sends C-u first)
+#   --tail <N>        (capture) Show only the last N non-blank lines (default: all)
 #   --socket <name>   Custom tmux socket (default: tmux-exec)
 #
 # Examples:
 #   # Set up a test environment
 #   tmux-exec create test-env --cwd /tmp/thrum-e2e --clean
 #   tmux-exec run test-env -- thrum init
-#   tmux-exec run test-env -- thrum quickstart --name e2e_coord --role coord --module all
 #   tmux-exec run test-env -- thrum team --json
 #   tmux-exec destroy test-env
 #
 #   # One-shot isolated command
 #   tmux-exec exec --cwd /tmp/test-repo --clean -- thrum status
+#
+#   # Interactive session (e.g., Claude Code in tmux)
+#   tmux-exec send coordinator --clear "/thrum:prime" Enter
+#   sleep 25
+#   tmux-exec capture coordinator --tail 40
 #
 set -euo pipefail
 
@@ -242,6 +250,68 @@ cmd_exec() {
   return "${exit_code:-0}"
 }
 
+cmd_send() {
+  local name="$1"
+  shift
+
+  local clear=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --clear)  clear=true; shift ;;
+      --socket) SOCKET="$2"; shift 2 ;;
+      --)       shift; break ;;
+      *)        break ;;
+    esac
+  done
+
+  [[ $# -eq 0 ]] && die "send: no keys specified"
+
+  if ! session_exists "$name"; then
+    die "session '$name' does not exist"
+  fi
+
+  # Clear line first if requested
+  if $clear; then
+    tmux_cmd send-keys -t "$name" C-u
+  fi
+
+  # Send each argument as a separate send-keys call.
+  # This lets callers pass "Enter", "C-c", etc. as separate args.
+  for key in "$@"; do
+    tmux_cmd send-keys -t "$name" "$key"
+  done
+}
+
+cmd_capture() {
+  local name="$1"
+  shift
+
+  local tail_n=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --tail)   tail_n="$2"; shift 2 ;;
+      --socket) SOCKET="$2"; shift 2 ;;
+      *)        die "capture: unknown option: $1" ;;
+    esac
+  done
+
+  if ! session_exists "$name"; then
+    die "session '$name' does not exist"
+  fi
+
+  local output
+  output=$(tmux_cmd capture-pane -p -t "$name" -S - -E - 2>/dev/null || echo "")
+
+  # For live sessions, keep all lines (including blanks) — only strip trailing
+  # empty lines from the tmux pane buffer. No awk 'NF' — that destroys
+  # terminal output structure.
+  if [[ -n "$tail_n" ]]; then
+    echo "$output" | grep -v '^$' | tail -n "$tail_n"
+  else
+    echo "$output" | clean_output
+  fi
+}
+
 cmd_destroy() {
   local name="$1"
   shift
@@ -287,6 +357,8 @@ case "$1" in
   create)  shift; cmd_create "$@" ;;
   run)     shift; cmd_run "$@" ;;
   exec)    shift; cmd_exec "$@" ;;
+  send)    shift; cmd_send "$@" ;;
+  capture) shift; cmd_capture "$@" ;;
   destroy) shift; cmd_destroy "$@" ;;
   list)    shift; cmd_list "$@" ;;
   -h|--help|help) usage 0 ;;
