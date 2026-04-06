@@ -24,6 +24,7 @@ type PrimeContext struct {
 	RepoPath            string           `json:"repo_path,omitempty"`
 	Runtime             string           `json:"runtime,omitempty"`
 	SingleAgentMode     bool             `json:"single_agent_mode,omitempty"`
+	TmuxMode            bool             `json:"tmux_mode,omitempty"`
 	SavedSessionContext string           `json:"saved_session_context,omitempty"`
 }
 
@@ -380,11 +381,19 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 			out.WriteString("- **Deaf Agent** — No listener running. You miss messages.\n")
 			out.WriteString("- **Silent Agent** — Never sends status updates.\n\n")
 
-			// Section 6: Listener spawn instructions
-			agentID := ctx.Identity.AgentID
-			out.WriteString("\n## Start Background Message Listener\n\n")
-			fmt.Fprintf(&out, "  Task(subagent_type=\"message-listener\", model=\"haiku\",\n")
-			fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages.\\nSTEP_1: %s/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s --agent-name %s\")\n", repoPath, agentID)
+			// Section 6: Listener or tmux-mode instructions
+			if ctx.TmuxMode {
+				out.WriteString("\n## Tmux-Managed Session\n\n")
+				out.WriteString("You are running in a tmux-managed session. Message notifications\n")
+				out.WriteString("are delivered directly to your input — do NOT spawn a background listener.\n\n")
+				out.WriteString("When you see a message notification, check your inbox:\n")
+				out.WriteString("  thrum inbox --unread\n")
+			} else {
+				agentID := ctx.Identity.AgentID
+				out.WriteString("\n## Start Background Message Listener\n\n")
+				fmt.Fprintf(&out, "  Task(subagent_type=\"message-listener\", model=\"haiku\",\n")
+				fmt.Fprintf(&out, "    prompt=\"Listen for Thrum messages.\\nSTEP_1: %s/scripts/thrum-startup.sh --listener-heartbeat\\nSTEP_2: thrum wait --timeout 8m --after -15s --agent-name %s\")\n", repoPath, agentID)
+			}
 		}
 	}
 

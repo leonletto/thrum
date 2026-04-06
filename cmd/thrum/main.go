@@ -35,6 +35,7 @@ import (
 	"github.com/leonletto/thrum/internal/subscriptions"
 	thrumSync "github.com/leonletto/thrum/internal/sync"
 	"github.com/leonletto/thrum/internal/timeparse"
+	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 	"github.com/leonletto/thrum/internal/web"
 	"github.com/leonletto/thrum/internal/websocket"
@@ -3931,6 +3932,24 @@ Examples:
 					ctxPath := filepath.Join(thrumDir, "context", result.Identity.AgentID+".md")
 					if data, err := os.ReadFile(ctxPath); err == nil { // #nosec G304 -- internal context file
 						result.SavedSessionContext = string(data)
+					}
+				}
+
+				// Detect tmux and write-back if needed
+				if ttmux.InTmux() {
+					if currentTarget, err := ttmux.PaneTarget(); err == nil && currentTarget != "" {
+						if idFile, _, err := config.LoadIdentityWithPath(result.RepoPath); err == nil {
+							if idFile.TmuxSession != currentTarget {
+								idFile.TmuxSession = currentTarget
+								_ = config.SaveIdentityFile(thrumDir, idFile)
+							}
+							result.TmuxMode = true
+						}
+					}
+				} else if idFile, _, err := config.LoadIdentityWithPath(result.RepoPath); err == nil && idFile.TmuxSession != "" {
+					sessionName, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+					if ttmux.HasSession(sessionName) {
+						result.TmuxMode = true
 					}
 				}
 			}
