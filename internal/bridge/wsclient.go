@@ -14,12 +14,12 @@ import (
 )
 
 const (
-	// readDeadline is the read deadline for the WebSocket connection.
+	// ReadDeadline is the read deadline for the WebSocket connection.
 	// The server sends pings every 54s; we reset the deadline on pong.
 	// 90s allows for jitter beyond the 60s server timeout.
 	readDeadline = 90 * time.Second
 
-	// notifyChanSize is the buffer size for the notifications channel.
+	// NotifyChanSize is the buffer size for the notifications channel.
 	notifyChanSize = 256
 )
 

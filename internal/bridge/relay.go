@@ -266,7 +266,7 @@ func (r *Relay) findProxy(recipientID string) *ProxyConfig {
 }
 
 // groupExists checks if a group name exists in a group.list response.
-// group.list returns {"groups": [...]}, NOT a flat array.
+// Group.list returns {"groups": [...]}, NOT a flat array.
 func groupExists(result json.RawMessage, name string) bool {
 	var resp struct {
 		Groups []struct {

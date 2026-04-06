@@ -126,11 +126,11 @@ func TestPeerTransport_LocalPortDiscovery(t *testing.T) {
 	// Create temp dir with .thrum/var/ws.port file.
 	tmpDir := t.TempDir()
 	varDir := filepath.Join(tmpDir, ".thrum", "var")
-	if err := os.MkdirAll(varDir, 0o755); err != nil {
+	if err := os.MkdirAll(varDir, 0o750); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	portFile := filepath.Join(varDir, "ws.port")
-	if err := os.WriteFile(portFile, []byte(fmt.Sprintf("%s\n", port)), 0o644); err != nil {
+	if err := os.WriteFile(portFile, []byte(fmt.Sprintf("%s\n", port)), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 

@@ -6,7 +6,7 @@ import (
 )
 
 // ValidateAddressChange checks whether a proposed address change is valid for the given transport type.
-// oldAddr and newAddr must be host:port strings.
+// OldAddr and newAddr must be host:port strings.
 func ValidateAddressChange(transport, oldAddr, newAddr string) error {
 	_, _, err := net.SplitHostPort(oldAddr)
 	if err != nil {

@@ -7,7 +7,7 @@ import (
 )
 
 // AddressChangedFunc is called when a peer notifies us of an address change.
-// peerToken identifies the peer; newIP and newPort are the new network location.
+// PeerToken identifies the peer; newIP and newPort are the new network location.
 type AddressChangedFunc func(peerToken, newIP, newPort string) error
 
 // PeerAddressChangedHandler handles the peer.address_changed RPC.

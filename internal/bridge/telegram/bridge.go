@@ -195,7 +195,7 @@ func (b *Bridge) run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("ws connect: %w", err)
 	}
-	defer ws.Close()
+	defer func() { _ = ws.Close() }()
 
 	// 2. Register as user
 	userID := "user:" + b.cfg.UserID

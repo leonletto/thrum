@@ -337,8 +337,8 @@ Examples:
 				_ = os.MkdirAll(filepath.Dir(projectStatePath), 0750)
 				if _, err := os.Stat(projectStatePath); os.IsNotExist(err) {
 					repoName := filepath.Base(flagRepo)
-					branch, _ := exec.Command("git", "-C", flagRepo, "branch", "--show-current").Output()
-					version, _ := exec.Command("git", "-C", flagRepo, "describe", "--tags", "--abbrev=0").Output()
+					branch, _ := exec.Command("git", "-C", flagRepo, "branch", "--show-current").Output()          // #nosec G204 -- flagRepo is validated user input
+					version, _ := exec.Command("git", "-C", flagRepo, "describe", "--tags", "--abbrev=0").Output() // #nosec G204 -- flagRepo is validated user input
 					beads := ""
 					if _, err := os.Stat(filepath.Join(flagRepo, ".beads")); err == nil {
 						if out, err := exec.Command("bd", "stats", "--short").Output(); err == nil {

@@ -41,7 +41,7 @@ func NewBridge(cfg BridgeConfig, logger *log.Logger) *Bridge {
 	return &Bridge{cfg: cfg, logger: logger}
 }
 
-// Run starts the bridge and blocks until ctx is cancelled or an unrecoverable
+// Run starts the bridge and blocks until ctx is canceled or an unrecoverable
 // error occurs.
 func (b *Bridge) Run(ctx context.Context) error {
 	// 1. Connect to local daemon via loopback-only WSClient.
@@ -53,7 +53,7 @@ func (b *Bridge) Run(ctx context.Context) error {
 	if err := localWS.Connect(ctx); err != nil {
 		return fmt.Errorf("local ws connect: %w", err)
 	}
-	defer localWS.Close()
+	defer func() { _ = localWS.Close() }()
 
 	// 2. Register as bridge user.
 	username := strings.TrimPrefix(b.cfg.BridgeUserID, "user:")
@@ -109,7 +109,7 @@ func (b *Bridge) Run(ctx context.Context) error {
 	if err := remote.Connect(ctx); err != nil {
 		return fmt.Errorf("remote connect: %w", err)
 	}
-	defer remote.Close()
+	defer func() { _ = remote.Close() }()
 
 	b.logger.Printf("peer bridge connected (user: %s, peer: %s)", b.cfg.BridgeUserID, b.cfg.PeerName)
 
@@ -361,7 +361,7 @@ func (b *Bridge) runInbound(
 	}
 }
 
-// heartbeatLoop sends session.heartbeat every 30 seconds until ctx is cancelled.
+// heartbeatLoop sends session.heartbeat every 30 seconds until ctx is canceled.
 func (b *Bridge) heartbeatLoop(ctx context.Context, localWS bridge.TransportBridge, sessionID string) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()

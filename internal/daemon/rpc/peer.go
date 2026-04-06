@@ -18,7 +18,7 @@ type StartPairingFunc func(timeout time.Duration) (code, address string, err err
 type WaitForPairingFunc func(ctx context.Context) (peerName, peerAddress, peerDaemonID string, err error)
 
 // JoinPeerFunc connects to a remote peer, sends a pairing code, and stores the result.
-// repoPath is optional; if non-empty the peer will be stored with Transport="local" and RepoPath set.
+// RepoPath is optional; if non-empty the peer will be stored with Transport="local" and RepoPath set.
 type JoinPeerFunc func(peerAddr, code, repoPath string) (peerName, peerDaemonID string, err error)
 
 // RemovePeerFunc removes a peer by daemon ID.

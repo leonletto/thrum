@@ -111,7 +111,7 @@ func buildLocalServer(t *testing.T, rs *recordingServer) *httptest.Server {
 			resp := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      *req.ID,
-				"result":  json.RawMessage(result),
+				"result":  result,
 			}
 			data, _ := json.Marshal(resp)
 			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
@@ -267,7 +267,7 @@ func TestPeerBridge_ConnectsRemote(t *testing.T) {
 			resp := map[string]any{
 				"jsonrpc": "2.0",
 				"id":      *req.ID,
-				"result":  json.RawMessage(result),
+				"result":  result,
 			}
 			data, _ := json.Marshal(resp)
 			if conn.WriteMessage(websocket.TextMessage, data) != nil {

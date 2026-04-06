@@ -663,7 +663,7 @@ func TestGenerateProjectStateWithBeads(t *testing.T) {
 
 func TestDetectLanguage(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644)
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0o600)
 	lang := DetectLanguage(dir)
 	if lang != "Go" {
 		t.Errorf("expected Go, got %q", lang)
@@ -672,8 +672,8 @@ func TestDetectLanguage(t *testing.T) {
 
 func TestDetectLanguageMultiple(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644)
-	os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0644)
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0o600)
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0o600)
 	lang := DetectLanguage(dir)
 	if lang != "Go + Node.js" {
 		t.Errorf("expected 'Go + Node.js', got %q", lang)

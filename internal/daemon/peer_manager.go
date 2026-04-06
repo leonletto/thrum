@@ -77,7 +77,7 @@ func (pm *PeerManager) startBridge(parentCtx context.Context, cfg peer.BridgeCon
 	if _, exists := pm.bridges[cfg.PeerName]; exists {
 		return
 	}
-	ctx, cancel := context.WithCancel(parentCtx)
+	ctx, cancel := context.WithCancel(parentCtx) // #nosec G118 -- cancel stored in runningBridge, called on disconnect
 	b := peer.NewBridge(cfg, pm.logger)
 	pm.bridges[cfg.PeerName] = &runningBridge{cancel: cancel}
 
