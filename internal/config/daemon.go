@@ -14,6 +14,7 @@ type ThrumConfig struct {
 	Daemon   DaemonConfig   `json:"daemon"`
 	Backup   BackupConfig   `json:"backup"`
 	Telegram TelegramConfig `json:"telegram"`
+	Peers    PeersConfig    `json:"peers"`
 }
 
 // TelegramConfig holds Telegram bridge settings.
@@ -114,6 +115,7 @@ type DaemonConfig struct {
 	LocalOnly       bool   `json:"local_only,omitempty"`
 	SyncInterval    int    `json:"sync_interval,omitempty"`    // seconds; 0 means use default (60)
 	WSPort          string `json:"ws_port,omitempty"`          // "auto" or specific port number
+	PeerPort        string `json:"peer_port,omitempty"`        // "auto" or specific port number for peer connections
 	SingleAgentMode bool   `json:"single_agent_mode,omitempty"`
 }
 
@@ -189,7 +191,9 @@ func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
 	data, err := os.ReadFile(configPath) // #nosec G304 -- configPath is .thrum/config.json, an internal config file
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			cfg := &ThrumConfig{}
+			cfg := &ThrumConfig{
+				Peers: DefaultPeersConfig(),
+			}
 			applyDefaults(cfg)
 			return cfg, nil
 		}
@@ -223,6 +227,13 @@ func applyDefaults(cfg *ThrumConfig) {
 	}
 	if cfg.Backup.Retention.Monthly == nil {
 		cfg.Backup.Retention.Monthly = IntPtr(DefaultRetentionMonthly)
+	}
+	// Apply peers defaults for missing fields.
+	if cfg.Peers.PairingCodeLength == 0 {
+		cfg.Peers.PairingCodeLength = DefaultPeersConfig().PairingCodeLength
+	}
+	if cfg.Daemon.PeerPort == "" {
+		cfg.Daemon.PeerPort = "auto"
 	}
 }
 
