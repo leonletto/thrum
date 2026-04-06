@@ -2181,6 +2181,33 @@ Five input methods:
 		},
 	})
 
+	// thrum peer configure <peer-name> <action> <agent-name> — manage proxy agents
+	cmd.AddCommand(&cobra.Command{
+		Use:   "configure <peer-name> <action> <agent-name>",
+		Short: "Configure proxy agents for a peer",
+		Long:  "Add or remove proxy agents for a peer. Actions: add-agent, remove-agent",
+		Args:  cobra.ExactArgs(3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			peerName, action, agentName := args[0], args[1], args[2]
+			var result any
+			if err := client.Call("peer.configure", map[string]any{
+				"peer_name":  peerName,
+				"action":     action,
+				"agent_name": agentName,
+			}, &result); err != nil {
+				return err
+			}
+			fmt.Printf("✓ %s: %s %s\n", peerName, action, agentName)
+			return nil
+		},
+	})
+
 	return cmd
 }
 
@@ -5112,6 +5139,13 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		}
 		server.RegisterHandler("peer.status",
 			rpc.NewPeerStatusHandler(statusFn).Handle)
+
+		// peer.configure — add/remove proxy agents for a peer
+		peerConfigureHandler := rpc.NewPeerConfigureHandler(
+			peerRegistry.AddRemoteAgent,
+			peerRegistry.RemoveRemoteAgent,
+		)
+		server.RegisterHandler("peer.configure", peerConfigureHandler.Handle)
 	}
 
 	// User management (for WebSocket connections)
