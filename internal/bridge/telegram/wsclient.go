@@ -2,9 +2,6 @@ package telegram
 
 import (
 	"context"
-	"fmt"
-	"net"
-	"net/url"
 
 	"github.com/leonletto/thrum/internal/bridge"
 )
@@ -21,36 +18,9 @@ type WSClient struct {
 // Dial connects to the given WebSocket URL and starts the read loop.
 // The URL MUST point to a loopback address (127.0.0.1, [::1], or localhost).
 func Dial(ctx context.Context, rawURL string) (*WSClient, error) {
-	client := bridge.NewWSClient(rawURL, bridge.WithAddressValidator(validateLoopback))
+	client := bridge.NewWSClient(rawURL, bridge.WithAddressValidator(bridge.LoopbackValidator))
 	if err := client.Connect(ctx); err != nil {
 		return nil, err
 	}
 	return &WSClient{WSClient: client}, nil
-}
-
-// validateLoopback checks that the given URL resolves to a loopback address.
-func validateLoopback(rawURL string) error {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("invalid WebSocket URL: %w", err)
-	}
-
-	host := u.Hostname()
-	if host == "" {
-		return fmt.Errorf("WebSocket URL has no host")
-	}
-
-	if host == "localhost" {
-		return nil
-	}
-
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return fmt.Errorf("WebSocket URL host is not a loopback address")
-	}
-	if !ip.IsLoopback() {
-		return fmt.Errorf("WebSocket URL host is not a loopback address")
-	}
-
-	return nil
 }

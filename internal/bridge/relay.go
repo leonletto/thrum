@@ -172,14 +172,14 @@ func (r *Relay) ClassifyOutbound(authorAgentID string, recipients []string, repl
 // EnsureProxies registers proxy agents and creates groups on the local daemon.
 // Idempotent — safe to call on reconnect.
 func (r *Relay) EnsureProxies(ctx context.Context) error {
-	for _, g := range r.cfg.Groups {
-		// Check if group exists.
-		result, err := r.ws.Call(ctx, "group.list", nil)
-		if err != nil {
-			return fmt.Errorf("group.list: %w", err)
-		}
+	// Fetch existing groups once, not per-group.
+	groupListResult, err := r.ws.Call(ctx, "group.list", nil)
+	if err != nil {
+		return fmt.Errorf("group.list: %w", err)
+	}
 
-		if !groupExists(result, g.ThrumName) {
+	for _, g := range r.cfg.Groups {
+		if !groupExists(groupListResult, g.ThrumName) {
 			_, err = r.ws.Call(ctx, "group.create", map[string]any{
 				"name":        g.ThrumName,
 				"description": fmt.Sprintf("Mirrored group: %s", g.Name),
