@@ -20,6 +20,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/leonletto/thrum/internal/backup"
+	bridgepeer "github.com/leonletto/thrum/internal/bridge/peer"
 	telegram "github.com/leonletto/thrum/internal/bridge/telegram"
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
@@ -5146,6 +5147,21 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			peerRegistry.RemoveRemoteAgent,
 		)
 		server.RegisterHandler("peer.configure", peerConfigureHandler.Handle)
+
+		// peer.address_changed — receive address change notifications from peers
+		addressChangedHandler := rpc.NewPeerAddressChangedHandler(func(peerToken, newIP, newPort string) error {
+			p := peerRegistry.FindPeerByToken(peerToken)
+			if p == nil {
+				return fmt.Errorf("unknown peer token")
+			}
+			newAddr := net.JoinHostPort(newIP, newPort)
+			if err := bridgepeer.ValidateAddressChange(p.Transport, p.Address, newAddr); err != nil {
+				return err
+			}
+			p.Address = newAddr
+			return peerRegistry.AddPeer(p)
+		})
+		server.RegisterHandler("peer.address_changed", addressChangedHandler.Handle)
 	}
 
 	// User management (for WebSocket connections)

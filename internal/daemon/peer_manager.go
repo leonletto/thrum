@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/leonletto/thrum/internal/bridge"
 	"github.com/leonletto/thrum/internal/bridge/peer"
 )
 
@@ -122,6 +123,32 @@ func (pm *PeerManager) ActiveCount() int {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	return len(pm.bridges)
+}
+
+// NotifyAddressChange connects to each known peer and sends a peer.address_changed
+// notification with the new IP, port, and our own peer token.
+func (pm *PeerManager) NotifyAddressChange(ctx context.Context, ip, port, myToken string) {
+	peers := pm.registry.ListPeers()
+	for _, p := range peers {
+		if p.Token == "" || p.Address == "" {
+			continue
+		}
+		url := fmt.Sprintf("ws://%s/ws?token=%s", p.Address, p.Token)
+		ws := bridge.NewWSClient(url, bridge.WithPeerName(p.Name))
+		if err := ws.Connect(ctx); err != nil {
+			pm.logger.Printf("notify %s address change: connect: %v", p.Name, err)
+			continue
+		}
+		_, err := ws.Call(ctx, "peer.address_changed", map[string]any{
+			"new_ip":     ip,
+			"new_port":   port,
+			"peer_token": myToken,
+		})
+		_ = ws.Close()
+		if err != nil {
+			pm.logger.Printf("notify %s address change: %v", p.Name, err)
+		}
+	}
 }
 
 // StopAll cancels all running bridges and clears the bridge map.
