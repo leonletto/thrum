@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"sync"
@@ -16,18 +17,29 @@ import (
 // It receives the sessionID of the disconnected client.
 type DisconnectFunc func(sessionID string)
 
+// ServerOption is a functional option for configuring a Server.
+type ServerOption func(*Server)
+
+// WithTokenValidator sets a token validation function on the server.
+// When set, WebSocket upgrade requests must either provide a valid ?token=
+// query parameter, or originate from a loopback address without a token.
+func WithTokenValidator(fn func(string) bool) ServerOption {
+	return func(s *Server) { s.tokenValidator = fn }
+}
+
 // Server represents the WebSocket RPC server.
 type Server struct {
-	addr         string
-	httpServer   *http.Server
-	upgrader     websocket.Upgrader
-	registry     HandlerRegistry
-	clients      *ClientRegistry
-	onDisconnect DisconnectFunc
-	mu           sync.RWMutex
-	shutdown     bool
-	wg           sync.WaitGroup
-	startTime    time.Time
+	addr           string
+	httpServer     *http.Server
+	upgrader       websocket.Upgrader
+	registry       HandlerRegistry
+	clients        *ClientRegistry
+	onDisconnect   DisconnectFunc
+	tokenValidator func(string) bool
+	mu             sync.RWMutex
+	shutdown        bool
+	wg             sync.WaitGroup
+	startTime      time.Time
 }
 
 // NewServer creates a new WebSocket RPC server.
@@ -36,7 +48,8 @@ type Server struct {
 // UiFS is an optional filesystem for serving the embedded web UI. When nil,
 // the WebSocket handler is registered at "/" for backwards compatibility.
 // When provided, WebSocket moves to "/ws" and the UI is served at "/".
-func NewServer(addr string, registry HandlerRegistry, uiFS fs.FS) *Server {
+// Optional ServerOption values (e.g. WithTokenValidator) may be passed last.
+func NewServer(addr string, registry HandlerRegistry, uiFS fs.FS, opts ...ServerOption) *Server {
 	s := &Server{
 		addr:      addr,
 		registry:  registry,
@@ -50,6 +63,11 @@ func NewServer(addr string, registry HandlerRegistry, uiFS fs.FS) *Server {
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 		},
+	}
+
+	// Apply functional options
+	for _, opt := range opts {
+		opt(s)
 	}
 
 	// Set up HTTP server with route handlers
@@ -225,8 +243,33 @@ func splitHostPort(addr string) (host, port string, err error) {
 	return addr[:lastColon], addr[lastColon+1:], nil
 }
 
+// isLoopbackAddr reports whether remoteAddr (in "host:port" format) is a loopback address.
+func isLoopbackAddr(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // handleWebSocket handles the WebSocket upgrade and connection.
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Token authentication: only enforced when a validator is configured.
+	if s.tokenValidator != nil {
+		token := r.URL.Query().Get("token")
+		if token != "" {
+			if !s.tokenValidator(token) {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+		} else if !isLoopbackAddr(r.RemoteAddr) {
+			// No token and not from loopback → reject
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
+
 	// Hold the read lock across both the shutdown check and wg.Add to prevent
 	// a race where Stop() calls wg.Wait() between our check and our Add.
 	s.mu.RLock()

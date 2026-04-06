@@ -826,6 +826,95 @@ func TestWebSocketAtWsPathWithUI(t *testing.T) {
 	}
 }
 
+func TestServer_TokenAuth_ValidToken(t *testing.T) {
+	registry := ws.NewSimpleRegistry()
+	validator := func(token string) bool { return token == "valid-token" }
+	server := ws.NewServer("localhost:9983", registry, nil, ws.WithTokenValidator(validator))
+	ctx := context.Background()
+
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Connect with valid token — should succeed
+	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:9983/?token=valid-token", nil)
+	if err != nil {
+		t.Fatalf("expected successful connection with valid token, got: %v", err)
+	}
+	_ = conn.Close()
+}
+
+func TestServer_TokenAuth_InvalidToken(t *testing.T) {
+	registry := ws.NewSimpleRegistry()
+	validator := func(token string) bool { return token == "valid-token" }
+	server := ws.NewServer("localhost:9982", registry, nil, ws.WithTokenValidator(validator))
+	ctx := context.Background()
+
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Connect with wrong token — should get 401
+	_, resp, err := websocket.DefaultDialer.Dial("ws://localhost:9982/?token=wrong", nil)
+	if err == nil {
+		t.Fatal("expected connection to be rejected, but it succeeded")
+	}
+	if resp == nil || resp.StatusCode != http.StatusUnauthorized {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+		t.Fatalf("expected HTTP 401, got %d (err: %v)", status, err)
+	}
+}
+
+func TestServer_TokenAuth_NoToken_Localhost_Allowed(t *testing.T) {
+	registry := ws.NewSimpleRegistry()
+	validator := func(token string) bool { return token == "valid-token" }
+	server := ws.NewServer("localhost:9981", registry, nil, ws.WithTokenValidator(validator))
+	ctx := context.Background()
+
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Connect from localhost without token — loopback should be allowed
+	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:9981/", nil)
+	if err != nil {
+		t.Fatalf("expected localhost connection without token to be allowed, got: %v", err)
+	}
+	_ = conn.Close()
+}
+
+func TestServer_TokenAuth_NoValidator_AllAllowed(t *testing.T) {
+	registry := ws.NewSimpleRegistry()
+	// No WithTokenValidator — all connections should be accepted
+	server := ws.NewServer("localhost:9980", registry, nil)
+	ctx := context.Background()
+
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	time.Sleep(100 * time.Millisecond)
+
+	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:9980/", nil)
+	if err != nil {
+		t.Fatalf("expected connection to be accepted when no validator configured, got: %v", err)
+	}
+	_ = conn.Close()
+}
+
 func TestSPAFallbackServesIndexHTML(t *testing.T) {
 	registry := ws.NewSimpleRegistry()
 
