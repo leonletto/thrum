@@ -1,0 +1,294 @@
+#!/usr/bin/env bash
+#
+# tmux-exec — Run commands in isolated tmux sessions.
+#
+# Abstracts away tmux session management so callers never need to know tmux
+# commands. Useful for running CLI tools in a clean environment (no inherited
+# env vars, no PID ancestry contamination) and for manual release testing.
+#
+# Usage:
+#   tmux-exec create <name> [--cwd <dir>] [--clean]    Create a named session
+#   tmux-exec run <name> [--timeout <sec>] -- <cmd...>  Run a command in a session
+#   tmux-exec exec [--cwd <dir>] [--timeout <sec>] -- <cmd...>  One-shot (ephemeral)
+#   tmux-exec destroy <name>                            Destroy a named session
+#   tmux-exec list                                      List active sessions
+#
+# Options:
+#   --cwd <dir>       Working directory for the session/command
+#   --timeout <sec>   Command timeout in seconds (default: 120)
+#   --clean           Strip all THRUM_* env vars from the session (for test isolation)
+#   --socket <name>   Custom tmux socket (default: tmux-exec)
+#
+# Examples:
+#   # Set up a test environment
+#   tmux-exec create test-env --cwd /tmp/thrum-e2e --clean
+#   tmux-exec run test-env -- thrum init
+#   tmux-exec run test-env -- thrum quickstart --name e2e_coord --role coord --module all
+#   tmux-exec run test-env -- thrum team --json
+#   tmux-exec destroy test-env
+#
+#   # One-shot isolated command
+#   tmux-exec exec --cwd /tmp/test-repo --clean -- thrum status
+#
+set -euo pipefail
+
+SOCKET="${TMUX_EXEC_SOCKET:-tmux-exec}"
+TIMEOUT=120
+CWD=""
+CLEAN=false
+POLL_INTERVAL=0.05
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+tmux_cmd() {
+  tmux -u -L "$SOCKET" "$@"
+}
+
+die() {
+  echo "tmux-exec: error: $*" >&2
+  exit 1
+}
+
+session_exists() {
+  tmux_cmd has-session -t "$1" 2>/dev/null
+}
+
+# Build an env-cleaning prefix if --clean is set
+clean_prefix() {
+  if $CLEAN; then
+    # Safe: only unsets THRUM_* vars from the current env, no user input involved
+    echo 'for __v in $(env | grep "^THRUM_" | cut -d= -f1); do unset "$__v"; done;'
+  fi
+}
+
+# Strip tmux capture artifacts from output
+clean_output() {
+  # Remove "Pane is dead (...)" footer, then trim trailing blank lines
+  grep -v '^Pane is dead' | awk '
+    { lines[NR] = $0; last = NR }
+    END {
+      # Find last non-blank line
+      while (last > 0 && lines[last] ~ /^[[:space:]]*$/) last--
+      for (i = 1; i <= last; i++) print lines[i]
+    }
+  '
+}
+
+# ── Commands ─────────────────────────────────────────────────────────────────
+
+cmd_create() {
+  local name="$1"
+  shift
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --cwd)    CWD="$2"; shift 2 ;;
+      --clean)  CLEAN=true; shift ;;
+      --socket) SOCKET="$2"; shift 2 ;;
+      *)        die "create: unknown option: $1" ;;
+    esac
+  done
+
+  if session_exists "$name"; then
+    die "session '$name' already exists (use 'destroy' first)"
+  fi
+
+  local args=(new-session -d -s "$name")
+  [[ -n "$CWD" ]] && args+=(-c "$CWD")
+  tmux_cmd "${args[@]}"
+
+  # If --clean, remove THRUM_* vars from the tmux global environment.
+  # Vars live in the global table (inherited from the server's parent process).
+  # Session-level -u only hides session overrides, not global ones.
+  # Using -gu (global unset) removes them for all new panes in all sessions
+  # on this socket — which is fine since each test gets its own socket or
+  # all sessions on this socket want clean THRUM_* state.
+  if $CLEAN; then
+    local var
+    while IFS= read -r var; do
+      tmux_cmd set-environment -gu "$var"
+    done < <(tmux_cmd show-environment -g 2>/dev/null | grep '^THRUM_' | cut -d= -f1)
+  fi
+
+  echo "Session '$name' created"
+  [[ -n "$CWD" ]] && echo "  cwd: $CWD"
+  $CLEAN && echo "  env: THRUM_* vars stripped"
+}
+
+cmd_run() {
+  local name="$1"
+  shift
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --timeout) TIMEOUT="$2"; shift 2 ;;
+      --socket)  SOCKET="$2"; shift 2 ;;
+      --)        shift; break ;;
+      *)         die "run: unknown option '$1' (put command after --)" ;;
+    esac
+  done
+
+  [[ $# -eq 0 ]] && die "run: no command specified (use -- before command)"
+
+  if ! session_exists "$name"; then
+    die "session '$name' does not exist (use 'create' first)"
+  fi
+
+  # Build the command string
+  local cmd="$*"
+
+  # Use a unique window for this execution so we don't clobber the main shell.
+  # Inherit the session's start directory for the new window.
+  local win="run-$$-$(date +%s)"
+  local session_cwd
+  session_cwd=$(tmux_cmd display-message -p -t "$name" '#{session_path}' 2>/dev/null || echo "")
+
+  local win_args=(-t "$name" -n "$win")
+  [[ -n "$session_cwd" ]] && win_args+=(-c "$session_cwd")
+  tmux_cmd new-window "${win_args[@]}"
+  tmux_cmd set-option -t "$name:$win" remain-on-exit on
+  tmux_cmd respawn-pane -k -t "$name:$win" -- sh -c "$cmd"
+
+  # Poll for completion
+  local deadline=$(( $(date +%s) + TIMEOUT ))
+  local timed_out=true
+  while [[ $(date +%s) -lt $deadline ]]; do
+    local dead
+    dead=$(tmux_cmd display-message -p -t "$name:$win" '#{pane_dead}' 2>/dev/null || echo "1")
+    if [[ "$dead" == "1" ]]; then
+      timed_out=false
+      break
+    fi
+    sleep "$POLL_INTERVAL"
+  done
+
+  # Capture results
+  local exit_code
+  exit_code=$(tmux_cmd display-message -p -t "$name:$win" '#{pane_dead_status}' 2>/dev/null || echo "1")
+  local output
+  output=$(tmux_cmd capture-pane -p -t "$name:$win" -S - 2>/dev/null || echo "")
+
+  # Cleanup the execution window
+  tmux_cmd kill-window -t "$name:$win" 2>/dev/null || true
+
+  if $timed_out; then
+    echo "$output" | clean_output >&2
+    die "command timed out after ${TIMEOUT}s"
+  fi
+
+  # Print clean output
+  echo "$output" | clean_output
+
+  return "${exit_code:-0}"
+}
+
+cmd_exec() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --cwd)     CWD="$2"; shift 2 ;;
+      --timeout) TIMEOUT="$2"; shift 2 ;;
+      --clean)   CLEAN=true; shift ;;
+      --socket)  SOCKET="$2"; shift 2 ;;
+      --)        shift; break ;;
+      *)         die "exec: unknown option '$1' (put command after --)" ;;
+    esac
+  done
+
+  [[ $# -eq 0 ]] && die "exec: no command specified (use -- before command)"
+
+  local cmd="$*"
+  local session="tmux-exec-$$-$(date +%s)"
+
+  # Create ephemeral session
+  local args=(new-session -d -s "$session")
+  [[ -n "$CWD" ]] && args+=(-c "$CWD")
+  tmux_cmd "${args[@]}"
+  tmux_cmd set-option -t "$session" remain-on-exit on
+
+  # Prepend env cleanup if --clean
+  local prefix
+  prefix=$(clean_prefix)
+  tmux_cmd respawn-pane -k -t "$session" -- sh -c "${prefix}${cmd}"
+
+  # Poll for completion
+  local deadline=$(( $(date +%s) + TIMEOUT ))
+  local timed_out=true
+  while [[ $(date +%s) -lt $deadline ]]; do
+    local dead
+    dead=$(tmux_cmd display-message -p -t "$session" '#{pane_dead}' 2>/dev/null || echo "1")
+    if [[ "$dead" == "1" ]]; then
+      timed_out=false
+      break
+    fi
+    sleep "$POLL_INTERVAL"
+  done
+
+  # Capture results
+  local exit_code
+  exit_code=$(tmux_cmd display-message -p -t "$session" '#{pane_dead_status}' 2>/dev/null || echo "1")
+  local output
+  output=$(tmux_cmd capture-pane -p -t "$session" -S - 2>/dev/null || echo "")
+
+  # Always cleanup ephemeral session
+  tmux_cmd kill-session -t "$session" 2>/dev/null || true
+
+  if $timed_out; then
+    echo "$output" | clean_output >&2
+    die "command timed out after ${TIMEOUT}s"
+  fi
+
+  echo "$output" | clean_output
+
+  return "${exit_code:-0}"
+}
+
+cmd_destroy() {
+  local name="$1"
+  shift
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --socket) SOCKET="$2"; shift 2 ;;
+      *)        die "destroy: unknown option: $1" ;;
+    esac
+  done
+
+  if ! session_exists "$name"; then
+    echo "Session '$name' does not exist (already destroyed?)"
+    return 0
+  fi
+
+  tmux_cmd kill-session -t "$name"
+  echo "Session '$name' destroyed"
+}
+
+cmd_list() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --socket) SOCKET="$2"; shift 2 ;;
+      *)        die "list: unknown option: $1" ;;
+    esac
+  done
+
+  tmux_cmd list-sessions -F '#{session_name}  (#{session_windows} windows, created #{session_created_string})' 2>/dev/null || echo "(no active sessions)"
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+usage() {
+  # Extract header comment block as usage text (macOS sed compatible)
+  awk 'NR>=3 && /^#/{sub(/^# ?/,""); print; next} NR>=3{exit}' "$0"
+  exit "${1:-0}"
+}
+
+[[ $# -eq 0 ]] && usage 1
+
+case "$1" in
+  create)  shift; cmd_create "$@" ;;
+  run)     shift; cmd_run "$@" ;;
+  exec)    shift; cmd_exec "$@" ;;
+  destroy) shift; cmd_destroy "$@" ;;
+  list)    shift; cmd_list "$@" ;;
+  -h|--help|help) usage 0 ;;
+  *)       die "unknown command: $1 (try 'tmux-exec help')" ;;
+esac
