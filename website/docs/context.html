@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Cross-Repo Communication</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -398,9 +398,9 @@ agent-initiated <code>/thrum:update-project</code> skill captures richer context
 decisions and rationale.</p>
 <hr>
 <h2>The /thrum:update-project Skill</h2>
-<p>The <code>/thrum:update-project</code> skill is a Claude Code plugin slash command defined in
-<code>claude-plugin/commands/update-project.md</code>. It does <strong>not</strong> use MCP messaging —
-it works entirely through local shell commands and a spawned sub-agent.</p>
+<p>The <code>/thrum:update-project</code> skill is a Claude Code plugin slash command defined
+in <code>claude-plugin/commands/update-project.md</code>. It does <strong>not</strong> use MCP messaging
+— it works entirely through local shell commands and a spawned sub-agent.</p>
 <p><strong>What it does:</strong></p>
 <ol>
 <li>You provide a brief narrative of your session: what you worked on, key
@@ -634,8 +634,8 @@ or reach a natural breakpoint.</p>
 <li>At the end of a work session</li>
 </ul>
 <h3>Use the /thrum:update-project Skill</h3>
-<p>The skill provides a consistent, low-friction workflow for updating project state.
-Install the thrum Claude Code plugin and use it regularly.</p>
+<p>The skill provides a consistent, low-friction workflow for updating project
+state. Install the thrum Claude Code plugin and use it regularly.</p>
 <h3>Sync Selectively</h3>
 <p>Only sync context that is useful to other agents or future sessions on different
 machines. Local notes and WIP context can stay local.</p>

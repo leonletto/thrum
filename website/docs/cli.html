@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Cross-Repo Communication</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -209,8 +209,32 @@ for AI agent coordination.</p>
 <td>Manage runtime presets (list, show, set-default)</td>
 </tr>
 <tr>
-<td><code>thrum peer</code></td>
-<td>Manage Tailscale peers</td>
+<td><code>thrum peer add</code></td>
+<td>Start a pairing session and display a peercode</td>
+</tr>
+<tr>
+<td><code>thrum peer join</code></td>
+<td>Join a peer using a peercode</td>
+</tr>
+<tr>
+<td><code>thrum peer list</code></td>
+<td>List all paired peers</td>
+</tr>
+<tr>
+<td><code>thrum peer status</code></td>
+<td>Show detailed per-peer health</td>
+</tr>
+<tr>
+<td><code>thrum peer remove</code></td>
+<td>Remove a paired peer</td>
+</tr>
+<tr>
+<td><code>thrum peer configure</code></td>
+<td>Add or remove proxy agents for a peer</td>
+</tr>
+<tr>
+<td><code>thrum single-agent-mode</code></td>
+<td>Toggle or query single-agent mode</td>
 </tr>
 <tr>
 <td><code>thrum telegram configure</code></td>
@@ -1765,7 +1789,7 @@ local-only mode is active, displays &quot;local-only (remote sync disabled)&quot
 <p>Snapshot all thrum data (events, messages, config, and identity files) to a
 backup directory. By default, backups are written to <code>.thrum/backup/</code> inside the
 repo. The backup directory can be overridden via <code>--dir</code> or configured in
-<code>.thrum/config.yaml</code>.</p>
+<code>.thrum/config.json</code>.</p>
 <pre><code>thrum backup [flags]</code></pre>
 <table>
 <thead>
@@ -1850,7 +1874,7 @@ Restored from: .thrum/backup/my-repo/current
 # Restore from a specific archive
 $ thrum backup restore .thrum/backup/my-repo/2026-02-15T10:00:00Z.zip --yes</code></pre>
 <h3>thrum backup plugin list</h3>
-<p>List all backup plugins configured in <code>.thrum/config.yaml</code>.</p>
+<p>List all backup plugins configured in <code>.thrum/config.json</code>.</p>
 <pre><code>thrum backup plugin list</code></pre>
 <h3>thrum backup plugin add</h3>
 <p>Add a backup plugin by name/command/include pattern, or use a built-in preset.</p>
@@ -1963,6 +1987,105 @@ $ thrum roles deploy --dry-run
 
 $ thrum roles deploy --agent alice
 ✓ Deployed preamble for alice (implementer)</code></pre>
+<h2>Peer Management</h2>
+<h3>thrum peer add</h3>
+<p>Start a Tailscale pairing session on the local machine. Displays a peercode and
+blocks until the remote machine connects or the session times out (5 minutes).</p>
+<pre><code>thrum peer add</code></pre>
+<p>If <code>THRUM_TS_AUTHKEY</code> is not set, the command prompts for a Tailscale auth key
+and saves it to <code>.thrum/.env</code>.</p>
+<p>Example:</p>
+<pre><code>$ thrum peer add
+Waiting for connection...
+Pairing code: alice:100.64.1.5:44123:7392
+
+Share this with the other machine:
+  thrum peer join --peercode alice:100.64.1.5:44123:7392
+
+Paired with &quot;bob&quot; (100.64.1.9:44123). Syncing started.</code></pre>
+<h3>thrum peer join</h3>
+<p>Connect to a remote peer using the peercode from <code>thrum peer add</code>.</p>
+<pre><code>thrum peer join [peercode] [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--peercode</code></td>
+<td>Connection string (pass <code>-</code> to read from stdin)</td>
+</tr>
+<tr>
+<td><code>--repo-path</code></td>
+<td>Filesystem path to peer&#39;s repo (sets transport to <code>local</code>)</td>
+</tr>
+</tbody></table>
+<p>The peercode can be passed as a positional argument, via <code>--peercode</code>, piped
+through stdin, or entered interactively.</p>
+<p><strong>Peercode format:</strong> <code>name:ip:port:code</code></p>
+<p>Example:</p>
+<pre><code>$ thrum peer join --peercode alice:100.64.1.5:44123:7392
+Paired with &quot;alice&quot;. Syncing started.
+
+# Local same-machine peer
+$ thrum peer join --peercode alice:127.0.0.1:44123:7392 --repo-path /path/to/other/repo</code></pre>
+<h3>thrum peer list</h3>
+<p>List all paired peers with address, last sync time, and sequence number.</p>
+<pre><code>thrum peer list [--json]</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum peer list
+NAME                 ADDRESS                LAST SYNC          LAST SEQ
+alice                100.64.1.5:44123       2 minutes ago      1042
+bob                  100.64.1.9:44123       5 seconds ago      1087</code></pre>
+<h3>thrum peer status</h3>
+<p>Show detailed per-peer health including pairing time and authentication status.</p>
+<pre><code>thrum peer status [--json]</code></pre>
+<h3>thrum peer remove</h3>
+<p>Remove a paired peer by name. Stops syncing immediately.</p>
+<pre><code>thrum peer remove &lt;name&gt;</code></pre>
+<h3>thrum peer configure</h3>
+<p>Manage proxy agents for a peer. Proxy agents are local stand-ins that route
+messages to agents on the remote peer&#39;s machine.</p>
+<pre><code>thrum peer configure &lt;peer-name&gt; &lt;action&gt; &lt;agent-name&gt;</code></pre>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>&lt;peer-name&gt;</code></td>
+<td>Name of the peer (from <code>thrum peer list</code>)</td>
+</tr>
+<tr>
+<td><code>&lt;action&gt;</code></td>
+<td><code>add-agent</code> or <code>remove-agent</code></td>
+</tr>
+<tr>
+<td><code>&lt;agent-name&gt;</code></td>
+<td>Agent to add or remove as a proxy</td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>$ thrum peer configure alice add-agent planner
+✓ alice: add-agent planner</code></pre>
+<h2>Single-Agent Mode</h2>
+<h3>thrum single-agent-mode</h3>
+<p>Toggle or query single-agent mode. When enabled, Thrum skips messaging
+infrastructure (listener, inbox, stop hook) and focuses on context management.</p>
+<pre><code>thrum single-agent-mode [true|false|on|off]</code></pre>
+<p>Without arguments, prints the current mode. Changes take effect on the next
+daemon start or <code>thrum prime</code>.</p>
+<p>Example:</p>
+<pre><code>$ thrum single-agent-mode
+single-agent mode: enabled
+
+$ thrum single-agent-mode false
+Single-agent mode disabled. Full messaging active on next thrum prime.</code></pre>
+<p>See <a href="single-agent-mode.html">Single-Agent Mode</a> for details.</p>
 <h2>Telegram</h2>
 <h3>thrum telegram configure</h3>
 <p>Configure the Telegram bridge. When all flags are provided with <code>--yes</code>, runs

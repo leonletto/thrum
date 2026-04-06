@@ -1,14 +1,3 @@
----
-title: "Single-Agent Mode"
-description:
-  "Use Thrum's context management without the messaging layer — single-agent
-  mode as default, three-tier context, and when to switch to multi-agent"
-category: "overview"
-order: 2
-tags: ["single-agent", "context", "getting-started"]
-last_updated: "2026-04-04"
----
-
 ## What Changed
 
 Thrum started as a messaging system. You run multiple agents, they need to talk
@@ -30,8 +19,6 @@ manually maintaining a continuation prompt document to give your agent project
 context across sessions, that pattern is now built into Thrum. Three files,
 three purposes, clean separation. And `thrum prime` now delivers all of it in
 one call — no more two-step "run prime, then run context show."
-
----
 
 ## Single-Agent Mode
 
@@ -109,8 +96,6 @@ The listener stops getting spawned, the stop hook exits early, and the messaging
 protocol drops out of your preamble. Everything is read at runtime — no files
 get rewritten in either direction.
 
----
-
 ## Context That Survives Between Sessions
 
 ### Why This Matters
@@ -164,8 +149,6 @@ separation is what makes it work — project knowledge doesn't get overwritten
 when session state updates, and role instructions don't drift when the project
 evolves. For the full technical details on the three-tier model, file paths, and
 update mechanics, see the [Context Management](context.md) docs.
-
----
 
 ## Listener Improvements
 
@@ -222,8 +205,6 @@ New hook. When context compaction happens:
 This pairs with the existing PreCompact hook that saves session context before
 compaction. PreCompact saves, PostCompact recovers.
 
----
-
 ## Migration
 
 **Existing multi-agent repos:** Nothing breaks. Your `.thrum/config.json`
@@ -242,8 +223,6 @@ your daemon. The new context files are created on first `thrum init` or
 state document manually, you don't lose that work. Ask your agent to look at the
 new project state format (`/thrum:update-project`) and import your existing
 content into it. From then on, Thrum maintains it for you.
-
----
 
 ## What's Next
 

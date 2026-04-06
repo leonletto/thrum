@@ -4,7 +4,7 @@ description:
   "Thrum architecture — daemon design, storage, sync engine, transport layer,
   key features, and foundation packages"
 category: "architecture"
-last_updated: "2026-03-13"
+last_updated: "2026-04-06"
 ---
 
 ## System Architecture
@@ -207,7 +207,7 @@ The daemon serves the WebSocket API and embedded Web UI SPA on the same port
 | **WebSocket**   | `ws://localhost:9999/ws` | Web UI, MCP waiter, real-time apps |
 | **HTTP**        | `http://localhost:9999/` | Embedded React SPA (Web UI)        |
 
-26 registered RPC methods on Unix socket (24 on WebSocket):
+35+ registered RPC methods on Unix socket. Key methods:
 
 - `health` - Daemon status
 - `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`,
@@ -218,6 +218,8 @@ The daemon serves the WebSocket API and embedded Web UI SPA on the same port
   `message.delete`, `message.markRead`
 - `subscribe`, `unsubscribe`, `subscriptions.list`
 - `sync.force`, `sync.status`
+- `peer.start_pairing`, `peer.wait_pairing`, `peer.join`, `peer.list`,
+  `peer.status`, `peer.remove`, `peer.configure`, `peer.address_changed`
 - `user.register`, `user.identify` (user.register is WebSocket-only)
 
 ### 7. Message Lifecycle
@@ -264,8 +266,8 @@ thrum context sync
 ```
 
 Context files live at `.thrum/context/{agent-name}.md` and appear in
-`thrum status` output. Use the `/thrum:update-project` skill in Claude Code for guided
-context updates.
+`thrum status` output. Use the `/thrum:update-project` skill in Claude Code for
+guided context updates.
 
 ## Storage Architecture
 
@@ -345,6 +347,12 @@ architecture above.
 
 ```text
 internal/
+├── bridge/      # Cross-repo communication (v0.7.0)
+│   ├── bridge.go    # TransportBridge interface, Notification type
+│   ├── msgmap.go    # Local↔remote message ID mapping (LRU, max 10k)
+│   ├── relay.go     # Common inbound/outbound relay with proxy registration
+│   ├── wsclient.go  # Shared WebSocket client with loopback validation
+│   └── peer/        # PeerTransport, PeerBridge, address validation
 ├── config/      # Configuration loading, identity files, agent naming
 ├── identity/    # ID generation (repo, agent, session, message, event)
 ├── jsonl/       # JSONL reader/writer with file locking
@@ -357,15 +365,23 @@ internal/
 
 ## Configuration (`internal/config`)
 
-### Resolution Order
+### Identity File Selection (v0.7.0)
 
-Configuration is resolved in priority order:
+Which identity file to load (in priority order):
 
-1. `THRUM_NAME` env var (selects which identity file to load)
-2. Environment variables (`THRUM_ROLE`, `THRUM_MODULE`, `THRUM_DISPLAY`)
-3. CLI flags (`--role`, `--module`)
-4. Identity file (`.thrum/identities/{name}.json`)
-5. Error if required fields missing
+1. `THRUM_NAME` env var → load `{name}.json` directly
+2. Solo-agent auto-select → only one `.json` file in `identities/`
+3. PID match → walk process tree to find Claude PID, match against `claude_pid`
+   field in identity files
+4. Worktree match → filter by current git worktree name
+5. Error if no unambiguous selection
+
+After file selection, field values can be overridden:
+
+- CLI flags (`--role`, `--module`) override env vars override identity file
+
+See [Identity System](identity.md) for full details on PID resolution and
+adoption logic.
 
 ### Identity File Format
 
@@ -374,7 +390,7 @@ Identity files are stored at `.thrum/identities/{agent_name}.json`
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "repo_id": "r_7K2Q1X9M3P0B",
   "agent": {
     "kind": "agent",
@@ -384,6 +400,7 @@ Identity files are stored at `.thrum/identities/{agent_name}.json`
     "display": "Sync Implementer"
   },
   "worktree": "daemon",
+  "claude_pid": 12345,
   "confirmed_by": "human:leon",
   "updated_at": "2026-02-03T18:02:10.000Z"
 }
@@ -615,7 +632,7 @@ schema_version      # Migration tracking
 
 ### Schema Version
 
-Current version: **13**
+Current version: **16**
 
 Key migrations:
 
@@ -634,6 +651,12 @@ Key migrations:
   explicit thread creation events)
 - v12 -> v13: Backfill NULL `display`, `hostname`, and `last_seen_at` values in
   `agents` table to empty strings (ensures NOT NULL invariants on existing rows)
+- v13 -> v14: `message_deliveries` table (durable delivery/seen/read tracking
+  per recipient)
+- v14 -> v15: `purge_metadata` table (stores latest purge cutoff for sync-aware
+  filtering)
+- v15 -> v16: `claude_pid INTEGER NOT NULL DEFAULT 0` added to `agents` table
+  (PID-first identity resolution)
 
 ### Initialization
 
@@ -824,6 +847,74 @@ back to the sync worktree, imports local tables into SQLite, and removes
 `messages.db` so the projector rebuilds from JSONL on the next daemon start.
 Plugin restore commands run after the core restore.
 
+## Cross-Repo Peer System (v0.7.0)
+
+Two Thrum daemons — different repos, different machines, same machine in
+different worktrees — can exchange messages bidirectionally via Tailscale. Pair
+them once, and messages route automatically from then on.
+
+### Architecture Layers
+
+```text
+┌──────────────────────────────────────────────────────┐
+│  PeerManager         — Lifecycle of all bridges      │
+│    ├─ ConnectAll()   — Connect to all dialer-role    │
+│    ├─ AcceptPeer()   — Handle listener-side connects │
+│    └─ NotifyAddressChange() — Propagate IP changes   │
+├──────────────────────────────────────────────────────┤
+│  PeerBridge          — One per connected peer        │
+│    ├─ runOutbound    — Local → Remote relay          │
+│    ├─ runInbound     — Remote → Local relay          │
+│    └─ heartbeatLoop  — 30s keepalive                 │
+├──────────────────────────────────────────────────────┤
+│  PeerTransport       — TransportBridge implementation│
+│    ├─ Remote (IP:port + token auth)                  │
+│    └─ Local  (reads ws.port from .thrum/var/)        │
+├──────────────────────────────────────────────────────┤
+│  PeerRegistry        — On-disk peer records          │
+│    └─ .thrum/peers.json                              │
+└──────────────────────────────────────────────────────┘
+```
+
+### Pairing Flow
+
+1. **Machine A** runs `thrum peer add`, which generates a 16-digit pairing code
+   and a 32-byte shared token, then blocks waiting.
+2. **Machine B** runs `thrum peer join --peercode <code>`, validates the code,
+   stores the peer record (role=`"dialer"`), receives the token.
+3. Machine A stores the peer record (role=`"listener"`), and both sides start
+   bridge goroutines.
+4. On subsequent daemon restarts, peers with `auto_connect: true` reconnect
+   automatically via `PeerManager.ConnectAll()`.
+
+### Message Routing
+
+**Outbound** (local → remote): The bridge subscribes to `notification.message`
+events. Messages addressed to proxy agents (format `prefix:name`) are relayed to
+the remote daemon after stripping the prefix. A `MessageMap` (max 10k entries,
+LRU) stores local↔remote message ID mappings for reply threading.
+
+**Inbound** (remote → local): Messages from the remote daemon are wrapped as
+`InboundMessage` with `source: "peer"` metadata and injected into the local
+daemon via `relay.RelayInbound()`.
+
+### Proxy Agents
+
+Remote agents are registered locally as `{prefix}:{name}` (e.g.,
+`sf:coordinator_main`). These proxy names are addressable via `@sf:coordinator`
+and appear in `thrum team`. Configure with `thrum peer configure`.
+
+### Address Validation
+
+`ValidateAddressChange()` enforces transport-appropriate addressing:
+
+- **Local** peers must be on loopback
+- **Tailscale** peers must be in `100.64.0.0/10` (CGNAT)
+- **Network** peers must stay on the same `/24` subnet
+
+See [Configuration](configuration.md) for the `peers` config block and
+[CLI Reference](cli.md) for the `thrum peer` commands.
+
 ## References
 
 - Design document: `dev-docs/2026-02-03-thrum-design.md`
@@ -837,6 +928,6 @@ Plugin restore commands run after the core restore.
   RPC handlers, sync loop, and WebSocket server internals
 - [Sync Protocol](sync.md) — how the `a-sync` orphan branch, JSONL dedup, and
   conflict-free merging work in detail
-- [RPC API Reference](rpc-api.md) — all 26 RPC methods that the CLI and Web UI
-  call into
+- [RPC API Reference](rpc-api.md) — all RPC methods (35+) that the CLI and Web
+  UI call into
 - [Development Guide](development.md) — how to build, test, and extend Thrum

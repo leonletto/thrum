@@ -50,7 +50,13 @@ for AI agent coordination.
 | `thrum context sync`       | Sync context to a-sync branch                        |
 | `thrum context prime`      | Collect all context for session initialization       |
 | `thrum runtime`            | Manage runtime presets (list, show, set-default)     |
-| `thrum peer`               | Manage Tailscale peers                               |
+| `thrum peer add`           | Start a pairing session and display a peercode       |
+| `thrum peer join`          | Join a peer using a peercode                         |
+| `thrum peer list`          | List all paired peers                                |
+| `thrum peer status`        | Show detailed per-peer health                        |
+| `thrum peer remove`        | Remove a paired peer                                 |
+| `thrum peer configure`     | Add or remove proxy agents for a peer                |
+| `thrum single-agent-mode`  | Toggle or query single-agent mode                    |
 | `thrum telegram configure` | Configure the Telegram bridge (interactive or flags) |
 | `thrum telegram status`    | Show Telegram bridge connection status and config    |
 | `thrum roles list`         | List role templates and matching agents              |
@@ -211,6 +217,33 @@ $ thrum setup --main-repo /path/to/main/repo
 Connected to daemon
 ✓ Thrum worktree setup complete
 ```
+
+### thrum setup claude-md
+
+Generate Thrum agent coordination instructions for CLAUDE.md.
+
+```bash
+thrum setup claude-md              # Print to stdout
+thrum setup claude-md --apply      # Append to CLAUDE.md (creates if missing)
+thrum setup claude-md --apply --force  # Replace existing Thrum section
+```
+
+Flags:
+
+- `--apply` — Append generated content to CLAUDE.md (with duplicate detection)
+- `--force` — Replace existing Thrum section instead of skipping (used with
+  --apply)
+
+This command generates comprehensive agent coordination instructions including:
+
+- Registration and session management
+- Message protocols
+- MCP server configuration
+- Background listener setup
+- Group management
+
+The instructions are automatically injected by `thrum prime` when agents start
+sessions, providing immediate context on how to use Thrum for coordination.
 
 ### thrum migrate
 
@@ -1502,7 +1535,7 @@ thrum sync force
 Snapshot all thrum data (events, messages, config, and identity files) to a
 backup directory. By default, backups are written to `.thrum/backup/` inside the
 repo. The backup directory can be overridden via `--dir` or configured in
-`.thrum/config.yaml`.
+`.thrum/config.json`.
 
 ```text
 thrum backup [flags]
@@ -1604,7 +1637,7 @@ $ thrum backup restore .thrum/backup/my-repo/2026-02-15T10:00:00Z.zip --yes
 
 ### thrum backup plugin list
 
-List all backup plugins configured in `.thrum/config.yaml`.
+List all backup plugins configured in `.thrum/config.json`.
 
 ```text
 thrum backup plugin list
@@ -1717,6 +1750,142 @@ $ thrum roles deploy --dry-run
 $ thrum roles deploy --agent alice
 ✓ Deployed preamble for alice (implementer)
 ```
+
+## Peer Management
+
+### thrum peer add
+
+Start a Tailscale pairing session on the local machine. Displays a peercode and
+blocks until the remote machine connects or the session times out (5 minutes).
+
+```text
+thrum peer add
+```
+
+If `THRUM_TS_AUTHKEY` is not set, the command prompts for a Tailscale auth key
+and saves it to `.thrum/.env`.
+
+Example:
+
+```text
+$ thrum peer add
+Waiting for connection...
+Pairing code: alice:100.64.1.5:44123:7392
+
+Share this with the other machine:
+  thrum peer join --peercode alice:100.64.1.5:44123:7392
+
+Paired with "bob" (100.64.1.9:44123). Syncing started.
+```
+
+### thrum peer join
+
+Connect to a remote peer using the peercode from `thrum peer add`.
+
+```text
+thrum peer join [peercode] [flags]
+```
+
+| Flag          | Description                                                |
+| ------------- | ---------------------------------------------------------- |
+| `--peercode`  | Connection string (pass `-` to read from stdin)            |
+| `--repo-path` | Filesystem path to peer's repo (sets transport to `local`) |
+
+The peercode can be passed as a positional argument, via `--peercode`, piped
+through stdin, or entered interactively.
+
+**Peercode format:** `name:ip:port:code`
+
+Example:
+
+```text
+$ thrum peer join --peercode alice:100.64.1.5:44123:7392
+Paired with "alice". Syncing started.
+
+# Local same-machine peer
+$ thrum peer join --peercode alice:127.0.0.1:44123:7392 --repo-path /path/to/other/repo
+```
+
+### thrum peer list
+
+List all paired peers with address, last sync time, and sequence number.
+
+```text
+thrum peer list [--json]
+```
+
+Example:
+
+```text
+$ thrum peer list
+NAME                 ADDRESS                LAST SYNC          LAST SEQ
+alice                100.64.1.5:44123       2 minutes ago      1042
+bob                  100.64.1.9:44123       5 seconds ago      1087
+```
+
+### thrum peer status
+
+Show detailed per-peer health including pairing time and authentication status.
+
+```text
+thrum peer status [--json]
+```
+
+### thrum peer remove
+
+Remove a paired peer by name. Stops syncing immediately.
+
+```text
+thrum peer remove <name>
+```
+
+### thrum peer configure
+
+Manage proxy agents for a peer. Proxy agents are local stand-ins that route
+messages to agents on the remote peer's machine.
+
+```text
+thrum peer configure <peer-name> <action> <agent-name>
+```
+
+| Argument       | Description                               |
+| -------------- | ----------------------------------------- |
+| `<peer-name>`  | Name of the peer (from `thrum peer list`) |
+| `<action>`     | `add-agent` or `remove-agent`             |
+| `<agent-name>` | Agent to add or remove as a proxy         |
+
+Example:
+
+```text
+$ thrum peer configure alice add-agent planner
+✓ alice: add-agent planner
+```
+
+## Single-Agent Mode
+
+### thrum single-agent-mode
+
+Toggle or query single-agent mode. When enabled, Thrum skips messaging
+infrastructure (listener, inbox, stop hook) and focuses on context management.
+
+```text
+thrum single-agent-mode [true|false|on|off]
+```
+
+Without arguments, prints the current mode. Changes take effect on the next
+daemon start or `thrum prime`.
+
+Example:
+
+```text
+$ thrum single-agent-mode
+single-agent mode: enabled
+
+$ thrum single-agent-mode false
+Single-agent mode disabled. Full messaging active on next thrum prime.
+```
+
+See [Single-Agent Mode](single-agent-mode.md) for details.
 
 ## Telegram
 

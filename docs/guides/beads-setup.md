@@ -235,7 +235,7 @@ bd dolt start
 
 This starts a background `dolt sql-server` process. You should see output like:
 
-```text
+```
 Dolt server started (PID <num>, port <num>)
 ```
 

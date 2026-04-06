@@ -7,7 +7,7 @@ category: "guides"
 order: 2
 tags:
   ["multi-agent", "groups", "runtime", "coordination", "teams", "context-prime"]
-last_updated: "2026-02-11"
+last_updated: "2026-04-06"
 ---
 
 ## Multi-Agent Support
@@ -22,15 +22,23 @@ last_updated: "2026-02-11"
 ## Overview
 
 Thrum helps you coordinate multiple AI agents from the ground up. You can run
-agents in different terminals, worktrees, or on different machines — they share
-a single daemon and message store. Each agent gets a unique identity, and you
-get tools to organize agents into teams, detect and configure any AI coding
-platform, and recover full session context after compaction.
+agents in different terminals, worktrees, on different machines, or even across
+different repositories. Within a repo they share a single daemon and message
+store. Across repos they talk through the peer transport system (v0.7.0). Each
+agent gets a unique identity, and you get tools to organize them into teams,
+detect and configure any AI coding platform, and recover full session context
+after compaction.
+
+**Note:** New repos default to single-agent mode (`single_agent_mode: true`).
+Run `thrum single-agent-mode false` to enable the features on this page. See
+[Single-Agent Mode](single-agent-mode.md).
 
 **Key multi-agent capabilities:**
 
 - **Agent Groups** -- Named collections of agents and roles for targeted
   messaging
+- **Cross-Repo Peers** (v0.7.0) -- Pair two repos via Tailscale so agents can
+  message each other across repo boundaries
 - **Runtime Presets** -- Auto-detect and configure Claude Code, Codex, Cursor,
   Gemini, and other AI platforms
 - **Context Prime** -- Single command to gather full agent state for session

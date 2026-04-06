@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Cross-Repo Communication</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -226,7 +226,7 @@ work, intelligent handoffs.</p>
 <td>Embedded React SPA (Web UI)</td>
 </tr>
 </tbody></table>
-<p>26 registered RPC methods on Unix socket (24 on WebSocket):</p>
+<p>35+ registered RPC methods on Unix socket. Key methods:</p>
 <ul>
 <li><code>health</code> - Daemon status</li>
 <li><code>agent.register</code>, <code>agent.list</code>, <code>agent.whoami</code>, <code>agent.listContext</code>,
@@ -237,6 +237,8 @@ work, intelligent handoffs.</p>
 <code>message.delete</code>, <code>message.markRead</code></li>
 <li><code>subscribe</code>, <code>unsubscribe</code>, <code>subscriptions.list</code></li>
 <li><code>sync.force</code>, <code>sync.status</code></li>
+<li><code>peer.start_pairing</code>, <code>peer.wait_pairing</code>, <code>peer.join</code>, <code>peer.list</code>,
+<code>peer.status</code>, <code>peer.remove</code>, <code>peer.configure</code>, <code>peer.address_changed</code></li>
 <li><code>user.register</code>, <code>user.identify</code> (user.register is WebSocket-only)</li>
 </ul>
 <h3>7. Message Lifecycle</h3>
@@ -266,8 +268,8 @@ thrum context show
 # Share context across worktrees (manual sync)
 thrum context sync</code></pre>
 <p>Context files live at <code>.thrum/context/{agent-name}.md</code> and appear in
-<code>thrum status</code> output. Use the <code>/thrum:update-project</code> skill in Claude Code for guided
-context updates.</p>
+<code>thrum status</code> output. Use the <code>/thrum:update-project</code> skill in Claude Code for
+guided context updates.</p>
 <h2>Storage Architecture</h2>
 <p>Thrum uses event sourcing with CQRS:</p>
 <pre><code>┌─────────────────────────────────────────────────────────────┐
@@ -387,6 +389,12 @@ and setup instructions.</p>
 architecture above.</p>
 <h3>Package Structure</h3>
 <pre><code>internal/
+├── bridge/      # Cross-repo communication (v0.7.0)
+│   ├── bridge.go    # TransportBridge interface, Notification type
+│   ├── msgmap.go    # Local↔remote message ID mapping (LRU, max 10k)
+│   ├── relay.go     # Common inbound/outbound relay with proxy registration
+│   ├── wsclient.go  # Shared WebSocket client with loopback validation
+│   └── peer/        # PeerTransport, PeerBridge, address validation
 ├── config/      # Configuration loading, identity files, agent naming
 ├── identity/    # ID generation (repo, agent, session, message, event)
 ├── jsonl/       # JSONL reader/writer with file locking
@@ -396,20 +404,27 @@ architecture above.</p>
 ├── gitctx/      # Git-derived work context extraction
 └── types/       # Shared event types</code></pre>
 <h2>Configuration (<code>internal/config</code>)</h2>
-<h3>Resolution Order</h3>
-<p>Configuration is resolved in priority order:</p>
+<h3>Identity File Selection (v0.7.0)</h3>
+<p>Which identity file to load (in priority order):</p>
 <ol>
-<li><code>THRUM_NAME</code> env var (selects which identity file to load)</li>
-<li>Environment variables (<code>THRUM_ROLE</code>, <code>THRUM_MODULE</code>, <code>THRUM_DISPLAY</code>)</li>
-<li>CLI flags (<code>--role</code>, <code>--module</code>)</li>
-<li>Identity file (<code>.thrum/identities/{name}.json</code>)</li>
-<li>Error if required fields missing</li>
+<li><code>THRUM_NAME</code> env var → load <code>{name}.json</code> directly</li>
+<li>Solo-agent auto-select → only one <code>.json</code> file in <code>identities/</code></li>
+<li>PID match → walk process tree to find Claude PID, match against <code>claude_pid</code>
+field in identity files</li>
+<li>Worktree match → filter by current git worktree name</li>
+<li>Error if no unambiguous selection</li>
 </ol>
+<p>After file selection, field values can be overridden:</p>
+<ul>
+<li>CLI flags (<code>--role</code>, <code>--module</code>) override env vars override identity file</li>
+</ul>
+<p>See <a href="identity.html">Identity System</a> for full details on PID resolution and
+adoption logic.</p>
 <h3>Identity File Format</h3>
 <p>Identity files are stored at <code>.thrum/identities/{agent_name}.json</code>
 (per-worktree):</p>
 <pre><code>{
-  &quot;version&quot;: 2,
+  &quot;version&quot;: 3,
   &quot;repo_id&quot;: &quot;r_7K2Q1X9M3P0B&quot;,
   &quot;agent&quot;: {
     &quot;kind&quot;: &quot;agent&quot;,
@@ -419,6 +434,7 @@ architecture above.</p>
     &quot;display&quot;: &quot;Sync Implementer&quot;
   },
   &quot;worktree&quot;: &quot;daemon&quot;,
+  &quot;claude_pid&quot;: 12345,
   &quot;confirmed_by&quot;: &quot;human:leon&quot;,
   &quot;updated_at&quot;: &quot;2026-02-03T18:02:10.000Z&quot;
 }</code></pre>
@@ -656,7 +672,7 @@ events              # Sequence-ordered, deduplicated event log (for sync)
 sync_checkpoints    # Per-peer sync progress tracking
 schema_version      # Migration tracking</code></pre>
 <h3>Schema Version</h3>
-<p>Current version: <strong>13</strong></p>
+<p>Current version: <strong>16</strong></p>
 <p>Key migrations:</p>
 <ul>
 <li>v3 -&gt; v4: Impersonation support (<code>authored_by</code>, <code>disclosed</code> columns)</li>
@@ -674,6 +690,12 @@ with a <code>thread_id</code> forms a thread automatically, removing the need fo
 explicit thread creation events)</li>
 <li>v12 -&gt; v13: Backfill NULL <code>display</code>, <code>hostname</code>, and <code>last_seen_at</code> values in
 <code>agents</code> table to empty strings (ensures NOT NULL invariants on existing rows)</li>
+<li>v13 -&gt; v14: <code>message_deliveries</code> table (durable delivery/seen/read tracking
+per recipient)</li>
+<li>v14 -&gt; v15: <code>purge_metadata</code> table (stores latest purge cutoff for sync-aware
+filtering)</li>
+<li>v15 -&gt; v16: <code>claude_pid INTEGER NOT NULL DEFAULT 0</code> added to <code>agents</code> table
+(PID-first identity resolution)</li>
 </ul>
 <h3>Initialization</h3>
 <pre><code>db, _ := schema.OpenDB(&quot;thrum.db&quot;)
@@ -857,6 +879,61 @@ backup and receives <code>THRUM_BACKUP_DIR</code>, <code>THRUM_BACKUP_REPO</code
 back to the sync worktree, imports local tables into SQLite, and removes
 <code>messages.db</code> so the projector rebuilds from JSONL on the next daemon start.
 Plugin restore commands run after the core restore.</p>
+<h2>Cross-Repo Peer System (v0.7.0)</h2>
+<p>Two Thrum daemons — different repos, different machines, same machine in
+different worktrees — can exchange messages bidirectionally via Tailscale. Pair
+them once, and messages route automatically from then on.</p>
+<h3>Architecture Layers</h3>
+<pre><code>┌──────────────────────────────────────────────────────┐
+│  PeerManager         — Lifecycle of all bridges      │
+│    ├─ ConnectAll()   — Connect to all dialer-role    │
+│    ├─ AcceptPeer()   — Handle listener-side connects │
+│    └─ NotifyAddressChange() — Propagate IP changes   │
+├──────────────────────────────────────────────────────┤
+│  PeerBridge          — One per connected peer        │
+│    ├─ runOutbound    — Local → Remote relay          │
+│    ├─ runInbound     — Remote → Local relay          │
+│    └─ heartbeatLoop  — 30s keepalive                 │
+├──────────────────────────────────────────────────────┤
+│  PeerTransport       — TransportBridge implementation│
+│    ├─ Remote (IP:port + token auth)                  │
+│    └─ Local  (reads ws.port from .thrum/var/)        │
+├──────────────────────────────────────────────────────┤
+│  PeerRegistry        — On-disk peer records          │
+│    └─ .thrum/peers.json                              │
+└──────────────────────────────────────────────────────┘</code></pre>
+<h3>Pairing Flow</h3>
+<ol>
+<li><strong>Machine A</strong> runs <code>thrum peer add</code>, which generates a 16-digit pairing code
+and a 32-byte shared token, then blocks waiting.</li>
+<li><strong>Machine B</strong> runs <code>thrum peer join --peercode &lt;code&gt;</code>, validates the code,
+stores the peer record (role=<code>&quot;dialer&quot;</code>), receives the token.</li>
+<li>Machine A stores the peer record (role=<code>&quot;listener&quot;</code>), and both sides start
+bridge goroutines.</li>
+<li>On subsequent daemon restarts, peers with <code>auto_connect: true</code> reconnect
+automatically via <code>PeerManager.ConnectAll()</code>.</li>
+</ol>
+<h3>Message Routing</h3>
+<p><strong>Outbound</strong> (local → remote): The bridge subscribes to <code>notification.message</code>
+events. Messages addressed to proxy agents (format <code>prefix:name</code>) are relayed to
+the remote daemon after stripping the prefix. A <code>MessageMap</code> (max 10k entries,
+LRU) stores local↔remote message ID mappings for reply threading.</p>
+<p><strong>Inbound</strong> (remote → local): Messages from the remote daemon are wrapped as
+<code>InboundMessage</code> with <code>source: &quot;peer&quot;</code> metadata and injected into the local
+daemon via <code>relay.RelayInbound()</code>.</p>
+<h3>Proxy Agents</h3>
+<p>Remote agents are registered locally as <code>{prefix}:{name}</code> (e.g.,
+<code>sf:coordinator_main</code>). These proxy names are addressable via <code>@sf:coordinator</code>
+and appear in <code>thrum team</code>. Configure with <code>thrum peer configure</code>.</p>
+<h3>Address Validation</h3>
+<p><code>ValidateAddressChange()</code> enforces transport-appropriate addressing:</p>
+<ul>
+<li><strong>Local</strong> peers must be on loopback</li>
+<li><strong>Tailscale</strong> peers must be in <code>100.64.0.0/10</code> (CGNAT)</li>
+<li><strong>Network</strong> peers must stay on the same <code>/24</code> subnet</li>
+</ul>
+<p>See <a href="configuration.html">Configuration</a> for the <code>peers</code> config block and
+<a href="cli.html">CLI Reference</a> for the <code>thrum peer</code> commands.</p>
 <h2>References</h2>
 <ul>
 <li>Design document: <code>dev-docs/2026-02-03-thrum-design.md</code></li>
@@ -870,8 +947,8 @@ Plugin restore commands run after the core restore.</p>
 RPC handlers, sync loop, and WebSocket server internals</li>
 <li><a href="sync.html">Sync Protocol</a> — how the <code>a-sync</code> orphan branch, JSONL dedup, and
 conflict-free merging work in detail</li>
-<li><a href="rpc-api.html">RPC API Reference</a> — all 26 RPC methods that the CLI and Web UI
-call into</li>
+<li><a href="rpc-api.html">RPC API Reference</a> — all RPC methods (35+) that the CLI and Web
+UI call into</li>
 <li><a href="development.html">Development Guide</a> — how to build, test, and extend Thrum</li>
 </ul>
 

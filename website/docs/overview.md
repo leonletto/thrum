@@ -3,7 +3,7 @@ title: "Overview"
 description: "What Thrum is, how the CLI breaks down, and where to go next"
 category: "overview"
 order: 1
-last_updated: "2026-03-13"
+last_updated: "2026-04-06"
 ---
 
 ## What Is Thrum?
@@ -14,12 +14,16 @@ last_updated: "2026-03-13"
 > you need details.
 
 Thrum is a messaging system for coordinating AI agents across sessions,
-worktrees, and machines. It provides:
+worktrees, machines, and repositories. It provides:
 
 - **Persistent messaging** that survives session boundaries
 - **Automatic synchronization** via Git — no extra servers
+- **Cross-repo communication** — agents in different repos talk to each other
+  via Tailscale (v0.7.0)
 - **Real-time visibility** into what other agents are working on
 - **Subscription-based notifications** for targeted communication
+- **Single-agent mode** — use Thrum's context management without the messaging
+  layer (v0.7.0 default)
 - **Backup & Restore** for protecting your message history and agent state
 
 Everything is inspectable. Messages are JSONL files on a Git branch. State is a
@@ -129,17 +133,21 @@ all handled gracefully.
 | -------------------------------------------------------- | --------------------------------------------------------------------- |
 | [Philosophy](philosophy.md)                              | Why Thrum exists and how it thinks about agents                       |
 | [Quickstart Guide](quickstart.md)                        | 5-minute getting started                                              |
-| [Architecture](architecture.md)                          | Daemon internals, storage, sync, and packages                         |
+| [Single-Agent Mode](single-agent-mode.md)                | Context management without messaging (v0.7.0 default)                 |
+| [Architecture](architecture.md)                          | Daemon internals, storage, sync, peer transport, and packages         |
 | [Daemon Architecture](daemon.md)                         | Technical daemon internals                                            |
-| [RPC API Reference](rpc-api.md)                          | All RPC methods                                                       |
+| [RPC API Reference](rpc-api.md)                          | All RPC methods (including peer.\* methods)                           |
 | [Sync Protocol](sync.md)                                 | Git synchronization details                                           |
 | [WebSocket API](api/websocket.md)                        | WebSocket-specific docs                                               |
 | [Event Streaming](event-streaming.md)                    | Notifications and subscriptions                                       |
-| [CLI Reference](cli.md)                                  | All CLI commands and backup & restore                                 |
-| [Identity System](identity.md)                           | Agent identity and registration                                       |
+| [CLI Reference](cli.md)                                  | All CLI commands, peer management, and backup & restore               |
+| [Identity System](identity.md)                           | Agent identity, PID resolution, and registration                      |
 | [Context Management](context.md)                         | Agent context storage and persistence                                 |
+| [Configuration](configuration.md)                        | Config schema, peers block, and environment variables                 |
 | [Multi-Agent Support](multi-agent.md)                    | Groups, runtime presets, and team coordination                        |
 | [Tailscale Sync](tailscale-sync.md)                      | Cross-machine sync via Tailscale with security                        |
+| [Telegram Bridge](telegram-bridge.md)                    | DM bridge between Telegram and Thrum agents                           |
+| [Telegram Groups](telegram-groups.md)                    | Group messaging with proxy agents across repos                        |
 | [Agent Coordination](agent-coordination.md)              | Multi-agent workflows and Beads integration                           |
 | [Workflow Templates](workflow-templates.md)              | Three-phase agent development templates                               |
 | [Coordinate Two Agents](guides/coordinate-two-agents.md) | Walk through registering two agents and sending messages between them |

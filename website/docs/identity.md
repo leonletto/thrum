@@ -7,7 +7,7 @@ category: "identity"
 order: 1
 tags:
   ["identity", "registration", "agents", "naming", "conflicts", "resolution"]
-last_updated: "2026-02-08"
+last_updated: "2026-04-06"
 ---
 
 ## Agent Identity & Registration
@@ -141,19 +141,38 @@ identity file.
 
 Thrum resolves agent identity using a priority chain:
 
+Thrum has two distinct resolution phases: **which identity file to load** and
+**which field values to use**. These are separate concerns.
+
+### Phase 1: Identity File Selection
+
+Which `.thrum/identities/*.json` file gets loaded:
+
 ```text
-1. THRUM_NAME env var → selects identity file     [Highest priority]
+1. THRUM_NAME env var → load {name}.json directly  [Highest priority]
    ↓
-2. --agent-id flag (CLI)
+2. Solo-agent auto-select → only one .json file exists
    ↓
-3. CLI flags (--name, --role, --module)
+3. PID match (v0.7.0) → match claude_pid in identity files
    ↓
-4. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_DISPLAY)
+4. Worktree match (v0.7.0) → filter by current worktree name
    ↓
-5. Identity file auto-selection (.thrum/identities/ directory)
-   ↓
-6. Error if required fields missing                [Lowest priority]
+5. Error: cannot auto-select (set THRUM_NAME)      [Lowest priority]
 ```
+
+There is no `--agent-id` flag for file selection. `THRUM_NAME` is the only way
+to explicitly choose a file.
+
+### Phase 2: Field Value Overrides
+
+After an identity file is loaded, field values can be overridden:
+
+```text
+CLI flags (--role, --module)  >  Env vars (THRUM_ROLE, THRUM_MODULE)  >  Identity file
+```
+
+These overrides change the in-memory values used for the current command but do
+not modify the identity file on disk.
 
 ### Environment Variables
 
@@ -212,6 +231,31 @@ file settings. The `--name` flag is available on `quickstart` and
 This allows orchestrators to control identity even when scripts pass a `--name`
 argument.
 
+### PID-Based Identity Resolution (v0.7.0)
+
+If you have multiple identity files and `THRUM_NAME` isn't set, Thrum figures
+out which identity belongs to the current session by walking the process tree.
+
+**How it works:**
+
+1. **PID match:** Walk the process tree from `getppid()` up to PID 1, looking
+   for a process named `claude`. If found, check that PID against `claude_pid`
+   in each identity file. Match found and process alive? That identity wins.
+
+2. **Worktree match:** Check the current git worktree name against the
+   `worktree` field in each identity. One match wins. Multiple matches? Pick the
+   most recently updated.
+
+3. **Give up:** If nothing matches, error out and tell you to set `THRUM_NAME`.
+
+**Adoption:** After picking an identity, if its `claude_pid` is zero or points
+to a dead process, the current Claude PID gets written in. The identity file
+self-updates when a new session picks it up. If `claude_pid` points to a
+different live Claude process, adoption is skipped — that's a genuine conflict,
+two sessions claiming the same identity.
+
+The `claude_pid` field is also in the SQLite `agents` table (schema v16).
+
 ### Identity Files
 
 Identity files are stored in `.thrum/identities/` as individual JSON files named
@@ -224,11 +268,11 @@ after the agent:
 └── coordinator_1B9K33T6RK.json  # Unnamed agent (hash-based)
 ```
 
-**Identity file format** (version 2):
+**Identity file format** (version 3):
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "repo_id": "r_7K2Q1X9M3P0B",
   "agent": {
     "kind": "agent",
@@ -238,18 +282,27 @@ after the agent:
     "display": "Auth Implementer"
   },
   "worktree": "auth",
+  "claude_pid": 12345,
   "confirmed_by": "human:leon",
   "updated_at": "2026-02-03T18:02:10.000Z"
 }
 ```
 
-**Auto-selection rules** for identity files:
+The `claude_pid` field (v0.7.0) stores the PID of the Claude process that owns
+this identity. It is automatically maintained by the adoption logic described
+above.
+
+**Auto-selection rules** for identity files (in priority order):
 
 1. If `THRUM_NAME` is set, load `{THRUM_NAME}.json` directly (error if not
    found)
 2. If only **one** `.json` file exists in `identities/`, load it automatically
    (solo-agent worktree backward compatibility)
-3. If **multiple** files exist and no `THRUM_NAME` is set, return an error
+3. **PID match** (v0.7.0): If the calling process is inside a Claude session,
+   match by `claude_pid` field
+4. **Worktree match** (v0.7.0): Filter by current git worktree name; if multiple
+   match, pick the most recently updated
+5. If **multiple** files exist and no selection is possible, return an error
    asking the user to set `THRUM_NAME`
 
 Use identity files when:

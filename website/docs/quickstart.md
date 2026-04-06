@@ -6,7 +6,7 @@ description:
 category: "quickstart"
 order: 1
 tags: ["quickstart", "getting-started", "installation", "setup", "tutorial"]
-last_updated: "2026-03-13"
+last_updated: "2026-04-06"
 ---
 
 ## Thrum Quickstart Guide
@@ -77,6 +77,13 @@ This creates:
 
 `thrum init` also starts the daemon automatically (since v0.4.5). You do not
 need a separate `thrum daemon start` step for first-time setup.
+
+**v0.7.0 default:** New repos start in single-agent mode
+(`single_agent_mode: true`). This gives you context management (`thrum prime`,
+sessions, context save/show) without the messaging layer (no listener, no cron
+watchdog, no messaging protocol in preambles). If you need multi-agent
+coordination, run `thrum single-agent-mode false`. See
+[Single-Agent Mode](single-agent-mode.md) for details.
 
 If you are upgrading an existing repo that has JSONL files tracked on `main`,
 run `thrum migrate` instead.

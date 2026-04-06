@@ -255,3 +255,9 @@ thrum telegram status
 
 - This confirmation appears when reconfiguring with a different token. Use
   `--yes` to bypass in scripts.
+
+### Next: Telegram Groups
+
+Once your DM bridge is working, you can set up a shared Telegram group so your
+whole team can interact with the same agent. See
+[Telegram Groups](telegram-groups.md) for setup.

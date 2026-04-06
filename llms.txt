@@ -1,6 +1,6 @@
-# Thrum v0.6.3
+# Thrum v0.7.0
 
-> Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
+> Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
 ## What is Thrum
 
@@ -10,6 +10,10 @@ branch, accessed via a `.git/thrum-sync/a-sync` git worktree. A SQLite projectio
 fast queries. A background daemon provides JSON-RPC over Unix socket and
 WebSocket, with automatic Git sync every 60 seconds. No branch switching is
 needed -- all sync operations happen within the worktree.
+
+New in v0.7.0: single-agent mode (default for new repos), cross-repo peer
+communication via Tailscale, PID-based identity resolution, and a three-tier
+context model for session persistence across compaction.
 
 ## Quick Start
 
@@ -233,22 +237,37 @@ All commands accept these flags:
   thrum sync force
     Trigger immediate sync (non-blocking).
 
-### Peer Sync (Tailscale)
+### Peer Management (Cross-Repo, v0.7.0)
 
   thrum peer add
-    Start a pairing session. Displays a 4-digit code. Blocks until peer connects (5min timeout).
+    Start a Tailscale pairing session. Displays a 16-digit peercode. Blocks until peer connects (5min timeout).
+    Prompts for THRUM_TS_AUTHKEY if not set.
 
-  thrum peer join <address>
-    Connect to a remote daemon at a Tailscale address. Prompts for 4-digit pairing code.
+  thrum peer join [peercode] [--peercode CODE] [--repo-path PATH]
+    Connect to a remote peer using the peercode from `peer add`.
+    Peercode format: name:ip:port:code. Accepts positional arg, --peercode flag, stdin pipe, or interactive prompt.
+    Use --repo-path for local same-machine peers (sets transport to "local").
 
-  thrum peer list
-    List paired peers.
+  thrum peer list [--json]
+    List paired peers with address, last sync, sequence number.
 
   thrum peer remove <name>
-    Remove a paired peer.
+    Remove a paired peer. Stops syncing immediately.
 
-  thrum peer status
-    Show detailed sync status for all peers.
+  thrum peer status [--json]
+    Show detailed per-peer health: pairing time, auth status, sync state.
+
+  thrum peer configure <peer-name> <action> <agent-name>
+    Manage proxy agents for a peer. Actions: add-agent, remove-agent.
+    Proxy agents appear locally as prefix:name (e.g., sf:coordinator_main).
+
+### Single-Agent Mode (v0.7.0)
+
+  thrum single-agent-mode [true|false|on|off]
+    Toggle or query single-agent mode. Without args, prints current mode.
+    When enabled: no listener, no cron watchdog, no stop hook, no messaging protocol.
+    Context features (prime, sessions, context save/show) still work.
+    Default for new repos after thrum init.
 
 ### Runtime Presets
 
@@ -338,14 +357,17 @@ All commands accept these flags:
   thrum group add backend-team --role implementer
   thrum send "Deploy in 5 minutes" --to @backend-team
 
-### Peer sync across machines (Tailscale)
+### Cross-repo peer communication (Tailscale, v0.7.0)
 
-  # Configure: .env with THRUM_TS_ENABLED=true, THRUM_TS_HOSTNAME, THRUM_TS_AUTHKEY
   # Machine A
-  thrum peer add                    # Displays pairing code (blocks 5min)
+  thrum peer add                    # Displays 16-digit peercode, blocks 5min
   # Machine B
-  thrum peer join 100.x.y.z:9100   # Use Tailscale IP, enter pairing code
-  # Both machines now sync every 15s
+  thrum peer join --peercode alice:100.64.1.5:44123:7392168401234567
+  # Both daemons now route messages bidirectionally
+
+  # Configure proxy agents so remote agents are addressable locally
+  thrum peer configure alice add-agent planner
+  thrum send "Ready for review" --to @alice:planner
 
 ### Save and recover context
 
@@ -440,12 +462,20 @@ All commands accept these flags:
 
 ## Environment Variables
 
-  THRUM_NAME      Agent name (highest priority for identity resolution)
-  THRUM_ROLE      Agent role (overrides identity file)
-  THRUM_MODULE    Agent module (overrides identity file)
-  THRUM_DISPLAY   Display name (overrides identity file)
-  THRUM_LOCAL     Enable local-only mode (disables remote sync) -- set to "1"
-  THRUM_WS_PORT   WebSocket port (default: 9999)
+  THRUM_NAME          Agent name (highest priority for identity file selection)
+  THRUM_ROLE          Agent role (overrides identity file)
+  THRUM_MODULE        Agent module (overrides identity file)
+  THRUM_DISPLAY       Display name (overrides identity file)
+  THRUM_LOCAL         Enable local-only mode (disables remote sync) -- set to "1"
+  THRUM_WS_PORT       WebSocket port (default: auto)
+  THRUM_HOME          Pin repo path for all commands (set by thrum-startup.sh)
+  THRUM_AGENT_ID      Pin caller identity for daemon RPC
+  THRUM_SOCKET        Unix socket path override
+  THRUM_TS_AUTHKEY    Tailscale auth key for peering
+  THRUM_TS_PORT       Tailscale listener port (default: auto)
+  THRUM_TS_HOSTNAME   tsnet hostname override
+  THRUM_TS_STATE_DIR  tsnet state directory
+  THRUM_TS_ENABLED    (deprecated) Tailscale auto-starts when peers are configured
 
 ## Local-Only Mode
 
@@ -502,9 +532,15 @@ All commands accept these flags:
 
 ## Identity Resolution Order
 
-  1. CLI flags (--role, --module, --name)
-  2. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_NAME)
-  3. Identity files in .thrum/identities/ directory
+  File selection (which .thrum/identities/*.json gets loaded):
+  1. THRUM_NAME env var → load {name}.json directly
+  2. Solo-agent auto-select → only one .json file exists
+  3. PID match (v0.7.0) → walk process tree to find Claude PID, match claude_pid field
+  4. Worktree match (v0.7.0) → filter by current git worktree name
+  5. Error if no unambiguous selection
 
-  Note: THRUM_NAME env var takes highest priority for name resolution,
+  Field value overrides (after file is loaded):
+  CLI flags (--role, --module) > env vars (THRUM_ROLE, THRUM_MODULE) > identity file
+
+  Note: THRUM_NAME env var takes highest priority for file selection,
   overriding even the --name CLI flag.

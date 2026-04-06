@@ -74,7 +74,7 @@
     "category": "architecture",
     "order": 999,
     "tags": [],
-    "lastUpdated": "2026-03-13"
+    "lastUpdated": "2026-04-06"
   },
   {
     "path": "context.html",
@@ -121,7 +121,7 @@
       "makefile",
       "go"
     ],
-    "lastUpdated": "2026-02-08"
+    "lastUpdated": "2026-04-06"
   },
   {
     "path": "security-cicd.html",
@@ -184,7 +184,7 @@
       "teams",
       "context-prime"
     ],
-    "lastUpdated": "2026-02-11"
+    "lastUpdated": "2026-04-06"
   },
   {
     "path": "claude-code-plugin.html",
@@ -200,7 +200,7 @@
       "mcp",
       "hooks"
     ],
-    "lastUpdated": "2026-02-13"
+    "lastUpdated": "2026-04-06"
   },
   {
     "path": "configuration.html",
@@ -216,7 +216,7 @@
       "settings",
       "config-show"
     ],
-    "lastUpdated": "2026-02-12"
+    "lastUpdated": "2026-04-06"
   },
   {
     "path": "workflow-templates.html",
@@ -330,6 +330,21 @@
     "lastUpdated": "2026-03-24"
   },
   {
+    "path": "telegram-groups.html",
+    "title": "Telegram Groups",
+    "description": "Share a Telegram group with your team so everyone can interact with the same Thrum agent — send instructions, see responses, and coordinate through one chat",
+    "category": "guides",
+    "order": 13,
+    "tags": [
+      "telegram",
+      "groups",
+      "team",
+      "collaboration",
+      "coordination"
+    ],
+    "lastUpdated": "2026-04-05"
+  },
+  {
     "path": "claude-agent-integration.html",
     "title": "Claude Code Agent Integration",
     "description": "Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup",
@@ -379,7 +394,7 @@
       "conflicts",
       "resolution"
     ],
-    "lastUpdated": "2026-02-08"
+    "lastUpdated": "2026-04-06"
   },
   {
     "path": "subscriptions.html",
@@ -418,7 +433,20 @@
     "category": "overview",
     "order": 1,
     "tags": [],
-    "lastUpdated": "2026-03-13"
+    "lastUpdated": "2026-04-06"
+  },
+  {
+    "path": "single-agent-mode.html",
+    "title": "Single-Agent Mode",
+    "description": "Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent",
+    "category": "overview",
+    "order": 2,
+    "tags": [
+      "single-agent",
+      "context",
+      "getting-started"
+    ],
+    "lastUpdated": "2026-04-04"
   },
   {
     "path": "quickstart.html",
@@ -433,7 +461,7 @@
       "setup",
       "tutorial"
     ],
-    "lastUpdated": "2026-03-13"
+    "lastUpdated": "2026-04-06"
   },
   {
     "path": "cli.html",

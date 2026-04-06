@@ -7,7 +7,7 @@ category: "guides"
 order: 3
 tags:
   ["configuration", "config", "runtime", "daemon", "settings", "config-show"]
-last_updated: "2026-02-12"
+last_updated: "2026-04-06"
 ---
 
 ## Configuration
@@ -25,7 +25,13 @@ Located at `.thrum/config.json` in your repository:
   "daemon": {
     "local_only": true,
     "sync_interval": 60,
-    "ws_port": "auto"
+    "ws_port": "auto",
+    "peer_port": "auto",
+    "single_agent_mode": true
+  },
+  "peers": {
+    "auto_connect": true,
+    "pairing_code_length": 16
   },
   "backup": {
     "dir": "/path/to/backups",
@@ -44,6 +50,15 @@ Located at `.thrum/config.json` in your repository:
       }
     ]
   }
+}
+```
+
+After `thrum init`, a minimal config looks like:
+
+```json
+{
+  "runtime": { "primary": "claude" },
+  "daemon": { "single_agent_mode": true }
 }
 ```
 
@@ -75,6 +90,48 @@ WebSocket server port.
 - **Default:** `"auto"` (find free port dynamically)
 - **Values:** `"auto"` or a specific port number like `"9999"`
 - **Override:** `THRUM_WS_PORT` environment variable
+
+### `daemon.peer_port`
+
+Tailscale peer-to-peer listener port for cross-repo communication.
+
+- **Type:** string
+- **Default:** `"auto"`
+- **Values:** `"auto"` or a specific port like `"9100"`
+- **Override:** `THRUM_TS_PORT` environment variable
+
+### `daemon.single_agent_mode`
+
+Disable messaging infrastructure for single-agent workflows. When enabled, Thrum
+skips the background listener, cron watchdog, stop hook checks, and inbox
+processing. Context management features (prime, context save/show, sessions)
+remain active.
+
+- **Type:** boolean
+- **Default:** `false` (but `thrum init` sets it to `true` for new workspaces)
+- **Toggle:** `thrum single-agent-mode true|false`
+
+See [Single-Agent Mode](single-agent-mode.md) for details.
+
+## Peers
+
+Settings for cross-repo peer connections. See
+[Architecture — Peer System](architecture.md#cross-repo-peer-system) for how
+this works.
+
+### `peers.auto_connect`
+
+Automatically connect to all known peers when the daemon starts.
+
+- **Type:** boolean
+- **Default:** `true`
+
+### `peers.pairing_code_length`
+
+Length of generated pairing codes for `thrum peer add`.
+
+- **Type:** integer
+- **Default:** `16`
 
 ## Backup
 
@@ -185,16 +242,22 @@ configuration. For day-to-day use, edit `config.json`.
 
 ### Environment Variable Reference
 
-| Variable              | Overrides                      | Example                    |
-| --------------------- | ------------------------------ | -------------------------- |
-| `THRUM_LOCAL`         | `daemon.local_only`            | `THRUM_LOCAL=false`        |
-| `THRUM_SYNC_INTERVAL` | `daemon.sync_interval`         | `THRUM_SYNC_INTERVAL=120`  |
-| `THRUM_WS_PORT`       | `daemon.ws_port`               | `THRUM_WS_PORT=9999`       |
-| `THRUM_NAME`          | Agent identity selection       | `THRUM_NAME=alice`         |
-| `THRUM_ROLE`          | Agent role                     | `THRUM_ROLE=planner`       |
-| `THRUM_MODULE`        | Agent module                   | `THRUM_MODULE=backend`     |
-| `THRUM_HOME`          | Repo path for all commands     | `THRUM_HOME=/path/to/repo` |
-| `THRUM_AGENT_ID`      | Caller identity for daemon RPC | `THRUM_AGENT_ID=alice`     |
+| Variable              | Overrides                       | Example                    |
+| --------------------- | ------------------------------- | -------------------------- |
+| `THRUM_LOCAL`         | `daemon.local_only`             | `THRUM_LOCAL=false`        |
+| `THRUM_SYNC_INTERVAL` | `daemon.sync_interval`          | `THRUM_SYNC_INTERVAL=120`  |
+| `THRUM_WS_PORT`       | `daemon.ws_port`                | `THRUM_WS_PORT=9999`       |
+| `THRUM_NAME`          | Agent identity selection        | `THRUM_NAME=alice`         |
+| `THRUM_ROLE`          | Agent role                      | `THRUM_ROLE=planner`       |
+| `THRUM_MODULE`        | Agent module                    | `THRUM_MODULE=backend`     |
+| `THRUM_HOME`          | Repo path for all commands      | `THRUM_HOME=/path/to/repo` |
+| `THRUM_AGENT_ID`      | Caller identity for daemon RPC  | `THRUM_AGENT_ID=alice`     |
+| `THRUM_SOCKET`        | Unix socket path override       | `THRUM_SOCKET=/tmp/t.sock` |
+| `THRUM_TS_AUTHKEY`    | Tailscale auth key for peering  | `THRUM_TS_AUTHKEY=tskey-…` |
+| `THRUM_TS_PORT`       | Tailscale listener port         | `THRUM_TS_PORT=9100`       |
+| `THRUM_TS_HOSTNAME`   | tsnet hostname override         | `THRUM_TS_HOSTNAME=myhost` |
+| `THRUM_TS_STATE_DIR`  | tsnet state directory           | `THRUM_TS_STATE_DIR=…`     |
+| `THRUM_TS_ENABLED`    | _(deprecated)_ Tailscale toggle | `THRUM_TS_ENABLED=true`    |
 
 `THRUM_HOME` pins all thrum commands to the specified repo path regardless of
 the current working directory. This is set automatically by `thrum-startup.sh`
@@ -267,11 +330,13 @@ they are per-agent or volatile state, not global repository settings.
 
 ## Next Steps
 
+- [Single-Agent Mode](single-agent-mode.md) — how `single_agent_mode` changes
+  daemon behavior and when to disable it
 - [Daemon Architecture](daemon.md) — how the daemon reads config.json and
   applies the settings at startup
 - [Sync Protocol](sync.md) — the sync loop behavior controlled by `local_only`
   and `sync_interval`
 - [Identity System](identity.md) — the identity files that live alongside
   config.json in `.thrum/`
-- [CLI Reference](cli.md) — `thrum config show` and other configuration-related
-  commands
+- [CLI Reference](cli.md) — `thrum config show`, `thrum peer`, and other
+  configuration-related commands

@@ -114,12 +114,13 @@ role.
 Thrum routes `@mentions` differently depending on whether the target is a name
 or a role:
 
-| Target      | Routing behaviour                                                                 |
-| ----------- | --------------------------------------------------------------------------------- |
-| `@furiosa`  | Routes directly to agent named `furiosa`                                          |
-| `@reviewer` | Routes via the auto-created `reviewer` role group (all agents with role reviewer) |
-| `@everyone` | Broadcasts to all agents                                                          |
-| `@mygroup`  | Routes to the named custom group                                                  |
+| Target            | Routing behaviour                                                                 |
+| ----------------- | --------------------------------------------------------------------------------- |
+| `@furiosa`        | Routes directly to agent named `furiosa`                                          |
+| `@reviewer`       | Routes via the auto-created `reviewer` role group (all agents with role reviewer) |
+| `@everyone`       | Broadcasts to all agents                                                          |
+| `@mygroup`        | Routes to the named custom group                                                  |
+| `@sf:coordinator` | Routes to proxy agent `sf:coordinator` (cross-repo via peer transport, v0.7.0)    |
 
 **Important:** Sending to an unknown name/group that doesn't exist is a **hard
 error** — the message is rejected and not stored. Unknown recipients must be

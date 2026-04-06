@@ -364,9 +364,9 @@ decisions and rationale.
 
 ## The /thrum:update-project Skill
 
-The `/thrum:update-project` skill is a Claude Code plugin slash command defined in
-`claude-plugin/commands/update-project.md`. It does **not** use MCP messaging —
-it works entirely through local shell commands and a spawned sub-agent.
+The `/thrum:update-project` skill is a Claude Code plugin slash command defined
+in `claude-plugin/commands/update-project.md`. It does **not** use MCP messaging
+— it works entirely through local shell commands and a spawned sub-agent.
 
 **What it does:**
 
@@ -684,8 +684,8 @@ or reach a natural breakpoint.
 
 ### Use the /thrum:update-project Skill
 
-The skill provides a consistent, low-friction workflow for updating project state.
-Install the thrum Claude Code plugin and use it regularly.
+The skill provides a consistent, low-friction workflow for updating project
+state. Install the thrum Claude Code plugin and use it regularly.
 
 ### Sync Selectively
 

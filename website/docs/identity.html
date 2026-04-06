@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <strong>Agent Identity & Registration</strong><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Cross-Repo Communication</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -134,17 +134,26 @@ for.</p>
 identity file.</p>
 <h2>Identity Resolution</h2>
 <p>Thrum resolves agent identity using a priority chain:</p>
-<pre><code>1. THRUM_NAME env var → selects identity file     [Highest priority]
+<p>Thrum has two distinct resolution phases: <strong>which identity file to load</strong> and
+<strong>which field values to use</strong>. These are separate concerns.</p>
+<h3>Phase 1: Identity File Selection</h3>
+<p>Which <code>.thrum/identities/*.json</code> file gets loaded:</p>
+<pre><code>1. THRUM_NAME env var → load {name}.json directly  [Highest priority]
    ↓
-2. --agent-id flag (CLI)
+2. Solo-agent auto-select → only one .json file exists
    ↓
-3. CLI flags (--name, --role, --module)
+3. PID match (v0.7.0) → match claude_pid in identity files
    ↓
-4. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_DISPLAY)
+4. Worktree match (v0.7.0) → filter by current worktree name
    ↓
-5. Identity file auto-selection (.thrum/identities/ directory)
-   ↓
-6. Error if required fields missing                [Lowest priority]</code></pre>
+5. Error: cannot auto-select (set THRUM_NAME)      [Lowest priority]</code></pre>
+<p>There is no <code>--agent-id</code> flag for file selection. <code>THRUM_NAME</code> is the only way
+to explicitly choose a file.</p>
+<h3>Phase 2: Field Value Overrides</h3>
+<p>After an identity file is loaded, field values can be overridden:</p>
+<pre><code>CLI flags (--role, --module)  &gt;  Env vars (THRUM_ROLE, THRUM_MODULE)  &gt;  Identity file</code></pre>
+<p>These overrides change the in-memory values used for the current command but do
+not modify the identity file on disk.</p>
 <h3>Environment Variables</h3>
 <pre><code>export THRUM_NAME=furiosa          # Select identity file (highest priority)
 export THRUM_ROLE=implementer      # Override role
@@ -187,6 +196,28 @@ file settings. The <code>--name</code> flag is available on <code>quickstart</co
 <p><strong>Priority exception</strong>: <code>THRUM_NAME</code> env var overrides the <code>--name</code> CLI flag.
 This allows orchestrators to control identity even when scripts pass a <code>--name</code>
 argument.</p>
+<h3>PID-Based Identity Resolution (v0.7.0)</h3>
+<p>If you have multiple identity files and <code>THRUM_NAME</code> isn&#39;t set, Thrum figures
+out which identity belongs to the current session by walking the process tree.</p>
+<p><strong>How it works:</strong></p>
+<ol>
+<li><p><strong>PID match:</strong> Walk the process tree from <code>getppid()</code> up to PID 1, looking
+for a process named <code>claude</code>. If found, check that PID against <code>claude_pid</code>
+in each identity file. Match found and process alive? That identity wins.</p>
+</li>
+<li><p><strong>Worktree match:</strong> Check the current git worktree name against the
+<code>worktree</code> field in each identity. One match wins. Multiple matches? Pick the
+most recently updated.</p>
+</li>
+<li><p><strong>Give up:</strong> If nothing matches, error out and tell you to set <code>THRUM_NAME</code>.</p>
+</li>
+</ol>
+<p><strong>Adoption:</strong> After picking an identity, if its <code>claude_pid</code> is zero or points
+to a dead process, the current Claude PID gets written in. The identity file
+self-updates when a new session picks it up. If <code>claude_pid</code> points to a
+different live Claude process, adoption is skipped — that&#39;s a genuine conflict,
+two sessions claiming the same identity.</p>
+<p>The <code>claude_pid</code> field is also in the SQLite <code>agents</code> table (schema v16).</p>
 <h3>Identity Files</h3>
 <p>Identity files are stored in <code>.thrum/identities/</code> as individual JSON files named
 after the agent:</p>
@@ -194,9 +225,9 @@ after the agent:</p>
 ├── furiosa.json           # Named agent
 ├── nux.json               # Named agent
 └── coordinator_1B9K33T6RK.json  # Unnamed agent (hash-based)</code></pre>
-<p><strong>Identity file format</strong> (version 2):</p>
+<p><strong>Identity file format</strong> (version 3):</p>
 <pre><code>{
-  &quot;version&quot;: 2,
+  &quot;version&quot;: 3,
   &quot;repo_id&quot;: &quot;r_7K2Q1X9M3P0B&quot;,
   &quot;agent&quot;: {
     &quot;kind&quot;: &quot;agent&quot;,
@@ -206,16 +237,24 @@ after the agent:</p>
     &quot;display&quot;: &quot;Auth Implementer&quot;
   },
   &quot;worktree&quot;: &quot;auth&quot;,
+  &quot;claude_pid&quot;: 12345,
   &quot;confirmed_by&quot;: &quot;human:leon&quot;,
   &quot;updated_at&quot;: &quot;2026-02-03T18:02:10.000Z&quot;
 }</code></pre>
-<p><strong>Auto-selection rules</strong> for identity files:</p>
+<p>The <code>claude_pid</code> field (v0.7.0) stores the PID of the Claude process that owns
+this identity. It is automatically maintained by the adoption logic described
+above.</p>
+<p><strong>Auto-selection rules</strong> for identity files (in priority order):</p>
 <ol>
 <li>If <code>THRUM_NAME</code> is set, load <code>{THRUM_NAME}.json</code> directly (error if not
 found)</li>
 <li>If only <strong>one</strong> <code>.json</code> file exists in <code>identities/</code>, load it automatically
 (solo-agent worktree backward compatibility)</li>
-<li>If <strong>multiple</strong> files exist and no <code>THRUM_NAME</code> is set, return an error
+<li><strong>PID match</strong> (v0.7.0): If the calling process is inside a Claude session,
+match by <code>claude_pid</code> field</li>
+<li><strong>Worktree match</strong> (v0.7.0): Filter by current git worktree name; if multiple
+match, pick the most recently updated</li>
+<li>If <strong>multiple</strong> files exist and no selection is possible, return an error
 asking the user to set <code>THRUM_NAME</code></li>
 </ol>
 <p>Use identity files when:</p>

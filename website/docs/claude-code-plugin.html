@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <strong>Claude Code Plugin</strong> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Cross-Repo Communication</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <strong>Claude Code Plugin</strong> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -56,8 +56,8 @@ disclosure resource docs. It replaces the manual agent definition approach
 <ul>
 <li><strong>10 slash commands</strong> — <code>/thrum:send</code>, <code>/thrum:inbox</code>, <code>/thrum:quickstart</code>,
 and more</li>
-<li><strong>Automatic context</strong> — SessionStart and PreCompact hooks run <code>thrum prime</code> to
-inject identity, team roster, inbox, and git state</li>
+<li><strong>Automatic context</strong> — SessionStart, PreCompact, and PostCompact hooks keep
+your agent oriented across sessions and compaction</li>
 <li><strong>8 resource docs</strong> — Progressive disclosure for messaging patterns, groups,
 identity, worktrees, and anti-patterns</li>
 <li><strong>Background listener</strong> — Sub-agent template for async message monitoring</li>
@@ -168,7 +168,7 @@ thrum send &quot;Heads up: breaking change&quot; --to @everyone</code></pre>
 <pre><code>/thrum:inbox
 /thrum:reply</code></pre>
 <h2>Hooks</h2>
-<p>The plugin configures two hooks that run automatically:</p>
+<p>The plugin configures three hooks that run automatically:</p>
 <h3>SessionStart</h3>
 <p>Runs <code>thrum prime</code> when a Claude Code session begins. Injects:</p>
 <ul>
@@ -180,9 +180,13 @@ thrum send &quot;Heads up: breaking change&quot; --to @everyone</code></pre>
 </ul>
 <p>If Thrum isn&#39;t initialized, shows a friendly setup message instead of failing.</p>
 <h3>PreCompact</h3>
-<p>Runs <code>thrum prime</code> before context compaction. This ensures agent identity and
-session state survive compaction — the agent can continue working without losing
-track of who it is or what messages are pending.</p>
+<p>Saves session context before context compaction. This preserves agent state
+(decisions, next steps, work-in-progress) so it can be restored after
+compaction.</p>
+<h3>PostCompact (v0.7.0)</h3>
+<p>Fires after context compaction. Tells the agent to run <code>thrum prime</code> so it gets
+its bearings back. In multi-agent mode, it also checks the listener heartbeat
+and respawns if stale. PreCompact saves state, PostCompact recovers it.</p>
 <h2>Resource Docs</h2>
 <p>The plugin includes 8 resource documents that Claude loads on demand for deeper
 guidance:</p>
@@ -306,7 +310,7 @@ the listener every 30 min if it stops:</p>
 </tr>
 <tr>
 <td>Maintenance</td>
-<td>Versioned (v0.4.5)</td>
+<td>Versioned (v0.7.0)</td>
 <td>Ad-hoc</td>
 </tr>
 </tbody></table>

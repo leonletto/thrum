@@ -17,8 +17,8 @@ disclosure resource docs. It replaces the manual agent definition approach
 
 - **10 slash commands** — `/thrum:send`, `/thrum:inbox`, `/thrum:quickstart`,
   and more
-- **Automatic context** — SessionStart and PreCompact hooks run `thrum prime` to
-  inject identity, team roster, inbox, and git state
+- **Automatic context** — SessionStart, PreCompact, and PostCompact hooks keep
+  your agent oriented across sessions and compaction
 - **8 resource docs** — Progressive disclosure for messaging patterns, groups,
   identity, worktrees, and anti-patterns
 - **Background listener** — Sub-agent template for async message monitoring
@@ -42,6 +42,10 @@ thrum init
 generates CLAUDE.md coordination instructions, starts the daemon, registers your
 agent, and starts a session. For manual control, you can still run individual
 steps:
+
+```bash
+thrum setup claude-md --apply    # Generate CLAUDE.md coordination instructions
+```
 
 Verify the daemon is running:
 
@@ -137,7 +141,7 @@ thrum send "Heads up: breaking change" --to @everyone
 
 ## Hooks
 
-The plugin configures two hooks that run automatically:
+The plugin configures three hooks that run automatically:
 
 ### SessionStart
 
@@ -153,9 +157,15 @@ If Thrum isn't initialized, shows a friendly setup message instead of failing.
 
 ### PreCompact
 
-Runs `thrum prime` before context compaction. This ensures agent identity and
-session state survive compaction — the agent can continue working without losing
-track of who it is or what messages are pending.
+Saves session context before context compaction. This preserves agent state
+(decisions, next steps, work-in-progress) so it can be restored after
+compaction.
+
+### PostCompact (v0.7.0)
+
+Fires after context compaction. Tells the agent to run `thrum prime` so it gets
+its bearings back. In multi-agent mode, it also checks the listener heartbeat
+and respawns if stale. PreCompact saves state, PostCompact recovers it.
 
 ## Resource Docs
 
@@ -243,7 +253,7 @@ See the `LISTENER_PATTERN.md` resource for the full template.
 | Slash commands | 10 commands included                        | None                                  |
 | Hooks          | SessionStart + PreCompact                   | Manual hook configuration             |
 | Resource docs  | 8 progressive disclosure docs               | Single monolithic agent file          |
-| Maintenance    | Versioned (v0.4.5)                          | Ad-hoc                                |
+| Maintenance    | Versioned (v0.7.0)                          | Ad-hoc                                |
 
 The manual agent definitions (`thrum-agent.md`, `message-listener.md`) still
 work and are available in `toolkit/agents/` for environments that don't support

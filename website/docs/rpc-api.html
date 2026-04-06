@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Cross-Repo Communication</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <strong>RPC API</strong> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -41,7 +41,7 @@ a{color:#0366d6}
 <main>
 <h2>Thrum Daemon RPC API</h2>
 <blockquote>
-<p><strong>TL;DR:</strong> 26 RPC methods over JSON-RPC 2.0, available on a Unix socket or
+<p><strong>TL;DR:</strong> 35+ RPC methods over JSON-RPC 2.0, available on a Unix socket or
 WebSocket. Most users never need this — the CLI wraps all of it. This
 reference is for building custom integrations or understanding what&#39;s
 happening under the hood.</p>
@@ -2610,6 +2610,379 @@ otherwise.</li>
 <li>The sync loop runs every 60 seconds by default (configurable via
 <code>--sync-interval</code>).</li>
 </ul>
+<h2>Peer Methods (v0.7.0)</h2>
+<h3>peer.start_pairing</h3>
+<p>Start a pairing session. Returns a code and address for the joining peer.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>timeout_seconds</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Pairing timeout (default: 300)</td>
+</tr>
+<tr>
+<td><code>auth_key</code></td>
+<td>string</td>
+<td>no</td>
+<td>Tailscale auth key for tsnet startup</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>code</code></td>
+<td>string</td>
+<td>Pairing code to share</td>
+</tr>
+<tr>
+<td><code>address</code></td>
+<td>string</td>
+<td>Local tsnet address (e.g., <code>100.x.x.x:9100</code>)</td>
+</tr>
+</tbody></table>
+<h3>peer.wait_pairing</h3>
+<p>Block until the active pairing session completes or times out. Long-poll method.</p>
+<p><strong>Request:</strong> <em>(none)</em></p>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>&quot;paired&quot;</code>, <code>&quot;timeout&quot;</code>, or <code>&quot;error&quot;</code></td>
+</tr>
+<tr>
+<td><code>peer_name</code></td>
+<td>string</td>
+<td>Name of the paired peer (on success)</td>
+</tr>
+<tr>
+<td><code>peer_address</code></td>
+<td>string</td>
+<td>Address of the paired peer (on success)</td>
+</tr>
+<tr>
+<td><code>peer_daemon_id</code></td>
+<td>string</td>
+<td>Daemon ID of the paired peer (on success)</td>
+</tr>
+<tr>
+<td><code>message</code></td>
+<td>string</td>
+<td>Human-readable status message</td>
+</tr>
+</tbody></table>
+<h3>peer.join</h3>
+<p>Connect to a remote peer using a pairing code.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>address</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Remote peer&#39;s tsnet address</td>
+</tr>
+<tr>
+<td><code>code</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Pairing code from <code>peer.start_pairing</code></td>
+</tr>
+<tr>
+<td><code>repo_path</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filesystem path (sets transport to <code>&quot;local&quot;</code>)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>&quot;paired&quot;</code> or <code>&quot;error&quot;</code></td>
+</tr>
+<tr>
+<td><code>peer_name</code></td>
+<td>string</td>
+<td>Name of the paired peer</td>
+</tr>
+<tr>
+<td><code>peer_daemon_id</code></td>
+<td>string</td>
+<td>Daemon ID of the paired peer</td>
+</tr>
+<tr>
+<td><code>message</code></td>
+<td>string</td>
+<td>Human-readable status message</td>
+</tr>
+</tbody></table>
+<h3>peer.list</h3>
+<p>List all known peers.</p>
+<p><strong>Request:</strong> <em>(none)</em></p>
+<p><strong>Response:</strong> Array of peer objects:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>daemon_id</code></td>
+<td>string</td>
+<td>Peer daemon ID</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Peer name</td>
+</tr>
+<tr>
+<td><code>address</code></td>
+<td>string</td>
+<td>Peer address</td>
+</tr>
+<tr>
+<td><code>last_sync</code></td>
+<td>string</td>
+<td>Relative last sync time</td>
+</tr>
+<tr>
+<td><code>last_synced_seq</code></td>
+<td>integer</td>
+<td>Last synced sequence number</td>
+</tr>
+</tbody></table>
+<h3>peer.status</h3>
+<p>Detailed per-peer health including authentication status.</p>
+<p><strong>Request:</strong> <em>(none)</em></p>
+<p><strong>Response:</strong> Array of peer status objects:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>daemon_id</code></td>
+<td>string</td>
+<td>Peer daemon ID</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Peer name</td>
+</tr>
+<tr>
+<td><code>address</code></td>
+<td>string</td>
+<td>Peer address</td>
+</tr>
+<tr>
+<td><code>has_token</code></td>
+<td>boolean</td>
+<td>Whether a shared token is stored</td>
+</tr>
+<tr>
+<td><code>paired_at</code></td>
+<td>string</td>
+<td>ISO 8601 pairing timestamp</td>
+</tr>
+<tr>
+<td><code>last_sync</code></td>
+<td>string</td>
+<td>Relative last sync time</td>
+</tr>
+<tr>
+<td><code>last_synced_seq</code></td>
+<td>integer</td>
+<td>Last synced sequence number</td>
+</tr>
+</tbody></table>
+<h3>peer.remove</h3>
+<p>Remove a peer by name or daemon ID.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>no</td>
+<td>Peer name (one of <code>name</code> or <code>daemon_id</code>)</td>
+</tr>
+<tr>
+<td><code>daemon_id</code></td>
+<td>string</td>
+<td>no</td>
+<td>Peer daemon ID</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>&quot;ok&quot;</code></td>
+</tr>
+</tbody></table>
+<h3>peer.configure</h3>
+<p>Add or remove proxy agents for a peer.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>peer_name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Name of the peer</td>
+</tr>
+<tr>
+<td><code>action</code></td>
+<td>string</td>
+<td>yes</td>
+<td><code>&quot;add-agent&quot;</code> or <code>&quot;remove-agent&quot;</code></td>
+</tr>
+<tr>
+<td><code>agent_name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Agent name to add/remove as proxy</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ok</code></td>
+<td>boolean</td>
+<td>Success indicator</td>
+</tr>
+<tr>
+<td><code>action</code></td>
+<td>string</td>
+<td><code>&quot;added&quot;</code> or <code>&quot;removed&quot;</code></td>
+</tr>
+<tr>
+<td><code>agent</code></td>
+<td>string</td>
+<td>The agent name that was acted on</td>
+</tr>
+</tbody></table>
+<h3>peer.address_changed</h3>
+<p>Notify this daemon that a remote peer&#39;s address has changed.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>peer_token</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Shared peer token</td>
+</tr>
+<tr>
+<td><code>new_ip</code></td>
+<td>string</td>
+<td>yes</td>
+<td>New IP address</td>
+</tr>
+<tr>
+<td><code>new_port</code></td>
+<td>string</td>
+<td>yes</td>
+<td>New port</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ok</code></td>
+<td>boolean</td>
+<td>Success indicator</td>
+</tr>
+</tbody></table>
 <h2>Using the API</h2>
 <h3>From Command Line</h3>
 <pre><code># Using netcat (nc)

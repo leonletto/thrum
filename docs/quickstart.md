@@ -67,6 +67,13 @@ This creates:
 `thrum init` also starts the daemon automatically (since v0.4.5). You do not
 need a separate `thrum daemon start` step for first-time setup.
 
+**v0.7.0 default:** New repos start in single-agent mode
+(`single_agent_mode: true`). This gives you context management (`thrum prime`,
+sessions, context save/show) without the messaging layer (no listener, no cron
+watchdog, no messaging protocol in preambles). If you need multi-agent
+coordination, run `thrum single-agent-mode false`. See
+[Single-Agent Mode](single-agent-mode.md) for details.
+
 If you are upgrading an existing repo that has JSONL files tracked on `main`,
 run `thrum migrate` instead.
 
@@ -104,7 +111,19 @@ The plugin already includes the skill — `thrum init --skills` will detect the
 plugin and skip the install. See [Claude Code Plugin](claude-code-plugin.md) for
 details.
 
-### 3. Register Your Agent and Start a Session
+### 3. Generate CLAUDE.md Coordination Instructions
+
+For Claude Code and other AI agents, generate Thrum coordination instructions:
+
+```bash
+thrum setup claude-md --apply
+```
+
+This appends agent coordination instructions to your CLAUDE.md file (creates it
+if missing). Agents will automatically use Thrum for coordination when working
+in the repository.
+
+### 4. Register Your Agent and Start a Session
 
 The fastest way is the quickstart command, which registers, starts a session,
 and sets your intent in one step:

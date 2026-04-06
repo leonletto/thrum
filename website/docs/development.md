@@ -6,7 +6,7 @@ description:
 category: "development"
 order: 2
 tags: ["development", "contributing", "testing", "building", "makefile", "go"]
-last_updated: "2026-02-08"
+last_updated: "2026-04-06"
 ---
 
 ## Thrum Development Guide
@@ -73,9 +73,16 @@ thrum/
 │   ├── mcp/                 # MCP stdio server (11 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
-│   ├── schema/              # SQLite schema, DDL, and migrations (v7)
+│   ├── schema/              # SQLite schema, DDL, and migrations (v16)
 │   ├── subscriptions/       # Notification dispatcher and subscription service
 │   ├── sync/                # Sync engine (loop, merge, push, dedup, branch management)
+│   ├── bridge/              # Shared bridge components (v0.7.0)
+│   │   ├── bridge.go        # TransportBridge interface, Notification type
+│   │   ├── msgmap.go        # Local↔remote message ID mapping
+│   │   ├── relay.go         # Common inbound/outbound relay
+│   │   ├── wsclient.go      # Shared WebSocket client
+│   │   ├── peer/            # PeerBridge, PeerTransport, address validation
+│   │   └── telegram/        # Telegram bridge (thin wrappers around shared components)
 │   ├── transport/           # Transport abstraction layer
 │   ├── types/               # Shared event type definitions
 │   ├── web/                 # Embedded SPA (//go:embed React build)
@@ -339,7 +346,7 @@ case "my.new":
 ### Modifying Database Schema
 
 1. Update table definitions in `internal/schema/schema.go`
-2. Increment `CurrentVersion` constant (currently v7)
+2. Increment `CurrentVersion` constant (currently v16)
 3. Add migration logic in the `Migrate()` function
 4. Write tests for the new schema
 5. Update `docs/architecture.md`

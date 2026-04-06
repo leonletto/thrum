@@ -232,8 +232,8 @@ cd ../..
 ```
 
 Dolt automatically reads from `refs/dolt/data` on the git remote. This downloads
-all beads issue data. For HTTPS remotes, use
-`https://github.com/org/repo.git` instead.
+all beads issue data. For HTTPS remotes, use `https://github.com/org/repo.git`
+instead.
 
 **You must `cd` back to the repo root** before running any `bd` commands — they
 need to discover the `.beads/` directory from the project root.

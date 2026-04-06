@@ -1,6 +1,6 @@
 ## Thrum Daemon RPC API
 
-> **TL;DR:** 26 RPC methods over JSON-RPC 2.0, available on a Unix socket or
+> **TL;DR:** 35+ RPC methods over JSON-RPC 2.0, available on a Unix socket or
 > WebSocket. Most users never need this — the CLI wraps all of it. This
 > reference is for building custom integrations or understanding what's
 > happening under the hood.
@@ -1068,6 +1068,152 @@ Trigger an immediate sync (non-blocking). Available when the sync loop is active
   otherwise.
 - The sync loop runs every 60 seconds by default (configurable via
   `--sync-interval`).
+
+## Peer Methods (v0.7.0)
+
+### peer.start_pairing
+
+Start a pairing session. Returns a code and address for the joining peer.
+
+**Request:**
+
+| Parameter         | Type    | Required | Description                          |
+| ----------------- | ------- | -------- | ------------------------------------ |
+| `timeout_seconds` | integer | no       | Pairing timeout (default: 300)       |
+| `auth_key`        | string  | no       | Tailscale auth key for tsnet startup |
+
+**Response:**
+
+| Field     | Type   | Description                                  |
+| --------- | ------ | -------------------------------------------- |
+| `code`    | string | Pairing code to share                        |
+| `address` | string | Local tsnet address (e.g., `100.x.x.x:9100`) |
+
+### peer.wait_pairing
+
+Block until the active pairing session completes or times out. Long-poll method.
+
+**Request:** _(none)_
+
+**Response:**
+
+| Field            | Type   | Description                               |
+| ---------------- | ------ | ----------------------------------------- |
+| `status`         | string | `"paired"`, `"timeout"`, or `"error"`     |
+| `peer_name`      | string | Name of the paired peer (on success)      |
+| `peer_address`   | string | Address of the paired peer (on success)   |
+| `peer_daemon_id` | string | Daemon ID of the paired peer (on success) |
+| `message`        | string | Human-readable status message             |
+
+### peer.join
+
+Connect to a remote peer using a pairing code.
+
+**Request:**
+
+| Parameter   | Type   | Required | Description                                   |
+| ----------- | ------ | -------- | --------------------------------------------- |
+| `address`   | string | yes      | Remote peer's tsnet address                   |
+| `code`      | string | yes      | Pairing code from `peer.start_pairing`        |
+| `repo_path` | string | no       | Filesystem path (sets transport to `"local"`) |
+
+**Response:**
+
+| Field            | Type   | Description                   |
+| ---------------- | ------ | ----------------------------- |
+| `status`         | string | `"paired"` or `"error"`       |
+| `peer_name`      | string | Name of the paired peer       |
+| `peer_daemon_id` | string | Daemon ID of the paired peer  |
+| `message`        | string | Human-readable status message |
+
+### peer.list
+
+List all known peers.
+
+**Request:** _(none)_
+
+**Response:** Array of peer objects:
+
+| Field             | Type    | Description                 |
+| ----------------- | ------- | --------------------------- |
+| `daemon_id`       | string  | Peer daemon ID              |
+| `name`            | string  | Peer name                   |
+| `address`         | string  | Peer address                |
+| `last_sync`       | string  | Relative last sync time     |
+| `last_synced_seq` | integer | Last synced sequence number |
+
+### peer.status
+
+Detailed per-peer health including authentication status.
+
+**Request:** _(none)_
+
+**Response:** Array of peer status objects:
+
+| Field             | Type    | Description                      |
+| ----------------- | ------- | -------------------------------- |
+| `daemon_id`       | string  | Peer daemon ID                   |
+| `name`            | string  | Peer name                        |
+| `address`         | string  | Peer address                     |
+| `has_token`       | boolean | Whether a shared token is stored |
+| `paired_at`       | string  | ISO 8601 pairing timestamp       |
+| `last_sync`       | string  | Relative last sync time          |
+| `last_synced_seq` | integer | Last synced sequence number      |
+
+### peer.remove
+
+Remove a peer by name or daemon ID.
+
+**Request:**
+
+| Parameter   | Type   | Required | Description                              |
+| ----------- | ------ | -------- | ---------------------------------------- |
+| `name`      | string | no       | Peer name (one of `name` or `daemon_id`) |
+| `daemon_id` | string | no       | Peer daemon ID                           |
+
+**Response:**
+
+| Field    | Type   | Description |
+| -------- | ------ | ----------- |
+| `status` | string | `"ok"`      |
+
+### peer.configure
+
+Add or remove proxy agents for a peer.
+
+**Request:**
+
+| Parameter    | Type   | Required | Description                       |
+| ------------ | ------ | -------- | --------------------------------- |
+| `peer_name`  | string | yes      | Name of the peer                  |
+| `action`     | string | yes      | `"add-agent"` or `"remove-agent"` |
+| `agent_name` | string | yes      | Agent name to add/remove as proxy |
+
+**Response:**
+
+| Field    | Type    | Description                      |
+| -------- | ------- | -------------------------------- |
+| `ok`     | boolean | Success indicator                |
+| `action` | string  | `"added"` or `"removed"`         |
+| `agent`  | string  | The agent name that was acted on |
+
+### peer.address_changed
+
+Notify this daemon that a remote peer's address has changed.
+
+**Request:**
+
+| Parameter    | Type   | Required | Description       |
+| ------------ | ------ | -------- | ----------------- |
+| `peer_token` | string | yes      | Shared peer token |
+| `new_ip`     | string | yes      | New IP address    |
+| `new_port`   | string | yes      | New port          |
+
+**Response:**
+
+| Field | Type    | Description       |
+| ----- | ------- | ----------------- |
+| `ok`  | boolean | Success indicator |
 
 ## Using the API
 

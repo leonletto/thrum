@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Cross-Repo Communication</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -47,12 +47,16 @@ which are one-time setup. Start here, then drill into the reference pages when
 you need details.</p>
 </blockquote>
 <p>Thrum is a messaging system for coordinating AI agents across sessions,
-worktrees, and machines. It provides:</p>
+worktrees, machines, and repositories. It provides:</p>
 <ul>
 <li><strong>Persistent messaging</strong> that survives session boundaries</li>
 <li><strong>Automatic synchronization</strong> via Git — no extra servers</li>
+<li><strong>Cross-repo communication</strong> — agents in different repos talk to each other
+via Tailscale (v0.7.0)</li>
 <li><strong>Real-time visibility</strong> into what other agents are working on</li>
 <li><strong>Subscription-based notifications</strong> for targeted communication</li>
+<li><strong>Single-agent mode</strong> — use Thrum&#39;s context management without the messaging
+layer (v0.7.0 default)</li>
 <li><strong>Backup &amp; Restore</strong> for protecting your message history and agent state</li>
 </ul>
 <p>Everything is inspectable. Messages are JSONL files on a Git branch. State is a
@@ -245,8 +249,12 @@ all handled gracefully.</p>
 <td>5-minute getting started</td>
 </tr>
 <tr>
+<td><a href="single-agent-mode.html">Single-Agent Mode</a></td>
+<td>Context management without messaging (v0.7.0 default)</td>
+</tr>
+<tr>
 <td><a href="architecture.html">Architecture</a></td>
-<td>Daemon internals, storage, sync, and packages</td>
+<td>Daemon internals, storage, sync, peer transport, and packages</td>
 </tr>
 <tr>
 <td><a href="daemon.html">Daemon Architecture</a></td>
@@ -254,7 +262,7 @@ all handled gracefully.</p>
 </tr>
 <tr>
 <td><a href="rpc-api.html">RPC API Reference</a></td>
-<td>All RPC methods</td>
+<td>All RPC methods (including peer.* methods)</td>
 </tr>
 <tr>
 <td><a href="sync.html">Sync Protocol</a></td>
@@ -270,15 +278,19 @@ all handled gracefully.</p>
 </tr>
 <tr>
 <td><a href="cli.html">CLI Reference</a></td>
-<td>All CLI commands and backup &amp; restore</td>
+<td>All CLI commands, peer management, and backup &amp; restore</td>
 </tr>
 <tr>
 <td><a href="identity.html">Identity System</a></td>
-<td>Agent identity and registration</td>
+<td>Agent identity, PID resolution, and registration</td>
 </tr>
 <tr>
 <td><a href="context.html">Context Management</a></td>
 <td>Agent context storage and persistence</td>
+</tr>
+<tr>
+<td><a href="configuration.html">Configuration</a></td>
+<td>Config schema, peers block, and environment variables</td>
 </tr>
 <tr>
 <td><a href="multi-agent.html">Multi-Agent Support</a></td>
@@ -287,6 +299,14 @@ all handled gracefully.</p>
 <tr>
 <td><a href="tailscale-sync.html">Tailscale Sync</a></td>
 <td>Cross-machine sync via Tailscale with security</td>
+</tr>
+<tr>
+<td><a href="telegram-bridge.html">Telegram Bridge</a></td>
+<td>DM bridge between Telegram and Thrum agents</td>
+</tr>
+<tr>
+<td><a href="telegram-groups.html">Telegram Groups</a></td>
+<td>Group messaging with proxy agents across repos</td>
 </tr>
 <tr>
 <td><a href="agent-coordination.html">Agent Coordination</a></td>

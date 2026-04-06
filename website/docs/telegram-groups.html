@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Cross-Repo Communication — Thrum</title>
-<meta name="description" content="Connect agents across different repos using shared Telegram groups — proxy agents, @mention routing, and direct addressing without network configuration">
+<title>Telegram Groups — Thrum</title>
+<meta name="description" content="Share a Telegram group with your team so everyone can interact with the same Thrum agent — send instructions, see responses, and coordinate through one chat">
 <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#telegram-groups.html">
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
@@ -19,7 +19,7 @@ a{color:#0366d6}
 </head>
 <body>
 <nav>
-<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Cross-Repo Communication
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Telegram Groups
 <hr>
 <strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="single-agent-mode.html">Single-Agent Mode</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
@@ -27,7 +27,7 @@ a{color:#0366d6}
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <strong>Cross-Repo Communication</strong> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <strong>Telegram Groups</strong> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
@@ -39,69 +39,76 @@ a{color:#0366d6}
 <strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
 </nav>
 <main>
-<h2>Cross-Repo Communication</h2>
-<p>In the <a href="single-agent-mode.html">single-agent-mode</a> release notes I mentioned
-cross-project agent coordination as the next thing I was thinking about. This
-is it.</p>
-<p>If you work with multiple repos that depend on each other — a backend and a
-frontend, a primary service and a couple of microservices, a monorepo with
-satellite projects — you&#39;ve hit the moment where a change in one repo means a
-change in another. Today you handle that by context-switching: stop what you&#39;re
-doing, go to the other repo, explain to a different agent what changed and why,
-hope you got the details right. That&#39;s the same manual relay problem Thrum
-solved within a single repo, just across repo boundaries.</p>
-<p>The solution is a shared Telegram group. Each repo&#39;s bot joins the same group.
-Messages flow between the Telegram group and a mirrored Thrum group inside each
-daemon. No network configuration, no Tailscale, no direct daemon connections.
-If both repos have a Telegram bot, they can talk to each other.</p>
+<h2>Telegram Groups</h2>
+<p>The <a href="telegram-bridge.html">DM bridge</a> connects one person to their agents. That&#39;s
+great when you&#39;re the only one working with a repo. But if you&#39;re on a team — a
+few engineers, maybe a PM — and you all want to interact with the same agent,
+DMs don&#39;t work. Everyone would need their own bot, their own pairing, their own
+private conversation. Nobody sees what anyone else asked or what the agent said
+back.</p>
+<p>Telegram group support fixes this. You create a Telegram group, add your repo&#39;s
+bot, and invite your team. Anyone in the group can send instructions to the
+agent. The agent&#39;s responses appear in the group where everyone can see them.
+You get a shared conversation with your agent that the whole team can
+participate in.</p>
 <h3>How It Works</h3>
-<p>Each repo already has a Telegram bot from the
-<a href="telegram-bridge.html">DM bridge setup</a>. You create a Telegram group, add both
-bots to it, and configure each repo to recognize the other&#39;s bot as trusted.
-Thrum does the rest:</p>
-<pre><code>Repo A (thrum)                    Repo B (falcon-backend)
-┌────────────────┐                ┌────────────────┐
-│ coordinator    │                │ coordinator    │
-│ implementer(s) │                │ implementer(s) │
-│                │                │                │
-│ tg:cross-repo ←── Telegram ──→ tg:cross-repo  │
-│ (mirrored grp) │   Group Chat   │ (mirrored grp) │
-│                │                │                │
-│ thrum-bot  ────┼──→ group ←──┼──── falcon-bot │
-└────────────────┘                └────────────────┘</code></pre>
+<pre><code>Telegram Group
+┌─────────────────────────────────┐
+│  Alice: @thrum_bot check the    │
+│         deploy status           │
+│                                 │
+│  thrum_bot: Deploy is green.    │
+│    Last push 12m ago by Bob.    │
+│                                 │
+│  Bob: @thrum_bot run the smoke  │
+│       tests on staging          │
+│                                 │
+│  thrum_bot: All 47 tests pass.  │
+└─────────────┬───────────────────┘
+              │
+              ▼
+┌─────────────────────────────────┐
+│  Thrum Daemon                   │
+│                                 │
+│  tg:dev-team (mirrored group)   │
+│  ├── @coordinator_main          │
+│  ├── user:alice                 │
+│  └── user:bob                   │
+└─────────────────────────────────┘</code></pre>
 <ul>
-<li><strong>Inbound:</strong> A message lands in the Telegram group. Each bot checks: is this
-@mentioning me specifically, or is it a broadcast (no @mention)? If it&#39;s for
-us or for everyone, the bot relays it into the local mirrored Thrum group
-(<code>tg:cross-repo</code>). If it @mentions a different bot, we ignore it.</li>
-<li><strong>Outbound:</strong> An agent sends a message to the mirrored Thrum group. The
-bridge posts it to the Telegram group. The other repo&#39;s bot picks it up.</li>
-<li><strong>Echo prevention:</strong> Each bot ignores its own messages in the group. No loops.</li>
+<li><strong>Inbound:</strong> Someone sends a message in the Telegram group. If it @mentions
+the bot (or has no @mention at all), the bridge relays it into a mirrored
+Thrum group (<code>tg:dev-team</code>). The target agent receives it.</li>
+<li><strong>Outbound:</strong> The agent sends a message to the mirrored Thrum group. The
+bridge posts it back to the Telegram group where everyone can see it.</li>
+<li><strong>Threading:</strong> Telegram replies map to Thrum <code>reply_to</code>. If someone replies to
+the bot&#39;s message in the group, the agent sees it as a reply to the original
+thread.</li>
+<li><strong>Identity:</strong> Each person&#39;s messages are tagged with their Telegram username,
+so the agent knows who&#39;s asking.</li>
 </ul>
 <h3>Prerequisites</h3>
-<p>Before setting up group communication, you need:</p>
 <ol>
-<li><strong>A working DM bridge in each repo.</strong> Follow the
-<a href="telegram-bridge.html">Telegram Bridge</a> guide for each repo. You&#39;ll have a bot
-token, a paired Telegram account, and a working DM relay.</li>
+<li><strong>A working DM bridge.</strong> Follow the <a href="telegram-bridge.html">Telegram Bridge</a>
+guide first. You&#39;ll have a bot token, a paired Telegram account, and a
+working DM relay. The group feature builds on top of this.</li>
 <li><strong>Bot privacy mode disabled.</strong> By default, Telegram bots in groups only see
 messages that @mention them or are commands. For broadcast messages (no
-@mention) to work, each bot needs privacy mode turned off. In Telegram,
-message <a href="https://t.me/BotFather">@BotFather</a>, send <code>/setprivacy</code>, select
-your bot, and choose <strong>Disable</strong>.</li>
+@mention) to work, you need privacy mode turned off. In Telegram, message
+<a href="https://t.me/BotFather">@BotFather</a>, send <code>/setprivacy</code>, select your bot,
+and choose <strong>Disable</strong>.</li>
 </ol>
 <h3>Setup</h3>
 <h4>1. Create a Telegram Group</h4>
-<p>Create a regular Telegram group. Give it a descriptive name — &quot;Thrum + Falcon
-Coordination&quot; or whatever makes sense for your repos. Add both bots to the
-group.</p>
-<p>Note the group&#39;s chat ID. The easiest way to get it: send a message in the
-group, then check <code>thrum telegram status --json</code>. The group chat ID is negative
-(e.g., <code>-100123456789</code>).</p>
-<h4>2. Configure Each Repo</h4>
-<p>In each repo, add the group to your Telegram config. You can do this from the
-web UI (Settings → Telegram → Groups) or the config file directly.</p>
-<p><strong>Repo A</strong> (<code>.thrum/config.json</code>):</p>
+<p>Create a regular Telegram group. Add your bot and invite your team. Give it a
+name that makes sense — &quot;Dev Coordination&quot; or &quot;Backend Agents&quot; or whatever.</p>
+<p>Note the group&#39;s chat ID. Easiest way: send a message in the group, then check
+<code>thrum telegram status --json</code>. Group chat IDs are negative numbers (e.g.,
+<code>-100123456789</code>).</p>
+<h4>2. Configure the Group</h4>
+<p>Add the group to your Telegram config. You can do this from the web UI (Settings
+→ Telegram → Groups) or the config file directly.</p>
+<p><code>.thrum/config.json</code>:</p>
 <pre><code>{
   &quot;telegram&quot;: {
     &quot;token&quot;: &quot;...&quot;,
@@ -113,126 +120,63 @@ web UI (Settings → Telegram → Groups) or the config file directly.</p>
     &quot;groups&quot;: [
       {
         &quot;chat_id&quot;: -100123456789,
-        &quot;name&quot;: &quot;cross-repo-coord&quot;,
-        &quot;trusted_bots&quot;: [8693071965]
+        &quot;name&quot;: &quot;dev-team&quot;
       }
     ]
   }
 }</code></pre>
-<p><strong>Repo B</strong> — same structure, but <code>trusted_bots</code> lists Repo A&#39;s bot user ID
-instead.</p>
-<p>The <code>trusted_bots</code> array is the key piece. Normally, Thrum drops all messages
-from bots — that&#39;s the security default from the DM bridge. The trusted bots
-list creates a per-group exception: &quot;in this specific group, messages from
-these specific bot IDs are allowed through.&quot; Each repo independently decides
-which bots it trusts.</p>
-<h4>3. Restart and Verify</h4>
-<p>Restart both daemons:</p>
+<p>Everyone in the group who should be able to message the agent needs their
+Telegram user ID in the global <code>allow_from</code> list. Same gate as DMs — if your ID
+isn&#39;t in the list, your messages are silently dropped.</p>
+<h4>3. Restart and Test</h4>
 <pre><code>thrum daemon restart</code></pre>
-<p>On startup, the bridge:</p>
-<ol>
-<li>Creates a mirrored Thrum group named <code>tg:cross-repo-coord</code></li>
-<li>Adds your user and target agent as members</li>
-<li>Registers any proxy agents you&#39;ve configured (see below)</li>
-</ol>
-<p>Test it — send a message in the Telegram group and check that it appears in
-both repos:</p>
+<p>On startup, the bridge creates a mirrored Thrum group named <code>tg:dev-team</code> and
+adds your user and target agent as members.</p>
+<p>Test it — send a message in the Telegram group mentioning the bot:</p>
+<pre><code>@your_bot_name hello from the group</code></pre>
+<p>Check the agent&#39;s inbox:</p>
 <pre><code>thrum inbox --unread</code></pre>
-<hr>
-<h3>Proxy Agents</h3>
-<p>The group relay gets messages flowing between repos. But &quot;a message appeared in
-the cross-repo group&quot; isn&#39;t the same as &quot;I can send a message to the Falcon
-coordinator.&quot; Proxy agents close that gap.</p>
-<p>A proxy agent is a local stand-in for a remote agent in another repo. You
-configure it, Thrum registers it on startup, and it shows up in <code>thrum team</code>
-like any other agent. When someone sends a message to the proxy, the bridge
-routes it through the Telegram group to the right bot, which delivers it to the
-real agent.</p>
-<h4>Configuring Proxy Agents</h4>
-<p>Add <code>remote_agents</code> to a group in your config:</p>
-<pre><code>{
-  &quot;groups&quot;: [
-    {
-      &quot;chat_id&quot;: -100123456789,
-      &quot;name&quot;: &quot;cross-repo-coord&quot;,
-      &quot;trusted_bots&quot;: [8693071965],
-      &quot;remote_agents&quot;: [
-        {
-          &quot;name&quot;: &quot;coordinator_main&quot;,
-          &quot;prefix&quot;: &quot;falcon&quot;,
-          &quot;bot&quot;: &quot;@falconmode_backend_bot&quot;
-        }
-      ]
-    }
-  ]
-}</code></pre>
-<p>This tells Thrum: &quot;There&#39;s an agent called <code>coordinator_main</code> in the Falcon
-repo. Register it locally as <code>falcon:coordinator_main</code>. When someone sends it a
-message, route it through the Telegram group to <code>@falconmode_backend_bot</code>.&quot;</p>
-<h4>Sending to a Remote Agent</h4>
-<pre><code>thrum send &quot;check the /users endpoint — the response schema changed&quot; \
-  --to @falcon:coordinator_main</code></pre>
-<p>That message goes through the bridge to the Telegram group as:</p>
-<pre><code>@falconmode_backend_bot @coordinator_main: check the /users endpoint — the response schema changed</code></pre>
-<p>The Falcon bot sees its @mention, strips it, and delivers the message to its
-local <code>coordinator_main</code> as a DM. When the coordinator replies, the response
-flows back through the group.</p>
-<h4>How It Looks in thrum team</h4>
-<pre><code>● @coordinator_main (main) — Coordinate agents and tasks [live]
-● @implementer (website-dev) — Write documentation [live]
-● @falcon:coordinator_main [remote] (falcon-backend) — via tg:cross-repo-coord</code></pre>
-<p>Remote agents show their prefix, the <code>[remote]</code> tag, and which Telegram group
-they&#39;re reachable through. Your agents can address them like any local agent —
-they don&#39;t need to know the message is crossing repo boundaries.</p>
-<hr>
-<h3>Security</h3>
-<p>Every aspect of this is explicit configuration. There&#39;s no auto-discovery, no
-&quot;the bots found each other.&quot; Each repo independently controls:</p>
-<ul>
-<li><strong>Which bots are trusted</strong> — the <code>trusted_bots</code> array is per-group. A bot
-not in the list is silently dropped, same as the DM bridge&#39;s <code>allow_from</code>.</li>
-<li><strong>Which remote agents are visible</strong> — <code>remote_agents</code> is a whitelist. Falcon
-might expose its coordinator to you, but not its implementers. You decide
-what your repo can see.</li>
-<li><strong>Asymmetric access</strong> — Repo A can see Repo B&#39;s coordinator without Repo B
-seeing anything in Repo A. Each side configures independently.</li>
-</ul>
-<p>The security model is the same principle as the DM bridge: fail-closed, explicit
-allowlists, no side effects from blocked messages.</p>
+<p>You should see the message. Have the agent reply to the mirrored group and
+verify it appears in Telegram.</p>
 <hr>
 <h3>@Mention Routing</h3>
-<p>Messages in the Telegram group are routed based on @mentions:</p>
+<p>Messages in the group are routed based on @mentions:</p>
 <table>
 <thead>
 <tr>
 <th>Message</th>
-<th>Who relays it</th>
+<th>What happens</th>
 </tr>
 </thead>
 <tbody><tr>
 <td><code>@thrum_bot check the API</code></td>
-<td>Only Thrum&#39;s bot</td>
-</tr>
-<tr>
-<td><code>@falcon_bot run the tests</code></td>
-<td>Only Falcon&#39;s bot</td>
+<td>Bot relays to agent</td>
 </tr>
 <tr>
 <td><code>Schema changed in v2</code> (no @mention)</td>
-<td>All bots — broadcast</td>
+<td>Bot relays to agent (broadcast)</td>
 </tr>
 <tr>
-<td><code>@thrum_bot @falcon_bot coordinate</code></td>
-<td>Both mentioned bots</td>
+<td><code>Hey @alice what do you think?</code></td>
+<td>Bot ignores — addressed to a human, not the bot</td>
 </tr>
 </tbody></table>
-<p>This means you can be precise about who you&#39;re talking to. If you send a
-message to the group from Telegram with <code>@falcon_bot</code>, only the Falcon repo
-picks it up. If you just send a message with no @mention, every repo in the
-group gets it.</p>
-<p>Agents sending through Thrum don&#39;t need to think about this. When you use
-<code>thrum send --to @falcon:coordinator_main</code>, the bridge handles the @mention
-routing automatically.</p>
+<p>If privacy mode is disabled, the bot sees everything. It relays messages that
+either @mention it or have no @mention at all. Messages that @mention a human
+(not the bot) are left alone — the person gets a normal Telegram notification
+and the agent doesn&#39;t need to see it.</p>
+<hr>
+<h3>Security</h3>
+<p>The same security model from the DM bridge applies to groups:</p>
+<ul>
+<li><strong><code>allow_from</code> is global.</strong> A person&#39;s Telegram user ID must be in the
+<code>allow_from</code> list to send messages through any chat — DM or group. There&#39;s no
+per-group allow list.</li>
+<li><strong>Fail-closed.</strong> Empty <code>allow_from</code> with <code>allow_all: false</code> blocks everyone.</li>
+<li><strong>Bot blocking.</strong> Messages from other bots are dropped by default (see
+<a href="#multi-bot-groups">Multi-Bot Groups</a> below for the exception).</li>
+<li><strong>Rate limiting.</strong> Per-user rate limits apply in groups the same as DMs.</li>
+</ul>
 <hr>
 <h3>Configuration Reference</h3>
 <p>The <code>groups</code> array sits alongside the existing DM fields in the <code>telegram</code>
@@ -259,12 +203,12 @@ config:</p>
 <tr>
 <td><code>trusted_bots</code></td>
 <td>int[]</td>
-<td>Bot user IDs allowed to relay messages in this group</td>
+<td>Bot user IDs allowed to relay messages in this group (see <a href="#multi-bot-groups">Multi-Bot Groups</a>)</td>
 </tr>
 <tr>
 <td><code>remote_agents</code></td>
 <td>array</td>
-<td>Proxy agent definitions (optional)</td>
+<td>Proxy agent definitions (see <a href="#multi-bot-groups">Multi-Bot Groups</a>)</td>
 </tr>
 </tbody></table>
 <h4>RemoteAgent</h4>
@@ -294,8 +238,7 @@ config:</p>
 </tbody></table>
 <hr>
 <h3>Web UI</h3>
-<p>The web UI&#39;s Settings → Telegram panel now has a <strong>Groups</strong> section where you
-can:</p>
+<p>The web UI&#39;s Settings → Telegram panel has a <strong>Groups</strong> section where you can:</p>
 <ul>
 <li>Add and remove groups (chat ID + name)</li>
 <li>Manage trusted bot IDs per group</li>
@@ -304,41 +247,93 @@ can:</p>
 </ul>
 <p>All changes take effect on daemon restart.</p>
 <hr>
+<h3>Multi-Bot Groups</h3>
+<p>Thrum supports putting multiple bots in the same Telegram group. This is fully
+implemented — trusted bot allowlists, proxy agent registration, @mention routing
+between bots. The use case is cross-repo coordination: Repo A&#39;s bot and Repo B&#39;s
+bot in the same group, agents messaging each other through it.</p>
+<p><strong>There&#39;s a catch.</strong> Telegram&#39;s Bot API has a server-side restriction: bots
+cannot see messages from other bots in groups. This is intentional on Telegram&#39;s
+part — it prevents bot loops. What this means in practice:</p>
+<ul>
+<li>Your bot can <strong>send</strong> messages to the group, and they appear for humans and in
+the Telegram UI</li>
+<li>Another bot in the same group will <strong>not receive</strong> those messages</li>
+<li>So agent-to-agent communication through a shared Telegram group doesn&#39;t work</li>
+</ul>
+<p>The outbound direction works fine. If you want your agent&#39;s messages to be
+visible in a group that humans are watching, that works. What doesn&#39;t work is
+the return path — the other repo&#39;s bot picking up those messages and delivering
+them to its agents.</p>
+<p>I&#39;m leaving the multi-bot infrastructure in place because:</p>
+<ol>
+<li>The outbound routing is genuinely useful (agents can post to groups that
+humans monitor)</li>
+<li>Telegram might change this restriction in the future</li>
+<li>Cross-repo agent-to-agent communication will come through a different
+mechanism — likely local daemon-to-daemon communication or Tailscale sync,
+not Telegram</li>
+</ol>
+<p>If you want to configure trusted bots or proxy agents anyway (for the outbound
+direction), here&#39;s how:</p>
+<h4>Trusted Bots</h4>
+<p>Add bot user IDs to the group&#39;s <code>trusted_bots</code> array. This creates a per-group
+exception to the default &quot;drop all bot messages&quot; rule:</p>
+<pre><code>{
+  &quot;groups&quot;: [
+    {
+      &quot;chat_id&quot;: -100123456789,
+      &quot;name&quot;: &quot;cross-repo-coord&quot;,
+      &quot;trusted_bots&quot;: [8693071965]
+    }
+  ]
+}</code></pre>
+<h4>Proxy Agents</h4>
+<p>Proxy agents register a remote agent as a local stand-in. They show up in
+<code>thrum team</code> and can be addressed directly:</p>
+<pre><code>{
+  &quot;groups&quot;: [
+    {
+      &quot;chat_id&quot;: -100123456789,
+      &quot;name&quot;: &quot;cross-repo-coord&quot;,
+      &quot;trusted_bots&quot;: [8693071965],
+      &quot;remote_agents&quot;: [
+        {
+          &quot;name&quot;: &quot;coordinator_main&quot;,
+          &quot;prefix&quot;: &quot;falcon&quot;,
+          &quot;bot&quot;: &quot;@falconmode_backend_bot&quot;
+        }
+      ]
+    }
+  ]
+}</code></pre>
+<p>Sending to a proxy agent posts a message to the Telegram group with the target
+bot&#39;s @mention:</p>
+<pre><code>thrum send &quot;check the /users endpoint&quot; --to @falcon:coordinator_main</code></pre>
+<p>The message appears in the group as:</p>
+<pre><code>@falconmode_backend_bot @coordinator_main: check the /users endpoint</code></pre>
+<p>Humans in the group can see it. The target bot cannot (Telegram limitation). The
+proxy agent shows in <code>thrum team</code> as:</p>
+<pre><code>● @falcon:coordinator_main [remote] (falcon-backend) — via tg:cross-repo-coord</code></pre>
+<hr>
 <h3>Troubleshooting</h3>
 <p><strong>Messages not arriving from the group:</strong></p>
 <ul>
-<li>Check bot privacy mode. If privacy mode is on, the bot only sees @mentions
-and commands — broadcast messages won&#39;t come through. Disable via BotFather:
+<li>Check bot privacy mode. If privacy mode is on, the bot only sees @mentions and
+commands — broadcast messages won&#39;t come through. Disable via BotFather:
 <code>/setprivacy</code> → your bot → Disable.</li>
 <li>Verify the bot is actually in the Telegram group.</li>
-<li>Check <code>trusted_bots</code> — if the sending bot isn&#39;t in your trusted list, its
-messages are silently dropped.</li>
+<li>Check that the sender&#39;s Telegram user ID is in <code>allow_from</code>.</li>
 </ul>
-<p><strong>Echo loops (message bouncing between repos):</strong></p>
+<p><strong>Bot responses not appearing in the group:</strong></p>
 <ul>
-<li>Each bot ignores messages from its own bot ID. If you see echoes, check that
-the bot user ID used for posting matches the ID the bot sees as &quot;self.&quot; Run
-<code>thrum telegram status --json</code> to verify.</li>
-</ul>
-<p><strong>Proxy agent not showing in thrum team:</strong></p>
-<ul>
-<li>Restart the daemon after adding <code>remote_agents</code> to the config.</li>
-<li>Check the daemon logs for registration errors — the agent name might conflict
-with a local agent.</li>
-</ul>
-<p><strong>Messages arriving but not routed to the right agent:</strong></p>
-<ul>
-<li>Check @mention formatting. The bridge parses <code>@bot_username</code> from the message
-text. If the bot username has special characters or differs from what&#39;s in
-your config, routing breaks.</li>
-<li>For proxy agents, verify the <code>bot</code> field matches the target bot&#39;s actual
-Telegram username (without the <code>@</code> in the config, but with it in message
-text).</li>
+<li>Verify <code>chat_id</code> in the group config is correct (should be negative).</li>
+<li>Check the daemon logs for send errors.</li>
 </ul>
 <p><strong>Group chat ID:</strong></p>
 <ul>
-<li>Telegram group IDs are negative numbers (e.g., <code>-100123456789</code>). If your
-chat ID is positive, you&#39;re probably using a user ID, not a group ID.</li>
+<li>Telegram group IDs are negative numbers (e.g., <code>-100123456789</code>). If your chat
+ID is positive, you&#39;re probably using a user ID, not a group ID.</li>
 <li>Easiest way to find it: send a message in the group, then check
 <code>thrum telegram status --json</code>.</li>
 </ul>
