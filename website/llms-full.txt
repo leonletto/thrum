@@ -1208,16 +1208,23 @@ Unknown event types are silently ignored (forward compatibility).
 
 ### Identity Resolution Chain
 
-  Priority (highest to lowest):
-    1. THRUM_NAME env var (for name -- overrides even --name CLI flag)
-    2. CLI flags: --name, --role, --module
-    3. Environment variables: THRUM_ROLE, THRUM_MODULE, THRUM_DISPLAY
-    4. Identity files in .thrum/identities/ directory
+  File selection priority (which .thrum/identities/*.json to load):
+    1. THRUM_NAME env var → load {name}.json directly
+    2. Solo-agent auto-select → only one .json file exists
+    3. PID match → match claude_pid in identity files via process-tree walk
+    4. Worktree match → filter by current worktree name
+    5. Error: cannot auto-select (set THRUM_NAME)
+
+  Field value overrides (after file is loaded):
+    CLI flags (--role, --module) > Env vars (THRUM_ROLE, THRUM_MODULE) > Identity file
+
+  PID liveness: thrum team shows [live]/[stale] per agent based on whether the
+  claude_pid process is still running (checked via OS process table).
 
 ### Identity File (.thrum/identities/{name}.json)
 
   {
-    "version": 2,
+    "version": 3,
     "repo_id": "r_7K2Q1X9M3P0B",
     "agent": {
       "kind": "agent",
@@ -1227,6 +1234,7 @@ Unknown event types are silently ignored (forward compatibility).
       "display": "Auth Implementer"
     },
     "worktree": "auth",
+    "claude_pid": 12345,
     "confirmed_by": "human:leon",
     "updated_at": "2026-02-03T18:02:10.000Z"
   }
