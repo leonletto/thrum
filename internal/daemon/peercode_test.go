@@ -62,3 +62,35 @@ func TestParseConnectionString_Roundtrip(t *testing.T) {
 		t.Errorf("roundtrip mismatch: got %q %q %d %q", name, ip, port, code)
 	}
 }
+
+func TestParseConnectionString_16CharCode(t *testing.T) {
+	longCode := "1234567890123456"
+	original := FormatConnectionString("myhost", "192.168.1.1", 9155, longCode)
+	name, ip, port, code, err := ParseConnectionString(original)
+	if err != nil {
+		t.Fatalf("ParseConnectionString with 16-char code: %v", err)
+	}
+	if name != "myhost" || ip != "192.168.1.1" || port != 9155 || code != longCode {
+		t.Errorf("16-char code roundtrip mismatch: got %q %q %d %q", name, ip, port, code)
+	}
+}
+
+func TestDetectTransport(t *testing.T) {
+	tests := []struct {
+		address string
+		want    string
+	}{
+		{"127.0.0.1:9147", "local"},
+		{"::1", "local"},
+		{"100.64.0.1:9147", "tailscale"},
+		{"100.127.255.255:9147", "tailscale"},
+		{"8.8.8.8:9147", "network"},
+		{"192.168.1.1:9147", "network"},
+	}
+	for _, tt := range tests {
+		got := DetectTransport(tt.address)
+		if got != tt.want {
+			t.Errorf("DetectTransport(%q) = %q, want %q", tt.address, got, tt.want)
+		}
+	}
+}

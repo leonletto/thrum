@@ -2028,6 +2028,7 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 
 	// thrum peer join --peercode — connect to a remote peer using a connection string
 	var peerCode string
+	var repoPath string
 	joinCmd := &cobra.Command{
 		Use:   "join [peercode]",
 		Short: "Join a remote peer using a peercode",
@@ -2075,13 +2076,19 @@ Five input methods:
 			_ = name // used by ParseConnectionString output only
 
 			address := fmt.Sprintf("%s:%d", ip, port)
+
+			// Warn if connecting via loopback without --repo-path
+			if repoPath == "" && daemon.DetectTransport(address) == "local" {
+				fmt.Fprintf(os.Stderr, "warning: connecting to loopback address; consider using --repo-path for local peers\n")
+			}
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.PeerJoin(client, address, pairCode)
+			result, err := cli.PeerJoin(client, address, pairCode, repoPath)
 			if err != nil {
 				return err
 			}
@@ -2096,6 +2103,7 @@ Five input methods:
 		},
 	}
 	joinCmd.Flags().StringVar(&peerCode, "peercode", "", "Connection string from 'thrum peer add'")
+	joinCmd.Flags().StringVar(&repoPath, "repo-path", "", "Filesystem path to the peer's repo (sets transport=local)")
 	cmd.AddCommand(joinCmd)
 
 	// thrum peer list — show all peers
@@ -5013,7 +5021,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			rpc.NewPeerWaitPairingHandler(waitFn).Handle)
 
 		// peer.join — send pairing code to remote peer
-		joinFn := func(peerAddr, code string) (peerName, peerDaemonID string, err error) {
+		joinFn := func(peerAddr, code, repoPath string) (peerName, peerDaemonID string, err error) {
 			// Lazy tsnet start for peer join (machine B may not have run peer add)
 			if startTsnetFn != nil && getTsLocalAddr() == "" {
 				if peerRegistry.LocalPort() == 0 {
@@ -5036,6 +5044,17 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			peer, err := syncManager.JoinPeer(peerAddr, code, st.DaemonID(), hostname, localAddr)
 			if err != nil {
 				return "", "", err
+			}
+			// Set role and transport on the dialer side
+			peer.Role = "dialer"
+			if repoPath != "" {
+				peer.RepoPath = repoPath
+				peer.Transport = "local"
+			} else {
+				peer.Transport = daemon.DetectTransport(peerAddr)
+			}
+			if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
+				fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
 			}
 			return peer.Name, peer.DaemonID, nil
 		}

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 )
@@ -14,6 +15,28 @@ func FormatConnectionString(name, ip string, port int, code string) string {
 // FormatPeercode creates a peercode from name, address (ip:port), and code.
 func FormatPeercode(name, address, code string) string {
 	return fmt.Sprintf("%s:%s:%s", name, address, code)
+}
+
+// DetectTransport infers the transport type from a peer address.
+// Returns "local" for loopback, "tailscale" for Tailscale CGNAT (100.64.0.0/10), or "network".
+func DetectTransport(address string) string {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		host = address
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return "network"
+	}
+	if ip.IsLoopback() {
+		return "local"
+	}
+	// Tailscale CGNAT range: 100.64.0.0/10
+	_, cgnat, _ := net.ParseCIDR("100.64.0.0/10")
+	if cgnat.Contains(ip) {
+		return "tailscale"
+	}
+	return "network"
 }
 
 // ParseConnectionString parses a peercode string into its 4 components.
