@@ -45,5 +45,5 @@ from the thrum plugin instead.
 
 To check whether the skill is installed, look for `update-context.md` in
 `.claude/commands/` (project-level) or `~/.claude/commands/` (global). Ephemeral
-session context is managed via the `/update-context` Claude Code skill.
-Durable project state is managed via `/thrum:update-project` (thrum plugin).
+session context is managed via the `/update-context` Claude Code skill. Durable
+project state is managed via `/thrum:update-project` (thrum plugin).

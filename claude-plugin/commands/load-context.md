@@ -1,5 +1,6 @@
 ---
-description: Restore saved agent work context after compaction or session restart
+description:
+  Restore saved agent work context after compaction or session restart
 ---
 
 Run `thrum prime` to restore your complete session context. Prime now includes

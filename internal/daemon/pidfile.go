@@ -171,4 +171,3 @@ func RemovePIDFile(path string) error {
 	}
 	return nil
 }
-

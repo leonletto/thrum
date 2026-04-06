@@ -212,6 +212,33 @@ Connected to daemon
 ✓ Thrum worktree setup complete
 ```
 
+### thrum setup claude-md
+
+Generate Thrum agent coordination instructions for CLAUDE.md.
+
+```bash
+thrum setup claude-md              # Print to stdout
+thrum setup claude-md --apply      # Append to CLAUDE.md (creates if missing)
+thrum setup claude-md --apply --force  # Replace existing Thrum section
+```
+
+Flags:
+
+- `--apply` — Append generated content to CLAUDE.md (with duplicate detection)
+- `--force` — Replace existing Thrum section instead of skipping (used with
+  --apply)
+
+This command generates comprehensive agent coordination instructions including:
+
+- Registration and session management
+- Message protocols
+- MCP server configuration
+- Background listener setup
+- Group management
+
+The instructions are automatically injected by `thrum prime` when agents start
+sessions, providing immediate context on how to use Thrum for coordination.
+
 ### thrum migrate
 
 Migrate an existing Thrum repository from the old layout (JSONL files tracked on
@@ -1886,6 +1913,8 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
   "updated_at": "2026-02-03T10:00:00Z"
 }
 ```
+
+---
 
 _The section below covers storage internals. You don't need it for normal use._
 

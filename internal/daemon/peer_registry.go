@@ -20,9 +20,9 @@ type PeerInfo struct {
 	Token        string    `json:"token,omitempty"`
 	PairedAt     time.Time `json:"paired_at"`
 	LastSync     time.Time `json:"last_sync"`
-	Transport    string    `json:"transport,omitempty"`    // "local", "tailscale", "network"
-	RepoPath     string    `json:"repo_path,omitempty"`    // Filesystem path for local peers
-	ProxyPrefix  string    `json:"proxy_prefix,omitempty"` // Namespace prefix for proxy agents
+	Transport    string    `json:"transport,omitempty"`     // "local", "tailscale", "network"
+	RepoPath     string    `json:"repo_path,omitempty"`     // Filesystem path for local peers
+	ProxyPrefix  string    `json:"proxy_prefix,omitempty"`  // Namespace prefix for proxy agents
 	RemoteAgents []string  `json:"remote_agents,omitempty"` // Agent names to proxy
 	Role         string    `json:"role,omitempty"`          // "listener" or "dialer"
 }

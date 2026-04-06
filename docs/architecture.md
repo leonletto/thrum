@@ -255,8 +255,8 @@ thrum context sync
 ```
 
 Context files live at `.thrum/context/{agent-name}.md` and appear in
-`thrum status` output. Use the `/thrum:update-project` skill in Claude Code for guided
-context updates.
+`thrum status` output. Use the `/thrum:update-project` skill in Claude Code for
+guided context updates.
 
 ## Storage Architecture
 
@@ -324,6 +324,8 @@ messaging tools (`send_message`, `check_messages`, `wait_for_message`,
 
 See [MCP Server](mcp-server.md) for the complete tools reference, configuration,
 and setup instructions.
+
+---
 
 ## Foundation Packages
 
