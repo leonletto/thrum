@@ -5511,6 +5511,16 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)
 	}
 
+	// Tmux session management handlers
+	tmuxHandler := rpc.NewTmuxHandler(thrumDir)
+	server.RegisterHandler("tmux.create", tmuxHandler.HandleCreate)
+	server.RegisterHandler("tmux.launch", tmuxHandler.HandleLaunch)
+	server.RegisterHandler("tmux.status", tmuxHandler.HandleStatus)
+	server.RegisterHandler("tmux.kill", tmuxHandler.HandleKill)
+	server.RegisterHandler("tmux.send", tmuxHandler.HandleSend)
+	server.RegisterHandler("tmux.capture", tmuxHandler.HandleCapture)
+	server.RegisterHandler("tmux.check-pane", tmuxHandler.HandleCheckPane)
+
 	// Auto-connect to dialer-role peers after the WS server is ready.
 	if peerManager != nil && thrumCfg.Peers.AutoConnect {
 		go func() {
