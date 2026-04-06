@@ -182,7 +182,7 @@ func registerAllHandlers(server *daemon.Server, st *state.State) {
 	server.RegisterHandler("unsubscribe", subscriptionHandler.HandleUnsubscribe)
 	server.RegisterHandler("subscriptions.list", subscriptionHandler.HandleList)
 
-	teamHandler := rpc.NewTeamHandler(st)
+	teamHandler := rpc.NewTeamHandler(st, "")
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
 	contextHandler := rpc.NewContextHandler(st)
