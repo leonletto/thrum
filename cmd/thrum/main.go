@@ -152,6 +152,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(rolesCmd())
 	rootCmd.AddCommand(purgeCmd())
 	rootCmd.AddCommand(telegramCmd())
+	rootCmd.AddCommand(tmuxCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -6693,4 +6694,167 @@ func detectGitUser() string {
 	name = strings.ToLower(name)
 	name = strings.ReplaceAll(name, " ", "-")
 	return name
+}
+
+func tmuxCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "tmux",
+		Short: "Manage tmux sessions for agents",
+	}
+
+	// create
+	createCmd := &cobra.Command{
+		Use:   "create <name>",
+		Short: "Create a tmux session for an agent",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, _ := cmd.Flags().GetString("cwd")
+			if cwd == "" {
+				return fmt.Errorf("--cwd is required")
+			}
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
+				Name: args[0], Cwd: cwd,
+			})
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Print(cli.FormatTmuxCreate(result))
+			}
+			return nil
+		},
+	}
+	createCmd.Flags().String("cwd", "", "Working directory for the session")
+	cmd.AddCommand(createCmd)
+
+	// launch
+	launchCmd := &cobra.Command{
+		Use:   "launch <name>",
+		Short: "Start an AI tool inside a tmux session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rt, _ := cmd.Flags().GetString("runtime")
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxLaunch(client, cli.TmuxLaunchOptions{
+				Name: args[0], Runtime: rt,
+			})
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Printf("Launched %s in session %s\n", result.Runtime, result.Session)
+			}
+			return nil
+		},
+	}
+	launchCmd.Flags().String("runtime", "claude", "AI tool to launch (claude, opencode, shell)")
+	cmd.AddCommand(launchCmd)
+
+	// status (primary) + list (alias)
+	statusCmd := &cobra.Command{
+		Use:     "status",
+		Aliases: []string{"list"},
+		Short:   "Show tmux-managed sessions with state",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxStatus(client)
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Print(cli.FormatTmuxStatus(result))
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(statusCmd)
+
+	// kill
+	killCmd := &cobra.Command{
+		Use:   "kill <name>",
+		Short: "Tear down a tmux session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+			if err := cli.TmuxKill(client, args[0]); err != nil {
+				return err
+			}
+			if !flagQuiet {
+				fmt.Printf("Session %s killed\n", args[0])
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(killCmd)
+
+	// send
+	sendCmd := &cobra.Command{
+		Use:   "send <name> <text>",
+		Short: "Send text into a tmux session",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+			return cli.TmuxSend(client, args[0], args[1])
+		},
+	}
+	cmd.AddCommand(sendCmd)
+
+	// capture
+	captureCmd := &cobra.Command{
+		Use:   "capture <name>",
+		Short: "Capture pane content from a tmux session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			lines, _ := cmd.Flags().GetInt("lines")
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxCapture(client, args[0], lines)
+			if err != nil {
+				return err
+			}
+			fmt.Print(result.Content)
+			return nil
+		},
+	}
+	captureCmd.Flags().Int("lines", 50, "Number of lines to capture")
+	cmd.AddCommand(captureCmd)
+
+	return cmd
 }
