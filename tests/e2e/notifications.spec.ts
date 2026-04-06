@@ -16,40 +16,30 @@
  * repos with distinct identities.
  */
 import { test, expect } from '@playwright/test';
-import { thrum, getTestRoot, getImplementerRoot, thrumIn } from './helpers/thrum-cli.js';
-import { ensureTestSessions } from './helpers/fixtures.js';
-import { spawn } from 'node:child_process';
-import * as path from 'node:path';
+import { thrum, BIN, getTestRoot, getImplementerRoot, thrumIn } from './helpers/thrum-cli';
+import { ensureTestSessions } from './helpers/fixtures';
+import { tmuxExecAsync, shellEscape, buildEnvPrefix } from './helpers/tmux-exec';
 
-const SOURCE_ROOT = path.resolve(__dirname, '../..');
-const BIN = path.join(SOURCE_ROOT, 'bin', 'thrum');
+/** Implementer agent env for thrumIn calls. */
+const implEnv: NodeJS.ProcessEnv = { THRUM_NAME: 'e2e_implementer', THRUM_ROLE: 'implementer', THRUM_MODULE: 'main' };
 
-/** Run thrum wait in background from the coordinator repo, resolves with stdout when it exits. */
+/** Coordinator agent env for wait commands. */
+const coordEnv: NodeJS.ProcessEnv = { THRUM_NAME: 'e2e_coordinator', THRUM_ROLE: 'tester', THRUM_MODULE: 'e2e' };
+
+/** Run thrum wait in background via tmux, resolves when command exits. */
 function thrumWaitBackground(
   args: string[],
   timeoutMs = 15_000,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  return new Promise((resolve) => {
-    const child = spawn(BIN, ['wait', ...args], {
-      cwd: getTestRoot(),
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
-    });
+  const prefix = buildEnvPrefix(coordEnv);
+  const escapedArgs = args.map(shellEscape).join(' ');
+  const cmd = `${prefix} ${shellEscape(BIN)} wait ${escapedArgs}`;
 
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (data) => { stdout += data.toString(); });
-    child.stderr.on('data', (data) => { stderr += data.toString(); });
-
-    const timer = setTimeout(() => {
-      child.kill('SIGTERM');
-    }, timeoutMs);
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ stdout: stdout.trim(), stderr: stderr.trim(), exitCode: code ?? 1 });
-    });
-  });
+  return tmuxExecAsync(cmd, { cwd: getTestRoot(), timeoutMs }).then(result => ({
+    stdout: result.stdout,
+    stderr: '',
+    exitCode: result.exitCode,
+  }));
 }
 
 test.describe('Notifications & Subscriptions', () => {
@@ -75,7 +65,7 @@ test.describe('Notifications & Subscriptions', () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Send from the IMPLEMENTER worktree (different agent identity)
-    thrumIn(getImplementerRoot(), ['send', 'Auth module updated for SC-34', '--scope', 'module:auth']);
+    thrumIn(getImplementerRoot(), ['send', 'Auth module updated for SC-34', '--scope', 'module:auth'], 10_000, implEnv);
 
     // Assert: wait should receive the notification (plain text outputs MESSAGES_RECEIVED)
     const result = await waitPromise;
@@ -97,7 +87,7 @@ test.describe('Notifications & Subscriptions', () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Send from implementer mentioning the coordinator
-    thrumIn(getImplementerRoot(), ['send', 'Hey coordinator, SC-35 test', '--mention', '@e2e_coordinator']);
+    thrumIn(getImplementerRoot(), ['send', 'Hey coordinator, SC-35 test', '--mention', '@e2e_coordinator'], 10_000, implEnv);
 
     const result = await waitPromise;
     expect(result.exitCode).toBe(0);
@@ -122,7 +112,7 @@ test.describe('Notifications & Subscriptions', () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Send from implementer
-    thrumIn(getImplementerRoot(), ['send', 'Firehose test SC-36']);
+    thrumIn(getImplementerRoot(), ['send', 'Firehose test SC-36'], 10_000, implEnv);
 
     const result = await waitPromise;
     expect(result.exitCode).toBe(0);

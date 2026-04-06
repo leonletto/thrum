@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
+
+	"github.com/leonletto/thrum/internal/process"
 )
 
 // PIDInfo contains daemon process metadata stored in the PID file.
@@ -86,7 +87,7 @@ func CheckPIDFileJSON(path string) (bool, PIDInfo, error) {
 	}
 
 	// Check if process is running
-	running := isProcessRunning(info.PID)
+	running := process.IsRunning(info.PID)
 
 	return running, info, nil
 }
@@ -158,7 +159,7 @@ func CheckPIDFile(path string) (bool, int, error) {
 	}
 
 	// Check if process is running
-	running := isProcessRunning(pid)
+	running := process.IsRunning(pid)
 
 	return running, pid, nil
 }
@@ -169,39 +170,4 @@ func RemovePIDFile(path string) error {
 		return fmt.Errorf("failed to remove PID file: %w", err)
 	}
 	return nil
-}
-
-// isProcessRunning checks if a process with the given PID is running.
-func isProcessRunning(pid int) bool {
-	// Send signal 0 to check if process exists
-	// This doesn't actually send a signal, just checks permissions and existence
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		// On Unix, FindProcess always succeeds
-		// On Windows, it may fail if process doesn't exist
-		return false
-	}
-
-	// Try to send signal 0 (null signal) to check if process exists
-	err = process.Signal(syscall.Signal(0))
-	if err == nil {
-		// Process exists and we have permission to signal it
-		return true
-	}
-
-	// Check error type
-	if err == syscall.ESRCH {
-		// No such process
-		return false
-	}
-
-	if err == syscall.EPERM {
-		// Process exists but we don't have permission
-		// This means process is running
-		return true
-	}
-
-	// Other error (process finished, etc.)
-	// Assume process is not running
-	return false
 }

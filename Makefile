@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go install deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks
+.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go install deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks sync-skills
 
 # Tool versions - pinned for supply chain security
 GOLANGCI_LINT_VERSION := v1.64.5
@@ -10,7 +10,7 @@ GOVULNCHECK_VERSION := latest
 BINARY_NAME := thrum
 BUILD_DIR := bin
 INSTALL_DIR := $(HOME)/.local/bin
-VERSION := 0.6.3
+VERSION := 0.7.0
 
 # Default target
 help:
@@ -288,6 +288,17 @@ ci: fmt-all lint-all vet test security build
 pre-commit: quick-check
 
 pre-push: ci
+
+# Sync toolkit assets to plugin directories
+sync-skills:
+	@echo "Syncing toolkit assets to plugins..."
+	@cp toolkit/skills/update-project.md claude-plugin/commands/update-project.md
+	@test -d codex-plugin/skills && cp toolkit/skills/update-project.md codex-plugin/skills/update-project.md || true
+	@test -f toolkit/resources/LISTENER_PATTERN.md && cp toolkit/resources/LISTENER_PATTERN.md claude-plugin/skills/thrum/resources/LISTENER_PATTERN.md || true
+	@test -d codex-plugin/skills/thrum-core/references && test -f toolkit/resources/LISTENER_PATTERN.md && cp toolkit/resources/LISTENER_PATTERN.md codex-plugin/skills/thrum-core/references/LISTENER_PATTERN.md || true
+	@test -d internal/cli/skill/thrum/references && test -f toolkit/resources/LISTENER_PATTERN.md && cp toolkit/resources/LISTENER_PATTERN.md internal/cli/skill/thrum/references/LISTENER_PATTERN.md || true
+	@cp toolkit/agents/message-listener.md claude-plugin/agents/message-listener.md
+	@echo "Assets synced."
 
 # Setup git hook chaining
 setup-hooks:

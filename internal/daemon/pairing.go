@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -57,7 +58,7 @@ func NewPairingManager(peers *PeerRegistry, daemonID, name string) *PairingManag
 	}
 }
 
-// StartPairing begins a new pairing session. Returns the 4-digit code for display.
+// StartPairing begins a new pairing session. Returns the 16-digit code for display.
 // Returns an error if a pairing session is already active.
 func (pm *PairingManager) StartPairing(timeout time.Duration) (string, error) {
 	pm.mu.Lock()
@@ -73,7 +74,7 @@ func (pm *PairingManager) StartPairing(timeout time.Duration) (string, error) {
 		return "", fmt.Errorf("pairing already in progress (code generated %s ago)", time.Since(pm.session.CreatedAt).Truncate(time.Second))
 	}
 
-	code, err := generatePairingCode()
+	code, err := generatePairingCode(16)
 	if err != nil {
 		return "", fmt.Errorf("generate pairing code: %w", err)
 	}
@@ -161,12 +162,13 @@ func (pm *PairingManager) HandlePairRequest(code, peerDaemonID, peerName, peerAd
 		return "", "", "", fmt.Errorf("already paired with %s", existing.Name)
 	}
 
-	// Store the peer
+	// Store the peer (listener side — we accepted the incoming pair request)
 	err = pm.peers.AddPeer(&PeerInfo{
 		Name:     peerName,
 		Address:  peerAddress,
 		DaemonID: peerDaemonID,
 		Token:    pm.session.Token,
+		Role:     "listener",
 	})
 	if err != nil {
 		return "", "", "", fmt.Errorf("store peer: %w", err)
@@ -222,15 +224,22 @@ func (pm *PairingManager) HasActiveSession() bool {
 	return true
 }
 
-// generatePairingCode generates a random 4-digit numeric code.
-func generatePairingCode() (string, error) {
-	b := make([]byte, 2)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
+// generatePairingCode generates a random numeric code of the given length (4-16 digits).
+func generatePairingCode(length int) (string, error) {
+	if length < 4 || length > 16 {
+		return "", fmt.Errorf("pairing code length must be 4-16, got %d", length)
 	}
-	// Convert to 4-digit code (0000-9999)
-	n := int(b[0])<<8 | int(b[1])
-	return fmt.Sprintf("%04d", n%10000), nil
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate pairing code: %w", err)
+	}
+	n := binary.BigEndian.Uint64(b)
+	mod := uint64(1)
+	for i := 0; i < length; i++ {
+		mod *= 10
+	}
+	n = n % mod
+	return fmt.Sprintf("%0*d", length, n), nil
 }
 
 // generatePairingToken generates a random 32-byte hex-encoded token.

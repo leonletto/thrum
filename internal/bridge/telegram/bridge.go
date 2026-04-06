@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -194,7 +195,7 @@ func (b *Bridge) run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("ws connect: %w", err)
 	}
-	defer ws.Close()
+	defer func() { _ = ws.Close() }()
 
 	// 2. Register as user
 	userID := "user:" + b.cfg.UserID
@@ -229,7 +230,10 @@ func (b *Bridge) run(ctx context.Context) error {
 		})
 	}()
 
-	// 4. Initialize Telegram bot (token flows through, not stored on Bridge)
+	// 4. Set up mirrored groups and proxy agents
+	b.ensureGroups(ctx, ws, userID)
+
+	// 5. Initialize Telegram bot (token flows through, not stored on Bridge)
 	bot, err := NewBot(b.cfg.Token, b.cfg)
 	if err != nil {
 		return fmt.Errorf("telegram bot: %w", err)
@@ -238,12 +242,12 @@ func (b *Bridge) run(ctx context.Context) error {
 	// Store bot pointer for concurrent access by Pair() before marking running.
 	b.bot.Store(bot)
 
-	// 5. Create message map and relays
+	// 6. Create message map and relays
 	msgMap := NewMessageMap(10000)
-	inbound := NewInboundRelay(ws, msgMap, userID, b.cfg.Target)
-	outbound := NewOutboundRelay(ws, bot, msgMap, userID, b.cfg.ChatID)
+	inbound := NewInboundRelay(ws, msgMap, userID, b.cfg.Target, b.cfg.Groups, bot.BotUsername())
+	outbound := NewOutboundRelay(ws, bot, msgMap, userID, b.cfg.ChatID, b.cfg.Groups)
 
-	// 6. Mark running BEFORE launching goroutines so Pair() sees accurate state.
+	// 7. Mark running BEFORE launching goroutines so Pair() sees accurate state.
 	// b.bot.Store(bot) was set above — Pair() checks running first, then loads bot.
 	b.running.Store(true)
 	b.mu.Lock()
@@ -255,7 +259,7 @@ func (b *Bridge) run(ctx context.Context) error {
 		b.bot.Store(nil)
 	}()
 
-	// 7. Start sub-goroutines (each with panic recovery)
+	// 8. Start sub-goroutines (each with panic recovery)
 	go b.safeGo("bot.Poll", func() { bot.Poll(ctx) })
 	go b.safeGo("outbound.Run", func() { outbound.Run(ctx) })
 	go b.safeGo("heartbeat", func() { b.heartbeatLoop(ctx, ws, sess.SessionID) })
@@ -272,10 +276,94 @@ func (b *Bridge) run(ctx context.Context) error {
 				return nil
 			}
 			b.inboundCount.Add(1)
-			if err := inbound.relay(ctx, msg); err != nil {
+			if err := inbound.Relay(ctx, msg); err != nil {
 				b.logger.Printf("inbound relay error: %v", err)
 			}
 		}
+	}
+}
+
+// ensureGroups creates mirrored Thrum groups and registers proxy agents for
+// each configured Telegram group. It is idempotent: group.create is skipped if
+// the group already exists, and group.member.add for existing members is a no-op.
+// When b.cfg.Groups is empty this method does nothing.
+func (b *Bridge) ensureGroups(ctx context.Context, ws *WSClient, userID string) {
+	for _, grp := range b.cfg.Groups {
+		thrumGroupName := "tg:" + grp.Name
+
+		// Check if group exists via group.list
+		var listResp struct {
+			Groups []struct {
+				Name string `json:"name"`
+			} `json:"groups"`
+		}
+		listResult, _ := ws.Call(ctx, "group.list", map[string]any{})
+		_ = json.Unmarshal(listResult, &listResp)
+
+		exists := false
+		for _, g := range listResp.Groups {
+			if g.Name == thrumGroupName {
+				exists = true
+				break
+			}
+		}
+
+		// Create group if needed
+		if !exists {
+			_, _ = ws.Call(ctx, "group.create", map[string]any{
+				"name":            thrumGroupName,
+				"description":     "Mirrored Telegram group: " + grp.Name,
+				"caller_agent_id": userID,
+			})
+		}
+
+		// Add bridge user as member
+		_, _ = ws.Call(ctx, "group.member.add", map[string]any{
+			"group":           thrumGroupName,
+			"member_type":     "agent",
+			"member_value":    userID,
+			"caller_agent_id": userID,
+		})
+
+		// Add target agent as member
+		if b.cfg.Target != "" {
+			target := strings.TrimPrefix(b.cfg.Target, "@")
+			_, _ = ws.Call(ctx, "group.member.add", map[string]any{
+				"group":           thrumGroupName,
+				"member_type":     "agent",
+				"member_value":    target,
+				"caller_agent_id": userID,
+			})
+		}
+
+		// Register proxy agents — sequential: register must complete before
+		// group.member.add, because HandleMemberAdd validates agent exists.
+		for _, ra := range grp.RemoteAgents {
+			proxyName := ra.Prefix + ":" + ra.Name
+			_, regErr := ws.Call(ctx, "agent.register", map[string]any{
+				"name":    proxyName,
+				"role":    "remote",
+				"module":  ra.Prefix,
+				"display": ra.Prefix + " " + ra.Name + " (via Telegram)",
+			})
+
+			if regErr != nil {
+				b.logger.Printf("group %s: failed to register proxy agent %s: %v", grp.Name, proxyName, regErr)
+			} else {
+				_, addErr := ws.Call(ctx, "group.member.add", map[string]any{
+					"group":           thrumGroupName,
+					"member_type":     "agent",
+					"member_value":    proxyName,
+					"caller_agent_id": userID,
+				})
+				if addErr != nil {
+					b.logger.Printf("group %s: failed to add proxy agent %s to group: %v", grp.Name, proxyName, addErr)
+				}
+			}
+		}
+
+		b.logger.Printf("group %s: mirrored as %s (%d remote agents)",
+			grp.Name, thrumGroupName, len(grp.RemoteAgents))
 	}
 }
 

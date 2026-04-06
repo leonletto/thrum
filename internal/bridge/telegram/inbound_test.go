@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/leonletto/thrum/internal/config"
 )
 
 // mockRPCServer creates a WebSocket server that handles message.send requests
@@ -75,7 +76,7 @@ func TestInboundRelayNewMessage(t *testing.T) {
 	defer cleanup()
 
 	msgMap := NewMessageMap(100)
-	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main")
+	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main", nil, "")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -141,7 +142,7 @@ func TestInboundRelayReplyMessage(t *testing.T) {
 	// Pre-populate map: Telegram msg 10 → Thrum msg_original
 	msgMap.Store(12345, 10, "msg_original")
 
-	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main")
+	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main", nil, "")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -180,7 +181,7 @@ func TestInboundRelayUnknownReply(t *testing.T) {
 	defer cleanup()
 
 	msgMap := NewMessageMap(100)
-	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main")
+	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main", nil, "")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -203,5 +204,218 @@ func TestInboundRelayUnknownReply(t *testing.T) {
 	params := captured["params"].(map[string]any)
 	if _, exists := params["reply_to"]; exists {
 		t.Error("expected no reply_to for unknown reply target")
+	}
+}
+
+func TestInboundRelay_SenderIdentity(t *testing.T) {
+	msg := InboundMessage{Username: "leon", IsBotSender: false}
+	id := senderIdentity(msg)
+	if id != "user:leon" {
+		t.Errorf("got %q, want user:leon", id)
+	}
+
+	msg = InboundMessage{BotUsername: "falcon_bot", IsBotSender: true}
+	id = senderIdentity(msg)
+	if id != "bot:falcon_bot" {
+		t.Errorf("got %q, want bot:falcon_bot", id)
+	}
+}
+
+func TestInboundRelay_GroupMessage(t *testing.T) {
+	var captured map[string]any
+
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		captured = req
+		return map[string]any{
+			"result": map[string]any{
+				"message_id": "group_msg_001",
+			},
+		}
+	})
+	defer cleanup()
+
+	groups := []config.TelegramGroup{
+		{ChatID: -100123, Name: "dev-team"},
+	}
+	msgMap := NewMessageMap(100)
+	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main", groups, "mybot")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	msg := InboundMessage{
+		Text:        "hello group",
+		ChatID:      -100123,
+		GroupChatID: -100123,
+		MessageID:   10,
+		Username:    "alice",
+		UserID:      555,
+	}
+
+	if err := relay.Relay(ctx, msg); err != nil {
+		t.Fatalf("Relay: %v", err)
+	}
+
+	params := captured["params"].(map[string]any)
+	if params["group"] != "tg:dev-team" {
+		t.Errorf("group = %q, want tg:dev-team", params["group"])
+	}
+	if params["content"] != "hello group" {
+		t.Errorf("content = %q, want 'hello group'", params["content"])
+	}
+	if params["caller_agent_id"] != "user:alice" {
+		t.Errorf("caller_agent_id = %q, want user:alice", params["caller_agent_id"])
+	}
+
+	// Verify message ID was stored in map
+	thrumID, ok := msgMap.ThrumID(-100123, 10)
+	if !ok || thrumID != "group_msg_001" {
+		t.Errorf("ThrumID = %q, %v; want group_msg_001, true", thrumID, ok)
+	}
+}
+
+func TestInboundRelay_GroupMentionOurBot(t *testing.T) {
+	var captured map[string]any
+
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		captured = req
+		return map[string]any{"result": map[string]any{"message_id": "x"}}
+	})
+	defer cleanup()
+
+	groups := []config.TelegramGroup{{ChatID: -999, Name: "test-group"}}
+	msgMap := NewMessageMap(100)
+	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main", groups, "mybot")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	msg := InboundMessage{
+		Text:        "@mybot do the thing",
+		ChatID:      -999,
+		GroupChatID: -999,
+		MessageID:   20,
+		Username:    "bob",
+		UserID:      777,
+	}
+
+	if err := relay.Relay(ctx, msg); err != nil {
+		t.Fatalf("Relay: %v", err)
+	}
+
+	params := captured["params"].(map[string]any)
+	// @mybot mention should be stripped from content
+	if params["content"] != "do the thing" {
+		t.Errorf("content = %q, want 'do the thing'", params["content"])
+	}
+}
+
+func TestInboundRelay_GroupMentionOtherBot_Ignored(t *testing.T) {
+	called := false
+
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		called = true
+		return map[string]any{"result": map[string]any{"message_id": "x"}}
+	})
+	defer cleanup()
+
+	groups := []config.TelegramGroup{{ChatID: -999, Name: "test-group"}}
+	msgMap := NewMessageMap(100)
+	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main", groups, "mybot")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	msg := InboundMessage{
+		Text:        "@otherbot do something",
+		ChatID:      -999,
+		GroupChatID: -999,
+		MessageID:   30,
+		Username:    "bob",
+		UserID:      777,
+	}
+
+	if err := relay.Relay(ctx, msg); err != nil {
+		t.Fatalf("Relay: %v", err)
+	}
+
+	if called {
+		t.Error("expected RPC to NOT be called for messages mentioning another bot")
+	}
+}
+
+func TestInboundRelay_GroupUnknownChatID_Ignored(t *testing.T) {
+	called := false
+
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		called = true
+		return map[string]any{"result": map[string]any{"message_id": "x"}}
+	})
+	defer cleanup()
+
+	groups := []config.TelegramGroup{{ChatID: -999, Name: "test-group"}}
+	msgMap := NewMessageMap(100)
+	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main", groups, "mybot")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	msg := InboundMessage{
+		Text:        "hello from unconfigured group",
+		ChatID:      -8888,
+		GroupChatID: -8888,
+		MessageID:   40,
+		Username:    "carol",
+		UserID:      888,
+	}
+
+	if err := relay.Relay(ctx, msg); err != nil {
+		t.Fatalf("Relay: %v", err)
+	}
+
+	if called {
+		t.Error("expected RPC to NOT be called for unconfigured group chat ID")
+	}
+}
+
+func TestInboundRelay_DMStillRoutesThroughRelayMethod(t *testing.T) {
+	var captured map[string]any
+
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		captured = req
+		return map[string]any{"result": map[string]any{"message_id": "dm_msg_001"}}
+	})
+	defer cleanup()
+
+	groups := []config.TelegramGroup{{ChatID: -999, Name: "test-group"}}
+	msgMap := NewMessageMap(100)
+	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main", groups, "mybot")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// GroupChatID == 0 means DM
+	msg := InboundMessage{
+		Text:        "direct message",
+		ChatID:      12345,
+		GroupChatID: 0,
+		MessageID:   50,
+		Username:    "alice",
+		UserID:      555,
+	}
+
+	if err := relay.Relay(ctx, msg); err != nil {
+		t.Fatalf("Relay: %v", err)
+	}
+
+	params := captured["params"].(map[string]any)
+	// DM path: uses r.target as mention
+	mentions := params["mentions"].([]any)
+	if len(mentions) != 1 || mentions[0] != "@coordinator_main" {
+		t.Errorf("DM path: mentions = %v, want [@coordinator_main]", mentions)
+	}
+	// DM path: no "group" field
+	if _, exists := params["group"]; exists {
+		t.Error("DM path: unexpected 'group' field in params")
 	}
 }

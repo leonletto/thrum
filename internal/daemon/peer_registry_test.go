@@ -329,6 +329,145 @@ func TestPeerRegistry_DaemonIDPersists(t *testing.T) {
 	}
 }
 
+func TestPeerInfo_NewFields_Persist(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "peers.json")
+
+	reg, err := NewPeerRegistry(path)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+
+	info := &PeerInfo{
+		DaemonID:     "d_newfields",
+		Name:         "newfields-peer",
+		Address:      "peer.example.com:9100",
+		Transport:    "tailscale",
+		RepoPath:     "/home/user/project",
+		ProxyPrefix:  "remote.",
+		RemoteAgents: []string{"agent-a", "agent-b"},
+		Role:         "listener",
+	}
+	if err := reg.AddPeer(info); err != nil {
+		t.Fatalf("AddPeer: %v", err)
+	}
+
+	// Reload from disk
+	reg2, err := NewPeerRegistry(path)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry reload: %v", err)
+	}
+
+	got := reg2.GetPeer("d_newfields")
+	if got == nil {
+		t.Fatal("peer not found after reload")
+	}
+	if got.Transport != "tailscale" {
+		t.Errorf("Transport = %q, want %q", got.Transport, "tailscale")
+	}
+	if got.RepoPath != "/home/user/project" {
+		t.Errorf("RepoPath = %q, want %q", got.RepoPath, "/home/user/project")
+	}
+	if got.ProxyPrefix != "remote." {
+		t.Errorf("ProxyPrefix = %q, want %q", got.ProxyPrefix, "remote.")
+	}
+	if len(got.RemoteAgents) != 2 || got.RemoteAgents[0] != "agent-a" || got.RemoteAgents[1] != "agent-b" {
+		t.Errorf("RemoteAgents = %v, want [agent-a agent-b]", got.RemoteAgents)
+	}
+	if got.Role != "listener" {
+		t.Errorf("Role = %q, want %q", got.Role, "listener")
+	}
+}
+
+func TestAddRemoteAgent(t *testing.T) {
+	dir := t.TempDir()
+	reg, err := NewPeerRegistry(filepath.Join(dir, "peers.json"))
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+
+	if err := reg.AddPeer(&PeerInfo{DaemonID: "d_ra", Name: "ra-peer", Address: "ra:9100"}); err != nil {
+		t.Fatalf("AddPeer: %v", err)
+	}
+
+	// Add first agent
+	if err := reg.AddRemoteAgent("ra-peer", "alpha"); err != nil {
+		t.Fatalf("AddRemoteAgent alpha: %v", err)
+	}
+	got := reg.FindPeerByName("ra-peer")
+	if len(got.RemoteAgents) != 1 || got.RemoteAgents[0] != "alpha" {
+		t.Errorf("RemoteAgents = %v, want [alpha]", got.RemoteAgents)
+	}
+
+	// Add second agent
+	if err := reg.AddRemoteAgent("ra-peer", "beta"); err != nil {
+		t.Fatalf("AddRemoteAgent beta: %v", err)
+	}
+	got = reg.FindPeerByName("ra-peer")
+	if len(got.RemoteAgents) != 2 {
+		t.Errorf("RemoteAgents len = %d, want 2", len(got.RemoteAgents))
+	}
+
+	// Idempotent: add alpha again — should still be 2 agents
+	if err := reg.AddRemoteAgent("ra-peer", "alpha"); err != nil {
+		t.Fatalf("AddRemoteAgent alpha (dup): %v", err)
+	}
+	got = reg.FindPeerByName("ra-peer")
+	if len(got.RemoteAgents) != 2 {
+		t.Errorf("after dup add, RemoteAgents len = %d, want 2", len(got.RemoteAgents))
+	}
+
+	// Error on unknown peer
+	if err := reg.AddRemoteAgent("no-such-peer", "gamma"); err == nil {
+		t.Error("expected error for unknown peer")
+	}
+}
+
+func TestRemoveRemoteAgent(t *testing.T) {
+	dir := t.TempDir()
+	reg, err := NewPeerRegistry(filepath.Join(dir, "peers.json"))
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+
+	if err := reg.AddPeer(&PeerInfo{
+		DaemonID:     "d_rr",
+		Name:         "rr-peer",
+		Address:      "rr:9100",
+		RemoteAgents: []string{"alpha", "beta", "gamma"},
+	}); err != nil {
+		t.Fatalf("AddPeer: %v", err)
+	}
+
+	// Remove middle agent
+	if err := reg.RemoveRemoteAgent("rr-peer", "beta"); err != nil {
+		t.Fatalf("RemoveRemoteAgent beta: %v", err)
+	}
+	got := reg.FindPeerByName("rr-peer")
+	if len(got.RemoteAgents) != 2 {
+		t.Errorf("RemoteAgents len = %d, want 2 after remove", len(got.RemoteAgents))
+	}
+	for _, a := range got.RemoteAgents {
+		if a == "beta" {
+			t.Error("beta should have been removed")
+		}
+	}
+
+	// Remove non-existent agent — should be a no-op
+	if err := reg.RemoveRemoteAgent("rr-peer", "delta"); err != nil {
+		t.Fatalf("RemoveRemoteAgent delta (no-op): %v", err)
+	}
+	got = reg.FindPeerByName("rr-peer")
+	if len(got.RemoteAgents) != 2 {
+		t.Errorf("RemoteAgents len = %d, want 2 after no-op remove", len(got.RemoteAgents))
+	}
+
+	// Error on unknown peer
+	if err := reg.RemoveRemoteAgent("no-such-peer", "alpha"); err == nil {
+		t.Error("expected error for unknown peer")
+	}
+}
+
 func TestPeerInfo_Addr(t *testing.T) {
 	// Addr() now just returns the Address field
 	p := &PeerInfo{Name: "alice", Address: "alice.tailnet.ts.net:9100"}

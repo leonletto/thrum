@@ -311,26 +311,37 @@ func TestDefaultPreambleContent(t *testing.T) {
 		t.Fatal("DefaultPreamble should not be empty")
 	}
 	s := string(content)
+
+	// Mode-independent content MUST be present
 	for _, keyword := range []string{
-		"thrum inbox", "thrum send", "thrum reply", "thrum status",
-		"thrum team", "thrum context save",
-		"NEVER the role",
-		"thrum message read --all",
-		"Background Message Listener",
-		"message-listener",
-		"thrum-startup.sh --listener-heartbeat",
+		"thrum context",
+		"thrum prime",
 		".thrum/strategies/sub-agent-strategy.md",
 		".thrum/strategies/thrum-registration.md",
 		".thrum/strategies/resume-after-context-loss.md",
 		"Operating Principles",
-		"Startup Protocol",
 		"Anti-Patterns",
-		"Deaf Agent",
-		"Silent Agent",
 		"Context Hog",
 	} {
 		if !strings.Contains(s, keyword) {
-			t.Errorf("DefaultPreamble missing keyword %q", keyword)
+			t.Errorf("DefaultPreamble missing mode-independent keyword %q", keyword)
+		}
+	}
+
+	// Messaging/listener content MUST be absent (moved to prime section 5)
+	for _, keyword := range []string{
+		"LISTENER RULE",
+		"thrum inbox",
+		"thrum send",
+		"CronCreate",
+		"Deaf Agent",
+		"Silent Agent",
+		"Background Message Listener",
+		"message-listener",
+		"Startup Protocol",
+	} {
+		if strings.Contains(s, keyword) {
+			t.Errorf("DefaultPreamble should not contain messaging keyword %q", keyword)
 		}
 	}
 }
@@ -558,8 +569,8 @@ func TestRoleAwarePreamble(t *testing.T) {
 			if !strings.Contains(s, "Operating Principles") {
 				t.Errorf("RoleAwarePreamble(%q): missing base preamble content", tc.role)
 			}
-			if !strings.Contains(s, "thrum inbox") {
-				t.Errorf("RoleAwarePreamble(%q): missing command reference", tc.role)
+			if !strings.Contains(s, "thrum prime") {
+				t.Errorf("RoleAwarePreamble(%q): missing context command reference", tc.role)
 			}
 		})
 	}
@@ -584,6 +595,96 @@ func TestRoleAwarePreambleUnknownRole(t *testing.T) {
 	empty := RoleAwarePreamble("")
 	if string(empty) != string(def) {
 		t.Errorf("RoleAwarePreamble(\"\"): expected DefaultPreamble(), got different content")
+	}
+}
+
+func TestGenerateProjectState(t *testing.T) {
+	opts := &ProjectStateOpts{
+		RepoName: "test-project",
+		Language: "Go",
+		Version:  "v1.2.3",
+		Branch:   "main",
+	}
+	content := GenerateProjectState(opts)
+	s := string(content)
+	if !strings.Contains(s, "# Project State — test-project") {
+		t.Error("missing header")
+	}
+	if !strings.Contains(s, "**Codebase:** Go") {
+		t.Error("missing language")
+	}
+	if !strings.Contains(s, "**Version:** v1.2.3") {
+		t.Error("missing version")
+	}
+	if !strings.Contains(s, "## Recent Sessions") {
+		t.Error("missing Recent Sessions section")
+	}
+	if !strings.Contains(s, "## Key Architecture Files") {
+		t.Error("missing Key Architecture Files section")
+	}
+}
+
+func TestGenerateProjectStateMinimal(t *testing.T) {
+	opts := &ProjectStateOpts{
+		RepoName: "bare-repo",
+		Branch:   "develop",
+	}
+	content := GenerateProjectState(opts)
+	s := string(content)
+	if !strings.Contains(s, "# Project State — bare-repo") {
+		t.Error("missing header")
+	}
+	if !strings.Contains(s, "**Branch:** develop") {
+		t.Error("missing branch")
+	}
+	// Blank codebase/version lines should still be present
+	if !strings.Contains(s, "**Codebase:**") {
+		t.Error("missing codebase line")
+	}
+	if !strings.Contains(s, "**Version:**") {
+		t.Error("missing version line")
+	}
+}
+
+func TestGenerateProjectStateWithBeads(t *testing.T) {
+	opts := &ProjectStateOpts{
+		RepoName: "thrum",
+		Language: "Go + Node.js",
+		Version:  "v0.6.3",
+		Branch:   "main",
+		Beads:    "32 open, 245 closed",
+	}
+	content := GenerateProjectState(opts)
+	s := string(content)
+	if !strings.Contains(s, "**Beads:** 32 open, 245 closed") {
+		t.Error("missing beads stats")
+	}
+}
+
+func TestDetectLanguage(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0o600)
+	lang := DetectLanguage(dir)
+	if lang != "Go" {
+		t.Errorf("expected Go, got %q", lang)
+	}
+}
+
+func TestDetectLanguageMultiple(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0o600)
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0o600)
+	lang := DetectLanguage(dir)
+	if lang != "Go + Node.js" {
+		t.Errorf("expected 'Go + Node.js', got %q", lang)
+	}
+}
+
+func TestDetectLanguageNone(t *testing.T) {
+	dir := t.TempDir()
+	lang := DetectLanguage(dir)
+	if lang != "" {
+		t.Errorf("expected empty string, got %q", lang)
 	}
 }
 

@@ -4,7 +4,7 @@ description: >
   Multi-agent coordination via messaging, groups, and shared context. Use when
   agents need to communicate, delegate work, or coordinate across worktrees.
 allowed-tools: "Bash(thrum:*)"
-version: "0.6.3"
+version: "0.7.0"
 author: "Leon Letto <https://github.com/leonletto>"
 license: "MIT"
 ---
@@ -71,7 +71,7 @@ thrum context prime                      Same as thrum prime
 thrum context show                       Show saved work context
 thrum context save --file <path>         Save context from file
 thrum overview                           Combined status + team + inbox
-/thrum:update-context                    Guided context save (narrative + state)
+/thrum:update-project                    Guided project state update (narrative + state)
 /thrum:load-context                      Restore work context after compaction
 ```
 

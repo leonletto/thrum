@@ -1257,7 +1257,7 @@ $ echo "Working on auth module" | thrum context save
 ✓ Context saved for furiosa (24 bytes)
 ```
 
-**Agent safety note:** Agents should use the `/thrum:update-context` skill
+**Agent safety note:** Agents should use the `/thrum:update-project` skill
 instead of running `thrum context save` directly. The skill composes a
 structured context (decisions, next steps, work-in-progress) before saving,
 whereas running the command manually with arbitrary input can overwrite

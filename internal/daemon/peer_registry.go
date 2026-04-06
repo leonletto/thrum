@@ -14,12 +14,17 @@ import (
 
 // PeerInfo represents a paired sync peer.
 type PeerInfo struct {
-	Name     string    `json:"name"`
-	Address  string    `json:"address"`
-	DaemonID string    `json:"daemon_id"`
-	Token    string    `json:"token,omitempty"`
-	PairedAt time.Time `json:"paired_at"`
-	LastSync time.Time `json:"last_sync"`
+	Name         string    `json:"name"`
+	Address      string    `json:"address"`
+	DaemonID     string    `json:"daemon_id"`
+	Token        string    `json:"token,omitempty"`
+	PairedAt     time.Time `json:"paired_at"`
+	LastSync     time.Time `json:"last_sync"`
+	Transport    string    `json:"transport,omitempty"`     // "local", "tailscale", "network"
+	RepoPath     string    `json:"repo_path,omitempty"`     // Filesystem path for local peers
+	ProxyPrefix  string    `json:"proxy_prefix,omitempty"`  // Namespace prefix for proxy agents
+	RemoteAgents []string  `json:"remote_agents,omitempty"` // Agent names to proxy
+	Role         string    `json:"role,omitempty"`          // "listener" or "dialer"
 }
 
 // Addr returns the network address for connecting to this peer.
@@ -226,6 +231,53 @@ func (r *PeerRegistry) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.peers)
+}
+
+// findByNameLocked returns the peer with the given name, or nil if not found.
+// Caller must hold mu (read or write lock).
+func (r *PeerRegistry) findByNameLocked(name string) *PeerInfo {
+	for _, p := range r.peers {
+		if p.Name == name {
+			return p
+		}
+	}
+	return nil
+}
+
+// AddRemoteAgent appends agentName to the named peer's RemoteAgents list.
+// Idempotent — adding the same agent twice is a no-op.
+func (r *PeerRegistry) AddRemoteAgent(peerName, agentName string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	peer := r.findByNameLocked(peerName)
+	if peer == nil {
+		return fmt.Errorf("peer not found: %s", peerName)
+	}
+	for _, a := range peer.RemoteAgents {
+		if a == agentName {
+			return nil
+		}
+	}
+	peer.RemoteAgents = append(peer.RemoteAgents, agentName)
+	return r.saveLocked()
+}
+
+// RemoveRemoteAgent removes agentName from the named peer's RemoteAgents list.
+func (r *PeerRegistry) RemoveRemoteAgent(peerName, agentName string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	peer := r.findByNameLocked(peerName)
+	if peer == nil {
+		return fmt.Errorf("peer not found: %s", peerName)
+	}
+	filtered := peer.RemoteAgents[:0]
+	for _, a := range peer.RemoteAgents {
+		if a != agentName {
+			filtered = append(filtered, a)
+		}
+	}
+	peer.RemoteAgents = filtered
+	return r.saveLocked()
 }
 
 // load reads the peers.json file, auto-detecting old array or new object format.

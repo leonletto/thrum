@@ -114,7 +114,7 @@ All commands live under the `/thrum:` namespace.
 | `/thrum:group`          | Create, manage, and message agent groups                     |
 | `/thrum:overview`       | Combined status + team + inbox view                          |
 | `/thrum:prime`          | Load full session context (identity, team, inbox, git)       |
-| `/thrum:update-context` | Guided workflow to save session narrative + state            |
+| `/thrum:update-project` | Guided workflow to update durable project state              |
 
 ### Common workflows
 

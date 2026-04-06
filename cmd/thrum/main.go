@@ -20,6 +20,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/leonletto/thrum/internal/backup"
+	bridgepeer "github.com/leonletto/thrum/internal/bridge/peer"
 	telegram "github.com/leonletto/thrum/internal/bridge/telegram"
 	"github.com/leonletto/thrum/internal/cli"
 	"github.com/leonletto/thrum/internal/config"
@@ -127,6 +128,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(pingCmd())
 
 	// Configuration
+	rootCmd.AddCommand(singleAgentModeCmd())
 	rootCmd.AddCommand(configGroupCmd())
 
 	// Subcommand groups
@@ -319,11 +321,42 @@ Examples:
 					cfg = &config.ThrumConfig{}
 				}
 				cfg.Runtime.Primary = selectedRuntime
+				cfg.Daemon.SingleAgentMode = true // Default: single-agent mode
 				if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
 					return fmt.Errorf("failed to save config: %w", err)
 				}
 				if !flagQuiet {
 					fmt.Printf("✓ Runtime saved to .thrum/config.json (primary: %s)\n", selectedRuntime)
+				}
+			}
+
+			// Step 3b: Generate project_state.md if it doesn't exist
+			if !dryRun {
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+				projectStatePath := filepath.Join(thrumDir, "context", "project_state.md")
+				_ = os.MkdirAll(filepath.Dir(projectStatePath), 0750)
+				if _, err := os.Stat(projectStatePath); os.IsNotExist(err) {
+					repoName := filepath.Base(flagRepo)
+					branch, _ := exec.Command("git", "-C", flagRepo, "branch", "--show-current").Output()          // #nosec G204 -- flagRepo is validated user input
+					version, _ := exec.Command("git", "-C", flagRepo, "describe", "--tags", "--abbrev=0").Output() // #nosec G204 -- flagRepo is validated user input
+					beads := ""
+					if _, err := os.Stat(filepath.Join(flagRepo, ".beads")); err == nil {
+						if out, err := exec.Command("bd", "stats", "--short").Output(); err == nil {
+							beads = strings.TrimSpace(string(out))
+						}
+					}
+					opts := &agentcontext.ProjectStateOpts{
+						RepoName: repoName,
+						Language: agentcontext.DetectLanguage(flagRepo),
+						Version:  strings.TrimSpace(string(version)),
+						Branch:   strings.TrimSpace(string(branch)),
+						Beads:    beads,
+					}
+					content := agentcontext.GenerateProjectState(opts)
+					_ = os.WriteFile(projectStatePath, content, 0644) //#nosec G306 -- markdown file
+					if !flagQuiet {
+						fmt.Println("✓ Generated .thrum/context/project_state.md")
+					}
 				}
 			}
 
@@ -687,6 +720,59 @@ func isInteractive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd())) // #nosec G115 -- file descriptors are small non-negative integers; uintptr->int conversion cannot overflow
 }
 
+func singleAgentModeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "single-agent-mode [true|false]",
+		Short: "Enable or disable single-agent mode",
+		Long: `Toggle single-agent mode. When enabled, Thrum skips all messaging
+infrastructure (listener, inbox, stop hook checks) and focuses on
+context management features only.
+
+Examples:
+  thrum single-agent-mode true    # Enable (no listener, no messaging)
+  thrum single-agent-mode false   # Disable (full multi-agent messaging)
+  thrum single-agent-mode         # Show current mode`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			if _, err := os.Stat(thrumDir); os.IsNotExist(err) {
+				return fmt.Errorf("not in a thrum workspace (run thrum init first)")
+			}
+			cfg, err := config.LoadThrumConfig(thrumDir)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			if len(args) == 0 {
+				if cfg.Daemon.SingleAgentMode {
+					fmt.Println("single-agent mode: enabled")
+				} else {
+					fmt.Println("single-agent mode: disabled (multi-agent)")
+				}
+				fmt.Println("\nUsage: thrum single-agent-mode [true|false]")
+				return nil
+			}
+			switch strings.ToLower(args[0]) {
+			case "true", "on", "1":
+				cfg.Daemon.SingleAgentMode = true
+			case "false", "off", "0":
+				cfg.Daemon.SingleAgentMode = false
+			default:
+				return fmt.Errorf("expected true or false, got %q", args[0])
+			}
+			if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
+				return fmt.Errorf("failed to save config: %w", err)
+			}
+			if cfg.Daemon.SingleAgentMode {
+				fmt.Println("Single-agent mode enabled. Messaging infrastructure disabled.")
+			} else {
+				fmt.Println("Single-agent mode disabled. Full messaging active on next thrum prime.")
+			}
+			return nil
+		},
+	}
+	return cmd
+}
+
 func configGroupCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
@@ -812,12 +898,11 @@ Examples:
 func setupCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Set up Thrum in a worktree or generate CLAUDE.md",
+		Short: "Set up Thrum in a worktree",
 		Long: `Set up Thrum for your development environment.
 
 Subcommands:
   worktree   Set up redirect for a feature worktree (default)
-  claude-md  Generate recommended CLAUDE.md content for thrum
 
 When no subcommand is given, defaults to worktree setup for backwards compatibility.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -843,7 +928,7 @@ When no subcommand is given, defaults to worktree setup for backwards compatibil
 
 	cmd.Flags().String("main-repo", ".", "Path to the main repository (where daemon runs)")
 
-	cmd.AddCommand(setupWorktreeCmd(), setupClaudeMdCmd())
+	cmd.AddCommand(setupWorktreeCmd())
 
 	return cmd
 }
@@ -878,50 +963,6 @@ and a local .thrum/identities/ directory for per-worktree agent identities.`,
 	}
 
 	cmd.Flags().String("main-repo", ".", "Path to the main repository (where daemon runs)")
-
-	return cmd
-}
-
-func setupClaudeMdCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "claude-md",
-		Short: "Generate recommended CLAUDE.md content for thrum",
-		Long: `Generates Thrum agent coordination instructions for your CLAUDE.md.
-Prints to stdout by default. Use --apply to append to CLAUDE.md.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			apply, _ := cmd.Flags().GetBool("apply")
-			force, _ := cmd.Flags().GetBool("force")
-
-			opts := cli.ClaudeMdOptions{
-				RepoPath: flagRepo,
-				Apply:    apply,
-				Force:    force,
-			}
-
-			result, err := cli.GenerateClaudeMd(opts)
-			if err != nil {
-				return err
-			}
-
-			if result.Skipped {
-				fmt.Fprintf(os.Stderr, "Skipped: %s\n", result.SkipReason)
-				return nil
-			}
-
-			if result.Applied {
-				if !flagQuiet {
-					fmt.Fprintf(os.Stderr, "✓ Thrum section written to %s\n", result.FilePath)
-				}
-			} else {
-				fmt.Print(result.Content)
-			}
-
-			return nil
-		},
-	}
-
-	cmd.Flags().Bool("apply", false, "Append to CLAUDE.md (create if missing)")
-	cmd.Flags().Bool("force", false, "Overwrite existing Thrum section")
 
 	return cmd
 }
@@ -1740,6 +1781,24 @@ Exit codes:
 				Quiet:         flagQuiet || flagJSON,
 			}
 
+			// Resolve PID file path for spawn coordination
+			agentName, _ := cmd.Flags().GetString("agent-name")
+			if agentName == "" {
+				agentName = os.Getenv("THRUM_AGENT_ID")
+				if agentName == "" {
+					agentName = os.Getenv("THRUM_NAME")
+				}
+			}
+			if agentName != "" {
+				thrumDir, err := paths.ResolveThrumDir(flagRepo)
+				if err != nil {
+					thrumDir = filepath.Join(flagRepo, ".thrum")
+				}
+				varDir := filepath.Join(thrumDir, "var")
+				_ = os.MkdirAll(varDir, 0o750)
+				opts.PIDFilePath = filepath.Join(varDir, agentName+"-listener.pid")
+			}
+
 			if flagVerbose && !afterTime.IsZero() {
 				fmt.Fprintf(os.Stderr, "Listening for messages after %s\n", afterTime.Format(time.RFC3339))
 			}
@@ -1779,6 +1838,7 @@ Exit codes:
 	cmd.Flags().String("scope", "", "Filter by scope (format: type:value)")
 	cmd.Flags().String("mention", "", "Wait for mentions of role (format: @role)")
 	cmd.Flags().String("after", "", "Only return messages after this relative time (e.g., -30s, -5m, +60s)")
+	cmd.Flags().String("agent-name", "", "Agent name for listener PID file (enables spawn coordination)")
 
 	return cmd
 }
@@ -1969,20 +2029,26 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 
 	// thrum peer join --peercode — connect to a remote peer using a connection string
 	var peerCode string
+	var repoPath string
 	joinCmd := &cobra.Command{
 		Use:   "join [peercode]",
 		Short: "Join a remote peer using a peercode",
 		Long: `Connects to a remote peer using the peercode from 'thrum peer add'.
 
-Four input methods:
+Five input methods:
   thrum peer join name:ip:port:code              (positional argument)
   thrum peer join --peercode name:ip:port:code   (flag)
-  echo "name:ip:port:code" | thrum peer join     (piped via stdin)
+  echo "name:ip:port:code" | thrum peer join     (pipe, no flag)
+  thrum peer join --peercode -                   (pipe via stdin flag)
   thrum peer join                                 (interactive prompt)`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Resolve peercode: flag > positional arg > stdin > prompt
 			code := peerCode
+			// Treat "--peercode -" as "read from stdin" (Unix convention)
+			if code == "-" {
+				code = ""
+			}
 			if code == "" && len(args) > 0 {
 				code = strings.TrimSpace(args[0])
 			}
@@ -2011,13 +2077,19 @@ Four input methods:
 			_ = name // used by ParseConnectionString output only
 
 			address := fmt.Sprintf("%s:%d", ip, port)
+
+			// Warn if connecting via loopback without --repo-path
+			if repoPath == "" && daemon.DetectTransport(address) == "local" {
+				fmt.Fprintf(os.Stderr, "warning: connecting to loopback address; consider using --repo-path for local peers\n")
+			}
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
 
-			result, err := cli.PeerJoin(client, address, pairCode)
+			result, err := cli.PeerJoin(client, address, pairCode, repoPath)
 			if err != nil {
 				return err
 			}
@@ -2032,6 +2104,7 @@ Four input methods:
 		},
 	}
 	joinCmd.Flags().StringVar(&peerCode, "peercode", "", "Connection string from 'thrum peer add'")
+	joinCmd.Flags().StringVar(&repoPath, "repo-path", "", "Filesystem path to the peer's repo (sets transport=local)")
 	cmd.AddCommand(joinCmd)
 
 	// thrum peer list — show all peers
@@ -2105,6 +2178,33 @@ Four input methods:
 				fmt.Print(cli.FormatPeerStatus(peers))
 			}
 
+			return nil
+		},
+	})
+
+	// thrum peer configure <peer-name> <action> <agent-name> — manage proxy agents
+	cmd.AddCommand(&cobra.Command{
+		Use:   "configure <peer-name> <action> <agent-name>",
+		Short: "Configure proxy agents for a peer",
+		Long:  "Add or remove proxy agents for a peer. Actions: add-agent, remove-agent",
+		Args:  cobra.ExactArgs(3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("failed to connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			peerName, action, agentName := args[0], args[1], args[2]
+			var result any
+			if err := client.Call("peer.configure", map[string]any{
+				"peer_name":  peerName,
+				"action":     action,
+				"agent_name": agentName,
+			}, &result); err != nil {
+				return err
+			}
+			fmt.Printf("✓ %s: %s %s\n", peerName, action, agentName)
 			return nil
 		},
 	})
@@ -3409,56 +3509,26 @@ func contextCmd() *cobra.Command {
 func contextUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update agent context (delegates to /update-context skill)",
+		Short: "Update agent context (delegates to /thrum:update-project skill)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Determine search paths for the skill file
-			var searchPaths []string
-
-			// Project-level: relative to repo root (.thrum/ directory)
-			cwd, err := os.Getwd()
-			if err == nil {
-				if repoRoot, err := paths.FindThrumRoot(cwd); err == nil {
-					searchPaths = append(searchPaths, filepath.Join(repoRoot, ".claude", "commands", "update-context.md"))
-				}
-			}
-
-			// Global: ~/.claude/commands/
-			if homeDir, err := os.UserHomeDir(); err == nil {
-				searchPaths = append(searchPaths, filepath.Join(homeDir, ".claude", "commands", "update-context.md"))
-			}
-
-			for _, p := range searchPaths {
-				if _, err := os.Stat(p); err == nil {
-					fmt.Printf("Context update skill found at %s\n", p)
-					fmt.Println("Run /update-context in Claude Code to update your agent context.")
-					return nil
-				}
-			}
-
-			// Check if the thrum plugin is installed (provides /thrum:update-context)
+			// Check if the thrum plugin is installed (provides /thrum:update-project)
 			if homeDir, err := os.UserHomeDir(); err == nil {
 				pluginPath := filepath.Join(homeDir, ".claude", "plugins", "cache", "thrum-marketplace", "thrum")
-				if matches, _ := filepath.Glob(pluginPath + "/*/commands/update-context.md"); len(matches) > 0 {
-					fmt.Println("The thrum plugin provides /thrum:update-context.")
-					fmt.Println("Run /thrum:update-context in Claude Code to update your agent context.")
+				if matches, _ := filepath.Glob(pluginPath + "/*/commands/update-project.md"); len(matches) > 0 {
+					fmt.Println("The thrum plugin provides /thrum:update-project.")
+					fmt.Println("Run /thrum:update-project in Claude Code to update your agent context.")
 					return nil
 				}
 			}
 
-			// Not found — print installation instructions
-			fmt.Println("The /update-context skill is not installed.")
+			// Not found — print instructions
+			fmt.Println("The thrum Claude Code plugin is not installed.")
 			fmt.Println()
-			fmt.Println("If the thrum Claude Code plugin is installed, use /thrum:update-context instead.")
+			fmt.Println("Install the thrum plugin to get /thrum:update-project for guided context updates.")
 			fmt.Println()
-			fmt.Println("Otherwise, install the standalone skill from the thrum toolkit:")
+			fmt.Println("Alternatively, use thrum context save directly:")
 			fmt.Println()
-			fmt.Println("  # Project-level (this repo only)")
-			fmt.Println("  mkdir -p .claude/commands")
-			fmt.Println("  cp toolkit/commands/update-context.md .claude/commands/")
-			fmt.Println()
-			fmt.Println("  # Global (all projects)")
-			fmt.Println("  mkdir -p ~/.claude/commands")
-			fmt.Println("  cp toolkit/commands/update-context.md ~/.claude/commands/")
+			fmt.Println("  echo '$CONTEXT' | thrum context save")
 			return nil
 		},
 	}
@@ -3532,6 +3602,8 @@ func contextShowCmd() *cobra.Command {
 	var flagAgent string
 	var flagRaw bool
 	var flagNoPreamble bool
+	var flagProject bool
+	var flagSession bool
 
 	cmd := &cobra.Command{
 		Use:     "show",
@@ -3541,8 +3613,9 @@ func contextShowCmd() *cobra.Command {
 Also available as 'thrum context load'.
 
 Examples:
-  thrum context show
-  thrum context load
+  thrum context show                # Show both project state and session context
+  thrum context show --project      # Show project state only
+  thrum context show --session      # Show session context only
   thrum context show --agent coordinator
   thrum context show --raw
   thrum context show --no-preamble`,
@@ -3556,7 +3629,46 @@ Examples:
 			}
 
 			absRepo, _ := filepath.Abs(flagRepo)
+			thrumDir := filepath.Join(absRepo, ".thrum")
 
+			// Determine what to show: default is both
+			showProject := flagProject || (!flagProject && !flagSession)
+			showSession := flagSession || (!flagProject && !flagSession)
+
+			// Show project state
+			if showProject {
+				projectPath := filepath.Join(thrumDir, "context", "project_state.md")
+				if data, err := os.ReadFile(projectPath); err == nil && len(data) > 0 { // #nosec G304 -- internal context file
+					if flagRaw {
+						fmt.Println("<!-- project_state: .thrum/context/project_state.md -->")
+						fmt.Print(string(data))
+						if data[len(data)-1] != '\n' {
+							fmt.Println()
+						}
+						fmt.Println("<!-- end project_state -->")
+					} else {
+						fmt.Println("--- Project State ---")
+						fmt.Println()
+						fmt.Print(string(data))
+						if data[len(data)-1] != '\n' {
+							fmt.Println()
+						}
+					}
+					if showSession {
+						fmt.Println()
+					}
+				} else if flagProject {
+					// Only show missing message if --project was explicitly requested
+					fmt.Println("No project state found (.thrum/context/project_state.md)")
+					return nil
+				}
+			}
+
+			if !showSession {
+				return nil
+			}
+
+			// Show session context (existing behavior)
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
@@ -3574,7 +3686,9 @@ Examples:
 			}
 
 			if !resp.HasContext && !resp.HasPreamble {
-				fmt.Printf("No context saved for %s\n", resp.AgentName)
+				if !showProject {
+					fmt.Printf("No context saved for %s\n", resp.AgentName)
+				}
 				return nil
 			}
 
@@ -3596,6 +3710,10 @@ Examples:
 				}
 			} else {
 				// Normal mode: header + seamless content
+				if showProject {
+					fmt.Println("--- Session Context ---")
+					fmt.Println()
+				}
 				if resp.HasContext {
 					fmt.Printf("# Context for %s (%d bytes, updated %s)\n\n", resp.AgentName, resp.Size, resp.UpdatedAt)
 				} else {
@@ -3621,6 +3739,8 @@ Examples:
 	cmd.Flags().StringVar(&flagAgent, "agent", "", "Override agent name")
 	cmd.Flags().BoolVar(&flagRaw, "raw", false, "Raw output with file boundary markers, no header")
 	cmd.Flags().BoolVar(&flagNoPreamble, "no-preamble", false, "Exclude preamble from output")
+	cmd.Flags().BoolVar(&flagProject, "project", false, "Show project state only")
+	cmd.Flags().BoolVar(&flagSession, "session", false, "Show session context only")
 
 	return cmd
 }
@@ -3799,6 +3919,21 @@ Examples:
 				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
 			}
 			result := cli.ContextPrime(client, agentID)
+
+			// Wire SingleAgentMode from config
+			if result.RepoPath != "" {
+				thrumDir := filepath.Join(result.RepoPath, ".thrum")
+				if cfg, err := config.LoadThrumConfig(thrumDir); err == nil {
+					result.SingleAgentMode = cfg.Daemon.SingleAgentMode
+				}
+				// Wire SavedSessionContext
+				if result.Identity != nil {
+					ctxPath := filepath.Join(thrumDir, "context", result.Identity.AgentID+".md")
+					if data, err := os.ReadFile(ctxPath); err == nil { // #nosec G304 -- internal context file
+						result.SavedSessionContext = string(data)
+					}
+				}
+			}
 
 			if flagJSON {
 				output, _ := json.MarshalIndent(result, "", "  ")
@@ -4914,7 +5049,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			rpc.NewPeerWaitPairingHandler(waitFn).Handle)
 
 		// peer.join — send pairing code to remote peer
-		joinFn := func(peerAddr, code string) (peerName, peerDaemonID string, err error) {
+		joinFn := func(peerAddr, code, repoPath string) (peerName, peerDaemonID string, err error) {
 			// Lazy tsnet start for peer join (machine B may not have run peer add)
 			if startTsnetFn != nil && getTsLocalAddr() == "" {
 				if peerRegistry.LocalPort() == 0 {
@@ -4937,6 +5072,17 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			peer, err := syncManager.JoinPeer(peerAddr, code, st.DaemonID(), hostname, localAddr)
 			if err != nil {
 				return "", "", err
+			}
+			// Set role and transport on the dialer side
+			peer.Role = "dialer"
+			if repoPath != "" {
+				peer.RepoPath = repoPath
+				peer.Transport = "local"
+			} else {
+				peer.Transport = daemon.DetectTransport(peerAddr)
+			}
+			if updateErr := peerRegistry.AddPeer(peer); updateErr != nil {
+				fmt.Fprintf(os.Stderr, "[peer.join] warning: failed to update peer transport/role: %v\n", updateErr)
 			}
 			return peer.Name, peer.DaemonID, nil
 		}
@@ -4994,6 +5140,28 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		}
 		server.RegisterHandler("peer.status",
 			rpc.NewPeerStatusHandler(statusFn).Handle)
+
+		// peer.configure — add/remove proxy agents for a peer
+		peerConfigureHandler := rpc.NewPeerConfigureHandler(
+			peerRegistry.AddRemoteAgent,
+			peerRegistry.RemoveRemoteAgent,
+		)
+		server.RegisterHandler("peer.configure", peerConfigureHandler.Handle)
+
+		// peer.address_changed — receive address change notifications from peers
+		addressChangedHandler := rpc.NewPeerAddressChangedHandler(func(peerToken, newIP, newPort string) error {
+			p := peerRegistry.FindPeerByToken(peerToken)
+			if p == nil {
+				return fmt.Errorf("unknown peer token")
+			}
+			newAddr := net.JoinHostPort(newIP, newPort)
+			if err := bridgepeer.ValidateAddressChange(p.Transport, p.Address, newAddr); err != nil {
+				return err
+			}
+			p.Address = newAddr
+			return peerRegistry.AddPeer(p)
+		})
+		server.RegisterHandler("peer.address_changed", addressChangedHandler.Handle)
 	}
 
 	// User management (for WebSocket connections)
@@ -5099,7 +5267,21 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		}
 	}
 
-	wsServer := websocket.NewServer(wsAddr, wsRegistry, uiFS)
+	// Create PeerManager before the WS server so we can wire the accept handler.
+	var peerManager *daemon.PeerManager
+	var wsOpts []websocket.ServerOption
+	if peerRegistry != nil {
+		peerManager = daemon.NewPeerManager(peerRegistry, wsPort, nil)
+		defer peerManager.StopAll()
+		wsOpts = append(wsOpts, websocket.WithPeerAcceptHandler(func(token string) {
+			p := peerRegistry.FindPeerByToken(token)
+			if p != nil {
+				peerManager.AcceptPeer(ctx, p)
+			}
+		}))
+	}
+
+	wsServer := websocket.NewServer(wsAddr, wsRegistry, uiFS, wsOpts...)
 
 	// Wire the WebSocket client registry into the message handler so it can
 	// broadcast notification.message to ALL connected clients (including the
@@ -5176,20 +5358,27 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			_ = syncRegistry.Register("pair.request", pairHandler.Handle)
 		}
 
-		// Accept loop for sync connections
-		go func() {
-			for {
-				conn, err := tsListener.Accept()
-				if err != nil {
-					return // Listener closed
-				}
-				go func(c net.Conn) {
-					defer func() { _ = c.Close() }()
-					peerID := c.RemoteAddr().String()
-					syncRegistry.ServeSyncRPC(ctx, c, peerID)
-				}(conn)
-			}
-		}()
+		// Build WebSocket server options for the Tailscale sync endpoint.
+		// Token auth validates that the connecting peer has a stored token.
+		// Pairing connections arrive with ?pairing_code= and must be allowed
+		// without a token — the pairing manager validates the code.
+		var tsWSOpts []websocket.ServerOption
+		if syncManager != nil {
+			tsWSOpts = append(tsWSOpts, websocket.WithTokenValidator(func(token string) bool {
+				return syncManager.PeerRegistry().FindPeerByToken(token) != nil
+			}))
+		}
+		if pairingMgr != nil {
+			tsWSOpts = append(tsWSOpts, websocket.WithPairingValidator(func(code string) bool {
+				return pairingMgr.HasActiveSession()
+			}))
+		}
+
+		// Serve WebSocket on the tsnet listener (replaces raw TCP accept loop).
+		// The SyncRegistry implements websocket.HandlerRegistry via GetHandler.
+		// NewServer with empty addr + nil uiFS registers the WS handler at "/".
+		tsWSServer := websocket.NewServer("", syncRegistry, nil, tsWSOpts...)
+		go tsListener.ServeHTTP(ctx, tsWSServer.HTTPHandler())
 
 		// Start periodic sync with Tailscale-optimized intervals
 		if syncManager != nil {
@@ -5309,12 +5498,25 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("telegram.configure", telegramHandler.HandleConfigure)
 	server.RegisterHandler("telegram.status", telegramHandler.HandleStatus)
 	server.RegisterHandler("telegram.pair", telegramHandler.HandlePair)
+	// Also register on WebSocket registry so the web UI settings panel can
+	// call telegram.status even when the bridge is not yet configured.
+	wsRegistry.Register("telegram.configure", websocket.Handler(telegramHandler.HandleConfigure))
+	wsRegistry.Register("telegram.status", websocket.Handler(telegramHandler.HandleStatus))
+	wsRegistry.Register("telegram.pair", websocket.Handler(telegramHandler.HandlePair))
 
 	if thrumCfg.Telegram.TelegramEnabled() {
 		tgBridge := telegram.New(thrumCfg.Telegram, wsPort)
 		telegramHandler.SetBridge(tgBridge)
 		go tgBridge.Run(ctx)
 		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)
+	}
+
+	// Auto-connect to dialer-role peers after the WS server is ready.
+	if peerManager != nil && thrumCfg.Peers.AutoConnect {
+		go func() {
+			time.Sleep(500 * time.Millisecond) // Wait for WS server to start
+			peerManager.ConnectAll(ctx)
+		}()
 	}
 
 	return lifecycle.Run(ctx)

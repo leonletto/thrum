@@ -56,7 +56,7 @@ thrum overview                           Combined status + team + inbox
 
 **Context workflow:**
 
-- Before compaction: save via update-context flow
+- Before compaction: save via /thrum:update-project skill
 - After compaction: run load-context to restore work state
 - `thrum prime` gathers identity, team, inbox, git context, sync health
 
@@ -97,5 +97,5 @@ thrum agent heartbeat
 - `references/team.md`
 - `references/wait.md`
 - `references/prime.md`
-- `references/update-context.md`
+- `references/update-project.md`
 - `references/load-context.md`

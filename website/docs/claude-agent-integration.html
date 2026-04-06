@@ -93,8 +93,9 @@ Add to .claude/settings.json:
 
 ### 3. Launch Background Listener
 
-Spawn a message-listener sub-agent to get async notifications. Re-arm it every
-time it returns (both MESSAGES_RECEIVED and NO_MESSAGES_TIMEOUT).
+Spawn a message-listener sub-agent to get async notifications. The listener
+loops automatically for up to 4 hours — no manual re-arming needed. Set up a
+cron watchdog to auto-respawn it every 30 min if it stops.
 
 ### 4. Communicate
 
@@ -143,10 +144,11 @@ thrum session end</code></pre>
 <h2>message-listener</h2>
 <p>A lightweight background agent (runs on Haiku for <del>$0.00003/cycle) that uses
 <code>thrum wait</code> for efficient blocking until messages arrive — no polling loops or
-sleep intervals needed. It loops up to ~6 cycles (</del>90 minutes of coverage),
-returning immediately when new messages arrive.</p>
-<p><strong>Usage:</strong> Spawn at the start of every coordination session. Re-arm immediately
-when it returns.</p>
+sleep intervals needed. It loops up to 30 cycles (</del>4 hours of coverage),
+returning immediately when new messages arrive. A cron watchdog auto-respawns it
+every 30 min if it stops — no manual re-arming needed.</p>
+<p><strong>Usage:</strong> Spawn at the start of every coordination session. Set up a cron
+watchdog to keep it running automatically.</p>
 <details>
 <summary>message-listener.md</summary>
 
@@ -176,7 +178,7 @@ loops needed — `thrum wait` uses the daemon&#39;s WebSocket push internally.
 Your prompt contains the EXACT command to use after &quot;WAIT_CMD=&quot;. Use that
 command verbatim.
 
-**LOOP** (repeat up to 6 cycles, ~90 min coverage):
+**LOOP** (repeat up to 30 cycles, ~4 hour coverage):
 
 1. Run the WAIT_CMD from your prompt EXACTLY as given (Bash).
 2. If messages found (exit code 0), return them immediately.
@@ -201,8 +203,8 @@ NO_MESSAGES_TIMEOUT
 
 Always end with:
 
-RE-ARM: This listener has stopped. Spawn a new message-listener agent to
-continue listening.</code></pre>
+LISTENER_STOPPED: This listener has exhausted its cycles. The cron watchdog will
+respawn it automatically within 30 minutes.</code></pre>
 </details>
 
 <h2>Setup</h2>
@@ -226,6 +228,9 @@ coordination patterns</li>
 </ul>
 
 </main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#claude-agent-integration.html')}</script>
 </body>
 </html>

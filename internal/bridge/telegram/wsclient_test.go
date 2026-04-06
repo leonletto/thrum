@@ -233,58 +233,15 @@ func TestWSClientClose(t *testing.T) {
 	}
 }
 
-// TestWSClientLoopbackValidation verifies that non-loopback URLs are rejected.
+// TestWSClientLoopbackValidation verifies that Dial rejects non-loopback URLs.
+// Detailed validator tests are in bridge/wsclient_test.go:TestWSClient_LoopbackValidator.
 func TestWSClientLoopbackValidation(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name    string
-		url     string
-		wantErr bool
-	}{
-		{
-			name:    "loopback 127.0.0.1",
-			url:     "ws://127.0.0.1:9999/ws",
-			wantErr: false,
-		},
-		{
-			name:    "loopback IPv6",
-			url:     "ws://[::1]:9999/ws",
-			wantErr: false,
-		},
-		{
-			name:    "localhost",
-			url:     "ws://localhost:9999/ws",
-			wantErr: false,
-		},
-		{
-			name:    "external IP",
-			url:     "ws://8.8.8.8:9999/ws",
-			wantErr: true,
-		},
-		{
-			name:    "external hostname",
-			url:     "ws://example.com:9999/ws",
-			wantErr: true,
-		},
-		{
-			name:    "private network IP",
-			url:     "ws://192.168.1.1:9999/ws",
-			wantErr: true,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			err := validateLoopback(tc.url)
-			if tc.wantErr && err == nil {
-				t.Errorf("expected error for URL %q, got nil", tc.url)
-			}
-			if !tc.wantErr && err != nil {
-				t.Errorf("expected no error for URL %q, got %v", tc.url, err)
-			}
-		})
+	// External IP should be rejected by bridge.LoopbackValidator used in Dial.
+	_, err := Dial(context.Background(), "ws://8.8.8.8:9999/ws")
+	if err == nil {
+		t.Error("expected error for external IP, got nil")
 	}
 }
 

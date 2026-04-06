@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
+
+	"github.com/leonletto/thrum/internal/config"
 )
 
 // OutboundRelay listens for Thrum notification.message events on the WebSocket
@@ -13,13 +16,14 @@ type OutboundRelay struct {
 	ws     *WSClient
 	bot    *Bot
 	msgMap *MessageMap
-	userID string // "user:leon-letto" — messages TO this user get forwarded
-	chatID int64  // Telegram chat to send to; outbound restricted to this chat only
+	userID string                 // "user:leon-letto" — messages TO this user get forwarded
+	chatID int64                  // Telegram chat to send to; outbound restricted to this chat only
+	groups []config.TelegramGroup // Group bridge configs for group/proxy routing
 }
 
 // NewOutboundRelay creates a relay that forwards Thrum messages to Telegram.
-func NewOutboundRelay(ws *WSClient, bot *Bot, msgMap *MessageMap, userID string, chatID int64) *OutboundRelay {
-	return &OutboundRelay{ws: ws, bot: bot, msgMap: msgMap, userID: userID, chatID: chatID}
+func NewOutboundRelay(ws *WSClient, bot *Bot, msgMap *MessageMap, userID string, chatID int64, groups []config.TelegramGroup) *OutboundRelay {
+	return &OutboundRelay{ws: ws, bot: bot, msgMap: msgMap, userID: userID, chatID: chatID, groups: groups}
 }
 
 // notificationParams represents the params of a notification.message event.
@@ -87,37 +91,75 @@ func (r *OutboundRelay) handleNotification(ctx context.Context, params json.RawM
 		return
 	}
 
-	// Only forward messages where the bridge user is a recipient
-	if !r.isForUser(full) {
-		return
-	}
-
-	// Format for Telegram: "@agent_name: message content"
-	content := r.formatForTelegram(data.Author.Name, full)
-
-	// Threading: check if this Thrum message replies to a Telegram-originated message
-	var replyTo *int
-	if full.Message.ReplyTo != "" {
-		if _, teleID, ok := r.msgMap.TeleID(full.Message.ReplyTo); ok {
-			replyTo = &teleID
+	// Group path — check if any recipient is a mirrored Thrum group (before DM
+	// path, because group messages also include the bridge user as a recipient)
+	for _, recip := range full.Message.Recipients {
+		if chatID := r.findGroupChatID(recip.AgentID); chatID != 0 {
+			content := formatForTelegram(data.Author.Name, full.Message.Body.Content)
+			teleMsgID, err := r.bot.SendMessage(chatID, content, nil)
+			if err == nil {
+				r.msgMap.Store(chatID, teleMsgID, data.MessageID)
+			}
+			return
 		}
 	}
 
-	// SECURITY: Only send to the configured chatID — never to arbitrary chat IDs
-	teleMsgID, err := r.bot.SendMessage(r.chatID, content, replyTo)
-	if err != nil {
-		log.Printf("telegram outbound: send to chat %d failed: %v", r.chatID, err)
-		return
+	// Reply-to-group path — if this message replies to one that came from a
+	// Telegram group, route the reply back to the same group with threading.
+	if full.Message.ReplyTo != "" {
+		if chatID, teleID, ok := r.msgMap.TeleID(full.Message.ReplyTo); ok && chatID < 0 {
+			content := formatForTelegram(data.Author.Name, full.Message.Body.Content)
+			replyTo := teleID
+			teleMsgID, err := r.bot.SendMessage(chatID, content, &replyTo)
+			if err == nil {
+				r.msgMap.Store(chatID, teleMsgID, data.MessageID)
+			}
+			return
+		}
 	}
 
-	// Store mapping for future reply threading
-	r.msgMap.Store(r.chatID, teleMsgID, data.MessageID)
+	// Proxy agent path
+	for _, recip := range full.Message.Recipients {
+		if agent, chatID := r.findProxyRoute(recip.AgentID); agent != nil {
+			content := fmt.Sprintf("%s @%s: %s", agent.Bot, data.Author.Name, full.Message.Body.Content)
+			teleMsgID, err := r.bot.SendMessage(chatID, content, nil)
+			if err == nil {
+				r.msgMap.Store(chatID, teleMsgID, data.MessageID)
+			}
+			return
+		}
+	}
 
-	// Mark as read in Thrum (best-effort)
-	_, _ = r.ws.Call(ctx, "message.markRead", map[string]any{
-		"message_id":      data.MessageID,
-		"caller_agent_id": r.userID,
-	})
+	// DM path — forward messages where the bridge user is a recipient
+	if r.isForUser(full) {
+		// Format for Telegram: "@agent_name: message content"
+		content := r.formatForTelegram(data.Author.Name, full)
+
+		// Threading: check if this Thrum message replies to a Telegram-originated message
+		var replyTo *int
+		if full.Message.ReplyTo != "" {
+			if _, teleID, ok := r.msgMap.TeleID(full.Message.ReplyTo); ok {
+				replyTo = &teleID
+			}
+		}
+
+		// SECURITY: Only send to the configured chatID — never to arbitrary chat IDs
+		teleMsgID, err := r.bot.SendMessage(r.chatID, content, replyTo)
+		if err != nil {
+			log.Printf("telegram outbound: send to chat %d failed: %v", r.chatID, err)
+			return
+		}
+
+		// Store mapping for future reply threading
+		r.msgMap.Store(r.chatID, teleMsgID, data.MessageID)
+
+		// Mark as read in Thrum (best-effort)
+		_, _ = r.ws.Call(ctx, "message.markRead", map[string]any{
+			"message_id":      data.MessageID,
+			"caller_agent_id": r.userID,
+		})
+		return
+	}
 }
 
 // fetchMessage retrieves the full message from Thrum via message.get RPC.
@@ -148,9 +190,42 @@ func (r *OutboundRelay) isForUser(full *fullMessage) bool {
 
 // formatForTelegram formats a Thrum message for display in Telegram.
 func (r *OutboundRelay) formatForTelegram(authorName string, full *fullMessage) string {
-	content := full.Message.Body.Content
+	return formatForTelegram(authorName, full.Message.Body.Content)
+}
+
+// formatForTelegram is a package-level helper used by group and proxy paths.
+func formatForTelegram(authorName, content string) string {
 	if authorName != "" {
 		return fmt.Sprintf("@%s: %s", authorName, content)
 	}
 	return content
+}
+
+// findGroupChatID returns the Telegram chat ID for a tg: prefixed recipient,
+// or 0 if no matching group is configured.
+func (r *OutboundRelay) findGroupChatID(recipientID string) int64 {
+	if !strings.HasPrefix(recipientID, "tg:") {
+		return 0
+	}
+	groupName := strings.TrimPrefix(recipientID, "tg:")
+	for _, g := range r.groups {
+		if g.Name == groupName {
+			return g.ChatID
+		}
+	}
+	return 0
+}
+
+// findProxyRoute returns the RemoteAgent and chat ID for a proxy recipient ID
+// of the form "prefix:name", or nil/0 if no match is found.
+func (r *OutboundRelay) findProxyRoute(recipientID string) (*config.RemoteAgent, int64) {
+	for _, g := range r.groups {
+		for i, ra := range g.RemoteAgents {
+			proxyName := ra.Prefix + ":" + ra.Name
+			if recipientID == proxyName {
+				return &g.RemoteAgents[i], g.ChatID
+			}
+		}
+	}
+	return nil, 0
 }

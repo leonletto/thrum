@@ -13,15 +13,16 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.6.3 highlights:**
+**v0.7.0 highlights:**
 
-- **Cron watchdog for message listener** — The background listener now
-  automatically recovers when it exits. No more manual re-arming after each
-  cycle.
-- **Extended listener budget** — 30 cycles (~4 hours) instead of 10 (~80 min),
-  with ~65% lower token usage overall.
-- **Sync-aware purge** — `thrum purge` propagates across Tailscale-synced nodes.
-  Agent deletion also fully propagates to peers.
+- **Unified cross-repo communication** — Four-layer transport architecture
+  connecting agents across repos, machines, and networks via WebSocket peering.
+- **PID identity resolution** — Process tree walk identifies agents by PID,
+  eliminating identity conflicts in multi-agent sessions.
+- **Telegram group bridge** — Human-to-agent messaging via Telegram groups with
+  mention routing and proxy agents.
+- **Three-tier context model** — Project state, session context, and prime
+  briefing for reliable context recovery across compaction.
 
 ## Quick Start
 

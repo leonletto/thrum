@@ -1,4 +1,4 @@
-# Thrum v0.6.3 -- Complete Agent Reference
+# Thrum v0.7.0 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
 
@@ -185,18 +185,6 @@ All commands accept:
   Errors:   Fails if .thrum/ exists (unless --force). Fails if not a git repo.
   Related:  `thrum migrate` upgrades repos from the old tracked-on-main layout.
             `thrum setup` configures .thrum/ in feature worktrees (creates redirect).
-
-
-### thrum setup claude-md
-
-  Usage:    thrum setup claude-md [flags]
-  Flags:    --apply     Append to CLAUDE.md (create if missing)
-            --force     Overwrite existing Thrum section
-  Action:   Generates comprehensive Thrum agent coordination instructions for CLAUDE.md.
-            Prints to stdout by default. Use --apply to append to CLAUDE.md (with
-            duplicate detection). Use --force with --apply to replace existing Thrum
-            section. Includes registration, messaging protocols, MCP configuration,
-            background listener setup, and group management instructions.
 
 
 ### thrum quickstart

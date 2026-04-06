@@ -213,6 +213,22 @@ for AI agent coordination.</p>
 <td>Manage Tailscale peers</td>
 </tr>
 <tr>
+<td><code>thrum telegram configure</code></td>
+<td>Configure the Telegram bridge (interactive or flags)</td>
+</tr>
+<tr>
+<td><code>thrum telegram status</code></td>
+<td>Show Telegram bridge connection status and config</td>
+</tr>
+<tr>
+<td><code>thrum roles list</code></td>
+<td>List role templates and matching agents</td>
+</tr>
+<tr>
+<td><code>thrum roles deploy</code></td>
+<td>Re-render agent preambles from role templates</td>
+</tr>
+<tr>
 <td><code>thrum config</code></td>
 <td>Manage configuration (show, init)</td>
 </tr>
@@ -1496,7 +1512,7 @@ $ thrum ping planner
 # Save from stdin
 $ echo &quot;Working on auth module&quot; | thrum context save
 ✓ Context saved for furiosa (24 bytes)</code></pre>
-<p><strong>Agent safety note:</strong> Agents should use the <code>/thrum:update-context</code> skill
+<p><strong>Agent safety note:</strong> Agents should use the <code>/thrum:update-project</code> skill
 instead of running <code>thrum context save</code> directly. The skill composes a
 structured context (decisions, next steps, work-in-progress) before saving,
 whereas running the command manually with arbitrary input can overwrite
@@ -1904,6 +1920,101 @@ $ thrum backup schedule off</code></pre>
 <li>Daemon must be restarted for schedule changes to take effect</li>
 <li>Intervals use Go duration format: <code>24h</code>, <code>12h</code>, <code>6h30m</code>, <code>168h</code> (1 week)</li>
 </ul>
+<h2>Role Templates</h2>
+<h3>thrum roles list</h3>
+<p>List all role templates and show which registered agents match each template.</p>
+<pre><code>thrum roles list</code></pre>
+<h3>thrum roles deploy</h3>
+<p>Re-render agent preambles from role templates. By default deploys for all
+agents. Use <code>--agent</code> to target a single agent, and <code>--dry-run</code> to preview
+changes without writing files.</p>
+<pre><code>thrum roles deploy [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--agent</code></td>
+<td>Deploy for a specific agent only</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--dry-run</code></td>
+<td>Preview changes without writing files</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>$ thrum roles list
+Role Templates:
+  implementer   → 2 agents (alice, bob)
+  reviewer      → 1 agent  (carol)
+  coordinator   → 1 agent  (dave)
+
+$ thrum roles deploy --dry-run
+[dry-run] Would update preamble for alice (implementer)
+[dry-run] Would update preamble for bob (implementer)
+[dry-run] Would update preamble for carol (reviewer)
+[dry-run] Would update preamble for dave (coordinator)
+
+$ thrum roles deploy --agent alice
+✓ Deployed preamble for alice (implementer)</code></pre>
+<h2>Telegram</h2>
+<h3>thrum telegram configure</h3>
+<p>Configure the Telegram bridge. When all flags are provided with <code>--yes</code>, runs
+non-interactively. When flags are omitted, runs in interactive mode and prompts
+for each value.</p>
+<pre><code>thrum telegram configure [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--token</code></td>
+<td>Telegram bot token</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--target</code></td>
+<td>Target chat ID or username</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--user</code></td>
+<td>Telegram username to associate</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--yes</code></td>
+<td>Skip confirmation prompt</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code># Interactive mode (prompts for each value)
+$ thrum telegram configure
+
+# Non-interactive
+$ thrum telegram configure --token 123456:ABC-DEF --target @mychat --user alice --yes
+✓ Telegram bridge configured</code></pre>
+<h3>thrum telegram status</h3>
+<p>Show the current Telegram bridge connection status and configuration.</p>
+<pre><code>thrum telegram status</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum telegram status
+Telegram Bridge
+  Status:  connected
+  Bot:     @my_thrum_bot
+  Target:  @mychat
+  User:    alice</code></pre>
 <h2>MCP Server</h2>
 <h3>thrum mcp serve</h3>
 <p>Start an MCP (Model Context Protocol) server on stdin/stdout for native
@@ -2140,6 +2251,9 @@ wraps</li>
 </ul>
 
 </main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#cli.html')}</script>
 </body>
 </html>

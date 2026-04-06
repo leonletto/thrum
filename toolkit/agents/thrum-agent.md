@@ -107,7 +107,7 @@ thrum daemon status                      # Daemon health
 | `--timeout` requires a duration unit                     | `--timeout 120s` not `--timeout 120`                                                |
 | `thrum wait --all` does not exist                        | Use `thrum wait --timeout <duration>`                                               |
 | `thrum daemon health` does not exist                     | Use `thrum daemon status`                                                           |
-| `thrum context update` does not exist                    | Use `/thrum:update-context` skill                                                   |
+| `thrum context update` does not exist                    | Use `/thrum:update-project` skill                                                   |
 | `--foreground` flag not on `daemon start`                | Just use `thrum daemon start`                                                       |
 | `--group` nesting flag not on `group add`                | Use `--group <name>` as member arg: `thrum group add leads --group backend-team`    |
 | Name==role rejected at registration                      | `--name lead-agent --role coordinator`, not `--name coordinator --role coordinator` |

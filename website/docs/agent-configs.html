@@ -91,9 +91,10 @@ more</li>
 <h3>message-listener</h3>
 <p>Lightweight background listener that watches for incoming Thrum messages so you
 don&#39;t have to manually check your inbox. Runs on Haiku for cost efficiency
-(~$0.00003/cycle). Uses <code>thrum wait</code> for efficient blocking instead of polling
-loops — returns immediately when messages arrive, covers ~90 minutes across 6
-cycles.</p>
+(~$0.00003/cycle, ~65% fewer tokens than the old pattern). Uses <code>thrum wait</code> for
+efficient blocking instead of polling loops — returns immediately when messages
+arrive, covers up to 4 hours across 30 cycles. A cron watchdog auto-respawns it
+every 30 min if it stops — no manual re-arming needed.</p>
 <p><strong>Use when:</strong></p>
 <ul>
 <li>You&#39;re running multiple agents and want to know when they message you</li>
@@ -102,12 +103,13 @@ cycles.</p>
 </ul>
 <p><strong>Key capabilities:</strong></p>
 <ul>
-<li>Blocking wait via <code>thrum wait --timeout 8m</code> (6 cycles max, filters by agent
-identity)</li>
+<li>Blocking wait via <code>thrum wait --timeout 8m</code> (30 cycles max, ~4 hours, filters
+by agent identity)</li>
 <li>Immediate return on message arrival</li>
 <li>Time-based filtering with <code>--after</code> flag (negative value = &quot;N ago&quot;; e.g.,
 <code>-1s</code> includes messages sent up to 1 second ago)</li>
 <li>CLI-only (no MCP tools — sub-agents can&#39;t access MCP)</li>
+<li>Cron watchdog auto-respawns the listener every 30 min if it is not running</li>
 </ul>
 <h2>Configure the message listener</h2>
 <p>The message-listener runs as a background task so your main agent session stays
@@ -125,11 +127,16 @@ Task({
 <ul>
 <li><code>--timeout 8m</code> — Block up to 8 minutes per cycle</li>
 <li><code>--after -15s</code> — Include messages sent up to 15 seconds ago (negative = &quot;N
-ago&quot;; covers re-arm gap)</li>
+ago&quot;; covers restart gap)</li>
 </ul>
 <p>The listener uses <code>thrum wait</code> which blocks until a message arrives or the
-timeout expires — no polling loops needed. Each cycle is a single Bash call.
-Re-arm the listener after processing messages to continue listening.</p>
+timeout expires — no polling loops needed. Each cycle is a single Bash call. The
+listener loops automatically for up to 4 hours (30 cycles). Set up a cron
+watchdog to auto-respawn it if it stops:</p>
+<pre><code>CronCreate(cron=&quot;*/30 * * * *&quot;,
+  prompt=&quot;If there is no background message listener running, spawn one now:
+    Task(subagent_type=&#39;message-listener&#39;, model=&#39;haiku&#39;, run_in_background=true,
+      prompt=&#39;Listen for Thrum messages. WAIT_CMD=cd /path/to/repo &amp;&amp; thrum wait --timeout 8m --after -15s --json&#39;)&quot;)</code></pre>
 <h2>Customize for your project</h2>
 <p>You can edit these agent definitions to match your team&#39;s workflows. Add
 project-specific commands, adjust priorities, or include custom context.</p>
@@ -148,6 +155,9 @@ the full research → plan → implement cycle</li>
 </ul>
 
 </main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
 <script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#agent-configs.html')}</script>
 </body>
 </html>

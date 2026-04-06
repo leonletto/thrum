@@ -412,6 +412,8 @@ func initTestSchema(db *sql.DB) error {
 		role TEXT NOT NULL,
 		module TEXT NOT NULL,
 		display TEXT,
+		hostname TEXT,
+		claude_pid INTEGER NOT NULL DEFAULT 0,
 		registered_at TEXT NOT NULL,
 		last_seen_at TEXT
 	);

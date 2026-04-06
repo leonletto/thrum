@@ -17,6 +17,7 @@ type RegisterRequest struct {
 	Display    string `json:"display,omitempty"`
 	Force      bool   `json:"force,omitempty"`
 	ReRegister bool   `json:"re_register,omitempty"`
+	ClaudePID  int    `json:"claude_pid,omitempty"`
 }
 
 // RegisterResponse represents the response from agent.register RPC.
@@ -31,6 +32,7 @@ type ConflictInfo struct {
 	ExistingAgentID string `json:"existing_agent_id"`
 	RegisteredAt    string `json:"registered_at"`
 	LastSeenAt      string `json:"last_seen_at"`
+	ConflictPID     int    `json:"conflict_pid,omitempty"` // PID of the conflicting agent
 }
 
 // AgentInfo represents information about a registered agent.
@@ -42,6 +44,7 @@ type AgentInfo struct {
 	Display      string `json:"display"`
 	RegisteredAt string `json:"registered_at"`
 	LastSeenAt   string `json:"last_seen_at,omitempty"`
+	ClaudePID    int    `json:"claude_pid,omitempty"`
 }
 
 // ListAgentsRequest represents the request for agent.list RPC.
@@ -63,6 +66,7 @@ type AgentRegisterOptions struct {
 	Display    string
 	Force      bool
 	ReRegister bool
+	ClaudePID  int
 }
 
 // AgentListOptions contains options for listing agents.

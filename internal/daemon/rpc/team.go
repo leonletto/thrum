@@ -41,6 +41,7 @@ type TeamMember struct {
 	Module          string             `json:"module"`
 	Display         string             `json:"display,omitempty"`
 	Hostname        string             `json:"hostname,omitempty"`
+	ClaudePID       int                `json:"claude_pid,omitempty"`
 	WorktreePath    string             `json:"worktree,omitempty"`
 	SessionID       string             `json:"session_id,omitempty"`
 	SessionStart    string             `json:"session_start,omitempty"`
@@ -77,7 +78,7 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 
 	// Query 1: Agents + sessions + work contexts
 	query := `SELECT
-		a.agent_id, a.role, a.module, a.display, a.hostname,
+		a.agent_id, a.role, a.module, a.display, a.hostname, a.claude_pid,
 		s.session_id, s.started_at, s.last_seen_at,
 		wc.branch, wc.worktree_path, wc.intent, wc.current_task,
 		wc.unmerged_commits, wc.file_changes
@@ -109,7 +110,7 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 		var unmergedCommitsJSON, fileChangesJSON sql.NullString
 
 		if err := rows.Scan(
-			&m.AgentID, &m.Role, &m.Module, &display, &hostname,
+			&m.AgentID, &m.Role, &m.Module, &display, &hostname, &m.ClaudePID,
 			&sessionID, &sessionStart, &lastSeen,
 			&branch, &worktreePath, &intent, &currentTask,
 			&unmergedCommitsJSON, &fileChangesJSON,

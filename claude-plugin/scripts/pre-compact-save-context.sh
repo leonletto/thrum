@@ -2,7 +2,7 @@
 # Pre-compact hook: save mechanical state to thrum context before auto-compaction.
 # This captures git state, beads state, and recent activity so the agent can
 # recover context after compaction. The agent's narrative summary (from
-# /update-context) provides richer context, but this ensures at minimum the
+# /thrum:update-project) provides richer context, but this ensures at minimum the
 # mechanical state is preserved.
 #
 # Bundled with the thrum Claude plugin — runs from ${CLAUDE_PLUGIN_ROOT}/scripts/.

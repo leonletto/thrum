@@ -21,6 +21,12 @@ type InboundMessage struct {
 	Username     string
 	UserID       int64
 	ReplyToMsgID *int
+
+	// Group support
+	GroupChatID int64  // Negative if from a group, 0 if DM
+	IsSelf      bool   // True if message was sent by our own bot
+	IsBotSender bool   // True if sender is a bot (trusted)
+	BotUsername string // Sender's bot username (if IsBotSender)
 }
 
 const (
@@ -95,6 +101,11 @@ func (b *Bot) Messages() <-chan InboundMessage {
 	return b.messages
 }
 
+// BotUsername returns the bot's Telegram username (without @).
+func (b *Bot) BotUsername() string {
+	return b.api.Self.UserName
+}
+
 // Poll long-polls Telegram for updates and forwards allowed messages to the messages channel.
 // It runs until ctx is canceled.
 func (b *Bot) Poll(ctx context.Context) {
@@ -123,9 +134,23 @@ func (b *Bot) Poll(ctx context.Context) {
 			// SECURITY: Gate check FIRST — before any extraction, logging of content,
 			// or other processing. Blocked senders produce zero observable side effects.
 
-			// Drop bot messages — bots are never allowed, even if ID is in AllowFrom.
-			if from.IsBot {
+			log.Printf("telegram: poll received update from user %d (bot=%v) in chat %d", from.ID, from.IsBot, msg.Chat.ID)
+
+			// Echo prevention: ignore our own messages.
+			if from.ID == b.api.Self.ID {
+				log.Printf("telegram: dropping echo (own message)")
 				continue
+			}
+
+			// Bot message gate: drop untrusted bots; allow trusted bots in configured groups.
+			if from.IsBot {
+				// Allow trusted bots in configured groups
+				if msg.Chat != nil && b.config.IsTrustedBot(msg.Chat.ID, from.ID) {
+					log.Printf("telegram: trusted bot %d in group %d — allowing", from.ID, msg.Chat.ID)
+				} else {
+					log.Printf("telegram: dropping untrusted bot %d", from.ID)
+					continue // Drop untrusted bot messages
+				}
 			}
 
 			// Pair mode: intercept message for pairing handshake.
@@ -149,8 +174,11 @@ func (b *Bot) Poll(ctx context.Context) {
 
 			// Fail-closed access check using config.IsAllowed.
 			if !b.config.IsAllowed(from.ID) {
+				log.Printf("telegram: dropping message from user %d — not in allow_from", from.ID)
 				continue
 			}
+
+			log.Printf("telegram: message accepted from user %d in chat %d, group=%v", from.ID, msg.Chat.ID, msg.Chat.ID < 0)
 
 			// Rate limit: drop silently if user exceeds max messages per window.
 			if !b.rateLimit.allow(from.ID) {
@@ -159,6 +187,15 @@ func (b *Bot) Poll(ctx context.Context) {
 
 			// Access granted — now extract the message.
 			im := extractMessage(msg)
+
+			// Set group fields (extractMessage doesn't have Bot context).
+			if msg.Chat != nil && msg.Chat.ID < 0 {
+				im.GroupChatID = msg.Chat.ID
+			}
+			im.IsBotSender = from.IsBot
+			if from.IsBot {
+				im.BotUsername = from.UserName
+			}
 
 			select {
 			case b.messages <- im:

@@ -3,11 +3,24 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"net"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/eventlog"
+	"github.com/leonletto/thrum/internal/websocket"
 )
+
+// newTestWSServer starts an httptest.Server that serves WebSocket RPC using the
+// provided SyncRegistry. Returns the server and a cleanup function.
+// The returned addr is in "host:port" format (no scheme) suitable for SyncClient.
+func newTestWSServer(t *testing.T, reg *SyncRegistry) (addr string, cleanup func()) {
+	t.Helper()
+	ts := httptest.NewServer(websocket.NewServer("", reg, nil).HTTPHandler())
+	t.Cleanup(ts.Close)
+	// Strip "http://" prefix — SyncClient builds the ws:// URL itself.
+	addr = ts.Listener.Addr().String()
+	return addr, ts.Close
+}
 
 func TestSyncClient_PullEvents(t *testing.T) {
 	// Set up a sync server with test data
@@ -60,29 +73,11 @@ func TestSyncClient_PullEvents(t *testing.T) {
 		}, nil
 	})
 
-	// Start a TCP listener
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	defer ln.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go reg.ServeSyncRPC(ctx, conn, "test-peer")
-		}
-	}()
+	addr, _ := newTestWSServer(t, reg)
 
 	// Test PullEvents
 	client := NewSyncClient()
-	resp, err := client.PullEvents(ln.Addr().String(), 0, "")
+	resp, err := client.PullEvents(addr, 0, "")
 	if err != nil {
 		t.Fatalf("PullEvents: %v", err)
 	}
@@ -95,7 +90,7 @@ func TestSyncClient_PullEvents(t *testing.T) {
 	}
 
 	// Pull after sequence 2 — should get only 1 event
-	resp, err = client.PullEvents(ln.Addr().String(), 2, "")
+	resp, err = client.PullEvents(addr, 2, "")
 	if err != nil {
 		t.Fatalf("PullEvents(afterSeq=2): %v", err)
 	}
@@ -113,27 +108,10 @@ func TestSyncClient_QueryPeerInfo(t *testing.T) {
 		}, nil
 	})
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	defer ln.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go reg.ServeSyncRPC(ctx, conn, "test-peer")
-		}
-	}()
+	addr, _ := newTestWSServer(t, reg)
 
 	client := NewSyncClient()
-	info, err := client.QueryPeerInfo(ln.Addr().String(), "")
+	info, err := client.QueryPeerInfo(addr, "")
 	if err != nil {
 		t.Fatalf("QueryPeerInfo: %v", err)
 	}

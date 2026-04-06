@@ -34,12 +34,13 @@ go.work.sum
 # Development artifacts (local only, not for public repo)
 dev-docs/
 docs/plans/
+docs/superpowers/
 .agents/
 .beads/
 .beads_backup/
 .claude/
-CLAUDE.md
-AGENTS.md
+/CLAUDE.md
+/AGENTS.md
 
 # Editor/IDE
 # .idea/
