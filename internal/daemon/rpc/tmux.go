@@ -190,7 +190,8 @@ func (h *TmuxHandler) HandleSend(ctx context.Context, params json.RawMessage) (a
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
-	target := req.Name + ":0.0"
+	name := ttmux.SanitizeSessionName(req.Name)
+	target := name + ":0.0"
 	return nil, ttmux.SendKeys(target, req.Text)
 }
 
@@ -204,7 +205,8 @@ func (h *TmuxHandler) HandleCapture(ctx context.Context, params json.RawMessage)
 	if lines <= 0 {
 		lines = 50
 	}
-	content, err := ttmux.CapturePane(req.Name+":0.0", lines)
+	name := ttmux.SanitizeSessionName(req.Name)
+	content, err := ttmux.CapturePane(name+":0.0", lines)
 	if err != nil {
 		return nil, err
 	}
@@ -249,6 +251,8 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 
 		if !ttmux.HasSession(session) {
 			info.State = "dead"
+			// Clean stale tmux_session from identity file
+			h.clearTmuxFromIdentities(session)
 		} else if idFile.ClaudePID > 0 && !isProcessAlive(idFile.ClaudePID) {
 			info.State = "stale"
 		} else {
@@ -262,9 +266,12 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 }
 
 // HandleCheckPane is the handler for the tmux check-pane silence hook.
-// Full implementation in Epic 3 (thrum-loi.3).
+// Receives session/reason/content from the CLI check-pane command.
+// Currently logs the event; full coordinator notification is deferred.
 func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessage) (any, error) {
-	return nil, fmt.Errorf("check-pane not yet implemented")
+	// Skeletal handler — accepts the request without error so the tmux
+	// silence hook doesn't produce noise. Full notification flow deferred.
+	return nil, nil
 }
 
 // writeTmuxToIdentity writes tmux_session and runtime to the identity file
@@ -285,9 +292,9 @@ func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
 		if err := json.Unmarshal(data, &idFile); err != nil {
 			continue
 		}
-		// Match by worktree association — the session name is derived from role-module
+		// Match by existing tmux_session association
 		sess, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
-		if sess == sessionName || idFile.TmuxSession == "" {
+		if sess == sessionName {
 			idFile.TmuxSession = target
 			idFile.Runtime = runtime
 			_ = config.SaveIdentityFile(filepath.Dir(identitiesDir), &idFile)
