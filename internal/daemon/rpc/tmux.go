@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"github.com/leonletto/thrum/internal/config"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
@@ -99,6 +98,9 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 	if req.Cwd == "" {
 		return nil, fmt.Errorf("cwd is required")
 	}
+	if !filepath.IsAbs(req.Cwd) {
+		return nil, fmt.Errorf("cwd must be an absolute path, got: %q", req.Cwd)
+	}
 
 	name := ttmux.SanitizeSessionName(req.Name)
 	if err := ttmux.CreateSession(name, req.Cwd); err != nil {
@@ -109,13 +111,6 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 	thrumBin, _ := os.Executable()
 	if thrumBin != "" {
 		_ = ttmux.SetMonitorSilence(name, 60, thrumBin, h.thrumDir)
-	}
-
-	// Run whoami in session to verify identity
-	target := name + ":0.0"
-	if err := ttmux.SendKeys(target, "thrum whoami --json"); err == nil {
-		_ = ttmux.SendSpecialKey(target, "Enter")
-		time.Sleep(500 * time.Millisecond)
 	}
 
 	// Try to read identity file from worktree
@@ -152,10 +147,12 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 		launchCmd = "claude"
 	case "opencode":
 		launchCmd = "opencode"
+	case "aider":
+		launchCmd = "aider"
 	case "shell":
 		launchCmd = "" // already has a shell
 	default:
-		launchCmd = runtime // allow arbitrary commands
+		return nil, fmt.Errorf("unsupported runtime %q (supported: claude, opencode, aider, shell)", runtime)
 	}
 
 	target := req.Name + ":0.0"
@@ -168,6 +165,9 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 		}
 	}
 
+	// Write tmux_session and runtime to the agent's identity file
+	h.writeTmuxToIdentity(req.Name, target, runtime)
+
 	return &TmuxLaunchResponse{Session: req.Name, Runtime: runtime}, nil
 }
 
@@ -178,9 +178,10 @@ func (h *TmuxHandler) HandleKill(ctx context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	h.clearTmuxFromIdentities(req.Name)
+	name := ttmux.SanitizeSessionName(req.Name)
+	h.clearTmuxFromIdentities(name)
 
-	return nil, ttmux.KillSession(req.Name)
+	return nil, ttmux.KillSession(name)
 }
 
 // HandleSend sends text to a tmux session pane.
@@ -264,6 +265,35 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 // Full implementation in Epic 3 (thrum-loi.3).
 func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessage) (any, error) {
 	return nil, fmt.Errorf("check-pane not yet implemented")
+}
+
+// writeTmuxToIdentity writes tmux_session and runtime to the identity file
+// for the agent whose session matches the given name.
+func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
+	identitiesDir := filepath.Join(h.thrumDir, "identities")
+	entries, _ := os.ReadDir(identitiesDir)
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(identitiesDir, entry.Name())
+		data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/identities/<name>.json
+		if err != nil {
+			continue
+		}
+		var idFile config.IdentityFile
+		if err := json.Unmarshal(data, &idFile); err != nil {
+			continue
+		}
+		// Match by worktree association — the session name is derived from role-module
+		sess, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+		if sess == sessionName || idFile.TmuxSession == "" {
+			idFile.TmuxSession = target
+			idFile.Runtime = runtime
+			_ = config.SaveIdentityFile(filepath.Dir(identitiesDir), &idFile)
+			return // write to first matching identity
+		}
+	}
 }
 
 // clearTmuxFromIdentities removes tmux_session and runtime from identity files

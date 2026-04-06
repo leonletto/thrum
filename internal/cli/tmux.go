@@ -123,8 +123,12 @@ func FormatTmuxStatus(resp *TmuxStatusResponse) string {
 	fmt.Fprintf(&out, "%-25s %-20s %-12s %-10s %s\n",
 		"SESSION", "AGENT", "STATE", "RUNTIME", "BRANCH")
 	for _, s := range resp.Sessions {
+		agentDisplay := s.Agent
+		if agentDisplay != "" {
+			agentDisplay = "@" + agentDisplay
+		}
 		fmt.Fprintf(&out, "%-25s %-20s %-12s %-10s %s\n",
-			s.Name, s.Agent, s.State, s.Runtime, s.Branch)
+			s.Name, agentDisplay, s.State, s.Runtime, s.Branch)
 	}
 	return out.String()
 }

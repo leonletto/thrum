@@ -152,7 +152,7 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	}
 	result.Session = sessResult
 
-	// Step 2.5: Enrich identity file with v3 fields
+	// Step 2.5: Enrich identity file with v4 fields
 	repoPath := opts.RepoPath
 	if repoPath == "" {
 		repoPath = "."
@@ -161,8 +161,8 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		thrumDir := filepath.Join(repoPath, ".thrum")
 		changed := false
 
-		if idFile.Version < 3 {
-			idFile.Version = 3
+		if idFile.Version < 4 {
+			idFile.Version = 4
 			changed = true
 		}
 		if idFile.Branch == "" {
