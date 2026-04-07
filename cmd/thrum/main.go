@@ -583,8 +583,15 @@ Examples:
 			}
 
 			if qsResult.Session != nil {
-				idFile.SessionID = qsResult.Session.SessionID
-				_ = config.SaveIdentityFile(thrumDir, idFile)
+				// Reload identity file to preserve fields set by
+				// cli.Quickstart enrichment (ClaudePID, TmuxSession).
+				if enriched, _, loadErr := config.LoadIdentityWithPath(flagRepo); loadErr == nil {
+					enriched.SessionID = qsResult.Session.SessionID
+					_ = config.SaveIdentityFile(thrumDir, enriched)
+				} else {
+					idFile.SessionID = qsResult.Session.SessionID
+					_ = config.SaveIdentityFile(thrumDir, idFile)
+				}
 			}
 
 			if !flagQuiet {
@@ -4395,31 +4402,43 @@ Examples:
 						fmt.Sprintf("%s_%s.json", flagRole, flagModule))
 					_ = os.Remove(legacyFile)
 				}
-				idFile := &config.IdentityFile{
-					Version: 3,
-					RepoID:  cli.GetRepoID(flagRepo),
-					Agent: config.AgentConfig{
-						Kind:    "agent",
-						Name:    savedName,
-						Role:    flagRole,
-						Module:  flagModule,
-						Display: cli.AutoDisplay(flagRole, flagModule),
-					},
-					Worktree: cli.GetWorktreeName(flagRepo),
-					Branch:   cli.GetCurrentBranch(flagRepo),
-					Intent:   intent,
+
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+
+				// Load the identity file that cli.Quickstart's enrichment block
+				// already wrote — it contains ClaudePID, TmuxSession, and other
+				// fields set during enrichment. Building a fresh struct here would
+				// overwrite those fields.
+				idFile, _, loadErr := config.LoadIdentityWithPath(flagRepo)
+				if loadErr != nil || idFile == nil {
+					// Fallback: create a new identity file if none exists yet
+					idFile = &config.IdentityFile{
+						Version: 4,
+						RepoID:  cli.GetRepoID(flagRepo),
+						Agent: config.AgentConfig{
+							Kind:    "agent",
+							Name:    savedName,
+							Role:    flagRole,
+							Module:  flagModule,
+							Display: cli.AutoDisplay(flagRole, flagModule),
+						},
+						Worktree: cli.GetWorktreeName(flagRepo),
+						Branch:   cli.GetCurrentBranch(flagRepo),
+						Intent:   intent,
+					}
 				}
+
+				// Update fields that the cobra handler is responsible for
 				if display != "" {
 					idFile.Agent.Display = display
 				}
 				if result.Session != nil {
 					idFile.SessionID = result.Session.SessionID
 				}
+				if idFile.ContextFile == "" {
+					idFile.ContextFile = fmt.Sprintf("context/%s.md", savedName)
+				}
 
-				// Populate context_file with the agent's context file path
-				idFile.ContextFile = fmt.Sprintf("context/%s.md", savedName)
-
-				thrumDir := filepath.Join(flagRepo, ".thrum")
 				if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to save identity file: %v\n", err)
 				}
