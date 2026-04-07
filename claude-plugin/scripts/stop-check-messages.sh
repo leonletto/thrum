@@ -54,6 +54,16 @@ if [ "$MSG_COUNT" -gt 0 ]; then
   exit 2
 fi
 
+# Skip listener check for tmux-managed agents (daemon nudges directly).
+# If tmux_session is set in the identity file, the agent was launched via tmux.
+# The session may have died, but if so the agent wouldn't be running this hook
+# either (it runs inside the tmux pane). So field presence is sufficient here.
+TMUX_SESSION=$(cd "$PROJECT_DIR" && THRUM_AGENT_ID="$AGENT_ID" \
+  thrum whoami --field tmux_session 2>/dev/null)
+if [ -n "$TMUX_SESSION" ]; then
+  exit 0
+fi
+
 # Phase 3: Check if listener process is alive via PID file
 THRUM_DIR="${THRUM_HOME:-$PROJECT_DIR}"
 PID_FILE="$THRUM_DIR/.thrum/var/${AGENT_ID}-listener.pid"

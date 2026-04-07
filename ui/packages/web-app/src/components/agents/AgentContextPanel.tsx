@@ -130,7 +130,7 @@ export function AgentContextPanel({ agentId }: AgentContextPanelProps) {
         <AgentDeleteDialog
           open={deleteDialogOpen}
           onOpenChange={setDeleteDialogOpen}
-          agentName={fallbackDisplayName}
+          agentName={agentId}
           agentId={agentId}
         />
       </div>
@@ -281,7 +281,7 @@ export function AgentContextPanel({ agentId }: AgentContextPanelProps) {
       <AgentDeleteDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        agentName={displayName}
+        agentName={agentId}
         agentId={agentId}
       />
     </div>

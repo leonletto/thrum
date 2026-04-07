@@ -747,6 +747,30 @@ Configure in `.claude/settings.json`:
 
 ---
 
+## Tmux Sessions
+
+```bash
+thrum tmux start                               # One-command: create + launch + prime + attach
+thrum tmux create <name>                       # Create detached tmux session
+thrum tmux create <name> --cwd <path>          # Create with specific working directory
+thrum tmux launch <name>                       # Start AI runtime in session
+thrum tmux launch <name> --runtime claude      # Override runtime for this launch
+thrum tmux status                              # Show managed sessions with state
+thrum tmux connect                             # Attach (interactive picker)
+thrum tmux connect <name>                      # Attach directly by name
+thrum tmux restart <name>                      # Restart session with context snapshot
+thrum tmux restart <name> --force              # Restart without confirmation
+thrum tmux kill <name>                         # Tear down a session
+```
+
+`tmux launch` flags:
+
+```text
+--runtime    AI tool to launch (default: from config or claude)
+```
+
+---
+
 ## Config
 
 ```bash

@@ -370,6 +370,9 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 				out.WriteString("  thrum inbox --unread\n\n")
 			} else {
 				out.WriteString("## Listener Rules\n\n")
+				out.WriteString("**Tip:** If tmux is available on your system, consider using ")
+				out.WriteString("`thrum tmux start` for zero-cost message delivery instead of ")
+				out.WriteString("the listener pattern. See TMUX_SESSIONS.md resource.\n\n")
 				out.WriteString("**Keep the listener running at all times.** Spawn it on session start ")
 				out.WriteString("and re-arm whenever it completes. The PID file prevents duplicates — ")
 				out.WriteString("spawning when one is already running is a no-op.\n\n")

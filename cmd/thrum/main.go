@@ -6911,6 +6911,24 @@ func tmuxCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, _ := cmd.Flags().GetString("runtime")
+			if rt == "" {
+				// Query tmux for session's working directory (same approach as tmux start)
+				out, err := exec.Command("tmux", "display-message",
+					"-t", args[0], "-p", "#{pane_current_path}").Output()
+				if err == nil {
+					sessionCwd := strings.TrimSpace(string(out))
+					thrumDir := filepath.Join(sessionCwd, ".thrum")
+					if _, statErr := os.Stat(thrumDir); statErr == nil {
+						cfg, _ := config.LoadThrumConfig(thrumDir)
+						if cfg.Runtime.Primary != "" {
+							rt = cfg.Runtime.Primary
+						}
+					}
+				}
+				if rt == "" {
+					rt = "claude"
+				}
+			}
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
@@ -6932,7 +6950,7 @@ func tmuxCmd() *cobra.Command {
 			return nil
 		},
 	}
-	launchCmd.Flags().String("runtime", "claude", "AI tool to launch (claude, opencode, shell)")
+	launchCmd.Flags().String("runtime", "", "AI tool to launch (default: from config or claude)")
 	cmd.AddCommand(launchCmd)
 
 	// status (primary) + list (alias)
