@@ -101,6 +101,12 @@ func TmuxSend(client *Client, name, text string) error {
 	return nil
 }
 
+// TmuxRestartResponse is the response from the tmux.restart RPC.
+type TmuxRestartResponse struct {
+	Session       string `json:"session"`
+	SnapshotLines int    `json:"snapshot_lines"`
+}
+
 // TmuxCapture calls the tmux.capture RPC to capture pane content.
 func TmuxCapture(client *Client, name string, lines int) (*TmuxCaptureResponse, error) {
 	req := map[string]any{"name": name, "lines": lines}

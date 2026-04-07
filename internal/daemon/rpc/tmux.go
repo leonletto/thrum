@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/restart"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 )
 
@@ -327,6 +330,222 @@ func (h *TmuxHandler) clearTmuxFromIdentities(sessionName string) {
 			idFile.Runtime = ""
 			updated, _ := json.MarshalIndent(idFile, "", "  ")
 			_ = os.WriteFile(path, updated, 0600) // #nosec G306 -- identity file permissions
+		}
+	}
+}
+
+// TmuxRestartRequest is the request to restart a tmux-managed agent session.
+type TmuxRestartRequest struct {
+	Name    string `json:"name"`
+	Force   bool   `json:"force,omitempty"`
+	Runtime string `json:"runtime,omitempty"`
+}
+
+// TmuxRestartResponse is the response after a restart.
+type TmuxRestartResponse struct {
+	Session       string `json:"session"`
+	SnapshotLines int    `json:"snapshot_lines"`
+}
+
+// HandleRestart orchestrates the full restart cycle: snapshot → kill → relaunch.
+func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage) (any, error) {
+	var req TmuxRestartRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	name := ttmux.SanitizeSessionName(req.Name)
+	if !ttmux.HasSession(name) {
+		return nil, fmt.Errorf("session %s does not exist", name)
+	}
+
+	// Find the agent's identity file to get PID and runtime
+	agentName, idFile, idDir := h.findIdentityForSession(name)
+	if agentName == "" {
+		return nil, fmt.Errorf("no identity file found for session %s", name)
+	}
+
+	runtime := req.Runtime
+	if runtime == "" {
+		runtime = idFile.Runtime
+	}
+	if runtime == "" {
+		runtime = "claude"
+	}
+
+	snapshotLines := 0
+
+	// Extract JSONL snapshot if PID is available
+	if idFile.ClaudePID > 0 {
+		claudeDir := filepath.Join(os.Getenv("HOME"), ".claude")
+		wtThrumDir := filepath.Dir(idDir) // identities/ parent is .thrum/
+		if jsonlPath, err := restart.FindSessionJSONL(claudeDir, idFile.ClaudePID); err == nil {
+			cfg, _ := config.LoadThrumConfig(h.thrumDir)
+			maxLines := cfg.Restart.RestartMaxLines()
+			if conversation, err := restart.ExtractConversation(jsonlPath, maxLines); err == nil {
+				snapshot := restart.FormatRestartSnapshot(agentName, idFile.SessionID, "external", conversation)
+				if err := restart.SaveSnapshot(wtThrumDir, agentName, snapshot); err == nil {
+					snapshotLines = strings.Count(snapshot, "\n")
+				}
+			}
+		}
+	}
+
+	// Kill existing session
+	h.clearTmuxFromIdentitiesInDir(idDir, name)
+	if err := ttmux.KillSession(name); err != nil {
+		return nil, fmt.Errorf("kill session: %w", err)
+	}
+
+	// Resolve worktree to path. IdentityFile.Worktree is a bare name like "team-fix".
+	// Use git worktree list to find the absolute path.
+	repoDir := filepath.Dir(h.thrumDir)
+	cwd := resolveWorktreePath(ctx, repoDir, idFile.Worktree)
+	if cwd == "" {
+		// Fallback: if worktree matches the repo itself
+		if filepath.Base(repoDir) == idFile.Worktree || idFile.Worktree == "" {
+			cwd = repoDir
+		}
+	}
+	if cwd == "" {
+		return nil, fmt.Errorf("cannot resolve worktree %q to a path for %s", idFile.Worktree, agentName)
+	}
+
+	// Create and launch new session
+	if err := ttmux.CreateSession(name, cwd); err != nil {
+		return nil, fmt.Errorf("create session: %w", err)
+	}
+
+	thrumBin, _ := os.Executable()
+	_ = ttmux.SetMonitorSilence(name, 60, thrumBin, h.thrumDir)
+
+	target := name + ":0.0"
+	launchCmd := runtimeToLaunchCmd(runtime)
+	if launchCmd != "" {
+		if err := ttmux.SendKeys(target, launchCmd); err != nil {
+			return nil, fmt.Errorf("send launch command: %w", err)
+		}
+		if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
+			return nil, fmt.Errorf("send enter: %w", err)
+		}
+	}
+
+	return &TmuxRestartResponse{
+		Session:       name,
+		SnapshotLines: snapshotLines,
+	}, nil
+}
+
+// runtimeToLaunchCmd converts a runtime name to the CLI command to launch it.
+func runtimeToLaunchCmd(runtime string) string {
+	switch runtime {
+	case "claude":
+		return "claude"
+	case "opencode":
+		return "opencode"
+	case "aider":
+		return "aider"
+	case "shell":
+		return ""
+	default:
+		return runtime // best-effort: use the runtime name as the command
+	}
+}
+
+// resolveWorktreePath uses git worktree list to find the absolute path for a worktree name.
+func resolveWorktreePath(ctx context.Context, repoDir, worktreeName string) string {
+	out, err := exec.CommandContext(ctx, "git", "-C", repoDir, "worktree", "list", "--porcelain").Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "worktree ") {
+			path := strings.TrimPrefix(line, "worktree ")
+			if filepath.Base(path) == worktreeName {
+				return path
+			}
+		}
+	}
+	return ""
+}
+
+// findIdentityForSession searches all worktree identity dirs for an agent
+// associated with the given tmux session name.
+func (h *TmuxHandler) findIdentityForSession(sessionName string) (string, *config.IdentityFile, string) {
+	for _, idDir := range h.allIdentityDirs() {
+		entries, _ := os.ReadDir(idDir)
+		for _, entry := range entries {
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+				continue
+			}
+			path := filepath.Join(idDir, entry.Name())
+			data, err := os.ReadFile(path) // #nosec G304
+			if err != nil {
+				continue
+			}
+			var idFile config.IdentityFile
+			if err := json.Unmarshal(data, &idFile); err != nil {
+				continue
+			}
+			sess, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+			if sess == sessionName {
+				agentName := strings.TrimSuffix(entry.Name(), ".json")
+				return agentName, &idFile, idDir
+			}
+		}
+	}
+	return "", nil, ""
+}
+
+// allIdentityDirs returns all identity directories across worktrees.
+// It looks for .thrum/identities directories in known worktree locations.
+func (h *TmuxHandler) allIdentityDirs() []string {
+	var dirs []string
+	// Primary identities dir
+	primary := filepath.Join(h.thrumDir, "identities")
+	dirs = append(dirs, primary)
+
+	// Also scan worktrees via git
+	repoDir := filepath.Dir(h.thrumDir)
+	out, err := exec.Command("git", "-C", repoDir, "worktree", "list", "--porcelain").Output()
+	if err != nil {
+		return dirs
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "worktree ") {
+			wtPath := strings.TrimPrefix(line, "worktree ")
+			idDir := filepath.Join(wtPath, ".thrum", "identities")
+			if idDir != primary {
+				dirs = append(dirs, idDir)
+			}
+		}
+	}
+	return dirs
+}
+
+// clearTmuxFromIdentitiesInDir removes tmux_session and runtime from identity files
+// in a specific identities directory matching the given session name.
+func (h *TmuxHandler) clearTmuxFromIdentitiesInDir(idDir, sessionName string) {
+	entries, _ := os.ReadDir(idDir)
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(idDir, entry.Name())
+		data, err := os.ReadFile(path) // #nosec G304
+		if err != nil {
+			continue
+		}
+		var idFile config.IdentityFile
+		if err := json.Unmarshal(data, &idFile); err != nil {
+			continue
+		}
+		sess, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+		if sess == sessionName {
+			idFile.TmuxSession = ""
+			idFile.Runtime = ""
+			updated, _ := json.MarshalIndent(idFile, "", "  ")
+			_ = os.WriteFile(path, updated, 0600) // #nosec G306
 		}
 	}
 }

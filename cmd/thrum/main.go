@@ -5555,6 +5555,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("tmux.send", tmuxHandler.HandleSend)
 	server.RegisterHandler("tmux.capture", tmuxHandler.HandleCapture)
 	server.RegisterHandler("tmux.check-pane", tmuxHandler.HandleCheckPane)
+	server.RegisterHandler("tmux.restart", tmuxHandler.HandleRestart)
 
 	// Auto-connect to dialer-role peers after the WS server is ready.
 	if peerManager != nil && thrumCfg.Peers.AutoConnect {
@@ -7034,6 +7035,46 @@ func tmuxCmd() *cobra.Command {
 	}
 	checkPaneCmd.Flags().String("repo", "", "Repository path (baked in by tmux hook)")
 	cmd.AddCommand(checkPaneCmd)
+
+	// restart
+	tmuxRestartCmd := &cobra.Command{
+		Use:   "restart <name>",
+		Short: "Restart a tmux-managed agent session with context snapshot",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			force, _ := cmd.Flags().GetBool("force")
+			rt, _ := cmd.Flags().GetString("runtime")
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			req := map[string]any{
+				"name":  args[0],
+				"force": force,
+			}
+			if rt != "" {
+				req["runtime"] = rt
+			}
+			var result cli.TmuxRestartResponse
+			if err := client.Call("tmux.restart", req, &result); err != nil {
+				return err
+			}
+
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Printf("Session %s restarted (%d snapshot lines)\n", result.Session, result.SnapshotLines)
+			}
+			return nil
+		},
+	}
+	tmuxRestartCmd.Flags().Bool("force", false, "Skip graceful signal, force restart")
+	tmuxRestartCmd.Flags().String("runtime", "", "Runtime override (default: same as before)")
+	cmd.AddCommand(tmuxRestartCmd)
 
 	return cmd
 }
