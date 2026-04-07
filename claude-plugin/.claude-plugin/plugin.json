@@ -34,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "thrum prime 2>/dev/null || echo 'Thrum not initialized (run: thrum init)'"
+            "command": "echo 'Run /thrum:prime to load your session context, identity, and any restart snapshots.'"
           }
         ]
       }
