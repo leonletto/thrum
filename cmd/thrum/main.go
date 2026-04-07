@@ -7049,11 +7049,6 @@ func tmuxCmd() *cobra.Command {
 		Args:   cobra.ExactArgs(1),
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			repoPath, _ := cmd.Flags().GetString("repo")
-			if repoPath == "" {
-				repoPath = flagRepo
-			}
-
 			session := args[0]
 			target := session + ":0.0"
 
