@@ -585,7 +585,8 @@ Examples:
 			if qsResult.Session != nil {
 				// Reload identity file to preserve fields set by
 				// cli.Quickstart enrichment (ClaudePID, TmuxSession).
-				if enriched, _, loadErr := config.LoadIdentityWithPath(flagRepo); loadErr == nil {
+				// Only use the reloaded identity if the name matches.
+				if enriched, _, loadErr := config.LoadIdentityWithPath(flagRepo); loadErr == nil && enriched.Agent.Name == agentNameResolved {
 					enriched.SessionID = qsResult.Session.SessionID
 					_ = config.SaveIdentityFile(thrumDir, enriched)
 				} else {
@@ -4409,9 +4410,12 @@ Examples:
 				// already wrote — it contains ClaudePID, TmuxSession, and other
 				// fields set during enrichment. Building a fresh struct here would
 				// overwrite those fields.
+				// Only use the loaded identity if the agent name matches — a stale
+				// identity from `thrum init` (e.g. implementer_main) must not
+				// prevent creation of the correct identity file.
 				idFile, _, loadErr := config.LoadIdentityWithPath(flagRepo)
-				if loadErr != nil || idFile == nil {
-					// Fallback: create a new identity file if none exists yet
+				if loadErr != nil || idFile == nil || idFile.Agent.Name != savedName {
+					// Create a new identity file: no existing file, or name mismatch
 					idFile = &config.IdentityFile{
 						Version: 4,
 						RepoID:  cli.GetRepoID(flagRepo),
