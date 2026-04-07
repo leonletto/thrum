@@ -29,7 +29,8 @@ Full sequence for a coordinator setting up an agent in a new worktree:
 # 1. Initialize thrum + beads redirects in the worktree
 cd <worktree-path>
 thrum init                              # Sets up .thrum redirect to main repo
-bd init                                 # Sets up beads redirect (if using beads)
+# Beads: bd init doesn't auto-detect worktrees, so set up the redirect manually:
+mkdir -p .beads && echo /path/to/main/repo/.beads > .beads/redirect
 
 # 2. Create tmux session
 thrum tmux create <name> --cwd <path>
