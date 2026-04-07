@@ -49,7 +49,7 @@ func (t *PeerTransport) Connect(ctx context.Context) error {
 func (t *PeerTransport) resolveAddress() (string, error) {
 	if t.repoPath != "" {
 		portFile := filepath.Join(t.repoPath, ".thrum", "var", "ws.port")
-		data, err := os.ReadFile(portFile)
+		data, err := os.ReadFile(portFile) // #nosec G304 -- portFile derived from trusted config, not user input
 		if err != nil {
 			return "", fmt.Errorf("read port file %s: %w", portFile, err)
 		}

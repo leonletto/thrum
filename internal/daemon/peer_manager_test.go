@@ -131,11 +131,11 @@ func TestPeerManager_StopAll(t *testing.T) {
 		t.Errorf("ActiveCount() after StopAll = %d, want 0", count)
 	}
 
-	// Verify the context was cancelled.
+	// Verify the context was canceled.
 	select {
 	case <-ctx.Done():
 		// expected
 	default:
-		t.Error("bridge context should have been cancelled by StopAll")
+		t.Error("bridge context should have been canceled by StopAll")
 	}
 }

@@ -31,11 +31,11 @@ The listener loops internally (up to ~30 cycles of 8 min = ~4 hours max).
 
 ## Wait Command Flags
 
-| Flag              | Purpose                                                   |
-| ----------------- | --------------------------------------------------------- |
-| `--timeout 8m`    | Block up to 8 min per cycle (under Bash 600s limit)       |
-| `--after -15s`    | Include messages sent up to 15s ago (covers re-arm gap)   |
-| `--agent-name ID` | Write PID file for spawn coordination                     |
+| Flag              | Purpose                                                 |
+| ----------------- | ------------------------------------------------------- |
+| `--timeout 8m`    | Block up to 8 min per cycle (under Bash 600s limit)     |
+| `--after -15s`    | Include messages sent up to 15s ago (covers re-arm gap) |
+| `--agent-name ID` | Write PID file for spawn coordination                   |
 
 ## Cron Watchdog (Recommended)
 

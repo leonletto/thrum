@@ -15,10 +15,10 @@ type mockTransport struct {
 	notifyCh  chan bridge.Notification
 }
 
-func (m *mockTransport) PeerName() string                         { return m.name }
-func (m *mockTransport) Connected() bool                          { return m.connected }
-func (m *mockTransport) Connect(ctx context.Context) error        { m.connected = true; return nil }
-func (m *mockTransport) Close() error                             { m.connected = false; return nil }
+func (m *mockTransport) PeerName() string                          { return m.name }
+func (m *mockTransport) Connected() bool                           { return m.connected }
+func (m *mockTransport) Connect(ctx context.Context) error         { m.connected = true; return nil }
+func (m *mockTransport) Close() error                              { m.connected = false; return nil }
 func (m *mockTransport) Notifications() <-chan bridge.Notification { return m.notifyCh }
 func (m *mockTransport) Call(ctx context.Context, method string, params map[string]any) (json.RawMessage, error) {
 	return json.RawMessage(`{"ok":true}`), nil

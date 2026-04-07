@@ -291,7 +291,7 @@ func TestEnsurePreamble_CreatesFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	contextDir := filepath.Join(thrumDir, "context")
-	if err := os.MkdirAll(contextDir, 0o755); err != nil {
+	if err := os.MkdirAll(contextDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 

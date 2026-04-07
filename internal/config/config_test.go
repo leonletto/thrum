@@ -1011,7 +1011,7 @@ func writeTestIdentity(t *testing.T, dir, name string, id config.IdentityFile) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, name+".json"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, name+".json"), data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

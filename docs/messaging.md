@@ -591,6 +591,8 @@ These flags are available on all commands:
 | `--module`  | Agent module (or `THRUM_MODULE` env var)      |
 | `--repo`    | Repository path (default: `.`)                |
 
+---
+
 _The sections below cover storage internals. You don't need these for normal
 use._
 

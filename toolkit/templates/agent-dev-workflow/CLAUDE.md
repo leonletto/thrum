@@ -151,9 +151,9 @@ the code. The agent doesn't need conversation history to resume.
 
 Each implementation agent has two layers of context:
 
-| Layer   | File                            | Persistence            | Content                                                                                             | Maintained By           |
-| ------- | ------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------- | ----------------------- |
-| Prompt  | `dev-docs/prompts/{feature}.md` | Given at session start | Feature-specific: epic IDs, owned packages, design doc, architectural constraints, quality commands | project-setup skill     |
+| Layer   | File                            | Persistence            | Content                                                                                             | Maintained By                 |
+| ------- | ------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Prompt  | `dev-docs/prompts/{feature}.md` | Given at session start | Feature-specific: epic IDs, owned packages, design doc, architectural constraints, quality commands | project-setup skill           |
 | Context | `.thrum/context/{name}.md`      | Updated each session   | Volatile session state: current task, decisions made, blockers hit                                  | `/thrum:update-project` skill |
 
 The **prompt** (implementation template) contains all feature-specific
@@ -161,8 +161,8 @@ instructions: which epic/tasks to implement, which packages to modify, design
 doc references, feature-specific constraints, and scoped quality commands. It is
 given directly to the agent at session start, not stored in thrum.
 
-The **context** file is volatile — the `/thrum:update-project` skill rewrites it each
-session with current state (active task, decisions, blockers). It is
+The **context** file is volatile — the `/thrum:update-project` skill rewrites it
+each session with current state (active task, decisions, blockers). It is
 auto-created as an empty file by `thrum quickstart` and populated at runtime by
 the skill.
 

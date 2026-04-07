@@ -20,9 +20,8 @@ Your prompt contains STEP_1 and STEP_2. Each is a complete Bash command.
 
 1. Run STEP_1 in Bash.
 2. Run STEP_2 in Bash. This blocks until a message arrives or times out.
-3. Exit 0 → Return "MESSAGES_RECEIVED" and STOP.
-   Exit 1 → Timeout. Go back to step 1.
-   Exit 2 → Error. Return "ERROR" and STOP.
+3. Exit 0 → Return "MESSAGES_RECEIVED" and STOP. Exit 1 → Timeout. Go back to
+   step 1. Exit 2 → Error. Return "ERROR" and STOP.
 
 Budget: 65 turns max.
 

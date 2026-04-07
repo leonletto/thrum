@@ -517,7 +517,7 @@ func TestTelegramConfig_GroupNames(t *testing.T) {
 func TestSaveThrumConfig_PersistsGroups(t *testing.T) {
 	dir := t.TempDir()
 	thrumDir := filepath.Join(dir, ".thrum")
-	os.MkdirAll(thrumDir, 0o755)
+	os.MkdirAll(thrumDir, 0o750)
 
 	cfg := config.ThrumConfig{
 		Telegram: config.TelegramConfig{

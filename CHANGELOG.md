@@ -6,6 +6,72 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-04-06
+
+### Added
+
+- **Unified cross-repo communication** — Four-layer transport architecture
+  (Network → Transport Bridge → Routing → Application) connecting agents across
+  repos and machines via WebSocket peering. Includes `TransportBridge`
+  interface, shared `WSClient`, common relay logic, `PeerTransport` for remote
+  daemons, `PeerBridge` lifecycle, `PeerManager` with auto-connect and
+  exponential backoff, `peer configure` CLI for proxy agent management, 16-char
+  numeric pairing code, and optional token auth on WebSocket upgrade.
+- **PID identity resolution** — Process tree walk identifies agents by their
+  Claude PID, eliminating identity conflicts in multi-agent sessions. Includes
+  adoption logic for stale/human-owned identities, schema v16 (`claude_pid`
+  column), `[live]`/`[stale]` indicators in `thrum team`, and quickstart gating
+  on PID liveness.
+- **Telegram group bridge** — Human-to-agent messaging via Telegram groups with
+  `@mention` routing, proxy agent registration, conditional IsBot gate with
+  trusted bot allowlist, and web UI groups management panel.
+- **Three-tier context model** — `project_state.md` skeleton on init,
+  `thrum prime` as single complete session briefing with inline preamble and
+  project state, `update-project` skill for session summaries, and
+  `context show --project/--session` flags.
+- **Single-agent mode** — Config flag, `thrum single-agent-mode` toggle command,
+  stop hook and startup gated on mode, default preamble stripped to
+  mode-independent content.
+- **PID file spawn coordination** — `thrum wait` writes PID file, shell scripts
+  check PID instead of heartbeat, simplified listener spawn instructions.
+- **E2E test tmux isolation** — All E2E tests migrated to tmux-based command
+  isolation. Global setup cleans THRUM\_\* env vars before tmux server starts.
+- **`scripts/tmux-exec` CLI** — Standalone bash script for isolated tmux command
+  execution (create/run/exec/send/capture/destroy) with `--clean` flag.
+- **Telegram UI enhancements** — Setup wizard, pairing flow, allow list
+  management, groups management in settings panel.
+
+### Changed
+
+- **Tailscale sync migrated to WebSocket** — Sync transport moved from raw
+  TCP/NDJSON to WebSocket via shared `TransportBridge`. Breaking change for
+  existing Tailscale-paired peers (re-pair required).
+- **Bridge components extracted to shared package** — `internal/bridge/` now
+  contains `TransportBridge` interface, `WSClient`, `MessageMap`, and common
+  relay logic used by both Telegram and peer transports.
+- **Default preamble is mode-independent** — Messaging protocol content moved to
+  multi-agent preamble only; single-agent mode gets a clean minimal preamble.
+- **Plugin version bumped to 0.7.0** for marketplace pre-release testing.
+
+### Fixed
+
+- **Telegram group relay** — Fixed missing `group` field and wrong
+  `caller_agent_id` in group inbound relay.
+- **Telegram group bridge routing** — Fixed DM path matching before group/proxy
+  paths, reply-to-group routing, and proxy agent registration.
+- **Stop hook scoping** — Unread count now scoped to current agent identity.
+- **Quickstart self-conflict** — Allow name changes within the same session
+  without triggering PID conflict.
+- **Base32 hash detection** — Exclude Crockford-invalid letters (I, L, O, U).
+- **Peer code stdin** — Support `--peercode -` for piped input.
+- **Wait heartbeat** — Update heartbeat timestamp after successful RPC call.
+
+### Removed
+
+- **`thrum setup claude-md` command** — Deleted in favor of manual CLAUDE.md
+  management.
+- **`update-context` command** — Superseded by `/thrum:update-project` skill.
+
 ## [0.6.3] - 2026-03-28
 
 ### Added

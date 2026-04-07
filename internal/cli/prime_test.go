@@ -460,15 +460,15 @@ func setupPrimeTestFiles(t *testing.T, repoPath string) {
 
 	// Create a preamble file
 	os.WriteFile(thrumDir+"/context/test_agent_preamble.md",
-		[]byte("## Test Preamble\nTest instructions."), 0644)
+		[]byte("## Test Preamble\nTest instructions."), 0o600)
 
 	// Create project_state.md
 	os.WriteFile(thrumDir+"/context/project_state.md",
-		[]byte("# Project State — test\n\n**Version:** v1.0.0\n"), 0644)
+		[]byte("# Project State — test\n\n**Version:** v1.0.0\n"), 0o600)
 
 	// Create an identity file (so listener section triggers in multi-agent)
 	os.WriteFile(thrumDir+"/identities/test_agent.json",
-		[]byte(`{"agent_id":"test_agent"}`), 0644)
+		[]byte(`{"agent_id":"test_agent"}`), 0o600)
 }
 
 func TestPrimeOutputMultiAgent(t *testing.T) {

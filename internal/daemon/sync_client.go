@@ -50,7 +50,7 @@ func (c *SyncClient) wsCall(ctx context.Context, wsURL string, method string, pa
 }
 
 // syncWSURL builds the WebSocket URL for a peer's sync endpoint using a token.
-// peerAddr is the "host:port" address stored in PeerInfo.Address.
+// PeerAddr is the "host:port" address stored in PeerInfo.Address.
 func syncWSURL(peerAddr, token string) string {
 	if token != "" {
 		return fmt.Sprintf("ws://%s/ws?token=%s", peerAddr, token)
