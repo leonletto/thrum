@@ -21,19 +21,18 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; API Reference &rsaquo; RPC API
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="single-agent-mode.html">Single-Agent Mode</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="single-agent-mode.html">Single-Agent Mode</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="session-restart.html">Session Restart & Context Recovery</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <strong>RPC API</strong> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
 <strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
 <strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
-<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
 <strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>strategies</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
 <strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
@@ -41,7 +40,7 @@ a{color:#0366d6}
 <main>
 <h2>Thrum Daemon RPC API</h2>
 <blockquote>
-<p><strong>TL;DR:</strong> 35+ RPC methods over JSON-RPC 2.0, available on a Unix socket or
+<p><strong>TL;DR:</strong> 45+ RPC methods over JSON-RPC 2.0, available on a Unix socket or
 WebSocket. Most users never need this — the CLI wraps all of it. This
 reference is for building custom integrations or understanding what&#39;s
 happening under the hood.</p>
@@ -2981,6 +2980,327 @@ otherwise.</li>
 <td><code>ok</code></td>
 <td>boolean</td>
 <td>Success indicator</td>
+</tr>
+</tbody></table>
+<h2>Tmux Methods (v0.7.1)</h2>
+<h3>tmux.create</h3>
+<p>Create a tmux session for an agent with a clean environment and
+<code>monitor-silence</code> hooks.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Session name</td>
+</tr>
+<tr>
+<td><code>cwd</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Working directory for the session</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session</code></td>
+<td>string</td>
+<td>Created session name</td>
+</tr>
+<tr>
+<td><code>identity</code></td>
+<td>object</td>
+<td>Agent identity file if found at cwd (nullable)</td>
+</tr>
+</tbody></table>
+<h3>tmux.launch</h3>
+<p>Start an AI tool inside an existing tmux session. Writes <code>tmux_session</code> and
+<code>runtime</code> to the agent&#39;s identity file.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Session name</td>
+</tr>
+<tr>
+<td><code>runtime</code></td>
+<td>string</td>
+<td>no</td>
+<td>Runtime to launch (<code>claude</code>, <code>opencode</code>, <code>shell</code>) — default: <code>claude</code></td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session</code></td>
+<td>string</td>
+<td>Session name</td>
+</tr>
+<tr>
+<td><code>runtime</code></td>
+<td>string</td>
+<td>Runtime that launched</td>
+</tr>
+</tbody></table>
+<h3>tmux.status</h3>
+<p>List all tmux-managed sessions with agent info and liveness state. Scans
+identity files in <code>.thrum/identities/</code> for agents with <code>tmux_session</code> set, then
+checks session existence and PID liveness.</p>
+<p><strong>Request:</strong> <em>(none)</em></p>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>sessions</code></td>
+<td>array</td>
+<td>List of session info objects</td>
+</tr>
+<tr>
+<td><code>sessions[].name</code></td>
+<td>string</td>
+<td>Tmux session name</td>
+</tr>
+<tr>
+<td><code>sessions[].agent</code></td>
+<td>string</td>
+<td>Agent name</td>
+</tr>
+<tr>
+<td><code>sessions[].role</code></td>
+<td>string</td>
+<td>Agent role</td>
+</tr>
+<tr>
+<td><code>sessions[].module</code></td>
+<td>string</td>
+<td>Agent module</td>
+</tr>
+<tr>
+<td><code>sessions[].state</code></td>
+<td>string</td>
+<td><code>alive</code>, <code>stale</code>, <code>dead</code></td>
+</tr>
+<tr>
+<td><code>sessions[].runtime</code></td>
+<td>string</td>
+<td>Runtime (<code>claude</code>, <code>opencode</code>, etc.)</td>
+</tr>
+<tr>
+<td><code>sessions[].branch</code></td>
+<td>string</td>
+<td>Current git branch</td>
+</tr>
+</tbody></table>
+<h3>tmux.kill</h3>
+<p>Tear down a tmux session and clear <code>tmux_session</code> from all matching identity
+files.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Session name</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong> <code>null</code></p>
+<h3>tmux.send</h3>
+<p>Send text into a tmux session via <code>send-keys</code>.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Session name</td>
+</tr>
+<tr>
+<td><code>text</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Text to send</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong> <code>null</code></p>
+<h3>tmux.capture</h3>
+<p>Capture the visible content of a tmux pane.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Session name</td>
+</tr>
+<tr>
+<td><code>lines</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Lines to capture (default: 50)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>content</code></td>
+<td>string</td>
+<td>Captured pane output</td>
+</tr>
+</tbody></table>
+<h3>tmux.check-pane</h3>
+<p>Check a tmux pane for permission prompts or idle state. Called by the
+<code>alert-silence</code> tmux hook — not typically called by users.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Session name</td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td>string</td>
+<td>no</td>
+<td>Detected state reason</td>
+</tr>
+<tr>
+<td><code>content</code></td>
+<td>string</td>
+<td>no</td>
+<td>Captured pane content (last 5 lines)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong> <code>null</code></p>
+<h3>tmux.restart</h3>
+<p>Restart a tmux-managed agent session with a context snapshot. Extracts the
+agent&#39;s conversation history from the JSONL transcript, kills the session,
+creates a new one, and relaunches.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Session name</td>
+</tr>
+<tr>
+<td><code>force</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Skip graceful signal (default: <code>false</code>)</td>
+</tr>
+<tr>
+<td><code>runtime</code></td>
+<td>string</td>
+<td>no</td>
+<td>Runtime override (default: same as before)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session</code></td>
+<td>string</td>
+<td>New session name</td>
+</tr>
+<tr>
+<td><code>snapshot_lines</code></td>
+<td>integer</td>
+<td>Lines in the saved snapshot</td>
 </tr>
 </tbody></table>
 <h2>Using the API</h2>

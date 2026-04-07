@@ -29,12 +29,22 @@ agent gets a unique identity, and you get tools to organize them into teams,
 detect and configure any AI coding platform, and recover full session context
 after compaction.
 
+**Recommended:** Use [tmux-managed sessions](tmux-sessions.md) to run your agent
+team. The coordinator creates tmux sessions, launches agents, and the daemon
+delivers messages instantly — no background listeners, no token burn, no
+operational boilerplate. See [Tmux-Managed Sessions](tmux-sessions.md) for the
+full story.
+
 **Note:** New repos default to single-agent mode (`single_agent_mode: true`).
 Run `thrum single-agent-mode false` to enable the features on this page. See
 [Single-Agent Mode](single-agent-mode.md).
 
 **Key multi-agent capabilities:**
 
+- **Tmux-Managed Sessions** (v0.7.1) -- Daemon-driven agent lifecycle with
+  instant message delivery and zero background listeners
+- **Session Restart** (v0.7.1) -- Agents restart mid-task without losing
+  conversation history
 - **Agent Groups** -- Named collections of agents and roles for targeted
   messaging
 - **Cross-Repo Peers** (v0.7.0) -- Pair two repos via Tailscale so agents can

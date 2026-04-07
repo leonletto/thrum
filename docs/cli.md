@@ -88,6 +88,17 @@ for AI agent coordination.
 | `thrum backup plugin list` | List configured backup plugins                       |
 | `thrum backup plugin add`  | Add a backup plugin (or use a built-in preset)       |
 | `thrum backup schedule`    | Configure automatic backup schedule                  |
+| `thrum tmux create`        | Create a tmux session for an agent                   |
+| `thrum tmux launch`        | Start an AI tool inside a tmux session               |
+| `thrum tmux status`        | Show tmux-managed sessions with state                |
+| `thrum tmux list`          | Alias for `thrum tmux status`                        |
+| `thrum tmux kill`          | Tear down a tmux session                             |
+| `thrum tmux send`          | Send text into a tmux session                        |
+| `thrum tmux capture`       | Capture pane content from a tmux session             |
+| `thrum tmux restart`       | Restart a tmux session with context snapshot         |
+| `thrum restart save`       | Save conversation snapshot for session restart       |
+| `thrum restart restore`    | Output a restart snapshot to stdout                  |
+| `thrum restart check`      | Check if a restart snapshot exists (exit code)       |
 | `thrum mcp serve`          | Start MCP stdio server for agent messaging           |
 
 ## Global Flags
@@ -1942,6 +1953,206 @@ Telegram Bridge
   User:    alice
 ```
 
+## Tmux Session Management
+
+Manage daemon-driven tmux sessions for agents. Replaces the background listener
+with instant message delivery via `send-keys`. See
+[Tmux-Managed Sessions](tmux-sessions.md) for the full story.
+
+### thrum tmux create
+
+Create a tmux session for an agent with a clean environment. Sets up
+`monitor-silence` hooks for permission detection.
+
+```text
+thrum tmux create <name> --cwd <path>
+```
+
+| Flag    | Description                       | Required |
+| ------- | --------------------------------- | -------- |
+| `--cwd` | Working directory for the session | yes      |
+
+Example:
+
+```text
+$ thrum tmux create implementer-api --cwd ../worktrees/api-feature
+Session created: implementer-api
+```
+
+### thrum tmux launch
+
+Start an AI tool inside an existing tmux session.
+
+```text
+thrum tmux launch <name> [flags]
+```
+
+| Flag        | Description                                       | Default  |
+| ----------- | ------------------------------------------------- | -------- |
+| `--runtime` | AI tool to launch (`claude`, `opencode`, `shell`) | `claude` |
+
+Example:
+
+```text
+$ thrum tmux launch implementer-api
+Launched claude in session implementer-api
+
+$ thrum tmux launch implementer-api --runtime opencode
+Launched opencode in session implementer-api
+```
+
+### thrum tmux status
+
+Show all tmux-managed sessions with agent info, liveness state, runtime, and
+branch.
+
+```text
+thrum tmux status
+```
+
+`thrum tmux list` is an alias.
+
+Example:
+
+```text
+$ thrum tmux status
+SESSION                   AGENT                STATE        RUNTIME    BRANCH
+coordinator-main          coordinator_main     alive        claude     thrum-dev
+implementer-api           impl_api             alive        opencode   feature/api
+implementer-website-dev   impl_website_dev     stale        claude     website-dev
+```
+
+### thrum tmux kill
+
+Tear down a tmux session and clear `tmux_session` from the agent's identity
+file.
+
+```text
+thrum tmux kill <name>
+```
+
+Example:
+
+```text
+$ thrum tmux kill implementer-api
+Session implementer-api killed
+```
+
+### thrum tmux send
+
+Send text into a tmux session via `send-keys`. Useful for coordinator debugging
+or injecting commands.
+
+```text
+thrum tmux send <name> "text"
+```
+
+Example:
+
+```text
+thrum tmux send implementer-api "thrum inbox --unread"
+```
+
+### thrum tmux capture
+
+Capture the visible content of a tmux pane. Useful for coordinator inspection or
+permission prompt detection.
+
+```text
+thrum tmux capture <name> [flags]
+```
+
+| Flag      | Description                | Default |
+| --------- | -------------------------- | ------- |
+| `--lines` | Number of lines to capture | `50`    |
+
+Example:
+
+```text
+thrum tmux capture implementer-api --lines 10
+```
+
+### thrum tmux restart
+
+Restart a tmux-managed agent session with a context snapshot. Extracts the
+agent's conversation history from the JSONL transcript, kills the session,
+creates a new one, and relaunches. The new session loads the snapshot via
+`thrum prime`. See [Session Restart](session-restart.md) for details.
+
+```text
+thrum tmux restart <name> [flags]
+```
+
+| Flag        | Description                                   | Default |
+| ----------- | --------------------------------------------- | ------- |
+| `--force`   | Skip graceful signal, force restart           | `false` |
+| `--runtime` | Runtime override for relaunch (default: same) |         |
+
+Example:
+
+```text
+$ thrum tmux restart implementer-api
+Session implementer-api restarted (847 snapshot lines)
+
+$ thrum tmux restart implementer-api --runtime opencode
+Session implementer-api restarted (847 snapshot lines)
+```
+
+## Session Restart
+
+Save and restore conversation snapshots for session restart. See
+[Session Restart & Context Recovery](session-restart.md) for the full story.
+
+### thrum restart save
+
+Save a conversation snapshot for the current agent. Extracts user + assistant
+text from the Claude Code JSONL transcript, truncates to the configured line
+limit, and writes to `.thrum/restart/<agent>.md`.
+
+```text
+thrum restart save [flags]
+```
+
+| Flag       | Description                                                            | Default          |
+| ---------- | ---------------------------------------------------------------------- | ---------------- |
+| `--reason` | Reason for restart (`self-initiated`, `external`, `context-threshold`) | `self-initiated` |
+
+Example:
+
+```text
+$ thrum restart save
+Restart snapshot saved for impl_api (847 lines)
+
+$ thrum restart save --reason context-threshold
+Restart snapshot saved for impl_api (847 lines)
+```
+
+### thrum restart restore
+
+Output a restart snapshot to stdout and delete the file. Manual escape hatch for
+non-tmux agents or when `thrum prime` is not used.
+
+```text
+thrum restart restore
+```
+
+Exits with code 1 if no snapshot exists.
+
+### thrum restart check
+
+Check if a restart snapshot exists for the current agent. Exits 0 if yes, 1 if
+no. No stdout — for scripting.
+
+```text
+thrum restart check
+```
+
+Example:
+
+```text
+if thrum restart check; then echo "Snapshot ready"; fi
+```
+
 ## MCP Server
 
 ### thrum mcp serve
@@ -2047,7 +2258,7 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "repo_id": "r_0123456789AB",
   "agent": {
     "kind": "agent",
@@ -2057,12 +2268,13 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
     "display": "Auth Developer"
   },
   "worktree": "main",
+  "tmux_session": "implementer-auth:0.0",
+  "runtime": "claude",
+  "claude_pid": 12345,
   "confirmed_by": "",
   "updated_at": "2026-02-03T10:00:00Z"
 }
 ```
-
----
 
 _The section below covers storage internals. You don't need it for normal use._
 

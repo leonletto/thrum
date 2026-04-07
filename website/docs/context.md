@@ -3,8 +3,8 @@ title: "Agent Context Management"
 description:
   "Per-agent context storage for persisting volatile project state across
   sessions and machines"
-category: "context"
-order: 1
+category: "guides"
+order: 6
 tags: ["context", "agents", "persistence", "markdown", "state"]
 last_updated: "2026-02-12"
 ---
@@ -14,7 +14,12 @@ last_updated: "2026-02-12"
 > **TL;DR:** Context lets agents save notes that survive session restarts and
 > compaction. Save with `thrum context save`, view with `thrum context show`.
 > Files live in `.thrum/context/{agent}.md` — plain Markdown you can read and
-> edit directly.
+> edit directly. For most people, the `/thrum:update-project` skill is the
+> easiest way to keep context current — run it before shutting down for the day.
+
+> See also: [Session Restart & Context Recovery](session-restart.md) for
+> automated restart snapshots that extract conversation history from Claude
+> Code's JSONL transcripts.
 
 ## Overview
 

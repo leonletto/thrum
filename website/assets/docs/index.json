@@ -77,21 +77,6 @@
     "lastUpdated": "2026-04-06"
   },
   {
-    "path": "context.html",
-    "title": "Agent Context Management",
-    "description": "Per-agent context storage for persisting volatile project state across sessions and machines",
-    "category": "context",
-    "order": 1,
-    "tags": [
-      "context",
-      "agents",
-      "persistence",
-      "markdown",
-      "state"
-    ],
-    "lastUpdated": "2026-02-12"
-  },
-  {
     "path": "daemon.html",
     "title": "Daemon Architecture",
     "description": "Background service managing state, RPC handlers, sync loop, WebSocket server, and embedded UI on single port",
@@ -266,6 +251,36 @@
     "lastUpdated": "2026-02-24"
   },
   {
+    "path": "session-restart.html",
+    "title": "Session Restart & Context Recovery",
+    "description": "Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts",
+    "category": "guides",
+    "order": 5,
+    "tags": [
+      "restart",
+      "context",
+      "snapshot",
+      "recovery",
+      "session"
+    ],
+    "lastUpdated": "2026-04-07"
+  },
+  {
+    "path": "context.html",
+    "title": "Agent Context Management",
+    "description": "Per-agent context storage for persisting volatile project state across sessions and machines",
+    "category": "guides",
+    "order": 6,
+    "tags": [
+      "context",
+      "agents",
+      "persistence",
+      "markdown",
+      "state"
+    ],
+    "lastUpdated": "2026-02-12"
+  },
+  {
     "path": "guides/coordinate-two-agents.html",
     "title": "Coordinate Two Agents",
     "description": "Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case",
@@ -436,11 +451,26 @@
     "lastUpdated": "2026-04-06"
   },
   {
+    "path": "tmux-sessions.html",
+    "title": "Tmux-Managed Sessions",
+    "description": "Run agent teams in daemon-managed tmux sessions with instant message delivery, zero background listeners, and coordinator-managed lifecycle",
+    "category": "overview",
+    "order": 2,
+    "tags": [
+      "tmux",
+      "sessions",
+      "multi-agent",
+      "nudge",
+      "coordinator"
+    ],
+    "lastUpdated": "2026-04-07"
+  },
+  {
     "path": "single-agent-mode.html",
     "title": "Single-Agent Mode",
     "description": "Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent",
     "category": "overview",
-    "order": 2,
+    "order": 3,
     "tags": [
       "single-agent",
       "context",

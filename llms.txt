@@ -1,4 +1,4 @@
-# Thrum v0.7.0
+# Thrum v0.7.1
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -14,6 +14,10 @@ needed -- all sync operations happen within the worktree.
 New in v0.7.0: single-agent mode (default for new repos), cross-repo peer
 communication via Tailscale, PID-based identity resolution, and a three-tier
 context model for session persistence across compaction.
+
+New in v0.7.1: tmux-managed sessions replace background listeners with instant
+daemon-driven nudge delivery. Session restart extracts conversation history from
+JSONL transcripts and reloads it in new sessions.
 
 ## Quick Start
 
@@ -293,6 +297,44 @@ All commands accept these flags:
   thrum config show [--json]
     Show effective configuration from all sources (config.json, env, defaults).
 
+### Tmux Session Management (v0.7.1)
+
+  thrum tmux create <name> --cwd <path>
+    Create a tmux session for an agent with clean environment and monitor-silence hooks.
+
+  thrum tmux launch <name> [--runtime claude|opencode|shell]
+    Start an AI tool inside an existing tmux session. Default runtime: claude.
+
+  thrum tmux status
+    Show all tmux-managed sessions with agent info, state, runtime, and branch.
+
+  thrum tmux list
+    Alias for thrum tmux status.
+
+  thrum tmux kill <name>
+    Tear down a tmux session and clear tmux_session from identity file.
+
+  thrum tmux send <name> "text"
+    Send text into a tmux session via send-keys.
+
+  thrum tmux capture <name> [--lines N]
+    Capture visible pane content from a tmux session.
+
+  thrum tmux restart <name> [--force] [--runtime R]
+    Restart a tmux session with context snapshot. Extracts JSONL conversation,
+    kills session, creates new one, relaunches. New session loads snapshot via prime.
+
+### Session Restart (v0.7.1)
+
+  thrum restart save [--reason self-initiated|external|context-threshold]
+    Save conversation snapshot for session restart.
+
+  thrum restart restore
+    Output restart snapshot to stdout and delete file. Manual escape hatch.
+
+  thrum restart check
+    Check if restart snapshot exists. Exit 0 = yes, exit 1 = no.
+
 ### Daemon
 
   thrum daemon start [--local]
@@ -368,6 +410,19 @@ All commands accept these flags:
   # Configure proxy agents so remote agents are addressable locally
   thrum peer configure alice add-agent planner
   thrum send "Ready for review" --to @alice:planner
+
+### Launch agents in tmux sessions (v0.7.1)
+
+  # Create and launch an agent
+  thrum tmux create implementer-api --cwd ../worktrees/api-feature
+  thrum tmux launch implementer-api
+  thrum send "Your epic is thrum-abc. Start working." --to @impl_api
+
+  # Check session status
+  thrum tmux status
+
+  # Restart an agent with context preserved
+  thrum tmux restart implementer-api
 
 ### Save and recover context
 

@@ -33,6 +33,11 @@ Located at `.thrum/config.json` in your repository:
     "auto_connect": true,
     "pairing_code_length": 16
   },
+  "restart": {
+    "max_lines": 1000,
+    "auto_threshold": 0,
+    "graceful_timeout": 30
+  },
   "backup": {
     "dir": "/path/to/backups",
     "schedule": "24h",
@@ -228,6 +233,59 @@ Example:
   }
 }
 ```
+
+## Restart
+
+Session restart settings for context snapshot behavior. See
+[Session Restart & Context Recovery](session-restart.md).
+
+### `restart.max_lines`
+
+Maximum lines in a restart snapshot.
+
+- **Type:** integer
+- **Default:** `1000`
+
+### `restart.auto_threshold`
+
+Context window usage percentage that triggers automatic restart. Set to 0 to
+disable.
+
+- **Type:** integer (0-100)
+- **Default:** `0` (disabled)
+
+### `restart.graceful_timeout`
+
+Seconds to wait for an agent to save its own snapshot during graceful restart
+before falling back to force extraction.
+
+- **Type:** integer (seconds)
+- **Default:** `30`
+
+Example config with restart enabled:
+
+```json
+{
+  "restart": {
+    "max_lines": 1000,
+    "auto_threshold": 80,
+    "graceful_timeout": 30
+  }
+}
+```
+
+## Tmux Configuration
+
+If you're using [tmux-managed sessions](tmux-sessions.md), create a
+`~/.tmux.conf` with mouse support:
+
+```bash
+# ~/.tmux.conf
+set -g mouse on
+```
+
+Without this, scrolling doesn't work in tmux sessions and the experience feels
+broken. This one line makes tmux behave like a regular terminal.
 
 ## Priority Chain
 

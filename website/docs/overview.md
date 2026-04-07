@@ -8,7 +8,7 @@ last_updated: "2026-04-06"
 
 ## What Is Thrum?
 
-> **TL;DR:** Thrum has ~30 commands but you only need 8 for daily use. The
+> **TL;DR:** Thrum has ~40 commands but you only need 8 for daily use. The
 > tables below break down which commands are for you, which are for agents, and
 > which are one-time setup. Start here, then drill into the reference pages when
 > you need details.
@@ -22,6 +22,10 @@ worktrees, machines, and repositories. It provides:
   via Tailscale (v0.7.0)
 - **Real-time visibility** into what other agents are working on
 - **Subscription-based notifications** for targeted communication
+- **Tmux-managed sessions** — daemon-driven agent lifecycle with instant message
+  delivery and zero background listeners (v0.7.1)
+- **Session restart with context snapshots** — agents restart mid-task without
+  losing conversation history (v0.7.1)
 - **Single-agent mode** — use Thrum's context management without the messaging
   layer (v0.7.0 default)
 - **Backup & Restore** for protecting your message history and agent state
@@ -48,7 +52,7 @@ and suggests this if it's missing.
 
 ## Understanding the CLI
 
-Thrum has ~30 commands. Here's why that's not as many as it sounds.
+Thrum has ~40 commands. Here's why that's not as many as it sounds.
 
 ### Daily Drivers (8 commands)
 
@@ -133,7 +137,9 @@ all handled gracefully.
 | -------------------------------------------------------- | --------------------------------------------------------------------- |
 | [Philosophy](philosophy.md)                              | Why Thrum exists and how it thinks about agents                       |
 | [Quickstart Guide](quickstart.md)                        | 5-minute getting started                                              |
+| [Tmux-Managed Sessions](tmux-sessions.md)                | Daemon-managed tmux sessions with instant message delivery (v0.7.1)   |
 | [Single-Agent Mode](single-agent-mode.md)                | Context management without messaging (v0.7.0 default)                 |
+| [Session Restart](session-restart.md)                    | Save conversation history and resume across sessions (v0.7.1)         |
 | [Architecture](architecture.md)                          | Daemon internals, storage, sync, peer transport, and packages         |
 | [Daemon Architecture](daemon.md)                         | Technical daemon internals                                            |
 | [RPC API Reference](rpc-api.md)                          | All RPC methods (including peer.\* methods)                           |

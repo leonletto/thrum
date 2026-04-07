@@ -1,4 +1,4 @@
-# Thrum v0.7.0 -- Complete Agent Reference
+# Thrum v0.7.1 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -658,6 +658,43 @@ All commands accept:
             environment variables, defaults, auto-detected values). Shows the source
             of each config value. Works whether the daemon is running or not.
 
+### thrum tmux create | launch | status | kill | send | capture | restart (v0.7.1)
+
+  thrum tmux create <name> --cwd <path>
+    Create tmux session for an agent with clean env and monitor-silence hooks.
+
+  thrum tmux launch <name> [--runtime claude|opencode|shell]
+    Start AI tool inside tmux session. Default: claude.
+
+  thrum tmux status
+    Show tmux-managed sessions with state (alive/stale/dead), runtime, branch.
+
+  thrum tmux list
+    Alias for status.
+
+  thrum tmux kill <name>
+    Tear down session, clear tmux_session from identity.
+
+  thrum tmux send <name> "text"
+    Send text into session via send-keys.
+
+  thrum tmux capture <name> [--lines N]
+    Capture visible pane content. Default: 50 lines.
+
+  thrum tmux restart <name> [--force] [--runtime R]
+    Snapshot + kill + relaunch. New session loads snapshot via prime.
+
+### thrum restart save | restore | check (v0.7.1)
+
+  thrum restart save [--reason self-initiated|external|context-threshold]
+    Save conversation snapshot from JSONL transcript.
+
+  thrum restart restore
+    Output snapshot to stdout and delete file.
+
+  thrum restart check
+    Exit 0 if snapshot exists, 1 if not. No stdout.
+
 ### thrum daemon start | stop | status | restart
 
   thrum daemon start [--local]  Start daemon in background (10s socket wait)
@@ -954,6 +991,53 @@ All methods use JSON-RPC 2.0 protocol.
   Notes:     Returns the git user.name and user.email from the repo's git config.
              Username is sanitized (lowercase, alphanumeric + hyphens).
 
+### Tmux RPC Methods (v0.7.1)
+
+### tmux.create
+
+  Request:   { name, cwd }
+  Response:  { session, identity? }
+
+### tmux.launch
+
+  Request:   { name, runtime? }
+  Response:  { session, runtime }
+  Default:   runtime = "claude"
+
+### tmux.status
+
+  Request:   {} (no params)
+  Response:  { sessions: [{ name, agent, role, module, state, runtime, branch }] }
+  States:    "alive" | "stale" | "dead"
+
+### tmux.kill
+
+  Request:   { name }
+  Response:  null
+
+### tmux.send
+
+  Request:   { name, text }
+  Response:  null
+
+### tmux.capture
+
+  Request:   { name, lines? }
+  Response:  { content }
+  Default:   lines = 50
+
+### tmux.check-pane
+
+  Request:   { session, reason?, content? }
+  Response:  null
+  Notes:     Called by tmux alert-silence hook, not typically user-facing.
+
+### tmux.restart
+
+  Request:   { name, force?, runtime? }
+  Response:  { session, snapshot_lines }
+  Notes:     Extracts JSONL conversation, kills session, creates new one, relaunches.
+
 ## Event Types (JSONL)
 
 Events stored in sharded JSONL files within `.git/thrum-sync/a-sync` worktree:
@@ -1221,7 +1305,7 @@ Unknown event types are silently ignored (forward compatibility).
 ### Identity File (.thrum/identities/{name}.json)
 
   {
-    "version": 3,
+    "version": 4,
     "repo_id": "r_7K2Q1X9M3P0B",
     "agent": {
       "kind": "agent",
@@ -1232,6 +1316,8 @@ Unknown event types are silently ignored (forward compatibility).
     },
     "worktree": "auth",
     "claude_pid": 12345,
+    "tmux_session": "implementer-auth:0.0",
+    "runtime": "claude",
     "confirmed_by": "human:leon",
     "updated_at": "2026-02-03T18:02:10.000Z"
   }
@@ -1239,6 +1325,8 @@ Unknown event types are silently ignored (forward compatibility).
   Created/updated by `thrum agent register`. Each agent gets a separate file named
   after the agent name (e.g., furiosa.json). Unnamed agents use {role}_{hash}.json.
   claude_pid (v0.7.0) tracks which Claude process owns this identity.
+  tmux_session (v0.7.1) is the full pane target for daemon nudge delivery.
+  runtime (v0.7.1) indicates which AI tool is running (claude, opencode, shell).
 
 ### Init Options
 

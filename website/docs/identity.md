@@ -300,11 +300,11 @@ after the agent:
 └── coordinator_1B9K33T6RK.json  # Unnamed agent (hash-based)
 ```
 
-**Identity file format** (version 3):
+**Identity file format** (version 4):
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "repo_id": "r_7K2Q1X9M3P0B",
   "agent": {
     "kind": "agent",
@@ -315,6 +315,8 @@ after the agent:
   },
   "worktree": "auth",
   "claude_pid": 12345,
+  "tmux_session": "implementer-auth:0.0",
+  "runtime": "claude",
   "confirmed_by": "human:leon",
   "updated_at": "2026-02-03T18:02:10.000Z"
 }
@@ -323,6 +325,22 @@ after the agent:
 The `claude_pid` field (v0.7.0) stores the PID of the Claude process that owns
 this identity. It is automatically maintained by the adoption logic described
 above.
+
+The `tmux_session` and `runtime` fields (v0.7.1) support
+[tmux-managed sessions](tmux-sessions.md). `tmux_session` is the full pane
+target (e.g., `implementer-auth:0.0`) used by the daemon to route nudge
+notifications. `runtime` indicates which AI tool is running in the session
+(`claude`, `opencode`, `shell`, etc.). Both fields are `omitempty` — legacy
+agents without tmux sessions won't have them.
+
+**Tmux-mode determination** (live, not stored): An agent is in tmux-mode when
+its identity file has `tmux_session` set, the tmux session exists, and the
+Claude PID is alive. The daemon clears `tmux_session` when it detects the
+session is gone or the PID is dead, preventing stale state.
+
+**Canonical writer:** `thrum tmux launch` is the primary writer of both fields.
+`thrum prime` confirms the values on startup — if `tmux_session` is missing or
+mismatched, it writes the current value from `$TMUX`.
 
 **Auto-selection rules** for identity files (in priority order):
 

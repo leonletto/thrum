@@ -1,6 +1,6 @@
-# Thrum v0.6.3 -- Complete Agent Reference
+# Thrum v0.7.1 -- Complete Agent Reference
 
-> Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Persistent.
+> Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
 ## Architecture
 
@@ -185,18 +185,6 @@ All commands accept:
   Errors:   Fails if .thrum/ exists (unless --force). Fails if not a git repo.
   Related:  `thrum migrate` upgrades repos from the old tracked-on-main layout.
             `thrum setup` configures .thrum/ in feature worktrees (creates redirect).
-
-
-### thrum setup claude-md
-
-  Usage:    thrum setup claude-md [flags]
-  Flags:    --apply     Append to CLAUDE.md (create if missing)
-            --force     Overwrite existing Thrum section
-  Action:   Generates comprehensive Thrum agent coordination instructions for CLAUDE.md.
-            Prints to stdout by default. Use --apply to append to CLAUDE.md (with
-            duplicate detection). Use --force with --apply to replace existing Thrum
-            section. Includes registration, messaging protocols, MCP configuration,
-            background listener setup, and group management instructions.
 
 
 ### thrum quickstart
@@ -534,8 +522,7 @@ All commands accept:
   Usage:    thrum team [--all] [--json]
   Flags:    --all    Include offline agents
   Action:   Shows rich, multi-line status for every active agent. Displays session info,
-            work context, inbox counts, branch status, per-file change details, and
-            PID liveness ([live]/[stale]) based on claude_pid process-tree check.
+            work context, inbox counts, branch status, and per-file change details.
   Requires: Daemon running.
 
 ### thrum context save
@@ -670,6 +657,43 @@ All commands accept:
   Action:   Shows effective Thrum configuration from all sources (config.json,
             environment variables, defaults, auto-detected values). Shows the source
             of each config value. Works whether the daemon is running or not.
+
+### thrum tmux create | launch | status | kill | send | capture | restart (v0.7.1)
+
+  thrum tmux create <name> --cwd <path>
+    Create tmux session for an agent with clean env and monitor-silence hooks.
+
+  thrum tmux launch <name> [--runtime claude|opencode|shell]
+    Start AI tool inside tmux session. Default: claude.
+
+  thrum tmux status
+    Show tmux-managed sessions with state (alive/stale/dead), runtime, branch.
+
+  thrum tmux list
+    Alias for status.
+
+  thrum tmux kill <name>
+    Tear down session, clear tmux_session from identity.
+
+  thrum tmux send <name> "text"
+    Send text into session via send-keys.
+
+  thrum tmux capture <name> [--lines N]
+    Capture visible pane content. Default: 50 lines.
+
+  thrum tmux restart <name> [--force] [--runtime R]
+    Snapshot + kill + relaunch. New session loads snapshot via prime.
+
+### thrum restart save | restore | check (v0.7.1)
+
+  thrum restart save [--reason self-initiated|external|context-threshold]
+    Save conversation snapshot from JSONL transcript.
+
+  thrum restart restore
+    Output snapshot to stdout and delete file.
+
+  thrum restart check
+    Exit 0 if snapshot exists, 1 if not. No stdout.
 
 ### thrum daemon start | stop | status | restart
 
@@ -902,55 +926,56 @@ All methods use JSON-RPC 2.0 protocol.
   Request:   {} (no params)
   Response:  { running, last_sync_at, last_error?, sync_state }
 
-### Tailscale Peer Sync RPC Methods
-
-### tsync.force
-
-  Request:   {} (no params)
-  Action:    Triggers immediate Tailscale peer sync.
-
-### tsync.peers.list
-
-  Request:   {} (no params)
-  Response:  List of paired Tailscale peers.
-
-### tsync.peers.add
-
-  Request:   { address }
-  Response:  Peer pairing information.
+### Peer RPC Methods (v0.7.0)
 
 ### peer.start_pairing
 
+  Request:   { timeout_seconds?, auth_key? }
+  Response:  { code, address }
+  Notes:     Generates a 16-digit pairing code and starts a Tailscale listener.
+             auth_key is the Tailscale auth key if tsnet needs initializing.
+
+### peer.wait_pairing (long-poll)
+
   Request:   {} (no params)
-  Response:  { code }
-  Notes:     Returns a 4-digit pairing code. Starts a pairing listener.
-
-### peer.wait_pairing
-
-  Request:   { timeout? }
-  Response:  { peer_id, address }
-  Notes:     Blocks until a peer connects using the pairing code.
+  Response:  { status, peer_name, peer_address, peer_daemon_id, message }
+  Notes:     Blocks until a remote peer completes pairing or timeout.
+             status: "paired", "timeout", or "error".
 
 ### peer.join
 
-  Request:   { address, code }
-  Response:  { peer_id, status }
-  Notes:     Connects to a remote daemon using the pairing code.
+  Request:   { address, code, repo_path? }
+  Response:  { status, peer_name, peer_daemon_id, message }
+  Notes:     Connects to a remote peer using the peercode.
+             repo_path sets transport to "local" for same-machine peers.
 
 ### peer.list
 
   Request:   {} (no params)
-  Response:  { peers: [{ name, address, last_sync, status }] }
+  Response:  [{ daemon_id, name, address, last_sync, last_synced_seq }]
 
 ### peer.remove
 
-  Request:   { name }
-  Response:  { name, removed }
+  Request:   { name? | daemon_id? }
+  Response:  { status: "ok" }
 
 ### peer.status
 
   Request:   {} (no params)
-  Response:  { peers: [{ name, address, status, last_sync, events_synced }] }
+  Response:  [{ daemon_id, name, address, has_token, paired_at, last_sync, last_synced_seq }]
+
+### peer.configure
+
+  Request:   { peer_name, action, agent_name }
+  Response:  { ok, action, agent }
+  Notes:     action: "add-agent" or "remove-agent". Manages proxy agents for cross-repo routing.
+
+### peer.address_changed
+
+  Request:   { peer_token, new_ip, new_port }
+  Response:  { ok }
+  Notes:     Called by remote peer to notify address change. Validates address per transport
+             (loopback for local, CGNAT for Tailscale, same /24 for network).
 
 ### user.register (WebSocket only)
 
@@ -965,6 +990,53 @@ All methods use JSON-RPC 2.0 protocol.
   Response:  { username, email, display }
   Notes:     Returns the git user.name and user.email from the repo's git config.
              Username is sanitized (lowercase, alphanumeric + hyphens).
+
+### Tmux RPC Methods (v0.7.1)
+
+### tmux.create
+
+  Request:   { name, cwd }
+  Response:  { session, identity? }
+
+### tmux.launch
+
+  Request:   { name, runtime? }
+  Response:  { session, runtime }
+  Default:   runtime = "claude"
+
+### tmux.status
+
+  Request:   {} (no params)
+  Response:  { sessions: [{ name, agent, role, module, state, runtime, branch }] }
+  States:    "alive" | "stale" | "dead"
+
+### tmux.kill
+
+  Request:   { name }
+  Response:  null
+
+### tmux.send
+
+  Request:   { name, text }
+  Response:  null
+
+### tmux.capture
+
+  Request:   { name, lines? }
+  Response:  { content }
+  Default:   lines = 50
+
+### tmux.check-pane
+
+  Request:   { session, reason?, content? }
+  Response:  null
+  Notes:     Called by tmux alert-silence hook, not typically user-facing.
+
+### tmux.restart
+
+  Request:   { name, force?, runtime? }
+  Response:  { session, snapshot_lines }
+  Notes:     Extracts JSONL conversation, kills session, creates new one, relaunches.
 
 ## Event Types (JSONL)
 
@@ -1199,32 +1271,41 @@ Unknown event types are silently ignored (forward compatibility).
 
 ### Environment Variables
 
-  THRUM_NAME        Agent name (highest priority for identity resolution)
-  THRUM_ROLE        Agent role (e.g., implementer, reviewer, planner)
-  THRUM_MODULE      Agent module/component (e.g., auth, db, ui)
-  THRUM_DISPLAY     Human-readable display name
-  THRUM_LOCAL       Enable local-only mode (disables remote sync) -- set to "1"
-  THRUM_WS_PORT     WebSocket port (default: 9999)
+  THRUM_NAME          Agent name (highest priority for identity file selection)
+  THRUM_ROLE          Agent role (e.g., implementer, reviewer, planner)
+  THRUM_MODULE        Agent module/component (e.g., auth, db, ui)
+  THRUM_DISPLAY       Human-readable display name
+  THRUM_LOCAL         Enable local-only mode (disables remote sync) -- set to "1"
+  THRUM_WS_PORT       WebSocket port (default: auto)
+  THRUM_HOME          Pin repo path for all commands
+  THRUM_AGENT_ID      Pin caller identity for daemon RPC
+  THRUM_SOCKET        Unix socket path override
+  THRUM_TS_AUTHKEY    Tailscale auth key for peering
+  THRUM_TS_PORT       Tailscale listener port (default: auto)
+  THRUM_TS_HOSTNAME   tsnet hostname override
+  THRUM_TS_STATE_DIR  tsnet state directory
+  THRUM_TS_ENABLED    (deprecated) Tailscale auto-starts when peers are configured
 
-### Identity Resolution Chain
+### Identity Resolution Chain (v0.7.0)
 
-  File selection priority (which .thrum/identities/*.json to load):
+  File selection (which .thrum/identities/*.json gets loaded):
     1. THRUM_NAME env var → load {name}.json directly
     2. Solo-agent auto-select → only one .json file exists
-    3. PID match → match claude_pid in identity files via process-tree walk
-    4. Worktree match → filter by current worktree name
-    5. Error: cannot auto-select (set THRUM_NAME)
+    3. PID match → walk process tree to find Claude PID, match claude_pid field
+    4. Worktree match → filter by current git worktree name
+    5. Error if no unambiguous selection
 
   Field value overrides (after file is loaded):
-    CLI flags (--role, --module) > Env vars (THRUM_ROLE, THRUM_MODULE) > Identity file
+    CLI flags (--role, --module) > env vars (THRUM_ROLE, THRUM_MODULE) > identity file
 
-  PID liveness: thrum team shows [live]/[stale] per agent based on whether the
-  claude_pid process is still running (checked via OS process table).
+  PID adoption: after picking an identity, if its claude_pid is zero or dead,
+  the current Claude PID gets written in. Skipped if claude_pid points to a
+  different live Claude process (genuine conflict).
 
 ### Identity File (.thrum/identities/{name}.json)
 
   {
-    "version": 3,
+    "version": 4,
     "repo_id": "r_7K2Q1X9M3P0B",
     "agent": {
       "kind": "agent",
@@ -1235,12 +1316,17 @@ Unknown event types are silently ignored (forward compatibility).
     },
     "worktree": "auth",
     "claude_pid": 12345,
+    "tmux_session": "implementer-auth:0.0",
+    "runtime": "claude",
     "confirmed_by": "human:leon",
     "updated_at": "2026-02-03T18:02:10.000Z"
   }
 
   Created/updated by `thrum agent register`. Each agent gets a separate file named
   after the agent name (e.g., furiosa.json). Unnamed agents use {role}_{hash}.json.
+  claude_pid (v0.7.0) tracks which Claude process owns this identity.
+  tmux_session (v0.7.1) is the full pane target for daemon nudge delivery.
+  runtime (v0.7.1) indicates which AI tool is running (claude, opencode, shell).
 
 ### Init Options
 

@@ -21,19 +21,18 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Identity &rsaquo; Agent Identity & Registration
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="single-agent-mode.html">Single-Agent Mode</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="single-agent-mode.html">Single-Agent Mode</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <strong>Agent Identity & Registration</strong><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="session-restart.html">Session Restart & Context Recovery</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
 <strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
 <strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
-<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
 <strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>strategies</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
 <strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
@@ -251,9 +250,9 @@ after the agent:</p>
 ├── furiosa.json           # Named agent
 ├── nux.json               # Named agent
 └── coordinator_1B9K33T6RK.json  # Unnamed agent (hash-based)</code></pre>
-<p><strong>Identity file format</strong> (version 3):</p>
+<p><strong>Identity file format</strong> (version 4):</p>
 <pre><code>{
-  &quot;version&quot;: 3,
+  &quot;version&quot;: 4,
   &quot;repo_id&quot;: &quot;r_7K2Q1X9M3P0B&quot;,
   &quot;agent&quot;: {
     &quot;kind&quot;: &quot;agent&quot;,
@@ -264,12 +263,27 @@ after the agent:</p>
   },
   &quot;worktree&quot;: &quot;auth&quot;,
   &quot;claude_pid&quot;: 12345,
+  &quot;tmux_session&quot;: &quot;implementer-auth:0.0&quot;,
+  &quot;runtime&quot;: &quot;claude&quot;,
   &quot;confirmed_by&quot;: &quot;human:leon&quot;,
   &quot;updated_at&quot;: &quot;2026-02-03T18:02:10.000Z&quot;
 }</code></pre>
 <p>The <code>claude_pid</code> field (v0.7.0) stores the PID of the Claude process that owns
 this identity. It is automatically maintained by the adoption logic described
 above.</p>
+<p>The <code>tmux_session</code> and <code>runtime</code> fields (v0.7.1) support
+<a href="tmux-sessions.html">tmux-managed sessions</a>. <code>tmux_session</code> is the full pane
+target (e.g., <code>implementer-auth:0.0</code>) used by the daemon to route nudge
+notifications. <code>runtime</code> indicates which AI tool is running in the session
+(<code>claude</code>, <code>opencode</code>, <code>shell</code>, etc.). Both fields are <code>omitempty</code> — legacy
+agents without tmux sessions won&#39;t have them.</p>
+<p><strong>Tmux-mode determination</strong> (live, not stored): An agent is in tmux-mode when
+its identity file has <code>tmux_session</code> set, the tmux session exists, and the
+Claude PID is alive. The daemon clears <code>tmux_session</code> when it detects the
+session is gone or the PID is dead, preventing stale state.</p>
+<p><strong>Canonical writer:</strong> <code>thrum tmux launch</code> is the primary writer of both fields.
+<code>thrum prime</code> confirms the values on startup — if <code>tmux_session</code> is missing or
+mismatched, it writes the current value from <code>$TMUX</code>.</p>
 <p><strong>Auto-selection rules</strong> for identity files (in priority order):</p>
 <ol>
 <li>If <code>THRUM_NAME</code> is set, load <code>{THRUM_NAME}.json</code> directly (error if not

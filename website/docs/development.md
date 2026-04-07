@@ -76,6 +76,8 @@ thrum/
 │   ├── schema/              # SQLite schema, DDL, and migrations (v16)
 │   ├── subscriptions/       # Notification dispatcher and subscription service
 │   ├── sync/                # Sync engine (loop, merge, push, dedup, branch management)
+│   ├── tmux/                # Tmux operations, nudge delivery, session management (v0.7.1)
+│   ├── restart/             # JSONL conversation extraction, restart snapshots (v0.7.1)
 │   ├── bridge/              # Shared bridge components (v0.7.0)
 │   │   ├── bridge.go        # TransportBridge interface, Notification type
 │   │   ├── msgmap.go        # Local↔remote message ID mapping

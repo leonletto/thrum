@@ -327,8 +327,6 @@ messaging tools (`send_message`, `check_messages`, `wait_for_message`,
 See [MCP Server](mcp-server.md) for the complete tools reference, configuration,
 and setup instructions.
 
----
-
 ## Foundation Packages
 
 The sections below describe the internal packages that implement the
@@ -344,6 +342,8 @@ internal/
 │   ├── relay.go     # Common inbound/outbound relay with proxy registration
 │   ├── wsclient.go  # Shared WebSocket client with loopback validation
 │   └── peer/        # PeerTransport, PeerBridge, address validation
+├── tmux/        # Tmux session operations, nudge delivery, per-session mutex (v0.7.1)
+├── restart/     # JSONL conversation extraction, snapshot formatting (v0.7.1)
 ├── config/      # Configuration loading, identity files, agent naming
 ├── identity/    # ID generation (repo, agent, session, message, event)
 ├── jsonl/       # JSONL reader/writer with file locking

@@ -13,6 +13,11 @@ support for direct messaging, read tracking, scoping, references, and rich
 content formats. Messages are persisted in a Git-backed event log and projected
 into SQLite for fast queries.
 
+**Message delivery:** For agents running in
+[tmux-managed sessions](tmux-sessions.md), the daemon delivers notifications
+instantly via `tmux send-keys` — no background listener needed. For agents
+without tmux, the existing listener/hook-based pull mechanism still works.
+
 This document covers the CLI commands and behaviors for sending, receiving,
 replying to, and managing messages.
 
@@ -591,8 +596,6 @@ These flags are available on all commands:
 | `--role`    | Agent role (or `THRUM_ROLE` env var)          |
 | `--module`  | Agent module (or `THRUM_MODULE` env var)      |
 | `--repo`    | Repository path (default: `.`)                |
-
----
 
 _The sections below cover storage internals. You don't need these for normal
 use._

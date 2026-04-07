@@ -4,7 +4,7 @@ description:
   "Use Thrum's context management without the messaging layer — single-agent
   mode as default, three-tier context, and when to switch to multi-agent"
 category: "overview"
-order: 2
+order: 3
 tags: ["single-agent", "context", "getting-started"]
 last_updated: "2026-04-04"
 ---
@@ -84,6 +84,11 @@ when you want to:
   through Git-synced messages
 - **Have agents coordinate on dependencies** — one agent finishing a task and
   notifying another that its blocker is resolved
+
+**Recommended:** When you're ready for multi-agent, use
+[tmux-managed sessions](tmux-sessions.md) instead of the legacy background
+listener approach. The coordinator creates and manages agent sessions
+automatically — no listeners, no token burn.
 
 Switching is one command:
 

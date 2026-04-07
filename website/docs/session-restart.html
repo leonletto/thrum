@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Session Restart & Context Recovery — Thrum</title>
+<meta name="description" content="Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#session-restart.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Guides &rsaquo; Session Restart & Context Recovery
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="single-agent-mode.html">Single-Agent Mode</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
+<strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <strong>Session Restart & Context Recovery</strong> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
+<strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
+<strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
+<strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
+<strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>strategies</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+</nav>
+<main>
+<h2>Two Ways to Use This</h2>
+<p><strong>If you&#39;re a developer using Thrum with one or two agents,</strong> the only thing you
+need from this page is the first section. Run <code>/thrum:update-project</code> before you
+close your laptop. Come back tomorrow. Your agent remembers where it was.</p>
+<p><strong>If you&#39;re running agent teams</strong> and agents need to restart mid-task without
+losing their place — context exhaustion, rate limits, stuck state — the rest of
+this page covers how the daemon extracts conversation history, saves a snapshot,
+and relaunches the agent automatically.</p>
+<hr>
+<h2>Everyday Use: Save and Resume</h2>
+<p>The <code>/thrum:update-project</code> skill is the thing most people need. It saves your
+project state and session context so your agent can pick up where it left off
+next time.</p>
+<p>Run it:</p>
+<ul>
+<li>Before you shut down for the day</li>
+<li>Before compaction hits</li>
+<li>Whenever you want your agent to remember what you were working on</li>
+</ul>
+<p>Next session, <code>thrum prime</code> loads everything back — project state, session
+history, role instructions. The agent is oriented and ready to work immediately.</p>
+<p>If you&#39;re using <a href="beads-and-thrum.html">Beads</a> for task tracking, that state
+survives too — it&#39;s in git. Your agent knows which tasks are open, which are
+blocked, and what it was working on.</p>
+<p>That&#39;s the &quot;close your laptop&quot; workflow. Simple, works everywhere, no tmux
+required.</p>
+<h3>How This Differs from Restart Snapshots</h3>
+<p><code>/thrum:update-project</code> saves to <code>.thrum/context/&lt;agent&gt;.md</code> and persists
+indefinitely. It&#39;s your agent&#39;s long-term memory of the project — architecture
+decisions, open epics, session history. It accumulates over time.</p>
+<p>Restart snapshots (the rest of this page) save to <code>.thrum/restart/&lt;agent&gt;.md</code>
+and are consumed once — <code>thrum prime</code> loads the snapshot and deletes it. They&#39;re
+a one-time context transfer between sessions, carrying the raw conversation so
+the new session can pick up mid-task.</p>
+<p>Different tools, different purposes. Use <code>/thrum:update-project</code> for daily
+saves. Restart snapshots happen automatically when an agent needs a fresh
+session.</p>
+<hr>
+<h2>How Restart Snapshots Work</h2>
+<p>Claude Code stores full session transcripts as append-only JSONL files. The
+restart system reads these transcripts and extracts just the conversation — what
+the user said and what the assistant said back. No tool calls, no thinking
+blocks, no subagent sidechains. Just the conversation you&#39;d see in the terminal.</p>
+<p>The pipeline:</p>
+<ol>
+<li>Find the agent&#39;s Claude PID from the identity file</li>
+<li>Locate the JSONL transcript via <code>~/.claude/sessions/&lt;pid&gt;.json</code></li>
+<li>Parse the JSONL and extract <code>user</code> + <code>assistant</code> text entries</li>
+<li>Skip <code>isSidechain: true</code> entries (subagent transcripts)</li>
+<li>Skip <code>tool_use</code>, <code>tool_result</code>, and <code>thinking</code> content blocks</li>
+<li>Truncate to the configured line limit (default 1000 lines, oldest removed
+first)</li>
+<li>Save to <code>.thrum/restart/&lt;agent&gt;.md</code></li>
+</ol>
+<p>On the next session start, <code>thrum prime</code> detects the snapshot file and includes
+it in the session briefing. The agent gets its conversation history and picks up
+where it left off. The file is deleted after loading — it&#39;s a one-time transfer.</p>
+<h3>Snapshot Format</h3>
+<pre><code># Restart Snapshot — impl_api
+
+**Session:** ses_abc123 **Saved:** 2026-04-07T14:30:00Z **Reason:** external
+
+[Conversation continued from earlier — truncated to last 847 lines]
+
+=== USER === Implement the rate limiter for the /api/submit endpoint...
+
+=== ASSISTANT === I&#39;ll add the rate limiter using the token bucket pattern...
+
+=== USER === Looks good. Now add the Redis backend for distributed rate
+limiting.
+
+=== ASSISTANT === I&#39;ll modify the rate limiter to use Redis...</code></pre>
+<p>The truncation is boundary-aligned — it always starts on a <code>=== USER ===</code> marker
+and ends with assistant text. No partial exchanges.</p>
+<hr>
+<h2>Three Restart Triggers</h2>
+<h3>Self-Initiated</h3>
+<p>The agent recognizes it needs a fresh session — context is getting full, it hit
+rate limits, or it&#39;s stuck. It runs the <code>/thrum:restart</code> skill, which:</p>
+<ol>
+<li>Saves the conversation snapshot via <code>thrum restart save</code></li>
+<li>If in a tmux session, notifies the coordinator to handle the relaunch</li>
+<li>If not in tmux, prints instructions for the operator</li>
+</ol>
+<p>The agent doesn&#39;t kill itself. It lets the coordinator (or operator) orchestrate
+the restart.</p>
+<h3>External</h3>
+<p>The coordinator decides an agent needs a fresh session:</p>
+<pre><code>thrum tmux restart implementer-api</code></pre>
+<p>This extracts the agent&#39;s JSONL conversation directly — no agent cooperation
+needed. Then it kills the session, creates a new one, and relaunches. The new
+session loads the snapshot via <code>thrum prime</code>.</p>
+<p>Use <code>--runtime</code> to switch runtimes on relaunch:</p>
+<pre><code>thrum tmux restart implementer-api --runtime opencode</code></pre>
+<h3>Automatic</h3>
+<p>A Claude Code plugin hook monitors context usage. When <code>used_percentage</code> exceeds
+the configured threshold, it triggers automatically:</p>
+<ol>
+<li>Saves the conversation snapshot</li>
+<li>If in a tmux session, calls <code>thrum tmux restart</code> to handle the full cycle</li>
+<li>If not in tmux, only saves the snapshot — manual restart required</li>
+</ol>
+<p>Auto-restart is <strong>disabled by default</strong>. Enable it by setting a threshold:</p>
+<pre><code>thrum config set restart.auto_threshold 80</code></pre>
+<hr>
+<h2>CLI Commands</h2>
+<h3><code>thrum restart save</code></h3>
+<p>Save a conversation snapshot for the current agent.</p>
+<pre><code>thrum restart save
+thrum restart save --reason context-threshold</code></pre>
+<p>The <code>--reason</code> flag sets the reason in the snapshot header. Values:
+<code>self-initiated</code> (default), <code>external</code>, <code>context-threshold</code>.</p>
+<h3><code>thrum restart restore</code></h3>
+<p>Manual escape hatch for non-tmux agents. Outputs the snapshot to stdout and
+deletes the file.</p>
+<pre><code>thrum restart restore</code></pre>
+<p>If no snapshot exists, exits with code 1.</p>
+<h3><code>thrum restart check</code></h3>
+<p>Check if a restart snapshot exists. Exits 0 if yes, 1 if no. No output — for
+scripting.</p>
+<pre><code>if thrum restart check; then
+  echo &quot;Snapshot ready&quot;
+fi</code></pre>
+<h3><code>thrum tmux restart</code></h3>
+<p>Full restart cycle for tmux-managed agents. See
+<a href="tmux-sessions.html">Tmux-Managed Sessions</a> for context.</p>
+<pre><code>thrum tmux restart implementer-api
+thrum tmux restart implementer-api --force
+thrum tmux restart implementer-api --runtime opencode</code></pre>
+<hr>
+<h2>Configuration</h2>
+<pre><code>restart:
+  max_lines: 1000 # Max lines in snapshot (default: 1000)
+  auto_threshold: 0 # Context % trigger, 0 = disabled (default: 0)
+  graceful_timeout: 30 # Seconds to wait for graceful save (default: 30)</code></pre>
+<p><code>max_lines</code> controls how much conversation history to keep. 1000 lines is
+usually enough to capture the last 20-30 exchanges. Increase it if your agents
+have long conversations with lots of context.</p>
+<p><code>auto_threshold</code> is the percentage of context window usage that triggers an
+automatic restart. Set to 0 to disable (the default). A value like 80 means
+&quot;restart when 80% of the context window is used.&quot;</p>
+<p><code>graceful_timeout</code> is how long <code>thrum tmux restart</code> waits for the agent to save
+its own snapshot before falling back to force extraction.</p>
+<hr>
+<h2>How It Fits Together</h2>
+<p>The context preservation story has layers:</p>
+<ul>
+<li><strong><code>/thrum:update-project</code></strong> — your everyday tool. Saves project state and
+session context. Persists indefinitely. Run it before shutdown, before
+compaction, whenever you want your agent to remember.</li>
+<li><strong>Restart snapshots</strong> — automated mid-task recovery. Extracts raw conversation
+history, consumed once on next session start. Happens when agents restart.</li>
+<li><strong><code>thrum prime</code></strong> — loads everything on session start. Project state, session
+context, restart snapshot (if present), role instructions.</li>
+<li><strong>Beads</strong> — task state is in git. Survives everything. Your agent knows which
+tasks are open regardless of how the session started.</li>
+</ul>
+<p>For the full technical details on context files, see
+<a href="context.html">Context Management</a>.</p>
+<hr>
+<h2>Next Steps</h2>
+<ul>
+<li><a href="tmux-sessions.html">Tmux-Managed Sessions</a> — the daemon-managed session system
+that makes automated restarts possible</li>
+<li><a href="context.html">Context Management</a> — the three-tier context model and how
+<code>/thrum:update-project</code> works under the hood</li>
+<li><a href="beads-and-thrum.html">Beads and Thrum</a> — how task tracking and messaging work
+together for persistent state across sessions</li>
+</ul>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#session-restart.html')}</script>
+</body>
+</html>

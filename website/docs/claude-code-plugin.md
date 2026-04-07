@@ -27,8 +27,8 @@ disclosure resource docs. It replaces the manual agent definition approach
 
 **What you get:**
 
-- **10 slash commands** — `/thrum:send`, `/thrum:inbox`, `/thrum:quickstart`,
-  and more
+- **11 slash commands** — `/thrum:send`, `/thrum:inbox`, `/thrum:quickstart`,
+  `/thrum:restart`, and more
 - **Automatic context** — SessionStart, PreCompact, and PostCompact hooks keep
   your agent oriented across sessions and compaction
 - **8 resource docs** — Progressive disclosure for messaging patterns, groups,
@@ -115,6 +115,7 @@ All commands live under the `/thrum:` namespace.
 | `/thrum:overview`       | Combined status + team + inbox view                          |
 | `/thrum:prime`          | Load full session context (identity, team, inbox, git)       |
 | `/thrum:update-project` | Guided workflow to update durable project state              |
+| `/thrum:restart`        | Save conversation snapshot and prepare for session restart   |
 
 ### Common workflows
 

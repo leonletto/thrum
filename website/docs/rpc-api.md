@@ -8,7 +8,7 @@ category: "api"
 
 ## Thrum Daemon RPC API
 
-> **TL;DR:** 35+ RPC methods over JSON-RPC 2.0, available on a Unix socket or
+> **TL;DR:** 45+ RPC methods over JSON-RPC 2.0, available on a Unix socket or
 > WebSocket. Most users never need this — the CLI wraps all of it. This
 > reference is for building custom integrations or understanding what's
 > happening under the hood.
@@ -1222,6 +1222,146 @@ Notify this daemon that a remote peer's address has changed.
 | Field | Type    | Description       |
 | ----- | ------- | ----------------- |
 | `ok`  | boolean | Success indicator |
+
+## Tmux Methods (v0.7.1)
+
+### tmux.create
+
+Create a tmux session for an agent with a clean environment and
+`monitor-silence` hooks.
+
+**Request:**
+
+| Parameter | Type   | Required | Description                       |
+| --------- | ------ | -------- | --------------------------------- |
+| `name`    | string | yes      | Session name                      |
+| `cwd`     | string | yes      | Working directory for the session |
+
+**Response:**
+
+| Field      | Type   | Description                                    |
+| ---------- | ------ | ---------------------------------------------- |
+| `session`  | string | Created session name                           |
+| `identity` | object | Agent identity file if found at cwd (nullable) |
+
+### tmux.launch
+
+Start an AI tool inside an existing tmux session. Writes `tmux_session` and
+`runtime` to the agent's identity file.
+
+**Request:**
+
+| Parameter | Type   | Required | Description                                                           |
+| --------- | ------ | -------- | --------------------------------------------------------------------- |
+| `name`    | string | yes      | Session name                                                          |
+| `runtime` | string | no       | Runtime to launch (`claude`, `opencode`, `shell`) — default: `claude` |
+
+**Response:**
+
+| Field     | Type   | Description           |
+| --------- | ------ | --------------------- |
+| `session` | string | Session name          |
+| `runtime` | string | Runtime that launched |
+
+### tmux.status
+
+List all tmux-managed sessions with agent info and liveness state. Scans
+identity files in `.thrum/identities/` for agents with `tmux_session` set, then
+checks session existence and PID liveness.
+
+**Request:** _(none)_
+
+**Response:**
+
+| Field                | Type   | Description                          |
+| -------------------- | ------ | ------------------------------------ |
+| `sessions`           | array  | List of session info objects         |
+| `sessions[].name`    | string | Tmux session name                    |
+| `sessions[].agent`   | string | Agent name                           |
+| `sessions[].role`    | string | Agent role                           |
+| `sessions[].module`  | string | Agent module                         |
+| `sessions[].state`   | string | `alive`, `stale`, `dead`             |
+| `sessions[].runtime` | string | Runtime (`claude`, `opencode`, etc.) |
+| `sessions[].branch`  | string | Current git branch                   |
+
+### tmux.kill
+
+Tear down a tmux session and clear `tmux_session` from all matching identity
+files.
+
+**Request:**
+
+| Parameter | Type   | Required | Description  |
+| --------- | ------ | -------- | ------------ |
+| `name`    | string | yes      | Session name |
+
+**Response:** `null`
+
+### tmux.send
+
+Send text into a tmux session via `send-keys`.
+
+**Request:**
+
+| Parameter | Type   | Required | Description  |
+| --------- | ------ | -------- | ------------ |
+| `name`    | string | yes      | Session name |
+| `text`    | string | yes      | Text to send |
+
+**Response:** `null`
+
+### tmux.capture
+
+Capture the visible content of a tmux pane.
+
+**Request:**
+
+| Parameter | Type    | Required | Description                    |
+| --------- | ------- | -------- | ------------------------------ |
+| `name`    | string  | yes      | Session name                   |
+| `lines`   | integer | no       | Lines to capture (default: 50) |
+
+**Response:**
+
+| Field     | Type   | Description          |
+| --------- | ------ | -------------------- |
+| `content` | string | Captured pane output |
+
+### tmux.check-pane
+
+Check a tmux pane for permission prompts or idle state. Called by the
+`alert-silence` tmux hook — not typically called by users.
+
+**Request:**
+
+| Parameter | Type   | Required | Description                          |
+| --------- | ------ | -------- | ------------------------------------ |
+| `session` | string | yes      | Session name                         |
+| `reason`  | string | no       | Detected state reason                |
+| `content` | string | no       | Captured pane content (last 5 lines) |
+
+**Response:** `null`
+
+### tmux.restart
+
+Restart a tmux-managed agent session with a context snapshot. Extracts the
+agent's conversation history from the JSONL transcript, kills the session,
+creates a new one, and relaunches.
+
+**Request:**
+
+| Parameter | Type    | Required | Description                                |
+| --------- | ------- | -------- | ------------------------------------------ |
+| `name`    | string  | yes      | Session name                               |
+| `force`   | boolean | no       | Skip graceful signal (default: `false`)    |
+| `runtime` | string  | no       | Runtime override (default: same as before) |
+
+**Response:**
+
+| Field            | Type    | Description                 |
+| ---------------- | ------- | --------------------------- |
+| `session`        | string  | New session name            |
+| `snapshot_lines` | integer | Lines in the saved snapshot |
 
 ## Using the API
 

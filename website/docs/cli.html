@@ -21,19 +21,18 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Reference &rsaquo; CLI Reference
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="single-agent-mode.html">Single-Agent Mode</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="single-agent-mode.html">Single-Agent Mode</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="session-restart.html">Session Restart & Context Recovery</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
 <strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
 <strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
-<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
 <strong>Reference</strong>: <strong>CLI Reference</strong> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>strategies</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
 <strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
@@ -359,6 +358,50 @@ for AI agent coordination.</p>
 <tr>
 <td><code>thrum backup schedule</code></td>
 <td>Configure automatic backup schedule</td>
+</tr>
+<tr>
+<td><code>thrum tmux create</code></td>
+<td>Create a tmux session for an agent</td>
+</tr>
+<tr>
+<td><code>thrum tmux launch</code></td>
+<td>Start an AI tool inside a tmux session</td>
+</tr>
+<tr>
+<td><code>thrum tmux status</code></td>
+<td>Show tmux-managed sessions with state</td>
+</tr>
+<tr>
+<td><code>thrum tmux list</code></td>
+<td>Alias for <code>thrum tmux status</code></td>
+</tr>
+<tr>
+<td><code>thrum tmux kill</code></td>
+<td>Tear down a tmux session</td>
+</tr>
+<tr>
+<td><code>thrum tmux send</code></td>
+<td>Send text into a tmux session</td>
+</tr>
+<tr>
+<td><code>thrum tmux capture</code></td>
+<td>Capture pane content from a tmux session</td>
+</tr>
+<tr>
+<td><code>thrum tmux restart</code></td>
+<td>Restart a tmux session with context snapshot</td>
+</tr>
+<tr>
+<td><code>thrum restart save</code></td>
+<td>Save conversation snapshot for session restart</td>
+</tr>
+<tr>
+<td><code>thrum restart restore</code></td>
+<td>Output a restart snapshot to stdout</td>
+</tr>
+<tr>
+<td><code>thrum restart check</code></td>
+<td>Check if a restart snapshot exists (exit code)</td>
 </tr>
 <tr>
 <td><code>thrum mcp serve</code></td>
@@ -2143,6 +2186,168 @@ Telegram Bridge
   Bot:     @my_thrum_bot
   Target:  @mychat
   User:    alice</code></pre>
+<h2>Tmux Session Management</h2>
+<p>Manage daemon-driven tmux sessions for agents. Replaces the background listener
+with instant message delivery via <code>send-keys</code>. See
+<a href="tmux-sessions.html">Tmux-Managed Sessions</a> for the full story.</p>
+<h3>thrum tmux create</h3>
+<p>Create a tmux session for an agent with a clean environment. Sets up
+<code>monitor-silence</code> hooks for permission detection.</p>
+<pre><code>thrum tmux create &lt;name&gt; --cwd &lt;path&gt;</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Required</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--cwd</code></td>
+<td>Working directory for the session</td>
+<td>yes</td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>$ thrum tmux create implementer-api --cwd ../worktrees/api-feature
+Session created: implementer-api</code></pre>
+<h3>thrum tmux launch</h3>
+<p>Start an AI tool inside an existing tmux session.</p>
+<pre><code>thrum tmux launch &lt;name&gt; [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--runtime</code></td>
+<td>AI tool to launch (<code>claude</code>, <code>opencode</code>, <code>shell</code>)</td>
+<td><code>claude</code></td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>$ thrum tmux launch implementer-api
+Launched claude in session implementer-api
+
+$ thrum tmux launch implementer-api --runtime opencode
+Launched opencode in session implementer-api</code></pre>
+<h3>thrum tmux status</h3>
+<p>Show all tmux-managed sessions with agent info, liveness state, runtime, and
+branch.</p>
+<pre><code>thrum tmux status</code></pre>
+<p><code>thrum tmux list</code> is an alias.</p>
+<p>Example:</p>
+<pre><code>$ thrum tmux status
+SESSION                   AGENT                STATE        RUNTIME    BRANCH
+coordinator-main          coordinator_main     alive        claude     thrum-dev
+implementer-api           impl_api             alive        opencode   feature/api
+implementer-website-dev   impl_website_dev     stale        claude     website-dev</code></pre>
+<h3>thrum tmux kill</h3>
+<p>Tear down a tmux session and clear <code>tmux_session</code> from the agent&#39;s identity
+file.</p>
+<pre><code>thrum tmux kill &lt;name&gt;</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum tmux kill implementer-api
+Session implementer-api killed</code></pre>
+<h3>thrum tmux send</h3>
+<p>Send text into a tmux session via <code>send-keys</code>. Useful for coordinator debugging
+or injecting commands.</p>
+<pre><code>thrum tmux send &lt;name&gt; &quot;text&quot;</code></pre>
+<p>Example:</p>
+<pre><code>thrum tmux send implementer-api &quot;thrum inbox --unread&quot;</code></pre>
+<h3>thrum tmux capture</h3>
+<p>Capture the visible content of a tmux pane. Useful for coordinator inspection or
+permission prompt detection.</p>
+<pre><code>thrum tmux capture &lt;name&gt; [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--lines</code></td>
+<td>Number of lines to capture</td>
+<td><code>50</code></td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>thrum tmux capture implementer-api --lines 10</code></pre>
+<h3>thrum tmux restart</h3>
+<p>Restart a tmux-managed agent session with a context snapshot. Extracts the
+agent&#39;s conversation history from the JSONL transcript, kills the session,
+creates a new one, and relaunches. The new session loads the snapshot via
+<code>thrum prime</code>. See <a href="session-restart.html">Session Restart</a> for details.</p>
+<pre><code>thrum tmux restart &lt;name&gt; [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--force</code></td>
+<td>Skip graceful signal, force restart</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--runtime</code></td>
+<td>Runtime override for relaunch (default: same)</td>
+<td></td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>$ thrum tmux restart implementer-api
+Session implementer-api restarted (847 snapshot lines)
+
+$ thrum tmux restart implementer-api --runtime opencode
+Session implementer-api restarted (847 snapshot lines)</code></pre>
+<h2>Session Restart</h2>
+<p>Save and restore conversation snapshots for session restart. See
+<a href="session-restart.html">Session Restart &amp; Context Recovery</a> for the full story.</p>
+<h3>thrum restart save</h3>
+<p>Save a conversation snapshot for the current agent. Extracts user + assistant
+text from the Claude Code JSONL transcript, truncates to the configured line
+limit, and writes to <code>.thrum/restart/&lt;agent&gt;.md</code>.</p>
+<pre><code>thrum restart save [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--reason</code></td>
+<td>Reason for restart (<code>self-initiated</code>, <code>external</code>, <code>context-threshold</code>)</td>
+<td><code>self-initiated</code></td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>$ thrum restart save
+Restart snapshot saved for impl_api (847 lines)
+
+$ thrum restart save --reason context-threshold
+Restart snapshot saved for impl_api (847 lines)</code></pre>
+<h3>thrum restart restore</h3>
+<p>Output a restart snapshot to stdout and delete the file. Manual escape hatch for
+non-tmux agents or when <code>thrum prime</code> is not used.</p>
+<pre><code>thrum restart restore</code></pre>
+<p>Exits with code 1 if no snapshot exists.</p>
+<h3>thrum restart check</h3>
+<p>Check if a restart snapshot exists for the current agent. Exits 0 if yes, 1 if
+no. No stdout — for scripting.</p>
+<pre><code>thrum restart check</code></pre>
+<p>Example:</p>
+<pre><code>if thrum restart check; then echo &quot;Snapshot ready&quot;; fi</code></pre>
 <h2>MCP Server</h2>
 <h3>thrum mcp serve</h3>
 <p>Start an MCP (Model Context Protocol) server on stdin/stdout for native
@@ -2307,7 +2512,7 @@ select the correct one.</p>
 automatically on successful registration. The filename is derived from the agent
 name (e.g., <code>furiosa.json</code> or <code>implementer_35HV62T9B9.json</code>).</p>
 <pre><code>{
-  &quot;version&quot;: 3,
+  &quot;version&quot;: 4,
   &quot;repo_id&quot;: &quot;r_0123456789AB&quot;,
   &quot;agent&quot;: {
     &quot;kind&quot;: &quot;agent&quot;,
@@ -2317,6 +2522,9 @@ name (e.g., <code>furiosa.json</code> or <code>implementer_35HV62T9B9.json</code
     &quot;display&quot;: &quot;Auth Developer&quot;
   },
   &quot;worktree&quot;: &quot;main&quot;,
+  &quot;tmux_session&quot;: &quot;implementer-auth:0.0&quot;,
+  &quot;runtime&quot;: &quot;claude&quot;,
+  &quot;claude_pid&quot;: 12345,
   &quot;confirmed_by&quot;: &quot;&quot;,
   &quot;updated_at&quot;: &quot;2026-02-03T10:00:00Z&quot;
 }</code></pre>

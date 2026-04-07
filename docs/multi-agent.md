@@ -17,12 +17,22 @@ agent gets a unique identity, and you get tools to organize them into teams,
 detect and configure any AI coding platform, and recover full session context
 after compaction.
 
+**Recommended:** Use [tmux-managed sessions](tmux-sessions.md) to run your agent
+team. The coordinator creates tmux sessions, launches agents, and the daemon
+delivers messages instantly — no background listeners, no token burn, no
+operational boilerplate. See [Tmux-Managed Sessions](tmux-sessions.md) for the
+full story.
+
 **Note:** New repos default to single-agent mode (`single_agent_mode: true`).
 Run `thrum single-agent-mode false` to enable the features on this page. See
 [Single-Agent Mode](single-agent-mode.md).
 
 **Key multi-agent capabilities:**
 
+- **Tmux-Managed Sessions** (v0.7.1) -- Daemon-driven agent lifecycle with
+  instant message delivery and zero background listeners
+- **Session Restart** (v0.7.1) -- Agents restart mid-task without losing
+  conversation history
 - **Agent Groups** -- Named collections of agents and roles for targeted
   messaging
 - **Cross-Repo Peers** (v0.7.0) -- Pair two repos via Tailscale so agents can
@@ -150,8 +160,6 @@ mcp__thrum__add_group_member(group="backend", member_type="role", member_value="
 mcp__thrum__send_message(to="@backend", content="API changes merged")
 ```
 
----
-
 ## Runtime Presets
 
 Thrum supports multiple AI coding platforms through a runtime preset system.
@@ -272,8 +280,6 @@ Add custom runtime presets via `~/.config/thrum/runtimes.json` (XDG-aware):
 
 Custom runtimes appear alongside built-in presets in `thrum runtime list`.
 
----
-
 ## Context Prime
 
 `thrum context prime` gathers identity, session info, team status, unread
@@ -287,8 +293,6 @@ thrum context prime --json # Structured JSON for LLM consumption
 
 See [Context Management](context.md) for full documentation including output
 format, graceful degradation behavior, and use cases.
-
----
 
 ## Multi-Worktree Coordination
 
@@ -385,8 +389,6 @@ THRUM_NAME=furiosa thrum send "Implementation complete"
 THRUM_NAME=reviewer thrum send "LGTM, approved"
 ```
 
----
-
 ## Coordination Tools
 
 ### who-has: File Ownership
@@ -455,8 +457,6 @@ thrum wait --mention @reviewer --timeout 5m
 - `0` -- message received
 - `1` -- timeout (no messages)
 - `2` -- error
-
----
 
 ## Complete Workflows
 
@@ -546,8 +546,6 @@ thrum inbox --unread
 thrum sent --to @coord_main
 thrum send "Auth complete, 15 tests passing" --to @coord_main
 ```
-
----
 
 ## Best Practices
 

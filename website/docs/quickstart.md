@@ -491,8 +491,27 @@ tool integration. The CLI works everywhere — MCP is an alternative transport.
 7. **Back up your data** regularly: `thrum backup`
 8. **Enable automatic backups**: `thrum backup schedule 24h`
 
+## Tmux Setup (Recommended for Multi-Agent)
+
+If you're planning to run multiple agents, install tmux and enable mouse
+support. This lets the coordinator create and manage agent sessions
+automatically — no background listeners needed.
+
+```bash
+# Install tmux
+brew install tmux  # macOS
+# or: sudo apt install tmux  # Ubuntu/Debian
+
+# Enable mouse scrolling (critical for a good experience)
+echo "set -g mouse on" >> ~/.tmux.conf
+```
+
+See [Tmux-Managed Sessions](tmux-sessions.md) for the full story.
+
 ## Next Steps
 
+- [Tmux-Managed Sessions](tmux-sessions.md) — daemon-managed agent sessions with
+  instant message delivery and zero background listeners
 - [Why Thrum Exists](philosophy.md) — understand the philosophy behind
   human-directed agent coordination before going deeper
 - [CLI Reference](cli.md) — complete documentation for every command and flag

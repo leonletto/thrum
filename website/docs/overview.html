@@ -21,19 +21,18 @@ a{color:#0366d6}
 <nav>
 <strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Overview &rsaquo; Overview
 <hr>
-<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <strong>Overview</strong> | <a href="single-agent-mode.html">Single-Agent Mode</a><br>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <strong>Overview</strong> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="single-agent-mode.html">Single-Agent Mode</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
   <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Web UI</strong>: <a href="web-ui.html">Web UI</a><br>
 <strong>Messaging</strong>: <a href="subscriptions.html">Subscriptions & Notifications</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a><br>
-<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>Guides</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="configuration.html">Configuration</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="session-restart.html">Session Restart & Context Recovery</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="guides/review-workflow.html">Code Review Workflow</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="messaging.html">Messaging</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>API Reference</strong>: <a href="event-streaming.html">Event Streaming</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="rpc-api.html">RPC API</a> | <a href="api/websocket.html">WebSocket API</a><br>
 <strong>Daemon</strong>: <a href="daemon.html">Daemon Architecture</a><br>
 <strong>Sync</strong>: <a href="sync.html">Sync Protocol</a><br>
 <strong>Development</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a><br>
 <strong>Architecture</strong>: <a href="architecture.html">Architecture</a><br>
-<strong>Context</strong>: <a href="context.html">Agent Context Management</a><br>
 <strong>Reference</strong>: <a href="cli.html">CLI Reference</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>strategies</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
 <strong>uncategorized</strong>: <a href="role-templates.html">Role-Based Preamble Templates</a><br>
@@ -41,7 +40,7 @@ a{color:#0366d6}
 <main>
 <h2>What Is Thrum?</h2>
 <blockquote>
-<p><strong>TL;DR:</strong> Thrum has ~30 commands but you only need 8 for daily use. The
+<p><strong>TL;DR:</strong> Thrum has ~40 commands but you only need 8 for daily use. The
 tables below break down which commands are for you, which are for agents, and
 which are one-time setup. Start here, then drill into the reference pages when
 you need details.</p>
@@ -55,6 +54,10 @@ worktrees, machines, and repositories. It provides:</p>
 via Tailscale (v0.7.0)</li>
 <li><strong>Real-time visibility</strong> into what other agents are working on</li>
 <li><strong>Subscription-based notifications</strong> for targeted communication</li>
+<li><strong>Tmux-managed sessions</strong> — daemon-driven agent lifecycle with instant message
+delivery and zero background listeners (v0.7.1)</li>
+<li><strong>Session restart with context snapshots</strong> — agents restart mid-task without
+losing conversation history (v0.7.1)</li>
 <li><strong>Single-agent mode</strong> — use Thrum&#39;s context management without the messaging
 layer (v0.7.0 default)</li>
 <li><strong>Backup &amp; Restore</strong> for protecting your message history and agent state</li>
@@ -74,7 +77,7 @@ for your CLAUDE.md:</p>
 <p><code>thrum prime</code> (or <code>thrum context prime</code>) checks for an existing Thrum section
 and suggests this if it&#39;s missing.</p>
 <h2>Understanding the CLI</h2>
-<p>Thrum has ~30 commands. Here&#39;s why that&#39;s not as many as it sounds.</p>
+<p>Thrum has ~40 commands. Here&#39;s why that&#39;s not as many as it sounds.</p>
 <h3>Daily Drivers (8 commands)</h3>
 <p>These are the commands you&#39;ll actually use. If you&#39;re directing agents and
 checking on their work, this is your whole toolkit:</p>
@@ -249,8 +252,16 @@ all handled gracefully.</p>
 <td>5-minute getting started</td>
 </tr>
 <tr>
+<td><a href="tmux-sessions.html">Tmux-Managed Sessions</a></td>
+<td>Daemon-managed tmux sessions with instant message delivery (v0.7.1)</td>
+</tr>
+<tr>
 <td><a href="single-agent-mode.html">Single-Agent Mode</a></td>
 <td>Context management without messaging (v0.7.0 default)</td>
+</tr>
+<tr>
+<td><a href="session-restart.html">Session Restart</a></td>
+<td>Save conversation history and resume across sessions (v0.7.1)</td>
 </tr>
 <tr>
 <td><a href="architecture.html">Architecture</a></td>
