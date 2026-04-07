@@ -890,6 +890,20 @@ Examples:
 			}
 
 			fmt.Print(cli.FormatPurge(result))
+
+			// Clean up stale .consumed restart snapshot files
+			if confirmFlag {
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+				restartDir := filepath.Join(thrumDir, "restart")
+				if entries, err := os.ReadDir(restartDir); err == nil {
+					for _, e := range entries {
+						if strings.HasSuffix(e.Name(), ".consumed") {
+							_ = os.Remove(filepath.Join(restartDir, e.Name()))
+						}
+					}
+				}
+			}
+
 			return nil
 		},
 	}
@@ -6740,7 +6754,22 @@ func restartCmd() *cobra.Command {
 			}
 			pid := idFile.ClaudePID
 			if pid == 0 {
-				return fmt.Errorf("no Claude PID found for %s — ensure agent was started via thrum tmux launch", whoami.AgentID)
+				// Fallback: query daemon for the agent's ClaudePID
+				var agents []struct {
+					AgentID   string `json:"agent_id"`
+					ClaudePID int    `json:"claude_pid"`
+				}
+				if err := client.Call("agent.list", nil, &agents); err == nil {
+					for _, a := range agents {
+						if a.AgentID == whoami.AgentID && a.ClaudePID > 0 {
+							pid = a.ClaudePID
+							break
+						}
+					}
+				}
+			}
+			if pid == 0 {
+				return fmt.Errorf("no Claude PID found for %s — ensure agent is registered with a Claude PID", whoami.AgentID)
 			}
 
 			homeDir, err := os.UserHomeDir()

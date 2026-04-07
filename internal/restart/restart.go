@@ -141,6 +141,11 @@ func truncateExchanges(exchanges []string, maxLines int) string {
 	}
 	truncated = truncated[:lastAssistantEnd]
 
+	if len(truncated) == 0 {
+		// Edge case: tail had no USER marker — return the raw tail instead of empty body
+		truncated = lines[len(lines)-maxLines:]
+	}
+
 	header := fmt.Sprintf("[Conversation continued from earlier — truncated to last %d lines]\n\n", len(truncated))
 	return header + strings.Join(truncated, "\n")
 }
@@ -226,8 +231,12 @@ func Restore(thrumDir, agentName string) (string, error) {
 		return "", fmt.Errorf("no restart snapshot for %s: %w", agentName, err)
 	}
 	consumed := path + ".consumed"
-	_ = os.Rename(path, consumed)
-	_ = os.Remove(consumed)
+	if err := os.Rename(path, consumed); err != nil {
+		// Fallback: direct delete if rename fails (e.g., cross-device)
+		_ = os.Remove(path)
+	} else {
+		_ = os.Remove(consumed)
+	}
 	return string(data), nil
 }
 

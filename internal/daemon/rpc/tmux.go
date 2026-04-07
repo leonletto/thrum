@@ -373,13 +373,27 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		runtime = "claude"
 	}
 
-	snapshotLines := 0
+	// Resolve worktree to path BEFORE killing — if resolution fails, keep the session alive.
+	// IdentityFile.Worktree is a bare name like "team-fix".
+	repoDir := filepath.Dir(h.thrumDir)
+	cwd := resolveWorktreePath(ctx, repoDir, idFile.Worktree)
+	if cwd == "" {
+		// Fallback: if worktree matches the repo itself
+		if filepath.Base(repoDir) == idFile.Worktree || idFile.Worktree == "" {
+			cwd = repoDir
+		}
+	}
+	if cwd == "" {
+		return nil, fmt.Errorf("cannot resolve worktree %q to a path for %s", idFile.Worktree, agentName)
+	}
 
-	// Extract JSONL snapshot if PID is available
-	if idFile.ClaudePID > 0 {
+	snapshotLines := 0
+	wtThrumDir := filepath.Dir(idDir) // identities/ parent is .thrum/
+
+	// Extract JSONL snapshot if PID is available and no snapshot already exists
+	if idFile.ClaudePID > 0 && !restart.SnapshotExists(wtThrumDir, agentName) {
 		homeDir, _ := os.UserHomeDir()
 		claudeDir := filepath.Join(homeDir, ".claude")
-		wtThrumDir := filepath.Dir(idDir) // identities/ parent is .thrum/
 		if jsonlPath, err := restart.FindSessionJSONL(claudeDir, idFile.ClaudePID); err == nil {
 			cfg, _ := config.LoadThrumConfig(wtThrumDir)
 			maxLines := cfg.Restart.RestartMaxLines()
@@ -396,20 +410,6 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	h.clearTmuxFromIdentitiesInDir(idDir, name)
 	if err := ttmux.KillSession(name); err != nil {
 		return nil, fmt.Errorf("kill session: %w", err)
-	}
-
-	// Resolve worktree to path. IdentityFile.Worktree is a bare name like "team-fix".
-	// Use git worktree list to find the absolute path.
-	repoDir := filepath.Dir(h.thrumDir)
-	cwd := resolveWorktreePath(ctx, repoDir, idFile.Worktree)
-	if cwd == "" {
-		// Fallback: if worktree matches the repo itself
-		if filepath.Base(repoDir) == idFile.Worktree || idFile.Worktree == "" {
-			cwd = repoDir
-		}
-	}
-	if cwd == "" {
-		return nil, fmt.Errorf("cannot resolve worktree %q to a path for %s", idFile.Worktree, agentName)
 	}
 
 	// Create and launch new session
