@@ -6743,7 +6743,11 @@ func restartCmd() *cobra.Command {
 				return fmt.Errorf("no Claude PID found for %s — ensure agent was started via thrum tmux launch", whoami.AgentID)
 			}
 
-			claudeDir := filepath.Join(os.Getenv("HOME"), ".claude")
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("resolve home directory: %w", err)
+			}
+			claudeDir := filepath.Join(homeDir, ".claude")
 			jsonlPath, err := restart.FindSessionJSONL(claudeDir, pid)
 			if err != nil {
 				return fmt.Errorf("find session JSONL: %w", err)

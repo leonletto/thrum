@@ -360,7 +360,7 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	}
 
 	// Find the agent's identity file to get PID and runtime
-	agentName, idFile, idDir := h.findIdentityForSession(name)
+	agentName, idFile, idDir := h.findIdentityForSession(ctx, name)
 	if agentName == "" {
 		return nil, fmt.Errorf("no identity file found for session %s", name)
 	}
@@ -377,10 +377,11 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 
 	// Extract JSONL snapshot if PID is available
 	if idFile.ClaudePID > 0 {
-		claudeDir := filepath.Join(os.Getenv("HOME"), ".claude")
+		homeDir, _ := os.UserHomeDir()
+		claudeDir := filepath.Join(homeDir, ".claude")
 		wtThrumDir := filepath.Dir(idDir) // identities/ parent is .thrum/
 		if jsonlPath, err := restart.FindSessionJSONL(claudeDir, idFile.ClaudePID); err == nil {
-			cfg, _ := config.LoadThrumConfig(h.thrumDir)
+			cfg, _ := config.LoadThrumConfig(wtThrumDir)
 			maxLines := cfg.Restart.RestartMaxLines()
 			if conversation, err := restart.ExtractConversation(jsonlPath, maxLines); err == nil {
 				snapshot := restart.FormatRestartSnapshot(agentName, idFile.SessionID, "external", conversation)
@@ -430,6 +431,9 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		}
 	}
 
+	// Write tmux_session and runtime to the agent's identity file
+	h.writeTmuxToIdentity(name, target, runtime)
+
 	return &TmuxRestartResponse{
 		Session:       name,
 		SnapshotLines: snapshotLines,
@@ -471,8 +475,8 @@ func resolveWorktreePath(ctx context.Context, repoDir, worktreeName string) stri
 
 // findIdentityForSession searches all worktree identity dirs for an agent
 // associated with the given tmux session name.
-func (h *TmuxHandler) findIdentityForSession(sessionName string) (string, *config.IdentityFile, string) {
-	for _, idDir := range h.allIdentityDirs() {
+func (h *TmuxHandler) findIdentityForSession(ctx context.Context, sessionName string) (string, *config.IdentityFile, string) {
+	for _, idDir := range h.allIdentityDirs(ctx) {
 		entries, _ := os.ReadDir(idDir)
 		for _, entry := range entries {
 			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
@@ -499,7 +503,7 @@ func (h *TmuxHandler) findIdentityForSession(sessionName string) (string, *confi
 
 // allIdentityDirs returns all identity directories across worktrees.
 // It looks for .thrum/identities directories in known worktree locations.
-func (h *TmuxHandler) allIdentityDirs() []string {
+func (h *TmuxHandler) allIdentityDirs(ctx context.Context) []string {
 	var dirs []string
 	// Primary identities dir
 	primary := filepath.Join(h.thrumDir, "identities")
@@ -507,7 +511,7 @@ func (h *TmuxHandler) allIdentityDirs() []string {
 
 	// Also scan worktrees via git
 	repoDir := filepath.Dir(h.thrumDir)
-	out, err := exec.Command("git", "-C", repoDir, "worktree", "list", "--porcelain").Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", repoDir, "worktree", "list", "--porcelain").Output()
 	if err != nil {
 		return dirs
 	}

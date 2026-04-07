@@ -217,14 +217,17 @@ func SaveSnapshot(thrumDir, agentName, content string) error {
 	return os.WriteFile(path, []byte(content), 0600)
 }
 
-// Restore reads and deletes a restart snapshot. Returns the content.
+// Restore reads and removes a restart snapshot. Returns the content.
+// Uses rename-then-delete for crash safety.
 func Restore(thrumDir, agentName string) (string, error) {
 	path := restartSnapshotPath(thrumDir, agentName)
 	data, err := os.ReadFile(path) // #nosec G304 -- path from internal thrumDir + agent name
 	if err != nil {
 		return "", fmt.Errorf("no restart snapshot for %s: %w", agentName, err)
 	}
-	_ = os.Remove(path)
+	consumed := path + ".consumed"
+	_ = os.Rename(path, consumed)
+	_ = os.Remove(consumed)
 	return string(data), nil
 }
 
