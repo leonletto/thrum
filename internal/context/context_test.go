@@ -328,20 +328,29 @@ func TestDefaultPreambleContent(t *testing.T) {
 		}
 	}
 
-	// Messaging/listener content MUST be absent (moved to prime section 5)
+	// Listener-specific content MUST be absent (moved to prime section 5)
 	for _, keyword := range []string{
 		"LISTENER RULE",
-		"thrum inbox",
-		"thrum send",
 		"CronCreate",
 		"Deaf Agent",
-		"Silent Agent",
 		"Background Message Listener",
 		"message-listener",
 		"Startup Protocol",
 	} {
 		if strings.Contains(s, keyword) {
-			t.Errorf("DefaultPreamble should not contain messaging keyword %q", keyword)
+			t.Errorf("DefaultPreamble should not contain listener-specific keyword %q", keyword)
+		}
+	}
+
+	// Tmux commands and dispatch pattern MUST be present
+	for _, keyword := range []string{
+		"thrum tmux start",
+		"thrum tmux status",
+		"Sub-Agent Dispatcher",
+		"thrum send",
+	} {
+		if !strings.Contains(s, keyword) {
+			t.Errorf("DefaultPreamble missing tmux/dispatch keyword %q", keyword)
 		}
 	}
 }

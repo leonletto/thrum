@@ -216,16 +216,34 @@ func DefaultPreamble() []byte {
 **Show project only:** ` + "`thrum context show --project`" + `
 **Show session only:** ` + "`thrum context show --session`" + `
 
+## Tmux Session Management
+
+` + "`thrum tmux start`" + ` — Launch an agent in the current directory (create + launch + prime + attach)
+` + "`thrum tmux create <name> --cwd <path>`" + ` — Create a detached tmux session
+` + "`thrum tmux launch <name>`" + ` — Start the configured runtime in a session
+` + "`thrum tmux status`" + ` — Show all managed sessions with state
+` + "`thrum tmux connect [name]`" + ` — Attach to a running session (interactive picker if no name)
+` + "`thrum tmux kill <name>`" + ` — Tear down a session
+` + "`thrum tmux restart <name>`" + ` — Restart with conversation snapshot preserved
+
+Tmux-managed agents receive message notifications instantly via daemon nudge —
+no background listener needed. This is the most token-efficient way to run agents.
+
 ## Operating Principles
 
 1. **Save context before compaction.**
    Use ` + "`/thrum:update-project`" + ` skill for durable project state.
 2. **Run ` + "`thrum prime`" + ` on session start or after compaction** — it loads everything you need.
 3. **Keep project_state.md current** — update it at session end so the next session starts informed.
+4. **Prefer tmux sessions for agents** — ` + "`thrum tmux start`" + ` eliminates background
+   listeners entirely. Messages arrive instantly via daemon nudge at zero token cost.
 
 ## Anti-Patterns
 
-` + "❌" + ` **Context Hog** — Reads entire files into context. Use ` + "`auggie-mcp codebase-retrieval`" + ` instead.
+` + "❌" + ` **Context Hog** — Reads entire files into context. Use Grep, Glob, and
+Explore sub-agents for code research instead.
+` + "❌" + ` **Sub-Agent Dispatcher** — Spawning sub-agents into worktrees where Thrum agents
+are running. Use ` + "`thrum send`" + ` to dispatch work via messaging instead.
 
 ## Agent Strategies
 
@@ -257,7 +275,19 @@ func roleHeader(role string) string {
 			"You orchestrate the team. You dispatch tasks, review completions, and make\n" +
 			"decisions. You do NOT implement features — delegate to implementers. Your\n" +
 			"value is fast decisions that unblock agents, not perfect code written yourself.\n" +
-			"Reply to every message. Silence stalls your team."
+			"Reply to every message. Silence stalls your team.\n\n" +
+			"### CRITICAL: Use Thrum Messaging to Dispatch Work\n\n" +
+			"Dispatch work to implementer agents via `thrum send \"...\" --to @agent_name`.\n" +
+			"**NEVER** spawn sub-agents (Agent tool) into worktrees where Thrum agents are\n" +
+			"running. If an agent is registered in a worktree (`thrum team` shows them),\n" +
+			"communicate with it through Thrum — that IS the coordination mechanism.\n\n" +
+			"The correct flow:\n" +
+			"1. `thrum tmux start` or `thrum tmux create` + `launch` to start an agent\n" +
+			"2. Agent runs `/thrum:prime` to self-identify\n" +
+			"3. Send work via `thrum send` — daemon nudges tmux pane instantly\n" +
+			"4. Monitor progress via `thrum inbox --unread`\n\n" +
+			"Sub-agents are for: message listeners, code reviewers, research/explore —\n" +
+			"never for implementation work in another agent's worktree."
 	case "implementer":
 		return "## Your Role: Implementer\n\n" +
 			"You build what you're assigned. Wait for tasks from your coordinator — do not\n" +

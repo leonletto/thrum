@@ -1004,7 +1004,7 @@ func TestNewMessageHandlerWithDispatcher(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	handler := NewMessageHandlerWithDispatcher(s, nil)
+	handler := NewMessageHandlerWithDispatcher(s, nil, "")
 	if handler == nil {
 		t.Fatal("Expected non-nil handler")
 	}

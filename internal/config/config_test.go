@@ -856,8 +856,8 @@ func TestIdentityFileV3Fields(t *testing.T) {
 		t.Fatalf("LoadIdentityWithPath: %v", err)
 	}
 
-	if loaded.Version != 3 {
-		t.Errorf("Version = %d, want 3", loaded.Version)
+	if loaded.Version != 4 {
+		t.Errorf("Version = %d, want 4", loaded.Version)
 	}
 	if loaded.Branch != "main" {
 		t.Errorf("Branch = %q, want %q", loaded.Branch, "main")
@@ -924,8 +924,8 @@ func TestIdentityV1RoundTrip(t *testing.T) {
 		t.Fatalf("Reload after save: %v", err)
 	}
 
-	if reloaded.Version != 3 {
-		t.Errorf("Version = %d, want 3", reloaded.Version)
+	if reloaded.Version != 4 {
+		t.Errorf("Version = %d, want 4", reloaded.Version)
 	}
 	if reloaded.ConfirmedBy != "human:tester" {
 		t.Errorf("ConfirmedBy = %q, want %q", reloaded.ConfirmedBy, "human:tester")
@@ -979,7 +979,7 @@ func TestIdentityFile_BackwardCompat_NoPIDField(t *testing.T) {
 	}
 }
 
-func TestSaveIdentityFile_BumpsVersionTo3(t *testing.T) {
+func TestSaveIdentityFile_BumpsVersionTo4(t *testing.T) {
 	t.Setenv("THRUM_HOME", "")
 	t.Setenv("THRUM_NAME", "")
 	tmpDir := t.TempDir()
@@ -998,8 +998,8 @@ func TestSaveIdentityFile_BumpsVersionTo3(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadIdentityWithPath: %v", err)
 	}
-	if loaded.Version != 3 {
-		t.Errorf("Version after save = %d, want 3", loaded.Version)
+	if loaded.Version != 4 {
+		t.Errorf("Version after save = %d, want 4", loaded.Version)
 	}
 }
 
@@ -1061,6 +1061,111 @@ func TestLoad_PIDFirstResolution_ZeroPIDFallsThrough(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "agent_x") || !strings.Contains(err.Error(), "agent_y") {
 		t.Errorf("Error should list available identities, got: %v", err)
+	}
+}
+
+func TestIdentityFile_TmuxFields(t *testing.T) {
+	t.Setenv("THRUM_HOME", "")
+	t.Setenv("THRUM_NAME", "")
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750)
+
+	identity := &config.IdentityFile{
+		Agent:       config.AgentConfig{Name: "test_agent", Role: "implementer", Module: "api"},
+		TmuxSession: "implementer-api:0.0",
+		Runtime:     "claude",
+	}
+
+	err := config.SaveIdentityFile(thrumDir, identity)
+	if err != nil {
+		t.Fatalf("SaveIdentityFile: %v", err)
+	}
+
+	loaded, _, err := config.LoadIdentityWithPath(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadIdentityWithPath: %v", err)
+	}
+
+	if loaded.TmuxSession != "implementer-api:0.0" {
+		t.Errorf("TmuxSession = %q, want %q", loaded.TmuxSession, "implementer-api:0.0")
+	}
+	if loaded.Runtime != "claude" {
+		t.Errorf("Runtime = %q, want %q", loaded.Runtime, "claude")
+	}
+	if loaded.Version != 4 {
+		t.Errorf("Version = %d, want 4", loaded.Version)
+	}
+}
+
+func TestIdentityFile_TmuxFieldsOmitEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750)
+
+	identity := &config.IdentityFile{
+		Agent: config.AgentConfig{Name: "legacy_agent", Role: "coordinator", Module: "main"},
+	}
+
+	err := config.SaveIdentityFile(thrumDir, identity)
+	if err != nil {
+		t.Fatalf("SaveIdentityFile: %v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(thrumDir, "identities", "legacy_agent.json"))
+	if strings.Contains(string(data), "tmux_session") {
+		t.Error("tmux_session should be omitted when empty")
+	}
+	if strings.Contains(string(data), "runtime") {
+		t.Error("runtime should be omitted when empty")
+	}
+}
+
+func TestRestartConfigDefaults(t *testing.T) {
+	cfg := config.ThrumConfig{}
+	if cfg.Restart.MaxLines != 0 {
+		t.Errorf("MaxLines = %d, want 0", cfg.Restart.MaxLines)
+	}
+	if cfg.Restart.AutoThreshold != 0 {
+		t.Errorf("AutoThreshold = %d, want 0", cfg.Restart.AutoThreshold)
+	}
+	if cfg.Restart.GracefulTimeout != 0 {
+		t.Errorf("GracefulTimeout = %d, want 0", cfg.Restart.GracefulTimeout)
+	}
+}
+
+func TestRestartConfigJSON(t *testing.T) {
+	jsonStr := `{"restart":{"max_lines":500,"auto_threshold":80,"graceful_timeout":45}}`
+	var cfg config.ThrumConfig
+	if err := json.Unmarshal([]byte(jsonStr), &cfg); err != nil {
+		t.Fatalf("json.Unmarshal failed: %v", err)
+	}
+	if cfg.Restart.MaxLines != 500 {
+		t.Errorf("MaxLines = %d, want 500", cfg.Restart.MaxLines)
+	}
+	if cfg.Restart.AutoThreshold != 80 {
+		t.Errorf("AutoThreshold = %d, want 80", cfg.Restart.AutoThreshold)
+	}
+	if cfg.Restart.GracefulTimeout != 45 {
+		t.Errorf("GracefulTimeout = %d, want 45", cfg.Restart.GracefulTimeout)
+	}
+}
+
+func TestRestartMaxLines(t *testing.T) {
+	if got := (config.RestartConfig{}).RestartMaxLines(); got != 1000 {
+		t.Errorf("RestartMaxLines() with zero = %d, want 1000", got)
+	}
+	if got := (config.RestartConfig{MaxLines: 500}).RestartMaxLines(); got != 500 {
+		t.Errorf("RestartMaxLines() with 500 = %d, want 500", got)
+	}
+}
+
+func TestRestartGracefulTimeout(t *testing.T) {
+	if got := (config.RestartConfig{}).RestartGracefulTimeout(); got != 30 {
+		t.Errorf("RestartGracefulTimeout() with zero = %d, want 30", got)
+	}
+	if got := (config.RestartConfig{GracefulTimeout: 45}).RestartGracefulTimeout(); got != 45 {
+		t.Errorf("RestartGracefulTimeout() with 45 = %d, want 45", got)
 	}
 }
 

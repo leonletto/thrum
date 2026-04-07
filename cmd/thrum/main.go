@@ -31,10 +31,12 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
+	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	thrumSync "github.com/leonletto/thrum/internal/sync"
 	"github.com/leonletto/thrum/internal/timeparse"
+	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 	"github.com/leonletto/thrum/internal/web"
 	"github.com/leonletto/thrum/internal/websocket"
@@ -151,6 +153,8 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(rolesCmd())
 	rootCmd.AddCommand(purgeCmd())
 	rootCmd.AddCommand(telegramCmd())
+	rootCmd.AddCommand(tmuxCmd())
+	rootCmd.AddCommand(restartCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -886,6 +890,20 @@ Examples:
 			}
 
 			fmt.Print(cli.FormatPurge(result))
+
+			// Clean up stale .consumed restart snapshot files
+			if confirmFlag {
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+				restartDir := filepath.Join(thrumDir, "restart")
+				if entries, err := os.ReadDir(restartDir); err == nil {
+					for _, e := range entries {
+						if strings.HasSuffix(e.Name(), ".consumed") {
+							_ = os.Remove(filepath.Join(restartDir, e.Name()))
+						}
+					}
+				}
+			}
+
 			return nil
 		},
 	}
@@ -3933,6 +3951,31 @@ Examples:
 						result.SavedSessionContext = string(data)
 					}
 				}
+
+				// Wire RestartSnapshot (consumed on read)
+				if result.Identity != nil {
+					if snapshot, err := restart.ConsumeInPrime(thrumDir, result.Identity.AgentID); err == nil {
+						result.RestartSnapshot = snapshot
+					}
+				}
+
+				// Detect tmux and write-back if needed
+				if ttmux.InTmux() {
+					if currentTarget, err := ttmux.PaneTarget(); err == nil && currentTarget != "" {
+						if idFile, _, err := config.LoadIdentityWithPath(result.RepoPath); err == nil {
+							if idFile.TmuxSession != currentTarget {
+								idFile.TmuxSession = currentTarget
+								_ = config.SaveIdentityFile(thrumDir, idFile)
+							}
+							result.TmuxMode = true
+						}
+					}
+				} else if idFile, _, err := config.LoadIdentityWithPath(result.RepoPath); err == nil && idFile.TmuxSession != "" {
+					sessionName, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+					if ttmux.HasSession(sessionName) {
+						result.TmuxMode = true
+					}
+				}
 			}
 
 			if flagJSON {
@@ -3940,6 +3983,11 @@ Examples:
 				fmt.Println(string(output))
 			} else {
 				fmt.Print(cli.FormatPrimeContext(result))
+			}
+
+			// Clean up consumed restart snapshot
+			if result.RestartSnapshot != "" && result.Identity != nil && result.RepoPath != "" {
+				restart.CleanupConsumed(filepath.Join(result.RepoPath, ".thrum"), result.Identity.AgentID)
 			}
 
 			return nil
@@ -4891,7 +4939,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("agent.cleanup", agentHandler.HandleCleanup)
 
 	// Team management
-	teamHandler := rpc.NewTeamHandler(st)
+	teamHandler := rpc.NewTeamHandler(st, thrumDir)
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
 	// Context management
@@ -4922,7 +4970,8 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("group.members", groupHandler.HandleMembers)
 
 	// Message management
-	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher)
+	nudgeState := daemon.NewNudgeState()
+	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir, nudgeState)
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)
 	server.RegisterHandler("message.list", messageHandler.HandleList)
@@ -5510,6 +5559,17 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		go tgBridge.Run(ctx)
 		fmt.Fprintf(os.Stderr, "  Telegram:    bridge enabled (target: %s)\n", thrumCfg.Telegram.Target)
 	}
+
+	// Tmux session management handlers
+	tmuxHandler := rpc.NewTmuxHandler(thrumDir)
+	server.RegisterHandler("tmux.create", tmuxHandler.HandleCreate)
+	server.RegisterHandler("tmux.launch", tmuxHandler.HandleLaunch)
+	server.RegisterHandler("tmux.status", tmuxHandler.HandleStatus)
+	server.RegisterHandler("tmux.kill", tmuxHandler.HandleKill)
+	server.RegisterHandler("tmux.send", tmuxHandler.HandleSend)
+	server.RegisterHandler("tmux.capture", tmuxHandler.HandleCapture)
+	server.RegisterHandler("tmux.check-pane", tmuxHandler.HandleCheckPane)
+	server.RegisterHandler("tmux.restart", tmuxHandler.HandleRestart)
 
 	// Auto-connect to dialer-role peers after the WS server is ready.
 	if peerManager != nil && thrumCfg.Peers.AutoConnect {
@@ -6664,4 +6724,554 @@ func detectGitUser() string {
 	name = strings.ToLower(name)
 	name = strings.ReplaceAll(name, " ", "-")
 	return name
+}
+
+func restartCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "restart",
+		Short: "Session restart with context snapshot",
+	}
+
+	saveCmd := &cobra.Command{
+		Use:   "save",
+		Short: "Save conversation snapshot for session restart",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			whoami, err := cli.AgentWhoami(client)
+			if err != nil {
+				return fmt.Errorf("resolve identity: %w", err)
+			}
+
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			idFile, _, err := config.LoadIdentityWithPath(flagRepo)
+			if err != nil {
+				return fmt.Errorf("load identity file: %w", err)
+			}
+			pid := idFile.ClaudePID
+			if pid == 0 {
+				// Fallback: query daemon for the agent's ClaudePID
+				var agents []struct {
+					AgentID   string `json:"agent_id"`
+					ClaudePID int    `json:"claude_pid"`
+				}
+				if err := client.Call("agent.list", nil, &agents); err == nil {
+					for _, a := range agents {
+						if a.AgentID == whoami.AgentID && a.ClaudePID > 0 {
+							pid = a.ClaudePID
+							break
+						}
+					}
+				}
+			}
+			if pid == 0 {
+				return fmt.Errorf("no Claude PID found for %s — ensure agent is registered with a Claude PID", whoami.AgentID)
+			}
+
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("resolve home directory: %w", err)
+			}
+			claudeDir := filepath.Join(homeDir, ".claude")
+			jsonlPath, err := restart.FindSessionJSONL(claudeDir, pid)
+			if err != nil {
+				return fmt.Errorf("find session JSONL: %w", err)
+			}
+
+			cfg, _ := config.LoadThrumConfig(thrumDir)
+			maxLines := cfg.Restart.RestartMaxLines()
+
+			conversation, err := restart.ExtractConversation(jsonlPath, maxLines)
+			if err != nil {
+				return fmt.Errorf("extract conversation: %w", err)
+			}
+
+			reason, _ := cmd.Flags().GetString("reason")
+			if reason == "" {
+				reason = "self-initiated"
+			}
+
+			snapshot := restart.FormatRestartSnapshot(whoami.AgentID, whoami.SessionID, reason, conversation)
+			if err := restart.SaveSnapshot(thrumDir, whoami.AgentID, snapshot); err != nil {
+				return err
+			}
+
+			lines := strings.Count(snapshot, "\n")
+			if !flagQuiet {
+				fmt.Printf("Restart snapshot saved for %s (%d lines)\n", whoami.AgentID, lines)
+			}
+			return nil
+		},
+	}
+	saveCmd.Flags().String("reason", "self-initiated", "Reason for restart")
+	cmd.AddCommand(saveCmd)
+
+	restoreCmd := &cobra.Command{
+		Use:   "restore",
+		Short: "Restore and output a restart snapshot",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			whoami, err := cli.AgentWhoami(client)
+			if err != nil {
+				return fmt.Errorf("resolve identity: %w", err)
+			}
+
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			content, err := restart.Restore(thrumDir, whoami.AgentID)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "No restart snapshot found")
+				os.Exit(1)
+			}
+			fmt.Print(content)
+			return nil
+		},
+	}
+	cmd.AddCommand(restoreCmd)
+
+	checkCmd := &cobra.Command{
+		Use:   "check",
+		Short: "Check if a restart snapshot exists (exit 0 = yes, exit 1 = no)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			whoami, err := cli.AgentWhoami(client)
+			if err != nil {
+				return fmt.Errorf("resolve identity: %w", err)
+			}
+
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			if !restart.SnapshotExists(thrumDir, whoami.AgentID) {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(checkCmd)
+
+	return cmd
+}
+
+func tmuxCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "tmux",
+		Short: "Manage tmux sessions for agents",
+	}
+
+	// create
+	createCmd := &cobra.Command{
+		Use:   "create <name>",
+		Short: "Create a tmux session for an agent",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, _ := cmd.Flags().GetString("cwd")
+			if cwd == "" {
+				return fmt.Errorf("--cwd is required")
+			}
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
+				Name: args[0], Cwd: cwd,
+			})
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Print(cli.FormatTmuxCreate(result))
+			}
+			return nil
+		},
+	}
+	createCmd.Flags().String("cwd", "", "Working directory for the session")
+	cmd.AddCommand(createCmd)
+
+	// launch
+	launchCmd := &cobra.Command{
+		Use:   "launch <name>",
+		Short: "Start an AI tool inside a tmux session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rt, _ := cmd.Flags().GetString("runtime")
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxLaunch(client, cli.TmuxLaunchOptions{
+				Name: args[0], Runtime: rt,
+			})
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Printf("Launched %s in session %s\n", result.Runtime, result.Session)
+			}
+			return nil
+		},
+	}
+	launchCmd.Flags().String("runtime", "claude", "AI tool to launch (claude, opencode, shell)")
+	cmd.AddCommand(launchCmd)
+
+	// status (primary) + list (alias)
+	statusCmd := &cobra.Command{
+		Use:     "status",
+		Aliases: []string{"list"},
+		Short:   "Show tmux-managed sessions with state",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxStatus(client)
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Print(cli.FormatTmuxStatus(result))
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(statusCmd)
+
+	// kill
+	killCmd := &cobra.Command{
+		Use:   "kill <name>",
+		Short: "Tear down a tmux session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+			if err := cli.TmuxKill(client, args[0]); err != nil {
+				return err
+			}
+			if !flagQuiet {
+				fmt.Printf("Session %s killed\n", args[0])
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(killCmd)
+
+	// send
+	sendCmd := &cobra.Command{
+		Use:   "send <name> <text>",
+		Short: "Send text into a tmux session",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+			return cli.TmuxSend(client, args[0], args[1])
+		},
+	}
+	cmd.AddCommand(sendCmd)
+
+	// capture
+	captureCmd := &cobra.Command{
+		Use:   "capture <name>",
+		Short: "Capture pane content from a tmux session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			lines, _ := cmd.Flags().GetInt("lines")
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxCapture(client, args[0], lines)
+			if err != nil {
+				return err
+			}
+			fmt.Print(result.Content)
+			return nil
+		},
+	}
+	captureCmd.Flags().Int("lines", 50, "Number of lines to capture")
+	cmd.AddCommand(captureCmd)
+
+	// check-pane (hidden — called by tmux silence hooks)
+	checkPaneCmd := &cobra.Command{
+		Use:    "check-pane <session>",
+		Short:  "Check a tmux pane for permission prompts or idle state (called by tmux hooks)",
+		Args:   cobra.ExactArgs(1),
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoPath, _ := cmd.Flags().GetString("repo")
+			if repoPath == "" {
+				repoPath = flagRepo
+			}
+
+			session := args[0]
+			target := session + ":0.0"
+
+			content, err := ttmux.CapturePane(target, 5)
+			if err != nil {
+				return err
+			}
+
+			reason := detectPaneState(content)
+			if reason == "" {
+				return nil // Normal state, nothing to report
+			}
+
+			// Connect to daemon and report
+			client, err := getClient()
+			if err != nil {
+				return nil // Daemon not running, silently skip
+			}
+			defer func() { _ = client.Close() }()
+
+			req := map[string]string{
+				"session": session,
+				"reason":  reason,
+				"content": content,
+			}
+			var result any
+			_ = client.Call("tmux.check-pane", req, &result)
+			return nil
+		},
+	}
+	checkPaneCmd.Flags().String("repo", "", "Repository path (baked in by tmux hook)")
+	cmd.AddCommand(checkPaneCmd)
+
+	// connect
+	connectCmd := &cobra.Command{
+		Use:   "connect [name]",
+		Short: "Attach to a running agent's tmux session",
+		Long: `Attach to a running agent's tmux session.
+
+With a session name argument, attaches directly.
+Without arguments, shows a numbered list of alive sessions to choose from.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				// Direct attach by name
+				return tmuxAttach(args[0])
+			}
+
+			// Interactive: list alive sessions and let user pick
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxStatus(client)
+			if err != nil {
+				return err
+			}
+
+			// Filter to alive sessions only
+			var alive []cli.TmuxSessionInfo
+			for _, s := range result.Sessions {
+				if s.State == "alive" {
+					alive = append(alive, s)
+				}
+			}
+			if len(alive) == 0 {
+				fmt.Println("No alive tmux sessions")
+				return nil
+			}
+
+			// Show numbered list
+			fmt.Printf("%-4s %-25s %-20s %-10s %s\n", "#", "SESSION", "AGENT", "RUNTIME", "BRANCH")
+			for i, s := range alive {
+				agentDisplay := s.Agent
+				if agentDisplay != "" {
+					agentDisplay = "@" + agentDisplay
+				}
+				fmt.Printf("%-4d %-25s %-20s %-10s %s\n",
+					i+1, s.Name, agentDisplay, s.Runtime, s.Branch)
+			}
+
+			// Read selection
+			fmt.Printf("\nEnter number (1-%d): ", len(alive))
+			scanner := bufio.NewScanner(os.Stdin)
+			if !scanner.Scan() {
+				return nil
+			}
+			input := strings.TrimSpace(scanner.Text())
+			var choice int
+			if _, err := fmt.Sscanf(input, "%d", &choice); err != nil || choice < 1 || choice > len(alive) {
+				return fmt.Errorf("invalid selection: %s", input)
+			}
+
+			return tmuxAttach(alive[choice-1].Name)
+		},
+	}
+	cmd.AddCommand(connectCmd)
+
+	// restart
+	tmuxRestartCmd := &cobra.Command{
+		Use:   "restart <name>",
+		Short: "Restart a tmux-managed agent session with context snapshot",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			force, _ := cmd.Flags().GetBool("force")
+			rt, _ := cmd.Flags().GetString("runtime")
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			req := map[string]any{
+				"name":  args[0],
+				"force": force,
+			}
+			if rt != "" {
+				req["runtime"] = rt
+			}
+			var result cli.TmuxRestartResponse
+			if err := client.Call("tmux.restart", req, &result); err != nil {
+				return err
+			}
+
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Printf("Session %s restarted (%d snapshot lines)\n", result.Session, result.SnapshotLines)
+			}
+			return nil
+		},
+	}
+	tmuxRestartCmd.Flags().Bool("force", false, "Skip graceful signal, force restart")
+	tmuxRestartCmd.Flags().String("runtime", "", "Runtime override (default: same as before)")
+	cmd.AddCommand(tmuxRestartCmd)
+
+	// start — one-command launch: create session, start runtime, prime, attach
+	startCmd := &cobra.Command{
+		Use:   "start",
+		Short: "Launch an agent session in the current directory and attach",
+		Long: `Creates a tmux session, launches the configured runtime (default: claude),
+runs /thrum:prime for agent registration, and attaches to the session.
+
+The session name is derived from the current directory name.
+The runtime is read from the repo's config (runtime.primary), defaulting to claude.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("get working directory: %w", err)
+			}
+
+			// Derive session name from directory basename
+			sessionName := filepath.Base(cwd)
+			nameOverride, _ := cmd.Flags().GetString("name")
+			if nameOverride != "" {
+				sessionName = nameOverride
+			}
+
+			// Check if session already exists
+			if ttmux.HasSession(sessionName) {
+				fmt.Printf("Session %s already exists — attaching\n", sessionName)
+				return tmuxAttach(sessionName)
+			}
+
+			// Determine runtime from config
+			thrumDir := filepath.Join(cwd, ".thrum")
+			runtime := "claude"
+			if _, err := os.Stat(thrumDir); err == nil {
+				cfg, _ := config.LoadThrumConfig(thrumDir)
+				if cfg.Runtime.Primary != "" {
+					runtime = cfg.Runtime.Primary
+				}
+			}
+			rtOverride, _ := cmd.Flags().GetString("runtime")
+			if rtOverride != "" {
+				runtime = rtOverride
+			}
+
+			// Create session via daemon
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			if _, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
+				Name: sessionName, Cwd: cwd,
+			}); err != nil {
+				return fmt.Errorf("create session: %w", err)
+			}
+
+			// Launch runtime
+			if _, err := cli.TmuxLaunch(client, cli.TmuxLaunchOptions{
+				Name: sessionName, Runtime: runtime,
+			}); err != nil {
+				return fmt.Errorf("launch runtime: %w", err)
+			}
+
+			fmt.Printf("Session %s created with %s — waiting for startup...\n", sessionName, runtime)
+
+			// Wait for runtime to initialize, then send prime
+			time.Sleep(8 * time.Second)
+			_ = cli.TmuxSend(client, sessionName, "/thrum:prime")
+
+			// Give prime a moment to start, then attach
+			time.Sleep(2 * time.Second)
+			return tmuxAttach(sessionName)
+		},
+	}
+	startCmd.Flags().String("name", "", "Override session name (default: directory name)")
+	startCmd.Flags().String("runtime", "", "Override runtime (default: from config or claude)")
+	cmd.AddCommand(startCmd)
+
+	return cmd
+}
+
+func tmuxAttach(session string) error {
+	c := exec.Command("tmux", "attach-session", "-t", session)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return c.Run()
+}
+
+func detectPaneState(content string) string {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	for _, line := range lines {
+		lower := strings.ToLower(line)
+		if strings.Contains(lower, "allow") && (strings.Contains(lower, "y/n") ||
+			strings.Contains(lower, "yes") || strings.Contains(lower, "deny")) {
+			return "permission:" + strings.TrimSpace(line)
+		}
+	}
+	return ""
 }

@@ -10,8 +10,18 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/runtime"
+	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 )
+
+// detectTmuxSession returns the current tmux pane target if running inside tmux,
+// or an empty string if not in tmux.
+func detectTmuxSession() (string, error) {
+	if !ttmux.InTmux() {
+		return "", nil
+	}
+	return ttmux.PaneTarget()
+}
 
 // QuickstartOptions contains options for the quickstart command.
 type QuickstartOptions struct {
@@ -142,7 +152,7 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	}
 	result.Session = sessResult
 
-	// Step 2.5: Enrich identity file with v3 fields
+	// Step 2.5: Enrich identity file with v4 fields
 	repoPath := opts.RepoPath
 	if repoPath == "" {
 		repoPath = "."
@@ -151,8 +161,8 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		thrumDir := filepath.Join(repoPath, ".thrum")
 		changed := false
 
-		if idFile.Version < 3 {
-			idFile.Version = 3
+		if idFile.Version < 4 {
+			idFile.Version = 4
 			changed = true
 		}
 		if idFile.Branch == "" {
@@ -180,6 +190,14 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 			repoName := GetRepoName(repoPath)
 			idFile.Intent = DefaultIntent(idFile.Agent.Role, repoName)
 			changed = true
+		}
+
+		// Detect tmux session and write to identity file
+		if tmuxTarget, err := detectTmuxSession(); err == nil && tmuxTarget != "" {
+			if idFile.TmuxSession != tmuxTarget {
+				idFile.TmuxSession = tmuxTarget
+				changed = true
+			}
 		}
 
 		if changed {

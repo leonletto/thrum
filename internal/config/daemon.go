@@ -15,6 +15,7 @@ type ThrumConfig struct {
 	Backup   BackupConfig   `json:"backup"`
 	Telegram TelegramConfig `json:"telegram"`
 	Peers    PeersConfig    `json:"peers"`
+	Restart  RestartConfig  `json:"restart"`
 }
 
 // TelegramConfig holds Telegram bridge settings.
@@ -183,6 +184,29 @@ const DefaultSyncInterval = 60
 // DefaultWSPort is the default WebSocket port strategy.
 const DefaultWSPort = "auto"
 
+// RestartConfig controls session restart with context snapshot behavior.
+type RestartConfig struct {
+	MaxLines        int `json:"max_lines,omitempty"`        // Max lines in snapshot (default: 1000)
+	AutoThreshold   int `json:"auto_threshold,omitempty"`   // Context % trigger, 0 = disabled
+	GracefulTimeout int `json:"graceful_timeout,omitempty"` // Seconds to wait for graceful save
+}
+
+// RestartMaxLines returns the configured max lines, defaulting to 1000.
+func (r RestartConfig) RestartMaxLines() int {
+	if r.MaxLines <= 0 {
+		return 1000
+	}
+	return r.MaxLines
+}
+
+// RestartGracefulTimeout returns the configured timeout, defaulting to 30s.
+func (r RestartConfig) RestartGracefulTimeout() int {
+	if r.GracefulTimeout <= 0 {
+		return 30
+	}
+	return r.GracefulTimeout
+}
+
 // LoadThrumConfig reads .thrum/config.json from the given thrum directory.
 // Returns a zero-value ThrumConfig (all defaults) if the file doesn't exist.
 func LoadThrumConfig(thrumDir string) (*ThrumConfig, error) {
@@ -280,6 +304,17 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 		var backupMap any
 		_ = json.Unmarshal(backupBytes, &backupMap)
 		existing["backup"] = backupMap
+	}
+
+	// Marshal and merge the restart section (only if any field is set)
+	if cfg.Restart.MaxLines > 0 || cfg.Restart.AutoThreshold > 0 || cfg.Restart.GracefulTimeout > 0 {
+		restartBytes, err := json.Marshal(cfg.Restart)
+		if err != nil {
+			return err
+		}
+		var restartMap any
+		_ = json.Unmarshal(restartBytes, &restartMap)
+		existing["restart"] = restartMap
 	}
 
 	// Marshal and merge the telegram section (only if token is set or explicitly configured)
