@@ -6969,6 +6969,83 @@ Without arguments, shows a numbered list of alive sessions to choose from.`,
 	}
 	cmd.AddCommand(connectCmd)
 
+	// start — one-command launch: create session, start runtime, prime, attach
+	startCmd := &cobra.Command{
+		Use:   "start",
+		Short: "Launch an agent session in the current directory and attach",
+		Long: `Creates a tmux session, launches the configured runtime (default: claude),
+runs /thrum:prime for agent registration, and attaches to the session.
+
+The session name is derived from the current directory name.
+The runtime is read from the repo's config (runtime.primary), defaulting to claude.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("get working directory: %w", err)
+			}
+
+			// Derive session name from directory basename
+			sessionName := filepath.Base(cwd)
+			nameOverride, _ := cmd.Flags().GetString("name")
+			if nameOverride != "" {
+				sessionName = nameOverride
+			}
+
+			// Check if session already exists
+			if ttmux.HasSession(sessionName) {
+				fmt.Printf("Session %s already exists — attaching\n", sessionName)
+				return tmuxAttach(sessionName)
+			}
+
+			// Determine runtime from config
+			thrumDir := filepath.Join(cwd, ".thrum")
+			runtime := "claude"
+			if _, err := os.Stat(thrumDir); err == nil {
+				cfg, _ := config.LoadThrumConfig(thrumDir)
+				if cfg.Runtime.Primary != "" {
+					runtime = cfg.Runtime.Primary
+				}
+			}
+			rtOverride, _ := cmd.Flags().GetString("runtime")
+			if rtOverride != "" {
+				runtime = rtOverride
+			}
+
+			// Create session via daemon
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			if _, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
+				Name: sessionName, Cwd: cwd,
+			}); err != nil {
+				return fmt.Errorf("create session: %w", err)
+			}
+
+			// Launch runtime
+			if _, err := cli.TmuxLaunch(client, cli.TmuxLaunchOptions{
+				Name: sessionName, Runtime: runtime,
+			}); err != nil {
+				return fmt.Errorf("launch runtime: %w", err)
+			}
+
+			fmt.Printf("Session %s created with %s — waiting for startup...\n", sessionName, runtime)
+
+			// Wait for runtime to initialize, then send prime
+			time.Sleep(8 * time.Second)
+			_ = cli.TmuxSend(client, sessionName, "/thrum:prime")
+
+			// Give prime a moment to start, then attach
+			time.Sleep(2 * time.Second)
+			return tmuxAttach(sessionName)
+		},
+	}
+	startCmd.Flags().String("name", "", "Override session name (default: directory name)")
+	startCmd.Flags().String("runtime", "", "Override runtime (default: from config or claude)")
+	cmd.AddCommand(startCmd)
+
 	return cmd
 }
 
