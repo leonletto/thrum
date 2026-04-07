@@ -182,10 +182,13 @@ func FindSessionJSONL(claudeDir string, pid int) (string, error) {
 }
 
 // encodeCwd converts a cwd path to Claude's project directory name format.
-// /Users/leon/dev/project → -Users-leon-dev-project.
+// /Users/leon/dev/project → -Users-leon-dev-project
+// /Users/leon/.workspaces/thrum → -Users-leon--workspaces-thrum
+// Claude Code replaces both "/" and "." with "-".
 func encodeCwd(cwd string) string {
 	encoded := strings.TrimPrefix(cwd, "/")
 	encoded = strings.ReplaceAll(encoded, "/", "-")
+	encoded = strings.ReplaceAll(encoded, ".", "-")
 	return "-" + encoded
 }
 

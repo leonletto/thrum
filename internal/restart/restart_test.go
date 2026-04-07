@@ -220,6 +220,9 @@ func TestFindSessionJSONL_NotFound(t *testing.T) {
 func TestEncodeCwd(t *testing.T) {
 	assert.Equal(t, "-Users-leon-dev-project", encodeCwd("/Users/leon/dev/project"))
 	assert.Equal(t, "-home-user-work", encodeCwd("/home/user/work"))
+	// Dot-prefixed directories (e.g. .workspaces) encode dots as dashes
+	assert.Equal(t, "-Users-leon--workspaces-thrum-website-dev", encodeCwd("/Users/leon/.workspaces/thrum/website-dev"))
+	assert.Equal(t, "-home-user--config-app", encodeCwd("/home/user/.config/app"))
 }
 
 func TestSnapshotSaveAndRestore(t *testing.T) {
