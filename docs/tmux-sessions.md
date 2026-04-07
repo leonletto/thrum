@@ -1,18 +1,18 @@
 ## What This Is
 
-Background message listeners were the #1 source of operational problems in
-Thrum. Agents forgot to launch them. The cron watchdog didn't always respawn
-them. They burned tokens polling for messages that might never arrive. And if
-the parent agent didn't re-arm after timeout, messages were silently missed.
+Tmux-managed sessions are how multi-agent orchestration frameworks run their
+agents. The daemon creates tmux sessions, launches AI tools inside them, and
+delivers message notifications directly into the pane. No background process, no
+polling, no token cost. The coordinator manages the whole team from one place.
 
-Tmux-managed sessions replace all of that. The daemon delivers message
-notifications directly into agent tmux panes. No listeners, no polling, no cron
-watchdogs, no token burn. Your coordinator creates sessions, launches agents,
-and manages the whole team from one place.
+Thrum's original approach — a background listener sub-agent watching for
+messages — worked well and got us this far. But tmux sessions are a better fit
+for how people actually run agent teams. The daemon handles delivery directly,
+agents don't need to manage their own listeners, and the whole setup is simpler
+to understand and operate.
 
-This is how production agent orchestration frameworks handle agent lifecycle.
-Thrum's implementation gives you the same daemon-driven session management you'd
-expect from those tools — without the complexity.
+This gives you the same daemon-driven session management you'd expect from
+production agent orchestration tools — without the complexity.
 
 ## Prerequisites
 
