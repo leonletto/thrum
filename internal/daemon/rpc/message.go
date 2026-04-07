@@ -255,20 +255,12 @@ type WSBroadcaster interface {
 }
 
 // MessageHandler handles message-related RPC methods.
-// NudgeDeduper provides nudge deduplication (implemented by daemon.NudgeState).
-type NudgeDeduper interface {
-	ShouldNudge(session, reason string) bool
-	RecordNudge(session, reason string)
-	Clear(session string)
-}
-
 type MessageHandler struct {
 	state         *state.State
 	dispatcher    *subscriptions.Dispatcher
 	groupResolver *groups.Resolver
 	wsBroadcaster WSBroadcaster // optional; nil if not wired
 	thrumDir      string        // for tmux nudge resolution
-	nudgeDeduper  NudgeDeduper  // optional; nil disables dedup
 }
 
 // SetWSBroadcaster configures a broadcaster that will be called after every
@@ -290,17 +282,13 @@ func NewMessageHandler(state *state.State) *MessageHandler {
 
 // NewMessageHandlerWithDispatcher creates a new message handler with a custom dispatcher.
 // The dispatcher should have the client notifier configured for push notifications.
-func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir string, nudgeDeduper ...NudgeDeduper) *MessageHandler {
-	h := &MessageHandler{
+func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir string) *MessageHandler {
+	return &MessageHandler{
 		state:         state,
 		dispatcher:    dispatcher,
 		groupResolver: groups.NewResolver(state.DB()),
 		thrumDir:      thrumDir,
 	}
-	if len(nudgeDeduper) > 0 {
-		h.nudgeDeduper = nudgeDeduper[0]
-	}
-	return h
 }
 
 // HandleSend handles the message.send RPC method.
@@ -537,16 +525,6 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	if h.thrumDir != "" {
 		senderName := agentID
 
-		// Clear nudge dedup for sender — they just sent a message, so they're
-		// active and have processed any prior nudge. This ensures subsequent
-		// messages to the sender's session aren't suppressed.
-		if h.nudgeDeduper != nil {
-			if senderTarget := resolveNudgeTarget(h.thrumDir, agentID); senderTarget != "" {
-				senderSession, _, _ := ttmux.ParseTarget(senderTarget)
-				h.nudgeDeduper.Clear(senderSession)
-			}
-		}
-
 		for _, recipientName := range recipients {
 			go func(name string) {
 				target := resolveNudgeTarget(h.thrumDir, name)
@@ -557,17 +535,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 				if !ttmux.HasSession(session) {
 					return
 				}
-				// Dedup: skip if same session was nudged recently for same reason
-				reason := "message"
-				if h.nudgeDeduper != nil {
-					if !h.nudgeDeduper.ShouldNudge(session, reason) {
-						return
-					}
-				}
 				_ = ttmux.Nudge(target, senderName)
-				if h.nudgeDeduper != nil {
-					h.nudgeDeduper.RecordNudge(session, reason)
-				}
 			}(recipientName)
 		}
 	}
