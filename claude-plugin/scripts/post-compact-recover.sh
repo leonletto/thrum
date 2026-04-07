@@ -22,6 +22,13 @@ if [ -z "$AGENT_ID" ]; then
   exit 0
 fi
 
+# Skip listener check for tmux-managed agents (daemon nudges directly)
+TMUX_SESSION=$(THRUM_AGENT_ID="$AGENT_ID" \
+  thrum whoami --field tmux_session 2>/dev/null)
+if [ -n "$TMUX_SESSION" ]; then
+  exit 0
+fi
+
 PID_FILE="$THRUM_HOME/.thrum/var/${AGENT_ID}-listener.pid"
 if [ ! -f "$PID_FILE" ]; then
   echo "No listener running. Spawn a new listener." >&2
