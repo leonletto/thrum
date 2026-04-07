@@ -221,3 +221,61 @@ func TestEncodeCwd(t *testing.T) {
 	assert.Equal(t, "-Users-leon-dev-project", encodeCwd("/Users/leon/dev/project"))
 	assert.Equal(t, "-home-user-work", encodeCwd("/home/user/work"))
 }
+
+func TestSnapshotSaveAndRestore(t *testing.T) {
+	thrumDir := t.TempDir()
+
+	content := "# Restart Snapshot — test_agent\n\n=== USER ===\nHello\n\n=== ASSISTANT ===\nHi"
+	require.NoError(t, SaveSnapshot(thrumDir, "test_agent", content))
+
+	assert.True(t, SnapshotExists(thrumDir, "test_agent"))
+
+	restored, err := Restore(thrumDir, "test_agent")
+	require.NoError(t, err)
+	assert.Equal(t, content, restored)
+
+	// File should be gone after restore
+	assert.False(t, SnapshotExists(thrumDir, "test_agent"))
+}
+
+func TestRestore_NotFound(t *testing.T) {
+	thrumDir := t.TempDir()
+	_, err := Restore(thrumDir, "nonexistent")
+	assert.Error(t, err)
+}
+
+func TestSnapshotPath(t *testing.T) {
+	path := restartSnapshotPath("/tmp/.thrum", "my_agent")
+	assert.Equal(t, "/tmp/.thrum/restart/my_agent.md", path)
+}
+
+func TestConsumeInPrime(t *testing.T) {
+	thrumDir := t.TempDir()
+
+	content := "snapshot content"
+	require.NoError(t, SaveSnapshot(thrumDir, "agent1", content))
+
+	// ConsumeInPrime should return content and rename to .consumed
+	result, err := ConsumeInPrime(thrumDir, "agent1")
+	require.NoError(t, err)
+	assert.Equal(t, content, result)
+
+	// Original file should be gone
+	assert.False(t, SnapshotExists(thrumDir, "agent1"))
+
+	// .consumed file should exist
+	consumedPath := filepath.Join(thrumDir, "restart", "agent1.md.consumed")
+	_, err = os.Stat(consumedPath)
+	assert.NoError(t, err)
+
+	// CleanupConsumed should remove it
+	CleanupConsumed(thrumDir, "agent1")
+	_, err = os.Stat(consumedPath)
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestConsumeInPrime_NotFound(t *testing.T) {
+	thrumDir := t.TempDir()
+	_, err := ConsumeInPrime(thrumDir, "nonexistent")
+	assert.Error(t, err)
+}

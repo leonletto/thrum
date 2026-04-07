@@ -194,3 +194,53 @@ func FormatRestartSnapshot(agentName, sessionID, reason, conversation string) st
 	out.WriteString(conversation)
 	return out.String()
 }
+
+// restartSnapshotPath returns the path to an agent's restart snapshot.
+func restartSnapshotPath(thrumDir, agentName string) string {
+	return filepath.Join(thrumDir, "restart", agentName+".md")
+}
+
+// SnapshotExists checks if a restart snapshot exists for the given agent.
+func SnapshotExists(thrumDir, agentName string) bool {
+	_, err := os.Stat(restartSnapshotPath(thrumDir, agentName))
+	return err == nil
+}
+
+// SaveSnapshot writes a restart snapshot to disk.
+// Creates the restart/ directory if needed.
+func SaveSnapshot(thrumDir, agentName, content string) error {
+	dir := filepath.Join(thrumDir, "restart")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create restart dir: %w", err)
+	}
+	path := restartSnapshotPath(thrumDir, agentName)
+	return os.WriteFile(path, []byte(content), 0600)
+}
+
+// Restore reads and deletes a restart snapshot. Returns the content.
+func Restore(thrumDir, agentName string) (string, error) {
+	path := restartSnapshotPath(thrumDir, agentName)
+	data, err := os.ReadFile(path) // #nosec G304 -- path from internal thrumDir + agent name
+	if err != nil {
+		return "", fmt.Errorf("no restart snapshot for %s: %w", agentName, err)
+	}
+	_ = os.Remove(path)
+	return string(data), nil
+}
+
+// ConsumeInPrime reads a restart snapshot for prime inclusion.
+// Uses rename-then-delete for crash safety.
+func ConsumeInPrime(thrumDir, agentName string) (string, error) {
+	path := restartSnapshotPath(thrumDir, agentName)
+	data, err := os.ReadFile(path) // #nosec G304 -- internal path
+	if err != nil {
+		return "", err
+	}
+	_ = os.Rename(path, path+".consumed")
+	return string(data), nil
+}
+
+// CleanupConsumed deletes the .consumed file after prime output succeeds.
+func CleanupConsumed(thrumDir, agentName string) {
+	_ = os.Remove(restartSnapshotPath(thrumDir, agentName) + ".consumed")
+}
