@@ -13,16 +13,17 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.7.0 highlights:**
+**v0.7.1 highlights:**
 
-- **Unified cross-repo communication** — Four-layer transport architecture
-  connecting agents across repos, machines, and networks via WebSocket peering.
-- **PID identity resolution** — Process tree walk identifies agents by PID,
-  eliminating identity conflicts in multi-agent sessions.
-- **Telegram group bridge** — Human-to-agent messaging via Telegram groups with
-  mention routing and proxy agents.
-- **Three-tier context model** — Project state, session context, and prime
-  briefing for reliable context recovery across compaction.
+- **Session restart** — JSONL conversation extraction, snapshot save/restore,
+  `thrum tmux restart` for seamless context preservation across session
+  restarts.
+- **Tmux-first plugin** — Tmux-managed sessions promoted as the recommended
+  message delivery approach. Plugin hooks skip listener checks for tmux agents.
+- **Runtime detection** — `thrum tmux launch` reads configured runtime from
+  `.thrum/config.json` instead of hardcoding Claude.
+- **Agent delete fix** — Web UI delete dialog now passes full agent ID
+  correctly.
 
 ## Quick Start
 

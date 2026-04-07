@@ -44,8 +44,8 @@ leave teammates waiting. ALWAYS keep your listener alive.
 progress or unblock dependencies. Report completions and blockers immediately.
 
 ❌ **Context Hog** — Reads entire files into context instead of delegating to
-sub-agents. Use Grep, Glob, Read, and Explore sub-agents for
-research. Your main context is for coordination and decision-making.
+sub-agents. Use Grep, Glob, Read, and Explore sub-agents for research. Your main
+context is for coordination and decision-making.
 
 ❌ **Stalled Coordinator** — Investigates deeply before replying, burning tokens
 while agents sit idle. Fast, good-enough decisions beat perfect ones delivered

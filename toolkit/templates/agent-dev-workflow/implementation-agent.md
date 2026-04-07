@@ -393,9 +393,9 @@ Task(subagent_type="general-purpose", model="sonnet",
 
 #### Code Exploration
 
-Use Grep, Glob, and Read tools for targeted searches. For broader exploration
-of unfamiliar code areas, spawn an Explore sub-agent — it's more
-context-efficient than reading entire files into your main context.
+Use Grep, Glob, and Read tools for targeted searches. For broader exploration of
+unfamiliar code areas, spawn an Explore sub-agent — it's more context-efficient
+than reading entire files into your main context.
 
 #### Subagents
 

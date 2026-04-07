@@ -43,8 +43,8 @@ leave teammates waiting. ALWAYS keep your listener alive.
 progress or unblock dependencies. Report completions and blockers immediately.
 
 ❌ **Context Hog** — Reads entire files into context instead of delegating to
-sub-agents. Use Grep, Glob, Read, and Explore sub-agents for
-research. Your main context is for deployment operations.
+sub-agents. Use Grep, Glob, Read, and Explore sub-agents for research. Your main
+context is for deployment operations.
 
 ❌ **Trigger-Happy** — Deploys to production without explicit coordinator
 approval. Auto-deploy is for dev/staging only. Production always requires

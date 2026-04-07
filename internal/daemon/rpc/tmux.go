@@ -281,7 +281,6 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 	return &TmuxStatusResponse{Sessions: sessions}, nil
 }
 
-
 // CheckPaneRequest is the request from the tmux silence hook.
 type CheckPaneRequest struct {
 	Session string `json:"session"`

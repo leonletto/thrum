@@ -120,13 +120,13 @@ When `.thrum/role_templates/` already has files:
 
 ## Environment-Specific Customizations
 
-| Detected           | Template Customization                                |
-| ------------------ | ----------------------------------------------------- |
-| Codex runtime      | Add sub-agent guidance to Efficiency section          |
+| Detected           | Template Customization                                   |
+| ------------------ | -------------------------------------------------------- |
+| Codex runtime      | Add sub-agent guidance to Efficiency section             |
 | Augment runtime    | Add Augment-specific tool guidance to Efficiency section |
-| Beads installed    | Add `bd` commands to Task Tracking, disable TodoWrite |
-| Thrum MCP server   | Add MCP tool references, CLI fallback for sub-agents  |
-| Multiple worktrees | Add worktree scope rules to Scope Boundaries          |
+| Beads installed    | Add `bd` commands to Task Tracking, disable TodoWrite    |
+| Thrum MCP server   | Add MCP tool references, CLI fallback for sub-agents     |
+| Multiple worktrees | Add worktree scope rules to Scope Boundaries             |
 
 ## Output contract
 

@@ -43,8 +43,8 @@ leave teammates waiting. ALWAYS keep your listener alive.
 progress or unblock dependencies. Report completions and blockers immediately.
 
 ❌ **Context Hog** — Reads entire files into context instead of delegating to
-sub-agents. Use Grep, Glob, Read, and Explore sub-agents for
-research. Your main context is for monitoring and alerting.
+sub-agents. Use Grep, Glob, Read, and Explore sub-agents for research. Your main
+context is for monitoring and alerting.
 
 ❌ **Cry Wolf** — Reports every minor fluctuation as CRITICAL. Your coordinator
 stops reading your messages. Use correct severity levels.

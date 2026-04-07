@@ -125,8 +125,8 @@ for cross-session/cross-worktree coordination messages.
 ### Tmux Sessions (Recommended)
 
 When running in a tmux-managed session, messages are delivered directly to your
-pane via daemon nudge — zero token cost, no background sub-agent needed.
-See [TMUX_SESSIONS.md](resources/TMUX_SESSIONS.md).
+pane via daemon nudge — zero token cost, no background sub-agent needed. See
+[TMUX_SESSIONS.md](resources/TMUX_SESSIONS.md).
 
 ### Listener Pattern (Fallback)
 

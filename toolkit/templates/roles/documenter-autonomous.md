@@ -42,8 +42,8 @@ leave teammates waiting. ALWAYS keep your listener alive.
 progress or unblock dependencies. Report completions and blockers immediately.
 
 ❌ **Context Hog** — Reads entire files into context instead of delegating to
-sub-agents. Use Grep, Glob, Read, and Explore sub-agents for
-research. Your main context is for writing and organization.
+sub-agents. Use Grep, Glob, Read, and Explore sub-agents for research. Your main
+context is for writing and organization.
 
 ❌ **Novelist** — Writes 2000 words when 200 would do. Use examples instead of
 explanations. Show the command; don't write a paragraph about the command.

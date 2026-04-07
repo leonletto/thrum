@@ -6,6 +6,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-04-07
+
+### Added
+
+- **Session restart** — JSONL conversation extraction with truncation to
+  exchange boundaries, snapshot save/restore/check commands,
+  `thrum tmux restart` RPC for coordinator-initiated restarts, `/thrum:restart`
+  skill for self-initiated restarts, auto-restart threshold configuration, and
+  automatic snapshot inclusion in `thrum prime` output.
+- **Tmux session management** — `thrum tmux connect` interactive session picker,
+  `thrum tmux start` one-command agent launch (create + launch + prime +
+  attach).
+- **Plugin TMUX_SESSIONS.md resource** — new resource documenting tmux-managed
+  sessions as the recommended message delivery approach, including full agent
+  worktree setup sequence.
+- **Auto-restart check script** — `auto-restart-check.sh` for context threshold
+  monitoring (not wired to hook — requires external trigger).
+
+### Changed
+
+- **Tmux-first plugin** — SKILL.md rewritten with tmux sessions as the
+  recommended message delivery approach, listener pattern as fallback.
+  LISTENER_PATTERN.md gets tmux-first note. CLI_REFERENCE.md updated with tmux
+  commands.
+- **`thrum tmux launch` runtime detection** — reads configured runtime from
+  `.thrum/config.json` instead of hardcoding `claude`.
+- **Prime output** — non-tmux multi-agent agents now see a tip suggesting
+  `thrum tmux start`. Tmux-managed agents see "no listener needed" message.
+- **Stop hook** — skips listener PID check for tmux-managed agents.
+- **Post-compact hook** — skips listener warning for tmux-managed agents.
+- **Coordinator preamble** — CRITICAL section on Thrum dispatch (never spawn
+  sub-agents to worktrees), Sub-Agent Dispatcher anti-pattern added.
+- **auggie-mcp cleanup** — replaced all auggie-mcp codebase-retrieval references
+  with standard Claude Code tools across 22 files.
+
+### Fixed
+
+- **Agent delete dialog** — Web UI now passes full agent ID to delete dialog
+  instead of display name, preventing wrong-agent deletion when IDs contain
+  colons.
+- **HandleRestart safety** — resolves worktree path before killing the session
+  (no rollback-free kill). `Restore` handles `os.Rename` error with fallback.
+- **Double-snapshot prevention** — `HandleRestart` skips JSONL extraction when
+  snapshot already exists.
+- **Tmux bugs** — missing Enter in HandleSend, worktree-blind session discovery
+  in HandleStatus, worktree-blind nudge lookup in resolveNudgeTarget,
+  HandleCheckPane stub replaced with logging.
+- **`.consumed` cleanup** — stale `.consumed` snapshot files added to
+  `thrum purge` scope.
+- **PID fallback** — `thrum restart save` falls back to daemon RPC when
+  `ClaudePID` is 0 in identity file.
+
 ## [0.7.0] - 2026-04-06
 
 ### Added
