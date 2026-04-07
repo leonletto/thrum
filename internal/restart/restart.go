@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -142,6 +143,45 @@ func truncateExchanges(exchanges []string, maxLines int) string {
 
 	header := fmt.Sprintf("[Conversation continued from earlier — truncated to last %d lines]\n\n", len(truncated))
 	return header + strings.Join(truncated, "\n")
+}
+
+// claudeSessionInfo represents the ~/.claude/sessions/<pid>.json file.
+type claudeSessionInfo struct {
+	PID       int    `json:"pid"`
+	SessionID string `json:"sessionId"`
+	Cwd       string `json:"cwd"`
+}
+
+// FindSessionJSONL locates the JSONL transcript for a Claude Code session
+// given its PID. claudeDir is typically ~/.claude.
+func FindSessionJSONL(claudeDir string, pid int) (string, error) {
+	sessFile := filepath.Join(claudeDir, "sessions", fmt.Sprintf("%d.json", pid))
+	data, err := os.ReadFile(sessFile) // #nosec G304 -- pid is from internal identity resolution
+	if err != nil {
+		return "", fmt.Errorf("read session file for PID %d: %w", pid, err)
+	}
+
+	var info claudeSessionInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return "", fmt.Errorf("parse session file: %w", err)
+	}
+
+	// Encode the cwd to match Claude's project directory naming
+	encoded := encodeCwd(info.Cwd)
+	jsonlPath := filepath.Join(claudeDir, "projects", encoded, info.SessionID+".jsonl")
+
+	if _, err := os.Stat(jsonlPath); err != nil {
+		return "", fmt.Errorf("JSONL not found at %s: %w", jsonlPath, err)
+	}
+	return jsonlPath, nil
+}
+
+// encodeCwd converts a cwd path to Claude's project directory name format.
+// /Users/leon/dev/project → -Users-leon-dev-project
+func encodeCwd(cwd string) string {
+	encoded := strings.TrimPrefix(cwd, "/")
+	encoded = strings.ReplaceAll(encoded, "/", "-")
+	return "-" + encoded
 }
 
 // FormatRestartSnapshot builds the complete snapshot file content.

@@ -188,3 +188,36 @@ func TestTruncateExchanges_EmptyInput(t *testing.T) {
 	result := truncateExchanges(nil, 1000)
 	assert.Equal(t, "", result)
 }
+
+func TestFindSessionJSONL(t *testing.T) {
+	dir := t.TempDir()
+	sessionsDir := filepath.Join(dir, "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0700))
+
+	sessFile := filepath.Join(sessionsDir, "12345.json")
+	require.NoError(t, os.WriteFile(sessFile, []byte(`{
+		"pid": 12345,
+		"sessionId": "abc-def-123",
+		"cwd": "/Users/test/myproject"
+	}`), 0600))
+
+	projectDir := filepath.Join(dir, "projects", "-Users-test-myproject")
+	require.NoError(t, os.MkdirAll(projectDir, 0700))
+	jsonlPath := filepath.Join(projectDir, "abc-def-123.jsonl")
+	require.NoError(t, os.WriteFile(jsonlPath, []byte(`{}`), 0600))
+
+	result, err := FindSessionJSONL(dir, 12345)
+	require.NoError(t, err)
+	assert.Equal(t, jsonlPath, result)
+}
+
+func TestFindSessionJSONL_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	_, err := FindSessionJSONL(dir, 99999)
+	assert.Error(t, err)
+}
+
+func TestEncodeCwd(t *testing.T) {
+	assert.Equal(t, "-Users-leon-dev-project", encodeCwd("/Users/leon/dev/project"))
+	assert.Equal(t, "-home-user-work", encodeCwd("/home/user/work"))
+}
