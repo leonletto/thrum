@@ -192,7 +192,10 @@ func (h *TmuxHandler) HandleSend(ctx context.Context, params json.RawMessage) (a
 	}
 	name := ttmux.SanitizeSessionName(req.Name)
 	target := name + ":0.0"
-	return nil, ttmux.SendKeys(target, req.Text)
+	if err := ttmux.SendKeys(target, req.Text); err != nil {
+		return nil, err
+	}
+	return nil, ttmux.SendSpecialKey(target, "Enter")
 }
 
 // HandleCapture captures the visible content of a tmux session pane.
