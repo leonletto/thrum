@@ -478,7 +478,7 @@ func runtimeToLaunchCmd(runtime string) string {
 
 // resolveWorktreePath uses git worktree list to find the absolute path for a worktree name.
 func resolveWorktreePath(ctx context.Context, repoDir, worktreeName string) string {
-	out, err := exec.CommandContext(ctx, "git", "-C", repoDir, "worktree", "list", "--porcelain").Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", repoDir, "worktree", "list", "--porcelain").Output() // #nosec G204 -- repoDir from daemon config
 	if err != nil {
 		return ""
 	}
@@ -531,7 +531,7 @@ func (h *TmuxHandler) allIdentityDirs(ctx context.Context) []string {
 
 	// Also scan worktrees via git
 	repoDir := filepath.Dir(h.thrumDir)
-	out, err := exec.CommandContext(ctx, "git", "-C", repoDir, "worktree", "list", "--porcelain").Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", repoDir, "worktree", "list", "--porcelain").Output() // #nosec G204 -- repoDir from daemon config
 	if err != nil {
 		return dirs
 	}

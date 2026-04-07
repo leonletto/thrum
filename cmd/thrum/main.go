@@ -6913,7 +6913,7 @@ func tmuxCmd() *cobra.Command {
 			rt, _ := cmd.Flags().GetString("runtime")
 			if rt == "" {
 				// Query tmux for session's working directory (same approach as tmux start)
-				out, err := exec.Command("tmux", "display-message",
+				out, err := exec.Command("tmux", "display-message", // #nosec G204 -- args are session name from CLI
 					"-t", args[0], "-p", "#{pane_current_path}").Output()
 				if err == nil {
 					sessionCwd := strings.TrimSpace(string(out))
@@ -7270,7 +7270,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 }
 
 func tmuxAttach(session string) error {
-	c := exec.Command("tmux", "attach-session", "-t", session)
+	c := exec.Command("tmux", "attach-session", "-t", session) // #nosec G204 -- session name from CLI arg
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
