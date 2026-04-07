@@ -4,7 +4,7 @@ description: >
   Multi-agent coordination via messaging, groups, and shared context. Use when
   agents need to communicate, delegate work, or coordinate across worktrees.
 allowed-tools: "Bash(thrum:*)"
-version: "0.7.0"
+version: "0.7.1"
 author: "Leon Letto <https://github.com/leonletto>"
 license: "MIT"
 ---
@@ -75,6 +75,16 @@ thrum overview                           Combined status + team + inbox
 /thrum:load-context                      Restore work context after compaction
 ```
 
+### Tmux Sessions (Recommended)
+
+```bash
+thrum tmux start                     Launch agent session (create+launch+prime+attach)
+thrum tmux status                    Show managed sessions with state
+thrum tmux connect                   Attach to running session (interactive picker)
+thrum tmux restart <name>            Restart session with context snapshot
+thrum tmux kill <name>               Tear down session
+```
+
 ### Daemon & Sync
 
 ```bash
@@ -110,21 +120,19 @@ in other worktrees?" YES = Thrum.
 **Thrum + TaskList coexist:** Use TaskList for immediate session work. Use Thrum
 for cross-session/cross-worktree coordination messages.
 
-## Message Protocol
+## Message Delivery
 
-### Listener Pattern (Background Message Monitoring)
+### Tmux Sessions (Recommended)
 
-When `thrum prime` detects a Claude Code session with an active identity, it
-outputs a ready-to-use listener spawn instruction. Launch it to monitor for
-messages in the background (~90 min coverage, 6 cycles × 15 min):
+When running in a tmux-managed session, messages are delivered directly to your
+pane via daemon nudge — zero token cost, no background sub-agent needed.
+See [TMUX_SESSIONS.md](resources/TMUX_SESSIONS.md).
 
-```text
-Task(subagent_type: "message-listener", model: "haiku", run_in_background: true)
-```
+### Listener Pattern (Fallback)
 
-The listener calls `thrum wait` (blocking), then returns when messages arrive.
-Re-arm after processing. See
-[LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md).
+When tmux is not available, use the background message listener. It calls
+`thrum wait` (blocking) and returns when messages arrive. Re-arm after
+processing. See [LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md).
 
 ### Context Management
 
@@ -138,6 +146,7 @@ Re-arm after processing. See
 
 | Resource                                             | Content                                      |
 | ---------------------------------------------------- | -------------------------------------------- |
+| [TMUX_SESSIONS.md](resources/TMUX_SESSIONS.md)       | Tmux-managed session setup and commands      |
 | [BOUNDARIES.md](resources/BOUNDARIES.md)             | Thrum vs TaskList/SendMessage decision guide |
 | [MESSAGING.md](resources/MESSAGING.md)               | Protocol patterns, context management        |
 | [ANTI_PATTERNS.md](resources/ANTI_PATTERNS.md)       | Common mistakes and how to avoid them        |
