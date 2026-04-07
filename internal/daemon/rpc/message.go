@@ -259,6 +259,7 @@ type WSBroadcaster interface {
 type NudgeDeduper interface {
 	ShouldNudge(session, reason string) bool
 	RecordNudge(session, reason string)
+	Clear(session string)
 }
 
 type MessageHandler struct {
@@ -535,6 +536,17 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	// Nudge tmux-managed recipients asynchronously
 	if h.thrumDir != "" {
 		senderName := agentID
+
+		// Clear nudge dedup for sender — they just sent a message, so they're
+		// active and have processed any prior nudge. This ensures subsequent
+		// messages to the sender's session aren't suppressed.
+		if h.nudgeDeduper != nil {
+			if senderTarget := resolveNudgeTarget(h.thrumDir, agentID); senderTarget != "" {
+				senderSession, _, _ := ttmux.ParseTarget(senderTarget)
+				h.nudgeDeduper.Clear(senderSession)
+			}
+		}
+
 		for _, recipientName := range recipients {
 			go func(name string) {
 				target := resolveNudgeTarget(h.thrumDir, name)

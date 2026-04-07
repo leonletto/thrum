@@ -6736,32 +6736,32 @@ func restartCmd() *cobra.Command {
 		Use:   "save",
 		Short: "Save conversation snapshot for session restart",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			whoami, err := cli.AgentWhoami(client)
-			if err != nil {
-				return fmt.Errorf("resolve identity: %w", err)
-			}
-
-			thrumDir := filepath.Join(flagRepo, ".thrum")
+			// Resolve identity from local identity file first (avoids PID-based
+			// daemon resolution which can find the wrong agent in multi-worktree setups)
 			idFile, _, err := config.LoadIdentityWithPath(flagRepo)
 			if err != nil {
 				return fmt.Errorf("load identity file: %w", err)
 			}
+			agentName := idFile.Agent.Name
+			sessionID := idFile.SessionID
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+
 			pid := idFile.ClaudePID
 			if pid == 0 {
 				// Fallback: query daemon for the agent's ClaudePID
+				client, err := getClient()
+				if err != nil {
+					return fmt.Errorf("connect to daemon: %w", err)
+				}
+				defer func() { _ = client.Close() }()
+
 				var agents []struct {
 					AgentID   string `json:"agent_id"`
 					ClaudePID int    `json:"claude_pid"`
 				}
 				if err := client.Call("agent.list", nil, &agents); err == nil {
 					for _, a := range agents {
-						if a.AgentID == whoami.AgentID && a.ClaudePID > 0 {
+						if a.AgentID == agentName && a.ClaudePID > 0 {
 							pid = a.ClaudePID
 							break
 						}
@@ -6769,7 +6769,7 @@ func restartCmd() *cobra.Command {
 				}
 			}
 			if pid == 0 {
-				return fmt.Errorf("no Claude PID found for %s — ensure agent is registered with a Claude PID", whoami.AgentID)
+				return fmt.Errorf("no Claude PID found for %s — ensure agent is registered with a Claude PID", agentName)
 			}
 
 			homeDir, err := os.UserHomeDir()
@@ -6795,14 +6795,14 @@ func restartCmd() *cobra.Command {
 				reason = "self-initiated"
 			}
 
-			snapshot := restart.FormatRestartSnapshot(whoami.AgentID, whoami.SessionID, reason, conversation)
-			if err := restart.SaveSnapshot(thrumDir, whoami.AgentID, snapshot); err != nil {
+			snapshot := restart.FormatRestartSnapshot(agentName, sessionID, reason, conversation)
+			if err := restart.SaveSnapshot(thrumDir, agentName, snapshot); err != nil {
 				return err
 			}
 
 			lines := strings.Count(snapshot, "\n")
 			if !flagQuiet {
-				fmt.Printf("Restart snapshot saved for %s (%d lines)\n", whoami.AgentID, lines)
+				fmt.Printf("Restart snapshot saved for %s (%d lines)\n", agentName, lines)
 			}
 			return nil
 		},
