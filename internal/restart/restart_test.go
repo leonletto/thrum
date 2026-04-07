@@ -149,3 +149,42 @@ func TestExtractConversation_FileNotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "open JSONL")
 }
+
+func TestTruncateExchanges_NoTruncation(t *testing.T) {
+	exchanges := []string{
+		"=== USER ===\nShort question",
+		"=== ASSISTANT ===\nShort answer",
+	}
+	result := truncateExchanges(exchanges, 1000)
+	assert.NotContains(t, result, "truncated")
+	assert.Contains(t, result, "Short question")
+	assert.Contains(t, result, "Short answer")
+}
+
+func TestTruncateExchanges_StartsOnUserBoundary(t *testing.T) {
+	var exchanges []string
+	for i := 0; i < 50; i++ {
+		exchanges = append(exchanges,
+			fmt.Sprintf("=== USER ===\nQuestion %d with some padding text to make lines", i),
+			fmt.Sprintf("=== ASSISTANT ===\nAnswer %d with some padding text to make lines", i),
+		)
+	}
+	result := truncateExchanges(exchanges, 20)
+	assert.Contains(t, result, "truncated")
+
+	// After the header, first content line should be === USER ===
+	lines := strings.Split(result, "\n")
+	firstContentLine := ""
+	for _, l := range lines {
+		if l == "=== USER ===" || l == "=== ASSISTANT ===" {
+			firstContentLine = l
+			break
+		}
+	}
+	assert.Equal(t, "=== USER ===", firstContentLine)
+}
+
+func TestTruncateExchanges_EmptyInput(t *testing.T) {
+	result := truncateExchanges(nil, 1000)
+	assert.Equal(t, "", result)
+}
