@@ -21,7 +21,34 @@ This creates a tmux session named after the current directory, launches the
 configured runtime (from `config.Runtime.Primary`, default `claude`), runs
 `/thrum:prime` for registration, and attaches.
 
-## Manual Setup
+## Setting Up a New Agent Worktree
+
+Full sequence for a coordinator setting up an agent in a new worktree:
+
+```bash
+# 1. Initialize thrum + beads redirects in the worktree
+cd <worktree-path>
+thrum init                              # Sets up .thrum redirect to main repo
+bd init                                 # Sets up beads redirect (if using beads)
+
+# 2. Create tmux session
+thrum tmux create <name> --cwd <path>
+
+# 3. Register agent identity (run inside the session)
+thrum tmux send <name> "thrum quickstart --name <agent> --role <role> --module <mod> --intent '...'"
+
+# 4. Launch the runtime (reads configured runtime from .thrum/config.json)
+thrum tmux launch <name>
+
+# 5. Agent runs /thrum:prime on startup — loads identity + full context
+# 6. Communicate via: thrum send "message" --to @<agent>
+```
+
+**Important:** `thrum quickstart` must run before `thrum tmux launch`. It creates
+the identity file that `/thrum:prime` reads on startup. Without it, the agent
+doesn't know who it is.
+
+## Manual Setup (Quick Reference)
 
 ```bash
 thrum tmux create <name> --cwd <path>   # Create detached session
