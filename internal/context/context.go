@@ -240,7 +240,8 @@ no background listener needed. This is the most token-efficient way to run agent
 
 ## Anti-Patterns
 
-` + "❌" + ` **Context Hog** — Reads entire files into context. Use ` + "`auggie-mcp codebase-retrieval`" + ` instead.
+` + "❌" + ` **Context Hog** — Reads entire files into context. Use Grep, Glob, and
+Explore sub-agents for code research instead.
 ` + "❌" + ` **Sub-Agent Dispatcher** — Spawning sub-agents into worktrees where Thrum agents
 are running. Use ` + "`thrum send`" + ` to dispatch work via messaging instead.
 

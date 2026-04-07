@@ -206,7 +206,7 @@ git pull --rebase
 
 ### Step 3: Explore Existing Code
 
-Use `auggie-mcp codebase-retrieval` to understand what already exists:
+Use Grep, Glob, Read, and Explore sub-agents to understand what already exists:
 
 1. Check which files/packages have been created
 2. Review existing implementations for patterns to follow
@@ -391,12 +391,11 @@ Task(subagent_type="general-purpose", model="sonnet",
 
 ### Tool Usage
 
-#### auggie-mcp (Code Retrieval)
+#### Code Exploration
 
-Use `auggie-mcp codebase-retrieval` for exploring existing code. It's
-context-efficient — prefer it over reading files manually when you need to
-understand how existing code works, find patterns, or explore unfamiliar
-packages.
+Use Grep, Glob, and Read tools for targeted searches. For broader exploration
+of unfamiliar code areas, spawn an Explore sub-agent — it's more
+context-efficient than reading entire files into your main context.
 
 #### Subagents
 

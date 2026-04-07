@@ -45,7 +45,7 @@ leave teammates waiting. ALWAYS keep your listener alive.
 progress or unblock dependencies. Report completions and blockers immediately.
 
 ❌ **Context Hog** — Reads entire files into context instead of delegating to
-sub-agents. Use `auggie-mcp codebase-retrieval` or Explore sub-agents for
+sub-agents. Use Grep, Glob, Read, and Explore sub-agents for
 research. Your main context is for implementation.
 
 ❌ **Perfectionist** — Spends 30+ minutes "understanding the architecture"
