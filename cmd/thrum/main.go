@@ -154,6 +154,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(purgeCmd())
 	rootCmd.AddCommand(telegramCmd())
 	rootCmd.AddCommand(tmuxCmd())
+	rootCmd.AddCommand(restartCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -6708,6 +6709,125 @@ func detectGitUser() string {
 	name = strings.ToLower(name)
 	name = strings.ReplaceAll(name, " ", "-")
 	return name
+}
+
+func restartCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "restart",
+		Short: "Session restart with context snapshot",
+	}
+
+	saveCmd := &cobra.Command{
+		Use:   "save",
+		Short: "Save conversation snapshot for session restart",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			whoami, err := cli.AgentWhoami(client)
+			if err != nil {
+				return fmt.Errorf("resolve identity: %w", err)
+			}
+
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			idFile, _, err := config.LoadIdentityWithPath(flagRepo)
+			if err != nil {
+				return fmt.Errorf("load identity file: %w", err)
+			}
+			pid := idFile.ClaudePID
+			if pid == 0 {
+				return fmt.Errorf("no Claude PID found for %s — ensure agent was started via thrum tmux launch", whoami.AgentID)
+			}
+
+			claudeDir := filepath.Join(os.Getenv("HOME"), ".claude")
+			jsonlPath, err := restart.FindSessionJSONL(claudeDir, pid)
+			if err != nil {
+				return fmt.Errorf("find session JSONL: %w", err)
+			}
+
+			cfg, _ := config.LoadThrumConfig(thrumDir)
+			maxLines := cfg.Restart.RestartMaxLines()
+
+			conversation, err := restart.ExtractConversation(jsonlPath, maxLines)
+			if err != nil {
+				return fmt.Errorf("extract conversation: %w", err)
+			}
+
+			reason, _ := cmd.Flags().GetString("reason")
+			if reason == "" {
+				reason = "self-initiated"
+			}
+
+			snapshot := restart.FormatRestartSnapshot(whoami.AgentID, whoami.SessionID, reason, conversation)
+			if err := restart.SaveSnapshot(thrumDir, whoami.AgentID, snapshot); err != nil {
+				return err
+			}
+
+			lines := strings.Count(snapshot, "\n")
+			if !flagQuiet {
+				fmt.Printf("Restart snapshot saved for %s (%d lines)\n", whoami.AgentID, lines)
+			}
+			return nil
+		},
+	}
+	saveCmd.Flags().String("reason", "self-initiated", "Reason for restart")
+	cmd.AddCommand(saveCmd)
+
+	restoreCmd := &cobra.Command{
+		Use:   "restore",
+		Short: "Restore and output a restart snapshot",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			whoami, err := cli.AgentWhoami(client)
+			if err != nil {
+				return fmt.Errorf("resolve identity: %w", err)
+			}
+
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			content, err := restart.Restore(thrumDir, whoami.AgentID)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "No restart snapshot found")
+				os.Exit(1)
+			}
+			fmt.Print(content)
+			return nil
+		},
+	}
+	cmd.AddCommand(restoreCmd)
+
+	checkCmd := &cobra.Command{
+		Use:   "check",
+		Short: "Check if a restart snapshot exists (exit 0 = yes, exit 1 = no)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			whoami, err := cli.AgentWhoami(client)
+			if err != nil {
+				return fmt.Errorf("resolve identity: %w", err)
+			}
+
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			if !restart.SnapshotExists(thrumDir, whoami.AgentID) {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(checkCmd)
+
+	return cmd
 }
 
 func tmuxCmd() *cobra.Command {
