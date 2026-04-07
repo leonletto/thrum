@@ -1121,6 +1121,54 @@ func TestIdentityFile_TmuxFieldsOmitEmpty(t *testing.T) {
 	}
 }
 
+func TestRestartConfigDefaults(t *testing.T) {
+	cfg := config.ThrumConfig{}
+	if cfg.Restart.MaxLines != 0 {
+		t.Errorf("MaxLines = %d, want 0", cfg.Restart.MaxLines)
+	}
+	if cfg.Restart.AutoThreshold != 0 {
+		t.Errorf("AutoThreshold = %d, want 0", cfg.Restart.AutoThreshold)
+	}
+	if cfg.Restart.GracefulTimeout != 0 {
+		t.Errorf("GracefulTimeout = %d, want 0", cfg.Restart.GracefulTimeout)
+	}
+}
+
+func TestRestartConfigJSON(t *testing.T) {
+	jsonStr := `{"restart":{"max_lines":500,"auto_threshold":80,"graceful_timeout":45}}`
+	var cfg config.ThrumConfig
+	if err := json.Unmarshal([]byte(jsonStr), &cfg); err != nil {
+		t.Fatalf("json.Unmarshal failed: %v", err)
+	}
+	if cfg.Restart.MaxLines != 500 {
+		t.Errorf("MaxLines = %d, want 500", cfg.Restart.MaxLines)
+	}
+	if cfg.Restart.AutoThreshold != 80 {
+		t.Errorf("AutoThreshold = %d, want 80", cfg.Restart.AutoThreshold)
+	}
+	if cfg.Restart.GracefulTimeout != 45 {
+		t.Errorf("GracefulTimeout = %d, want 45", cfg.Restart.GracefulTimeout)
+	}
+}
+
+func TestRestartMaxLines(t *testing.T) {
+	if got := (config.RestartConfig{}).RestartMaxLines(); got != 1000 {
+		t.Errorf("RestartMaxLines() with zero = %d, want 1000", got)
+	}
+	if got := (config.RestartConfig{MaxLines: 500}).RestartMaxLines(); got != 500 {
+		t.Errorf("RestartMaxLines() with 500 = %d, want 500", got)
+	}
+}
+
+func TestRestartGracefulTimeout(t *testing.T) {
+	if got := (config.RestartConfig{}).RestartGracefulTimeout(); got != 30 {
+		t.Errorf("RestartGracefulTimeout() with zero = %d, want 30", got)
+	}
+	if got := (config.RestartConfig{GracefulTimeout: 45}).RestartGracefulTimeout(); got != 45 {
+		t.Errorf("RestartGracefulTimeout() with 45 = %d, want 45", got)
+	}
+}
+
 func TestIdentityFile_AdoptionDoesNotBlock(t *testing.T) {
 	// Verify that loading a single identity file with a dead PID
 	// succeeds (doesn't block or error). Adoption itself won't fire
