@@ -31,6 +31,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
+	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	thrumSync "github.com/leonletto/thrum/internal/sync"
@@ -3936,6 +3937,13 @@ Examples:
 					}
 				}
 
+				// Wire RestartSnapshot (consumed on read)
+				if result.Identity != nil {
+					if snapshot, err := restart.ConsumeInPrime(thrumDir, result.Identity.AgentID); err == nil {
+						result.RestartSnapshot = snapshot
+					}
+				}
+
 				// Detect tmux and write-back if needed
 				if ttmux.InTmux() {
 					if currentTarget, err := ttmux.PaneTarget(); err == nil && currentTarget != "" {
@@ -3960,6 +3968,11 @@ Examples:
 				fmt.Println(string(output))
 			} else {
 				fmt.Print(cli.FormatPrimeContext(result))
+			}
+
+			// Clean up consumed restart snapshot
+			if result.RestartSnapshot != "" && result.Identity != nil && result.RepoPath != "" {
+				restart.CleanupConsumed(filepath.Join(result.RepoPath, ".thrum"), result.Identity.AgentID)
 			}
 
 			return nil
