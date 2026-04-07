@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/groups"
 	"github.com/leonletto/thrum/internal/identity"
@@ -2445,16 +2446,32 @@ func buildWSNotification(msg *subscriptions.MessageInfo) map[string]any {
 // resolveNudgeTarget reads the identity file for an agent and returns the tmux target
 // if the agent is in a tmux session. Returns empty string otherwise.
 func resolveNudgeTarget(thrumDir, agentName string) string {
-	identityPath := filepath.Join(thrumDir, "identities", agentName+".json")
-	data, err := os.ReadFile(identityPath) // #nosec G304 -- path is .thrum/identities/<name>.json
+	// Check main repo identity dir first
+	if target := readTmuxFromIdentity(filepath.Join(thrumDir, "identities"), agentName); target != "" {
+		return target
+	}
+
+	// Check all worktree identity dirs
+	repoDir := filepath.Dir(thrumDir)
+	for _, wtPath := range safecmd.WorktreePaths(context.Background(), repoDir) {
+		if wtPath == repoDir {
+			continue // already checked
+		}
+		idDir := filepath.Join(wtPath, ".thrum", "identities")
+		if target := readTmuxFromIdentity(idDir, agentName); target != "" {
+			return target
+		}
+	}
+	return ""
+}
+
+func readTmuxFromIdentity(identitiesDir, agentName string) string {
+	data, err := os.ReadFile(filepath.Join(identitiesDir, agentName+".json")) // #nosec G304 -- path is .thrum/identities/<name>.json
 	if err != nil {
 		return ""
 	}
 	var idFile config.IdentityFile
 	if err := json.Unmarshal(data, &idFile); err != nil {
-		return ""
-	}
-	if idFile.TmuxSession == "" {
 		return ""
 	}
 	return idFile.TmuxSession
