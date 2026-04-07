@@ -26,7 +26,9 @@ thrum whoami --field tmux_session
 thrum send "Restart snapshot saved. Please run: thrum tmux restart <session-name> --force" --to @coordinator_main
 ```
 
-Then wait for the coordinator to restart you. Do not exit on your own.
+Then wait up to 5 minutes for the coordinator to restart you. Do not exit on
+your own. If no restart occurs within 5 minutes, fall back to the non-tmux
+instructions in Step 4.
 
 4. If NOT in tmux (empty output), print these instructions for the operator:
 

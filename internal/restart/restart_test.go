@@ -244,6 +244,26 @@ func TestRestore_NotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestRestore_CrashSafety(t *testing.T) {
+	thrumDir := t.TempDir()
+
+	content := "snapshot content"
+	require.NoError(t, SaveSnapshot(thrumDir, "agent1", content))
+
+	// Restore should return content and clean up completely
+	restored, err := Restore(thrumDir, "agent1")
+	require.NoError(t, err)
+	assert.Equal(t, content, restored)
+
+	// Original file should be gone
+	assert.False(t, SnapshotExists(thrumDir, "agent1"))
+
+	// No .consumed file should remain (Restore does rename + immediate delete)
+	consumedPath := filepath.Join(thrumDir, "restart", "agent1.md.consumed")
+	_, err = os.Stat(consumedPath)
+	assert.True(t, os.IsNotExist(err))
+}
+
 func TestSnapshotPath(t *testing.T) {
 	path := restartSnapshotPath("/tmp/.thrum", "my_agent")
 	assert.Equal(t, "/tmp/.thrum/restart/my_agent.md", path)

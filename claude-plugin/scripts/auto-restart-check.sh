@@ -56,15 +56,20 @@ STATUS_JSON=$(cat)
 # Extract context usage percentage
 USED=$(echo "$STATUS_JSON" | jq -r '.context_window.used_percentage // 0' 2>/dev/null || echo "0")
 
-if [ "$USED" -ge "$THRESHOLD" ] 2>/dev/null; then
+# Truncate to integer for shell arithmetic (used_percentage may be a float)
+USED_INT=${USED%.*}
+
+if [ "$USED_INT" -ge "$THRESHOLD" ] 2>/dev/null; then
   # Save conversation snapshot
   thrum restart save --reason context-threshold 2>/dev/null || exit 0
 
   # For tmux-managed agents: trigger full restart
+  # tmux_session field returns "name:window.pane" format — extract session name
   TMUX_SESSION=$(thrum whoami --field tmux_session 2>/dev/null || true)
   if [ -n "$TMUX_SESSION" ]; then
     SESSION_NAME=$(echo "$TMUX_SESSION" | cut -d: -f1)
-    # Force restart — snapshot already saved
+    # Force restart — snapshot already saved; disown to prevent SIGHUP on shell exit
     thrum tmux restart "$SESSION_NAME" --force &
+    disown
   fi
 fi
