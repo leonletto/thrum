@@ -180,19 +180,32 @@ Here's what a coordinator does to spin up an agent from scratch:
 # 1. Create a worktree for the agent
 git worktree add ../worktrees/api-feature feature/api-refactor
 
-# 2. Create the tmux session
+# 2. Initialize thrum + beads in the worktree
+cd ../worktrees/api-feature
+thrum init
+# Beads doesn't auto-detect worktrees, so set up the redirect manually:
+mkdir -p .beads && echo /path/to/main/repo/.beads > .beads/redirect
+
+# 3. Create the tmux session
 thrum tmux create implementer-api --cwd ../worktrees/api-feature
 
-# 3. Launch Claude Code
+# 4. Register the agent identity (must happen before launch)
+thrum tmux send implementer-api "thrum quickstart --name impl_api --role implementer --module api --intent 'API refactor'"
+
+# 5. Launch the runtime
 thrum tmux launch implementer-api
 
-# 4. Agent boots → prime detects tmux → agent checks inbox → starts working
-# 5. Send it a task
+# 6. Agent boots → prime detects tmux → agent checks inbox → starts working
+# 7. Send it a task
 thrum send "Your epic is thrum-abc. Run bd show thrum-abc and start working." --to @impl_api
 ```
 
-That's it. The agent is running, receiving messages instantly, and you can
-monitor it with `thrum team` or `thrum tmux status`.
+**Important:** `thrum quickstart` must run before `thrum tmux launch`. It
+creates the identity file that `thrum prime` reads on startup. Without it, the
+agent doesn't know who it is.
+
+The agent is now running, receiving messages instantly, and you can monitor it
+with `thrum team` or `thrum tmux status`.
 
 ---
 

@@ -19,8 +19,8 @@ disclosure resource docs. It replaces the manual agent definition approach
   `/thrum:restart`, and more
 - **Automatic context** — SessionStart, PreCompact, and PostCompact hooks keep
   your agent oriented across sessions and compaction
-- **8 resource docs** — Progressive disclosure for messaging patterns, groups,
-  identity, worktrees, and anti-patterns
+- **9 resource docs** — Progressive disclosure for messaging patterns, groups,
+  identity, worktrees, tmux sessions, and anti-patterns
 - **Background listener** — Sub-agent template for async message monitoring
 
 ## Prerequisites

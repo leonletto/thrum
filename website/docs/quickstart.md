@@ -508,6 +508,15 @@ echo "set -g mouse on" >> ~/.tmux.conf
 
 See [Tmux-Managed Sessions](tmux-sessions.md) for the full story.
 
+**Beads in worktrees:** If you use [Beads](beads-and-thrum.md) for task
+tracking, note that `bd init` doesn't auto-detect worktrees like `thrum init`
+does. Set up the redirect manually:
+
+```bash
+cd your-worktree
+mkdir -p .beads && echo /path/to/main/repo/.beads > .beads/redirect
+```
+
 ## Next Steps
 
 - [Tmux-Managed Sessions](tmux-sessions.md) — daemon-managed agent sessions with

@@ -43,8 +43,8 @@ leave teammates waiting. ALWAYS keep your listener alive.
 progress or unblock dependencies. Report completions and blockers immediately.
 
 ❌ **Context Hog** — Reads entire files into context instead of delegating to
-sub-agents. Use Grep, Glob, Read, and Explore sub-agents for
-research. Your main context is for review and analysis.
+sub-agents. Use Grep, Glob, Read, and Explore sub-agents for research. Your main
+context is for review and analysis.
 
 ❌ **Rubber Stamp** — Skims the diff and approves without reading every changed
 line. Missing a critical bug defeats the purpose of review.

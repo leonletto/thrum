@@ -355,6 +355,11 @@ brew install tmux  # macOS
 # Enable mouse scrolling (critical for a good experience)
 echo &quot;set -g mouse on&quot; &gt;&gt; ~/.tmux.conf</code></pre>
 <p>See <a href="tmux-sessions.html">Tmux-Managed Sessions</a> for the full story.</p>
+<p><strong>Beads in worktrees:</strong> If you use <a href="beads-and-thrum.html">Beads</a> for task
+tracking, note that <code>bd init</code> doesn&#39;t auto-detect worktrees like <code>thrum init</code>
+does. Set up the redirect manually:</p>
+<pre><code>cd your-worktree
+mkdir -p .beads &amp;&amp; echo /path/to/main/repo/.beads &gt; .beads/redirect</code></pre>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="tmux-sessions.html">Tmux-Managed Sessions</a> — daemon-managed agent sessions with

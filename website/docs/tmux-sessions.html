@@ -143,17 +143,29 @@ and relaunches. The new session loads the snapshot via <code>thrum prime</code>.
 <pre><code># 1. Create a worktree for the agent
 git worktree add ../worktrees/api-feature feature/api-refactor
 
-# 2. Create the tmux session
+# 2. Initialize thrum + beads in the worktree
+cd ../worktrees/api-feature
+thrum init
+# Beads doesn&#39;t auto-detect worktrees, so set up the redirect manually:
+mkdir -p .beads &amp;&amp; echo /path/to/main/repo/.beads &gt; .beads/redirect
+
+# 3. Create the tmux session
 thrum tmux create implementer-api --cwd ../worktrees/api-feature
 
-# 3. Launch Claude Code
+# 4. Register the agent identity (must happen before launch)
+thrum tmux send implementer-api &quot;thrum quickstart --name impl_api --role implementer --module api --intent &#39;API refactor&#39;&quot;
+
+# 5. Launch the runtime
 thrum tmux launch implementer-api
 
-# 4. Agent boots → prime detects tmux → agent checks inbox → starts working
-# 5. Send it a task
+# 6. Agent boots → prime detects tmux → agent checks inbox → starts working
+# 7. Send it a task
 thrum send &quot;Your epic is thrum-abc. Run bd show thrum-abc and start working.&quot; --to @impl_api</code></pre>
-<p>That&#39;s it. The agent is running, receiving messages instantly, and you can
-monitor it with <code>thrum team</code> or <code>thrum tmux status</code>.</p>
+<p><strong>Important:</strong> <code>thrum quickstart</code> must run before <code>thrum tmux launch</code>. It
+creates the identity file that <code>thrum prime</code> reads on startup. Without it, the
+agent doesn&#39;t know who it is.</p>
+<p>The agent is now running, receiving messages instantly, and you can monitor it
+with <code>thrum team</code> or <code>thrum tmux status</code>.</p>
 <hr>
 <h2>Session States</h2>
 <p>The daemon determines agent state from two checks: does the tmux session exist,

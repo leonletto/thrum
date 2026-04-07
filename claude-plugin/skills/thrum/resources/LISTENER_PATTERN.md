@@ -2,8 +2,8 @@
 
 > **Prefer tmux-managed sessions when tmux is available.** They deliver messages
 > at zero token cost with no background listener needed. See
-> [TMUX_SESSIONS.md](TMUX_SESSIONS.md). Use the listener pattern below when
-> tmux is not available or not practical for your setup.
+> [TMUX_SESSIONS.md](TMUX_SESSIONS.md). Use the listener pattern below when tmux
+> is not available or not practical for your setup.
 
 The message-listener is a background sub-agent that blocks on `thrum wait` and
 returns when messages arrive. A PID file (`.thrum/var/<agent_id>-listener.pid`)

@@ -43,8 +43,8 @@ leave teammates waiting. ALWAYS keep your listener alive.
 progress or unblock dependencies. Report completions and blockers immediately.
 
 ❌ **Context Hog** — Reads entire files into context instead of delegating to
-sub-agents. Use Grep, Glob, Read, and Explore sub-agents for
-research. Your main context is for test design and execution.
+sub-agents. Use Grep, Glob, Read, and Explore sub-agents for research. Your main
+context is for test design and execution.
 
 ❌ **Optimist** — Tests only the happy path. The bug is always in the edge case.
 Test empty inputs, max values, concurrent access, and error returns.

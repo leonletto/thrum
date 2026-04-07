@@ -45,9 +45,9 @@ thrum tmux launch <name>
 # 6. Communicate via: thrum send "message" --to @<agent>
 ```
 
-**Important:** `thrum quickstart` must run before `thrum tmux launch`. It creates
-the identity file that `/thrum:prime` reads on startup. Without it, the agent
-doesn't know who it is.
+**Important:** `thrum quickstart` must run before `thrum tmux launch`. It
+creates the identity file that `/thrum:prime` reads on startup. Without it, the
+agent doesn't know who it is.
 
 ## Manual Setup (Quick Reference)
 
@@ -82,7 +82,8 @@ No listener sub-agent, no polling, no CronCreate watchdog. Messages just arrive.
 If your context window is running low, you can restart with a conversation
 snapshot preserved:
 
-- **Self-initiated:** Run `/thrum:restart` — saves snapshot, notifies coordinator
+- **Self-initiated:** Run `/thrum:restart` — saves snapshot, notifies
+  coordinator
 - **Coordinator-initiated:** `thrum tmux restart <name> --force`
 - **Automatic:** Configure `restart.auto_threshold` in `.thrum/config.json`
 
@@ -92,4 +93,5 @@ start.
 ## When Tmux Isn't Available
 
 If tmux is not installed or not practical for your setup, use the background
-message listener pattern instead. See [LISTENER_PATTERN.md](LISTENER_PATTERN.md).
+message listener pattern instead. See
+[LISTENER_PATTERN.md](LISTENER_PATTERN.md).
