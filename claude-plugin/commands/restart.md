@@ -16,13 +16,13 @@ Save your conversation history and prepare for a session restart.
 thrum restart save
 ```
 
-2. Check if you are in a tmux-managed session:
+1. Check if you are in a tmux-managed session:
 
 ```bash
 thrum whoami --field tmux_session
 ```
 
-3. If in tmux (non-empty output), notify the coordinator:
+1. If in tmux (non-empty output), notify the coordinator:
 
 ```bash
 thrum send "Restart snapshot saved. Please run: thrum tmux restart <session-name> --force" --to @coordinator_main
@@ -30,9 +30,9 @@ thrum send "Restart snapshot saved. Please run: thrum tmux restart <session-name
 
 Then wait up to 5 minutes for the coordinator to restart you. Do not exit on
 your own. If no restart occurs within 5 minutes, fall back to the non-tmux
-instructions in Step 4.
+instructions below.
 
-4. If NOT in tmux (empty output), print these instructions for the operator:
+1. If NOT in tmux (empty output), print these instructions for the operator:
 
 > Restart snapshot saved. To continue in a new session:
 >
