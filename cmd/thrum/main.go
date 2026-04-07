@@ -31,6 +31,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
+	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
 	thrumSync "github.com/leonletto/thrum/internal/sync"
@@ -153,6 +154,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(purgeCmd())
 	rootCmd.AddCommand(telegramCmd())
 	rootCmd.AddCommand(tmuxCmd())
+	rootCmd.AddCommand(restartCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -888,6 +890,20 @@ Examples:
 			}
 
 			fmt.Print(cli.FormatPurge(result))
+
+			// Clean up stale .consumed restart snapshot files
+			if confirmFlag {
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+				restartDir := filepath.Join(thrumDir, "restart")
+				if entries, err := os.ReadDir(restartDir); err == nil {
+					for _, e := range entries {
+						if strings.HasSuffix(e.Name(), ".consumed") {
+							_ = os.Remove(filepath.Join(restartDir, e.Name()))
+						}
+					}
+				}
+			}
+
 			return nil
 		},
 	}
@@ -3936,6 +3952,13 @@ Examples:
 					}
 				}
 
+				// Wire RestartSnapshot (consumed on read)
+				if result.Identity != nil {
+					if snapshot, err := restart.ConsumeInPrime(thrumDir, result.Identity.AgentID); err == nil {
+						result.RestartSnapshot = snapshot
+					}
+				}
+
 				// Detect tmux and write-back if needed
 				if ttmux.InTmux() {
 					if currentTarget, err := ttmux.PaneTarget(); err == nil && currentTarget != "" {
@@ -3960,6 +3983,11 @@ Examples:
 				fmt.Println(string(output))
 			} else {
 				fmt.Print(cli.FormatPrimeContext(result))
+			}
+
+			// Clean up consumed restart snapshot
+			if result.RestartSnapshot != "" && result.Identity != nil && result.RepoPath != "" {
+				restart.CleanupConsumed(filepath.Join(result.RepoPath, ".thrum"), result.Identity.AgentID)
 			}
 
 			return nil
@@ -5541,6 +5569,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("tmux.send", tmuxHandler.HandleSend)
 	server.RegisterHandler("tmux.capture", tmuxHandler.HandleCapture)
 	server.RegisterHandler("tmux.check-pane", tmuxHandler.HandleCheckPane)
+	server.RegisterHandler("tmux.restart", tmuxHandler.HandleRestart)
 
 	// Auto-connect to dialer-role peers after the WS server is ready.
 	if peerManager != nil && thrumCfg.Peers.AutoConnect {
@@ -6697,6 +6726,144 @@ func detectGitUser() string {
 	return name
 }
 
+func restartCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "restart",
+		Short: "Session restart with context snapshot",
+	}
+
+	saveCmd := &cobra.Command{
+		Use:   "save",
+		Short: "Save conversation snapshot for session restart",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			whoami, err := cli.AgentWhoami(client)
+			if err != nil {
+				return fmt.Errorf("resolve identity: %w", err)
+			}
+
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			idFile, _, err := config.LoadIdentityWithPath(flagRepo)
+			if err != nil {
+				return fmt.Errorf("load identity file: %w", err)
+			}
+			pid := idFile.ClaudePID
+			if pid == 0 {
+				// Fallback: query daemon for the agent's ClaudePID
+				var agents []struct {
+					AgentID   string `json:"agent_id"`
+					ClaudePID int    `json:"claude_pid"`
+				}
+				if err := client.Call("agent.list", nil, &agents); err == nil {
+					for _, a := range agents {
+						if a.AgentID == whoami.AgentID && a.ClaudePID > 0 {
+							pid = a.ClaudePID
+							break
+						}
+					}
+				}
+			}
+			if pid == 0 {
+				return fmt.Errorf("no Claude PID found for %s — ensure agent is registered with a Claude PID", whoami.AgentID)
+			}
+
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("resolve home directory: %w", err)
+			}
+			claudeDir := filepath.Join(homeDir, ".claude")
+			jsonlPath, err := restart.FindSessionJSONL(claudeDir, pid)
+			if err != nil {
+				return fmt.Errorf("find session JSONL: %w", err)
+			}
+
+			cfg, _ := config.LoadThrumConfig(thrumDir)
+			maxLines := cfg.Restart.RestartMaxLines()
+
+			conversation, err := restart.ExtractConversation(jsonlPath, maxLines)
+			if err != nil {
+				return fmt.Errorf("extract conversation: %w", err)
+			}
+
+			reason, _ := cmd.Flags().GetString("reason")
+			if reason == "" {
+				reason = "self-initiated"
+			}
+
+			snapshot := restart.FormatRestartSnapshot(whoami.AgentID, whoami.SessionID, reason, conversation)
+			if err := restart.SaveSnapshot(thrumDir, whoami.AgentID, snapshot); err != nil {
+				return err
+			}
+
+			lines := strings.Count(snapshot, "\n")
+			if !flagQuiet {
+				fmt.Printf("Restart snapshot saved for %s (%d lines)\n", whoami.AgentID, lines)
+			}
+			return nil
+		},
+	}
+	saveCmd.Flags().String("reason", "self-initiated", "Reason for restart")
+	cmd.AddCommand(saveCmd)
+
+	restoreCmd := &cobra.Command{
+		Use:   "restore",
+		Short: "Restore and output a restart snapshot",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			whoami, err := cli.AgentWhoami(client)
+			if err != nil {
+				return fmt.Errorf("resolve identity: %w", err)
+			}
+
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			content, err := restart.Restore(thrumDir, whoami.AgentID)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "No restart snapshot found")
+				os.Exit(1)
+			}
+			fmt.Print(content)
+			return nil
+		},
+	}
+	cmd.AddCommand(restoreCmd)
+
+	checkCmd := &cobra.Command{
+		Use:   "check",
+		Short: "Check if a restart snapshot exists (exit 0 = yes, exit 1 = no)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			whoami, err := cli.AgentWhoami(client)
+			if err != nil {
+				return fmt.Errorf("resolve identity: %w", err)
+			}
+
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			if !restart.SnapshotExists(thrumDir, whoami.AgentID) {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(checkCmd)
+
+	return cmd
+}
+
 func tmuxCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "tmux",
@@ -6968,6 +7135,46 @@ Without arguments, shows a numbered list of alive sessions to choose from.`,
 		},
 	}
 	cmd.AddCommand(connectCmd)
+
+	// restart
+	tmuxRestartCmd := &cobra.Command{
+		Use:   "restart <name>",
+		Short: "Restart a tmux-managed agent session with context snapshot",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			force, _ := cmd.Flags().GetBool("force")
+			rt, _ := cmd.Flags().GetString("runtime")
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			req := map[string]any{
+				"name":  args[0],
+				"force": force,
+			}
+			if rt != "" {
+				req["runtime"] = rt
+			}
+			var result cli.TmuxRestartResponse
+			if err := client.Call("tmux.restart", req, &result); err != nil {
+				return err
+			}
+
+			if flagJSON {
+				out, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(out))
+			} else {
+				fmt.Printf("Session %s restarted (%d snapshot lines)\n", result.Session, result.SnapshotLines)
+			}
+			return nil
+		},
+	}
+	tmuxRestartCmd.Flags().Bool("force", false, "Skip graceful signal, force restart")
+	tmuxRestartCmd.Flags().String("runtime", "", "Runtime override (default: same as before)")
+	cmd.AddCommand(tmuxRestartCmd)
 
 	// start — one-command launch: create session, start runtime, prime, attach
 	startCmd := &cobra.Command{

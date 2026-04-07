@@ -643,3 +643,30 @@ func TestFormatPrimeContext_LegacyMode(t *testing.T) {
 		t.Error("legacy mode should include listener spawn instructions")
 	}
 }
+
+func TestFormatPrimeContext_RestartSnapshot(t *testing.T) {
+	ctx := &PrimeContext{
+		RestartSnapshot: "# Restart Snapshot — test\n\n=== USER ===\nHello\n\n=== ASSISTANT ===\nHi",
+	}
+	output := FormatPrimeContext(ctx)
+	if !strings.Contains(output, "# Previous Session Context") {
+		t.Error("missing Previous Session Context section")
+	}
+	if !strings.Contains(output, "conversation log from your previous session") {
+		t.Error("missing restart snapshot description")
+	}
+	if !strings.Contains(output, "=== USER ===") {
+		t.Error("restart snapshot content not included")
+	}
+	if !strings.Contains(output, "Hello") {
+		t.Error("restart snapshot conversation not included")
+	}
+}
+
+func TestFormatPrimeContext_NoRestartSnapshot(t *testing.T) {
+	ctx := &PrimeContext{}
+	output := FormatPrimeContext(ctx)
+	if strings.Contains(output, "Previous Session Context") {
+		t.Error("should not include restart section when no snapshot")
+	}
+}

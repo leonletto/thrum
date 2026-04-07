@@ -585,3 +585,53 @@ func TestSaveThrumConfig_PreservesUnknownKeys(t *testing.T) {
 		t.Error("expected LocalOnly=true after save")
 	}
 }
+
+func TestSaveThrumConfig_RestartRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.ThrumConfig{
+		Restart: config.RestartConfig{
+			MaxLines:        500,
+			AutoThreshold:   80,
+			GracefulTimeout: 45,
+		},
+	}
+
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	loaded, err := config.LoadThrumConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if loaded.Restart.MaxLines != 500 {
+		t.Errorf("expected MaxLines=500, got %d", loaded.Restart.MaxLines)
+	}
+	if loaded.Restart.AutoThreshold != 80 {
+		t.Errorf("expected AutoThreshold=80, got %d", loaded.Restart.AutoThreshold)
+	}
+	if loaded.Restart.GracefulTimeout != 45 {
+		t.Errorf("expected GracefulTimeout=45, got %d", loaded.Restart.GracefulTimeout)
+	}
+}
+
+func TestSaveThrumConfig_OmitsDefaultRestart(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.ThrumConfig{}
+
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := raw["restart"]; exists {
+		t.Error("restart section should not be written when all fields are zero")
+	}
+}

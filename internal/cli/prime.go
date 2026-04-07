@@ -25,6 +25,7 @@ type PrimeContext struct {
 	Runtime             string           `json:"runtime,omitempty"`
 	SingleAgentMode     bool             `json:"single_agent_mode,omitempty"`
 	TmuxMode            bool             `json:"tmux_mode,omitempty"`
+	RestartSnapshot     string           `json:"restart_snapshot,omitempty"`
 	SavedSessionContext string           `json:"saved_session_context,omitempty"`
 }
 
@@ -338,6 +339,16 @@ func FormatPrimeContext(ctx *PrimeContext) string {
 		if ctx.SavedSessionContext[len(ctx.SavedSessionContext)-1] != '\n' {
 			out.WriteString("\n")
 		}
+	}
+
+	// Section 4.5: Restart Snapshot (if present — consumed from .thrum/restart/)
+	if ctx.RestartSnapshot != "" {
+		out.WriteString("\n# Previous Session Context\n\n")
+		out.WriteString("The following is a conversation log from your previous ")
+		out.WriteString("session. Use it to understand what was accomplished and ")
+		out.WriteString("continue from where the previous session left off.\n\n")
+		out.WriteString(ctx.RestartSnapshot)
+		out.WriteString("\n")
 	}
 
 	// Sections 5-6: Multi-agent only
