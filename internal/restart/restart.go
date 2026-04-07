@@ -153,7 +153,7 @@ type claudeSessionInfo struct {
 }
 
 // FindSessionJSONL locates the JSONL transcript for a Claude Code session
-// given its PID. claudeDir is typically ~/.claude.
+// given its PID. ClaudeDir is typically ~/.claude.
 func FindSessionJSONL(claudeDir string, pid int) (string, error) {
 	sessFile := filepath.Join(claudeDir, "sessions", fmt.Sprintf("%d.json", pid))
 	data, err := os.ReadFile(sessFile) // #nosec G304 -- pid is from internal identity resolution
@@ -177,7 +177,7 @@ func FindSessionJSONL(claudeDir string, pid int) (string, error) {
 }
 
 // encodeCwd converts a cwd path to Claude's project directory name format.
-// /Users/leon/dev/project → -Users-leon-dev-project
+// /Users/leon/dev/project → -Users-leon-dev-project.
 func encodeCwd(cwd string) string {
 	encoded := strings.TrimPrefix(cwd, "/")
 	encoded = strings.ReplaceAll(encoded, "/", "-")

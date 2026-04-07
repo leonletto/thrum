@@ -81,7 +81,7 @@ func SendSpecialKey(target, key string) error {
 }
 
 // CapturePane captures the visible content of a tmux pane.
-// lines is a positive number specifying how many lines to capture from the bottom.
+// Lines is a positive number specifying how many lines to capture from the bottom.
 func CapturePane(target string, lines int) (string, error) {
 	startLine := fmt.Sprintf("-%d", lines)
 	out, err := exec.Command("tmux", "capture-pane", "-p", "-t", target, "-S", startLine).CombinedOutput() // #nosec G204 -- target is validated, startLine is numeric
@@ -110,7 +110,7 @@ func PaneTarget() (string, error) {
 }
 
 // SetMonitorSilence configures the silence timeout and alert hook for a session.
-// thrumBin must be an absolute path — tmux run-shell has no $PATH guarantee.
+// ThrumBin must be an absolute path — tmux run-shell has no $PATH guarantee.
 // The thrumBin and repoPath are shell-quoted to prevent injection via paths with spaces.
 func SetMonitorSilence(session string, seconds int, thrumBin, repoPath string) error {
 	if !filepath.IsAbs(thrumBin) {
