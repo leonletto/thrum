@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"syscall"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 )
 
@@ -216,65 +218,119 @@ func (h *TmuxHandler) HandleCapture(ctx context.Context, params json.RawMessage)
 	return &TmuxCaptureResponse{Content: content}, nil
 }
 
-// HandleStatus scans identity files for managed tmux sessions and reports their state.
+// HandleStatus scans identity files across all worktrees for managed tmux sessions.
 func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) (any, error) {
-	identitiesDir := filepath.Join(h.thrumDir, "identities")
-	entries, err := os.ReadDir(identitiesDir)
-	if err != nil {
-		return &TmuxStatusResponse{Sessions: []TmuxSessionInfo{}}, nil
-	}
+	dirs := h.allIdentityDirs()
 
+	seen := make(map[string]bool) // deduplicate by session name
 	var sessions []TmuxSessionInfo
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
 
-		data, err := os.ReadFile(filepath.Join(identitiesDir, entry.Name())) // #nosec G304 -- path is .thrum/identities/<name>.json
+	for _, identitiesDir := range dirs {
+		entries, err := os.ReadDir(identitiesDir)
 		if err != nil {
 			continue
 		}
-		var idFile config.IdentityFile
-		if err := json.Unmarshal(data, &idFile); err != nil {
-			continue
-		}
-		if idFile.TmuxSession == "" {
-			continue
-		}
 
-		session, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
-		info := TmuxSessionInfo{
-			Name:    session,
-			Agent:   idFile.Agent.Name,
-			Role:    idFile.Agent.Role,
-			Module:  idFile.Agent.Module,
-			Runtime: idFile.Runtime,
-			Branch:  idFile.Branch,
-		}
+		for _, entry := range entries {
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+				continue
+			}
 
-		if !ttmux.HasSession(session) {
-			info.State = "dead"
-			// Clean stale tmux_session from identity file
-			h.clearTmuxFromIdentities(session)
-		} else if idFile.ClaudePID > 0 && !isProcessAlive(idFile.ClaudePID) {
-			info.State = "stale"
-		} else {
-			info.State = "alive"
-		}
+			data, err := os.ReadFile(filepath.Join(identitiesDir, entry.Name())) // #nosec G304 -- path is .thrum/identities/<name>.json
+			if err != nil {
+				continue
+			}
+			var idFile config.IdentityFile
+			if err := json.Unmarshal(data, &idFile); err != nil {
+				continue
+			}
+			if idFile.TmuxSession == "" {
+				continue
+			}
 
-		sessions = append(sessions, info)
+			session, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+			if seen[session] {
+				continue
+			}
+			seen[session] = true
+
+			info := TmuxSessionInfo{
+				Name:    session,
+				Agent:   idFile.Agent.Name,
+				Role:    idFile.Agent.Role,
+				Module:  idFile.Agent.Module,
+				Runtime: idFile.Runtime,
+				Branch:  idFile.Branch,
+			}
+
+			if !ttmux.HasSession(session) {
+				info.State = "dead"
+				h.clearTmuxFromIdentitiesInDir(identitiesDir, session)
+			} else if idFile.ClaudePID > 0 && !isProcessAlive(idFile.ClaudePID) {
+				info.State = "stale"
+			} else {
+				info.State = "alive"
+			}
+
+			sessions = append(sessions, info)
+		}
 	}
 
 	return &TmuxStatusResponse{Sessions: sessions}, nil
 }
 
+// allIdentityDirs returns identity directories for the main repo and all worktrees.
+func (h *TmuxHandler) allIdentityDirs() []string {
+	repoDir := filepath.Dir(h.thrumDir) // .thrum/ parent is the repo root
+	var dirs []string
+
+	for _, wtPath := range safecmd.WorktreePaths(context.Background(), repoDir) {
+		idDir := filepath.Join(wtPath, ".thrum", "identities")
+		if info, err := os.Stat(idDir); err == nil && info.IsDir() {
+			dirs = append(dirs, idDir)
+		}
+	}
+
+	if len(dirs) == 0 {
+		return []string{filepath.Join(h.thrumDir, "identities")}
+	}
+	return dirs
+}
+
+// CheckPaneRequest is the request from the tmux silence hook.
+type CheckPaneRequest struct {
+	Session string `json:"session"`
+	Reason  string `json:"reason"`
+	Content string `json:"content"`
+}
+
+// CheckPaneResponse reports what the check-pane handler detected.
+type CheckPaneResponse struct {
+	Session string `json:"session"`
+	State   string `json:"state"` // idle, permission, normal
+	Reason  string `json:"reason,omitempty"`
+}
+
 // HandleCheckPane is the handler for the tmux check-pane silence hook.
-// Receives session/reason/content from the CLI check-pane command.
-// Currently logs the event; full coordinator notification is deferred.
+// Detects idle or permission-blocked agents and logs the event.
 func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessage) (any, error) {
-	// Skeletal handler — accepts the request without error so the tmux
-	// silence hook doesn't produce noise. Full notification flow deferred.
-	return nil, nil
+	var req CheckPaneRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	state := "idle"
+	if req.Reason != "" {
+		state = "permission"
+	}
+
+	log.Printf("[tmux] check-pane: session=%s state=%s reason=%s", req.Session, state, req.Reason)
+
+	return &CheckPaneResponse{
+		Session: req.Session,
+		State:   state,
+		Reason:  req.Reason,
+	}, nil
 }
 
 // writeTmuxToIdentity writes tmux_session and runtime to the identity file
@@ -307,9 +363,15 @@ func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
 }
 
 // clearTmuxFromIdentities removes tmux_session and runtime from identity files
-// matching the given session name.
+// matching the given session name, scanning all worktrees.
 func (h *TmuxHandler) clearTmuxFromIdentities(sessionName string) {
-	identitiesDir := filepath.Join(h.thrumDir, "identities")
+	for _, dir := range h.allIdentityDirs() {
+		h.clearTmuxFromIdentitiesInDir(dir, sessionName)
+	}
+}
+
+// clearTmuxFromIdentitiesInDir clears tmux fields from identity files in a specific directory.
+func (h *TmuxHandler) clearTmuxFromIdentitiesInDir(identitiesDir, sessionName string) {
 	entries, _ := os.ReadDir(identitiesDir)
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {

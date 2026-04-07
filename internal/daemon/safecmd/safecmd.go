@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -39,4 +40,23 @@ func GitLong(ctx context.Context, dir string, args ...string) ([]byte, error) {
 		return out, fmt.Errorf("git %v in %s: %w (output: %s)", args, dir, err, out)
 	}
 	return out, nil
+}
+
+// WorktreePaths returns the absolute paths of all git worktrees for the repo at dir.
+func WorktreePaths(ctx context.Context, dir string) []string {
+	out, err := Git(ctx, dir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return []string{dir}
+	}
+
+	var paths []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if path, ok := strings.CutPrefix(line, "worktree "); ok {
+			paths = append(paths, path)
+		}
+	}
+	if len(paths) == 0 {
+		return []string{dir}
+	}
+	return paths
 }
