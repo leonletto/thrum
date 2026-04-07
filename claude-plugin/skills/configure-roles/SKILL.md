@@ -31,7 +31,7 @@ thrum config show 2>/dev/null           # Thrum configuration
 
 Also check:
 
-- `.claude/settings.json` for MCP servers (context7, auggie-mcp, etc.)
+- `.claude/settings.json` for MCP servers (context7, etc.)
 - `toolkit/templates/roles/` for shipped example templates
 
 ## Step 2: Report Findings
@@ -133,7 +133,7 @@ When `.thrum/role_templates/` already has files:
 | Detected             | Template Customization                                   |
 | -------------------- | -------------------------------------------------------- |
 | Claude Code runtime  | Add Task tool + sub-agent guidance to Efficiency section |
-| Augment runtime      | Add auggie-mcp codebase-retrieval to Efficiency section  |
+| Augment runtime      | Add Augment-specific tool guidance to Efficiency section |
 | Beads installed      | Add `bd` commands to Task Tracking, disable TodoWrite    |
 | Thrum MCP server     | Add MCP tool references, CLI fallback for sub-agents     |
 | Claude plugin skills | List installed skills with usage guidance                |
