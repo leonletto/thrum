@@ -6902,7 +6902,82 @@ func tmuxCmd() *cobra.Command {
 	checkPaneCmd.Flags().String("repo", "", "Repository path (baked in by tmux hook)")
 	cmd.AddCommand(checkPaneCmd)
 
+	// connect
+	connectCmd := &cobra.Command{
+		Use:   "connect [name]",
+		Short: "Attach to a running agent's tmux session",
+		Long: `Attach to a running agent's tmux session.
+
+With a session name argument, attaches directly.
+Without arguments, shows a numbered list of alive sessions to choose from.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				// Direct attach by name
+				return tmuxAttach(args[0])
+			}
+
+			// Interactive: list alive sessions and let user pick
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.TmuxStatus(client)
+			if err != nil {
+				return err
+			}
+
+			// Filter to alive sessions only
+			var alive []cli.TmuxSessionInfo
+			for _, s := range result.Sessions {
+				if s.State == "alive" {
+					alive = append(alive, s)
+				}
+			}
+			if len(alive) == 0 {
+				fmt.Println("No alive tmux sessions")
+				return nil
+			}
+
+			// Show numbered list
+			fmt.Printf("%-4s %-25s %-20s %-10s %s\n", "#", "SESSION", "AGENT", "RUNTIME", "BRANCH")
+			for i, s := range alive {
+				agentDisplay := s.Agent
+				if agentDisplay != "" {
+					agentDisplay = "@" + agentDisplay
+				}
+				fmt.Printf("%-4d %-25s %-20s %-10s %s\n",
+					i+1, s.Name, agentDisplay, s.Runtime, s.Branch)
+			}
+
+			// Read selection
+			fmt.Printf("\nEnter number (1-%d): ", len(alive))
+			scanner := bufio.NewScanner(os.Stdin)
+			if !scanner.Scan() {
+				return nil
+			}
+			input := strings.TrimSpace(scanner.Text())
+			var choice int
+			if _, err := fmt.Sscanf(input, "%d", &choice); err != nil || choice < 1 || choice > len(alive) {
+				return fmt.Errorf("invalid selection: %s", input)
+			}
+
+			return tmuxAttach(alive[choice-1].Name)
+		},
+	}
+	cmd.AddCommand(connectCmd)
+
 	return cmd
+}
+
+func tmuxAttach(session string) error {
+	c := exec.Command("tmux", "attach-session", "-t", session)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return c.Run()
 }
 
 func detectPaneState(content string) string {
