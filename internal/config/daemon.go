@@ -306,6 +306,17 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 		existing["backup"] = backupMap
 	}
 
+	// Marshal and merge the restart section (only if any field is set)
+	if cfg.Restart.MaxLines > 0 || cfg.Restart.AutoThreshold > 0 || cfg.Restart.GracefulTimeout > 0 {
+		restartBytes, err := json.Marshal(cfg.Restart)
+		if err != nil {
+			return err
+		}
+		var restartMap any
+		_ = json.Unmarshal(restartBytes, &restartMap)
+		existing["restart"] = restartMap
+	}
+
 	// Marshal and merge the telegram section (only if token is set or explicitly configured)
 	if cfg.Telegram.Token != "" || cfg.Telegram.Enabled != nil || cfg.Telegram.AllowAll || len(cfg.Telegram.AllowFrom) > 0 || len(cfg.Telegram.Groups) > 0 {
 		telegramBytes, err := json.Marshal(cfg.Telegram)
