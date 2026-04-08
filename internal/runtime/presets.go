@@ -45,6 +45,16 @@ var BuiltinPresets = map[string]RuntimePreset{
 		MCPConfigPath:    "Run: codex mcp add thrum 'thrum mcp serve'",
 		SetupNotes:       "Use .codex/hooks/session-start for startup",
 	},
+	"opencode": {
+		Name:             "opencode",
+		DisplayName:      "Open Code",
+		Command:          "opencode",
+		MCPSupported:     true,
+		HooksSupported:   true,
+		InstructionsFile: "AGENTS.md",
+		MCPConfigPath:    "opencode.json",
+		SetupNotes:       "Install plugin: opencode plugin opencode-thrum",
+	},
 	"cursor": {
 		Name:             "cursor",
 		DisplayName:      "Cursor",

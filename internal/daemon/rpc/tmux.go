@@ -169,11 +169,12 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 			return nil, fmt.Errorf("launch enter: %w", err)
 		}
 
-		// Send /thrum:prime after the runtime has time to start up.
+		// Send the runtime-appropriate prime command after startup delay.
 		// Runs in a goroutine so the RPC returns immediately.
+		primeCmd := primeCommandForRuntime(runtime)
 		go func() {
 			time.Sleep(10 * time.Second)
-			_ = ttmux.SendKeys(target, "/thrum:prime")
+			_ = ttmux.SendKeys(target, primeCmd)
 			_ = ttmux.SendSpecialKey(target, "Enter")
 		}()
 	}
@@ -459,11 +460,12 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 			return nil, fmt.Errorf("send enter: %w", err)
 		}
 
-		// Send /thrum:prime after the runtime has time to start up.
+		// Send the runtime-appropriate prime command after startup delay.
 		// For restart, this is critical — prime loads the restart snapshot.
+		primeCmd := primeCommandForRuntime(runtime)
 		go func() {
 			time.Sleep(10 * time.Second)
-			_ = ttmux.SendKeys(target, "/thrum:prime")
+			_ = ttmux.SendKeys(target, primeCmd)
 			_ = ttmux.SendSpecialKey(target, "Enter")
 		}()
 	}
@@ -490,6 +492,18 @@ func runtimeToLaunchCmd(runtime string) string {
 		return ""
 	default:
 		return runtime // best-effort: use the runtime name as the command
+	}
+}
+
+// primeCommandForRuntime returns the slash command to send after launch
+// for each supported runtime. Open Code uses /thrum-prime (command filenames
+// are the command names), while Claude Code uses /thrum:prime (plugin namespace).
+func primeCommandForRuntime(runtime string) string {
+	switch runtime {
+	case "opencode":
+		return "/thrum-prime"
+	default:
+		return "/thrum:prime"
 	}
 }
 

@@ -49,6 +49,13 @@ var builtinAgents = []AgentDefinition{
 		SkillsDir:   ".codex/skills",
 	},
 	{
+		Name:        "opencode",
+		DisplayName: "Open Code",
+		RepoMarkers: []string{".opencode/", "opencode.json"},
+		Binaries:    []BinaryCheck{{Name: "opencode", VerifyArgs: []string{"--version"}, MatchAny: []string{"opencode"}}},
+		SkillsDir:   ".opencode/skills",
+	},
+	{
 		Name:        "gemini",
 		DisplayName: "Gemini CLI",
 		RepoMarkers: []string{".gemini/"},

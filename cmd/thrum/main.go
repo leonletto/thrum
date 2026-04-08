@@ -200,7 +200,7 @@ Examples:
 
 			// Validate runtime flag if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
-				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, auggie, cli-only, all", runtimeFlag)
+				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, opencode, auggie, cli-only, all", runtimeFlag)
 			}
 
 			// Skills-only mode: install thrum skill without full init
@@ -633,7 +633,7 @@ Examples:
 	cmd.Flags().Bool("force", false, "Force reinitialization / overwrite existing files")
 	cmd.Flags().Bool("stealth", false, "Use .git/info/exclude instead of .gitignore (zero footprint in tracked files)")
 	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files")
-	cmd.Flags().String("runtime", "", "Generate runtime-specific configs (claude|codex|cursor|gemini|cli-only|all)")
+	cmd.Flags().String("runtime", "", "Generate runtime-specific configs (claude|codex|cursor|gemini|opencode|cli-only|all)")
 	cmd.Flags().String("agent-name", "", "Agent name for templates (default: default_agent)")
 	cmd.Flags().String("agent-role", "", "Agent role for templates (default: implementer)")
 	cmd.Flags().String("agent-module", "", "Agent module for templates (default: main)")
@@ -4301,7 +4301,7 @@ Examples:
 
 			// Validate runtime if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
-				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, auggie, cli-only", runtimeFlag)
+				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, opencode, auggie, cli-only", runtimeFlag)
 			}
 
 			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.

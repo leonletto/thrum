@@ -86,6 +86,11 @@ func runtimeTemplates(runtime string) []runtimeTemplate {
 			{"templates/gemini/settings.json.tmpl", ".gemini/settings.json", 0644},
 			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
 		}
+	case "opencode":
+		return []runtimeTemplate{
+			{"templates/opencode/opencode.json.tmpl", "opencode.json", 0644},
+			{"templates/shared/startup.sh.tmpl", "scripts/thrum-startup.sh", 0755},
+		}
 	case "auggie":
 		return []runtimeTemplate{
 			{"templates/auggie/settings.json.tmpl", ".augment/settings.json", 0644},
