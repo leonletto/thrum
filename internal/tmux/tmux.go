@@ -11,6 +11,21 @@ import (
 
 var unsafeChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
+// cleanEnv returns the current environment with TMUX and TMUX_PANE removed.
+// The daemon may inherit TMUX from its parent (e.g. tmux-exec), which causes
+// tmux commands to connect to the wrong server. Stripping these vars ensures
+// all commands use the default tmux server socket.
+func cleanEnv() []string {
+	var env []string
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, "TMUX=") || strings.HasPrefix(e, "TMUX_PANE=") {
+			continue
+		}
+		env = append(env, e)
+	}
+	return env
+}
+
 // SanitizeSessionName replaces unsafe characters with hyphens.
 func SanitizeSessionName(name string) string {
 	return unsafeChars.ReplaceAllString(name, "-")
@@ -33,8 +48,9 @@ func ParseTarget(target string) (session, window, pane string) {
 
 // HasSession checks whether a tmux session exists.
 func HasSession(name string) bool {
-	err := exec.Command("tmux", "has-session", "-t", name).Run() // #nosec G204 -- name is sanitized session name, not user input
-	return err == nil
+	cmd := exec.Command("tmux", "has-session", "-t", name) // #nosec G204 -- name is sanitized session name, not user input
+	cmd.Env = cleanEnv()
+	return cmd.Run() == nil
 }
 
 // CreateSession creates a new detached tmux session with a clean environment.
@@ -55,7 +71,9 @@ func CreateSession(name, cwd string) error {
 
 // KillSession destroys a tmux session.
 func KillSession(name string) error {
-	out, err := exec.Command("tmux", "kill-session", "-t", name).CombinedOutput() // #nosec G204 -- name is sanitized session name
+	cmd := exec.Command("tmux", "kill-session", "-t", name) // #nosec G204 -- name is sanitized session name
+	cmd.Env = cleanEnv()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("tmux kill-session failed: %w: %s", err, out)
 	}
@@ -64,7 +82,9 @@ func KillSession(name string) error {
 
 // SendKeys sends literal text to a tmux target (session:window.pane).
 func SendKeys(target, text string) error {
-	out, err := exec.Command("tmux", "send-keys", "-t", target, "-l", text).CombinedOutput() // #nosec G204 -- target is validated tmux target, text sent via -l literal mode
+	cmd := exec.Command("tmux", "send-keys", "-t", target, "-l", text) // #nosec G204 -- target is validated tmux target, text sent via -l literal mode
+	cmd.Env = cleanEnv()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("tmux send-keys failed: %w: %s", err, out)
 	}
@@ -73,7 +93,9 @@ func SendKeys(target, text string) error {
 
 // SendSpecialKey sends a named key (Enter, Escape, etc.) to a tmux target.
 func SendSpecialKey(target, key string) error {
-	out, err := exec.Command("tmux", "send-keys", "-t", target, key).CombinedOutput() // #nosec G204 -- target is validated, key is a named tmux key constant
+	cmd := exec.Command("tmux", "send-keys", "-t", target, key) // #nosec G204 -- target is validated, key is a named tmux key constant
+	cmd.Env = cleanEnv()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("tmux send-keys %s failed: %w: %s", key, err, out)
 	}
@@ -84,7 +106,9 @@ func SendSpecialKey(target, key string) error {
 // Lines is a positive number specifying how many lines to capture from the bottom.
 func CapturePane(target string, lines int) (string, error) {
 	startLine := fmt.Sprintf("-%d", lines)
-	out, err := exec.Command("tmux", "capture-pane", "-p", "-t", target, "-S", startLine).CombinedOutput() // #nosec G204 -- target is validated, startLine is numeric
+	cmd := exec.Command("tmux", "capture-pane", "-p", "-t", target, "-S", startLine) // #nosec G204 -- target is validated, startLine is numeric
+	cmd.Env = cleanEnv()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("tmux capture-pane failed: %w: %s", err, out)
 	}
@@ -92,6 +116,8 @@ func CapturePane(target string, lines int) (string, error) {
 }
 
 // SessionName returns the session name of the current tmux session (from inside).
+// Note: this intentionally does NOT strip TMUX env — it needs the current
+// session's TMUX var to know which session it's in.
 func SessionName() (string, error) {
 	out, err := exec.Command("tmux", "display-message", "-p", "#S").CombinedOutput() // #nosec G204 -- no user input
 	if err != nil {
@@ -101,6 +127,8 @@ func SessionName() (string, error) {
 }
 
 // PaneTarget returns the full target (session:window.pane) for the current pane.
+// Note: this intentionally does NOT strip TMUX env — it needs the current
+// session's TMUX var to know which pane it's in.
 func PaneTarget() (string, error) {
 	out, err := exec.Command("tmux", "display-message", "-p", "#{session_name}:#{window_index}.#{pane_index}").CombinedOutput() // #nosec G204 -- no user input
 	if err != nil {
@@ -116,15 +144,19 @@ func SetMonitorSilence(session string, seconds int, thrumBin, repoPath string) e
 	if !filepath.IsAbs(thrumBin) {
 		return fmt.Errorf("thrumBin must be an absolute path, got: %q", thrumBin)
 	}
-	if err := exec.Command("tmux", "set-option", "-t", session, // #nosec G204 -- session is sanitized, seconds is numeric
-		"monitor-silence", fmt.Sprintf("%d", seconds)).Run(); err != nil {
+	setOpt := exec.Command("tmux", "set-option", "-t", session, // #nosec G204 -- session is sanitized, seconds is numeric
+		"monitor-silence", fmt.Sprintf("%d", seconds))
+	setOpt.Env = cleanEnv()
+	if err := setOpt.Run(); err != nil {
 		return fmt.Errorf("set monitor-silence: %w", err)
 	}
 	hookCmd := fmt.Sprintf("run-shell %s",
 		shellQuote(fmt.Sprintf("%s tmux check-pane %s --repo %s",
 			shellQuote(thrumBin), shellQuote(session), shellQuote(repoPath))))
-	if err := exec.Command("tmux", "set-hook", "-t", session, // #nosec G204 -- session sanitized, hookCmd built with shellQuote
-		"alert-silence", hookCmd).Run(); err != nil {
+	setHook := exec.Command("tmux", "set-hook", "-t", session, // #nosec G204 -- session sanitized, hookCmd built with shellQuote
+		"alert-silence", hookCmd)
+	setHook.Env = cleanEnv()
+	if err := setHook.Run(); err != nil {
 		return fmt.Errorf("set alert-silence hook: %w", err)
 	}
 	return nil
