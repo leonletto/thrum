@@ -1,7 +1,7 @@
 {
   "name": "thrum",
   "description": "Git-backed messaging for AI agent coordination across sessions, worktrees, and machines.",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "author": {
     "name": "Leon Letto",
     "url": "https://github.com/leonletto"
@@ -34,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "thrum prime 2>/dev/null || echo 'Thrum not initialized (run: thrum init)'"
+            "command": "echo 'Run /thrum:prime to load your session context, identity, and any restart snapshots.'"
           }
         ]
       }

@@ -583,8 +583,16 @@ Examples:
 			}
 
 			if qsResult.Session != nil {
-				idFile.SessionID = qsResult.Session.SessionID
-				_ = config.SaveIdentityFile(thrumDir, idFile)
+				// Reload identity file to preserve fields set by
+				// cli.Quickstart enrichment (ClaudePID, TmuxSession).
+				// Only use the reloaded identity if the name matches.
+				if enriched, _, loadErr := config.LoadIdentityWithPath(flagRepo); loadErr == nil && enriched.Agent.Name == agentNameResolved {
+					enriched.SessionID = qsResult.Session.SessionID
+					_ = config.SaveIdentityFile(thrumDir, enriched)
+				} else {
+					idFile.SessionID = qsResult.Session.SessionID
+					_ = config.SaveIdentityFile(thrumDir, idFile)
+				}
 			}
 
 			if !flagQuiet {
@@ -4395,31 +4403,46 @@ Examples:
 						fmt.Sprintf("%s_%s.json", flagRole, flagModule))
 					_ = os.Remove(legacyFile)
 				}
-				idFile := &config.IdentityFile{
-					Version: 3,
-					RepoID:  cli.GetRepoID(flagRepo),
-					Agent: config.AgentConfig{
-						Kind:    "agent",
-						Name:    savedName,
-						Role:    flagRole,
-						Module:  flagModule,
-						Display: cli.AutoDisplay(flagRole, flagModule),
-					},
-					Worktree: cli.GetWorktreeName(flagRepo),
-					Branch:   cli.GetCurrentBranch(flagRepo),
-					Intent:   intent,
+
+				thrumDir := filepath.Join(flagRepo, ".thrum")
+
+				// Load the identity file that cli.Quickstart's enrichment block
+				// already wrote — it contains ClaudePID, TmuxSession, and other
+				// fields set during enrichment. Building a fresh struct here would
+				// overwrite those fields.
+				// Only use the loaded identity if the agent name matches — a stale
+				// identity from `thrum init` (e.g. implementer_main) must not
+				// prevent creation of the correct identity file.
+				idFile, _, loadErr := config.LoadIdentityWithPath(flagRepo)
+				if loadErr != nil || idFile == nil || idFile.Agent.Name != savedName {
+					// Create a new identity file: no existing file, or name mismatch
+					idFile = &config.IdentityFile{
+						Version: 4,
+						RepoID:  cli.GetRepoID(flagRepo),
+						Agent: config.AgentConfig{
+							Kind:    "agent",
+							Name:    savedName,
+							Role:    flagRole,
+							Module:  flagModule,
+							Display: cli.AutoDisplay(flagRole, flagModule),
+						},
+						Worktree: cli.GetWorktreeName(flagRepo),
+						Branch:   cli.GetCurrentBranch(flagRepo),
+						Intent:   intent,
+					}
 				}
+
+				// Update fields that the cobra handler is responsible for
 				if display != "" {
 					idFile.Agent.Display = display
 				}
 				if result.Session != nil {
 					idFile.SessionID = result.Session.SessionID
 				}
+				if idFile.ContextFile == "" {
+					idFile.ContextFile = fmt.Sprintf("context/%s.md", savedName)
+				}
 
-				// Populate context_file with the agent's context file path
-				idFile.ContextFile = fmt.Sprintf("context/%s.md", savedName)
-
-				thrumDir := filepath.Join(flagRepo, ".thrum")
 				if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to save identity file: %v\n", err)
 				}
@@ -4970,8 +4993,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("group.members", groupHandler.HandleMembers)
 
 	// Message management
-	nudgeState := daemon.NewNudgeState()
-	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir, nudgeState)
+	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir)
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)
 	server.RegisterHandler("message.list", messageHandler.HandleList)
@@ -6736,32 +6758,32 @@ func restartCmd() *cobra.Command {
 		Use:   "save",
 		Short: "Save conversation snapshot for session restart",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			whoami, err := cli.AgentWhoami(client)
-			if err != nil {
-				return fmt.Errorf("resolve identity: %w", err)
-			}
-
-			thrumDir := filepath.Join(flagRepo, ".thrum")
+			// Resolve identity from local identity file first (avoids PID-based
+			// daemon resolution which can find the wrong agent in multi-worktree setups)
 			idFile, _, err := config.LoadIdentityWithPath(flagRepo)
 			if err != nil {
 				return fmt.Errorf("load identity file: %w", err)
 			}
+			agentName := idFile.Agent.Name
+			sessionID := idFile.SessionID
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+
 			pid := idFile.ClaudePID
 			if pid == 0 {
 				// Fallback: query daemon for the agent's ClaudePID
+				client, err := getClient()
+				if err != nil {
+					return fmt.Errorf("connect to daemon: %w", err)
+				}
+				defer func() { _ = client.Close() }()
+
 				var agents []struct {
 					AgentID   string `json:"agent_id"`
 					ClaudePID int    `json:"claude_pid"`
 				}
 				if err := client.Call("agent.list", nil, &agents); err == nil {
 					for _, a := range agents {
-						if a.AgentID == whoami.AgentID && a.ClaudePID > 0 {
+						if a.AgentID == agentName && a.ClaudePID > 0 {
 							pid = a.ClaudePID
 							break
 						}
@@ -6769,7 +6791,7 @@ func restartCmd() *cobra.Command {
 				}
 			}
 			if pid == 0 {
-				return fmt.Errorf("no Claude PID found for %s — ensure agent is registered with a Claude PID", whoami.AgentID)
+				return fmt.Errorf("no Claude PID found for %s — ensure agent is registered with a Claude PID", agentName)
 			}
 
 			homeDir, err := os.UserHomeDir()
@@ -6795,14 +6817,14 @@ func restartCmd() *cobra.Command {
 				reason = "self-initiated"
 			}
 
-			snapshot := restart.FormatRestartSnapshot(whoami.AgentID, whoami.SessionID, reason, conversation)
-			if err := restart.SaveSnapshot(thrumDir, whoami.AgentID, snapshot); err != nil {
+			snapshot := restart.FormatRestartSnapshot(agentName, sessionID, reason, conversation)
+			if err := restart.SaveSnapshot(thrumDir, agentName, snapshot); err != nil {
 				return err
 			}
 
 			lines := strings.Count(snapshot, "\n")
 			if !flagQuiet {
-				fmt.Printf("Restart snapshot saved for %s (%d lines)\n", whoami.AgentID, lines)
+				fmt.Printf("Restart snapshot saved for %s (%d lines)\n", agentName, lines)
 			}
 			return nil
 		},

@@ -9,6 +9,8 @@ losing their place — context exhaustion, rate limits, stuck state — the rest
 this page covers how the daemon extracts conversation history, saves a snapshot,
 and relaunches the agent automatically.
 
+---
+
 ## Everyday Use: Save and Resume
 
 The `/thrum:update-project` skill is the thing most people need. It saves your
@@ -45,6 +47,8 @@ the new session can pick up mid-task.
 Different tools, different purposes. Use `/thrum:update-project` for daily
 saves. Restart snapshots happen automatically when an agent needs a fresh
 session.
+
+---
 
 ## How Restart Snapshots Work
 
@@ -89,6 +93,8 @@ limiting.
 
 The truncation is boundary-aligned — it always starts on a `=== USER ===` marker
 and ends with assistant text. No partial exchanges.
+
+---
 
 ## Three Restart Triggers
 
@@ -137,6 +143,8 @@ Auto-restart is **disabled by default**. Enable it by setting a threshold:
 thrum config set restart.auto_threshold 80
 ```
 
+---
+
 ## CLI Commands
 
 ### `thrum restart save`
@@ -184,6 +192,8 @@ thrum tmux restart implementer-api --force
 thrum tmux restart implementer-api --runtime opencode
 ```
 
+---
+
 ## Configuration
 
 ```yaml
@@ -204,6 +214,8 @@ automatic restart. Set to 0 to disable (the default). A value like 80 means
 `graceful_timeout` is how long `thrum tmux restart` waits for the agent to save
 its own snapshot before falling back to force extraction.
 
+---
+
 ## How It Fits Together
 
 The context preservation story has layers:
@@ -220,6 +232,8 @@ The context preservation story has layers:
 
 For the full technical details on context files, see
 [Context Management](context.md).
+
+---
 
 ## Next Steps
 

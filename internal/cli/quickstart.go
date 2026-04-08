@@ -192,6 +192,12 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 			changed = true
 		}
 
+		// Write ClaudePID to identity file for restart save
+		if claudePID > 0 && idFile.ClaudePID != claudePID {
+			idFile.ClaudePID = claudePID
+			changed = true
+		}
+
 		// Detect tmux session and write to identity file
 		if tmuxTarget, err := detectTmuxSession(); err == nil && tmuxTarget != "" {
 			if idFile.TmuxSession != tmuxTarget {

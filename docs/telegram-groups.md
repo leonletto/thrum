@@ -115,7 +115,7 @@ adds your user and target agent as members.
 
 Test it — send a message in the Telegram group mentioning the bot:
 
-```
+```text
 @your_bot_name hello from the group
 ```
 
@@ -127,6 +127,8 @@ thrum inbox --unread
 
 You should see the message. Have the agent reply to the mirrored group and
 verify it appears in Telegram.
+
+---
 
 ### @Mention Routing
 
@@ -143,6 +145,8 @@ either @mention it or have no @mention at all. Messages that @mention a human
 (not the bot) are left alone — the person gets a normal Telegram notification
 and the agent doesn't need to see it.
 
+---
+
 ### Security
 
 The same security model from the DM bridge applies to groups:
@@ -154,6 +158,8 @@ The same security model from the DM bridge applies to groups:
 - **Bot blocking.** Messages from other bots are dropped by default (see
   [Multi-Bot Groups](#multi-bot-groups) below for the exception).
 - **Rate limiting.** Per-user rate limits apply in groups the same as DMs.
+
+---
 
 ### Configuration Reference
 
@@ -177,6 +183,8 @@ config:
 | `prefix` | string | Local prefix — the proxy registers as `{prefix}:{name}`  |
 | `bot`    | string | Target bot's @username for @mention routing              |
 
+---
+
 ### Web UI
 
 The web UI's Settings → Telegram panel has a **Groups** section where you can:
@@ -187,6 +195,8 @@ The web UI's Settings → Telegram panel has a **Groups** section where you can:
 - See group connection status
 
 All changes take effect on daemon restart.
+
+---
 
 ### Multi-Bot Groups
 
@@ -271,16 +281,18 @@ thrum send "check the /users endpoint" --to @falcon:coordinator_main
 
 The message appears in the group as:
 
-```
+```text
 @falconmode_backend_bot @coordinator_main: check the /users endpoint
 ```
 
 Humans in the group can see it. The target bot cannot (Telegram limitation). The
 proxy agent shows in `thrum team` as:
 
-```
+```text
 ● @falcon:coordinator_main [remote] (falcon-backend) — via tg:cross-repo-coord
 ```
+
+---
 
 ### Troubleshooting
 
