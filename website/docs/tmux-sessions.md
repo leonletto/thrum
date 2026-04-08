@@ -68,7 +68,7 @@ When a coordinator creates a tmux session for an agent, three things happen:
 
 The notification looks like this:
 
-```
+```text
 New message from @coordinator_main -- run `thrum inbox --unread` to read
 ```
 
@@ -145,7 +145,7 @@ thrum tmux launch implementer-api --runtime shell
 thrum tmux status
 ```
 
-```
+```text
 SESSION                   AGENT                STATE        RUNTIME    BRANCH
 coordinator-main          coordinator_main     alive        claude     thrum-dev
 implementer-api           impl_api             alive        opencode   feature/api
@@ -231,7 +231,7 @@ Two additional states come from silence monitoring:
 These show up in `thrum team` output so you can see at a glance which agents
 need attention:
 
-```
+```text
 @coordinator_main  coordinator  main         tmux:alive    thrum-dev
 @impl_api          implementer  api          tmux:blocked  feature/api
 @impl_website_dev  implementer  website-dev  tmux:idle     website-dev

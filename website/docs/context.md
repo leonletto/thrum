@@ -16,7 +16,7 @@ last_updated: "2026-02-12"
 > Files live in `.thrum/context/{agent}.md` — plain Markdown you can read and
 > edit directly. For most people, the `/thrum:update-project` skill is the
 > easiest way to keep context current — run it before shutting down for the day.
-
+>
 > See also: [Session Restart & Context Recovery](session-restart.md) for
 > automated restart snapshots that extract conversation history from Claude
 > Code's JSONL transcripts.

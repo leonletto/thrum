@@ -127,7 +127,7 @@ adds your user and target agent as members.
 
 Test it — send a message in the Telegram group mentioning the bot:
 
-```
+```text
 @your_bot_name hello from the group
 ```
 
@@ -293,14 +293,14 @@ thrum send "check the /users endpoint" --to @falcon:coordinator_main
 
 The message appears in the group as:
 
-```
+```text
 @falconmode_backend_bot @coordinator_main: check the /users endpoint
 ```
 
 Humans in the group can see it. The target bot cannot (Telegram limitation). The
 proxy agent shows in `thrum team` as:
 
-```
+```text
 ● @falcon:coordinator_main [remote] (falcon-backend) — via tg:cross-repo-coord
 ```
 

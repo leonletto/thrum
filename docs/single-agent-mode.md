@@ -189,7 +189,7 @@ alive — don't spawn another one.
 
 When a listener finishes its cycle, it used to print:
 
-```
+```text
 RE-ARM: This listener has stopped. Spawn a new message-listener
 agent to continue listening.
 ```
@@ -197,7 +197,7 @@ agent to continue listening.
 That message caused the parent agent to immediately spawn a new listener —
 whether one was needed or not. Now it prints:
 
-```
+```text
 Listener cycle complete. Cron watchdog monitors heartbeat and
 will re-arm if needed.
 ```
