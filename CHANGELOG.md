@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-04-08
+
+### Changed
+
+- **`thrum tmux launch` auto-primes** — after launching the runtime, the daemon
+  sends `/thrum:prime` automatically (via background goroutine with 10s delay).
+  This matches the behavior of `thrum tmux start` and ensures agents always load
+  their session context on launch. Also applied to `thrum tmux restart`.
+
+### Fixed
+
+- **Tmux server isolation** — daemon-spawned tmux commands (`HasSession`,
+  `KillSession`, `SendKeys`, `CapturePane`, `SetMonitorSilence`) now strip
+  inherited `TMUX`/`TMUX_PANE` environment variables, ensuring they connect to
+  the default tmux server. Fixes `thrum tmux launch/restart/kill` failures when
+  the daemon was started inside tmux-exec or other nested tmux sessions.
+- **Identity reload guard** — `quickstart` and `init` cobra handlers now load
+  existing identity files with agent name-match validation, preventing stale
+  identity adoption when a worktree has a pre-existing identity from a different
+  agent.
+- **ClaudePID/TmuxSession preservation** — `quickstart` and `init` handlers load
+  existing identity instead of creating fresh structs, preserving `claude_pid`
+  and `tmux_session` fields set by the daemon enrichment block.
+- **Plugin SessionStart hook** — hook now echoes instruction to run
+  `/thrum:prime` in-conversation instead of executing `thrum prime` directly,
+  which consumed restart snapshots in system-reminder context where the agent
+  couldn't act on them.
+- **JSONL CWD path encoding** — `encodeCwd` now replaces both `/` and `.` with
+  `-`, matching Claude Code's encoding behavior. Paths containing `.workspaces`
+  now resolve correctly for session JSONL lookup.
+- **Nudge dedup removed** — rapid-fire messages now each trigger a separate
+  nudge instead of being coalesced.
+- **Restart save identity resolution** — fixed restart snapshot extraction when
+  `ClaudePID` is 0 by falling back to daemon RPC.
+
 ## [0.7.1] - 2026-04-07
 
 ### Added

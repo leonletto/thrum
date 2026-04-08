@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/restart"
@@ -167,6 +168,14 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 		if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
 			return nil, fmt.Errorf("launch enter: %w", err)
 		}
+
+		// Send /thrum:prime after the runtime has time to start up.
+		// Runs in a goroutine so the RPC returns immediately.
+		go func() {
+			time.Sleep(10 * time.Second)
+			_ = ttmux.SendKeys(target, "/thrum:prime")
+			_ = ttmux.SendSpecialKey(target, "Enter")
+		}()
 	}
 
 	// Write tmux_session and runtime to the agent's identity file
@@ -449,6 +458,14 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
 			return nil, fmt.Errorf("send enter: %w", err)
 		}
+
+		// Send /thrum:prime after the runtime has time to start up.
+		// For restart, this is critical — prime loads the restart snapshot.
+		go func() {
+			time.Sleep(10 * time.Second)
+			_ = ttmux.SendKeys(target, "/thrum:prime")
+			_ = ttmux.SendSpecialKey(target, "Enter")
+		}()
 	}
 
 	// Write tmux_session and runtime to the agent's identity file

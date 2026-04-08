@@ -13,17 +13,20 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.7.1 highlights:**
+**v0.7.2 highlights:**
 
-- **Session restart** — JSONL conversation extraction, snapshot save/restore,
-  `thrum tmux restart` for seamless context preservation across session
-  restarts.
-- **Tmux-first plugin** — Tmux-managed sessions promoted as the recommended
-  message delivery approach. Plugin hooks skip listener checks for tmux agents.
-- **Runtime detection** — `thrum tmux launch` reads configured runtime from
-  `.thrum/config.json` instead of hardcoding Claude.
-- **Agent delete fix** — Web UI delete dialog now passes full agent ID
-  correctly.
+- **Tmux server isolation fix** — Daemon tmux commands now use the default tmux
+  server regardless of inherited environment, fixing `thrum tmux launch/restart`
+  failures when the daemon was started inside tmux-exec or other nested tmux
+  sessions.
+- **Identity reload guard** — `quickstart`/`init` handlers now load existing
+  identity files with name-match validation, preventing stale identity adoption
+  across worktrees.
+- **Plugin SessionStart hook fix** — Hook now echoes instruction to run
+  `/thrum:prime` in-conversation instead of consuming restart snapshots outside
+  agent context.
+- **JSONL path encoding fix** — Dot characters in CWD paths (e.g. `.workspaces`)
+  now resolve correctly for session lookup.
 
 ## Quick Start
 

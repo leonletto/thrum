@@ -94,9 +94,9 @@ claude plugin install thrum
 
 ### Verify installation
 
-Start a new Claude Code session. The SessionStart hook should automatically run
-`thrum prime` and inject context. You'll see your agent identity, team roster,
-and unread messages in the session preamble.
+Start a new Claude Code session. The SessionStart hook will prompt you to run
+`/thrum:prime` to load your session context. Running it displays your agent
+identity, team roster, unread messages, and daemon health.
 
 ## Slash Commands
 
@@ -158,13 +158,15 @@ The plugin configures three hooks that run automatically:
 
 ### SessionStart
 
-Runs `thrum prime` when a Claude Code session begins. Injects:
+Prompts the agent to run `/thrum:prime` when a Claude Code session begins.
+Running prime loads:
 
 - Agent identity (name, role, module)
 - Active team members and their intents
 - Unread messages
 - Git branch and status
 - Daemon health
+- Restart snapshots (if any exist from a previous session)
 
 If Thrum isn't initialized, shows a friendly setup message instead of failing.
 

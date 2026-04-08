@@ -14,6 +14,8 @@ This is how production agent orchestration frameworks handle agent lifecycle.
 Thrum's implementation gives you the same daemon-driven session management you'd
 expect from those tools — without the complexity.
 
+---
+
 ## Prerequisites
 
 **tmux** must be installed:
@@ -40,6 +42,8 @@ trackpad, click to select panes, resize by dragging. You won't notice you're in
 tmux.
 
 The Thrum daemon must be running (`thrum daemon start`).
+
+---
 
 ## How It Works
 
@@ -91,6 +95,8 @@ Claude Code agents have a belt-and-suspenders safety net: the existing
 `UserPromptSubmit` hook still checks for unread messages at every tool boundary.
 If a nudge somehow gets missed, the hook catches it. Other runtimes rely solely
 on the tmux nudge — which is fine, because the nudge is the reliable path.
+
+---
 
 ## Session Lifecycle
 
@@ -190,6 +196,8 @@ agent doesn't know who it is.
 The agent is now running, receiving messages instantly, and you can monitor it
 with `thrum team` or `thrum tmux status`.
 
+---
+
 ## Session States
 
 The daemon determines agent state from two checks: does the tmux session exist,
@@ -221,6 +229,8 @@ need attention:
 
 States are always queried live — no caching, nothing to get stale.
 
+---
+
 ## Permission Delegation
 
 Running agents in unrestricted mode is dangerous. But agents that need
@@ -249,6 +259,8 @@ Notifications clear when the session produces output again.
 > **Note:** Automated approve/deny is deferred. v0.7.1 surfaces blocked agents
 > to the coordinator; approval is manual. Programmatic approval will follow once
 > Claude Code's permission prompt format is stable.
+
+---
 
 ## Mixed-Runtime Teams
 
@@ -284,6 +296,8 @@ output. The nudge mechanism is identical regardless of runtime.
 > safety net. Other runtimes rely solely on the tmux nudge for notification.
 > This is fine — the nudge is the primary and reliable delivery path.
 
+---
+
 ## Remote Transparency
 
 Tmux sessions work transparently over Tailscale. Each daemon manages its own
@@ -294,6 +308,8 @@ cross-machine tmux operations needed.
 You don't need to think about this. If you have two machines paired via
 `thrum peer`, messages route to the right daemon, and the right daemon nudges
 the right tmux pane. It just works.
+
+---
 
 ## Migration from Listeners
 
@@ -312,6 +328,8 @@ No flag day required. Some agents can run in tmux-mode while others use legacy
 listeners. The daemon nudges tmux agents and ignores legacy agents (who still
 use their own listeners).
 
+---
+
 ## What's Eliminated
 
 | Before                               | After                              |
@@ -324,6 +342,8 @@ use their own listeners).
 | "Forgot to launch listener"          | Impossible — no listener to forget |
 | Token burn on idle agents            | Zero — daemon does the work        |
 | Permission prompt stalls             | Surfaced to coordinator            |
+
+---
 
 ## Next Steps
 

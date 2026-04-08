@@ -2276,6 +2276,8 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
 }
 ```
 
+---
+
 _The section below covers storage internals. You don't need it for normal use._
 
 ### Storage Layout
