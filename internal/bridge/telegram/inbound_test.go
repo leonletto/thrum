@@ -126,15 +126,31 @@ func TestInboundRelayNewMessage(t *testing.T) {
 }
 
 func TestInboundRelayReplyMessage(t *testing.T) {
-	var captured map[string]any
+	var sendReq map[string]any
 
 	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
-		captured = req
-		return map[string]any{
-			"result": map[string]any{
-				"message_id": "msg_reply_456",
-			},
+		method, _ := req["method"].(string)
+		switch method {
+		case "message.get":
+			// Parent message was authored by the configured target, so the
+			// reply's mention routing should still resolve to @coordinator_main.
+			return map[string]any{
+				"result": map[string]any{
+					"message": map[string]any{
+						"message_id": "msg_original",
+						"author":     map[string]any{"agent_id": "coordinator_main"},
+					},
+				},
+			}
+		case "message.send":
+			sendReq = req
+			return map[string]any{
+				"result": map[string]any{
+					"message_id": "msg_reply_456",
+				},
+			}
 		}
+		return map[string]any{"result": map[string]any{}}
 	})
 	defer cleanup()
 
@@ -161,9 +177,137 @@ func TestInboundRelayReplyMessage(t *testing.T) {
 		t.Fatalf("relay: %v", err)
 	}
 
-	params := captured["params"].(map[string]any)
+	params := sendReq["params"].(map[string]any)
 	if params["reply_to"] != "msg_original" {
 		t.Errorf("reply_to = %v, want msg_original", params["reply_to"])
+	}
+	// Parent author is coordinator_main (the configured target), so mention
+	// should still be @coordinator_main.
+	mentions := params["mentions"].([]any)
+	if len(mentions) != 1 || mentions[0] != "@coordinator_main" {
+		t.Errorf("mentions = %v, want [@coordinator_main]", mentions)
+	}
+}
+
+// TestInboundRelayReplyRoutesToParentAuthor verifies the fix for thrum-phn.1:
+// when a Telegram user replies to a message authored by a non-target agent,
+// the reply's mention is routed to THAT agent — not the hardcoded bridge
+// target. This ensures conversations with non-target agents are symmetric.
+func TestInboundRelayReplyRoutesToParentAuthor(t *testing.T) {
+	var sendReq map[string]any
+
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		method, _ := req["method"].(string)
+		switch method {
+		case "message.get":
+			// Parent message was authored by impl_writer_website_dev — a
+			// different agent than the configured target.
+			return map[string]any{
+				"result": map[string]any{
+					"message": map[string]any{
+						"message_id": "msg_from_website_dev",
+						"author":     map[string]any{"agent_id": "impl_writer_website_dev"},
+					},
+				},
+			}
+		case "message.send":
+			sendReq = req
+			return map[string]any{
+				"result": map[string]any{
+					"message_id": "msg_reply_xyz",
+				},
+			}
+		}
+		return map[string]any{"result": map[string]any{}}
+	})
+	defer cleanup()
+
+	msgMap := NewMessageMap(100)
+	msgMap.Store(12345, 10, "msg_from_website_dev")
+
+	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main", nil, "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	replyID := 10
+	msg := InboundMessage{
+		Text:         "Testing a reply directly to the sender",
+		ChatID:       12345,
+		MessageID:    42,
+		Username:     "leon-letto",
+		UserID:       67890,
+		ReplyToMsgID: &replyID,
+	}
+
+	if err := relay.relay(ctx, msg); err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+
+	params := sendReq["params"].(map[string]any)
+	mentions := params["mentions"].([]any)
+	if len(mentions) != 1 || mentions[0] != "@impl_writer_website_dev" {
+		t.Errorf("mentions = %v, want [@impl_writer_website_dev]", mentions)
+	}
+	if params["reply_to"] != "msg_from_website_dev" {
+		t.Errorf("reply_to = %v, want msg_from_website_dev", params["reply_to"])
+	}
+}
+
+// TestInboundRelayReplyToOwnMessage verifies that when a Telegram user replies
+// to a message they themselves authored (possible if their agent posted on
+// their behalf), we fall back to the configured target to avoid a self-mention
+// loop.
+func TestInboundRelayReplyToOwnMessage(t *testing.T) {
+	var sendReq map[string]any
+
+	client, cleanup := mockRPCServer(t, func(req map[string]any) map[string]any {
+		method, _ := req["method"].(string)
+		switch method {
+		case "message.get":
+			return map[string]any{
+				"result": map[string]any{
+					"message": map[string]any{
+						"message_id": "msg_self",
+						"author":     map[string]any{"agent_id": "user:leon-letto"},
+					},
+				},
+			}
+		case "message.send":
+			sendReq = req
+			return map[string]any{
+				"result": map[string]any{"message_id": "msg_reply"},
+			}
+		}
+		return map[string]any{"result": map[string]any{}}
+	})
+	defer cleanup()
+
+	msgMap := NewMessageMap(100)
+	msgMap.Store(12345, 10, "msg_self")
+
+	relay := NewInboundRelay(client, msgMap, "user:leon-letto", "@coordinator_main", nil, "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	replyID := 10
+	msg := InboundMessage{
+		Text:         "self reply",
+		ChatID:       12345,
+		MessageID:    42,
+		Username:     "leon-letto",
+		ReplyToMsgID: &replyID,
+	}
+
+	if err := relay.relay(ctx, msg); err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+
+	params := sendReq["params"].(map[string]any)
+	mentions := params["mentions"].([]any)
+	if len(mentions) != 1 || mentions[0] != "@coordinator_main" {
+		t.Errorf("mentions = %v, want [@coordinator_main] (fallback to avoid self-mention)", mentions)
 	}
 }
 

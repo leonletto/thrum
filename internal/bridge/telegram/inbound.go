@@ -141,6 +141,17 @@ func (r *InboundRelay) relayGroup(ctx context.Context, msg InboundMessage) error
 }
 
 // relay sends a single Telegram message to Thrum via message.send RPC.
+//
+// Mention routing:
+//   - For fresh DMs (no reply_to), the mention target is the configured
+//     bridge target (e.g. @coordinator_main).
+//   - For replies to a message that originated inside Thrum (stored in
+//     msgMap), the mention target is the ORIGINAL AUTHOR of that parent
+//     message. This lets Telegram users reply to messages from any agent
+//     — not just the configured target — and have those replies actually
+//     reach the agent they were responding to. Falls back to r.target if
+//     the parent author cannot be resolved, or if the parent was authored
+//     by the bridge user themselves (avoiding a self-mention loop).
 func (r *InboundRelay) relay(ctx context.Context, msg InboundMessage) error {
 	structured := map[string]any{
 		"source":           "telegram",
@@ -150,18 +161,32 @@ func (r *InboundRelay) relay(ctx context.Context, msg InboundMessage) error {
 		"telegram_user_id": msg.UserID,
 	}
 
+	// Default mention target is the configured bridge target.
+	mentionTarget := r.target
+
+	// Threading: if Telegram message is a reply, look up the Thrum message_id
+	// and route the mention to the parent message's author when possible.
+	var replyToThrumID string
+	if msg.ReplyToMsgID != nil {
+		if thrumID, ok := r.msgMap.ThrumID(msg.ChatID, *msg.ReplyToMsgID); ok {
+			replyToThrumID = thrumID
+			if author, err := r.fetchMessageAuthor(ctx, thrumID); err != nil {
+				log.Printf("telegram inbound: fetch parent author for %s: %v — falling back to %s",
+					thrumID, err, r.target)
+			} else if author != "" && author != r.userID {
+				mentionTarget = "@" + author
+			}
+		}
+	}
+
 	sendReq := map[string]any{
 		"content":         msg.Text,
-		"mentions":        []string{r.target},
+		"mentions":        []string{mentionTarget},
 		"caller_agent_id": r.userID,
 		"structured":      structured,
 	}
-
-	// Threading: if Telegram message is a reply, look up the Thrum message_id
-	if msg.ReplyToMsgID != nil {
-		if thrumID, ok := r.msgMap.ThrumID(msg.ChatID, *msg.ReplyToMsgID); ok {
-			sendReq["reply_to"] = thrumID
-		}
+	if replyToThrumID != "" {
+		sendReq["reply_to"] = replyToThrumID
 	}
 
 	result, err := r.ws.Call(ctx, "message.send", sendReq)
@@ -178,4 +203,28 @@ func (r *InboundRelay) relay(ctx context.Context, msg InboundMessage) error {
 	}
 
 	return nil
+}
+
+// fetchMessageAuthor resolves the author agent_id of a Thrum message via the
+// message.get RPC. Returns an empty string (with no error) if the response
+// omits the author field.
+func (r *InboundRelay) fetchMessageAuthor(ctx context.Context, thrumID string) (string, error) {
+	result, err := r.ws.Call(ctx, "message.get", map[string]any{
+		"message_id": thrumID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("message.get: %w", err)
+	}
+
+	var parsed struct {
+		Message struct {
+			Author struct {
+				AgentID string `json:"agent_id"`
+			} `json:"author"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		return "", fmt.Errorf("parse message.get response: %w", err)
+	}
+	return parsed.Message.Author.AgentID, nil
 }
