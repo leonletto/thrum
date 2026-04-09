@@ -15,7 +15,7 @@ func TestTmuxHandler_HandleStatus_Empty(t *testing.T) {
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750)
 
-	handler := NewTmuxHandler(thrumDir)
+	handler := NewTmuxHandler(thrumDir, nil)
 
 	result, err := handler.HandleStatus(context.Background(), json.RawMessage("{}"))
 	if err != nil {
@@ -53,7 +53,7 @@ func TestTmuxHandler_HandleStatus_WithIdentities(t *testing.T) {
 	data, _ := json.MarshalIndent(idFile, "", "  ")
 	os.WriteFile(filepath.Join(identitiesDir, "test_agent.json"), data, 0600)
 
-	handler := NewTmuxHandler(thrumDir)
+	handler := NewTmuxHandler(thrumDir, nil)
 	result, err := handler.HandleStatus(context.Background(), json.RawMessage("{}"))
 	if err != nil {
 		t.Fatalf("HandleStatus: %v", err)
@@ -84,7 +84,7 @@ func TestTmuxHandler_HandleStatus_NoIdentitiesDir(t *testing.T) {
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	// Don't create identities dir
 
-	handler := NewTmuxHandler(thrumDir)
+	handler := NewTmuxHandler(thrumDir, nil)
 	result, err := handler.HandleStatus(context.Background(), json.RawMessage("{}"))
 	if err != nil {
 		t.Fatalf("HandleStatus: %v", err)
@@ -97,7 +97,7 @@ func TestTmuxHandler_HandleStatus_NoIdentitiesDir(t *testing.T) {
 }
 
 func TestTmuxHandler_HandleCreate_MissingFields(t *testing.T) {
-	handler := NewTmuxHandler(t.TempDir())
+	handler := NewTmuxHandler(t.TempDir(), nil)
 
 	// Missing name
 	_, err := handler.HandleCreate(context.Background(), json.RawMessage(`{"cwd":"/tmp"}`))
@@ -113,7 +113,7 @@ func TestTmuxHandler_HandleCreate_MissingFields(t *testing.T) {
 }
 
 func TestTmuxHandler_HandleLaunch_MissingName(t *testing.T) {
-	handler := NewTmuxHandler(t.TempDir())
+	handler := NewTmuxHandler(t.TempDir(), nil)
 
 	_, err := handler.HandleLaunch(context.Background(), json.RawMessage(`{}`))
 	if err == nil {
@@ -122,7 +122,7 @@ func TestTmuxHandler_HandleLaunch_MissingName(t *testing.T) {
 }
 
 func TestTmuxHandler_HandleLaunch_NoSession(t *testing.T) {
-	handler := NewTmuxHandler(t.TempDir())
+	handler := NewTmuxHandler(t.TempDir(), nil)
 
 	_, err := handler.HandleLaunch(context.Background(), json.RawMessage(`{"name":"nonexistent"}`))
 	if err == nil {
@@ -146,7 +146,7 @@ func TestTmuxHandler_ClearTmuxFromIdentities(t *testing.T) {
 	data, _ := json.MarshalIndent(idFile, "", "  ")
 	os.WriteFile(filepath.Join(identitiesDir, "agent1.json"), data, 0600)
 
-	handler := NewTmuxHandler(thrumDir)
+	handler := NewTmuxHandler(thrumDir, nil)
 	handler.clearTmuxFromIdentities("target-session")
 
 	// Verify tmux_session was cleared

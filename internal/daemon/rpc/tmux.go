@@ -9,10 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/restart"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 )
@@ -84,11 +86,37 @@ type TmuxStatusResponse struct {
 // TmuxHandler handles tmux session lifecycle RPC methods.
 type TmuxHandler struct {
 	thrumDir string
+	state    *state.State
+	queues   map[string]*SessionQueue
+	queuesMu sync.Mutex
 }
 
 // NewTmuxHandler creates a new TmuxHandler.
-func NewTmuxHandler(thrumDir string) *TmuxHandler {
-	return &TmuxHandler{thrumDir: thrumDir}
+func NewTmuxHandler(thrumDir string, st *state.State) *TmuxHandler {
+	return &TmuxHandler{
+		thrumDir: thrumDir,
+		state:    st,
+		queues:   make(map[string]*SessionQueue),
+	}
+}
+
+// getOrCreateQueue returns the queue for a session, creating it if necessary.
+func (h *TmuxHandler) getOrCreateQueue(session string) *SessionQueue {
+	h.queuesMu.Lock()
+	defer h.queuesMu.Unlock()
+	q, ok := h.queues[session]
+	if !ok {
+		q = NewSessionQueue(session)
+		h.queues[session] = q
+	}
+	return q
+}
+
+// getQueue returns the queue for a session, or nil if none exists.
+func (h *TmuxHandler) getQueue(session string) *SessionQueue {
+	h.queuesMu.Lock()
+	defer h.queuesMu.Unlock()
+	return h.queues[session]
 }
 
 // HandleCreate creates a new detached tmux session with monitor-silence hook.

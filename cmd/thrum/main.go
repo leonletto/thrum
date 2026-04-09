@@ -5933,7 +5933,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	}
 
 	// Tmux session management handlers
-	tmuxHandler := rpc.NewTmuxHandler(thrumDir)
+	tmuxHandler := rpc.NewTmuxHandler(thrumDir, st)
 	server.RegisterHandler("tmux.create", tmuxHandler.HandleCreate)
 	server.RegisterHandler("tmux.launch", tmuxHandler.HandleLaunch)
 	server.RegisterHandler("tmux.status", tmuxHandler.HandleStatus)
