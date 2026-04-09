@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -156,13 +157,14 @@ func migrationNeeded(repoPath, thrumDir string) (bool, []string) {
 // Delegates entirely to BranchManager which handles health checks, idempotency,
 // and recreation of broken worktrees.
 func ensureSyncWorktree(repoPath, syncDir string) error {
+	ctx := context.Background()
 	bm := sync.NewBranchManager(repoPath, false)
 
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(ctx); err != nil {
 		return fmt.Errorf("create sync branch: %w", err)
 	}
 
-	if err := bm.CreateSyncWorktree(syncDir); err != nil {
+	if err := bm.CreateSyncWorktree(ctx, syncDir); err != nil {
 		return fmt.Errorf("create sync worktree: %w", err)
 	}
 

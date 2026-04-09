@@ -71,7 +71,7 @@ func (l *SyncLoop) Start(ctx context.Context) error {
 	l.mu.Unlock()
 
 	// Ensure sync branch exists before starting loop
-	if err := l.syncer.branchManager.EnsureSyncBranch(); err != nil {
+	if err := l.syncer.branchManager.EnsureSyncBranch(ctx); err != nil {
 		return fmt.Errorf("ensure sync branch: %w", err)
 	}
 

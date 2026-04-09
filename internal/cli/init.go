@@ -1,6 +1,7 @@
 package cli
 
 import (
+	stdcontext "context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -348,10 +349,11 @@ func updateGitExclude(repoPath string) error {
 
 // initASyncBranch creates the a-sync branch and worktree for message synchronization.
 func initASyncBranch(repoPath string) error {
+	ctx := stdcontext.Background()
 	bm := sync.NewBranchManager(repoPath, true)
 
 	// Create orphan a-sync branch (safe plumbing — no working tree touch)
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(ctx); err != nil {
 		return fmt.Errorf("create sync branch: %w", err)
 	}
 
@@ -360,7 +362,7 @@ func initASyncBranch(repoPath string) error {
 	if err != nil {
 		return fmt.Errorf("resolve sync worktree path: %w", err)
 	}
-	if err := bm.CreateSyncWorktree(syncDir); err != nil {
+	if err := bm.CreateSyncWorktree(ctx, syncDir); err != nil {
 		return fmt.Errorf("create sync worktree: %w", err)
 	}
 
