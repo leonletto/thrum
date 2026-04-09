@@ -40,11 +40,12 @@ type IdentityFile struct {
 	Intent      string      `json:"intent,omitempty"`
 	SessionID   string      `json:"session_id,omitempty"`
 	ConfirmedBy string      `json:"confirmed_by,omitempty"`
-	ContextFile string      `json:"context_file,omitempty"`
-	ClaudePID   int         `json:"claude_pid,omitempty"`
-	TmuxSession string      `json:"tmux_session,omitempty"`
-	Runtime     string      `json:"runtime,omitempty"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	ContextFile      string      `json:"context_file,omitempty"`
+	AgentPID         int         `json:"agent_pid,omitempty"`
+	PreferredRuntime string      `json:"preferred_runtime,omitempty"`
+	TmuxSession      string      `json:"tmux_session,omitempty"`
+	Runtime          string      `json:"runtime,omitempty"`
+	UpdatedAt        time.Time   `json:"updated_at"`
 }
 
 // Load loads configuration with the following priority:
@@ -178,8 +179,8 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 		return nil, fmt.Errorf("no identity files found")
 	}
 
-	// Compute Claude PID once for all resolution paths
-	claudePID := process.FindClaudeAncestor()
+	// Compute agent PID once for all resolution paths
+	agentPID, _ := process.FindClaudeAncestor()
 
 	// If exactly one identity file, load it (solo-agent worktree)
 	if len(jsonFiles) == 1 {
@@ -188,7 +189,7 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 		if err != nil {
 			return nil, err
 		}
-		return adoptIdentity(dirPath, id, claudePID), nil
+		return adoptIdentity(dirPath, id, agentPID), nil
 	}
 
 	// Load all identities for multi-pass resolution
@@ -203,11 +204,11 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 		identities = append(identities, id)
 	}
 
-	// Pass 0: PID-first resolution — match by Claude PID
-	if claudePID > 0 {
+	// Pass 0: PID-first resolution — match by agent PID
+	if agentPID > 0 {
 		for _, id := range identities {
-			if id.ClaudePID == claudePID && process.IsRunning(claudePID) {
-				return adoptIdentity(dirPath, id, claudePID), nil
+			if id.AgentPID == agentPID && process.IsRunning(agentPID) {
+				return adoptIdentity(dirPath, id, agentPID), nil
 			}
 		}
 	}
@@ -222,7 +223,7 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 			}
 		}
 		if len(matches) == 1 {
-			return adoptIdentity(dirPath, matches[0], claudePID), nil
+			return adoptIdentity(dirPath, matches[0], agentPID), nil
 		}
 		if len(matches) > 1 {
 			best := matches[0]
@@ -231,7 +232,7 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 					best = m
 				}
 			}
-			return adoptIdentity(dirPath, best, claudePID), nil
+			return adoptIdentity(dirPath, best, agentPID), nil
 		}
 		// Zero matches: fall through to generic error
 	}
@@ -240,22 +241,22 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 		len(jsonFiles), strings.Join(available, ", "))
 }
 
-// adoptIdentity updates the identity's ClaudePID if the current session should claim it.
+// adoptIdentity updates the identity's AgentPID if the current session should claim it.
 // Returns the identity unchanged if no adoption is needed.
-func adoptIdentity(dirPath string, id *IdentityFile, claudePID int) *IdentityFile {
-	if claudePID <= 0 || id.ClaudePID == claudePID {
+func adoptIdentity(dirPath string, id *IdentityFile, agentPID int) *IdentityFile {
+	if agentPID <= 0 || id.AgentPID == agentPID {
 		return id // No adoption needed
 	}
-	if id.ClaudePID == 0 || !process.IsRunning(id.ClaudePID) {
+	if id.AgentPID == 0 || !process.IsRunning(id.AgentPID) {
 		// Dead or missing PID — silently adopt
-		id.ClaudePID = claudePID
+		id.AgentPID = agentPID
 		_ = SaveIdentityFile(filepath.Dir(dirPath), id) // best-effort rewrite; dirPath is identities dir, SaveIdentityFile expects .thrum dir
-	} else if !process.IsClaudeProcess(id.ClaudePID) {
-		// Alive but not Claude — adopt
-		id.ClaudePID = claudePID
+	} else if !process.IsRuntimeProcess(id.AgentPID, id.Runtime) {
+		// Alive but not a known runtime — adopt
+		id.AgentPID = agentPID
 		_ = SaveIdentityFile(filepath.Dir(dirPath), id)
 	}
-	// If alive + claude + different PID → genuine conflict, don't adopt
+	// If alive + runtime match + different PID → genuine conflict, don't adopt
 	return id
 }
 
@@ -309,8 +310,8 @@ func SaveIdentityFile(thrumDir string, identity *IdentityFile) error {
 
 	identityPath := filepath.Join(identitiesDir, filename)
 
-	if identity.Version < 4 {
-		identity.Version = 4
+	if identity.Version < 5 {
+		identity.Version = 5
 	}
 	identity.UpdatedAt = time.Now().UTC()
 	data, err := json.MarshalIndent(identity, "", "  ")

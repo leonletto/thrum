@@ -856,8 +856,8 @@ func TestIdentityFileV3Fields(t *testing.T) {
 		t.Fatalf("LoadIdentityWithPath: %v", err)
 	}
 
-	if loaded.Version != 4 {
-		t.Errorf("Version = %d, want 4", loaded.Version)
+	if loaded.Version != 5 {
+		t.Errorf("Version = %d, want 5", loaded.Version)
 	}
 	if loaded.Branch != "main" {
 		t.Errorf("Branch = %q, want %q", loaded.Branch, "main")
@@ -924,8 +924,8 @@ func TestIdentityV1RoundTrip(t *testing.T) {
 		t.Fatalf("Reload after save: %v", err)
 	}
 
-	if reloaded.Version != 4 {
-		t.Errorf("Version = %d, want 4", reloaded.Version)
+	if reloaded.Version != 5 {
+		t.Errorf("Version = %d, want 5", reloaded.Version)
 	}
 	if reloaded.ConfirmedBy != "human:tester" {
 		t.Errorf("ConfirmedBy = %q, want %q", reloaded.ConfirmedBy, "human:tester")
@@ -941,10 +941,10 @@ func TestIdentityV1RoundTrip(t *testing.T) {
 	}
 }
 
-func TestIdentityFile_ClaudePID_Serialization(t *testing.T) {
+func TestIdentityFile_AgentPID_Serialization(t *testing.T) {
 	identity := config.IdentityFile{
 		Version:   3,
-		ClaudePID: 12345,
+		AgentPID: 12345,
 		Agent:     config.AgentConfig{Name: "test"},
 	}
 	data, err := json.Marshal(identity)
@@ -955,16 +955,16 @@ func TestIdentityFile_ClaudePID_Serialization(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if decoded.ClaudePID != 12345 {
-		t.Errorf("ClaudePID = %d, want 12345", decoded.ClaudePID)
+	if decoded.AgentPID != 12345 {
+		t.Errorf("AgentPID = %d, want 12345", decoded.AgentPID)
 	}
 }
 
-func TestIdentityFile_ClaudePID_OmittedWhenZero(t *testing.T) {
+func TestIdentityFile_AgentPID_OmittedWhenZero(t *testing.T) {
 	identity := config.IdentityFile{Version: 3, Agent: config.AgentConfig{Name: "test"}}
 	data, _ := json.Marshal(identity)
-	if strings.Contains(string(data), "claude_pid") {
-		t.Error("claude_pid should be omitted when zero")
+	if strings.Contains(string(data), "agent_pid") {
+		t.Error("agent_pid should be omitted when zero")
 	}
 }
 
@@ -974,8 +974,8 @@ func TestIdentityFile_BackwardCompat_NoPIDField(t *testing.T) {
 	if err := json.Unmarshal([]byte(old), &identity); err != nil {
 		t.Fatal(err)
 	}
-	if identity.ClaudePID != 0 {
-		t.Errorf("ClaudePID should default to 0, got %d", identity.ClaudePID)
+	if identity.AgentPID != 0 {
+		t.Errorf("AgentPID should default to 0, got %d", identity.AgentPID)
 	}
 }
 
@@ -998,8 +998,8 @@ func TestSaveIdentityFile_BumpsVersionTo4(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadIdentityWithPath: %v", err)
 	}
-	if loaded.Version != 4 {
-		t.Errorf("Version after save = %d, want 4", loaded.Version)
+	if loaded.Version != 5 {
+		t.Errorf("Version after save = %d, want 5", loaded.Version)
 	}
 }
 
@@ -1029,13 +1029,13 @@ func TestLoad_PIDFirstResolution_ZeroPIDFallsThrough(t *testing.T) {
 		t.Fatalf("Failed to create identities dir: %v", err)
 	}
 
-	// Two identities with ClaudePID=0 (no PID stored) and non-matching worktrees.
+	// Two identities with AgentPID=0 (no PID stored) and non-matching worktrees.
 	// Pass 0 should skip (no PID match), Pass 1 should find no worktree match,
 	// and the function should return the "cannot auto-select" error.
 	agent1 := config.IdentityFile{
 		Version:   3,
 		RepoID:    "r_TEST",
-		ClaudePID: 0,
+		AgentPID: 0,
 		Worktree:  "worktree_x",
 		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_x", Role: "implementer", Module: "test"},
 		UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -1043,7 +1043,7 @@ func TestLoad_PIDFirstResolution_ZeroPIDFallsThrough(t *testing.T) {
 	agent2 := config.IdentityFile{
 		Version:   3,
 		RepoID:    "r_TEST",
-		ClaudePID: 0,
+		AgentPID: 0,
 		Worktree:  "worktree_y",
 		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_y", Role: "tester", Module: "test"},
 		UpdatedAt: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
@@ -1093,8 +1093,8 @@ func TestIdentityFile_TmuxFields(t *testing.T) {
 	if loaded.Runtime != "claude" {
 		t.Errorf("Runtime = %q, want %q", loaded.Runtime, "claude")
 	}
-	if loaded.Version != 4 {
-		t.Errorf("Version = %d, want 4", loaded.Version)
+	if loaded.Version != 5 {
+		t.Errorf("Version = %d, want 5", loaded.Version)
 	}
 }
 
@@ -1177,7 +1177,7 @@ func TestIdentityFile_AdoptionDoesNotBlock(t *testing.T) {
 	dir := t.TempDir()
 	writeTestIdentity(t, dir, "agent_dead", config.IdentityFile{
 		Version:   3,
-		ClaudePID: 999999,
+		AgentPID: 999999,
 		Agent:     config.AgentConfig{Name: "agent_dead", Role: "test", Module: "test"},
 		Worktree:  "main",
 	})
@@ -1191,7 +1191,7 @@ func TestIdentityFile_AdoptionDoesNotBlock(t *testing.T) {
 	if err := json.Unmarshal(data, &loaded); err != nil {
 		t.Fatal(err)
 	}
-	if loaded.ClaudePID != 999999 {
-		t.Errorf("ClaudePID = %d, want 999999", loaded.ClaudePID)
+	if loaded.AgentPID != 999999 {
+		t.Errorf("AgentPID = %d, want 999999", loaded.AgentPID)
 	}
 }
