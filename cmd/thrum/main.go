@@ -5942,6 +5942,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("tmux.capture", tmuxHandler.HandleCapture)
 	server.RegisterHandler("tmux.check-pane", tmuxHandler.HandleCheckPane)
 	server.RegisterHandler("tmux.restart", tmuxHandler.HandleRestart)
+	server.RegisterHandler("tmux.queue", tmuxHandler.HandleQueue)
 
 	// Auto-connect to dialer-role peers after the WS server is ready.
 	if peerManager != nil && thrumCfg.Peers.AutoConnect {

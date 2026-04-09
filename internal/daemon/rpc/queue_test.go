@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -55,6 +56,43 @@ func TestPersistCommand(t *testing.T) {
 	}
 	if loaded.State != StateQueued {
 		t.Errorf("State=%s, want %s", loaded.State, StateQueued)
+	}
+}
+
+func TestHandleQueueEnqueuesCommand(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	req := `{"session":"test-session","text":"echo hi","timeout_ms":60000,"requester":"test_coord"}`
+	resp, err := h.HandleQueue(context.Background(), json.RawMessage(req))
+	if err != nil {
+		t.Fatalf("HandleQueue: %v", err)
+	}
+
+	result, ok := resp.(*QueueResponse)
+	if !ok {
+		t.Fatalf("wrong response type: %T", resp)
+	}
+	if result.CommandID == "" {
+		t.Error("empty command_id")
+	}
+	if result.Position != 1 {
+		t.Errorf("position=%d, want 1", result.Position)
+	}
+
+	// Verify in-memory queue has the command
+	q := h.getQueue("test-session")
+	if q == nil || q.Len() != 1 {
+		t.Errorf("queue not populated: q=%v", q)
+	}
+
+	// Verify DB has the row
+	loaded, err := loadCommand(context.Background(), h.state.DB(), result.CommandID)
+	if err != nil {
+		t.Fatalf("loadCommand: %v", err)
+	}
+	if loaded.Text != "echo hi" {
+		t.Errorf("text=%s, want 'echo hi'", loaded.Text)
 	}
 }
 
