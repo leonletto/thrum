@@ -816,7 +816,7 @@ func TestPurgeHandler_CleansCommandQueue(t *testing.T) {
 	// Insert a new command_queue entry (should survive)
 	_, err = st.DB().ExecContext(ctx,
 		`INSERT INTO command_queue (command_id, session_name, requester_agent, command_text, state, submitted_at)
-		 VALUES ('cmd_new', 'test-session', 'test_agent', 'echo bye', 'pending', ?)`,
+		 VALUES ('cmd_new', 'test-session', 'test_agent', 'echo bye', 'queued', ?)`,
 		new_,
 	)
 	if err != nil {
