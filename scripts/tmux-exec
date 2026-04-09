@@ -142,8 +142,9 @@ cmd_run() {
     die "session '$name' does not exist (use 'create' first)"
   fi
 
-  # Build the command string
-  local cmd="$*"
+  # Build the command string, preserving quoting for each argument.
+  local cmd
+  cmd=$(printf '%q ' "$@")
 
   # Use a unique window for this execution so we don't clobber the main shell.
   # Inherit the session's start directory for the new window.

@@ -1,30 +1,17 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 )
 
 var unsafeChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
-
-// cleanEnv returns the current environment with TMUX and TMUX_PANE removed.
-// The daemon may inherit TMUX from its parent (e.g. tmux-exec), which causes
-// tmux commands to connect to the wrong server. Stripping these vars ensures
-// all commands use the default tmux server socket.
-func cleanEnv() []string {
-	var env []string
-	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "TMUX=") || strings.HasPrefix(e, "TMUX_PANE=") {
-			continue
-		}
-		env = append(env, e)
-	}
-	return env
-}
 
 // SanitizeSessionName replaces unsafe characters with hyphens.
 func SanitizeSessionName(name string) string {
@@ -48,9 +35,7 @@ func ParseTarget(target string) (session, window, pane string) {
 
 // HasSession checks whether a tmux session exists.
 func HasSession(name string) bool {
-	cmd := exec.Command("tmux", "has-session", "-t", name) // #nosec G204 -- name is sanitized session name, not user input
-	cmd.Env = cleanEnv()
-	return cmd.Run() == nil
+	return safecmd.TmuxRun(context.Background(), "has-session", "-t", name) == nil
 }
 
 // CreateSession creates a new detached tmux session with a clean environment.
@@ -60,44 +45,36 @@ func CreateSession(name, cwd string) error {
 	if cwd != "" {
 		args = append(args, "-c", cwd)
 	}
-	cmd := exec.Command("tmux", args...) // #nosec G204 -- args are constructed from sanitized name and validated cwd path
-	cmd.Env = cleanEnv()
-	out, err := cmd.CombinedOutput()
+	_, err := safecmd.Tmux(context.Background(), args...)
 	if err != nil {
-		return fmt.Errorf("tmux new-session failed: %w: %s", err, out)
+		return fmt.Errorf("tmux new-session failed: %w", err)
 	}
 	return nil
 }
 
 // KillSession destroys a tmux session.
 func KillSession(name string) error {
-	cmd := exec.Command("tmux", "kill-session", "-t", name) // #nosec G204 -- name is sanitized session name
-	cmd.Env = cleanEnv()
-	out, err := cmd.CombinedOutput()
+	_, err := safecmd.Tmux(context.Background(), "kill-session", "-t", name)
 	if err != nil {
-		return fmt.Errorf("tmux kill-session failed: %w: %s", err, out)
+		return fmt.Errorf("tmux kill-session failed: %w", err)
 	}
 	return nil
 }
 
 // SendKeys sends literal text to a tmux target (session:window.pane).
 func SendKeys(target, text string) error {
-	cmd := exec.Command("tmux", "send-keys", "-t", target, "-l", text) // #nosec G204 -- target is validated tmux target, text sent via -l literal mode
-	cmd.Env = cleanEnv()
-	out, err := cmd.CombinedOutput()
+	_, err := safecmd.Tmux(context.Background(), "send-keys", "-t", target, "-l", text)
 	if err != nil {
-		return fmt.Errorf("tmux send-keys failed: %w: %s", err, out)
+		return fmt.Errorf("tmux send-keys failed: %w", err)
 	}
 	return nil
 }
 
 // SendSpecialKey sends a named key (Enter, Escape, etc.) to a tmux target.
 func SendSpecialKey(target, key string) error {
-	cmd := exec.Command("tmux", "send-keys", "-t", target, key) // #nosec G204 -- target is validated, key is a named tmux key constant
-	cmd.Env = cleanEnv()
-	out, err := cmd.CombinedOutput()
+	_, err := safecmd.Tmux(context.Background(), "send-keys", "-t", target, key)
 	if err != nil {
-		return fmt.Errorf("tmux send-keys %s failed: %w: %s", key, err, out)
+		return fmt.Errorf("tmux send-keys %s failed: %w", key, err)
 	}
 	return nil
 }
@@ -106,33 +83,29 @@ func SendSpecialKey(target, key string) error {
 // Lines is a positive number specifying how many lines to capture from the bottom.
 func CapturePane(target string, lines int) (string, error) {
 	startLine := fmt.Sprintf("-%d", lines)
-	cmd := exec.Command("tmux", "capture-pane", "-p", "-t", target, "-S", startLine) // #nosec G204 -- target is validated, startLine is numeric
-	cmd.Env = cleanEnv()
-	out, err := cmd.CombinedOutput()
+	out, err := safecmd.Tmux(context.Background(), "capture-pane", "-p", "-t", target, "-S", startLine)
 	if err != nil {
-		return "", fmt.Errorf("tmux capture-pane failed: %w: %s", err, out)
+		return "", fmt.Errorf("tmux capture-pane failed: %w", err)
 	}
 	return string(out), nil
 }
 
 // SessionName returns the session name of the current tmux session (from inside).
-// Note: this intentionally does NOT strip TMUX env — it needs the current
-// session's TMUX var to know which session it's in.
+// Uses TmuxLocal which preserves TMUX env — needed to identify the current session.
 func SessionName() (string, error) {
-	out, err := exec.Command("tmux", "display-message", "-p", "#S").CombinedOutput() // #nosec G204 -- no user input
+	out, err := safecmd.TmuxLocal(context.Background(), "display-message", "-p", "#S")
 	if err != nil {
-		return "", fmt.Errorf("tmux display-message failed: %w: %s", err, out)
+		return "", fmt.Errorf("tmux display-message failed: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
 // PaneTarget returns the full target (session:window.pane) for the current pane.
-// Note: this intentionally does NOT strip TMUX env — it needs the current
-// session's TMUX var to know which pane it's in.
+// Uses TmuxLocal which preserves TMUX env — needed to identify the current pane.
 func PaneTarget() (string, error) {
-	out, err := exec.Command("tmux", "display-message", "-p", "#{session_name}:#{window_index}.#{pane_index}").CombinedOutput() // #nosec G204 -- no user input
+	out, err := safecmd.TmuxLocal(context.Background(), "display-message", "-p", "#{session_name}:#{window_index}.#{pane_index}")
 	if err != nil {
-		return "", fmt.Errorf("tmux display-message failed: %w: %s", err, out)
+		return "", fmt.Errorf("tmux display-message failed: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -144,19 +117,15 @@ func SetMonitorSilence(session string, seconds int, thrumBin, repoPath string) e
 	if !filepath.IsAbs(thrumBin) {
 		return fmt.Errorf("thrumBin must be an absolute path, got: %q", thrumBin)
 	}
-	setOpt := exec.Command("tmux", "set-option", "-t", session, // #nosec G204 -- session is sanitized, seconds is numeric
-		"monitor-silence", fmt.Sprintf("%d", seconds))
-	setOpt.Env = cleanEnv()
-	if err := setOpt.Run(); err != nil {
+	if err := safecmd.TmuxRun(context.Background(), "set-option", "-t", session,
+		"monitor-silence", fmt.Sprintf("%d", seconds)); err != nil {
 		return fmt.Errorf("set monitor-silence: %w", err)
 	}
 	hookCmd := fmt.Sprintf("run-shell %s",
 		shellQuote(fmt.Sprintf("%s tmux check-pane %s --repo %s",
 			shellQuote(thrumBin), shellQuote(session), shellQuote(repoPath))))
-	setHook := exec.Command("tmux", "set-hook", "-t", session, // #nosec G204 -- session sanitized, hookCmd built with shellQuote
-		"alert-silence", hookCmd)
-	setHook.Env = cleanEnv()
-	if err := setHook.Run(); err != nil {
+	if err := safecmd.TmuxRun(context.Background(), "set-hook", "-t", session,
+		"alert-silence", hookCmd); err != nil {
 		return fmt.Errorf("set alert-silence hook: %w", err)
 	}
 	return nil
@@ -165,6 +134,16 @@ func SetMonitorSilence(session string, seconds int, thrumBin, repoPath string) e
 // shellQuote wraps a string in single quotes, escaping any embedded single quotes.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+// IsSilent checks whether the window_silence_flag is set for a session.
+// Returns true if the pane has been silent for at least monitor-silence seconds.
+func IsSilent(session string) bool {
+	out, err := safecmd.Tmux(context.Background(), "display-message", "-t", session, "-p", "#{window_silence_flag}")
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "1"
 }
 
 // InTmux returns true if the current process is running inside a tmux session.

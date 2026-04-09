@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -106,7 +106,33 @@ func (h *TmuxHandler) HandleQueue(ctx context.Context, params json.RawMessage) (
 	h.state.Unlock()
 
 	// Persist succeeded — publish to the in-memory queue.
-	h.getOrCreateQueue(req.Session).Enqueue(cmd)
+	queue := h.getOrCreateQueue(req.Session)
+	queue.Enqueue(cmd)
+
+	// If this is the only queued command and nothing is active, try to
+	// dispatch immediately. The alert-silence hook won't fire for detached
+	// sessions (no client attached), so we check the silence flag directly.
+	if position == 1 && queue.Active() == nil {
+		if ttmux.IsSilent(req.Session) {
+			// Pane already idle — dispatch now. Use Background context because
+			// the RPC request context will be cancelled after we return.
+			go h.sendQueuedCommand(context.Background(), req.Session, queue, cmd)
+		} else {
+			// Pane is busy — lower the silence threshold so the hook fires
+			// sooner once the pane goes idle.
+			silenceSec := 5
+			if cmd.SilenceMs > 0 {
+				silenceSec = int((cmd.SilenceMs + 999) / 1000)
+				if silenceSec < 1 {
+					silenceSec = 1
+				}
+			}
+			bin := h.thrumBin()
+			if err := ttmux.SetMonitorSilence(req.Session, silenceSec, bin, h.thrumDir); err != nil {
+				slog.Error("[queue] SetMonitorSilence on enqueue failed", "seconds", silenceSec, "session", req.Session, "err", err)
+			}
+		}
+	}
 
 	return &QueueResponse{
 		CommandID: cmd.ID,
@@ -126,7 +152,7 @@ func (h *TmuxHandler) completeCommand(ctx context.Context, session string, queue
 	// Capture last 500 lines of pane; tolerate failure (tmux may not be running in tests).
 	output, err := ttmux.CapturePane(session+":0.0", 500)
 	if err != nil {
-		log.Printf("[queue] capture-pane failed for %s: %v", session, err)
+		slog.Error("[queue] capture-pane failed", "session", session, "err", err)
 		output = ""
 	}
 
@@ -187,7 +213,7 @@ func (h *TmuxHandler) completeCommand(ctx context.Context, session string, queue
 		// Queue empty — restore 60s silence.
 		bin := h.thrumBin()
 		if err := ttmux.SetMonitorSilence(session, 60, bin, h.thrumDir); err != nil {
-			log.Printf("[queue] SetMonitorSilence(60) failed for %s: %v", session, err)
+			slog.Error("[queue] SetMonitorSilence restore failed", "session", session, "err", err)
 		}
 	}
 }
@@ -212,12 +238,12 @@ func (h *TmuxHandler) sendQueuedCommand(ctx context.Context, session string, que
 	// Type the command and press Enter — do this before taking cmd.mu so
 	// slow tmux calls don't block concurrent cancel attempts.
 	if err := ttmux.SendKeys(target, cmd.Text); err != nil {
-		log.Printf("[queue] SendKeys failed for %s: %v", session, err)
+		slog.Error("[queue] SendKeys failed", "session", session, "err", err)
 		h.handleSendFailure(ctx, session, err)
 		return
 	}
 	if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
-		log.Printf("[queue] SendSpecialKey failed for %s: %v", session, err)
+		slog.Error("[queue] SendSpecialKey failed", "session", session, "err", err)
 		h.handleSendFailure(ctx, session, err)
 		return
 	}
@@ -257,7 +283,47 @@ func (h *TmuxHandler) sendQueuedCommand(ctx context.Context, session string, que
 	}
 	bin := h.thrumBin()
 	if err := ttmux.SetMonitorSilence(session, silenceSec, bin, h.thrumDir); err != nil {
-		log.Printf("[queue] SetMonitorSilence(%d) failed for %s: %v", silenceSec, session, err)
+		slog.Error("[queue] SetMonitorSilence failed", "seconds", silenceSec, "session", session, "err", err)
+	}
+
+	// Fallback: poll the tmux silence flag for completion detection.
+	// The alert-silence hook only fires for sessions with an attached client.
+	// For detached sessions (the common case for agent worktrees), we poll
+	// IsSilent at the configured threshold interval. If the hook fires first
+	// (attached session), we'll see a terminal state and exit immediately.
+	// Use Background — this goroutine outlives the RPC request that triggered dispatch.
+	go h.pollSilenceFlag(context.Background(), session, queue, cmd, silenceSec)
+}
+
+// pollSilenceFlag polls the tmux window_silence_flag as a fallback completion
+// detector. This handles detached sessions where the alert-silence hook won't
+// fire. If the hook completes the command first, we detect the terminal state
+// and exit. Polls every silenceSec seconds, up to cmd.Timeout.
+func (h *TmuxHandler) pollSilenceFlag(ctx context.Context, session string, queue *SessionQueue, cmd *QueuedCommand, silenceSec int) {
+	interval := time.Duration(silenceSec) * time.Second
+	// First poll waits for the silence interval plus a small buffer to let
+	// the command produce its output before we start checking.
+	timer := time.NewTimer(interval + time.Second)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-timer.C:
+			cmd.mu.Lock()
+			terminal := isTerminalState(cmd.State)
+			cmd.mu.Unlock()
+			if terminal {
+				return // hook or cancel already handled it
+			}
+			if ttmux.IsSilent(session) {
+				h.completeCommand(ctx, session, queue, cmd)
+				return
+			}
+			// Not silent yet — reset timer and try again.
+			timer.Reset(interval)
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
@@ -399,7 +465,7 @@ func (h *TmuxHandler) HandleQueueStatus(ctx context.Context, params json.RawMess
 // sendSystemMessage writes a message from @system to the recipient.
 func (h *TmuxHandler) sendSystemMessage(ctx context.Context, recipient, body string) {
 	if recipient == "" {
-		log.Printf("[queue] sendSystemMessage: empty recipient, skipping")
+		slog.Warn("[queue] sendSystemMessage: empty recipient, skipping")
 		return
 	}
 
@@ -425,7 +491,7 @@ func (h *TmuxHandler) sendSystemMessage(ctx context.Context, recipient, body str
 
 	h.state.Lock()
 	if err := h.state.WriteEvent(ctx, event); err != nil {
-		log.Printf("[queue] write @system message failed: %v", err)
+		slog.Error("[queue] write @system message failed", "err", err)
 	}
 	h.state.Unlock()
 }
@@ -663,7 +729,7 @@ func (h *TmuxHandler) RecoverQueueState(ctx context.Context) error {
 			reloaded++
 		}
 	}
-	log.Printf("[queue] recovery: interrupted=%d reloaded=%d", interrupted, reloaded)
+	slog.Info("[queue] recovery complete", "interrupted", interrupted, "reloaded", reloaded)
 	return nil
 }
 
@@ -688,10 +754,10 @@ func (h *TmuxHandler) handleSendFailure(ctx context.Context, session string, cau
 		// We leave the queue alone; next silence event will retry the
 		// dispatch path. The command itself stays in StateQueued since
 		// the caller has not yet persisted StateSent.
-		log.Printf("[queue] transient SendKeys failure for live session %s: %v (leaving queue intact)", session, cause)
+		slog.Warn("[queue] transient SendKeys failure for live session, leaving queue intact", "session", session, "err", cause)
 		return
 	}
-	log.Printf("[queue] session %s appears dead, draining queue", session)
+	slog.Warn("[queue] session appears dead, draining queue", "session", session)
 	h.drainSession(ctx, session, "session %s no longer exists")
 }
 

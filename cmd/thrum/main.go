@@ -7499,11 +7499,8 @@ func tmuxCmd() *cobra.Command {
 			}
 
 			reason := detectPaneState(content)
-			if reason == "" {
-				return nil // Normal state, nothing to report
-			}
 
-			// Connect to daemon and report
+			// Always call daemon — queue dispatch needs idle notifications
 			client, err := getClient()
 			if err != nil {
 				return nil // Daemon not running, silently skip
