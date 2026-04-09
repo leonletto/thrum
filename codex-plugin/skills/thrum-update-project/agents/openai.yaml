@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Update Project"
+  short_description: "Update project state with session summary and mechanical state"
+  default_prompt: "Run the thrum update-project workflow and summarize the result."

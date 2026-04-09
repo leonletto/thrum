@@ -293,9 +293,8 @@ pre-push: ci
 sync-skills:
 	@echo "Syncing toolkit assets to plugins..."
 	@cp toolkit/skills/update-project.md claude-plugin/commands/update-project.md
-	@test -d codex-plugin/skills && cp toolkit/skills/update-project.md codex-plugin/skills/update-project.md || true
 	@test -f toolkit/resources/LISTENER_PATTERN.md && cp toolkit/resources/LISTENER_PATTERN.md claude-plugin/skills/thrum/resources/LISTENER_PATTERN.md || true
-	@test -d codex-plugin/skills/thrum-core/references && test -f toolkit/resources/LISTENER_PATTERN.md && cp toolkit/resources/LISTENER_PATTERN.md codex-plugin/skills/thrum-core/references/LISTENER_PATTERN.md || true
+	@test -d codex-plugin/skills/thrum/resources && test -f toolkit/resources/LISTENER_PATTERN.md && cp toolkit/resources/LISTENER_PATTERN.md codex-plugin/skills/thrum/resources/LISTENER_PATTERN.md || true
 	@test -d internal/cli/skill/thrum/references && test -f toolkit/resources/LISTENER_PATTERN.md && cp toolkit/resources/LISTENER_PATTERN.md internal/cli/skill/thrum/references/LISTENER_PATTERN.md || true
 	@cp toolkit/agents/message-listener.md claude-plugin/agents/message-listener.md
 	@echo "Assets synced."

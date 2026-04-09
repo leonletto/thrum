@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Group"
+  short_description: "Manage messaging groups"
+  default_prompt: "Run the thrum group workflow and summarize the result."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Prime"
+  short_description: "Load AI-optimized session context"
+  default_prompt: "Run the thrum prime workflow and summarize the result."

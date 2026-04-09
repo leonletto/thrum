@@ -7,6 +7,13 @@ SRC_DIR="${PLUGIN_ROOT}/skills"
 DEST_ROOT="${CODEX_HOME:-${HOME}/.codex}"
 DEST_DIR="${DEST_ROOT}/skills"
 FORCE=0
+LEGACY_SKILLS=(
+  thrum-core
+  thrum-ops
+  thrum-role-config
+  project-setup
+  configure-roles
+)
 
 usage() {
   cat <<USAGE
@@ -49,6 +56,16 @@ if [[ ! -d "${SRC_DIR}" ]]; then
 fi
 
 mkdir -p "${DEST_DIR}"
+
+if [[ ${FORCE} -eq 1 ]]; then
+  for legacy_skill in "${LEGACY_SKILLS[@]}"; do
+    legacy_target="${DEST_DIR}/${legacy_skill}"
+    if [[ -e "${legacy_target}" ]]; then
+      rm -rf "${legacy_target}"
+      echo "removed legacy skill ${legacy_skill}"
+    fi
+  done
+fi
 
 installed=0
 skipped=0

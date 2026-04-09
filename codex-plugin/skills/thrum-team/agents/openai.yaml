@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Team"
+  short_description: "Show active team members"
+  default_prompt: "Run the thrum team workflow and summarize the result."

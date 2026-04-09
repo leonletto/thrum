@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Wait"
+  short_description: "Block until a message arrives"
+  default_prompt: "Run the thrum wait workflow and summarize the result."

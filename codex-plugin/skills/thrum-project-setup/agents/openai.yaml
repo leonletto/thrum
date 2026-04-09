@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Project Setup"
+  short_description: "Turn plans into beads epics, tasks, and worktrees"
+  default_prompt: "Decompose this plan into beads epics and tasks with dependencies, implementation guidance, and worktree-ready execution notes."
