@@ -3,8 +3,10 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -447,5 +449,207 @@ func TestSessionQueueFIFO(t *testing.T) {
 
 	if got := q.Len(); got != 2 {
 		t.Errorf("Len after pop=%d, want 2", got)
+	}
+}
+
+// TestHandleQueuePositionNoTOCTOU fires many concurrent HandleQueue calls for
+// the same session and asserts every row receives a unique DB position. This
+// would fail under the original implementation (queue.Len() was read outside
+// the state lock, so concurrent submitters could compute the same position).
+func TestHandleQueuePositionNoTOCTOU(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	const n = 20
+	var wg sync.WaitGroup
+	errCh := make(chan error, n)
+	positions := make([]int, n)
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			req := fmt.Sprintf(`{"session":"test-session","text":"echo %d","requester":"test_coord"}`, idx)
+			resp, err := h.HandleQueue(context.Background(), json.RawMessage(req))
+			if err != nil {
+				errCh <- err
+				return
+			}
+			qr := resp.(*QueueResponse)
+			positions[idx] = qr.Position
+		}(i)
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		t.Fatalf("HandleQueue error: %v", err)
+	}
+
+	// Every position must be unique AND in the range [1, n].
+	seen := make(map[int]bool, n)
+	for i, p := range positions {
+		if p < 1 || p > n {
+			t.Errorf("idx=%d position=%d out of range [1,%d]", i, p, n)
+		}
+		if seen[p] {
+			t.Errorf("duplicate position %d (idx=%d) — TOCTOU race not fixed", p, i)
+		}
+		seen[p] = true
+	}
+
+	// DB row positions should also be unique per session.
+	rows, err := h.state.DB().QueryContext(context.Background(),
+		`SELECT position, COUNT(*) FROM command_queue WHERE session_name = 'test-session' GROUP BY position`)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var pos, count int
+		if err := rows.Scan(&pos, &count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Errorf("position %d has %d rows — duplicates in DB", pos, count)
+		}
+	}
+}
+
+// TestConcurrentTransitionsSingleFinalState fires completeCommand,
+// HandleCancel, and the timeout callback for the SAME command on three
+// goroutines "simultaneously" to stress the cmd.mu serialisation. Under -race
+// this will flag any unsynchronised read/write on cmd.State / SentAt /
+// CompletedAt / CapturedOutput / timer. Only ONE path should win the
+// transition; the other two must short-circuit on the isTerminalState check.
+func TestConcurrentTransitionsSingleFinalState(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	q := h.getOrCreateQueue("test-session")
+
+	cmd := &QueuedCommand{
+		ID:               "cmd_race",
+		Text:             "echo race",
+		RequesterAgent:   "test_coord",
+		State:            StateSent,
+		Timeout:          60 * time.Second,
+		SilenceMs:        5000,
+		NotifyOnComplete: false, // suppress sendSystemMessage so the test is deterministic
+		SubmittedAt:      time.Now().UTC(),
+		SentAt:           time.Now().UTC(),
+	}
+	if err := persistCommand(ctx, h.state.DB(), "test-session", cmd, 0); err != nil {
+		t.Fatal(err)
+	}
+	q.SetActive(cmd)
+
+	// Barrier so all three goroutines start as close together as possible.
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	go func() {
+		defer wg.Done()
+		<-start
+		h.completeCommand(ctx, "test-session", q, cmd)
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		_, _ = h.HandleCancel(ctx, json.RawMessage(`{"command_id":"cmd_race"}`))
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		h.handleCommandTimeout(ctx, "test-session", cmd)
+	}()
+
+	close(start)
+	wg.Wait()
+
+	// Final state must be terminal. Read via the thread-safe helper.
+	final := cmd.stateSnapshot()
+	if !isTerminalState(final) {
+		t.Errorf("final state = %q, want one of completed/cancelled/interrupted", final)
+	}
+
+	// DB should agree with the in-memory state.
+	loaded, err := loadCommand(ctx, h.state.DB(), "cmd_race")
+	if err != nil {
+		t.Fatalf("loadCommand: %v", err)
+	}
+	// Either StateCompleted or StateCancelled is valid (whichever path won
+	// the race). handleCommandTimeout transitions through StateTimeoutWaiting
+	// but that's not terminal, so if it ran first the completeCommand or
+	// cancel path would still have run and produced a terminal state.
+	if loaded.State != StateCompleted && loaded.State != StateCancelled {
+		t.Errorf("DB state = %q, want completed or cancelled", loaded.State)
+	}
+}
+
+// TestSendSystemMessageUsesSentinelSessionID verifies that @system messages
+// are written with session_id='system' so they remain queryable by either
+// agent_id OR session_id.
+func TestSendSystemMessageUsesSentinelSessionID(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	h.sendSystemMessage(ctx, "test_coord", "hello from system")
+
+	var sessionID string
+	err := h.state.DB().QueryRowContext(ctx,
+		`SELECT session_id FROM messages WHERE agent_id = 'system' ORDER BY created_at DESC LIMIT 1`,
+	).Scan(&sessionID)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if sessionID != "system" {
+		t.Errorf("session_id=%q, want %q", sessionID, "system")
+	}
+}
+
+// TestHandleQueueWaitElapsedFromSentAt verifies that the elapsed_ms field in
+// a queue-wait response is measured from SentAt (not SubmittedAt) once the
+// command has been typed — matching the convention used by the completion
+// notification message body.
+func TestHandleQueueWaitElapsedFromSentAt(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	// Seed a command in the DB with a SubmittedAt 10s ago and a SentAt 2s ago
+	// that has already reached the Completed terminal state.
+	submitted := time.Now().UTC().Add(-10 * time.Second).Format(time.RFC3339Nano)
+	sent := time.Now().UTC().Add(-2 * time.Second).Format(time.RFC3339Nano)
+	completed := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := h.state.DB().ExecContext(ctx,
+		`INSERT INTO command_queue
+		 (command_id, session_name, requester_agent, command_text, state,
+		  timeout_ms, silence_ms, notify_on_complete, submitted_at, sent_at, completed_at, captured_output, position)
+		 VALUES ('cmd_elapsed', 'test-session', 'test_coord', 'echo hi', 'completed',
+		         60000, 5000, 1, ?, ?, ?, 'done', 0)`,
+		submitted, sent, completed,
+	)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	req := `{"command_id":"cmd_elapsed","timeout_ms":5000}`
+	resp, err := h.HandleQueueWait(ctx, json.RawMessage(req))
+	if err != nil {
+		t.Fatalf("HandleQueueWait: %v", err)
+	}
+	wr := resp.(*QueueWaitResponse)
+
+	// Elapsed should be ~2s (from SentAt), not ~10s (from SubmittedAt).
+	// Allow a generous tolerance window for clock slop / test scheduling:
+	// anything under 5s means we're measuring from SentAt, not SubmittedAt.
+	if wr.ElapsedMs > 5000 {
+		t.Errorf("ElapsedMs=%d — expected < 5000 (measured from SentAt, not SubmittedAt=10s ago)", wr.ElapsedMs)
+	}
+	if wr.ElapsedMs < 1000 {
+		t.Errorf("ElapsedMs=%d — expected >= 1000 (seeded SentAt is 2s ago)", wr.ElapsedMs)
 	}
 }

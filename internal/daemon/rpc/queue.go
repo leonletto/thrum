@@ -10,9 +10,18 @@ import (
 )
 
 // Queue state constants.
+//
+// Note: the spec describes a QUEUED → WAITING → SENT transition where WAITING
+// means "front of queue, waiting for pane silence before being typed". The
+// implementation elides the explicit WAITING marker: HandleCheckPane's
+// dispatch checks for an active command first, and only if none exists does
+// it peek the front of the queue and send it. Commands therefore go directly
+// from QUEUED to SENT when a silence event fires on an idle pane. The
+// functional semantics match the spec; we just don't persist the intermediate
+// state. No loader or filter references 'waiting', so there is no constant
+// for it here.
 const (
 	StateQueued         = "queued"
-	StateWaiting        = "waiting"
 	StateSent           = "sent"
 	StateActive         = "active"
 	StateCompleted      = "completed"
@@ -22,21 +31,37 @@ const (
 )
 
 // QueuedCommand represents a single command in a session's queue.
+//
+// Concurrency: immutable fields (ID, Text, RequesterAgent, Timeout, SilenceMs,
+// NotifyOnComplete, SubmittedAt) are set once in HandleQueue and never mutated,
+// so they are safe to read without synchronisation. Mutable fields
+// (State, SentAt, CompletedAt, CapturedOutput, timer) are protected by mu and
+// MUST only be read or written while holding it. The three transition paths
+// (completeCommand, HandleCancel, handleCommandTimeout) can race — e.g. the
+// timeout timer callback may fire at the same instant HandleCheckPane detects
+// silence — so the mutex is also used to enforce single-entry to terminal
+// transitions via the isTerminal precondition check at the top of each path.
 type QueuedCommand struct {
+	// Immutable after construction.
 	ID               string
 	Text             string
 	RequesterAgent   string
 	Timeout          time.Duration
 	SilenceMs        int64 // per-command silence threshold; default 5000
 	NotifyOnComplete bool  // if false, skip @system completion message (used by --wait mode)
-	State            string
 	SubmittedAt      time.Time
-	SentAt           time.Time
-	CompletedAt      time.Time
-	CapturedOutput   string
 
-	sessionName string      // populated by loadPendingCommands for restart recovery
-	timer       *time.Timer // timeout goroutine handle
+	// Protected by mu.
+	mu             sync.Mutex
+	State          string
+	SentAt         time.Time
+	CompletedAt    time.Time
+	CapturedOutput string
+	timer          *time.Timer // timeout goroutine handle
+
+	// Written once by loadPendingCommands during restart recovery; read-only
+	// thereafter.
+	sessionName string
 }
 
 // SessionQueue manages a FIFO command queue for one tmux session.
@@ -50,6 +75,15 @@ type SessionQueue struct {
 // NewSessionQueue creates an empty queue for a session.
 func NewSessionQueue(session string) *SessionQueue {
 	return &SessionQueue{Session: session}
+}
+
+// stateSnapshot returns the current State of the command, acquiring cmd.mu
+// for a consistent read. Use this when reading State outside a path that
+// already holds cmd.mu (e.g. after losing a transition race).
+func (cmd *QueuedCommand) stateSnapshot() string {
+	cmd.mu.Lock()
+	defer cmd.mu.Unlock()
+	return cmd.State
 }
 
 // Enqueue adds a command to the back of the queue.
@@ -209,12 +243,15 @@ func loadCommand(ctx context.Context, db *safedb.DB, commandID string) (*QueuedC
 
 // loadPendingCommands reads all non-terminal commands across all sessions, ordered by position.
 // Each returned command has its sessionName field populated for restart recovery.
+// Note: the 'waiting' state from the spec is not assigned by any production
+// code path, so it is not included in the filter (see state-constant comment
+// above for rationale).
 func loadPendingCommands(ctx context.Context, db *safedb.DB) ([]*QueuedCommand, error) {
 	rows, err := db.QueryContext(ctx,
 		`SELECT command_id, session_name, command_text, requester_agent, state, timeout_ms,
 		        silence_ms, notify_on_complete, submitted_at
 		 FROM command_queue
-		 WHERE state IN ('queued', 'waiting', 'sent', 'active', 'timeout_waiting')
+		 WHERE state IN ('queued', 'sent', 'active', 'timeout_waiting')
 		 ORDER BY session_name, position ASC`,
 	)
 	if err != nil {
