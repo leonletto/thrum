@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -66,4 +68,46 @@ func OpenRawLogFile(varDir string) (*os.File, error) {
 func InstallLogWriter(w io.Writer) {
 	log.SetOutput(w)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.LUTC)
+}
+
+// ParseLogLevel converts a string log level ("debug", "info", "warn",
+// "error") to a slog.Level. Unknown values return slog.LevelInfo.
+func ParseLogLevel(level string) slog.Level {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		return slog.LevelDebug
+	case "info", "":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
+// ConfigureSlog installs a slog.Logger writing to w at the given level and
+// sets it as the package-default slog logger. The handler format matches the
+// standard log package prefix so `thrum daemon logs` parses timestamps
+// consistently regardless of whether a line came from log.Printf or slog.
+// Returns the configured logger for callers that want to hold their own
+// reference (e.g. to add attributes).
+func ConfigureSlog(w io.Writer, level string) *slog.Logger {
+	handler := slog.NewTextHandler(w, &slog.HandlerOptions{
+		Level:     ParseLogLevel(level),
+		AddSource: false,
+		// Replace the default "time" key format with one that matches the
+		// log package's "2006/01/02 15:04:05.000000" prefix so daemon logs
+		// --since parsing works uniformly.
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if len(groups) == 0 && a.Key == slog.TimeKey {
+				return slog.String(slog.TimeKey, a.Value.Time().UTC().Format("2006/01/02 15:04:05.000000"))
+			}
+			return a
+		},
+	})
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+	return logger
 }

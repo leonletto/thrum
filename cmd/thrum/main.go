@@ -5285,9 +5285,17 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			Daemon: config.DaemonConfig{
 				SyncInterval: config.DefaultSyncInterval,
 				WSPort:       config.DefaultWSPort,
+				LogLevel:     config.DefaultLogLevel,
 			},
 		}
 	}
+
+	// Configure slog with the resolved log level so any subsequent calls
+	// to slog.Info/Debug/Warn/Error respect the user's configured threshold.
+	// Log.Printf calls continue to write unconditionally through the
+	// lumberjack writer for backward compatibility.
+	daemon.ConfigureSlog(logWriter, thrumCfg.Daemon.LogLevel)
+	log.Printf("daemon: log level=%s", thrumCfg.Daemon.LogLevel)
 
 	// Resolve local-only mode: CLI flag > env var > config file > default
 	localOnly := flagLocal

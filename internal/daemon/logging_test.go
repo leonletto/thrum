@@ -1,7 +1,9 @@
 package daemon
 
 import (
+	"bytes"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,6 +89,106 @@ func TestOpenRawLogFile(t *testing.T) {
 	_ = f2.Close()
 	if _, err := os.Stat(LogFilePath(nested)); err != nil {
 		t.Errorf("expected log file at %s: %v", LogFilePath(nested), err)
+	}
+}
+
+func TestParseLogLevel(t *testing.T) {
+	tests := []struct {
+		in   string
+		want slog.Level
+	}{
+		{"debug", slog.LevelDebug},
+		{"DEBUG", slog.LevelDebug},
+		{"info", slog.LevelInfo},
+		{"", slog.LevelInfo}, // default
+		{"warn", slog.LevelWarn},
+		{"warning", slog.LevelWarn},
+		{"error", slog.LevelError},
+		{"unknown", slog.LevelInfo}, // fallback
+		{"  info  ", slog.LevelInfo},
+	}
+	for _, tc := range tests {
+		if got := ParseLogLevel(tc.in); got != tc.want {
+			t.Errorf("ParseLogLevel(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestConfigureSlog_LevelFiltering(t *testing.T) {
+	// Save and restore default slog logger.
+	origDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(origDefault) })
+
+	t.Run("info level hides debug", func(t *testing.T) {
+		var buf bytes.Buffer
+		ConfigureSlog(&buf, "info")
+		slog.Debug("hidden debug message")
+		slog.Info("visible info message")
+		slog.Warn("visible warn message")
+
+		out := buf.String()
+		if strings.Contains(out, "hidden debug message") {
+			t.Errorf("expected debug to be filtered, got %q", out)
+		}
+		if !strings.Contains(out, "visible info message") {
+			t.Errorf("expected info to be visible, got %q", out)
+		}
+		if !strings.Contains(out, "visible warn message") {
+			t.Errorf("expected warn to be visible, got %q", out)
+		}
+	})
+
+	t.Run("debug level shows debug", func(t *testing.T) {
+		var buf bytes.Buffer
+		ConfigureSlog(&buf, "debug")
+		slog.Debug("debug message")
+		slog.Info("info message")
+
+		out := buf.String()
+		if !strings.Contains(out, "debug message") {
+			t.Errorf("expected debug to be visible at debug level, got %q", out)
+		}
+		if !strings.Contains(out, "info message") {
+			t.Errorf("expected info to be visible at debug level, got %q", out)
+		}
+	})
+
+	t.Run("error level hides info and warn", func(t *testing.T) {
+		var buf bytes.Buffer
+		ConfigureSlog(&buf, "error")
+		slog.Debug("debug")
+		slog.Info("info")
+		slog.Warn("warn")
+		slog.Error("error")
+
+		out := buf.String()
+		if strings.Contains(out, "debug") || strings.Contains(out, "info") || strings.Contains(out, "warn") {
+			t.Errorf("expected only error level to be visible, got %q", out)
+		}
+		if !strings.Contains(out, "error") {
+			t.Errorf("expected error to be visible, got %q", out)
+		}
+	})
+}
+
+func TestConfigureSlog_TimestampFormat(t *testing.T) {
+	origDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(origDefault) })
+
+	var buf bytes.Buffer
+	ConfigureSlog(&buf, "info")
+	slog.Info("test message")
+
+	out := buf.String()
+	// Expect timestamp in "YYYY/MM/DD HH:MM:SS.ffffff" format matching log pkg,
+	// which makes parseLogTimestamp in the daemon logs command work uniformly.
+	// Example: time="2026/04/09 18:14:56.123456" level=INFO msg="test message"
+	if !strings.Contains(out, `time="`) {
+		t.Errorf("expected time= key, got %q", out)
+	}
+	// Look for the date portion "2026/" or "20" followed by slash-formatted date
+	if !strings.Contains(out, "/") {
+		t.Errorf("expected slash-formatted date in timestamp, got %q", out)
 	}
 }
 
