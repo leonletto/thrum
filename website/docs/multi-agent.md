@@ -7,7 +7,7 @@ category: "coordination"
 order: 2
 tags:
   ["multi-agent", "groups", "runtime", "coordination", "teams", "context-prime"]
-last_updated: "2026-04-06"
+last_updated: "2026-04-09"
 ---
 
 ## Multi-Agent Support
@@ -21,23 +21,24 @@ last_updated: "2026-04-06"
 
 ## Overview
 
-Thrum helps you coordinate multiple AI agents from the ground up. You can run
-agents in different terminals, worktrees, on different machines, or even across
-different repositories. Within a repo they share a single daemon and message
-store. Across repos they talk through the peer transport system (v0.7.0). Each
-agent gets a unique identity, and you get tools to organize them into teams,
-detect and configure any AI coding platform, and recover full session context
-after compaction.
+You can run agents in different terminals, worktrees, on different machines, or
+across repos. Within a repo they share a single daemon and message store. Each
+agent gets a unique identity. You get tools to organize them into teams, detect
+and configure any AI coding platform, and recover full session context after
+compaction.
 
-**Recommended:** Use [tmux-managed sessions](tmux-sessions.md) to run your agent
-team. The coordinator creates tmux sessions, launches agents, and the daemon
-delivers messages instantly — no background listeners, no token burn, no
-operational boilerplate. See [Tmux-Managed Sessions](tmux-sessions.md) for the
-full story.
+**Use [tmux-managed sessions](tmux-sessions.md)** to run your agent team. The
+coordinator creates tmux sessions, launches agents, and the daemon delivers
+messages instantly — no background listeners, no token burn, no operational
+boilerplate. See [Tmux-Managed Sessions](tmux-sessions.md) for the full story.
 
 **Note:** New repos default to single-agent mode (`single_agent_mode: true`).
 Run `thrum single-agent-mode false` to enable the features on this page. See
 [Single-Agent Mode](single-agent-mode.md).
+
+For cross-repo and cross-machine multi-agent setups, see [Peers](peers.md).
+The coordinator/implementer/tester patterns below work the same way
+whether the agents are in one repo or many.
 
 **Key multi-agent capabilities:**
 
@@ -47,8 +48,6 @@ Run `thrum single-agent-mode false` to enable the features on this page. See
   conversation history
 - **Agent Groups** -- Named collections of agents and roles for targeted
   messaging
-- **Cross-Repo Peers** (v0.7.0) -- Pair two repos via Tailscale so agents can
-  message each other across repo boundaries
 - **Runtime Presets** -- Auto-detect and configure Claude Code, Codex, Cursor,
   Gemini, and other AI platforms
 - **Context Prime** -- Single command to gather full agent state for session
@@ -70,7 +69,7 @@ Thrum automatically creates two types of system groups:
 
 - **`@everyone`** — Created on daemon startup. Includes all registered agents
   via a `role:*` wildcard. New agents are automatically reachable through it.
-  Cannot be deleted or modified.
+  Can't be deleted or modified.
 - **Role groups** — Created automatically when an agent registers with a new
   role (e.g., registering with `--role reviewer` creates a `@reviewer` group
   containing all agents with that role). Role groups have IDs like
@@ -314,7 +313,7 @@ format, graceful degradation behavior, and use cases.
 
 ## Multi-Worktree Coordination
 
-Multiple agents can operate across git worktrees while sharing a single daemon
+Multiple agents can work across git worktrees while sharing a single daemon
 and message store.
 
 ### How It Works
@@ -377,12 +376,12 @@ export THRUM_NAME=nux
 thrum quickstart --name nux --role implementer --module sync
 ```
 
-All three agents share the same daemon and can message each other:
+All three share the same daemon and can message each other:
 
 ```bash
 # furiosa sends directly to the coordinator by name (run `thrum team` to find names)
 # Using --to @coord_main (agent name) targets one agent.
-# Using --to @coordinator (role) would fan out to ALL agents with the coordinator role.
+# Using --to @coordinator (role) fans out to ALL agents with the coordinator role.
 thrum send "Auth module complete, tests passing" --to @coord_main
 
 # coordinator sends to the whole team
@@ -424,11 +423,11 @@ thrum who-has internal/cli/agent.go
 ```
 
 This queries agent work contexts (tracked via `thrum agent list --context`) to
-prevent two agents from editing the same file simultaneously.
+prevent two agents from editing the same file at the same time.
 
 ### ping: Agent Presence
 
-Check if an agent is online and what they are working on:
+Check if an agent is online and what they're working on:
 
 ```bash
 thrum ping @reviewer
@@ -450,7 +449,7 @@ Block until a matching message arrives or a timeout expires. This is the
 foundation of the message-listener pattern for async agent coordination.
 
 `thrum wait` always filters by the calling agent's identity — it only returns
-messages directed to this agent (by name or role group). There is no `--all`
+messages directed to this agent (by name or role group). There's no `--all`
 flag; use subscriptions if you need a firehose.
 
 ```bash
@@ -592,14 +591,21 @@ thrum send "Auth complete, 15 tests passing" --to @coord_main
 - **Run `thrum context prime`** at the start of every session
 - **Save context** at the end of every session:
   `echo "# Next steps\n- ..." | thrum context save`
-- **After compaction**, context prime provides everything needed to resume work
+- **After compaction**, context prime has everything you need to resume work
 
 ### Coordination
 
 - **Check `who-has`** before editing files another agent might be working on
 - **Use `thrum wait`** instead of polling loops for efficient message delivery
-- **Set clear intents** so other agents can see what you are working on via
+- **Set clear intents** so other agents can see what you're working on via
   `thrum agent list --context`
+
+## Running this automatically
+
+If you want the coordinator role to be automated — handing off a plan
+and having the orchestrator run the implementers through it — see
+[Orchestrator Role](orchestrator-role.md). You still write the plan
+and you still merge. The orchestrator handles the middle.
 
 ## Next Steps
 

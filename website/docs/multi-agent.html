@@ -46,21 +46,21 @@ implementation workflows, <a href="identity.html">Identity System</a> for agent 
 registration.</p>
 </blockquote>
 <h2>Overview</h2>
-<p>Thrum helps you coordinate multiple AI agents from the ground up. You can run
-agents in different terminals, worktrees, on different machines, or even across
-different repositories. Within a repo they share a single daemon and message
-store. Across repos they talk through the peer transport system (v0.7.0). Each
-agent gets a unique identity, and you get tools to organize them into teams,
-detect and configure any AI coding platform, and recover full session context
-after compaction.</p>
-<p><strong>Recommended:</strong> Use <a href="tmux-sessions.html">tmux-managed sessions</a> to run your agent
-team. The coordinator creates tmux sessions, launches agents, and the daemon
-delivers messages instantly — no background listeners, no token burn, no
-operational boilerplate. See <a href="tmux-sessions.html">Tmux-Managed Sessions</a> for the
-full story.</p>
+<p>You can run agents in different terminals, worktrees, on different machines, or
+across repos. Within a repo they share a single daemon and message store. Each
+agent gets a unique identity. You get tools to organize them into teams, detect
+and configure any AI coding platform, and recover full session context after
+compaction.</p>
+<p><strong>Use <a href="tmux-sessions.html">tmux-managed sessions</a></strong> to run your agent team. The
+coordinator creates tmux sessions, launches agents, and the daemon delivers
+messages instantly — no background listeners, no token burn, no operational
+boilerplate. See <a href="tmux-sessions.html">Tmux-Managed Sessions</a> for the full story.</p>
 <p><strong>Note:</strong> New repos default to single-agent mode (<code>single_agent_mode: true</code>).
 Run <code>thrum single-agent-mode false</code> to enable the features on this page. See
 <a href="single-agent-mode.html">Single-Agent Mode</a>.</p>
+<p>For cross-repo and cross-machine multi-agent setups, see <a href="peers.html">Peers</a>.
+The coordinator/implementer/tester patterns below work the same way
+whether the agents are in one repo or many.</p>
 <p><strong>Key multi-agent capabilities:</strong></p>
 <ul>
 <li><strong>Tmux-Managed Sessions</strong> (v0.7.1) -- Daemon-driven agent lifecycle with
@@ -69,8 +69,6 @@ instant message delivery and zero background listeners</li>
 conversation history</li>
 <li><strong>Agent Groups</strong> -- Named collections of agents and roles for targeted
 messaging</li>
-<li><strong>Cross-Repo Peers</strong> (v0.7.0) -- Pair two repos via Tailscale so agents can
-message each other across repo boundaries</li>
 <li><strong>Runtime Presets</strong> -- Auto-detect and configure Claude Code, Codex, Cursor,
 Gemini, and other AI platforms</li>
 <li><strong>Context Prime</strong> -- Single command to gather full agent state for session
@@ -88,7 +86,7 @@ one individually. Groups can contain specific agents or all agents with a role.<
 <ul>
 <li><strong><code>@everyone</code></strong> — Created on daemon startup. Includes all registered agents
 via a <code>role:*</code> wildcard. New agents are automatically reachable through it.
-Cannot be deleted or modified.</li>
+Can&#39;t be deleted or modified.</li>
 <li><strong>Role groups</strong> — Created automatically when an agent registers with a new
 role (e.g., registering with <code>--role reviewer</code> creates a <code>@reviewer</code> group
 containing all agents with that role). Role groups have IDs like
@@ -378,7 +376,7 @@ thrum context prime --json # Structured JSON for LLM consumption</code></pre>
 format, graceful degradation behavior, and use cases.</p>
 <hr>
 <h2>Multi-Worktree Coordination</h2>
-<p>Multiple agents can operate across git worktrees while sharing a single daemon
+<p>Multiple agents can work across git worktrees while sharing a single daemon
 and message store.</p>
 <h3>How It Works</h3>
 <pre><code>┌──────────────────────────────────────────────────────────────┐
@@ -428,10 +426,10 @@ thrum quickstart --name furiosa --role implementer --module auth
 cd ~/.workspaces/repo/sync
 export THRUM_NAME=nux
 thrum quickstart --name nux --role implementer --module sync</code></pre>
-<p>All three agents share the same daemon and can message each other:</p>
+<p>All three share the same daemon and can message each other:</p>
 <pre><code># furiosa sends directly to the coordinator by name (run `thrum team` to find names)
 # Using --to @coord_main (agent name) targets one agent.
-# Using --to @coordinator (role) would fan out to ALL agents with the coordinator role.
+# Using --to @coordinator (role) fans out to ALL agents with the coordinator role.
 thrum send &quot;Auth module complete, tests passing&quot; --to @coord_main
 
 # coordinator sends to the whole team
@@ -455,9 +453,9 @@ THRUM_NAME=reviewer thrum send &quot;LGTM, approved&quot;</code></pre>
 thrum who-has internal/cli/agent.go
 # Output: No agent is currently editing internal/cli/agent.go</code></pre>
 <p>This queries agent work contexts (tracked via <code>thrum agent list --context</code>) to
-prevent two agents from editing the same file simultaneously.</p>
+prevent two agents from editing the same file at the same time.</p>
 <h3>ping: Agent Presence</h3>
-<p>Check if an agent is online and what they are working on:</p>
+<p>Check if an agent is online and what they&#39;re working on:</p>
 <pre><code>thrum ping @reviewer
 # Output:
 #   reviewer: active (last seen 2m ago)
@@ -472,7 +470,7 @@ otherwise.</p>
 <p>Block until a matching message arrives or a timeout expires. This is the
 foundation of the message-listener pattern for async agent coordination.</p>
 <p><code>thrum wait</code> always filters by the calling agent&#39;s identity — it only returns
-messages directed to this agent (by name or role group). There is no <code>--all</code>
+messages directed to this agent (by name or role group). There&#39;s no <code>--all</code>
 flag; use subscriptions if you need a firehose.</p>
 <pre><code># Wait for any message addressed to this agent
 thrum wait --timeout 5m
@@ -616,15 +614,20 @@ with that role are automatically included</li>
 <li><strong>Run <code>thrum context prime</code></strong> at the start of every session</li>
 <li><strong>Save context</strong> at the end of every session:
 <code>echo &quot;# Next steps\n- ...&quot; | thrum context save</code></li>
-<li><strong>After compaction</strong>, context prime provides everything needed to resume work</li>
+<li><strong>After compaction</strong>, context prime has everything you need to resume work</li>
 </ul>
 <h3>Coordination</h3>
 <ul>
 <li><strong>Check <code>who-has</code></strong> before editing files another agent might be working on</li>
 <li><strong>Use <code>thrum wait</code></strong> instead of polling loops for efficient message delivery</li>
-<li><strong>Set clear intents</strong> so other agents can see what you are working on via
+<li><strong>Set clear intents</strong> so other agents can see what you&#39;re working on via
 <code>thrum agent list --context</code></li>
 </ul>
+<h2>Running this automatically</h2>
+<p>If you want the coordinator role to be automated — handing off a plan
+and having the orchestrator run the implementers through it — see
+<a href="orchestrator-role.html">Orchestrator Role</a>. You still write the plan
+and you still merge. The orchestrator handles the middle.</p>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="agent-coordination.html">Agent Coordination</a> — workflow patterns and Beads
