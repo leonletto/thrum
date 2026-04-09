@@ -577,3 +577,82 @@ html[data-theme="light"] .docs-content-inner pre code {
     padding: var(--space-lg) var(--space-md) 80px;
   }
 }
+
+/* ============================================================================
+   SCENARIO CARDS (Overview landing page)
+   ========================================================================= */
+
+.scenario-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-lg);
+  margin: var(--space-xl) 0;
+}
+
+.scenario-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-xl);
+  background: linear-gradient(180deg, var(--bg-panel-dark) 0%, var(--bg-panel-light) 100%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+
+.scenario-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.15);
+  transform: translateY(-2px);
+}
+
+.scenario-card .feature-icon {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: var(--space-md);
+  text-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+  height: 48px;
+  display: flex;
+  align-items: center;
+}
+
+.scenario-card h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-sm);
+  border: none;
+  padding: 0;
+}
+
+.scenario-card p {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-lg);
+  flex-grow: 1;
+}
+
+.scenario-cta {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-top: auto;
+}
+
+/* Mobile: stack to single column */
+@media (max-width: 768px) {
+  .scenario-card-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+  .scenario-card {
+    padding: var(--space-lg);
+  }
+  .scenario-card h3 {
+    font-size: 18px;
+  }
+}
