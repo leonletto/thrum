@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/leonletto/thrum/internal/config"
 )
@@ -36,7 +36,7 @@ func (r *InboundRelay) Run(ctx context.Context, messages <-chan InboundMessage) 
 				return
 			}
 			if err := r.relay(ctx, msg); err != nil {
-				log.Printf("telegram inbound: relay failed: %v", err)
+				slog.Error("telegram inbound: relay failed", "err", err)
 			}
 		}
 	}
@@ -45,7 +45,7 @@ func (r *InboundRelay) Run(ctx context.Context, messages <-chan InboundMessage) 
 // Relay routes an inbound message to the correct handler based on whether it is
 // a group message (GroupChatID < 0) or a direct message.
 func (r *InboundRelay) Relay(ctx context.Context, msg InboundMessage) error {
-	log.Printf("telegram inbound: Relay called — GroupChatID=%d, text=%q", msg.GroupChatID, msg.Text)
+	slog.Debug("telegram inbound: Relay called", "group_chat_id", msg.GroupChatID, "text", msg.Text)
 	if msg.GroupChatID < 0 {
 		return r.relayGroup(ctx, msg)
 	}
@@ -77,10 +77,10 @@ func (r *InboundRelay) findGroup(chatID int64) *config.TelegramGroup {
 func (r *InboundRelay) relayGroup(ctx context.Context, msg InboundMessage) error {
 	grp := r.findGroup(msg.GroupChatID)
 	if grp == nil {
-		log.Printf("telegram inbound: no group config for chat_id %d — dropping", msg.GroupChatID)
+		slog.Debug("telegram inbound: no group config — dropping", "chat_id", msg.GroupChatID)
 		return nil
 	}
-	log.Printf("telegram inbound: matched group %q for chat_id %d", grp.Name, msg.GroupChatID)
+	slog.Debug("telegram inbound: matched group", "group", grp.Name, "chat_id", msg.GroupChatID)
 
 	// @mention routing: check if message mentions our bot or another bot.
 	mentions := ParseMentions(msg.Text)
@@ -171,8 +171,8 @@ func (r *InboundRelay) relay(ctx context.Context, msg InboundMessage) error {
 		if thrumID, ok := r.msgMap.ThrumID(msg.ChatID, *msg.ReplyToMsgID); ok {
 			replyToThrumID = thrumID
 			if author, err := r.fetchMessageAuthor(ctx, thrumID); err != nil {
-				log.Printf("telegram inbound: fetch parent author for %s: %v — falling back to %s",
-					thrumID, err, r.target)
+				slog.Warn("telegram inbound: fetch parent author failed — falling back",
+					"thrum_id", thrumID, "err", err, "fallback", r.target)
 			} else if author != "" && author != r.userID {
 				mentionTarget = "@" + author
 			}
