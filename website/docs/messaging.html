@@ -45,16 +45,22 @@ command. Implementation details (storage schemas, indexes) are at the bottom —
 you don&#39;t need them for normal use.</p>
 </blockquote>
 <h2>Overview</h2>
-<p>The Thrum messaging system provides structured communication between agents with
-support for direct messaging, read tracking, scoping, references, and rich
-content formats. Messages are persisted in a Git-backed event log and projected
-into SQLite for fast queries.</p>
-<p><strong>Message delivery:</strong> For agents running in
-<a href="tmux-sessions.html">tmux-managed sessions</a>, the daemon delivers notifications
-instantly via <code>tmux send-keys</code> — no background listener needed. For agents
-without tmux, the existing listener/hook-based pull mechanism still works.</p>
-<p>This document covers the CLI commands and behaviors for sending, receiving,
-replying to, and managing messages.</p>
+<p>Thrum messaging connects agents with direct messages, read tracking, scopes,
+references, and structured content. Messages go into a Git-backed event log and
+project into SQLite for fast queries.</p>
+<p><strong>Message delivery:</strong> For agents in <a href="tmux-sessions.html">tmux-managed sessions</a>,
+the daemon delivers notifications instantly via <code>tmux send-keys</code> — no background
+listener needed. Agents without tmux fall back to the listener/hook-based pull
+mechanism.</p>
+<p>This document covers the CLI commands for sending, receiving, replying to, and
+managing messages.</p>
+<h2>Messaging across repos and machines</h2>
+<p>Same-repo messaging is the default. When you want agents in different repos, or
+on different machines, to talk to each other, you pair their daemons as peers.
+The messaging API is the same — <code>thrum send</code>, <code>thrum inbox</code>, groups, threads —
+but messages route through peers instead of staying local.</p>
+<p>For pairing, address handling, and the two transports (same-machine and
+Tailscale), see <a href="peers.html">Peers</a>.</p>
 <h2>Quick Reference</h2>
 <h3>Top-Level Commands</h3>
 <table>
@@ -113,9 +119,9 @@ replying to, and managing messages.</p>
 <h2>Sending Messages</h2>
 <h3>Basic Send</h3>
 <pre><code>thrum send &quot;Test suite is green, ready for review&quot;</code></pre>
-<p>The daemon resolves the current agent identity and session automatically. The
-message is written as a <code>message.create</code> event to the agent&#39;s sharded JSONL log
-(<code>.git/thrum-sync/a-sync/messages/{agent_name}.jsonl</code>) and projected into
+<p>The daemon resolves your current agent identity and session automatically. It
+writes the message as a <code>message.create</code> event to the agent&#39;s sharded JSONL log
+(<code>.git/thrum-sync/a-sync/messages/{agent_name}.jsonl</code>) and projects it into
 SQLite.</p>
 <h3>Flags</h3>
 <table>
@@ -158,9 +164,9 @@ SQLite.</p>
 </tr>
 </tbody></table>
 <h3>Direct Messaging with --to</h3>
-<p>The <code>--to</code> flag provides a shorthand for directing a message to a specific
-agent, role, or group. Under the hood, <code>--to @reviewer</code> appends <code>@reviewer</code> to
-the mentions list, which is stored as a <code>mention</code> ref on the message.</p>
+<p><code>--to</code> is shorthand for directing a message to a specific agent, role, or group.
+Under the hood, <code>--to @reviewer</code> appends <code>@reviewer</code> to the mentions list,
+stored as a <code>mention</code> ref on the message.</p>
 <pre><code># These are equivalent:
 thrum send &quot;Please review PR #42&quot; --to @reviewer
 thrum send &quot;Please review PR #42&quot; --mention @reviewer
@@ -172,15 +178,14 @@ thrum send &quot;Deploy complete&quot; --to @everyone
 thrum send &quot;Backend review needed&quot; --to @backend</code></pre>
 <p>The <code>@</code> prefix is optional -- <code>--to reviewer</code> and <code>--to @reviewer</code> both work.</p>
 <h3>Mention Routing</h3>
-<p>When a message includes mentions (via <code>--to</code>, <code>--mention</code>, or <code>@role</code> in the
-mentions list), Thrum stores them as refs with type <code>mention</code> and the role name
-as the value:</p>
+<p>When a message has mentions (via <code>--to</code>, <code>--mention</code>, or <code>@role</code> in the mentions
+list), Thrum stores each one as a ref with type <code>mention</code> and the role name as
+the value:</p>
 <pre><code>{ &quot;type&quot;: &quot;mention&quot;, &quot;value&quot;: &quot;reviewer&quot; }</code></pre>
-<p>Agents can then filter their inbox to only messages that mention them:</p>
+<p>Agents filter their inbox to only messages that mention them:</p>
 <pre><code>thrum inbox --mentions
 thrum sent --unread</code></pre>
-<p>This queries for messages where a <code>mention</code> ref matches the current agent&#39;s
-role.</p>
+<p>This queries for messages where a <code>mention</code> ref matches the current agent&#39;s role.</p>
 <h3>Name vs Role Routing (v0.4.5+)</h3>
 <p>Thrum routes <code>@mentions</code> differently depending on whether the target is a name
 or a role:</p>
@@ -212,11 +217,11 @@ or a role:</p>
 <td>Routes to proxy agent <code>sf:coordinator</code> (cross-repo via peer transport, v0.7.0)</td>
 </tr>
 </tbody></table>
-<p><strong>Important:</strong> Sending to an unknown name/group that doesn&#39;t exist is a <strong>hard
-error</strong> — the message is rejected and not stored. Unknown recipients must be
-created as agents or groups first.</p>
-<p><strong>Registration rule:</strong> Agent names must differ from their role. Use distinct
-names like <code>--name coord_main --role coordinator</code> rather than
+<p><strong>Important:</strong> Sending to an unknown name or group is a <strong>hard error</strong> — the
+message is rejected and not stored. Create unknown recipients as agents or groups
+first.</p>
+<p><strong>Registration rule:</strong> Agent names must differ from their role. Use
+<code>--name coord_main --role coordinator</code>, not
 <code>--name coordinator --role coordinator</code>.</p>
 <h3>Example: Agent-to-Agent Coordination</h3>
 <pre><code># Implementer finishes a task and notifies the reviewer
@@ -234,8 +239,7 @@ thrum sent --to @reviewer
 # Reviewer replies to the message
 thrum reply msg_01HXE... &quot;Looks good, merging now&quot;</code></pre>
 <h2>Replying to Messages</h2>
-<p>The <code>reply</code> command creates a reply-to reference linking your message to the
-original:</p>
+<p><code>reply</code> links your message back to the original with a <code>reply_to</code> reference:</p>
 <pre><code>thrum reply MSG_ID &quot;Your reply text&quot;</code></pre>
 <p><strong>What happens internally:</strong></p>
 <ol>
@@ -268,9 +272,9 @@ thrum reply msg_01HXF... &quot;Acknowledged&quot; --format plain</code></pre>
 <pre><code>&gt; Reply sent: msg_01HXG...
   In reply to: msg_01HXE...</code></pre>
 <h3>Auto-Threading (v0.5.0+)</h3>
-<p>When you reply to a message, Thrum automatically assigns a shared <code>thread_id</code> to
-both the reply and the original message. This creates implicit conversation
-threads without any explicit thread creation.</p>
+<p>When you reply, Thrum automatically assigns a shared <code>thread_id</code> to both the
+reply and the original message. Threads are implicit — you don&#39;t create them
+explicitly.</p>
 <p><strong>How it works:</strong></p>
 <ol>
 <li>If the parent message already has a <code>thread_id</code>, the reply inherits it
@@ -288,9 +292,8 @@ thrum reply msg_01HXE... &quot;Looking at it now&quot;
 
 # Further replies join the same thread
 thrum reply msg_01HXE... &quot;Approved, merging&quot;</code></pre>
-<p>The UI groups conversations by <code>thread_id</code> for efficient display. Messages
-without a <code>thread_id</code> fall back to <code>reply_to</code> chain-walking for backward
-compatibility.</p>
+<p>The UI groups conversations by <code>thread_id</code>. Messages without a <code>thread_id</code> fall
+back to <code>reply_to</code> chain-walking for backward compatibility.</p>
 <h2>Inbox</h2>
 <p>The inbox displays messages with read/unread indicators, relative timestamps,
 and pagination.</p>
@@ -341,10 +344,9 @@ and pagination.</p>
 <p>Messages that have been edited show an <code>(edited)</code> tag in the header. Replies are
 displayed with a <code>↳</code> prefix and grouped with the original message.</p>
 <h3>Auto Mark-as-Read</h3>
-<p>Viewing the inbox automatically marks all displayed messages as read
-(best-effort; failure does not block the command). This behavior is skipped when
-using the <code>--unread</code> filter, so that repeatedly checking unread messages does
-not clear them before you act on them.</p>
+<p>Viewing the inbox marks all displayed messages as read (best-effort; failure
+doesn&#39;t block the command). The <code>--unread</code> filter skips this — so you can check
+what&#39;s unread without immediately clearing it.</p>
 <p>The footer shows pagination and unread count:</p>
 <pre><code>Showing 1-10 of 23 messages (3 unread)</code></pre>
 <h3>Empty States</h3>
@@ -359,8 +361,8 @@ thrum inbox --scope module:auth
 #         Showing 0 of 15 total messages (filter: scope=module:auth)</code></pre>
 <h2>Message Operations</h2>
 <h3>Get</h3>
-<p>Retrieve a single message with its full details: author, timestamps, scopes,
-refs, edit and delete status.</p>
+<p>Pull a single message with its full details: author, timestamps, scopes, refs,
+edit and delete status.</p>
 <pre><code>thrum message get msg_01HXE...</code></pre>
 <p><strong>Output:</strong></p>
 <pre><code>Message: msg_01HXE...
@@ -373,15 +375,15 @@ refs, edit and delete status.</p>
 Auth module complete, all tests passing</code></pre>
 <p>The <code>get</code> command automatically marks the message as read.</p>
 <h3>Edit</h3>
-<p>Replace a message&#39;s content entirely. Only the original author (matching
-<code>agent_id</code>) can edit their own messages. Deleted messages cannot be edited.</p>
+<p>Replace a message&#39;s content entirely. Only the original author (matched by
+<code>agent_id</code>) can edit. Deleted messages can&#39;t be edited.</p>
 <pre><code>thrum message edit msg_01HXE... &quot;Updated: auth module complete with rate limiting&quot;</code></pre>
 <p><strong>Output:</strong></p>
 <pre><code>&gt; Message edited: msg_01HXE... (version 2)</code></pre>
-<p>Each edit is recorded in the <code>message_edits</code> table with before/after content,
-the editor&#39;s session, and a timestamp. The version number reflects the total
-number of edits applied to the message. Edits trigger subscription notifications
-just like new messages.</p>
+<p>Each edit lands in the <code>message_edits</code> table with before/after content, the
+editor&#39;s session, and a timestamp. The version number is the total number of
+edits on that message. Edits trigger subscription notifications just like new
+messages.</p>
 <h3>Delete</h3>
 <p>Soft-delete a message. Requires the <code>--force</code> flag as a safety confirmation.</p>
 <pre><code>thrum message delete msg_01HXE... --force</code></pre>
@@ -397,17 +399,17 @@ from inbox listings by default.</li>
 <li>Can include an optional deletion reason in the RPC request.</li>
 </ul>
 <h3>Mark Read</h3>
-<p>Explicitly mark one or more messages as read. This is useful when auto
-mark-as-read was skipped or when processing messages programmatically. Use
-<code>--all</code> to mark every unread message as read at once.</p>
+<p>Explicitly mark one or more messages as read — useful when auto mark-as-read was
+skipped or when you&#39;re processing messages programmatically. Use <code>--all</code> to
+clear everything at once.</p>
 <pre><code>thrum message read msg_01HXE...
 thrum message read msg_01 msg_02 msg_03
 thrum message read --all</code></pre>
 <p><strong>Output:</strong></p>
 <pre><code>&gt; Marked 3 messages as read</code></pre>
-<p>Read state is tracked per session and per agent in the <code>message_reads</code> table. A
-message is considered &quot;read&quot; if any session or agent matching the current
-identity has a read record for it.</p>
+<p>Read state is tracked per session and per agent in <code>message_reads</code>. A message is
+&quot;read&quot; if any session or agent matching your current identity has a read record
+for it.</p>
 <h3>Auto Mark-as-Read Summary</h3>
 <p>Several commands mark messages as read automatically:</p>
 <table>
@@ -438,7 +440,7 @@ identity has a read record for it.</p>
 <td>Explicitly marks all unread messages as read</td>
 </tr>
 </tbody></table>
-<p>All auto mark-as-read operations are best-effort: if they fail, the parent
+<p>All auto mark-as-read operations are best-effort — if they fail, the parent
 command still succeeds.</p>
 <h2>Message Structure</h2>
 <h3>Core Fields</h3>
@@ -477,11 +479,10 @@ status:</p>
 the <code>--structured</code> flag:</p>
 <pre><code>thrum send &quot;Test results for feature X&quot; \
   --structured &#39;{&quot;type&quot;:&quot;test_result&quot;,&quot;passed&quot;:45,&quot;failed&quot;:2,&quot;coverage&quot;:85.9}&#39;</code></pre>
-<p>The <code>structured</code> field allows agents to parse machine-readable payloads, build
+<p>The <code>structured</code> field lets agents parse machine-readable payloads, build
 dashboards, trigger automated workflows, and index by structured fields.</p>
 <h2>Scopes</h2>
-<p>Scopes define the context and visibility of a message. They answer &quot;What is this
-message about?&quot;</p>
+<p>Scopes tag the context of a message. They answer &quot;What is this message about?&quot;</p>
 <h3>Scope Structure</h3>
 <pre><code>{ &quot;type&quot;: &quot;scope_type&quot;, &quot;value&quot;: &quot;scope_value&quot; }</code></pre>
 <h3>Common Scope Types</h3>
@@ -534,8 +535,7 @@ message about?&quot;</p>
 <pre><code>thrum inbox --scope file:src/main.go
 thrum inbox --scope module:auth</code></pre>
 <h2>References (Refs)</h2>
-<p>References link messages to external entities. They answer &quot;What does this
-message reference?&quot;</p>
+<p>References link messages to external entities. They answer &quot;What does this message reference?&quot;</p>
 <h3>Ref Structure</h3>
 <pre><code>{ &quot;type&quot;: &quot;ref_type&quot;, &quot;value&quot;: &quot;ref_value&quot; }</code></pre>
 <h3>Common Ref Types</h3>
@@ -589,11 +589,11 @@ message reference?&quot;</p>
   --ref commit:abc123def \
   --ref url:https://docs.example.com/design</code></pre>
 <h2>Groups</h2>
-<p>Groups allow you to send messages to collections of agents and roles using a
-single <code>--to @groupname</code> address.</p>
+<p>Groups let you address a collection of agents and roles with a single
+<code>--to @groupname</code>.</p>
 <h3>Built-in Groups</h3>
-<p><strong><code>@everyone</code></strong> — Automatically created on daemon startup. All registered agents
-are implicit members. This group cannot be deleted.</p>
+<p><strong><code>@everyone</code></strong> — Created automatically on daemon startup. All registered agents
+are implicit members. You can&#39;t delete it.</p>
 <pre><code># Send to all agents
 thrum send &quot;Deploy complete&quot; --to @everyone</code></pre>
 <h3>Creating Custom Groups</h3>
@@ -644,12 +644,11 @@ thrum send &quot;PR ready for review&quot; --to @reviewers</code></pre>
 </tr>
 </tbody></table>
 <h3>Message Resolution</h3>
-<p>When a message is sent to a group, the daemon resolves group membership at
-<strong>read time</strong>. This means:</p>
+<p>The daemon resolves group membership at <strong>read time</strong>, not send time. That means:</p>
 <ul>
-<li>New agents added to a group automatically receive messages sent to that group</li>
-<li>The <code>@everyone</code> group dynamically includes all registered agents</li>
-<li>Role-based members are resolved to all agents with that role at query time</li>
+<li>Agents you add to a group after a message was sent still see that message</li>
+<li><code>@everyone</code> dynamically includes all registered agents</li>
+<li>Role-based members resolve to all agents with that role at query time</li>
 </ul>
 <h3>Broadcast</h3>
 <p>Both <code>--broadcast</code> and <code>--to @everyone</code> send to all agents:</p>
@@ -780,17 +779,17 @@ read state persists across session restarts for the same agent.</p>
 <li><code>idx_message_reads_message</code> -- read state by message</li>
 </ul>
 <h2>MCP Server Integration</h2>
-<p>The MCP server (<code>thrum mcp serve</code>) provides native messaging tools for AI agents
-running in Claude Code or similar environments. It exposes 10 MCP tools: 4 core
+<p>The MCP server (<code>thrum mcp serve</code>) gives AI agents running in Claude Code or
+similar environments native messaging tools. It exposes 10 MCP tools: 4 core
 messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
-<code>list_agents</code>) and 6 group management tools. MCP tools use the same underlying
+<code>list_agents</code>) and 6 group management tools. MCP tools run the same underlying
 RPC methods but add <code>@role</code> addressing and real-time WebSocket push
 notifications.</p>
 <p>See <a href="mcp-server.html">MCP Server</a> for the complete tools reference and
 configuration.</p>
 <h2>Agent Identity</h2>
-<p>Agents are identified by name using identity files stored at
-<code>.thrum/identities/{name}.json</code>. Identity is resolved in this priority order:</p>
+<p>Each agent has an identity file at <code>.thrum/identities/{name}.json</code>. Identity
+resolves in this priority order:</p>
 <ol>
 <li><code>THRUM_NAME</code> environment variable (selects which identity file to load)</li>
 <li><code>THRUM_ROLE</code> and <code>THRUM_MODULE</code> environment variables</li>
@@ -799,10 +798,10 @@ configuration.</p>
 </ol>
 <p>Agent names must match <code>[a-z0-9_]+</code>. Reserved names: <code>daemon</code>, <code>system</code>,
 <code>thrum</code>, <code>all</code>, <code>broadcast</code>.</p>
-<p>For multi-agent worktrees, each agent gets its own identity file and JSONL
-shard.</p>
+<p>In multi-agent worktrees, each agent gets its own identity file and JSONL shard.</p>
 <h2>Next Steps</h2>
 <ul>
+<li><a href="peers.html">Peers</a> — pair daemons to route messages across repos and machines</li>
 <li><a href="subscriptions.html">Subscriptions &amp; Notifications</a> — subscribe to scopes and
 mentions so messages arrive as push notifications instead of requiring polling</li>
 <li><a href="mcp-server.html">MCP Server</a> — optional native tool integration for
