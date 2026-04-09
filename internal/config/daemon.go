@@ -133,6 +133,7 @@ type DaemonConfig struct {
 	WSPort          string `json:"ws_port,omitempty"`       // "auto" or specific port number
 	PeerPort        string `json:"peer_port,omitempty"`     // "auto" or specific port number for peer connections
 	SingleAgentMode bool   `json:"single_agent_mode,omitempty"`
+	LogLevel        string `json:"log_level,omitempty"` // "debug", "info", "warn", "error"; default "info"
 }
 
 // BackupConfig holds backup-related settings.
@@ -199,6 +200,9 @@ const DefaultSyncInterval = 60
 // DefaultWSPort is the default WebSocket port strategy.
 const DefaultWSPort = "auto"
 
+// DefaultLogLevel is the default daemon log level.
+const DefaultLogLevel = "info"
+
 // RestartConfig controls session restart with context snapshot behavior.
 type RestartConfig struct {
 	MaxLines        int `json:"max_lines,omitempty"`        // Max lines in snapshot (default: 1000)
@@ -257,6 +261,9 @@ func applyDefaults(cfg *ThrumConfig) {
 	}
 	if cfg.Daemon.WSPort == "" {
 		cfg.Daemon.WSPort = DefaultWSPort
+	}
+	if cfg.Daemon.LogLevel == "" {
+		cfg.Daemon.LogLevel = DefaultLogLevel
 	}
 	if cfg.Backup.Retention.Daily == nil {
 		cfg.Backup.Retention.Daily = IntPtr(DefaultRetentionDaily)

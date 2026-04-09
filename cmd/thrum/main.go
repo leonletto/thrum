@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -1999,7 +2000,46 @@ func daemonCmd() *cobra.Command {
 	})
 
 	cmd.AddCommand(daemonRunCmd(&flagLocal))
+	cmd.AddCommand(daemonLogsCmd())
 	// Old tsync/peers commands removed — replaced by top-level "thrum peer" commands
+
+	return cmd
+}
+
+func daemonLogsCmd() *cobra.Command {
+	var (
+		follow bool
+		lines  int
+		since  string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "logs",
+		Short: "Show daemon log output",
+		Long: `Read the daemon log file at .thrum/var/daemon.log.
+
+By default prints the last 50 lines. Use --follow/-f to stream new lines as
+they are written. Use --since to filter by timestamp (e.g. "1h", "7d",
+"2026-04-09", or RFC3339).`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts := cli.DaemonLogsOptions{
+				Lines:  lines,
+				Follow: follow,
+			}
+			if since != "" {
+				t, err := timeparse.ParseBefore(since)
+				if err != nil {
+					return fmt.Errorf("--since: %w", err)
+				}
+				opts.Since = &t
+			}
+			return cli.DaemonLogs(cmd.Context(), flagRepo, opts, os.Stdout)
+		},
+	}
+
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Stream new log lines as they are written")
+	cmd.Flags().IntVarP(&lines, "lines", "n", 50, "Number of lines to show (0 = all)")
+	cmd.Flags().StringVar(&since, "since", "", "Only show lines at or after this time (e.g. 1h, 7d, 2026-04-09)")
 
 	return cmd
 }
@@ -5183,6 +5223,14 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		return fmt.Errorf("failed to create var directory: %w", err)
 	}
 
+	// Install rotating log writer as early as possible so every subsequent
+	// log.Printf in daemon startup is captured. lumberjack rotates the file
+	// when it exceeds 10MB and keeps 4 compressed backups for 28 days.
+	logWriter := daemon.NewLogWriter(varDir)
+	defer func() { _ = logWriter.Close() }()
+	daemon.InstallLogWriter(logWriter)
+	log.Printf("daemon: starting version=%s repo=%s", Version+"+"+Build, absPath)
+
 	// Ensure identities directory exists in the local checkout, not the shared redirect target.
 	identitiesDir := filepath.Join(absPath, ".thrum", "identities")
 	if err := os.MkdirAll(identitiesDir, 0750); err != nil {
@@ -5237,9 +5285,17 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			Daemon: config.DaemonConfig{
 				SyncInterval: config.DefaultSyncInterval,
 				WSPort:       config.DefaultWSPort,
+				LogLevel:     config.DefaultLogLevel,
 			},
 		}
 	}
+
+	// Configure slog with the resolved log level so any subsequent calls
+	// to slog.Info/Debug/Warn/Error respect the user's configured threshold.
+	// Log.Printf calls continue to write unconditionally through the
+	// lumberjack writer for backward compatibility.
+	daemon.ConfigureSlog(logWriter, thrumCfg.Daemon.LogLevel)
+	log.Printf("daemon: log level=%s", thrumCfg.Daemon.LogLevel)
 
 	// Resolve local-only mode: CLI flag > env var > config file > default
 	localOnly := flagLocal

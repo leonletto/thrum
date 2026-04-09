@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
@@ -87,7 +87,7 @@ func (r *OutboundRelay) handleNotification(ctx context.Context, params json.RawM
 	// Fetch full message to check recipients and get full body
 	full, err := r.fetchMessage(ctx, data.MessageID)
 	if err != nil {
-		log.Printf("telegram outbound: fetch message %s: %v", data.MessageID, err)
+		slog.Error("telegram outbound: fetch message failed", "message_id", data.MessageID, "err", err)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (r *OutboundRelay) handleNotification(ctx context.Context, params json.RawM
 		// SECURITY: Only send to the configured chatID — never to arbitrary chat IDs
 		teleMsgID, err := r.bot.SendMessage(r.chatID, content, replyTo)
 		if err != nil {
-			log.Printf("telegram outbound: send to chat %d failed: %v", r.chatID, err)
+			slog.Error("telegram outbound: send failed", "chat_id", r.chatID, "err", err)
 			return
 		}
 
