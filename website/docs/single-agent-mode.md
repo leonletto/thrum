@@ -6,7 +6,7 @@ description:
 category: "orchestration"
 order: 3
 tags: ["single-agent", "context", "getting-started"]
-last_updated: "2026-04-04"
+last_updated: "2026-04-09"
 ---
 
 ## What Changed
@@ -89,6 +89,17 @@ when you want to:
 [tmux-managed sessions](tmux-sessions.md) instead of the legacy background
 listener approach. The coordinator creates and manages agent sessions
 automatically — no listeners, no token burn.
+
+---
+
+## Control it from your phone
+
+Single-agent mode still supports the Telegram Bridge. Get pinged
+when your agent needs input, reply from Telegram, and the message
+threads back to your agent without you touching the terminal. See
+[Telegram Bridge](telegram-bridge.md).
+
+---
 
 Switching is one command:
 
@@ -252,8 +263,7 @@ content into it. From then on, Thrum maintains it for you.
 
 ## What's Next
 
-The cross-repo problem I mentioned above? It shipped in this release. v0.7.0
-includes **peer transport** — you pair two Thrum daemons via Tailscale
+One more thing that shipped in this release: v0.7.0 includes **peer transport** — you pair two Thrum daemons via Tailscale
 (`thrum peer add` on one machine, `thrum peer join` on the other), configure
 which agents should be visible across repos (`thrum peer configure`), and
 messages route between them automatically. No Telegram relay, no manual
