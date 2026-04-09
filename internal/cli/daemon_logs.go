@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -25,7 +26,7 @@ type DaemonLogsOptions struct {
 // When opts.Follow is true, it continues streaming until the reader returns
 // an unrecoverable error or ctx-less termination (SIGINT handled by caller).
 // Rotation is detected by watching inode/size and reopening the file.
-func DaemonLogs(repoPath string, opts DaemonLogsOptions, out io.Writer) error {
+func DaemonLogs(ctx context.Context, repoPath string, opts DaemonLogsOptions, out io.Writer) error {
 	thrumDir, err := paths.ResolveThrumDir(repoPath)
 	if err != nil {
 		thrumDir = filepath.Join(repoPath, ".thrum")
@@ -40,7 +41,6 @@ func DaemonLogs(repoPath string, opts DaemonLogsOptions, out io.Writer) error {
 		return fmt.Errorf("stat daemon log: %w", err)
 	}
 
-	// Print the initial lines (last N or all, filtered by --since).
 	if err := printInitialLines(logPath, opts, out); err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func DaemonLogs(repoPath string, opts DaemonLogsOptions, out io.Writer) error {
 		return nil
 	}
 
-	return followLogFile(logPath, opts, out)
+	return followLogFile(ctx, logPath, opts, out)
 }
 
 // printInitialLines reads the log file and prints the last N lines matching
@@ -115,7 +115,7 @@ func printInitialLines(logPath string, opts DaemonLogsOptions, out io.Writer) er
 // followLogFile tails the log file, streaming new content until io.EOF is
 // encountered without new data after the poll interval indefinitely. Handles
 // lumberjack rotation by detecting inode change / size shrink and reopening.
-func followLogFile(logPath string, opts DaemonLogsOptions, out io.Writer) error {
+func followLogFile(ctx context.Context, logPath string, opts DaemonLogsOptions, out io.Writer) error {
 	const pollInterval = 200 * time.Millisecond
 
 	f, err := os.Open(logPath) // #nosec G304 -- logPath is .thrum/var/daemon.log
@@ -124,7 +124,6 @@ func followLogFile(logPath string, opts DaemonLogsOptions, out io.Writer) error 
 	}
 	defer func() { _ = f.Close() }()
 
-	// Seek to end so we only stream new content.
 	if _, err := f.Seek(0, io.SeekEnd); err != nil {
 		return fmt.Errorf("seek to end: %w", err)
 	}
@@ -138,6 +137,12 @@ func followLogFile(logPath string, opts DaemonLogsOptions, out io.Writer) error 
 	sinceActive := opts.Since == nil
 
 	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
 		line, err := reader.ReadString('\n')
 		if len(line) > 0 {
 			trimmed := strings.TrimRight(line, "\n")
@@ -158,8 +163,11 @@ func followLogFile(logPath string, opts DaemonLogsOptions, out io.Writer) error 
 			return fmt.Errorf("read daemon log: %w", err)
 		}
 
-		// EOF — wait briefly and check for rotation.
-		time.Sleep(pollInterval)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(pollInterval):
+		}
 
 		rotated, newF, newStat, rerr := detectRotation(logPath, currentStat)
 		if rerr != nil {
@@ -199,17 +207,19 @@ func detectRotation(path string, prev os.FileInfo) (bool, *os.File, os.FileInfo,
 	return false, nil, nil, nil
 }
 
-// parseLogTimestamp extracts a timestamp from a log line written by
-// InstallLogWriter. The log package with LstdFlags|Lmicroseconds|LUTC prefixes
-// lines with "YYYY/MM/DD HH:MM:SS.ffffff ". Falls back to the without-
-// microseconds format. Lines without either prefix (e.g. raw stderr output)
-// return ok=false.
+// parseLogTimestamp extracts a timestamp from a log line in one of two formats:
+//   - log.Printf with LstdFlags|Lmicroseconds|LUTC: "YYYY/MM/DD HH:MM:SS.ffffff "
+//   - slog TextHandler with custom ReplaceAttr:     'time="YYYY/MM/DD HH:MM:SS.ffffff" '
+//
+// Falls back to the without-microseconds log.Printf format.
+// Lines without a recognized prefix (e.g. raw stderr output) return ok=false.
 func parseLogTimestamp(line string) (time.Time, bool) {
 	const (
 		microLayout = "2006/01/02 15:04:05.000000"
 		microLen    = len(microLayout)
 		stdLayout   = "2006/01/02 15:04:05"
 		stdLen      = len(stdLayout)
+		slogPrefix  = `time="`
 	)
 
 	if len(line) >= microLen {
@@ -220,6 +230,20 @@ func parseLogTimestamp(line string) (time.Time, bool) {
 	if len(line) >= stdLen {
 		if t, err := time.Parse(stdLayout, line[:stdLen]); err == nil {
 			return t.UTC(), true
+		}
+	}
+
+	if strings.HasPrefix(line, slogPrefix) {
+		rest := line[len(slogPrefix):]
+		if len(rest) >= microLen {
+			if t, err := time.Parse(microLayout, rest[:microLen]); err == nil {
+				return t.UTC(), true
+			}
+		}
+		if len(rest) >= stdLen {
+			if t, err := time.Parse(stdLayout, rest[:stdLen]); err == nil {
+				return t.UTC(), true
+			}
 		}
 	}
 	return time.Time{}, false

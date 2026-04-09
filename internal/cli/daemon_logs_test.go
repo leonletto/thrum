@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,8 +12,6 @@ import (
 	"time"
 )
 
-// writeTestLog writes the given lines to .thrum/var/daemon.log under repoDir.
-// Each line is newline-terminated.
 func writeTestLog(t *testing.T, repoDir string, lines []string) string {
 	t.Helper()
 	varDir := filepath.Join(repoDir, ".thrum", "var")
@@ -38,7 +37,7 @@ func TestDaemonLogs_AllLines(t *testing.T) {
 	writeTestLog(t, repo, []string{"line one", "line two", "line three"})
 
 	var buf bytes.Buffer
-	if err := DaemonLogs(repo, DaemonLogsOptions{Lines: 0}, &buf); err != nil {
+	if err := DaemonLogs(context.Background(), repo, DaemonLogsOptions{Lines: 0}, &buf); err != nil {
 		t.Fatalf("DaemonLogs: %v", err)
 	}
 	got := buf.String()
@@ -54,7 +53,7 @@ func TestDaemonLogs_LastNLines(t *testing.T) {
 	writeTestLog(t, repo, lines)
 
 	var buf bytes.Buffer
-	if err := DaemonLogs(repo, DaemonLogsOptions{Lines: 2}, &buf); err != nil {
+	if err := DaemonLogs(context.Background(), repo, DaemonLogsOptions{Lines: 2}, &buf); err != nil {
 		t.Fatalf("DaemonLogs: %v", err)
 	}
 	got := buf.String()
@@ -69,7 +68,7 @@ func TestDaemonLogs_LastNLines_FewerAvailable(t *testing.T) {
 	writeTestLog(t, repo, []string{"a", "b"})
 
 	var buf bytes.Buffer
-	if err := DaemonLogs(repo, DaemonLogsOptions{Lines: 10}, &buf); err != nil {
+	if err := DaemonLogs(context.Background(), repo, DaemonLogsOptions{Lines: 10}, &buf); err != nil {
 		t.Fatalf("DaemonLogs: %v", err)
 	}
 	got := buf.String()
@@ -91,14 +90,12 @@ func TestDaemonLogs_Since(t *testing.T) {
 
 	since := time.Date(2026, 4, 9, 11, 0, 0, 0, time.UTC)
 	var buf bytes.Buffer
-	err := DaemonLogs(repo, DaemonLogsOptions{Lines: 0, Since: &since}, &buf)
+	err := DaemonLogs(context.Background(), repo, DaemonLogsOptions{Lines: 0, Since: &since}, &buf)
 	if err != nil {
 		t.Fatalf("DaemonLogs: %v", err)
 	}
 	got := buf.String()
 
-	// Expect lines from the 11:00 entry onward, including the non-timestamped
-	// line that follows (activated by the previous match).
 	if !strings.Contains(got, "third") {
 		t.Errorf("expected %q to contain 'third'", got)
 	}
@@ -113,11 +110,40 @@ func TestDaemonLogs_Since(t *testing.T) {
 	}
 }
 
+func TestDaemonLogs_Since_MixedFormats(t *testing.T) {
+	repo := t.TempDir()
+	writeTestLog(t, repo, []string{
+		"2026/04/09 10:00:00.000000 log-printf-line-early",
+		`time="2026/04/09 10:30:00.000000" level=INFO msg="slog-line-early"`,
+		`time="2026/04/09 11:00:00.000000" level=INFO msg="slog-line-at-since"`,
+		"2026/04/09 11:30:00.000000 log-printf-line-after",
+		`time="2026/04/09 12:00:00.000000" level=DEBUG msg="slog-line-after"`,
+	})
+
+	since := time.Date(2026, 4, 9, 11, 0, 0, 0, time.UTC)
+	var buf bytes.Buffer
+	err := DaemonLogs(context.Background(), repo, DaemonLogsOptions{Lines: 0, Since: &since}, &buf)
+	if err != nil {
+		t.Fatalf("DaemonLogs: %v", err)
+	}
+	got := buf.String()
+
+	for _, want := range []string{"slog-line-at-since", "log-printf-line-after", "slog-line-after"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q to contain %q", got, want)
+		}
+	}
+	for _, exclude := range []string{"log-printf-line-early", "slog-line-early"} {
+		if strings.Contains(got, exclude) {
+			t.Errorf("expected filter to exclude %q, got %q", exclude, got)
+		}
+	}
+}
+
 func TestDaemonLogs_MissingFile(t *testing.T) {
 	repo := t.TempDir()
-	// Don't create any log file.
 	var buf bytes.Buffer
-	err := DaemonLogs(repo, DaemonLogsOptions{Lines: 50}, &buf)
+	err := DaemonLogs(context.Background(), repo, DaemonLogsOptions{Lines: 50}, &buf)
 	if err == nil {
 		t.Fatal("expected error for missing log file")
 	}
@@ -130,24 +156,22 @@ func TestDaemonLogs_Follow(t *testing.T) {
 	repo := t.TempDir()
 	path := writeTestLog(t, repo, []string{"initial-line"})
 
-	// Tailing runs until the process is killed in real use. For the test
-	// we run it in a goroutine with a bounded reader that we close to
-	// cause follow to return via a read error.
 	var (
 		buf bytes.Buffer
 		mu  sync.Mutex
 	)
 	writer := &lockedBuffer{mu: &mu, buf: &buf}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	done := make(chan error, 1)
 	go func() {
-		done <- DaemonLogs(repo, DaemonLogsOptions{Lines: 1, Follow: true}, writer)
+		done <- DaemonLogs(ctx, repo, DaemonLogsOptions{Lines: 1, Follow: true}, writer)
 	}()
 
-	// Give the follower a moment to read the initial line and start tailing.
 	time.Sleep(300 * time.Millisecond)
 
-	// Append new content.
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600) // #nosec G304 -- test
 	if err != nil {
 		t.Fatalf("reopen log: %v", err)
@@ -160,7 +184,6 @@ func TestDaemonLogs_Follow(t *testing.T) {
 	}
 	_ = f.Close()
 
-	// Poll until the streamed lines appear (or timeout).
 	deadline := time.Now().Add(3 * time.Second)
 	var got string
 	for time.Now().Before(deadline) {
@@ -183,10 +206,15 @@ func TestDaemonLogs_Follow(t *testing.T) {
 		t.Errorf("expected streamed-line-2 in output, got %q", got)
 	}
 
-	// Goroutine is still blocked in follow; we leave it to exit at test
-	// teardown. t.Cleanup is not needed because the goroutine holds no
-	// resources that matter beyond the test process.
-	_ = done
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("DaemonLogs returned error after cancel: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("DaemonLogs did not exit after context cancellation")
+	}
 }
 
 func TestDaemonLogs_FollowHandlesRotation(t *testing.T) {
@@ -199,13 +227,15 @@ func TestDaemonLogs_FollowHandlesRotation(t *testing.T) {
 	)
 	writer := &lockedBuffer{mu: &mu, buf: &buf}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	go func() {
-		_ = DaemonLogs(repo, DaemonLogsOptions{Lines: 1, Follow: true}, writer)
+		_ = DaemonLogs(ctx, repo, DaemonLogsOptions{Lines: 1, Follow: true}, writer)
 	}()
 
 	time.Sleep(300 * time.Millisecond)
 
-	// Simulate lumberjack rotation: rename old file and create new one.
 	rotatedPath := path + ".1"
 	if err := os.Rename(path, rotatedPath); err != nil {
 		t.Fatalf("rename: %v", err)
@@ -246,6 +276,8 @@ func TestParseLogTimestamp(t *testing.T) {
 	}{
 		{"microseconds", "2026/04/09 18:14:56.122848 hello", true},
 		{"std flags only", "2026/04/09 18:14:56 hello", true},
+		{"slog format microseconds", `time="2026/04/09 18:14:56.122848" level=INFO msg="hello"`, true},
+		{"slog format std", `time="2026/04/09 18:14:56" level=INFO msg="hello"`, true},
 		{"no timestamp", "plain log line", false},
 		{"empty", "", false},
 		{"short", "2026/04/09", false},
@@ -253,15 +285,19 @@ func TestParseLogTimestamp(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, ok := parseLogTimestamp(tc.line)
+			ts, ok := parseLogTimestamp(tc.line)
 			if ok != tc.want {
 				t.Errorf("parseLogTimestamp(%q) ok = %v, want %v", tc.line, ok, tc.want)
+			}
+			if ok {
+				if ts.Location() != time.UTC {
+					t.Errorf("expected UTC, got %v", ts.Location())
+				}
 			}
 		})
 	}
 }
 
-// lockedBuffer is a goroutine-safe bytes.Buffer wrapper for concurrent tests.
 type lockedBuffer struct {
 	mu  *sync.Mutex
 	buf *bytes.Buffer

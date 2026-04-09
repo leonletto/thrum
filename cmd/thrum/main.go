@@ -2033,7 +2033,7 @@ they are written. Use --since to filter by timestamp (e.g. "1h", "7d",
 				}
 				opts.Since = &t
 			}
-			return cli.DaemonLogs(flagRepo, opts, os.Stdout)
+			return cli.DaemonLogs(cmd.Context(), flagRepo, opts, os.Stdout)
 		},
 	}
 

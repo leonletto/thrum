@@ -45,7 +45,7 @@ func (r *InboundRelay) Run(ctx context.Context, messages <-chan InboundMessage) 
 // Relay routes an inbound message to the correct handler based on whether it is
 // a group message (GroupChatID < 0) or a direct message.
 func (r *InboundRelay) Relay(ctx context.Context, msg InboundMessage) error {
-	slog.Debug("telegram inbound: Relay called", "group_chat_id", msg.GroupChatID, "text", msg.Text)
+	slog.Debug("telegram inbound: Relay called", "group_chat_id", msg.GroupChatID, "text", truncateForLog(msg.Text, 200))
 	if msg.GroupChatID < 0 {
 		return r.relayGroup(ctx, msg)
 	}
@@ -227,4 +227,14 @@ func (r *InboundRelay) fetchMessageAuthor(ctx context.Context, thrumID string) (
 		return "", fmt.Errorf("parse message.get response: %w", err)
 	}
 	return parsed.Message.Author.AgentID, nil
+}
+
+func truncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen > len("...(truncated)") {
+		return s[:maxLen-len("...(truncated)")] + "...(truncated)"
+	}
+	return s[:maxLen]
 }
