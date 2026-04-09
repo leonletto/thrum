@@ -503,6 +503,20 @@ thrum agent set-intent "Working on {{TASK_ID}}: <description>"
 
 ---
 
+<!-- REVIEW_GATE_TEMPLATE_START -->
+## Review Gate: {{EPIC_ID}}
+
+Before proceeding to the next epic:
+1. Commit all work for this epic
+2. Run tests: verify all tests pass for changes in this epic
+3. Report completion via Thrum:
+   `thrum send "Epic {{EPIC_ID}} complete. Ready for review." --to @{{SUPERVISOR_NAME}}`
+4. Set status: `thrum agent set-status idle`
+5. **STOP.** Wait for review approval before continuing.
+<!-- REVIEW_GATE_TEMPLATE_END -->
+
+---
+
 ## Phase 3: Self-Review Gate (MANDATORY)
 
 **You MUST complete this phase before claiming the epic is done.** Do not skip

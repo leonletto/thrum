@@ -649,6 +649,33 @@ Worktree ready at `{{WORKTREE_PATH}}` on branch `{{BRANCH_NAME}}`. Agent
      All behavioral sections must be present with placeholders resolved. -->
 ```
 
+### Step 3.5: Insert review gates between epics
+
+For multi-epic prompts (where one implementation agent handles sequential
+epics), insert a review gate block after each epic's task section. Use the
+template from `implementation-agent.md` (between `REVIEW_GATE_TEMPLATE_START`
+and `REVIEW_GATE_TEMPLATE_END` comments):
+
+```markdown
+## Review Gate: <EPIC_BEAD_ID>
+
+Before proceeding to the next epic:
+1. Commit all work for this epic
+2. Run tests: verify all tests pass for changes in this epic
+3. Report completion via Thrum:
+   `thrum send "Epic <EPIC_BEAD_ID> complete. Ready for review." --to @<SUPERVISOR_NAME>`
+4. Set status: `thrum agent set-status idle`
+5. **STOP.** Wait for review approval before continuing.
+```
+
+Resolve `{{EPIC_ID}}` with the current epic's bead ID and `{{SUPERVISOR_NAME}}`
+with the supervisor agent name. Insert one gate after each epic's tasks, before
+the next epic's heading. The orchestrator validates prompts by checking for
+`## Review Gate:` headings — prompts without them will be rejected.
+
+For single-epic prompts, omit the review gate (the Self-Review Gate in Phase 3
+handles end-of-work review).
+
 ### Step 4: Save and commit
 
 Save to `dev-docs/prompts/{feature}.md`, then commit:
