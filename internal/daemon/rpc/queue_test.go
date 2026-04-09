@@ -782,3 +782,115 @@ func TestHandleQueueWaitElapsedFromSentAt(t *testing.T) {
 		t.Errorf("ElapsedMs=%d — expected >= 1000 (seeded SentAt is 2s ago)", wr.ElapsedMs)
 	}
 }
+
+func TestRestartRecoveryMarksActiveAsInterrupted(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Insert a "sent" command — simulating a command that was in-flight when
+	// the daemon previously exited.
+	sentCmd := &QueuedCommand{
+		ID:             "cmd_interrupted",
+		Text:           "still running",
+		RequesterAgent: "test_coord",
+		State:          StateSent,
+		SubmittedAt:    time.Now(),
+		SentAt:         time.Now(),
+	}
+	if err := persistCommand(ctx, h.state.DB(), "test-session", sentCmd, 0); err != nil {
+		t.Fatalf("seed sent command: %v", err)
+	}
+
+	// Insert a "queued" command — simulating a command waiting its turn.
+	queuedCmd := &QueuedCommand{
+		ID:             "cmd_queued",
+		Text:           "waiting in line",
+		RequesterAgent: "test_coord",
+		State:          StateQueued,
+		SubmittedAt:    time.Now(),
+	}
+	if err := persistCommand(ctx, h.state.DB(), "test-session", queuedCmd, 1); err != nil {
+		t.Fatalf("seed queued command: %v", err)
+	}
+
+	if err := h.RecoverQueueState(ctx); err != nil {
+		t.Fatalf("RecoverQueueState: %v", err)
+	}
+
+	// The sent command must now be interrupted in the DB.
+	loaded, err := loadCommand(ctx, h.state.DB(), "cmd_interrupted")
+	if err != nil {
+		t.Fatalf("loadCommand(cmd_interrupted): %v", err)
+	}
+	if loaded.State != StateInterrupted {
+		t.Errorf("cmd_interrupted state=%s, want %s", loaded.State, StateInterrupted)
+	}
+
+	// The queued command must be reloaded into the in-memory queue.
+	q := h.getQueue("test-session")
+	if q == nil {
+		t.Fatal("no in-memory queue for test-session after recovery")
+	}
+	if q.Len() != 1 {
+		t.Errorf("queue len=%d, want 1", q.Len())
+	}
+
+	// The queued command's DB state must remain "queued" — reload doesn't mutate it.
+	loadedQ, err := loadCommand(ctx, h.state.DB(), "cmd_queued")
+	if err != nil {
+		t.Fatalf("loadCommand(cmd_queued): %v", err)
+	}
+	if loadedQ.State != StateQueued {
+		t.Errorf("cmd_queued state=%s, want %s", loadedQ.State, StateQueued)
+	}
+}
+
+func TestHandleKillDrainsQueue(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	q := h.getOrCreateQueue("doomed-session")
+
+	// Add an active + queued command.
+	active := &QueuedCommand{
+		ID:             "cmd_active_kill",
+		Text:           "still running",
+		RequesterAgent: "test_coord",
+		State:          StateActive,
+		SubmittedAt:    time.Now(),
+		SentAt:         time.Now(),
+	}
+	queued := &QueuedCommand{
+		ID:             "cmd_queued_kill",
+		Text:           "waiting",
+		RequesterAgent: "test_coord",
+		State:          StateQueued,
+		SubmittedAt:    time.Now(),
+	}
+	q.SetActive(active)
+	q.Enqueue(queued)
+	_ = persistCommand(ctx, h.state.DB(), "doomed-session", active, 0)
+	_ = persistCommand(ctx, h.state.DB(), "doomed-session", queued, 1)
+
+	// Call drainQueueOnKill directly (avoids invoking real tmux KillSession).
+	h.drainQueueOnKill(ctx, "doomed-session")
+
+	// Both commands should be marked interrupted in the DB.
+	for _, id := range []string{"cmd_active_kill", "cmd_queued_kill"} {
+		loaded, err := loadCommand(ctx, h.state.DB(), id)
+		if err != nil {
+			t.Fatalf("loadCommand %s: %v", id, err)
+		}
+		if loaded.State != StateInterrupted {
+			t.Errorf("command %s state=%s, want interrupted", id, loaded.State)
+		}
+	}
+
+	// The in-memory queue should be gone.
+	if h.getQueue("doomed-session") != nil {
+		t.Error("queue not removed on drain")
+	}
+}

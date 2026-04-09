@@ -599,3 +599,98 @@ func (h *TmuxHandler) HandleCancel(ctx context.Context, params json.RawMessage) 
 
 	return &CancelResponse{CommandID: loaded.ID, State: StateCancelled}, nil
 }
+
+// RecoverQueueState is called at daemon startup, before the server accepts
+// connections. It reconciles the SQLite command_queue with the in-memory
+// SessionQueue structs after a daemon restart.
+//
+// Two recovery phases are performed:
+//  1. Commands that were in 'sent', 'active', or 'timeout_waiting' at the
+//     time of the previous daemon's exit are marked 'interrupted' and their
+//     requesters notified — the daemon cannot resume a mid-flight tmux command.
+//  2. Commands that were in 'queued' state are reloaded into their in-memory
+//     SessionQueue structs so they resume processing on the next silence event.
+//
+// Safe to call concurrently with no other queue activity because the in-memory
+// queues are empty at startup.
+func (h *TmuxHandler) RecoverQueueState(ctx context.Context) error {
+	pending, err := loadPendingCommands(ctx, h.state.DB())
+	if err != nil {
+		return fmt.Errorf("load pending commands: %w", err)
+	}
+	var interrupted, reloaded int
+	for _, cmd := range pending {
+		switch cmd.State {
+		case StateSent, StateActive, StateTimeoutWaiting:
+			cmd.State = StateInterrupted
+			cmd.CompletedAt = time.Now().UTC()
+			h.state.Lock()
+			_ = updateCommandState(ctx, h.state.DB(), cmd)
+			h.state.Unlock()
+
+			body := fmt.Sprintf("Command %s interrupted by daemon restart.\nSession: %s\nResubmit if needed.",
+				cmd.ID, cmd.sessionName)
+			h.sendSystemMessage(ctx, cmd.RequesterAgent, body)
+			interrupted++
+
+		case StateQueued:
+			// Reload into the in-memory queue. The command will be picked
+			// up by HandleCheckPane on the next silence event.
+			h.getOrCreateQueue(cmd.sessionName).Enqueue(cmd)
+			reloaded++
+		}
+	}
+	log.Printf("[queue] recovery: interrupted=%d reloaded=%d", interrupted, reloaded)
+	return nil
+}
+
+// drainQueueOnKill marks all commands for a session as interrupted, notifies
+// their requesters (if NotifyOnComplete is set), and removes the session's
+// queue from the in-memory map. Called by HandleKill before actually killing
+// the tmux session so commands in flight get a clean terminal state in the DB.
+func (h *TmuxHandler) drainQueueOnKill(ctx context.Context, session string) {
+	queue := h.getQueue(session)
+	if queue == nil {
+		return
+	}
+
+	// Collect all commands (active + queued) into a single slice.
+	var all []*QueuedCommand
+	if active := queue.Active(); active != nil {
+		all = append(all, active)
+	}
+	all = append(all, queue.Snapshot()...)
+
+	// Mark each interrupted in DB and notify requester if requested.
+	for _, cmd := range all {
+		cmd.mu.Lock()
+		if isTerminalState(cmd.State) {
+			cmd.mu.Unlock()
+			continue
+		}
+		cmd.State = StateInterrupted
+		cmd.CompletedAt = time.Now().UTC()
+		if cmd.timer != nil {
+			cmd.timer.Stop()
+		}
+
+		h.state.Lock()
+		_ = updateCommandState(ctx, h.state.DB(), cmd)
+		h.state.Unlock()
+
+		notify := cmd.NotifyOnComplete
+		cmdID := cmd.ID
+		cmd.mu.Unlock()
+
+		if notify {
+			body := fmt.Sprintf("Command %s interrupted — session %s was killed.\nResubmit if needed.",
+				cmdID, session)
+			h.sendSystemMessage(ctx, cmd.RequesterAgent, body)
+		}
+	}
+
+	// Remove the queue from the in-memory map.
+	h.queuesMu.Lock()
+	delete(h.queues, session)
+	h.queuesMu.Unlock()
+}

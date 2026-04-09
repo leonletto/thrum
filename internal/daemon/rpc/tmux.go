@@ -218,6 +218,7 @@ func (h *TmuxHandler) HandleKill(ctx context.Context, params json.RawMessage) (a
 	}
 
 	name := ttmux.SanitizeSessionName(req.Name)
+	h.drainQueueOnKill(ctx, name)
 	h.clearTmuxFromIdentities(name)
 
 	return nil, ttmux.KillSession(name)
