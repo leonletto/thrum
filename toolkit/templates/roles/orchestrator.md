@@ -296,7 +296,7 @@ merge, with human confirmation.
 
 ---
 
-## CRITICAL REMINDERS
+## Critical Reminders
 
 - You NEVER write code — delegate everything
 - Default is delegate — self-action requires explicit justification

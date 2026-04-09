@@ -140,10 +140,24 @@ If it fails again, escalate to the human.
 thrum agent set-status idle --agent <name>
 ```
 
-### Step 5: Report to human
+### Step 5: Wait for agent registration
+
+Agents auto-prime on session start, which takes ~10-15 seconds. Before sending
+work, verify each agent has registered:
 
 ```bash
-thrum send "All agents launched and verified: <agent-list>. Starting execution." --to @<human_or_coordinator>
+# Wait for agents to register (poll every 5s, max 30s)
+thrum team
+```
+
+Confirm each launched agent appears in `thrum team` output. If an agent doesn't
+register within 30 seconds, check its session with `thrum tmux status` and
+retry the launch if needed.
+
+### Step 6: Report to human
+
+```bash
+thrum send "All agents launched and registered: <agent-list>. Starting execution." --to @<human_or_coordinator>
 ```
 
 ---
@@ -242,13 +256,29 @@ thrum send "All epics complete. Merge report: <report>. Ready to merge to <targe
 
 ### Step 4: Merge on approval
 
-Only after human approves:
+Only after human approves. The orchestrator runs on detached HEAD and cannot
+merge directly. Spawn a sub-agent in the main repo worktree to perform the
+merge:
 
-```bash
-# For each agent branch
-git merge <branch> --no-ff
-git push origin <merge-target>
+```text
+Agent(subagent_type="general-purpose", model="haiku",
+  prompt="Merge agent branches to the merge target.
+
+  Working directory: <main-repo-path>
+
+  Steps:
+  1. git checkout <merge-target>
+  2. git pull origin <merge-target>
+  3. For each branch: git merge <branch> --no-ff
+  4. git push origin <merge-target>
+  5. Report: which branches merged, any conflicts
+
+  Branches to merge: <list-of-agent-branches>
+  Merge target: <target-branch>")
 ```
+
+If the sub-agent reports merge conflicts, escalate to the human with the
+conflict details. Do not attempt to resolve conflicts yourself.
 
 ### Step 5: Cleanup
 
