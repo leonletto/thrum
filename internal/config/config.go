@@ -1,14 +1,15 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/process"
@@ -266,8 +267,7 @@ func adoptIdentity(dirPath string, id *IdentityFile, agentPID int) *IdentityFile
 func detectCurrentWorktree(identitiesDir string) string {
 	// identitiesDir is .thrum/identities/ — go up two levels to get repo root
 	repoRoot := filepath.Dir(filepath.Dir(identitiesDir))
-	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--show-toplevel") // #nosec G204 -- repoRoot derived from internal identitiesDir path, not user input
-	out, err := cmd.Output()
+	out, err := safecmd.Git(context.Background(), repoRoot, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return ""
 	}

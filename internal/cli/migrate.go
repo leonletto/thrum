@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/sync"
 )
@@ -104,13 +104,12 @@ func Migrate(repoPath string) error {
 // Returns true if migration is needed, along with a list of found sources.
 func migrationNeeded(repoPath, thrumDir string) (bool, []string) {
 	var sources []string
+	ctx := context.Background()
 
 	// Check for files tracked by git
 	trackedFiles := []string{".thrum/events.jsonl", ".thrum/messages.jsonl", ".thrum/messages/"}
 	for _, f := range trackedFiles {
-		cmd := exec.Command("git", "ls-files", f) // #nosec G204 -- f comes from hardcoded trackedFiles slice, not user input
-		cmd.Dir = repoPath
-		output, err := cmd.Output()
+		output, err := safecmd.Git(ctx, repoPath, "ls-files", f)
 		if err == nil && strings.TrimSpace(string(output)) != "" {
 			sources = append(sources, f+" (tracked by git)")
 		}
@@ -239,17 +238,14 @@ func copyDataToSync(thrumDir, syncDir string) ([]string, error) {
 
 // commitSyncData stages and commits all data in the sync worktree.
 func commitSyncData(syncDir string) error {
-	cmd := exec.Command("git", "add", ".")
-	cmd.Dir = syncDir
-	if err := cmd.Run(); err != nil {
+	ctx := context.Background()
+
+	// safecmd.Git injects the thrum user.name/user.email overrides automatically.
+	if _, err := safecmd.Git(ctx, syncDir, "add", "."); err != nil {
 		return fmt.Errorf("git add in sync worktree: %w", err)
 	}
 
-	cmd = exec.Command("git",
-		"-c", "user.name=Thrum", "-c", "user.email=thrum@local",
-		"commit", "--no-verify", "-m", "migrate: import data from main branch")
-	cmd.Dir = syncDir
-	output, err := cmd.CombinedOutput()
+	output, err := safecmd.Git(ctx, syncDir, "commit", "--no-verify", "-m", "migrate: import data from main branch")
 	if err != nil {
 		outStr := strings.ToLower(string(output))
 		// "nothing to commit" is acceptable (idempotent)
@@ -266,6 +262,7 @@ func commitSyncData(syncDir string) error {
 // Files remain on disk. Returns a list of files that were untracked.
 func removeFromMainTracking(repoPath string) []string {
 	var removed []string
+	ctx := context.Background()
 
 	targets := []struct {
 		path      string
@@ -284,9 +281,7 @@ func removeFromMainTracking(repoPath string) []string {
 		}
 		args = append(args, t.path)
 
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repoPath
-		if err := cmd.Run(); err == nil {
+		if _, err := safecmd.Git(ctx, repoPath, args...); err == nil {
 			removed = append(removed, t.path)
 		}
 		// Errors are expected (file not tracked) — ignore them
@@ -448,14 +443,11 @@ func MigrateSyncWorktreeLocation(repoPath, thrumDir string) error {
 	fmt.Fprintf(os.Stderr, "Migrating sync worktree from %s to .git/thrum-sync/...\n", oldSyncDir)
 
 	// Remove old worktree via git
-	cmd := exec.Command("git", "worktree", "remove", "--force", oldSyncDir) // #nosec G204 -- oldSyncDir is constructed from internal config paths, not user input
-	cmd.Dir = repoPath
-	if err := cmd.Run(); err != nil {
+	ctx := context.Background()
+	if _, err := safecmd.Git(ctx, repoPath, "worktree", "remove", "--force", oldSyncDir); err != nil {
 		// Fallback: manual removal + prune
 		_ = os.RemoveAll(oldSyncDir)
-		pruneCmd := exec.Command("git", "worktree", "prune")
-		pruneCmd.Dir = repoPath
-		_ = pruneCmd.Run()
+		_, _ = safecmd.Git(ctx, repoPath, "worktree", "prune")
 	}
 
 	// New worktree is created by the normal init path (CreateSyncWorktree)

@@ -1,14 +1,15 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	agentcontext "github.com/leonletto/thrum/internal/context"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/runtime"
 )
@@ -206,10 +207,10 @@ func getGitWorkContext() *WorkContextInfo {
 	return wc
 }
 
-// gitOutput runs a git command and returns trimmed stdout.
+// gitOutput runs a git command in the current working directory and returns
+// trimmed stdout (routed through safecmd.Git for unified timeout/error handling).
 func gitOutput(args ...string) (string, error) {
-	cmd := exec.Command("git", args...) // #nosec G204 -- hardcoded "git" binary; args are internal git subcommands/flags, not user input
-	out, err := cmd.Output()
+	out, err := safecmd.Git(context.Background(), ".", args...)
 	if err != nil {
 		return "", err
 	}
