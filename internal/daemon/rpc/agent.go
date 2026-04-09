@@ -1093,6 +1093,89 @@ func (h *AgentHandler) getMessageCount(ctx context.Context, agentID string) int 
 	return count
 }
 
+// HandleSetAgentStatus handles the agent.set-status RPC method.
+// It finds the target agent's identity file across all worktrees and updates the status.
+func (h *AgentHandler) HandleSetAgentStatus(ctx context.Context, params json.RawMessage) (any, error) {
+	var req struct {
+		Agent  string `json:"agent"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if req.Agent == "" {
+		return nil, errors.New("agent name is required")
+	}
+	if req.Status != "working" && req.Status != "idle" && req.Status != "blocked" {
+		return nil, fmt.Errorf("invalid status %q: must be working, idle, or blocked", req.Status)
+	}
+
+	// Search identity dirs across worktrees for the target agent
+	idFile, idPath, err := h.findAgentIdentity(ctx, req.Agent)
+	if err != nil {
+		return nil, fmt.Errorf("find agent %s: %w", req.Agent, err)
+	}
+
+	idFile.AgentStatus = req.Status
+	idFile.AgentStatusUpdatedAt = time.Now().UTC()
+
+	// Save back to the same directory the file was found in
+	idDir := filepath.Dir(idPath)
+	thrumDir := filepath.Dir(idDir) // identities dir is inside .thrum
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		return nil, fmt.Errorf("save identity for %s: %w", req.Agent, err)
+	}
+
+	return map[string]string{
+		"agent":  req.Agent,
+		"status": req.Status,
+	}, nil
+}
+
+// findAgentIdentity searches all worktree identity directories for the named agent.
+func (h *AgentHandler) findAgentIdentity(ctx context.Context, agentName string) (*config.IdentityFile, string, error) {
+	filename := agentName + ".json"
+
+	// Check primary identities dir first
+	primaryDir := filepath.Join(h.state.RepoPath(), ".thrum", "identities")
+	if idFile, path, err := h.tryLoadIdentity(primaryDir, filename); err == nil {
+		return idFile, path, nil
+	}
+
+	// Scan worktrees via git
+	output, err := safecmd.Git(ctx, h.state.RepoPath(), "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, "", fmt.Errorf("agent %s not found in primary identity dir", agentName)
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		if path, ok := strings.CutPrefix(line, "worktree "); ok {
+			idDir := filepath.Join(path, ".thrum", "identities")
+			if idDir == primaryDir {
+				continue
+			}
+			if idFile, idPath, err := h.tryLoadIdentity(idDir, filename); err == nil {
+				return idFile, idPath, nil
+			}
+		}
+	}
+
+	return nil, "", fmt.Errorf("agent %s not found in any worktree", agentName)
+}
+
+// tryLoadIdentity attempts to load an identity file from a directory.
+func (h *AgentHandler) tryLoadIdentity(idDir, filename string) (*config.IdentityFile, string, error) {
+	path := filepath.Join(idDir, filename)
+	data, err := os.ReadFile(path) // #nosec G304 -- path under .thrum/identities/
+	if err != nil {
+		return nil, "", err
+	}
+	var idFile config.IdentityFile
+	if err := json.Unmarshal(data, &idFile); err != nil {
+		return nil, "", err
+	}
+	return &idFile, path, nil
+}
+
 // getWorktreeName extracts the worktree name from the repo path.
 // Returns the basename of the repo path (e.g., "daemon", "foundation", "main").
 func (h *AgentHandler) getWorktreeName() string {

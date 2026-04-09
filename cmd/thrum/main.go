@@ -2759,8 +2759,72 @@ Examples:
 		RunE: sessionSetTaskRunE,
 	}
 	cmd.AddCommand(agentSetTaskCmd)
+	cmd.AddCommand(agentSetStatusCmd())
 
 	return cmd
+}
+
+func agentSetStatusCmd() *cobra.Command {
+	var targetAgent string
+	cmd := &cobra.Command{
+		Use:   "set-status <working|idle|blocked>",
+		Short: "Set agent operational status",
+		Long: `Set the operational status for an agent.
+
+Valid statuses: working, idle, blocked.
+
+Without --agent, updates the local agent's identity file directly.
+With --agent, sends a daemon RPC to update a remote agent's status.
+
+Examples:
+  thrum agent set-status working
+  thrum agent set-status idle --agent impl_team_fix`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			status := args[0]
+			if status != "working" && status != "idle" && status != "blocked" {
+				return fmt.Errorf("invalid status %q: must be working, idle, or blocked", status)
+			}
+			if targetAgent != "" {
+				return setRemoteAgentStatus(targetAgent, status)
+			}
+			return setLocalAgentStatus(status)
+		},
+	}
+	cmd.Flags().StringVar(&targetAgent, "agent", "", "Target agent name (uses daemon RPC for remote write)")
+	return cmd
+}
+
+func setLocalAgentStatus(status string) error {
+	idFile, _, err := config.LoadIdentityWithPath(flagRepo)
+	if err != nil {
+		return fmt.Errorf("load identity: %w", err)
+	}
+	idFile.AgentStatus = status
+	idFile.AgentStatusUpdatedAt = time.Now().UTC()
+	thrumDir := filepath.Join(paths.EffectiveRepoPath(flagRepo), ".thrum")
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		return fmt.Errorf("save identity: %w", err)
+	}
+	fmt.Printf("✓ Status set to %s\n", status)
+	return nil
+}
+
+func setRemoteAgentStatus(agentName, status string) error {
+	client, err := getClient()
+	if err != nil {
+		return fmt.Errorf("daemon not running: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+	var result map[string]any
+	if err := client.Call("agent.set-status", map[string]string{
+		"agent":  agentName,
+		"status": status,
+	}, &result); err != nil {
+		return fmt.Errorf("set remote status: %w", err)
+	}
+	fmt.Printf("✓ Status for %s set to %s\n", agentName, status)
+	return nil
 }
 
 // sessionStartRunE is the shared RunE for 'session start' and 'agent start'.
@@ -4987,6 +5051,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("agent.listContext", agentHandler.HandleListContext)
 	server.RegisterHandler("agent.delete", agentHandler.HandleDelete)
 	server.RegisterHandler("agent.cleanup", agentHandler.HandleCleanup)
+	server.RegisterHandler("agent.set-status", agentHandler.HandleSetAgentStatus)
 
 	// Team management
 	teamHandler := rpc.NewTeamHandler(st, thrumDir)
