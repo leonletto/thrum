@@ -39,7 +39,7 @@ type TeamMember struct {
 	Module          string       `json:"module"`
 	Display         string       `json:"display,omitempty"`
 	Hostname        string       `json:"hostname,omitempty"`
-	ClaudePID       int          `json:"claude_pid,omitempty"`
+	AgentPID       int          `json:"agent_pid,omitempty"`
 	WorktreePath    string       `json:"worktree,omitempty"`
 	SessionID       string       `json:"session_id,omitempty"`
 	SessionStart    string       `json:"session_start,omitempty"`
@@ -89,11 +89,11 @@ func FormatTeam(resp *TeamListResponse) string {
 		out.WriteString(FormatAgentSummaryCompact(summary) + "\n")
 
 		// PID liveness indicator
-		if m.ClaudePID > 0 {
-			if process.IsRunning(m.ClaudePID) {
-				fmt.Fprintf(&out, "PID:      %d [live]\n", m.ClaudePID)
+		if m.AgentPID > 0 {
+			if process.IsRunning(m.AgentPID) {
+				fmt.Fprintf(&out, "PID:      %d [live]\n", m.AgentPID)
 			} else {
-				fmt.Fprintf(&out, "PID:      %d [stale]\n", m.ClaudePID)
+				fmt.Fprintf(&out, "PID:      %d [stale]\n", m.AgentPID)
 			}
 		}
 

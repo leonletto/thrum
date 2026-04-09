@@ -363,8 +363,14 @@ func (p *Projector) applyAgentRegister(ctx context.Context, data json.RawMessage
 		return fmt.Errorf("unmarshal agent.register: %w", err)
 	}
 
+	// Coalesce AgentPID and ClaudePID for backward compat with old JSONL events
+	pid := event.AgentPID
+	if pid == 0 {
+		pid = event.ClaudePID
+	}
+
 	_, err := p.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO agents (agent_id, kind, role, module, display, hostname, claude_pid, registered_at)
+		INSERT OR REPLACE INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		event.AgentID,
@@ -373,7 +379,7 @@ func (p *Projector) applyAgentRegister(ctx context.Context, data json.RawMessage
 		event.Module,
 		sqlNullString(event.Display),
 		sqlNullString(event.Hostname),
-		event.ClaudePID,
+		pid,
 		event.Timestamp,
 	)
 	if err != nil {

@@ -42,10 +42,45 @@ func TestIsClaudeProcess_DeadPID(t *testing.T) {
 	}
 }
 
+func TestIsRuntimeProcess_NotRuntime(t *testing.T) {
+	// Current test process is "go" or similar, not any known runtime
+	if IsRuntimeProcess(os.Getpid(), "") {
+		t.Skip("running as a known runtime process")
+	}
+}
+
+func TestIsRuntimeProcess_DeadPID(t *testing.T) {
+	if IsRuntimeProcess(999999, "") {
+		t.Error("dead PID should not be a runtime process")
+	}
+}
+
+func TestIsRuntimeProcess_ZeroPID(t *testing.T) {
+	if IsRuntimeProcess(0, "") {
+		t.Error("PID 0 should return false")
+	}
+}
+
+func TestIsRuntimeProcess_NegativePID(t *testing.T) {
+	if IsRuntimeProcess(-1, "claude") {
+		t.Error("negative PID should return false")
+	}
+}
+
+func TestIsRuntimeProcess_SpecificRuntime(t *testing.T) {
+	// A non-claude process should not match "claude" runtime
+	if IsRuntimeProcess(os.Getpid(), "claude") {
+		t.Skip("running as claude process")
+	}
+}
+
 func TestFindClaudeAncestor_ReturnsZeroOutsideClaude(t *testing.T) {
-	pid := FindClaudeAncestor()
+	pid, runtime := FindClaudeAncestor()
 	if pid != 0 {
-		t.Skipf("running inside Claude (found PID %d), cannot test negative case", pid)
+		t.Skipf("running inside %s (found PID %d), cannot test negative case", runtime, pid)
+	}
+	if runtime != "" {
+		t.Errorf("expected empty runtime when no ancestor found, got %q", runtime)
 	}
 }
 

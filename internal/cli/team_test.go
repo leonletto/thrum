@@ -307,7 +307,7 @@ func TestFormatTeam_LiveIndicator(t *testing.T) {
 				AgentID:   "test_agent",
 				Role:      "implementer",
 				Module:    "test",
-				ClaudePID: os.Getpid(), // current process = alive
+				AgentPID: os.Getpid(), // current process = alive
 				Status:    "active",
 			},
 		},
@@ -325,7 +325,7 @@ func TestFormatTeam_StaleIndicator(t *testing.T) {
 				AgentID:   "test_agent",
 				Role:      "implementer",
 				Module:    "test",
-				ClaudePID: 999999, // dead PID
+				AgentPID: 999999, // dead PID
 				Status:    "active",
 			},
 		},
@@ -343,7 +343,7 @@ func TestFormatTeam_NoPIDNoIndicator(t *testing.T) {
 				AgentID:   "test_agent",
 				Role:      "implementer",
 				Module:    "test",
-				ClaudePID: 0, // no PID
+				AgentPID: 0, // no PID
 				Status:    "active",
 			},
 		},
