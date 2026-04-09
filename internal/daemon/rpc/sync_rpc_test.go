@@ -358,13 +358,14 @@ func setupThrumFiles(t *testing.T, repoPath string) {
 	}
 
 	// Create a-sync branch and worktree
+	ctx := context.Background()
 	bm := sync.NewBranchManager(repoPath, false)
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(ctx); err != nil {
 		t.Fatalf("failed to create a-sync branch: %v", err)
 	}
 
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	if err := bm.CreateSyncWorktree(syncDir); err != nil {
+	if err := bm.CreateSyncWorktree(ctx, syncDir); err != nil {
 		t.Fatalf("failed to create sync worktree: %v", err)
 	}
 

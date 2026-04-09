@@ -5,12 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/transport"
@@ -60,12 +60,12 @@ var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,32}$`)
 func (h *UserHandler) HandleIdentify(ctx context.Context, params json.RawMessage) (any, error) {
 	repoPath := h.state.RepoPath()
 
-	name, err := gitConfigValue(ctx, repoPath, "user.name")
+	name, err := safecmd.GitConfig(ctx, repoPath, "user.name")
 	if err != nil || name == "" {
 		return nil, fmt.Errorf("git config user.name not set: configure with 'git config user.name \"Your Name\"'")
 	}
 
-	email, _ := gitConfigValue(ctx, repoPath, "user.email")
+	email, _ := safecmd.GitConfig(ctx, repoPath, "user.email")
 
 	return &IdentifyResponse{
 		Username: sanitizeUsername(name),
@@ -225,21 +225,6 @@ func sanitizeUsername(name string) string {
 		return "user"
 	}
 	return result
-}
-
-// gitConfigValue runs git config to get a value from the repo's git config.
-// Uses exec.Command directly (not safecmd.Git) because safecmd injects
-// -c user.name=Thrum overrides that mask the real git config values.
-func gitConfigValue(ctx context.Context, repoPath, key string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "config", "--get", key) // #nosec G204 -- hardcoded "git" binary; key is an internal config key constant
-	cmd.Dir = repoPath
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("git config --get %s in %s: %w", key, repoPath, err)
-	}
-	return strings.TrimSpace(string(out)), nil
 }
 
 // RPCError represents a JSON-RPC error with custom code.

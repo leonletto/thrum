@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -138,7 +139,7 @@ func TestBranchManager_CreateSyncBranch_WithExistingCommits(t *testing.T) {
 	originalBranch := getCurrentBranch(t, repoPath)
 
 	// Create the sync branch
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}
 
@@ -164,12 +165,12 @@ func TestBranchManager_CreateSyncBranch_AlreadyExists(t *testing.T) {
 	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch first time
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}
 
 	// Create again - should not error
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Errorf("CreateSyncBranch failed on second call: %v", err)
 	}
 
@@ -194,7 +195,7 @@ func TestBranchManager_CreateSyncBranch_NoCommits(t *testing.T) {
 	}
 
 	// Create the sync branch in empty repo
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}
 
@@ -234,7 +235,7 @@ func TestBranchManager_CreateSyncBranch_NotGitRepo(t *testing.T) {
 	bm := NewBranchManager(tmpDir, false)
 
 	// Should fail because it's not a git repo
-	err := bm.CreateSyncBranch()
+	err := bm.CreateSyncBranch(context.Background())
 	if err == nil {
 		t.Error("CreateSyncBranch should fail for non-git directory")
 	}
@@ -251,12 +252,12 @@ func TestBranchManager_GetSyncBranchRef(t *testing.T) {
 	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}
 
 	// Get the ref
-	ref, err := bm.GetSyncBranchRef()
+	ref, err := bm.GetSyncBranchRef(context.Background())
 	if err != nil {
 		t.Fatalf("GetSyncBranchRef failed: %v", err)
 	}
@@ -277,7 +278,7 @@ func TestBranchManager_GetSyncBranchRef_NotExists(t *testing.T) {
 	bm := NewBranchManager(repoPath, false)
 
 	// Try to get ref of non-existent branch
-	_, err := bm.GetSyncBranchRef()
+	_, err := bm.GetSyncBranchRef(context.Background())
 	if err == nil {
 		t.Error("GetSyncBranchRef should fail when branch doesn't exist")
 	}
@@ -290,7 +291,7 @@ func TestBranchManager_EnsureSyncBranch_NoRemote(t *testing.T) {
 	bm := NewBranchManager(repoPath, false)
 
 	// Ensure sync branch (no remote configured)
-	if err := bm.EnsureSyncBranch(); err != nil {
+	if err := bm.EnsureSyncBranch(context.Background()); err != nil {
 		t.Fatalf("EnsureSyncBranch failed: %v", err)
 	}
 
@@ -323,7 +324,7 @@ func TestBranchManager_EnsureSyncBranch_LocalOnly_SkipsRemote(t *testing.T) {
 	bm := NewBranchManager(repoPath, true)
 
 	// EnsureSyncBranch should succeed (creates local branch, skips remote ops)
-	if err := bm.EnsureSyncBranch(); err != nil {
+	if err := bm.EnsureSyncBranch(context.Background()); err != nil {
 		t.Fatalf("EnsureSyncBranch failed: %v", err)
 	}
 
@@ -379,7 +380,7 @@ func TestBranchManager_EnsureSyncBranch_WithRemote(t *testing.T) {
 	bm := NewBranchManager(repoPath, false)
 
 	// Ensure sync branch (should push to remote)
-	if err := bm.EnsureSyncBranch(); err != nil {
+	if err := bm.EnsureSyncBranch(context.Background()); err != nil {
 		t.Fatalf("EnsureSyncBranch failed: %v", err)
 	}
 
@@ -397,7 +398,7 @@ func TestBranchManager_checkGitRepo(t *testing.T) {
 		repoPath := setupTestRepo(t)
 		bm := NewBranchManager(repoPath, false)
 
-		if err := bm.checkGitRepo(); err != nil {
+		if err := bm.checkGitRepo(context.Background()); err != nil {
 			t.Errorf("checkGitRepo failed for valid repo: %v", err)
 		}
 	})
@@ -406,7 +407,7 @@ func TestBranchManager_checkGitRepo(t *testing.T) {
 		tmpDir := t.TempDir()
 		bm := NewBranchManager(tmpDir, false)
 
-		err := bm.checkGitRepo()
+		err := bm.checkGitRepo(context.Background())
 		if err == nil {
 			t.Error("checkGitRepo should fail for non-git directory")
 		}
@@ -424,14 +425,14 @@ func TestBranchManager_branchExists(t *testing.T) {
 			t.Skip("no current branch found")
 		}
 
-		exists := bm.branchExists(currentBranch)
+		exists := bm.branchExists(context.Background(), currentBranch)
 		if !exists {
 			t.Errorf("branchExists returned false for existing branch %s", currentBranch)
 		}
 	})
 
 	t.Run("non-existing branch", func(t *testing.T) {
-		exists := bm.branchExists("non-existent-branch")
+		exists := bm.branchExists(context.Background(), "non-existent-branch")
 		if exists {
 			t.Error("branchExists returned true for non-existent branch")
 		}
@@ -445,7 +446,7 @@ func TestBranchManager_CreateSyncBranch_AlwaysOrphan(t *testing.T) {
 	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}
 
@@ -484,13 +485,13 @@ func TestBranchManager_CreateSyncWorktree(t *testing.T) {
 	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch first
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}
 
 	// Create worktree at the new .git/thrum-sync/a-sync location
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	if err := bm.CreateSyncWorktree(syncDir); err != nil {
+	if err := bm.CreateSyncWorktree(context.Background(), syncDir); err != nil {
 		t.Fatalf("CreateSyncWorktree failed: %v", err)
 	}
 
@@ -529,12 +530,12 @@ func TestBranchManager_CreateSyncWorktree_SparseCheckout(t *testing.T) {
 
 	bm := NewBranchManager(repoPath, false)
 
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}
 
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	if err := bm.CreateSyncWorktree(syncDir); err != nil {
+	if err := bm.CreateSyncWorktree(context.Background(), syncDir); err != nil {
 		t.Fatalf("CreateSyncWorktree failed: %v", err)
 	}
 
@@ -565,12 +566,12 @@ func TestBranchManager_CreateSyncWorktree_NoSparseCheckoutLeak(t *testing.T) {
 
 	bm := NewBranchManager(repoPath, false)
 
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}
 
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	if err := bm.CreateSyncWorktree(syncDir); err != nil {
+	if err := bm.CreateSyncWorktree(context.Background(), syncDir); err != nil {
 		t.Fatalf("CreateSyncWorktree failed: %v", err)
 	}
 
@@ -594,19 +595,19 @@ func TestBranchManager_CreateSyncWorktree_Idempotent(t *testing.T) {
 	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}
 
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
 
 	// Create worktree first time
-	if err := bm.CreateSyncWorktree(syncDir); err != nil {
+	if err := bm.CreateSyncWorktree(context.Background(), syncDir); err != nil {
 		t.Fatalf("CreateSyncWorktree (first) failed: %v", err)
 	}
 
 	// Create worktree second time - should be idempotent
-	if err := bm.CreateSyncWorktree(syncDir); err != nil {
+	if err := bm.CreateSyncWorktree(context.Background(), syncDir); err != nil {
 		t.Errorf("CreateSyncWorktree (second) failed: %v", err)
 	}
 
@@ -631,14 +632,14 @@ func TestBranchManager_CreateSyncWorktree_RecoverBroken(t *testing.T) {
 	bm := NewBranchManager(repoPath, false)
 
 	// Create the sync branch
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}
 
 	syncDir := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
 
 	// Create worktree
-	if err := bm.CreateSyncWorktree(syncDir); err != nil {
+	if err := bm.CreateSyncWorktree(context.Background(), syncDir); err != nil {
 		t.Fatalf("CreateSyncWorktree failed: %v", err)
 	}
 
@@ -658,7 +659,7 @@ func TestBranchManager_CreateSyncWorktree_RecoverBroken(t *testing.T) {
 	}
 
 	// Try to create worktree again - should recover
-	if err := bm.CreateSyncWorktree(syncDir); err != nil {
+	if err := bm.CreateSyncWorktree(context.Background(), syncDir); err != nil {
 		t.Fatalf("CreateSyncWorktree (recovery) failed: %v", err)
 	}
 
@@ -680,16 +681,18 @@ func TestBranchManager_removeSyncWorktree_AcceptsBothPaths(t *testing.T) {
 	repoPath := setupTestRepoWithCommit(t)
 	bm := NewBranchManager(repoPath, false)
 
+	ctx := context.Background()
+
 	// Test that removeSyncWorktree doesn't panic for .git paths
 	gitPath := filepath.Join(repoPath, ".git", "thrum-sync", "a-sync")
-	bm.removeSyncWorktree(gitPath) // Should not panic
+	bm.removeSyncWorktree(ctx, gitPath) // Should not panic
 
 	// Test that removeSyncWorktree doesn't panic for .thrum paths
 	thrumPath := filepath.Join(repoPath, ".thrum", "sync")
-	bm.removeSyncWorktree(thrumPath) // Should not panic
+	bm.removeSyncWorktree(ctx, thrumPath) // Should not panic
 
 	// Test that removeSyncWorktree refuses arbitrary paths
-	bm.removeSyncWorktree("/tmp/some-random-path") // Should be a no-op (safety guard)
+	bm.removeSyncWorktree(ctx, "/tmp/some-random-path") // Should be a no-op (safety guard)
 }
 
 func TestBranchManager_isWorktreeRegistered(t *testing.T) {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/restart"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
@@ -600,13 +600,12 @@ func primeCommandForRuntime(runtime string) string {
 
 // resolveWorktreePath uses git worktree list to find the absolute path for a worktree name.
 func resolveWorktreePath(ctx context.Context, repoDir, worktreeName string) string {
-	out, err := exec.CommandContext(ctx, "git", "-C", repoDir, "worktree", "list", "--porcelain").Output() // #nosec G204 -- repoDir from daemon config
+	out, err := safecmd.Git(ctx, repoDir, "worktree", "list", "--porcelain")
 	if err != nil {
 		return ""
 	}
 	for _, line := range strings.Split(string(out), "\n") {
-		if strings.HasPrefix(line, "worktree ") {
-			path := strings.TrimPrefix(line, "worktree ")
+		if path, ok := strings.CutPrefix(line, "worktree "); ok {
 			if filepath.Base(path) == worktreeName {
 				return path
 			}
@@ -653,17 +652,10 @@ func (h *TmuxHandler) allIdentityDirs(ctx context.Context) []string {
 
 	// Also scan worktrees via git
 	repoDir := filepath.Dir(h.thrumDir)
-	out, err := exec.CommandContext(ctx, "git", "-C", repoDir, "worktree", "list", "--porcelain").Output() // #nosec G204 -- repoDir from daemon config
-	if err != nil {
-		return dirs
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.HasPrefix(line, "worktree ") {
-			wtPath := strings.TrimPrefix(line, "worktree ")
-			idDir := filepath.Join(wtPath, ".thrum", "identities")
-			if idDir != primary {
-				dirs = append(dirs, idDir)
-			}
+	for _, wtPath := range safecmd.WorktreePaths(ctx, repoDir) {
+		idDir := filepath.Join(wtPath, ".thrum", "identities")
+		if idDir != primary {
+			dirs = append(dirs, idDir)
 		}
 	}
 	return dirs

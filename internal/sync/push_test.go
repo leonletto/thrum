@@ -376,7 +376,7 @@ func TestSyncer_GetSyncBranchRef(t *testing.T) {
 	repoPath := setupMergeTestRepo(t)
 	s := NewSyncer(repoPath, filepath.Join(repoPath, ".git", "thrum-sync", "a-sync"), false)
 
-	ref, err := s.GetSyncBranchRef()
+	ref, err := s.GetSyncBranchRef(context.Background())
 	if err != nil {
 		t.Fatalf("GetSyncBranchRef failed: %v", err)
 	}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -449,7 +450,7 @@ func TestMigrateSyncWorktreeLocation_OldExists(t *testing.T) {
 	// Create old-style worktree at .thrum/sync/
 	bm := newTestBranchManager(t, tmpDir)
 	oldSyncDir := filepath.Join(thrumDir, "sync")
-	if err := bm.CreateSyncWorktree(oldSyncDir); err != nil {
+	if err := bm.CreateSyncWorktree(context.Background(), oldSyncDir); err != nil {
 		t.Fatalf("Failed to create old worktree: %v", err)
 	}
 
@@ -496,7 +497,7 @@ func TestMigrateSyncWorktreeLocation_Idempotent(t *testing.T) {
 	// Create old-style worktree
 	bm := newTestBranchManager(t, tmpDir)
 	oldSyncDir := filepath.Join(thrumDir, "sync")
-	if err := bm.CreateSyncWorktree(oldSyncDir); err != nil {
+	if err := bm.CreateSyncWorktree(context.Background(), oldSyncDir); err != nil {
 		t.Fatalf("Failed to create old worktree: %v", err)
 	}
 
@@ -513,7 +514,7 @@ func TestMigrateSyncWorktreeLocation_Idempotent(t *testing.T) {
 func newTestBranchManager(t *testing.T, repoPath string) *syncpkg.BranchManager {
 	t.Helper()
 	bm := syncpkg.NewBranchManager(repoPath, false)
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
 		t.Fatalf("CreateSyncBranch failed: %v", err)
 	}
 	return bm

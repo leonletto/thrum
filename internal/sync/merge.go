@@ -199,6 +199,12 @@ func (m *Merger) extractRemoteFiles(ctx context.Context) (string, error) {
 	// Use git archive to extract all remote thrum files in a single command.
 	// This is significantly faster than multiple git show calls.
 	// NOTE: Files are at root level on a-sync branch (no .thrum/ prefix)
+	//
+	// Raw exec.Command is intentional here: safecmd.Git returns CombinedOutput(),
+	// but we need a streaming Stdout to pipe directly into `tar -xf -` without
+	// buffering the entire archive in memory. safecmd does not (yet) provide
+	// a streaming wrapper, and adding one solely for this one pipe-pattern
+	// call site isn't justified.
 	//nolint:gosec // arguments are not user-controlled
 	gitCmd := exec.CommandContext(ctx, "git", "archive", "origin/"+SyncBranchName, "--", "messages/", "events.jsonl")
 	gitCmd.Dir = m.syncDir

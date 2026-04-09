@@ -333,7 +333,7 @@ func loadPendingCommands(ctx context.Context, db *safedb.DB) ([]*QueuedCommand, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var cmds []*QueuedCommand
 	for rows.Next() {

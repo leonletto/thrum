@@ -1,11 +1,13 @@
 package sync
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 )
 
 const (
@@ -30,27 +32,27 @@ func NewBranchManager(repoPath string, localOnly bool) *BranchManager {
 
 // CreateSyncBranch creates the a-sync branch if it doesn't exist.
 // The a-sync branch is always created as an orphan (no shared history with main).
-func (b *BranchManager) CreateSyncBranch() error {
+func (b *BranchManager) CreateSyncBranch(ctx context.Context) error {
 	// Check if we're in a git repository
-	if err := b.checkGitRepo(); err != nil {
+	if err := b.checkGitRepo(ctx); err != nil {
 		return err
 	}
 
 	// Check if a-sync branch already exists
-	if exists := b.branchExists(SyncBranchName); exists {
+	if exists := b.branchExists(ctx, SyncBranchName); exists {
 		// Branch already exists, nothing to do
 		return nil
 	}
 
 	// Always create as orphan — a-sync should never share history with main
-	return b.createOrphanBranch()
+	return b.createOrphanBranch(ctx)
 }
 
 // EnsureSyncBranch ensures the branch exists locally and remotely.
 // When localOnly is true, only the local branch is created; remote operations are skipped.
-func (b *BranchManager) EnsureSyncBranch() error {
+func (b *BranchManager) EnsureSyncBranch(ctx context.Context) error {
 	// First, ensure the branch exists locally
-	if err := b.CreateSyncBranch(); err != nil {
+	if err := b.CreateSyncBranch(ctx); err != nil {
 		return fmt.Errorf("creating sync branch: %w", err)
 	}
 
@@ -59,9 +61,7 @@ func (b *BranchManager) EnsureSyncBranch() error {
 	}
 
 	// Check if remote exists
-	cmd := exec.Command("git", "remote")
-	cmd.Dir = b.repoPath
-	output, err := cmd.Output()
+	output, err := safecmd.Git(ctx, b.repoPath, "remote")
 	if err != nil {
 		return fmt.Errorf("checking for remotes: %w", err)
 	}
@@ -74,9 +74,7 @@ func (b *BranchManager) EnsureSyncBranch() error {
 
 	// Check if branch exists on remote (typically origin)
 	remote := "origin"
-	cmd = exec.Command("git", "ls-remote", "--heads", remote, SyncBranchName)
-	cmd.Dir = b.repoPath
-	output, err = cmd.Output()
+	output, err = safecmd.GitLong(ctx, b.repoPath, "ls-remote", "--heads", remote, SyncBranchName)
 	if err != nil {
 		// ls-remote failed, might be no network access
 		// Don't fail - allow local-only operation
@@ -86,9 +84,7 @@ func (b *BranchManager) EnsureSyncBranch() error {
 	remoteExists := strings.TrimSpace(string(output)) != ""
 	if !remoteExists {
 		// Push branch to remote to establish tracking
-		cmd = exec.Command("git", "push", "-u", remote, SyncBranchName)
-		cmd.Dir = b.repoPath
-		if err := cmd.Run(); err != nil {
+		if _, err := safecmd.GitLong(ctx, b.repoPath, "push", "-u", remote, SyncBranchName); err != nil {
 			// Push failed, but don't fail the operation
 			// User might be offline or remote might not accept pushes yet
 			return nil //nolint:nilerr // intentionally ignore error for offline support
@@ -99,10 +95,8 @@ func (b *BranchManager) EnsureSyncBranch() error {
 }
 
 // GetSyncBranchRef returns the current ref of a-sync.
-func (b *BranchManager) GetSyncBranchRef() (string, error) {
-	cmd := exec.Command("git", "rev-parse", SyncBranchName)
-	cmd.Dir = b.repoPath
-	output, err := cmd.Output()
+func (b *BranchManager) GetSyncBranchRef(ctx context.Context) (string, error) {
+	output, err := safecmd.Git(ctx, b.repoPath, "rev-parse", SyncBranchName)
 	if err != nil {
 		return "", fmt.Errorf("failed to get %s ref: %w", SyncBranchName, err)
 	}
@@ -111,35 +105,29 @@ func (b *BranchManager) GetSyncBranchRef() (string, error) {
 }
 
 // checkGitRepo verifies that the path is a git repository.
-func (b *BranchManager) checkGitRepo() error {
-	cmd := exec.Command("git", "rev-parse", "--git-dir")
-	cmd.Dir = b.repoPath
-	if err := cmd.Run(); err != nil {
+func (b *BranchManager) checkGitRepo(ctx context.Context) error {
+	if _, err := safecmd.Git(ctx, b.repoPath, "rev-parse", "--git-dir"); err != nil {
 		return fmt.Errorf("not a git repository")
 	}
 	return nil
 }
 
 // branchExists checks if a git branch exists.
-func (b *BranchManager) branchExists(branchName string) bool {
-	cmd := exec.Command("git", "rev-parse", "--verify", branchName) // #nosec G204 -- hardcoded "git" binary; branchName is an internal constant
-	cmd.Dir = b.repoPath
-	err := cmd.Run()
+func (b *BranchManager) branchExists(ctx context.Context, branchName string) bool {
+	_, err := safecmd.Git(ctx, b.repoPath, "rev-parse", "--verify", branchName)
 	return err == nil
 }
 
 // createOrphanBranch creates an orphan a-sync branch using git plumbing commands.
 // SAFETY: These commands never touch the working tree or index.
 // Fully idempotent — safe to call multiple times.
-func (b *BranchManager) createOrphanBranch() error {
+func (b *BranchManager) createOrphanBranch(ctx context.Context) error {
 	// The empty tree SHA is a well-known git constant (same across all repos)
 	const emptyTreeSHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 	// Step 1: Create a commit object pointing to the empty tree.
 	// git commit-tree writes to the object database only — no working tree or index changes.
-	cmd := exec.Command("git", "commit-tree", emptyTreeSHA, "-m", "Initialize Thrum sync")
-	cmd.Dir = b.repoPath
-	output, err := cmd.Output()
+	output, err := safecmd.Git(ctx, b.repoPath, "commit-tree", emptyTreeSHA, "-m", "Initialize Thrum sync")
 	if err != nil {
 		return fmt.Errorf("git commit-tree failed: %w", err)
 	}
@@ -147,9 +135,7 @@ func (b *BranchManager) createOrphanBranch() error {
 
 	// Step 2: Create the branch ref atomically.
 	// git update-ref is atomic — either it succeeds or the ref is unchanged.
-	cmd = exec.Command("git", "update-ref", "refs/heads/"+SyncBranchName, commitSHA) // #nosec G204 -- commitSHA is output from git commit-tree, not user input
-	cmd.Dir = b.repoPath
-	if err := cmd.Run(); err != nil {
+	if _, err := safecmd.Git(ctx, b.repoPath, "update-ref", "refs/heads/"+SyncBranchName, commitSHA); err != nil {
 		return fmt.Errorf("git update-ref failed: %w", err)
 	}
 
@@ -161,19 +147,17 @@ func (b *BranchManager) createOrphanBranch() error {
 // The worktree uses sparse checkout to only include events.jsonl and messages/.
 // If the worktree already exists and is healthy, this is a no-op.
 // If it exists but is broken, it is removed and recreated.
-func (b *BranchManager) CreateSyncWorktree(syncDir string) error {
-	// Prune stale worktree entries first
-	pruneCmd := exec.Command("git", "worktree", "prune")
-	pruneCmd.Dir = b.repoPath
-	_ = pruneCmd.Run() // Best effort
+func (b *BranchManager) CreateSyncWorktree(ctx context.Context, syncDir string) error {
+	// Prune stale worktree entries first (best effort)
+	_, _ = safecmd.Git(ctx, b.repoPath, "worktree", "prune")
 
 	// Health check: if worktree already exists and is valid, return early
-	if b.isHealthyWorktree(syncDir) {
+	if b.isHealthyWorktree(ctx, syncDir) {
 		return nil
 	}
 
 	// Unhealthy or missing — remove any remnants and recreate
-	b.removeSyncWorktree(syncDir)
+	b.removeSyncWorktree(ctx, syncDir)
 
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(syncDir), 0750); err != nil {
@@ -181,51 +165,42 @@ func (b *BranchManager) CreateSyncWorktree(syncDir string) error {
 	}
 
 	// Create worktree with --no-checkout so sparse checkout can be configured first
-	cmd := exec.Command("git", "worktree", "add", "-f", "--no-checkout", syncDir, SyncBranchName) // #nosec G204 -- hardcoded "git" binary; syncDir is an internal path from SyncWorktreePath()
-	cmd.Dir = b.repoPath
-	if err := cmd.Run(); err != nil {
+	if _, err := safecmd.Git(ctx, b.repoPath, "worktree", "add", "-f", "--no-checkout", syncDir, SyncBranchName); err != nil {
 		return fmt.Errorf("git worktree add failed: %w", err)
 	}
 
 	// Configure sparse checkout in the worktree
-	if err := b.configureSparseCheckout(syncDir); err != nil {
+	if err := b.configureSparseCheckout(ctx, syncDir); err != nil {
 		// Clean up on failure
-		b.removeSyncWorktree(syncDir)
+		b.removeSyncWorktree(ctx, syncDir)
 		return fmt.Errorf("configure sparse checkout: %w", err)
 	}
 
 	// Checkout with sparse active
-	cmd = exec.Command("git", "checkout", SyncBranchName)
-	cmd.Dir = syncDir
-	if err := cmd.Run(); err != nil {
-		b.removeSyncWorktree(syncDir)
+	if _, err := safecmd.Git(ctx, syncDir, "checkout", SyncBranchName); err != nil {
+		b.removeSyncWorktree(ctx, syncDir)
 		return fmt.Errorf("git checkout in worktree: %w", err)
 	}
 
 	// Prevent sparse checkout leak to the main repo.
 	// Known git 2.38+ bug: running sparse-checkout in a worktree can enable
 	// core.sparseCheckout on the main repo as a side effect.
-	cmd = exec.Command("git", "config", "core.sparseCheckout", "false")
-	cmd.Dir = b.repoPath
-	_ = cmd.Run() // Best effort — not fatal if this fails
+	// Best effort — not fatal if this fails.
+	_, _ = safecmd.Git(ctx, b.repoPath, "config", "core.sparseCheckout", "false")
 
 	return nil
 }
 
 // configureSparseCheckout sets up sparse checkout in the worktree so only
 // events.jsonl and messages/ are checked out.
-func (b *BranchManager) configureSparseCheckout(syncDir string) error {
+func (b *BranchManager) configureSparseCheckout(ctx context.Context, syncDir string) error {
 	// Initialize sparse checkout (non-cone mode for pattern matching)
-	cmd := exec.Command("git", "sparse-checkout", "init", "--no-cone")
-	cmd.Dir = syncDir
-	if err := cmd.Run(); err != nil {
+	if _, err := safecmd.Git(ctx, syncDir, "sparse-checkout", "init", "--no-cone"); err != nil {
 		return fmt.Errorf("sparse-checkout init: %w", err)
 	}
 
 	// Set patterns (messages.jsonl is the old monolithic format, kept for migration support)
-	cmd = exec.Command("git", "sparse-checkout", "set", "/events.jsonl", "/messages/", "/messages.jsonl")
-	cmd.Dir = syncDir
-	if err := cmd.Run(); err != nil {
+	if _, err := safecmd.Git(ctx, syncDir, "sparse-checkout", "set", "/events.jsonl", "/messages/", "/messages.jsonl"); err != nil {
 		return fmt.Errorf("sparse-checkout set: %w", err)
 	}
 
@@ -234,7 +209,7 @@ func (b *BranchManager) configureSparseCheckout(syncDir string) error {
 
 // isHealthyWorktree checks if syncDir is a valid, healthy worktree.
 // Returns true only if all health checks pass.
-func (b *BranchManager) isHealthyWorktree(syncDir string) bool {
+func (b *BranchManager) isHealthyWorktree(ctx context.Context, syncDir string) bool {
 	// Check 1: .git file exists (worktrees have a .git file, not directory)
 	gitFilePath := filepath.Join(syncDir, ".git")
 	info, err := os.Stat(gitFilePath)
@@ -243,9 +218,7 @@ func (b *BranchManager) isHealthyWorktree(syncDir string) bool {
 	}
 
 	// Check 2: Listed in git worktree list
-	cmd := exec.Command("git", "worktree", "list", "--porcelain")
-	cmd.Dir = b.repoPath
-	output, err := cmd.Output()
+	output, err := safecmd.Git(ctx, b.repoPath, "worktree", "list", "--porcelain")
 	if err != nil {
 		return false
 	}
@@ -254,9 +227,7 @@ func (b *BranchManager) isHealthyWorktree(syncDir string) bool {
 	}
 
 	// Check 3: HEAD points to a-sync
-	cmd = exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
-	cmd.Dir = syncDir
-	output, err = cmd.Output()
+	output, err = safecmd.Git(ctx, syncDir, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil || strings.TrimSpace(string(output)) != SyncBranchName {
 		return false
 	}
@@ -291,10 +262,10 @@ func (b *BranchManager) isWorktreeRegistered(porcelainOutput, syncDir string) bo
 	}
 
 	for _, line := range strings.Split(porcelainOutput, "\n") {
-		if !strings.HasPrefix(line, "worktree ") {
+		wtPath, ok := strings.CutPrefix(line, "worktree ")
+		if !ok {
 			continue
 		}
-		wtPath := strings.TrimPrefix(line, "worktree ")
 		resolvedWT, err := filepath.EvalSymlinks(wtPath)
 		if err != nil {
 			resolvedWT = wtPath
@@ -315,10 +286,10 @@ func (b *BranchManager) resolveWorktreeGitDir(syncDir string) string {
 		return ""
 	}
 	content := strings.TrimSpace(string(data))
-	if !strings.HasPrefix(content, "gitdir: ") {
+	gitDir, ok := strings.CutPrefix(content, "gitdir: ")
+	if !ok {
 		return ""
 	}
-	gitDir := strings.TrimPrefix(content, "gitdir: ")
 	if !filepath.IsAbs(gitDir) {
 		gitDir = filepath.Join(syncDir, gitDir)
 	}
@@ -327,7 +298,7 @@ func (b *BranchManager) resolveWorktreeGitDir(syncDir string) string {
 
 // removeSyncWorktree removes a sync worktree, cleaning up git metadata.
 // Accepts paths containing .git/ (new location) or .thrum/ (old location, for migration).
-func (b *BranchManager) removeSyncWorktree(syncDir string) {
+func (b *BranchManager) removeSyncWorktree(ctx context.Context, syncDir string) {
 	// Safety: never RemoveAll an empty or suspiciously short path
 	if syncDir == "" || len(syncDir) < 5 {
 		return
@@ -336,15 +307,11 @@ func (b *BranchManager) removeSyncWorktree(syncDir string) {
 		return
 	}
 
-	// Try git worktree remove first
-	cmd := exec.Command("git", "worktree", "remove", "--force", syncDir) // #nosec G204 -- hardcoded "git" binary; syncDir is validated internal path (non-empty, contains .git/.thrum)
-	cmd.Dir = b.repoPath
-	_ = cmd.Run() // Best effort — may fail if not a valid worktree
+	// Try git worktree remove first (best effort — may fail if not a valid worktree)
+	_, _ = safecmd.Git(ctx, b.repoPath, "worktree", "remove", "--force", syncDir)
 
-	// Prune stale worktree references
-	cmd = exec.Command("git", "worktree", "prune")
-	cmd.Dir = b.repoPath
-	_ = cmd.Run()
+	// Prune stale worktree references (best effort)
+	_, _ = safecmd.Git(ctx, b.repoPath, "worktree", "prune")
 
 	// If directory still exists (e.g., broken/corrupted worktree), remove it manually
 	_ = os.RemoveAll(syncDir)

@@ -28,6 +28,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
@@ -356,8 +357,9 @@ Examples:
 				_ = os.MkdirAll(filepath.Dir(projectStatePath), 0750)
 				if _, err := os.Stat(projectStatePath); os.IsNotExist(err) {
 					repoName := filepath.Base(flagRepo)
-					branch, _ := exec.Command("git", "-C", flagRepo, "branch", "--show-current").Output()          // #nosec G204 -- flagRepo is validated user input
-					version, _ := exec.Command("git", "-C", flagRepo, "describe", "--tags", "--abbrev=0").Output() // #nosec G204 -- flagRepo is validated user input
+					bgCtx := context.Background()
+					branch, _ := safecmd.Git(bgCtx, flagRepo, "branch", "--show-current")
+					version, _ := safecmd.Git(bgCtx, flagRepo, "describe", "--tags", "--abbrev=0")
 					beads := ""
 					if _, err := os.Stat(filepath.Join(flagRepo, ".beads")); err == nil {
 						if out, err := exec.Command("bd", "stats", "--short").Output(); err == nil {
@@ -2805,7 +2807,7 @@ func worktreeCreateCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
-				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or ..", name)
+				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or parent references", name)
 			}
 			detach, _ := cmd.Flags().GetBool("detach")
 			branch, _ := cmd.Flags().GetString("branch")
@@ -2824,7 +2826,7 @@ func worktreeCreateCmd() *cobra.Command {
 			worktreePath := filepath.Join(basePath, name)
 
 			// 1. Create git worktree
-			gitArgs := []string{"-C", repoPath, "worktree", "add"}
+			gitArgs := []string{"worktree", "add"}
 			if detach {
 				gitArgs = append(gitArgs, "--detach")
 			} else {
@@ -2835,7 +2837,7 @@ func worktreeCreateCmd() *cobra.Command {
 			}
 			gitArgs = append(gitArgs, worktreePath)
 
-			out, err := exec.Command("git", gitArgs...).CombinedOutput() // #nosec G204 -- repoPath from config, name from user arg
+			out, err := safecmd.Git(cmd.Context(), repoPath, gitArgs...)
 			if err != nil {
 				return fmt.Errorf("git worktree add: %s\n%s", err, out)
 			}
@@ -2898,7 +2900,7 @@ func worktreeTeardownCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
-				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or ..", name)
+				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or parent references", name)
 			}
 			repoPath := paths.EffectiveRepoPath(flagRepo)
 			thrumDir := filepath.Join(repoPath, ".thrum")
@@ -2935,7 +2937,7 @@ func worktreeTeardownCmd() *cobra.Command {
 			}
 
 			// Remove git worktree
-			out, err := exec.Command("git", "-C", repoPath, "worktree", "remove", "--force", worktreePath).CombinedOutput() // #nosec G204 -- repoPath from config
+			out, err := safecmd.Git(cmd.Context(), repoPath, "worktree", "remove", "--force", worktreePath)
 			if err != nil {
 				return fmt.Errorf("git worktree remove: %s\n%s", err, out)
 			}
@@ -2954,7 +2956,7 @@ func worktreeListCmd() *cobra.Command {
 			repoPath := paths.EffectiveRepoPath(flagRepo)
 
 			// Get git worktree list
-			out, err := exec.Command("git", "-C", repoPath, "worktree", "list", "--porcelain").Output() // #nosec G204 -- repoPath from config
+			out, err := safecmd.Git(cmd.Context(), repoPath, "worktree", "list", "--porcelain")
 			if err != nil {
 				return fmt.Errorf("git worktree list: %w", err)
 			}
@@ -4494,14 +4496,13 @@ Examples:
 				return fmt.Errorf("write context to sync worktree: %w", err)
 			}
 
-			// Stage and commit in sync worktree
-			stageCmd := exec.Command("git", "-C", syncDir, "add", filepath.Join("context", agentID+".md")) // #nosec G204 -- syncDir and agentID are internal values, not user input
-			if out, err := stageCmd.CombinedOutput(); err != nil {
+			// Stage and commit in sync worktree (safecmd.Git injects the thrum user overrides automatically)
+			ctx := cmd.Context()
+			if out, err := safecmd.Git(ctx, syncDir, "add", filepath.Join("context", agentID+".md")); err != nil {
 				return fmt.Errorf("stage context file: %s: %w", string(out), err)
 			}
 
-			commitCmd := exec.Command("git", "-C", syncDir, "-c", "user.name=Thrum", "-c", "user.email=thrum@local", "commit", "--no-verify", "-m", fmt.Sprintf("context: sync %s", agentID), "--allow-empty") // #nosec G204 -- syncDir is internal path; agentID is validated identity name
-			if out, err := commitCmd.CombinedOutput(); err != nil {
+			if out, err := safecmd.Git(ctx, syncDir, "commit", "--no-verify", "-m", fmt.Sprintf("context: sync %s", agentID), "--allow-empty"); err != nil {
 				// "nothing to commit" is OK
 				if !strings.Contains(string(out), "nothing to commit") {
 					return fmt.Errorf("commit context: %s: %w", string(out), err)
@@ -4509,15 +4510,13 @@ Examples:
 			}
 
 			// Push (skip in local-only mode - check for remote)
-			remoteCmd := exec.Command("git", "-C", syncDir, "remote", "get-url", "origin") // #nosec G204 -- syncDir is internal path, not user input
-			if _, remoteErr := remoteCmd.Output(); remoteErr != nil {
+			if _, remoteErr := safecmd.Git(ctx, syncDir, "remote", "get-url", "origin"); remoteErr != nil {
 				// No remote configured is not an error — local-only sync is valid
 				fmt.Printf("Context synced locally for %s (no remote configured).\n", agentID)
 				return nil //nolint:nilerr // intentional: no remote means local-only mode, not a failure
 			}
 
-			pushCmd := exec.Command("git", "-C", syncDir, "push", "origin", "a-sync") // #nosec G204 -- syncDir is internal path, hardcoded branch name
-			if out, err := pushCmd.CombinedOutput(); err != nil {
+			if out, err := safecmd.GitLong(ctx, syncDir, "push", "origin", "a-sync"); err != nil {
 				return fmt.Errorf("push context: %s: %w", string(out), err)
 			}
 
@@ -7096,11 +7095,12 @@ func maskToken(token string) string {
 }
 
 func detectGitUser() string {
-	out, err := exec.Command("git", "config", "user.name").Output() // #nosec G204 -- fixed command, no user input
-	if err != nil {
+	// Use GitConfig (not Git) so we read the real user.name, not the
+	// thrum injected override that Git/GitLong apply.
+	name, err := safecmd.GitConfig(context.Background(), ".", "user.name")
+	if err != nil || name == "" {
 		return ""
 	}
-	name := strings.TrimSpace(string(out))
 	// Convert "Leon Letto" → "leon-letto"
 	name = strings.ToLower(name)
 	name = strings.ReplaceAll(name, " ", "-")
@@ -7781,7 +7781,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 				fmt.Println(string(out))
 				return nil
 			}
-			fmt.Printf("Cancelled %s (state: %s)\n", resp.CommandID, resp.State)
+			fmt.Printf("Canceled %s (state: %s)\n", resp.CommandID, resp.State)
 			return nil
 		},
 	}

@@ -194,6 +194,6 @@ func isPushRejected(err error) bool {
 
 // GetSyncBranchRef returns the current commit ref of the a-sync branch.
 // This is useful for tracking sync state.
-func (s *Syncer) GetSyncBranchRef() (string, error) {
-	return s.branchManager.GetSyncBranchRef()
+func (s *Syncer) GetSyncBranchRef(ctx context.Context) (string, error) {
+	return s.branchManager.GetSyncBranchRef(ctx)
 }

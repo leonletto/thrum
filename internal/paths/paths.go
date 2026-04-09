@@ -1,11 +1,13 @@
 package paths
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 )
 
 const (
@@ -112,8 +114,7 @@ func ResolveThrumDir(repoPath string) (string, error) {
 // Uses git-common-dir for bare repo and nested worktree support.
 // For regular repos, returns: <git-common-dir>/thrum-sync/a-sync.
 func SyncWorktreePath(repoPath string) (string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-common-dir") // #nosec G204 -- hardcoded "git" binary; repoPath is an internal path from the caller
-	output, err := cmd.Output()
+	output, err := safecmd.Git(context.Background(), repoPath, "rev-parse", "--git-common-dir")
 	if err != nil {
 		// Fallback for non-git contexts
 		return filepath.Join(repoPath, ".git", syncWorktreeDir, syncBranchName), nil //nolint:nilerr // intentional: fallback to default path for non-git contexts

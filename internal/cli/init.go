@@ -1,14 +1,15 @@
 package cli
 
 import (
+	stdcontext "context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/context"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/sync"
 )
@@ -23,17 +24,17 @@ type InitOptions struct {
 // IsGitWorktree checks if repoPath is a git worktree (not the main working tree).
 // Returns (isWorktree, mainRepoRoot, error).
 func IsGitWorktree(repoPath string) (bool, string, error) {
+	ctx := stdcontext.Background()
+
 	// Get the repo toplevel (current working tree root)
-	topLevelCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--show-toplevel") // #nosec G204 -- hardcoded "git" binary; all args are fixed git flags
-	topLevelOut, err := topLevelCmd.Output()
+	topLevelOut, err := safecmd.Git(ctx, repoPath, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return false, "", fmt.Errorf("not a git repository")
 	}
 	topLevel := strings.TrimSpace(string(topLevelOut))
 
 	// Get the common git dir (shared across all worktrees)
-	commonDirCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-common-dir") // #nosec G204 -- hardcoded "git" binary; all args are fixed git flags
-	commonDirOut, err := commonDirCmd.Output()
+	commonDirOut, err := safecmd.Git(ctx, repoPath, "rev-parse", "--git-common-dir")
 	if err != nil {
 		return false, "", nil //nolint:nilerr // can't determine, assume not a worktree
 	}
@@ -46,8 +47,7 @@ func IsGitWorktree(repoPath string) (bool, string, error) {
 	commonDir = filepath.Clean(commonDir)
 
 	// Get the git dir for this working tree
-	gitDirCmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-dir") // #nosec G204 -- hardcoded "git" binary; all args are fixed git flags
-	gitDirOut, err := gitDirCmd.Output()
+	gitDirOut, err := safecmd.Git(ctx, repoPath, "rev-parse", "--git-dir")
 	if err != nil {
 		return false, "", nil //nolint:nilerr // can't determine, assume not a worktree
 	}
@@ -89,17 +89,14 @@ func Init(opts InitOptions) error {
 	var retErr error
 	defer func() {
 		if retErr != nil && !thrumDirExisted {
+			cleanupCtx := stdcontext.Background()
 			// Clean up worktree metadata first
 			if syncDir, syncErr := paths.SyncWorktreePath(opts.RepoPath); syncErr == nil {
-				rmCmd := exec.Command("git", "worktree", "remove", "--force", syncDir) // #nosec G204 -- syncDir from paths.SyncWorktreePath(), internal path construction
-				rmCmd.Dir = opts.RepoPath
-				_ = rmCmd.Run()
+				_, _ = safecmd.Git(cleanupCtx, opts.RepoPath, "worktree", "remove", "--force", syncDir)
 			}
 
 			// Clean up orphan branch ref
-			refCmd := exec.Command("git", "update-ref", "-d", "refs/heads/a-sync")
-			refCmd.Dir = opts.RepoPath
-			_ = refCmd.Run()
+			_, _ = safecmd.Git(cleanupCtx, opts.RepoPath, "update-ref", "-d", "refs/heads/a-sync")
 
 			// Remove the .thrum/ directory
 			_ = os.RemoveAll(thrumDir)
@@ -266,8 +263,7 @@ func updateGitignore(repoPath string) error {
 // This avoids any footprint in tracked files like .gitignore.
 func updateGitExclude(repoPath string) error {
 	// Resolve the git dir (handles worktrees correctly)
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-dir") // #nosec G204 -- hardcoded "git" binary; all args are fixed git flags
-	out, err := cmd.Output()
+	out, err := safecmd.Git(stdcontext.Background(), repoPath, "rev-parse", "--git-dir")
 	if err != nil {
 		return fmt.Errorf("resolve git dir: %w", err)
 	}
@@ -348,10 +344,11 @@ func updateGitExclude(repoPath string) error {
 
 // initASyncBranch creates the a-sync branch and worktree for message synchronization.
 func initASyncBranch(repoPath string) error {
+	ctx := stdcontext.Background()
 	bm := sync.NewBranchManager(repoPath, true)
 
 	// Create orphan a-sync branch (safe plumbing — no working tree touch)
-	if err := bm.CreateSyncBranch(); err != nil {
+	if err := bm.CreateSyncBranch(ctx); err != nil {
 		return fmt.Errorf("create sync branch: %w", err)
 	}
 
@@ -360,7 +357,7 @@ func initASyncBranch(repoPath string) error {
 	if err != nil {
 		return fmt.Errorf("resolve sync worktree path: %w", err)
 	}
-	if err := bm.CreateSyncWorktree(syncDir); err != nil {
+	if err := bm.CreateSyncWorktree(ctx, syncDir); err != nil {
 		return fmt.Errorf("create sync worktree: %w", err)
 	}
 
@@ -378,17 +375,12 @@ func initASyncBranch(repoPath string) error {
 	}
 
 	// Stage and commit initial files in the worktree
-	cmd := exec.Command("git", "add", ".")
-	cmd.Dir = syncDir
-	if err := cmd.Run(); err != nil {
+	// (safecmd.Git injects the thrum user.name/user.email overrides automatically)
+	if _, err := safecmd.Git(ctx, syncDir, "add", "."); err != nil {
 		return fmt.Errorf("git add in sync worktree: %w", err)
 	}
 
-	cmd = exec.Command("git",
-		"-c", "user.name=Thrum", "-c", "user.email=thrum@local",
-		"commit", "--no-verify", "-m", "Initialize Thrum sync data")
-	cmd.Dir = syncDir
-	output, err := cmd.CombinedOutput()
+	output, err := safecmd.Git(ctx, syncDir, "commit", "--no-verify", "-m", "Initialize Thrum sync data")
 	if err != nil {
 		outStr := strings.ToLower(string(output))
 		// "nothing to commit" is acceptable (idempotent re-init)
