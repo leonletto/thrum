@@ -453,6 +453,63 @@
     "lastUpdated": ""
   },
   {
+    "path": "scenarios/solo-dev.html",
+    "title": "Solo Dev with One Agent",
+    "description": "Use Thrum as a single-developer tool: one agent, one machine, no hand-holding",
+    "category": "onboarding",
+    "order": 1,
+    "tags": [
+      "onboarding",
+      "solo",
+      "single-agent",
+      "tmux"
+    ],
+    "lastUpdated": "2026-04-09"
+  },
+  {
+    "path": "scenarios/team.html",
+    "title": "Team on Your Machine",
+    "description": "Run multiple agents in parallel worktrees with Thrum as the coordination layer",
+    "category": "onboarding",
+    "order": 2,
+    "tags": [
+      "onboarding",
+      "team",
+      "multi-agent",
+      "worktrees"
+    ],
+    "lastUpdated": "2026-04-09"
+  },
+  {
+    "path": "scenarios/across-boundaries.html",
+    "title": "Agents Across Repos/Machines",
+    "description": "Connect Thrum daemons in different repos or on different machines via peers",
+    "category": "onboarding",
+    "order": 3,
+    "tags": [
+      "onboarding",
+      "peers",
+      "cross-repo",
+      "tailscale",
+      "mesh"
+    ],
+    "lastUpdated": "2026-04-09"
+  },
+  {
+    "path": "scenarios/orchestration.html",
+    "title": "Automated Plan Execution",
+    "description": "Hand off a plan you wrote and let the orchestrator run the execution phase",
+    "category": "onboarding",
+    "order": 4,
+    "tags": [
+      "onboarding",
+      "orchestrator",
+      "automation",
+      "plans"
+    ],
+    "lastUpdated": "2026-04-09"
+  },
+  {
     "path": "orchestrator-role.html",
     "title": "Orchestrator Role",
     "description": "Hand off a plan you wrote and let the orchestrator run the execution phase",
