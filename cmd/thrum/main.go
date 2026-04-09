@@ -2000,7 +2000,46 @@ func daemonCmd() *cobra.Command {
 	})
 
 	cmd.AddCommand(daemonRunCmd(&flagLocal))
+	cmd.AddCommand(daemonLogsCmd())
 	// Old tsync/peers commands removed — replaced by top-level "thrum peer" commands
+
+	return cmd
+}
+
+func daemonLogsCmd() *cobra.Command {
+	var (
+		follow bool
+		lines  int
+		since  string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "logs",
+		Short: "Show daemon log output",
+		Long: `Read the daemon log file at .thrum/var/daemon.log.
+
+By default prints the last 50 lines. Use --follow/-f to stream new lines as
+they are written. Use --since to filter by timestamp (e.g. "1h", "7d",
+"2026-04-09", or RFC3339).`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts := cli.DaemonLogsOptions{
+				Lines:  lines,
+				Follow: follow,
+			}
+			if since != "" {
+				t, err := timeparse.ParseBefore(since)
+				if err != nil {
+					return fmt.Errorf("--since: %w", err)
+				}
+				opts.Since = &t
+			}
+			return cli.DaemonLogs(flagRepo, opts, os.Stdout)
+		},
+	}
+
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Stream new log lines as they are written")
+	cmd.Flags().IntVarP(&lines, "lines", "n", 50, "Number of lines to show (0 = all)")
+	cmd.Flags().StringVar(&since, "since", "", "Only show lines at or after this time (e.g. 1h, 7d, 2026-04-09)")
 
 	return cmd
 }
