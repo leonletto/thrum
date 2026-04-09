@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Reply"
+  short_description: "Reply to a message"
+  default_prompt: "Run the thrum reply workflow and summarize the result."

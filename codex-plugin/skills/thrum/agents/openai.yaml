@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum"
+  short_description: "Main entry point for Thrum workflows in Codex"
+  default_prompt: "Use Thrum to coordinate this work. Prime context, choose the right command workflow, and keep coordination state explicit."

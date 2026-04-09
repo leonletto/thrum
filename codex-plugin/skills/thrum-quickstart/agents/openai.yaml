@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Quickstart"
+  short_description: "Register agent and start session"
+  default_prompt: "Run the thrum quickstart workflow and summarize the result."

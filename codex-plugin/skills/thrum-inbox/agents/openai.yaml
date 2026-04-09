@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Inbox"
+  short_description: "Check message inbox"
+  default_prompt: "Run the thrum inbox workflow and summarize the result."

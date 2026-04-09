@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thrum Overview"
+  short_description: "Combines identity, team, inbox, and sync status"
+  default_prompt: "Run the thrum overview workflow and summarize the result."

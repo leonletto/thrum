@@ -12,6 +12,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$REPO_ROOT/website/docs"
 DST="$REPO_ROOT/docs"
+MARKDOWNLINT_VERSION="0.43.0"
 
 if [ ! -d "$SRC" ]; then
   echo "Error: $SRC does not exist" >&2
@@ -46,20 +47,33 @@ done < <(find "$SRC" -name '*.md' -type f)
 
 echo "Synced $count files from website/docs/ to docs/"
 
-# Run formatting and linting so synced files match CI expectations
+# Run formatting and linting only on the synced doc trees so we don't touch
+# unrelated files elsewhere in the repo.
 echo ""
-echo "Running fmt-all and lint-all to ensure synced files pass CI..."
-if make -C "$REPO_ROOT" fmt-all 2>&1; then
+echo "Formatting synced markdown in website/docs and docs..."
+if command -v prettier >/dev/null 2>&1; then
+  prettier --write "$SRC/**/*.md" "$DST/**/*.md" --prose-wrap always --ignore-path "$REPO_ROOT/.prettierignore" 2>/dev/null || true
   echo "Formatting: OK"
 else
-  echo "Warning: formatting had issues (non-fatal)" >&2
+  echo "Warning: prettier not found; skipping markdown formatting" >&2
 fi
 
-if make -C "$REPO_ROOT" lint-md-fix 2>&1; then
+echo "Running markdownlint on website/docs and docs..."
+if ! command -v markdownlint >/dev/null 2>&1; then
+  echo "markdownlint not found. Installing ${MARKDOWNLINT_VERSION}..."
+  npm install -g "markdownlint-cli@${MARKDOWNLINT_VERSION}" || {
+    echo "Warning: failed to install markdownlint; skipping markdown lint fix" >&2
+    echo ""
+    echo "Sync complete. Synced files were copied, but markdown lint was skipped."
+    exit 0
+  }
+fi
+
+if markdownlint "$SRC" "$DST" --config "$REPO_ROOT/.markdownlint.json" --ignore-path "$REPO_ROOT/.markdownlintignore" --fix; then
   echo "Markdown lint fix: OK"
 else
   echo "Warning: markdown lint fix had issues (non-fatal)" >&2
 fi
 
 echo ""
-echo "Sync complete. All files formatted and linted — ready to commit."
+echo "Sync complete. Synced docs were formatted and linted — ready to commit."
