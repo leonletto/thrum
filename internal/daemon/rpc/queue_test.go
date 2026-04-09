@@ -847,6 +847,74 @@ func TestRestartRecoveryMarksActiveAsInterrupted(t *testing.T) {
 	}
 }
 
+// TestSendQueuedCommandDrainsOnDeadSession verifies that when SendKeys fails
+// and the tmux session no longer exists, sendQueuedCommand drains the whole
+// queue: every command transitions to StateInterrupted, the in-memory queue
+// is removed, and the loop does not leave commands stranded in StateQueued.
+//
+// The test uses a session name that definitely does not exist in tmux
+// ("ghost-session-for-test") so ttmux.SendKeys will fail and
+// ttmux.HasSession will return false — matching the production code path
+// for a session killed externally between enqueue and dispatch.
+func TestSendQueuedCommandDrainsOnDeadSession(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	session := "ghost-session-for-test"
+	q := h.getOrCreateQueue(session)
+
+	// Enqueue two commands so the drain has something to transition.
+	cmd1 := &QueuedCommand{
+		ID:               "cmd_ghost_1",
+		Text:             "echo never",
+		RequesterAgent:   "test_coord",
+		State:            StateQueued,
+		Timeout:          60 * time.Second,
+		SilenceMs:        5000,
+		NotifyOnComplete: false,
+		SubmittedAt:      time.Now().UTC(),
+	}
+	cmd2 := &QueuedCommand{
+		ID:               "cmd_ghost_2",
+		Text:             "echo also never",
+		RequesterAgent:   "test_coord",
+		State:            StateQueued,
+		Timeout:          60 * time.Second,
+		SilenceMs:        5000,
+		NotifyOnComplete: false,
+		SubmittedAt:      time.Now().UTC(),
+	}
+	if err := persistCommand(ctx, h.state.DB(), session, cmd1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := persistCommand(ctx, h.state.DB(), session, cmd2, 2); err != nil {
+		t.Fatal(err)
+	}
+	q.Enqueue(cmd1)
+	q.Enqueue(cmd2)
+
+	// Attempt to dispatch the front command. SendKeys will fail because
+	// the session does not exist, and HasSession will return false.
+	h.sendQueuedCommand(ctx, session, q, cmd1)
+
+	// Both commands should now be marked interrupted in the DB.
+	for _, id := range []string{"cmd_ghost_1", "cmd_ghost_2"} {
+		loaded, err := loadCommand(ctx, h.state.DB(), id)
+		if err != nil {
+			t.Fatalf("loadCommand %s: %v", id, err)
+		}
+		if loaded.State != StateInterrupted {
+			t.Errorf("command %s state=%s, want %s (session-death drain)", id, loaded.State, StateInterrupted)
+		}
+	}
+
+	// The in-memory queue should have been removed from the map.
+	if h.getQueue(session) != nil {
+		t.Error("expected queue removed from in-memory map after dead-session drain")
+	}
+}
+
 func TestHandleKillDrainsQueue(t *testing.T) {
 	h, cleanup := setupTmuxHandlerTest(t)
 	defer cleanup()

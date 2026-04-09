@@ -158,24 +158,55 @@ func TestTmuxQueue_RPC(t *testing.T) {
 }
 
 func TestTmuxQueueStatus_RPC(t *testing.T) {
-	active := &TmuxQueuedView{ID: "cmd_abc123", Text: "echo hello", State: "running"}
-	mockResp := TmuxQueueStatusResponse{
-		Session: "test-session",
-		Active:  active,
-		Queued:  []TmuxQueuedView{{ID: "cmd_def456", Text: "echo world", State: "queued"}},
-	}
+	// IMPORTANT: this test simulates the REAL server wire format by sending
+	// JSON with lowercase field names. The server's QueuedCommandView uses
+	// lowercase JSON tags (id/text/state/etc.) and the client's TmuxQueuedView
+	// must decode them correctly. A previous version of this test encoded
+	// TmuxQueuedView on both sides of the mock, which masked a JSON tag case
+	// mismatch (client had ID/Text/State, server had id/text/state) — the
+	// decoded fields were silently zero and 'thrum tmux queue-status' printed
+	// empty rows. Always use the production wire format in the mock response.
 	daemon, socketPath := newMockDaemon(t)
 	defer daemon.stop()
 
 	daemon.start(t, func(conn net.Conn) {
 		var request map[string]any
-		json.NewDecoder(conn).Decode(&request)
+		if err := json.NewDecoder(conn).Decode(&request); err != nil {
+			return
+		}
 		if request["method"] != "tmux.queue-status" {
 			t.Errorf("expected method tmux.queue-status, got %v", request["method"])
 		}
-		json.NewEncoder(conn).Encode(map[string]any{
-			"jsonrpc": "2.0", "id": request["id"], "result": mockResp,
-		})
+		// Raw-JSON response matching the server's QueuedCommandView tags.
+		response := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request["id"],
+			"result": map[string]any{
+				"session": "test-session",
+				"active": map[string]any{
+					"id":                 "cmd_abc123",
+					"text":               "echo hello",
+					"requester_agent":    "test_coord",
+					"state":              "running",
+					"silence_ms":         5000,
+					"notify_on_complete": true,
+					"submitted_at":       "2026-04-09T00:00:00Z",
+					"sent_at":            "2026-04-09T00:00:01Z",
+				},
+				"queued": []map[string]any{
+					{
+						"id":                 "cmd_def456",
+						"text":               "echo world",
+						"requester_agent":    "test_coord",
+						"state":              "queued",
+						"silence_ms":         5000,
+						"notify_on_complete": true,
+						"submitted_at":       "2026-04-09T00:00:02Z",
+					},
+				},
+			},
+		}
+		_ = json.NewEncoder(conn).Encode(response)
 	})
 	<-daemon.Ready()
 
@@ -192,11 +223,37 @@ func TestTmuxQueueStatus_RPC(t *testing.T) {
 	if result.Active == nil {
 		t.Fatal("expected active command, got nil")
 	}
+	// The original bug: uppercase JSON tags left every field as its zero
+	// value. Guard each decoded field explicitly.
 	if result.Active.ID != "cmd_abc123" {
-		t.Errorf("Active.ID = %q, want %q", result.Active.ID, "cmd_abc123")
+		t.Errorf("Active.ID = %q, want %q (JSON tag mismatch?)", result.Active.ID, "cmd_abc123")
+	}
+	if result.Active.Text != "echo hello" {
+		t.Errorf("Active.Text = %q, want %q (JSON tag mismatch?)", result.Active.Text, "echo hello")
+	}
+	if result.Active.State != "running" {
+		t.Errorf("Active.State = %q, want %q (JSON tag mismatch?)", result.Active.State, "running")
+	}
+	if result.Active.RequesterAgent != "test_coord" {
+		t.Errorf("Active.RequesterAgent = %q, want %q", result.Active.RequesterAgent, "test_coord")
+	}
+	if result.Active.SilenceMs != 5000 {
+		t.Errorf("Active.SilenceMs = %d, want 5000", result.Active.SilenceMs)
+	}
+	if !result.Active.NotifyOnComplete {
+		t.Error("Active.NotifyOnComplete = false, want true")
 	}
 	if len(result.Queued) != 1 {
 		t.Fatalf("expected 1 queued command, got %d", len(result.Queued))
+	}
+	if result.Queued[0].ID != "cmd_def456" {
+		t.Errorf("Queued[0].ID = %q, want %q", result.Queued[0].ID, "cmd_def456")
+	}
+	if result.Queued[0].Text != "echo world" {
+		t.Errorf("Queued[0].Text = %q, want %q", result.Queued[0].Text, "echo world")
+	}
+	if result.Queued[0].State != "queued" {
+		t.Errorf("Queued[0].State = %q, want %q", result.Queued[0].State, "queued")
 	}
 }
 

@@ -155,11 +155,22 @@ type TmuxQueueStatusResponse struct {
 	Queued  []TmuxQueuedView  `json:"queued"`
 }
 
-// TmuxQueuedView describes a single command in the queue.
+// TmuxQueuedView describes a single command in the queue. JSON tags MUST
+// match the server's QueuedCommandView (internal/daemon/rpc/queue.go) exactly
+// — mismatched case leaves every decoded field as its zero value, and the
+// queue-status table silently displays empty rows.
 type TmuxQueuedView struct {
-	ID    string `json:"ID"`
-	Text  string `json:"Text"`
-	State string `json:"State"`
+	ID               string    `json:"id"`
+	Text             string    `json:"text"`
+	RequesterAgent   string    `json:"requester_agent"`
+	State            string    `json:"state"`
+	SilenceMs        int64     `json:"silence_ms,omitempty"`
+	NotifyOnComplete bool      `json:"notify_on_complete"`
+	SubmittedAt      time.Time `json:"submitted_at"`
+	SentAt           time.Time `json:"sent_at,omitempty"`
+	CompletedAt      time.Time `json:"completed_at,omitempty"`
+	CapturedOutput   string    `json:"captured_output,omitempty"`
+	SessionName      string    `json:"session_name,omitempty"`
 }
 
 // TmuxCancelResponse is the response from the tmux.cancel RPC.

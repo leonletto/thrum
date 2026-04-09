@@ -197,17 +197,28 @@ func (h *TmuxHandler) completeCommand(ctx context.Context, session string, queue
 // cmd.mu; we acquire it around the mutation + persist sequence. Typing keys is
 // done OUTSIDE the lock (it's I/O and the command is not yet visible as
 // "active" to any other goroutine).
+//
+// Session death: if SendKeys or SendSpecialKey fails, the pane is likely gone
+// (session killed externally, agent exited, crash). We confirm with
+// ttmux.HasSession and, if the session is in fact dead, drain the queue —
+// transitioning every command (including cmd itself, which is still at the
+// front of the queue and has NOT yet been popped) to StateInterrupted and
+// removing the queue from the in-memory map. Without this handling the
+// commands would sit in StateQueued forever: next silence event would never
+// fire because monitor-silence requires a live pane.
 func (h *TmuxHandler) sendQueuedCommand(ctx context.Context, session string, queue *SessionQueue, cmd *QueuedCommand) {
 	target := session + ":0.0"
 
 	// Type the command and press Enter — do this before taking cmd.mu so
 	// slow tmux calls don't block concurrent cancel attempts.
 	if err := ttmux.SendKeys(target, cmd.Text); err != nil {
-		log.Printf("[queue] SendKeys failed: %v", err)
+		log.Printf("[queue] SendKeys failed for %s: %v", session, err)
+		h.handleSendFailure(ctx, session, err)
 		return
 	}
 	if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
-		log.Printf("[queue] SendSpecialKey failed: %v", err)
+		log.Printf("[queue] SendSpecialKey failed for %s: %v", session, err)
+		h.handleSendFailure(ctx, session, err)
 		return
 	}
 
@@ -613,6 +624,18 @@ func (h *TmuxHandler) HandleCancel(ctx context.Context, params json.RawMessage) 
 //
 // Safe to call concurrently with no other queue activity because the in-memory
 // queues are empty at startup.
+//
+// NotifyOnComplete asymmetry vs drainSession: drainSession (HandleKill and
+// dead-session drain) gates @system notifications on cmd.NotifyOnComplete,
+// because --wait callers already get the result via their blocking queue-wait
+// RPC and an inbox message would be redundant. RecoverQueueState, by contrast,
+// ALWAYS notifies regardless of NotifyOnComplete. Rationale: an unexpected
+// daemon restart is a bigger event than a kill/session-death. When the daemon
+// died, any --wait caller's long-poll RPC also lost its connection and they
+// have no way to observe the terminal state through the normal channel. An
+// inbox message that lands once they reconnect is the safer bet. This is a
+// deliberate choice, not an oversight — do not add a NotifyOnComplete guard
+// to the loop below.
 func (h *TmuxHandler) RecoverQueueState(ctx context.Context) error {
 	pending, err := loadPendingCommands(ctx, h.state.DB())
 	if err != nil {
@@ -649,6 +672,39 @@ func (h *TmuxHandler) RecoverQueueState(ctx context.Context) error {
 // queue from the in-memory map. Called by HandleKill before actually killing
 // the tmux session so commands in flight get a clean terminal state in the DB.
 func (h *TmuxHandler) drainQueueOnKill(ctx context.Context, session string) {
+	h.drainSession(ctx, session, "session %s was killed")
+}
+
+// handleSendFailure is invoked by sendQueuedCommand when typing into the tmux
+// pane fails. The usual cause is a dead session (killed externally, crashed,
+// or the underlying pane exited). We confirm with HasSession so we do not
+// drain on a transient error, then run the same drain path HandleKill uses —
+// every command in the queue transitions to StateInterrupted and the queue
+// is removed from the in-memory map. The specific SendKeys/SendSpecialKey
+// error is already logged by the caller.
+func (h *TmuxHandler) handleSendFailure(ctx context.Context, session string, cause error) {
+	if ttmux.HasSession(session) {
+		// Session is still alive — the failure was probably transient.
+		// We leave the queue alone; next silence event will retry the
+		// dispatch path. The command itself stays in StateQueued since
+		// the caller has not yet persisted StateSent.
+		log.Printf("[queue] transient SendKeys failure for live session %s: %v (leaving queue intact)", session, cause)
+		return
+	}
+	log.Printf("[queue] session %s appears dead, draining queue", session)
+	h.drainSession(ctx, session, "session %s no longer exists")
+}
+
+// drainSession is the shared drain implementation used by drainQueueOnKill
+// (HandleKill) and handleSendFailure (dead session during dispatch). It
+// transitions every non-terminal command in the session's queue to
+// StateInterrupted, persists the transition, notifies each requester (if
+// NotifyOnComplete is set), then removes the queue from the in-memory map.
+//
+// reasonFmt is a printf-style template that receives the session name and
+// produces the user-facing message body suffix (e.g. "session %s was killed"
+// or "session %s no longer exists").
+func (h *TmuxHandler) drainSession(ctx context.Context, session, reasonFmt string) {
 	queue := h.getQueue(session)
 	if queue == nil {
 		return
@@ -660,6 +716,8 @@ func (h *TmuxHandler) drainQueueOnKill(ctx context.Context, session string) {
 		all = append(all, active)
 	}
 	all = append(all, queue.Snapshot()...)
+
+	reason := fmt.Sprintf(reasonFmt, session)
 
 	// Mark each interrupted in DB and notify requester if requested.
 	for _, cmd := range all {
@@ -683,8 +741,8 @@ func (h *TmuxHandler) drainQueueOnKill(ctx context.Context, session string) {
 		cmd.mu.Unlock()
 
 		if notify {
-			body := fmt.Sprintf("Command %s interrupted — session %s was killed.\nResubmit if needed.",
-				cmdID, session)
+			body := fmt.Sprintf("Command %s interrupted — %s.\nResubmit if needed.",
+				cmdID, reason)
 			h.sendSystemMessage(ctx, cmd.RequesterAgent, body)
 		}
 	}
