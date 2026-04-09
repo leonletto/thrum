@@ -91,6 +91,8 @@ func printInitialLines(logPath string, opts DaemonLogsOptions, out io.Writer) er
 				lines = append(lines, line)
 			}
 		} else {
+			// #nosec G705 -- CLI writes daemon log content to stdout; the
+			// "taint" is log output we produced ourselves, not user input.
 			if _, err := fmt.Fprintln(out, line); err != nil {
 				return err
 			}
@@ -101,6 +103,7 @@ func printInitialLines(logPath string, opts DaemonLogsOptions, out io.Writer) er
 	}
 
 	for _, line := range lines {
+		// #nosec G705 -- CLI writes daemon log content to stdout.
 		if _, err := fmt.Fprintln(out, line); err != nil {
 			return err
 		}
@@ -144,6 +147,7 @@ func followLogFile(logPath string, opts DaemonLogsOptions, out io.Writer) error 
 				}
 			}
 			if sinceActive {
+				// #nosec G705 -- CLI writes daemon log content to stdout.
 				if _, werr := fmt.Fprintln(out, trimmed); werr != nil {
 					return werr
 				}

@@ -25,8 +25,8 @@ const (
 	LogFileName = "daemon.log"
 )
 
-// LogFilePath returns the absolute path to the daemon log file.
-// varDir is the .thrum/var directory.
+// LogFilePath returns the absolute path to the daemon log file inside the
+// given .thrum/var directory.
 func LogFilePath(varDir string) string {
 	return filepath.Join(varDir, LogFileName)
 }
