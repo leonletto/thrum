@@ -332,6 +332,13 @@ func roleHeader(role string) string {
 			"You watch system health and report anomalies. You check logs, metrics, and\n" +
 			"status endpoints. Report issues immediately with evidence. Do not attempt\n" +
 			"fixes — escalate to the coordinator with enough context for them to decide."
+	case "orchestrator":
+		return "## Your Role: Orchestrator\n\n" +
+			"You are the execution engine. You receive validated plans, launch agents in\n" +
+			"tmux sessions, manage epic-by-epic execution with review gates, and present\n" +
+			"results for human-controlled merging. You NEVER write code or investigate\n" +
+			"codebases — delegate everything. Your value is throughput: agents working,\n" +
+			"epics closing, branches landing. Invoke /thrum:orchestrate when a plan arrives."
 	default:
 		return ""
 	}

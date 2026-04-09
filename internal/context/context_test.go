@@ -557,6 +557,7 @@ func TestRoleAwarePreamble(t *testing.T) {
 		{"deployer", "## Your Role: Deployer"},
 		{"documenter", "## Your Role: Documenter"},
 		{"monitor", "## Your Role: Monitor"},
+		{"orchestrator", "## Your Role: Orchestrator"},
 	}
 
 	for _, tc := range knownRoles {
