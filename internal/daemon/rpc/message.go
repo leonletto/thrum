@@ -834,6 +834,23 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 		createdAfterArgs = append(createdAfterArgs, req.CreatedAfter)
 	}
 
+	// For-agent floor: when filtering for a specific agent, use the agent's
+	// registered_at as a floor for CreatedAfter so historical group/broadcast
+	// messages sent before the agent existed are excluded.
+	if req.ForAgent != "" {
+		var registeredAt string
+		err := h.state.DB().QueryRowContext(ctx,
+			"SELECT registered_at FROM agents WHERE agent_id = ? LIMIT 1",
+			req.ForAgent,
+		).Scan(&registeredAt)
+		if err == nil && registeredAt != "" {
+			if createdAfterClause == "" || registeredAt > req.CreatedAfter {
+				createdAfterClause = " AND m.created_at > ?"
+				createdAfterArgs = []any{registeredAt}
+			}
+		}
+	}
+
 	// For-agent filter: show messages mentioning me + messages scoped to my groups
 	// (forAgentValues already computed above for is_read)
 	forAgentClause, forAgentArgs := buildForAgentClause(forAgentValues, req.ForAgent, req.ForAgentRole)

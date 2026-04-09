@@ -77,6 +77,10 @@ playwright-report/
 # Playwright cli artifacts
 .playwright-cli
 
+# Open Code plugin build artifacts
+opencode-plugin/dist/
+opencode-plugin/node_modules/
+
 # Thrum runtime files
 .thrum/
 .thrum.*.json

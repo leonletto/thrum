@@ -31,6 +31,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
+	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
@@ -200,7 +201,7 @@ Examples:
 
 			// Validate runtime flag if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
-				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, auggie, cli-only, all", runtimeFlag)
+				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, opencode, auggie, cli-only, all", runtimeFlag)
 			}
 
 			// Skills-only mode: install thrum skill without full init
@@ -492,10 +493,14 @@ Examples:
 			}
 
 			// Step 6: Intent
+			intentFlag, _ := cmd.Flags().GetString("intent")
 			repoName := cli.GetRepoName(flagRepo)
-			intent := cli.DefaultIntent(agentRoleResolved, repoName)
+			intent := intentFlag
+			if intent == "" {
+				intent = cli.DefaultIntent(agentRoleResolved, repoName)
+			}
 
-			if isInteractive() && !flagQuiet {
+			if intentFlag == "" && isInteractive() && !flagQuiet {
 				fmt.Printf("\nIntent: %s\n", intent)
 				fmt.Printf("  Edit? [Y/n]: ")
 				reader := bufio.NewReader(os.Stdin)
@@ -511,10 +516,21 @@ Examples:
 				}
 			}
 
-			// Step 7: Write identity file (v3)
+			// Step 7: Write identity file
 			thrumDir := filepath.Join(flagRepo, ".thrum")
+
+			// Resolve preferred runtime: --runtime flag → auto-detect → config runtime.primary → empty
+			preferredRuntime := runtimeFlag
+			if preferredRuntime == "" || preferredRuntime == "all" {
+				if _, detectedRT := process.FindClaudeAncestor(); detectedRT != "" {
+					preferredRuntime = detectedRT
+				} else if cfg, err := config.LoadThrumConfig(thrumDir); err == nil && cfg.Runtime.Primary != "" {
+					preferredRuntime = cfg.Runtime.Primary
+				}
+			}
+
 			idFile := &config.IdentityFile{
-				Version: 3,
+				Version: 5,
 				RepoID:  cli.GetRepoID(flagRepo),
 				Agent: config.AgentConfig{
 					Kind:    "agent",
@@ -523,9 +539,10 @@ Examples:
 					Module:  agentModuleResolved,
 					Display: cli.AutoDisplay(agentRoleResolved, agentModuleResolved),
 				},
-				Worktree: cli.GetWorktreeName(flagRepo),
-				Branch:   cli.GetCurrentBranch(flagRepo),
-				Intent:   intent,
+				Worktree:         cli.GetWorktreeName(flagRepo),
+				Branch:           cli.GetCurrentBranch(flagRepo),
+				Intent:           intent,
+				PreferredRuntime: preferredRuntime,
 			}
 			if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
 				return fmt.Errorf("save identity file: %w", err)
@@ -584,7 +601,7 @@ Examples:
 
 			if qsResult.Session != nil {
 				// Reload identity file to preserve fields set by
-				// cli.Quickstart enrichment (ClaudePID, TmuxSession).
+				// cli.Quickstart enrichment (AgentPID, TmuxSession).
 				// Only use the reloaded identity if the name matches.
 				if enriched, _, loadErr := config.LoadIdentityWithPath(flagRepo); loadErr == nil && enriched.Agent.Name == agentNameResolved {
 					enriched.SessionID = qsResult.Session.SessionID
@@ -633,11 +650,12 @@ Examples:
 	cmd.Flags().Bool("force", false, "Force reinitialization / overwrite existing files")
 	cmd.Flags().Bool("stealth", false, "Use .git/info/exclude instead of .gitignore (zero footprint in tracked files)")
 	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files")
-	cmd.Flags().String("runtime", "", "Generate runtime-specific configs (claude|codex|cursor|gemini|cli-only|all)")
+	cmd.Flags().String("runtime", "", "Generate runtime-specific configs (claude|codex|cursor|gemini|opencode|cli-only|all)")
 	cmd.Flags().String("agent-name", "", "Agent name for templates (default: default_agent)")
 	cmd.Flags().String("agent-role", "", "Agent role for templates (default: implementer)")
 	cmd.Flags().String("agent-module", "", "Agent module for templates (default: main)")
 	cmd.Flags().Bool("skills", false, "Install thrum skill only (no MCP config, no startup script)")
+	cmd.Flags().String("intent", "", "Agent intent (what it's working on)")
 
 	return cmd
 }
@@ -4301,7 +4319,7 @@ Examples:
 
 			// Validate runtime if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
-				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, auggie, cli-only", runtimeFlag)
+				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, opencode, auggie, cli-only", runtimeFlag)
 			}
 
 			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.
@@ -4407,7 +4425,7 @@ Examples:
 				thrumDir := filepath.Join(flagRepo, ".thrum")
 
 				// Load the identity file that cli.Quickstart's enrichment block
-				// already wrote — it contains ClaudePID, TmuxSession, and other
+				// already wrote — it contains AgentPID, TmuxSession, and other
 				// fields set during enrichment. Building a fresh struct here would
 				// overwrite those fields.
 				// Only use the loaded identity if the agent name matches — a stale
@@ -4441,6 +4459,9 @@ Examples:
 				}
 				if idFile.ContextFile == "" {
 					idFile.ContextFile = fmt.Sprintf("context/%s.md", savedName)
+				}
+				if runtimeFlag != "" && idFile.PreferredRuntime != runtimeFlag {
+					idFile.PreferredRuntime = runtimeFlag
 				}
 
 				if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
@@ -6768,9 +6789,9 @@ func restartCmd() *cobra.Command {
 			sessionID := idFile.SessionID
 			thrumDir := filepath.Join(flagRepo, ".thrum")
 
-			pid := idFile.ClaudePID
+			pid := idFile.AgentPID
 			if pid == 0 {
-				// Fallback: query daemon for the agent's ClaudePID
+				// Fallback: query daemon for the agent's AgentPID
 				client, err := getClient()
 				if err != nil {
 					return fmt.Errorf("connect to daemon: %w", err)
@@ -6778,20 +6799,20 @@ func restartCmd() *cobra.Command {
 				defer func() { _ = client.Close() }()
 
 				var agents []struct {
-					AgentID   string `json:"agent_id"`
-					ClaudePID int    `json:"claude_pid"`
+					AgentID  string `json:"agent_id"`
+					AgentPID int    `json:"agent_pid"`
 				}
 				if err := client.Call("agent.list", nil, &agents); err == nil {
 					for _, a := range agents {
-						if a.AgentID == agentName && a.ClaudePID > 0 {
-							pid = a.ClaudePID
+						if a.AgentID == agentName && a.AgentPID > 0 {
+							pid = a.AgentPID
 							break
 						}
 					}
 				}
 			}
 			if pid == 0 {
-				return fmt.Errorf("no Claude PID found for %s — ensure agent is registered with a Claude PID", agentName)
+				return fmt.Errorf("no agent PID found for %s — ensure agent is registered with an agent PID", agentName)
 			}
 
 			homeDir, err := os.UserHomeDir()
@@ -6932,24 +6953,28 @@ func tmuxCmd() *cobra.Command {
 		Short: "Start an AI tool inside a tmux session",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rt, _ := cmd.Flags().GetString("runtime")
-			if rt == "" {
-				// Query tmux for session's working directory (same approach as tmux start)
-				out, err := exec.Command("tmux", "display-message", // #nosec G204 -- args are session name from CLI
-					"-t", args[0], "-p", "#{pane_current_path}").Output()
-				if err == nil {
-					sessionCwd := strings.TrimSpace(string(out))
-					thrumDir := filepath.Join(sessionCwd, ".thrum")
-					if _, statErr := os.Stat(thrumDir); statErr == nil {
-						cfg, _ := config.LoadThrumConfig(thrumDir)
-						if cfg.Runtime.Primary != "" {
-							rt = cfg.Runtime.Primary
-						}
+			rtOverride, _ := cmd.Flags().GetString("runtime")
+			rt := "claude"
+			// Resolution: --runtime flag > identity PreferredRuntime > config > "claude"
+			out, err := exec.Command("tmux", "display-message", // #nosec G204 -- args are session name from CLI
+				"-t", args[0], "-p", "#{pane_current_path}").Output()
+			if err == nil {
+				sessionCwd := strings.TrimSpace(string(out))
+				thrumDir := filepath.Join(sessionCwd, ".thrum")
+				if _, statErr := os.Stat(thrumDir); statErr == nil {
+					cfg, _ := config.LoadThrumConfig(thrumDir)
+					if cfg.Runtime.Primary != "" {
+						rt = cfg.Runtime.Primary
 					}
 				}
-				if rt == "" {
-					rt = "claude"
+				if idFile, _, loadErr := config.LoadIdentityWithPath(sessionCwd); loadErr == nil && idFile != nil {
+					if idFile.PreferredRuntime != "" {
+						rt = idFile.PreferredRuntime
+					}
 				}
+			}
+			if rtOverride != "" {
+				rt = rtOverride
 			}
 			client, err := getClient()
 			if err != nil {
@@ -7239,13 +7264,18 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 				return tmuxAttach(sessionName)
 			}
 
-			// Determine runtime from config
+			// Determine runtime: --runtime flag > identity PreferredRuntime > config > "claude"
 			thrumDir := filepath.Join(cwd, ".thrum")
 			runtime := "claude"
 			if _, err := os.Stat(thrumDir); err == nil {
 				cfg, _ := config.LoadThrumConfig(thrumDir)
 				if cfg.Runtime.Primary != "" {
 					runtime = cfg.Runtime.Primary
+				}
+			}
+			if idFile, _, err := config.LoadIdentityWithPath(cwd); err == nil && idFile != nil {
+				if idFile.PreferredRuntime != "" {
+					runtime = idFile.PreferredRuntime
 				}
 			}
 			rtOverride, _ := cmd.Flags().GetString("runtime")
@@ -7275,12 +7305,9 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 
 			fmt.Printf("Session %s created with %s — waiting for startup...\n", sessionName, runtime)
 
-			// Wait for runtime to initialize, then send prime
-			time.Sleep(8 * time.Second)
-			_ = cli.TmuxSend(client, sessionName, "/thrum:prime")
-
-			// Give prime a moment to start, then attach
-			time.Sleep(2 * time.Second)
+			// HandleLaunch sends the prime command via a background goroutine;
+			// just wait for the runtime to initialize before attaching.
+			time.Sleep(10 * time.Second)
 			return tmuxAttach(sessionName)
 		},
 	}

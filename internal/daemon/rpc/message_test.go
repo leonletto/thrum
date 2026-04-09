@@ -2186,7 +2186,7 @@ func TestResolveNudgeTarget_WithTmux(t *testing.T) {
 		"version":      4,
 		"tmux_session": "implementer-api:0.0",
 		"agent":        map[string]string{"name": "impl_api", "role": "implementer", "module": "api"},
-		"claude_pid":   os.Getpid(),
+		"agent_pid":    os.Getpid(),
 	}
 	data, _ := json.MarshalIndent(identity, "", "  ")
 	os.WriteFile(filepath.Join(identitiesDir, "impl_api.json"), data, 0600)

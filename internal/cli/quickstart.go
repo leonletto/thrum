@@ -96,8 +96,8 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		return result, nil
 	}
 
-	// Capture Claude PID for identity resolution
-	claudePID := process.FindClaudeAncestor()
+	// Capture agent PID and detected runtime for identity resolution
+	agentPID, detectedRuntime := process.FindClaudeAncestor()
 
 	// Step 1: Register agent
 	regOpts := AgentRegisterOptions{
@@ -106,7 +106,7 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		Module:     opts.Module,
 		Display:    opts.Display,
 		ReRegister: opts.ReRegister,
-		ClaudePID:  claudePID,
+		AgentPID:   agentPID,
 	}
 
 	regResult, err := AgentRegister(client, regOpts)
@@ -118,11 +118,11 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	if regResult.Status == "conflict" {
 		if regResult.Conflict != nil {
 			conflictPID := regResult.Conflict.ConflictPID
-			if conflictPID > 0 && conflictPID != claudePID && process.IsRunning(conflictPID) && process.IsClaudeProcess(conflictPID) {
-				return nil, fmt.Errorf("cannot register as %q: name is held by a running Claude session (PID %d)", opts.Name, conflictPID)
+			if conflictPID > 0 && conflictPID != agentPID && process.IsRunning(conflictPID) && process.IsRuntimeProcess(conflictPID, "") {
+				return nil, fmt.Errorf("cannot register as %q: name is held by a running agent session (PID %d)", opts.Name, conflictPID)
 			}
 		}
-		// Dead or non-claude PID — safe to retry
+		// Dead or non-runtime PID — safe to retry
 		regOpts.ReRegister = true
 		regResult, err = AgentRegister(client, regOpts)
 		if err != nil {
@@ -192,9 +192,21 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 			changed = true
 		}
 
-		// Write ClaudePID to identity file for restart save
-		if claudePID > 0 && idFile.ClaudePID != claudePID {
-			idFile.ClaudePID = claudePID
+		// Write AgentPID to identity file for restart save
+		if agentPID > 0 && idFile.AgentPID != agentPID {
+			idFile.AgentPID = agentPID
+			changed = true
+		}
+
+		// Write detected runtime to identity file
+		if detectedRuntime != "" && idFile.Runtime != detectedRuntime {
+			idFile.Runtime = detectedRuntime
+			changed = true
+		}
+
+		// Write PreferredRuntime from --runtime flag
+		if opts.Runtime != "" && idFile.PreferredRuntime != opts.Runtime {
+			idFile.PreferredRuntime = opts.Runtime
 			changed = true
 		}
 

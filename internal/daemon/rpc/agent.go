@@ -30,7 +30,7 @@ type RegisterRequest struct {
 	Display    string `json:"display,omitempty"`
 	Force      bool   `json:"force,omitempty"`       // Override existing
 	ReRegister bool   `json:"re_register,omitempty"` // Same agent returning
-	ClaudePID  int    `json:"claude_pid,omitempty"`  // Claude process PID for identity resolution
+	AgentPID  int    `json:"agent_pid,omitempty"`  // Claude process PID for identity resolution
 }
 
 // RegisterResponse represents the response from agent.register RPC.
@@ -68,7 +68,7 @@ type AgentInfo struct {
 	Display      string `json:"display"`
 	RegisteredAt string `json:"registered_at"`
 	LastSeenAt   string `json:"last_seen_at,omitempty"`
-	ClaudePID    int    `json:"claude_pid,omitempty"` // Claude process PID for identity resolution
+	AgentPID    int    `json:"agent_pid,omitempty"` // Claude process PID for identity resolution
 }
 
 // WhoamiResponse represents the response from agent.whoami RPC.
@@ -243,7 +243,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 					ExistingAgentID: existingByName.AgentID,
 					RegisteredAt:    existingByName.RegisteredAt,
 					LastSeenAt:      existingByName.LastSeenAt,
-					ConflictPID:     existingByName.ClaudePID,
+					ConflictPID:     existingByName.AgentPID,
 				},
 			}, fmt.Errorf("agent name '%s' already in use by %s", req.Name, existingByName.AgentID)
 		}
@@ -261,7 +261,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		if existingAgent.AgentID == agentID {
 			if req.ReRegister {
 				// Update registration
-				return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.ClaudePID)
+				return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
 			}
 			// Return existing agent info without conflict
 			return &RegisterResponse{
@@ -280,7 +280,7 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 					ExistingAgentID: existingAgent.AgentID,
 					RegisteredAt:    existingAgent.RegisteredAt,
 					LastSeenAt:      existingAgent.LastSeenAt,
-					ConflictPID:     existingAgent.ClaudePID,
+					ConflictPID:     existingAgent.AgentPID,
 				},
 			}, nil
 		}
@@ -289,11 +289,11 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 		_, _ = h.state.DB().ExecContext(ctx, "DELETE FROM agents WHERE agent_id = ?", existingAgent.AgentID)
 
 		// Force override - register new agent
-		return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.ClaudePID)
+		return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
 	}
 
 	// No conflict - register new agent
-	return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.ClaudePID)
+	return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
 }
 
 // HandleList handles the agent.list RPC method.
@@ -307,7 +307,7 @@ func (h *AgentHandler) HandleList(ctx context.Context, params json.RawMessage) (
 	defer h.state.RUnlock()
 
 	// Build query with optional filters
-	query := `SELECT agent_id, kind, role, module, display, registered_at, last_seen_at, claude_pid
+	query := `SELECT agent_id, kind, role, module, display, registered_at, last_seen_at, agent_pid
 	          FROM agents WHERE 1=1`
 	args := []any{}
 
@@ -341,7 +341,7 @@ func (h *AgentHandler) HandleList(ctx context.Context, params json.RawMessage) (
 			&display,
 			&agent.RegisteredAt,
 			&lastSeenAt,
-			&agent.ClaudePID,
+			&agent.AgentPID,
 		); err != nil {
 			return nil, fmt.Errorf("scan agent: %w", err)
 		}
@@ -471,7 +471,7 @@ func resolveHostname() string {
 }
 
 // registerAgent writes an agent.register event and returns the response.
-func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, module, display, worktree, status string, claudePID int) (*RegisterResponse, error) {
+func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, module, display, worktree, status string, agentPID int) (*RegisterResponse, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	// Create agent.register event
@@ -486,7 +486,7 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 		Worktree:  worktree,
 		Display:   display,
 		Hostname:  resolveHostname(),
-		ClaudePID: claudePID,
+		AgentPID: agentPID,
 	}
 
 	// Write event to JSONL and SQLite
@@ -528,7 +528,7 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 
 // getAgentByRoleModule queries for an existing agent with the given role and module.
 func (h *AgentHandler) getAgentByRoleModule(ctx context.Context, role, module string) (*AgentInfo, error) {
-	query := `SELECT agent_id, kind, role, module, display, registered_at, last_seen_at, claude_pid
+	query := `SELECT agent_id, kind, role, module, display, registered_at, last_seen_at, agent_pid
 	          FROM agents
 	          WHERE role = ? AND module = ?
 	          LIMIT 1`
@@ -544,7 +544,7 @@ func (h *AgentHandler) getAgentByRoleModule(ctx context.Context, role, module st
 		&display,
 		&agent.RegisteredAt,
 		&lastSeenAt,
-		&agent.ClaudePID,
+		&agent.AgentPID,
 	)
 
 	if err != nil {
@@ -563,7 +563,7 @@ func (h *AgentHandler) getAgentByRoleModule(ctx context.Context, role, module st
 
 // getAgentByID queries for an existing agent with the given agent ID.
 func (h *AgentHandler) getAgentByID(ctx context.Context, agentID string) (*AgentInfo, error) {
-	query := `SELECT agent_id, kind, role, module, display, registered_at, last_seen_at, claude_pid
+	query := `SELECT agent_id, kind, role, module, display, registered_at, last_seen_at, agent_pid
 	          FROM agents
 	          WHERE agent_id = ?
 	          LIMIT 1`
@@ -579,7 +579,7 @@ func (h *AgentHandler) getAgentByID(ctx context.Context, agentID string) (*Agent
 		&display,
 		&agent.RegisteredAt,
 		&lastSeenAt,
-		&agent.ClaudePID,
+		&agent.AgentPID,
 	)
 
 	if err != nil {
