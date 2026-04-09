@@ -70,9 +70,23 @@ func DaemonStart(repoPath string, localOnly bool) error {
 	}
 	cmd := exec.Command(executable, args...) // #nosec G204 -- executable from os.Executable(); repoPath is validated internal config, not raw user input
 
-	// Detach from current process - daemon runs independently
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	// Open the daemon log file so the forked process inherits valid fds for
+	// os.Stdout/os.Stderr from the very first instruction — this captures
+	// early panics, package init errors, and pre-lumberjack stderr prints
+	// that would otherwise vanish. Once runDaemon initializes lumberjack and
+	// calls log.SetOutput, log.Printf calls are routed through the rotation
+	// writer. The inherited fd remains as a best-effort fallback: after the
+	// first lumberjack rotation it will point at the renamed backup file, so
+	// panic output may become unreachable but will not corrupt new logs.
+	varDir := filepath.Join(thrumDir, "var")
+	logFile, err := daemon.OpenRawLogFile(varDir)
+	if err != nil {
+		return fmt.Errorf("failed to open daemon log file: %w", err)
+	}
+	defer func() { _ = logFile.Close() }() // parent releases its fd after Start dups it into the child
+
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
 	cmd.Stdin = nil
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setsid: true, // Create new session (detach from terminal)

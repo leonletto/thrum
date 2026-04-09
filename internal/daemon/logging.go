@@ -1,0 +1,69 @@
+// Package daemon provides daemon lifecycle and logging utilities.
+package daemon
+
+import (
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/natefinch/lumberjack.v2"
+)
+
+// Log rotation defaults.
+const (
+	// LogMaxSizeMB is the max log file size before rotation.
+	LogMaxSizeMB = 10
+	// LogMaxBackups is the number of rotated files to keep.
+	LogMaxBackups = 4
+	// LogMaxAgeDays is the max age (in days) to retain rotated files.
+	LogMaxAgeDays = 28
+	// LogFileName is the daemon log file name inside .thrum/var/.
+	LogFileName = "daemon.log"
+)
+
+// LogFilePath returns the absolute path to the daemon log file.
+// varDir is the .thrum/var directory.
+func LogFilePath(varDir string) string {
+	return filepath.Join(varDir, LogFileName)
+}
+
+// NewLogWriter returns a lumberjack.Logger configured for daemon log rotation.
+// Rotation: 10MB files, 4 backups, 28 day retention, gzip compressed.
+func NewLogWriter(varDir string) *lumberjack.Logger {
+	return &lumberjack.Logger{
+		Filename:   LogFilePath(varDir),
+		MaxSize:    LogMaxSizeMB,
+		MaxBackups: LogMaxBackups,
+		MaxAge:     LogMaxAgeDays,
+		Compress:   true,
+	}
+}
+
+// OpenRawLogFile opens the daemon log file for append-only writes without
+// going through lumberjack. Used by the parent process in DaemonStart so the
+// forked daemon inherits a valid fd for os.Stdout/os.Stderr before lumberjack
+// is initialized inside the child. Callers must Close the returned file after
+// handing it to exec.Cmd; the child retains its own duplicated fd.
+func OpenRawLogFile(varDir string) (*os.File, error) {
+	if err := os.MkdirAll(varDir, 0750); err != nil {
+		return nil, fmt.Errorf("create var dir: %w", err)
+	}
+	path := LogFilePath(varDir)
+	// #nosec G302 G304 -- path is an internal .thrum/var/ log file, 0600 is
+	// stricter than typical log files but preserves user isolation.
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", path, err)
+	}
+	return f, nil
+}
+
+// InstallLogWriter installs w as the destination for the standard log package
+// and returns the writer. Callers typically pass the result of NewLogWriter.
+// Standard flags include microseconds and UTC for consistent daemon timestamps.
+func InstallLogWriter(w io.Writer) {
+	log.SetOutput(w)
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.LUTC)
+}

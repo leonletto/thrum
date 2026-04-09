@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -5182,6 +5183,14 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	if err := os.MkdirAll(varDir, 0750); err != nil {
 		return fmt.Errorf("failed to create var directory: %w", err)
 	}
+
+	// Install rotating log writer as early as possible so every subsequent
+	// log.Printf in daemon startup is captured. lumberjack rotates the file
+	// when it exceeds 10MB and keeps 4 compressed backups for 28 days.
+	logWriter := daemon.NewLogWriter(varDir)
+	defer func() { _ = logWriter.Close() }()
+	daemon.InstallLogWriter(logWriter)
+	log.Printf("daemon: starting version=%s repo=%s", Version+"+"+Build, absPath)
 
 	// Ensure identities directory exists in the local checkout, not the shared redirect target.
 	identitiesDir := filepath.Join(absPath, ".thrum", "identities")
