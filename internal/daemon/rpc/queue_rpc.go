@@ -348,6 +348,11 @@ func (h *TmuxHandler) handleCommandTimeout(ctx context.Context, session string, 
 	_ = updateCommandState(ctx, h.state.DB(), cmd)
 	h.state.Unlock()
 
+	// --wait callers are blocked in the CLI (not reading inbox); if they want
+	// to intervene on long commands they should not use --wait.
+	if !cmd.NotifyOnComplete {
+		return
+	}
 	body := fmt.Sprintf("Command %s still processing after %ds.\nSession: %s\nSend \"thrum tmux cancel %s\" to abort.",
 		cmd.ID, int(cmd.Timeout.Seconds()), session, cmd.ID)
 	h.sendSystemMessage(ctx, cmd.RequesterAgent, body)
@@ -406,10 +411,14 @@ func (h *TmuxHandler) HandleCancel(ctx context.Context, params json.RawMessage) 
 
 		foundQueue.ClearActive()
 
-		// Notify requester.
-		body := fmt.Sprintf("Command %s cancelled.\nSession: %s\n\nPartial output:\n---\n%s\n---",
-			foundCmd.ID, foundSession, output)
-		h.sendSystemMessage(ctx, foundCmd.RequesterAgent, body)
+		// Notify requester unless they opted out (queue-wait returns on any
+		// terminal state including CANCELLED, so --wait callers get the result
+		// via the RPC response and the @system message is redundant).
+		if foundCmd.NotifyOnComplete {
+			body := fmt.Sprintf("Command %s cancelled.\nSession: %s\n\nPartial output:\n---\n%s\n---",
+				foundCmd.ID, foundSession, output)
+			h.sendSystemMessage(ctx, foundCmd.RequesterAgent, body)
+		}
 
 		// Send next queued command if any.
 		if next := foundQueue.Peek(); next != nil {

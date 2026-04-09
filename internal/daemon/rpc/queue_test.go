@@ -146,6 +146,108 @@ func TestHandleQueueRespectsSilenceAndNotifyOverrides(t *testing.T) {
 	}
 }
 
+// countSystemMessages returns the number of message rows authored by @system.
+// Shared helper for tests that verify NotifyOnComplete suppression.
+func countSystemMessages(t *testing.T, h *TmuxHandler) int {
+	t.Helper()
+	var n int
+	if err := h.state.DB().QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM messages WHERE agent_id = 'system'`).Scan(&n); err != nil {
+		t.Fatalf("count system messages: %v", err)
+	}
+	return n
+}
+
+// TestHandleCancelSkipsSystemMessageWhenNotifyFalse verifies that cancelling a
+// command with NotifyOnComplete=false does NOT write a @system message.
+// --wait callers get the cancelled terminal state via the queue-wait RPC
+// response directly, so an inbox message would be redundant.
+func TestHandleCancelSkipsSystemMessageWhenNotifyFalse(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	q := h.getOrCreateQueue("test-session")
+
+	cmd := &QueuedCommand{
+		ID:               "cmd_quiet_cancel",
+		Text:             "sleep 999",
+		RequesterAgent:   "test_coord",
+		State:            StateSent,
+		Timeout:          60 * time.Second,
+		SilenceMs:        5000,
+		NotifyOnComplete: false,
+		SubmittedAt:      time.Now().UTC(),
+		SentAt:           time.Now().UTC(),
+	}
+	if err := persistCommand(ctx, h.state.DB(), "test-session", cmd, 0); err != nil {
+		t.Fatal(err)
+	}
+	q.SetActive(cmd)
+
+	before := countSystemMessages(t, h)
+
+	params := json.RawMessage(`{"command_id":"cmd_quiet_cancel"}`)
+	resp, err := h.HandleCancel(ctx, params)
+	if err != nil {
+		t.Fatalf("HandleCancel: %v", err)
+	}
+	cancelResp, ok := resp.(*CancelResponse)
+	if !ok || cancelResp.State != StateCancelled {
+		t.Fatalf("unexpected cancel response: %+v", resp)
+	}
+	if q.Active() != nil {
+		t.Error("expected active cleared after cancel")
+	}
+
+	after := countSystemMessages(t, h)
+	if after != before {
+		t.Errorf("@system message count changed: before=%d after=%d — expected no new messages when NotifyOnComplete=false", before, after)
+	}
+}
+
+// TestHandleCommandTimeoutSkipsSystemMessageWhenNotifyFalse verifies that a
+// timeout with NotifyOnComplete=false does NOT write a @system message —
+// --wait callers are blocked in the CLI and not reading inbox anyway.
+func TestHandleCommandTimeoutSkipsSystemMessageWhenNotifyFalse(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	cmd := &QueuedCommand{
+		ID:               "cmd_quiet_timeout",
+		Text:             "sleep 999",
+		RequesterAgent:   "test_coord",
+		State:            StateActive,
+		Timeout:          30 * time.Second,
+		SilenceMs:        5000,
+		NotifyOnComplete: false,
+		SubmittedAt:      time.Now().UTC(),
+		SentAt:           time.Now().UTC(),
+	}
+	if err := persistCommand(ctx, h.state.DB(), "test-session", cmd, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	before := countSystemMessages(t, h)
+
+	h.handleCommandTimeout(ctx, "test-session", cmd)
+
+	// State should still transition to timeout_waiting in DB.
+	loaded, err := loadCommand(ctx, h.state.DB(), "cmd_quiet_timeout")
+	if err != nil {
+		t.Fatalf("loadCommand: %v", err)
+	}
+	if loaded.State != StateTimeoutWaiting {
+		t.Errorf("state=%s, want %s", loaded.State, StateTimeoutWaiting)
+	}
+
+	after := countSystemMessages(t, h)
+	if after != before {
+		t.Errorf("@system message count changed: before=%d after=%d — expected no new messages when NotifyOnComplete=false", before, after)
+	}
+}
+
 // TestCompleteCommandSkipsSystemMessageWhenNotifyFalse verifies that a command
 // with NotifyOnComplete=false does NOT write a @system message on completion.
 // This is the --wait mode's quiet path — the caller gets the result via the
@@ -157,16 +259,7 @@ func TestCompleteCommandSkipsSystemMessageWhenNotifyFalse(t *testing.T) {
 	ctx := context.Background()
 	q := h.getOrCreateQueue("test-session")
 
-	// Baseline: count existing message events authored by @system.
-	countSystemMessages := func() int {
-		var n int
-		if err := h.state.DB().QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM messages WHERE agent_id = 'system'`).Scan(&n); err != nil {
-			t.Fatalf("count system messages: %v", err)
-		}
-		return n
-	}
-	before := countSystemMessages()
+	before := countSystemMessages(t, h)
 
 	cmd := &QueuedCommand{
 		ID:               "cmd_quiet",
@@ -195,7 +288,7 @@ func TestCompleteCommandSkipsSystemMessageWhenNotifyFalse(t *testing.T) {
 	}
 
 	// No new @system messages should have been written.
-	after := countSystemMessages()
+	after := countSystemMessages(t, h)
 	if after != before {
 		t.Errorf("@system message count changed: before=%d after=%d — expected no new messages when NotifyOnComplete=false", before, after)
 	}
