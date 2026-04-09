@@ -317,6 +317,18 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 
 	log.Printf("[tmux] check-pane: session=%s state=%s reason=%s", req.Session, state, req.Reason)
 
+	// Check for status mismatch: agent says "working" but pane is idle
+	if state == "idle" {
+		agentName, idFile, _ := h.findIdentityForSession(ctx, req.Session)
+		if idFile != nil && idFile.AgentStatus == "working" {
+			state = "working_but_idle"
+			target := resolveNudgeTarget(h.thrumDir, agentName)
+			if target != "" {
+				_ = ttmux.Nudge(target, "daemon")
+			}
+		}
+	}
+
 	return &CheckPaneResponse{
 		Session: req.Session,
 		State:   state,
