@@ -124,6 +124,11 @@ func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 			PageSize:      10,
 			CallerAgentID: callerAgentID[0],
 		}
+		// Auto-filter to this agent's messages (matching inboxCmd behavior)
+		if whoami != nil {
+			inboxOpts.ForAgent = whoami.AgentID
+			inboxOpts.ForAgentRole = whoami.Role
+		}
 		inbox, err := Inbox(client, inboxOpts)
 		if err == nil {
 			info := &MessagesInfo{
