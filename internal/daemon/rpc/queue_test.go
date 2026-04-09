@@ -146,6 +146,48 @@ func TestCheckPaneCompletesActiveCommand(t *testing.T) {
 	_ = result
 }
 
+func TestHandleQueueWaitReturnsOnCompletion(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Insert a command already in StateCompleted.
+	cmd := &QueuedCommand{
+		ID:             "cmd_wait_test",
+		Text:           "echo done",
+		RequesterAgent: "test_coord",
+		State:          StateCompleted,
+		SubmittedAt:    time.Now(),
+		SentAt:         time.Now(),
+		CompletedAt:    time.Now(),
+		CapturedOutput: "done\n",
+	}
+	if err := persistCommand(ctx, h.state.DB(), "test-session", cmd, 0); err != nil {
+		t.Fatal(err)
+	}
+	h.state.Lock()
+	_ = updateCommandState(ctx, h.state.DB(), cmd)
+	h.state.Unlock()
+
+	params := json.RawMessage(`{"command_id":"cmd_wait_test","timeout_ms":5000}`)
+	resp, err := h.HandleQueueWait(ctx, params)
+	if err != nil {
+		t.Fatalf("HandleQueueWait: %v", err)
+	}
+
+	result, ok := resp.(*QueueWaitResponse)
+	if !ok {
+		t.Fatalf("wrong response type: %T", resp)
+	}
+	if result.State != StateCompleted {
+		t.Errorf("state=%s, want completed", result.State)
+	}
+	if result.Output != "done\n" {
+		t.Errorf("output=%q, want 'done\\n'", result.Output)
+	}
+}
+
 func TestSessionQueueFIFO(t *testing.T) {
 	q := NewSessionQueue("test-session")
 

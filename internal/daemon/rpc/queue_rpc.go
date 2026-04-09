@@ -165,6 +165,118 @@ func (h *TmuxHandler) thrumBin() string {
 	return exe
 }
 
+// QueueWaitRequest is the tmux.queue-wait RPC request.
+type QueueWaitRequest struct {
+	CommandID string `json:"command_id"`
+	TimeoutMs int64  `json:"timeout_ms"`
+}
+
+// QueueWaitResponse is the tmux.queue-wait RPC response.
+type QueueWaitResponse struct {
+	CommandID string `json:"command_id"`
+	State     string `json:"state"`
+	Output    string `json:"output,omitempty"`
+	ElapsedMs int64  `json:"elapsed_ms,omitempty"`
+}
+
+// isTerminalState reports whether a state is final.
+func isTerminalState(s string) bool {
+	return s == StateCompleted || s == StateCancelled || s == StateInterrupted
+}
+
+// HandleQueueWait blocks until the command reaches a terminal state or the timeout elapses.
+func (h *TmuxHandler) HandleQueueWait(ctx context.Context, params json.RawMessage) (any, error) {
+	var req QueueWaitRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if req.CommandID == "" {
+		return nil, fmt.Errorf("command_id is required")
+	}
+	if req.TimeoutMs <= 0 {
+		req.TimeoutMs = 120000
+	}
+
+	deadline := time.Now().Add(time.Duration(req.TimeoutMs) * time.Millisecond)
+
+	// Determine start time from initial load.
+	startLoad, _ := loadCommand(ctx, h.state.DB(), req.CommandID)
+	start := time.Now()
+	if startLoad != nil && !startLoad.SubmittedAt.IsZero() {
+		start = startLoad.SubmittedAt
+	}
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		cmd, err := loadCommand(ctx, h.state.DB(), req.CommandID)
+		if err != nil {
+			return nil, fmt.Errorf("load command: %w", err)
+		}
+
+		if isTerminalState(cmd.State) {
+			return &QueueWaitResponse{
+				CommandID: cmd.ID,
+				State:     cmd.State,
+				Output:    cmd.CapturedOutput,
+				ElapsedMs: time.Since(start).Milliseconds(),
+			}, nil
+		}
+
+		if time.Now().After(deadline) {
+			return &QueueWaitResponse{
+				CommandID: cmd.ID,
+				State:     cmd.State,
+				ElapsedMs: time.Since(start).Milliseconds(),
+			}, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			// continue polling
+		}
+	}
+}
+
+// QueueStatusRequest is the tmux.queue-status RPC request.
+type QueueStatusRequest struct {
+	Session string `json:"session"`
+}
+
+// QueueStatusResponse is the tmux.queue-status RPC response.
+type QueueStatusResponse struct {
+	Session string           `json:"session"`
+	Active  *QueuedCommand   `json:"active,omitempty"`
+	Queued  []*QueuedCommand `json:"queued,omitempty"`
+}
+
+// HandleQueueStatus returns the current queue state for a session.
+func (h *TmuxHandler) HandleQueueStatus(ctx context.Context, params json.RawMessage) (any, error) {
+	var req QueueStatusRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if req.Session == "" {
+		return nil, fmt.Errorf("session is required")
+	}
+
+	q := h.getQueue(req.Session)
+	if q == nil {
+		return &QueueStatusResponse{Session: req.Session}, nil
+	}
+
+	// Use public accessors — they handle locking internally.
+	// Never call q.mu.Lock() directly here — that would deadlock.
+	return &QueueStatusResponse{
+		Session: req.Session,
+		Active:  q.Active(),
+		Queued:  q.Snapshot(),
+	}, nil
+}
+
 // sendSystemMessage writes a message from @system to the recipient.
 // TODO Task 2.3: flesh out full delivery.
 func (h *TmuxHandler) sendSystemMessage(ctx context.Context, recipient, body string) {
