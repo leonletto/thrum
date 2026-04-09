@@ -169,6 +169,10 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 			time.Sleep(10 * time.Second)
 			_ = ttmux.SendKeys(target, primeCmd)
 			_ = ttmux.SendSpecialKey(target, "Enter")
+			// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
+			// startup. Retry after a brief pause as a fallback.
+			time.Sleep(3 * time.Second)
+			_ = ttmux.SendSpecialKey(target, "Enter")
 		}()
 	}
 
@@ -479,6 +483,10 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		go func() {
 			time.Sleep(10 * time.Second)
 			_ = ttmux.SendKeys(target, primeCmd)
+			_ = ttmux.SendSpecialKey(target, "Enter")
+			// TUI runtimes (e.g. OpenCode) may swallow the first Enter during
+			// startup. Retry after a brief pause as a fallback.
+			time.Sleep(3 * time.Second)
 			_ = ttmux.SendSpecialKey(target, "Enter")
 		}()
 	}
