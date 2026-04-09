@@ -793,6 +793,94 @@ func TestPurge_EmitsPurgeExecutedEvent(t *testing.T) {
 	}
 }
 
+// TestPurgeHandler_CleansCommandQueue verifies that purge deletes old command_queue rows.
+func TestPurgeHandler_CleansCommandQueue(t *testing.T) {
+	st, cleanup := setupPurgeTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	old := time.Now().UTC().Add(-48 * time.Hour).Format(time.RFC3339Nano)
+	new_ := time.Now().UTC().Add(48 * time.Hour).Format(time.RFC3339Nano)
+	cutoff := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339Nano)
+
+	// Insert an old command_queue entry (should be deleted)
+	_, err := st.DB().ExecContext(ctx,
+		`INSERT INTO command_queue (command_id, session_name, requester_agent, command_text, state, submitted_at)
+		 VALUES ('cmd_old', 'test-session', 'test_agent', 'echo hi', 'completed', ?)`,
+		old,
+	)
+	if err != nil {
+		t.Fatalf("insert old command_queue row: %v", err)
+	}
+
+	// Insert a new command_queue entry (should survive)
+	_, err = st.DB().ExecContext(ctx,
+		`INSERT INTO command_queue (command_id, session_name, requester_agent, command_text, state, submitted_at)
+		 VALUES ('cmd_new', 'test-session', 'test_agent', 'echo bye', 'pending', ?)`,
+		new_,
+	)
+	if err != nil {
+		t.Fatalf("insert new command_queue row: %v", err)
+	}
+
+	handler := NewPurgeHandler(st)
+
+	// --- dry run: should count but not delete ---
+	dryReq := PurgeRequest{Before: cutoff, DryRun: true}
+	dryParams, _ := json.Marshal(dryReq)
+	dryResult, err := handler.Handle(ctx, dryParams)
+	if err != nil {
+		t.Fatalf("Handle (dry_run): %v", err)
+	}
+	dryResp, ok := dryResult.(*PurgeResponse)
+	if !ok {
+		t.Fatalf("expected *PurgeResponse, got %T", dryResult)
+	}
+	if dryResp.CommandQueueDeleted != 1 {
+		t.Errorf("dry-run: CommandQueueDeleted = %d, want 1", dryResp.CommandQueueDeleted)
+	}
+	if n := countRows(t, st, "command_queue"); n != 2 {
+		t.Errorf("dry-run: command_queue count = %d, want 2 (nothing deleted)", n)
+	}
+
+	// --- execute: should delete old row only ---
+	execReq := PurgeRequest{Before: cutoff, DryRun: false}
+	execParams, _ := json.Marshal(execReq)
+	execResult, err := handler.Handle(ctx, execParams)
+	if err != nil {
+		t.Fatalf("Handle (execute): %v", err)
+	}
+	execResp, ok := execResult.(*PurgeResponse)
+	if !ok {
+		t.Fatalf("expected *PurgeResponse, got %T", execResult)
+	}
+	if execResp.CommandQueueDeleted != 1 {
+		t.Errorf("execute: CommandQueueDeleted = %d, want 1", execResp.CommandQueueDeleted)
+	}
+
+	// Old entry gone
+	var oldCount int
+	if err := st.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM command_queue WHERE command_id = 'cmd_old'`,
+	).Scan(&oldCount); err != nil {
+		t.Fatalf("query old command_queue: %v", err)
+	}
+	if oldCount != 0 {
+		t.Errorf("old command_queue row still present, count = %d", oldCount)
+	}
+
+	// New entry survives
+	var newCount int
+	if err := st.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM command_queue WHERE command_id = 'cmd_new'`,
+	).Scan(&newCount); err != nil {
+		t.Fatalf("query new command_queue: %v", err)
+	}
+	if newCount != 1 {
+		t.Errorf("new command_queue row gone, count = %d, want 1", newCount)
+	}
+}
+
 // nonEmptyLines splits text by newline, filtering blank lines.
 func nonEmptyLines(s string) []string {
 	var out []string
