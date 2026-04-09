@@ -31,6 +31,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
+	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
@@ -492,10 +493,14 @@ Examples:
 			}
 
 			// Step 6: Intent
+			intentFlag, _ := cmd.Flags().GetString("intent")
 			repoName := cli.GetRepoName(flagRepo)
-			intent := cli.DefaultIntent(agentRoleResolved, repoName)
+			intent := intentFlag
+			if intent == "" {
+				intent = cli.DefaultIntent(agentRoleResolved, repoName)
+			}
 
-			if isInteractive() && !flagQuiet {
+			if intentFlag == "" && isInteractive() && !flagQuiet {
 				fmt.Printf("\nIntent: %s\n", intent)
 				fmt.Printf("  Edit? [Y/n]: ")
 				reader := bufio.NewReader(os.Stdin)
@@ -511,10 +516,19 @@ Examples:
 				}
 			}
 
-			// Step 7: Write identity file (v3)
+			// Step 7: Write identity file
 			thrumDir := filepath.Join(flagRepo, ".thrum")
+
+			// Resolve preferred runtime: --runtime flag → auto-detect → config → empty
+			preferredRuntime := runtimeFlag
+			if preferredRuntime == "" || preferredRuntime == "all" {
+				if _, detectedRT := process.FindClaudeAncestor(); detectedRT != "" {
+					preferredRuntime = detectedRT
+				}
+			}
+
 			idFile := &config.IdentityFile{
-				Version: 3,
+				Version: 5,
 				RepoID:  cli.GetRepoID(flagRepo),
 				Agent: config.AgentConfig{
 					Kind:    "agent",
@@ -523,9 +537,10 @@ Examples:
 					Module:  agentModuleResolved,
 					Display: cli.AutoDisplay(agentRoleResolved, agentModuleResolved),
 				},
-				Worktree: cli.GetWorktreeName(flagRepo),
-				Branch:   cli.GetCurrentBranch(flagRepo),
-				Intent:   intent,
+				Worktree:         cli.GetWorktreeName(flagRepo),
+				Branch:           cli.GetCurrentBranch(flagRepo),
+				Intent:           intent,
+				PreferredRuntime: preferredRuntime,
 			}
 			if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
 				return fmt.Errorf("save identity file: %w", err)
@@ -638,6 +653,7 @@ Examples:
 	cmd.Flags().String("agent-role", "", "Agent role for templates (default: implementer)")
 	cmd.Flags().String("agent-module", "", "Agent module for templates (default: main)")
 	cmd.Flags().Bool("skills", false, "Install thrum skill only (no MCP config, no startup script)")
+	cmd.Flags().String("intent", "", "Agent intent (what it's working on)")
 
 	return cmd
 }
@@ -4441,6 +4457,9 @@ Examples:
 				}
 				if idFile.ContextFile == "" {
 					idFile.ContextFile = fmt.Sprintf("context/%s.md", savedName)
+				}
+				if runtimeFlag != "" && idFile.PreferredRuntime != runtimeFlag {
+					idFile.PreferredRuntime = runtimeFlag
 				}
 
 				if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {

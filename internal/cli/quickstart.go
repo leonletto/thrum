@@ -204,6 +204,12 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 			changed = true
 		}
 
+		// Write PreferredRuntime from --runtime flag
+		if opts.Runtime != "" && idFile.PreferredRuntime != opts.Runtime {
+			idFile.PreferredRuntime = opts.Runtime
+			changed = true
+		}
+
 		// Detect tmux session and write to identity file
 		if tmuxTarget, err := detectTmuxSession(); err == nil && tmuxTarget != "" {
 			if idFile.TmuxSession != tmuxTarget {
