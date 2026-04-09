@@ -345,7 +345,23 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 
 	log.Printf("[tmux] check-pane: session=%s state=%s reason=%s", req.Session, state, req.Reason)
 
+	// Queue-aware dispatch: check for active command or queued command waiting
+	if state == "idle" {
+		if queue := h.getQueue(req.Session); queue != nil {
+			// Case 1: active command → silence means it completed
+			if active := queue.Active(); active != nil {
+				h.completeCommand(ctx, req.Session, queue, active)
+				state = "command_completed"
+			} else if waiting := queue.Peek(); waiting != nil {
+				// Case 2: front-of-queue waiting for silence → safe to send it
+				h.sendQueuedCommand(ctx, req.Session, queue, waiting)
+				state = "command_sent"
+			}
+		}
+	}
+
 	// Check for status mismatch: agent says "working" but pane is idle
+	// Only runs if no queue action was taken above.
 	if state == "idle" {
 		agentName, idFile, _ := h.findIdentityForSession(ctx, req.Session)
 		if idFile != nil && idFile.AgentStatus == "working" {

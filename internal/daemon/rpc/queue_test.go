@@ -96,6 +96,56 @@ func TestHandleQueueEnqueuesCommand(t *testing.T) {
 	}
 }
 
+func TestCheckPaneCompletesActiveCommand(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	q := h.getOrCreateQueue("test-session")
+
+	// Simulate an active command
+	cmd := &QueuedCommand{
+		ID:             "cmd_active",
+		Text:           "echo hi",
+		RequesterAgent: "test_coord",
+		State:          StateActive,
+		SubmittedAt:    time.Now(),
+		SentAt:         time.Now(),
+	}
+	q.SetActive(cmd)
+	if err := persistCommand(ctx, h.state.DB(), "test-session", cmd, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fire check-pane (simulating silence detected)
+	params := json.RawMessage(`{"session":"test-session","reason":""}`)
+	resp, err := h.HandleCheckPane(ctx, params)
+	if err != nil {
+		t.Fatalf("HandleCheckPane: %v", err)
+	}
+
+	result, ok := resp.(*CheckPaneResponse)
+	if !ok {
+		t.Fatalf("wrong response type: %T", resp)
+	}
+
+	// Active command should be cleared
+	if q.Active() != nil {
+		t.Error("active command not cleared")
+	}
+
+	// State should have transitioned to completed in DB
+	loaded, err := loadCommand(ctx, h.state.DB(), "cmd_active")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.State != StateCompleted {
+		t.Errorf("state=%s, want completed", loaded.State)
+	}
+
+	_ = result
+}
+
 func TestSessionQueueFIFO(t *testing.T) {
 	q := NewSessionQueue("test-session")
 
