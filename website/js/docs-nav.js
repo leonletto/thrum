@@ -21,41 +21,39 @@
   // Display order and labels for top-level categories
   var CATEGORY_ORDER = [
     'overview',
+    'onboarding',
     'quickstart',
-    'webui',
-    'cli',
-    'messaging',
+    'orchestration',
     'identity',
-    'guides',
-    'strategies',
-    'api',
-    'daemon',
-    'mcp',
-    'sync',
-    'development'
+    'messaging',
+    'coordination',
+    'integrations',
+    'infrastructure',
+    'reference',
+    'api'
   ];
 
   var CATEGORY_LABELS = {
     overview: 'Overview',
+    onboarding: 'Onboarding',
     quickstart: 'Getting Started',
     tools: 'Recommended Tools',
-    webui: 'Web UI',
-    cli: 'CLI',
+    orchestration: 'Orchestration',
+    identity: 'Identity & Agents',
     messaging: 'Messaging',
-    identity: 'Identity',
-    guides: 'Guides',
-    strategies: 'Strategies',
-    api: 'API Reference',
-    daemon: 'Daemon',
-    mcp: 'MCP Server',
-    sync: 'Sync',
-    development: 'Development'
+    coordination: 'Coordination',
+    integrations: 'Integrations',
+    infrastructure: 'Infrastructure',
+    reference: 'Reference',
+    'agent-protocols': 'Agent Protocols',
+    api: 'API Reference'
   };
 
   // Sub-categories nested under a parent. Rendered indented and collapsible.
   // Key = parent category, value = array of child categories in display order.
   var CATEGORY_CHILDREN = {
-    quickstart: ['tools']
+    quickstart: ['tools'],
+    reference: ['agent-protocols']
   };
 
   var sidebarNav = document.getElementById('sidebar-nav');
