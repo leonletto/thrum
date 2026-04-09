@@ -2807,7 +2807,7 @@ func worktreeCreateCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
-				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or ..", name)
+				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or parent references", name)
 			}
 			detach, _ := cmd.Flags().GetBool("detach")
 			branch, _ := cmd.Flags().GetString("branch")
@@ -2900,7 +2900,7 @@ func worktreeTeardownCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
-				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or ..", name)
+				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or parent references", name)
 			}
 			repoPath := paths.EffectiveRepoPath(flagRepo)
 			thrumDir := filepath.Join(repoPath, ".thrum")

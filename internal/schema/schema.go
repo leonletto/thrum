@@ -810,7 +810,7 @@ func queueColumnSet(tx *sql.Tx) (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	cols := map[string]bool{}
 	for rows.Next() {
