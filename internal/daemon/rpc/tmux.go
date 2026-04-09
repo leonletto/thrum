@@ -146,19 +146,7 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 		runtime = "claude"
 	}
 
-	var launchCmd string
-	switch runtime {
-	case "claude":
-		launchCmd = "claude"
-	case "opencode":
-		launchCmd = "opencode"
-	case "aider":
-		launchCmd = "aider"
-	case "shell":
-		launchCmd = "" // already has a shell
-	default:
-		return nil, fmt.Errorf("unsupported runtime %q (supported: claude, opencode, aider, shell)", runtime)
-	}
+	launchCmd := runtimeToLaunchCmd(runtime)
 
 	target := req.Name + ":0.0"
 	if launchCmd != "" {

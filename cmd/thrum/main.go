@@ -6951,24 +6951,28 @@ func tmuxCmd() *cobra.Command {
 		Short: "Start an AI tool inside a tmux session",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rt, _ := cmd.Flags().GetString("runtime")
-			if rt == "" {
-				// Query tmux for session's working directory (same approach as tmux start)
-				out, err := exec.Command("tmux", "display-message", // #nosec G204 -- args are session name from CLI
-					"-t", args[0], "-p", "#{pane_current_path}").Output()
-				if err == nil {
-					sessionCwd := strings.TrimSpace(string(out))
-					thrumDir := filepath.Join(sessionCwd, ".thrum")
-					if _, statErr := os.Stat(thrumDir); statErr == nil {
-						cfg, _ := config.LoadThrumConfig(thrumDir)
-						if cfg.Runtime.Primary != "" {
-							rt = cfg.Runtime.Primary
-						}
+			rtOverride, _ := cmd.Flags().GetString("runtime")
+			rt := "claude"
+			// Resolution: --runtime flag > identity PreferredRuntime > config > "claude"
+			out, err := exec.Command("tmux", "display-message", // #nosec G204 -- args are session name from CLI
+				"-t", args[0], "-p", "#{pane_current_path}").Output()
+			if err == nil {
+				sessionCwd := strings.TrimSpace(string(out))
+				thrumDir := filepath.Join(sessionCwd, ".thrum")
+				if _, statErr := os.Stat(thrumDir); statErr == nil {
+					cfg, _ := config.LoadThrumConfig(thrumDir)
+					if cfg.Runtime.Primary != "" {
+						rt = cfg.Runtime.Primary
 					}
 				}
-				if rt == "" {
-					rt = "claude"
+				if idFile, _, loadErr := config.LoadIdentityWithPath(sessionCwd); loadErr == nil && idFile != nil {
+					if idFile.PreferredRuntime != "" {
+						rt = idFile.PreferredRuntime
+					}
 				}
+			}
+			if rtOverride != "" {
+				rt = rtOverride
 			}
 			client, err := getClient()
 			if err != nil {
@@ -7258,13 +7262,18 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 				return tmuxAttach(sessionName)
 			}
 
-			// Determine runtime from config
+			// Determine runtime: --runtime flag > identity PreferredRuntime > config > "claude"
 			thrumDir := filepath.Join(cwd, ".thrum")
 			runtime := "claude"
 			if _, err := os.Stat(thrumDir); err == nil {
 				cfg, _ := config.LoadThrumConfig(thrumDir)
 				if cfg.Runtime.Primary != "" {
 					runtime = cfg.Runtime.Primary
+				}
+			}
+			if idFile, _, err := config.LoadIdentityWithPath(cwd); err == nil && idFile != nil {
+				if idFile.PreferredRuntime != "" {
+					runtime = idFile.PreferredRuntime
 				}
 			}
 			rtOverride, _ := cmd.Flags().GetString("runtime")
@@ -7296,7 +7305,8 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 
 			// Wait for runtime to initialize, then send prime
 			time.Sleep(8 * time.Second)
-			_ = cli.TmuxSend(client, sessionName, "/thrum:prime")
+			primeCmd := primeForRuntime(runtime)
+			_ = cli.TmuxSend(client, sessionName, primeCmd)
 
 			// Give prime a moment to start, then attach
 			time.Sleep(2 * time.Second)
@@ -7308,6 +7318,16 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 	cmd.AddCommand(startCmd)
 
 	return cmd
+}
+
+// primeForRuntime returns the slash command to send after launching a runtime.
+func primeForRuntime(rt string) string {
+	switch rt {
+	case "opencode":
+		return "/thrum-prime"
+	default:
+		return "/thrum:prime"
+	}
 }
 
 func tmuxAttach(session string) error {
