@@ -634,6 +634,24 @@ func TestReplyGroupScope(t *testing.T) {
 	}
 }
 
+func TestRejectSystemReply(t *testing.T) {
+	sysMsg := MessageDetail{
+		MessageID: "msg_sys",
+		Author:    AuthorInfo{AgentID: "system"},
+	}
+	if err := rejectSystemReply(sysMsg); err == nil {
+		t.Fatal("expected error for system sender, got nil")
+	}
+
+	normalMsg := MessageDetail{
+		MessageID: "msg_normal",
+		Author:    AuthorInfo{AgentID: "test_coord"},
+	}
+	if err := rejectSystemReply(normalMsg); err != nil {
+		t.Errorf("expected nil for normal sender, got %v", err)
+	}
+}
+
 func TestMessageMarkRead(t *testing.T) {
 	daemon, socketPath := newMockDaemon(t)
 	defer daemon.stop()

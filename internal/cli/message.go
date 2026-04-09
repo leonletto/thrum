@@ -302,6 +302,14 @@ func FormatOutbox(resp *OutboxResult) string {
 	return out.String()
 }
 
+// rejectSystemReply returns an error if the parent message was sent by @system.
+func rejectSystemReply(parent MessageDetail) error {
+	if parent.Author.AgentID == "system" {
+		return fmt.Errorf("cannot reply to system messages (no-reply)")
+	}
+	return nil
+}
+
 // --- Reply ---
 
 // ReplyOptions contains options for the reply command.
@@ -321,6 +329,10 @@ func Reply(client *Client, opts ReplyOptions) (*SendResult, error) {
 		return nil, fmt.Errorf("failed to get parent message: %w", err)
 	}
 	parent := parentResp.Message
+
+	if err := rejectSystemReply(parent); err != nil {
+		return nil, err
+	}
 
 	// Build send options with reply_to ref
 	sendOpts := SendOptions{
