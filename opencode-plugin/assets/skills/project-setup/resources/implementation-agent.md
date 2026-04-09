@@ -43,8 +43,8 @@ When filling this template to create an implementation prompt:
 - `{{COVERAGE_TARGET}}` — Minimum coverage threshold (e.g., >80%)
 - `{{AGENT_NAME}}` — Unique name for this agent (e.g., `impl-daemon`,
   `impl-cli`)
-- `{{COORDINATOR_NAME}}` — Agent name of the coordinator (from `thrum team`,
-  e.g., `coord_main`). Use for direct messages, not the role name.
+- `{{SUPERVISOR_NAME}}` — Agent name of the supervisor — coordinator or
+  orchestrator (from `thrum team`). Use for direct messages, not the role name.
 - `{{PLAN_FILE}}` — **Absolute path** to the implementation plan file
 - `{{PROJECT_ROOT}}` — Absolute path to the project root
 - `{{ANTI_PATTERNS}}` — Epic-specific implementation standards: non-negotiable
@@ -138,7 +138,7 @@ cd {{WORKTREE_PATH}}
 thrum quickstart --name {{AGENT_NAME}} --role implementer --module {{BRANCH_NAME}} --intent "Implementing {{EPIC_ID}}"
 thrum inbox --unread
 # Tip: thrum inbox --unread peeks without marking read; thrum message read --all to mark all read
-thrum send "Starting work on {{EPIC_ID}}" --to @{{COORDINATOR_NAME}}
+thrum send "Starting work on {{EPIC_ID}}" --to @{{SUPERVISOR_NAME}}
 ```
 
 **Verify registration succeeded** — you must see your agent name in the output
@@ -157,13 +157,13 @@ NO_MESSAGES_TIMEOUT).
 When your work is complete (Phase 4), send a completion message:
 
 ```bash
-thrum send "Completed {{EPIC_ID}}. All tasks done, tests passing." --to @{{COORDINATOR_NAME}}
+thrum send "Completed {{EPIC_ID}}. All tasks done, tests passing." --to @{{SUPERVISOR_NAME}}
 ```
 
 If you hit a blocker from another agent's work, escalate:
 
 ```bash
-thrum send "Blocked on {{TASK_ID}} by {{BLOCKER_ID}}" --to @{{COORDINATOR_NAME}}
+thrum send "Blocked on {{TASK_ID}} by {{BLOCKER_ID}}" --to @{{SUPERVISOR_NAME}}
 ```
 
 ---
@@ -471,13 +471,13 @@ If a task is blocked:
 ```bash
 # Ask the blocking agent for help
 # NOTE: --mention @implementer is a message filter tag, not a delivery address.
-# The message is delivered to @{{COORDINATOR_NAME}}; the mention tag lets implementers
+# The message is delivered to @{{SUPERVISOR_NAME}}; the mention tag lets implementers
 # filter for messages that mention their role. To address a specific agent directly,
 # use --to @<agent-name> instead.
 thrum send "Blocked on {{TASK_ID}} — waiting for {{BLOCKER_ID}}. Can you prioritize?" --mention @implementer
 
 # Or escalate to the coordinator
-thrum send "Blocked on {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @{{COORDINATOR_NAME}}
+thrum send "Blocked on {{TASK_ID}} by external dependency {{BLOCKER_ID}}" --to @{{SUPERVISOR_NAME}}
 ```
 
 ### Communicating During Work
@@ -486,10 +486,10 @@ Use Thrum to stay coordinated:
 
 ```bash
 # Report progress on significant milestones
-thrum send "Completed task {{TASK_ID}}, moving to next" --to @{{COORDINATOR_NAME}}
+thrum send "Completed task {{TASK_ID}}, moving to next" --to @{{SUPERVISOR_NAME}}
 
 # Ask for input when you need a decision
-thrum send "Need input: should X use approach A or B? Context: ..." --to @{{COORDINATOR_NAME}}
+thrum send "Need input: should X use approach A or B? Context: ..." --to @{{SUPERVISOR_NAME}}
 
 # If you realize your work affects another agent's files
 # NOTE: --mention @implementer is a filter tag, not a delivery address.
@@ -705,7 +705,7 @@ git rebase origin/main
 git push origin {{BRANCH_NAME}}
 
 # Notify the coordinator
-thrum send "{{EPIC_ID}} complete. Branch {{BRANCH_NAME}} pushed, all tests passing. Ready for review/merge." --to @{{COORDINATOR_NAME}}
+thrum send "{{EPIC_ID}} complete. Branch {{BRANCH_NAME}} pushed, all tests passing. Ready for review/merge." --to @{{SUPERVISOR_NAME}}
 ```
 
 The coordinator handles code review and merge to main. This ensures review gates

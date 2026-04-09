@@ -580,6 +580,7 @@ worktree-related values come from the Phase 3 assignments:
 | `{{AGENT_NAME}}`       | **From Phase 3 agent registration**                                                                                                                                                                                         |
 | `{{PLAN_FILE}}`        | **Absolute path** to the plan file (primary input)                                                                                                                                                                          |
 | `{{ANTI_PATTERNS}}`    | Generated in Step 1.5 from design doc + philosophy doc                                                                                                                                                                      |
+| `{{SUPERVISOR_NAME}}` | From `thrum team` — first agent with role=orchestrator; if none, first with role=coordinator; if none, ask user                                                                                                              |
 | `{{CROSS_EPIC_DEPS}}`  | From Phase 2 cross-epic dependency map. If no cross-epic deps, replace with "No cross-epic dependencies."                                                                                                                   |
 
 **IMPORTANT — Absolute paths for gitignored files:** `{{DESIGN_DOC}}`,
