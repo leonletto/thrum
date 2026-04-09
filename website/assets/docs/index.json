@@ -366,6 +366,21 @@
     "lastUpdated": ""
   },
   {
+    "path": "peers.html",
+    "title": "Peers",
+    "description": "Cross-repo and cross-machine messaging between Thrum daemons",
+    "category": "messaging",
+    "order": 2,
+    "tags": [
+      "peers",
+      "cross-repo",
+      "tailscale",
+      "pairing",
+      "sync"
+    ],
+    "lastUpdated": "2026-04-09"
+  },
+  {
     "path": "subscriptions.html",
     "title": "Subscriptions & Notifications",
     "description": "Real-time push notification system with scope, mention, and all-message filters - subscription lifecycle and dispatch",
@@ -438,6 +453,20 @@
     "lastUpdated": ""
   },
   {
+    "path": "orchestrator-role.html",
+    "title": "Orchestrator Role",
+    "description": "Hand off a plan you wrote and let the orchestrator run the execution phase",
+    "category": "orchestration",
+    "order": 1,
+    "tags": [
+      "orchestrator",
+      "roles",
+      "automation",
+      "plans"
+    ],
+    "lastUpdated": "2026-04-09"
+  },
+  {
     "path": "tmux-sessions.html",
     "title": "Tmux-Managed Sessions",
     "description": "Run agent teams in daemon-managed tmux sessions with instant message delivery, zero background listeners, and coordinator-managed lifecycle",
@@ -451,6 +480,22 @@
       "coordinator"
     ],
     "lastUpdated": "2026-04-07"
+  },
+  {
+    "path": "multi-runtime.html",
+    "title": "Multi-Runtime Support",
+    "description": "Run Claude, Codex, Aider, Gemini, and other agent runtimes in tmux-managed sessions",
+    "category": "orchestration",
+    "order": 3,
+    "tags": [
+      "runtime",
+      "tmux",
+      "codex",
+      "aider",
+      "gemini",
+      "claude"
+    ],
+    "lastUpdated": "2026-04-09"
   },
   {
     "path": "single-agent-mode.html",

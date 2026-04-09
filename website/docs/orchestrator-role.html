@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Orchestrator Role — Thrum</title>
+<meta name="description" content="Hand off a plan you wrote and let the orchestrator run the execution phase">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#orchestrator-role.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; orchestration &rsaquo; Orchestrator Role
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>orchestration</strong>: <strong>Orchestrator Role</strong> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+</nav>
+<main>
+<h2>What the Orchestrator Is</h2>
+<p>The orchestrator is a Thrum role that takes a plan you already wrote, spins up
+implementer agents in tmux sessions, runs execution epic-by-epic with review
+gates, and hands back a merge report when it&#39;s done. It doesn&#39;t write code. It
+doesn&#39;t plan work. It runs plans you approved. You write the spec, the
+coordinator turns it into epics and an implementation prompt, and then you hand
+that work to the orchestrator — which manages every agent session, monitors
+progress, dispatches code reviews, and stops at the gates you defined. One agent
+doing the dispatch loop so you don&#39;t have to.</p>
+<hr>
+<h2>When to Use It</h2>
+<p>You&#39;ve got a plan. Beads has the epics. The implementation prompt exists with
+review gates between each epic. What&#39;s left is pure babysitting: create
+worktrees, launch sessions, send prompts, watch for completion, run reviews,
+repeat for each epic.</p>
+<p>That&#39;s the sweet spot for the orchestrator. It doesn&#39;t help with research or
+planning — that&#39;s the coordinator&#39;s job. It starts where the coordinator stops:
+at &quot;plan approved, implementation not started.&quot;</p>
+<p>If you&#39;re running a single epic with one agent and you want to watch it closely,
+manual management is probably fine. If you&#39;ve got three epics, two parallel
+workstreams, and you&#39;d rather not be the message relay, hand it to the
+orchestrator.</p>
+<p>The orchestrator is a <strong>pre-configured, human-launched agent</strong> — you set it up
+in its own tmux session ahead of time. The coordinator doesn&#39;t launch it. You
+do. That&#39;s intentional. See <a href="tmux-sessions.html">Tmux-Managed Sessions</a> for how
+to get it running.</p>
+<hr>
+<h2>Autonomy Levels</h2>
+<p>When you hand the orchestrator a plan, it asks you one question before touching
+anything: how much autonomy do you want?</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>per_epic</code></td>
+<td>Stops after each epic, presents findings, waits for your go-ahead before continuing</td>
+</tr>
+<tr>
+<td><code>end_only</code></td>
+<td>Runs all epics, stops only at the final merge report</td>
+</tr>
+</tbody></table>
+<p>There&#39;s no <code>full_auto</code>. The orchestrator never merges without your approval. The
+whole point of working this way is that you understand what got built — you can&#39;t
+do that if code appears on main while you were away.</p>
+<p><code>per_epic</code> is for when you want to stay close. Each epic gate is a checkpoint:
+you see what passed review, you decide whether to continue. <code>end_only</code> is for
+when you trust the plan and want to come back to a finished report.</p>
+<p>The default is <code>end_only</code>. You can change that in config, or just answer
+differently when the orchestrator asks. It negotiates per-run, not once globally.</p>
+<hr>
+<h2>Handoff: Giving the Orchestrator a Plan</h2>
+<p>The orchestrator validates the handoff before it does anything. It won&#39;t start
+with a half-ready plan — it sends back a specific list of what&#39;s missing and
+stops.</p>
+<p><strong>What the orchestrator expects:</strong></p>
+<ol>
+<li><strong>A plan file</strong> — the markdown file from <code>dev-docs/plans/</code> that describes the
+work</li>
+<li><strong>Beads epics with tasks</strong> — the coordinator creates these with <code>bd create</code>;
+the orchestrator checks them with <code>bd show &lt;epic&gt;</code> and <code>bd dep tree &lt;epic&gt;</code></li>
+<li><strong>An implementation prompt</strong> — the file from
+<code>claude-plugin/skills/project-setup/</code>, with <code>## Review Gate:</code> sections
+between epics. No review gates → rejected handoff</li>
+<li><strong>Merge target</strong> — confirmed in <code>.thrum/config.json</code> under
+<code>orchestration.merge_target</code></li>
+</ol>
+<p><strong>Before handing off, verify:</strong></p>
+<pre><code># Epics exist and have tasks
+bd show &lt;epic-id&gt;
+bd dep tree &lt;epic-id&gt;
+
+# Review gates are present in the prompt
+grep &quot;## Review Gate:&quot; path/to/implementation-prompt.md
+
+# Merge target is set
+cat .thrum/config.json | grep merge_target</code></pre>
+<p>If any of those fail, fix them before sending the plan path to the orchestrator.
+The coordinator&#39;s <code>project-setup</code> skill generates review-gate-ready prompts
+automatically — if you used it, you&#39;re probably good.</p>
+<p>The coordinator sends the plan to the orchestrator via Thrum messaging:</p>
+<pre><code>thrum send &quot;Plan ready at dev-docs/plans/2026-04-09-my-feature.md&quot; --to @orchestrator_main</code></pre>
+<hr>
+<h2>Execution Lifecycle</h2>
+<p>The orchestrator runs five phases. Here&#39;s what each phase does and what you see.</p>
+<h3>Phase 1 — Validate Handoff</h3>
+<p>Reads the plan file and design doc. Checks that beads epics exist, that the
+implementation prompt has <code>## Review Gate:</code> headings between epics, that
+dependencies are configured, and that the merge target is set.</p>
+<p>If anything is missing, it sends a specific feedback message to the coordinator
+and stops. You don&#39;t see a half-started execution.</p>
+<h3>Phase 2 — Configure Execution</h3>
+<p>Asks two questions (or one, if config has a default):</p>
+<ol>
+<li><strong>Autonomy level</strong> — <code>per_epic</code> or <code>end_only</code>?</li>
+<li><strong>Runtime selection</strong> — if your team runs a single runtime it uses it
+silently; if you&#39;ve got mixed runtimes registered, it asks which to use per
+workstream</li>
+</ol>
+<p>It also presents the worktree plan: which epics run in parallel, how many agents
+it needs to create, what their names will be. You see this before any session
+gets created.</p>
+<h3>Phase 3 — Launch Agents</h3>
+<p>For each agent it needs:</p>
+<pre><code>thrum worktree create &lt;name&gt;          # creates worktree + beads/thrum setup
+thrum tmux create &lt;name&gt; --cwd &lt;path&gt; # creates the tmux session
+thrum tmux launch &lt;name&gt;              # boots the runtime
+thrum agent set-status idle           # marks it ready</code></pre>
+<p>After launch it verifies every session is alive via <code>thrum tmux status</code> and
+reports back. No surprises — you know all agents are running before work starts.</p>
+<h3>Phase 4 — Execute (Epic Loop)</h3>
+<p>For each epic batch (which may run in parallel if epics are independent):</p>
+<ol>
+<li>Sends the implementation prompt section to each agent via <code>thrum send</code></li>
+<li>Marks agents <code>working</code></li>
+<li>Sets its own status to <code>idle</code> and waits for inbox messages</li>
+<li>As agents complete epics, dispatches a code review sub-agent for each</li>
+<li>If review passes → closes beads tasks, checks <code>bd ready</code> for the next batch</li>
+<li>If autonomy is <code>per_epic</code> → stops here, presents the epic report, waits for
+your go-ahead</li>
+</ol>
+<p>Review blockers loop back to the agent (up to 3 rounds). If after 3 rounds
+review still fails, the orchestrator escalates to you.</p>
+<h3>Phase 5 — Finalize</h3>
+<p>All epics complete. The orchestrator:</p>
+<ol>
+<li>Runs a final cross-branch review — diffs each agent branch against the merge
+target, checks for conflicts between branches touching the same files</li>
+<li>Prepares the merge report: changes per branch, all review results, test
+results the agents reported during their gates, configured merge target</li>
+<li>Presents the report to you</li>
+</ol>
+<p>You approve → it merges to the merge target, pushes, and asks if you want
+worktrees cleaned up. Then it sets itself to <code>idle</code>.</p>
+<hr>
+<h2>Review Gates</h2>
+<p>Review gates are <code>## Review Gate:</code> headings in the implementation prompt. The
+<code>project-setup</code> skill inserts one after each epic&#39;s task block. They look like
+this:</p>
+<pre><code>## Review Gate: thrum-abc
+
+Before proceeding to the next epic:
+1. Commit all work for this epic
+2. Run tests: verify all tests pass for changes in this epic
+3. Report completion via Thrum:
+   `thrum send &quot;Epic thrum-abc complete. Ready for review.&quot; --to @orchestrator_main`
+4. Set status: `thrum agent set-status idle`
+5. **STOP.** Wait for review approval before continuing.</code></pre>
+<p>When an agent hits a review gate, it sends the orchestrator a completion
+message and stops. The orchestrator dispatches a code review sub-agent. The
+sub-agent diffs the work against the spec, reports findings, and the
+orchestrator either clears the agent to continue or sends findings back for
+fixes.</p>
+<p>At <code>per_epic</code> autonomy, the orchestrator also surfaces the review results to
+you before proceeding. At <code>end_only</code>, it continues automatically if review
+passes.</p>
+<p>The orchestrator validates that <code>## Review Gate:</code> headings exist during Phase 1.
+A prompt without gates won&#39;t run — the orchestrator bounces it back.</p>
+<hr>
+<h2>Escalation</h2>
+<p>The orchestrator stops and messages you when it hits something it can&#39;t resolve:</p>
+<ul>
+<li><strong>Agent stuck after nudge</strong> — agent status is <code>working</code>, pane is idle, a nudge
+was sent, and there&#39;s still no message after the next check. The orchestrator
+reports what the agent was doing, what the tmux pane shows, and asks what to
+do.</li>
+<li><strong>Session dies</strong> — it attempts <code>thrum tmux restart</code> once; if that fails, it
+escalates with the session name and last-known state.</li>
+<li><strong>Review blockers after 3 rounds</strong> — sends you the review findings and the
+agent&#39;s three attempts to fix them, asks whether to continue with exceptions or
+stop.</li>
+<li><strong>Dependency conflict between epics</strong> — two parallel epics touch overlapping
+code in a way that will conflict at merge time.</li>
+<li><strong>Judgment call in the plan</strong> — any ambiguity it can&#39;t resolve from the
+plan file alone.</li>
+</ul>
+<p>Escalation messages include: what happened, what was tried, what specific
+decision you need to make. Not &quot;there was a problem.&quot; Something you can act on.</p>
+<p>If you don&#39;t respond at a review gate, the orchestrator waits and sends a
+reminder after a configured timeout. It doesn&#39;t proceed without your answer.</p>
+<hr>
+<h2>Configuration</h2>
+<p>Two keys in <code>.thrum/config.json</code> control orchestrator behavior:</p>
+<pre><code>{
+  &quot;orchestration&quot;: {
+    &quot;default_autonomy&quot;: &quot;end_only&quot;,
+    &quot;merge_target&quot;: &quot;main&quot;
+  }
+}</code></pre>
+<p><strong><code>default_autonomy</code></strong> — pre-selects the answer to the autonomy question at
+plan start. Values: <code>per_epic</code>, <code>end_only</code>. Default: <code>end_only</code>. You can
+override at runtime — the orchestrator always confirms before executing.</p>
+<p><strong><code>merge_target</code></strong> — the branch all agent branches merge to when you approve
+the final report. Default: <code>main</code>. The orchestrator confirms this branch with
+you on first activation. Change it here if you&#39;re working on a release branch
+or a long-lived integration branch.</p>
+<p>The <code>worktrees</code> key is also relevant — the orchestrator uses it to know where
+to create agent worktrees:</p>
+<pre><code>{
+  &quot;worktrees&quot;: {
+    &quot;base_path&quot;: &quot;/Users/you/.workspaces/project&quot;,
+    &quot;beads_enabled&quot;: true,
+    &quot;thrum_enabled&quot;: true
+  }
+}</code></pre>
+<p><code>thrum init</code> sets defaults for all of these. See
+<a href="configuration.html">Configuration</a> for the full config reference.</p>
+<h3>Role Template</h3>
+<p>The orchestrator preamble lives at <code>toolkit/templates/roles/orchestrator.md</code>
+in the Thrum repo. It&#39;s the context file the orchestrator loads at startup via
+<code>thrum prime</code>. You don&#39;t need to edit it. If you register an orchestrator agent
+with <code>thrum quickstart --role orchestrator</code>, the right template loads
+automatically.</p>
+<hr>
+<h2>Commands</h2>
+<p><strong>Register an orchestrator agent:</strong></p>
+<pre><code>thrum quickstart --role orchestrator --name orchestrator_main --module main</code></pre>
+<p>Run this in the orchestrator&#39;s worktree (a detached HEAD worktree under
+<code>~/.workspaces/&lt;project&gt;/orchestrator/</code>). The orchestrator stays on detached
+HEAD — it never commits. All code work happens in the agent worktrees it
+creates.</p>
+<p><strong>Set agent status:</strong></p>
+<pre><code>thrum agent set-status working    # mark yourself working
+thrum agent set-status idle       # mark yourself idle
+thrum agent set-status blocked    # mark yourself blocked
+
+# Orchestrator sets a remote agent&#39;s status via daemon RPC:
+thrum agent set-status working --agent impl_api</code></pre>
+<p><strong>Check team status:</strong></p>
+<pre><code>thrum tmux status    # session state + runtime + branch for all agents
+thrum team           # registered agents with roles and statuses</code></pre>
+<p>See <a href="cli.html">CLI Reference</a> for the full command reference, including <code>thrum tmux</code> subcommands for session lifecycle management.</p>
+<hr>
+<h2>Limitations</h2>
+<p><strong>The orchestrator doesn&#39;t create epics or tasks.</strong> That&#39;s the coordinator&#39;s
+job. If the beads structure isn&#39;t there when the orchestrator validates the
+handoff, it sends back a specific list of what&#39;s missing and waits. Fix it in
+the coordinator and re-send.</p>
+<p><strong>The orchestrator doesn&#39;t write code or investigate codebases.</strong> It manages
+agents that do that work. If it needs information from the codebase, it
+dispatches a sub-agent rather than reading source files itself.</p>
+<p><strong>The orchestrator doesn&#39;t merge without your approval.</strong> Phase 5 ends with a
+merge report and a question. You answer it. This isn&#39;t configurable — there&#39;s
+no autonomy level that skips the merge gate. The human always controls what
+lands on the merge target.</p>
+<p><strong>The orchestrator doesn&#39;t create the merge target branch.</strong> If <code>merge_target</code>
+is set to a branch that doesn&#39;t exist, the merge will fail. Confirm the branch
+exists before handing off a plan.</p>
+<hr>
+<h2>Next Steps</h2>
+<ul>
+<li><a href="tmux-sessions.html">Tmux-Managed Sessions</a> — how to create and launch the
+orchestrator&#39;s tmux session, and how the nudge mechanism keeps agents
+responsive</li>
+<li><a href="multi-agent.html">Multi-Agent Support</a> — groups, team coordination, and the
+patterns the orchestrator relies on</li>
+<li><a href="cli.html">CLI Reference</a> — full reference for <code>thrum tmux</code>, <code>thrum agent set-status</code>, <code>thrum worktree</code>, and other commands</li>
+<li><a href="configuration.html">Configuration</a> — <code>orchestration</code> and <code>worktrees</code> config
+keys in full</li>
+</ul>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#orchestrator-role.html')}</script>
+</body>
+</html>

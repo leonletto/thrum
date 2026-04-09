@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Peers — Thrum</title>
+<meta name="description" content="Cross-repo and cross-machine messaging between Thrum daemons">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#peers.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; Messaging &rsaquo; Peers
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <strong>Peers</strong> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+</nav>
+<main>
+<h2>What a Peer Is</h2>
+<p>A peer is a link between two Thrum daemons. Each daemon is bound to one repo.
+Peers let agents in different repos — or on different machines — message each
+other directly, as if they were all registered with the same daemon.</p>
+<p>You register <code>coordinator_main</code> in your main repo. Your colleague runs
+<code>reviewer_api</code> in the API repo on a different machine. Without peers, those two
+agents can&#39;t talk. With a peer, you send:</p>
+<pre><code>thrum send &quot;Auth module ready for review&quot; --to @api:reviewer_api</code></pre>
+<p>The daemon routes it through the peer connection. The reviewer gets it in their
+inbox. No relay, no manual handoff.</p>
+<p>Peers are bidirectional and persistent. Pair once; the connection re-establishes
+on daemon restarts automatically.</p>
+<hr>
+<h2>The Two Transports</h2>
+<p>Peers use two network transports. The peer model is the same for both — you pair
+once, messages route transparently. What differs is how the daemons find each
+other.</p>
+<h3>Local (same machine, different repos)</h3>
+<p>Both daemons run on the same machine. You&#39;re working across two repos in the
+same worktree setup: <code>main-repo</code> and <code>mock-salesforce</code>, for example. Each has
+its own daemon.</p>
+<p>For local peers, the daemon reads the port file from the other repo&#39;s filesystem
+(<code>.thrum/var/ws.port</code>). There&#39;s no network exposure — traffic stays on
+<code>127.0.0.1</code>. Firewall rules and NAT don&#39;t apply.</p>
+<p>Use this when you&#39;re building or testing a multi-repo system on one laptop.</p>
+<h3>Tailscale (different machines)</h3>
+<p>The two daemons are on separate machines connected via
+<a href="https://tailscale.com">Tailscale</a>. Traffic flows over Tailscale&#39;s encrypted
+WireGuard tunnels on <code>100.x.x.x</code> addresses.</p>
+<p>Use this when your agents are spread across laptops, servers, or CI runners.
+Tailscale handles the networking; you just provide a Tailscale auth key and
+pair.</p>
+<p>See <a href="tailscale-sync.html">Tailscale Sync</a> for Tailscale setup and
+<a href="tailscale-security.html">Tailscale Security</a> for the full security model.</p>
+<h3>Comparison</h3>
+<table>
+<thead>
+<tr>
+<th>Transport</th>
+<th>Network layer</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Local</td>
+<td><code>127.0.0.1</code></td>
+<td>Both repos are on the same machine</td>
+</tr>
+<tr>
+<td>Tailscale</td>
+<td><code>100.x.x.x</code></td>
+<td>Daemons are on separate Tailscale-connected machines</td>
+</tr>
+<tr>
+<td>Network</td>
+<td>Direct TCP/WS</td>
+<td>Same LAN, no Tailscale (trusted networks only)</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>The Pairing Flow</h2>
+<p>Pairing happens once. After that, peers reconnect automatically.</p>
+<p><strong>On the first machine</strong> (the listener):</p>
+<pre><code>thrum peer add</code></pre>
+<p>The daemon generates a 16-digit numeric pairing code and blocks waiting for the
+other side. It prints the full peercode:</p>
+<pre><code>Waiting for connection...
+
+Share this with the other machine:
+  thrum peer join --peercode alice:100.64.1.5:44123:4829175036284719
+
+Paired with &quot;bob&quot; (100.64.1.9:44123). Syncing started.</code></pre>
+<p><strong>On the second machine</strong> (the joiner):</p>
+<pre><code>thrum peer join --peercode alice:100.64.1.5:44123:4829175036284719</code></pre>
+<p>For a local peer on the same machine, add <code>--repo-path</code>:</p>
+<pre><code>thrum peer join --peercode alice:127.0.0.1:44123:4829175036284719 \
+  --repo-path /path/to/other/repo</code></pre>
+<p>The <code>--repo-path</code> flag tells the daemon where to find the other repo&#39;s port
+file. It&#39;s only needed for local peers — the joining side has filesystem access
+and can read the port directly.</p>
+<h3>Pairing Code Details</h3>
+<p>The peercode format is <code>name:ip:port:code</code>. Example:</p>
+<pre><code>mock-salesforce:127.0.0.1:9342:4829175036284719</code></pre>
+<p>The 16-digit numeric code is short-lived — it expires after 5 minutes. It&#39;s
+a handshake secret, not a long-term credential. During pairing, both sides
+exchange a 32-byte auth token that gets stored in <code>peers.json</code> and used for
+all future connections.</p>
+<p>If the pairing code expires, run <code>thrum peer add</code> again to generate a new one.</p>
+<hr>
+<h2>Listener vs Dialer</h2>
+<p>The &quot;adder&quot; side (the one that ran <code>thrum peer add</code>) is always the <strong>listener</strong>.
+The &quot;joiner&quot; side is always the <strong>dialer</strong>.</p>
+<p>The dialer initiates every connection — on first pair and on every reconnect
+after a restart. The listener waits for incoming connections and accepts them.</p>
+<p>This matters for firewalls and NAT:</p>
+<ul>
+<li>The listener needs an open port (or needs to be on Tailscale where port
+forwarding isn&#39;t required).</li>
+<li>The dialer just needs outbound connectivity to the listener&#39;s address.</li>
+<li>If the listener restarts, the dialer detects the broken connection and
+reconnects with backoff.</li>
+<li>If the dialer restarts, it re-dials on startup.</li>
+</ul>
+<p>The roles are fixed from the first pairing. They&#39;re stored in <code>peers.json</code> as
+<code>role: &quot;listener&quot;</code> or <code>role: &quot;dialer&quot;</code>.</p>
+<p>Once connected, the WebSocket connection is bidirectional — both sides send RPC
+requests and receive notifications over the same connection.</p>
+<hr>
+<h2>Address Change Handling</h2>
+<p>Laptops change networks. DHCP assigns new IPs. Daemons restart on different
+ports.</p>
+<p>When a daemon detects its own address has changed, it notifies each connected
+peer automatically:</p>
+<ol>
+<li>It connects to each peer at the peer&#39;s last-known address.</li>
+<li>It sends <code>peer.address_changed</code> with the new IP, new port, and the shared
+auth token.</li>
+<li>The peer verifies the token, validates the new address, and updates its
+registry.</li>
+<li>The connection continues on the new address. No re-pairing needed.</li>
+</ol>
+<p>Address changes are constrained by transport type to prevent redirect attacks:</p>
+<table>
+<thead>
+<tr>
+<th>Transport</th>
+<th>Allowed changes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Local</td>
+<td>Port only — IP must stay on <code>127.0.0.1</code></td>
+</tr>
+<tr>
+<td>Tailscale</td>
+<td>Port only — IP must stay in <code>100.64.0.0/10</code></td>
+</tr>
+<tr>
+<td>Network</td>
+<td>Same <code>/24</code> subnet as the original paired address</td>
+</tr>
+</tbody></table>
+<p>If both peers change address at the same time — both laptops moved to a new
+network — automatic reconnection isn&#39;t possible. In that case, re-pair with
+<code>thrum peer add</code> and <code>thrum peer join</code>. It takes 30 seconds. This scenario is
+rare.</p>
+<p>If a peer is temporarily unreachable when your address changes, the notification
+is queued and retried with backoff. When the peer comes back online, it&#39;ll
+catch up.</p>
+<p>See <a href="rpc-api.html#peer.address_changed">RPC API</a> for the <code>peer.address_changed</code>
+method signature.</p>
+<hr>
+<h2>Messaging Across Peers</h2>
+<h3>Proxy Agents</h3>
+<p>Remote agents don&#39;t appear in your daemon automatically. You register them
+explicitly as proxy agents using <code>thrum peer configure</code>:</p>
+<pre><code>thrum peer configure mock-salesforce add-agent coordinator_main</code></pre>
+<p>This registers <code>mock-sf:coordinator_main</code> in your local daemon. You can then
+send to it by name:</p>
+<pre><code>thrum send &quot;Request complete&quot; --to @mock-sf:coordinator_main</code></pre>
+<p>The daemon sees <code>mock-sf:</code> as the proxy prefix, routes the message through the
+peer connection, strips the prefix, and delivers it to <code>coordinator_main</code> on the
+remote daemon.</p>
+<p>Proxy agents appear in <code>thrum team</code> like any other agent:</p>
+<pre><code>NAME                     ROLE           STATUS
+coordinator_main         coordinator    active
+mock-sf:coordinator_main coordinator    active (via peer)</code></pre>
+<h3>Name Prefixing</h3>
+<p>Cross-repo agents use the format <code>prefix:name</code>. The prefix is the <code>proxy_prefix</code>
+stored in <code>peers.json</code> — set during pairing, typically a short slug of the peer
+name (<code>mock-sf</code>, <code>api</code>, <code>infra</code>).</p>
+<p>The full routing path:</p>
+<pre><code>@mock-sf:coordinator_main
+  → local daemon recognizes &quot;mock-sf&quot; as peer prefix
+  → relays to mock-salesforce peer&#39;s transport bridge
+  → remote daemon strips prefix, delivers to &quot;coordinator_main&quot;</code></pre>
+<p>Reply threading works across the connection. The <code>MessageMap</code> tracks local and
+remote message IDs so replies stay in the same thread.</p>
+<h3><code>thrum send</code> and <code>thrum team</code></h3>
+<p><code>thrum send --to @prefix:name</code> works the same as local delivery from the
+sender&#39;s perspective. Inbox, threading, and read state all work normally.</p>
+<p><code>thrum team</code> includes proxy agents from all connected peers. <code>thrum who-has</code>
+resolves cross-repo agents.</p>
+<p>See <a href="messaging.html">Messaging</a> for full send/receive/reply documentation.</p>
+<hr>
+<h2>Configuration</h2>
+<h3>config.json</h3>
+<pre><code>{
+  &quot;daemon&quot;: {
+    &quot;peer_port&quot;: &quot;auto&quot;
+  },
+  &quot;peers&quot;: {
+    &quot;auto_connect&quot;: true,
+    &quot;pairing_code_length&quot;: 16
+  }
+}</code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>daemon.peer_port</code></td>
+<td><code>auto</code></td>
+<td>Port the peer listener binds to. <code>auto</code> picks a free port.</td>
+</tr>
+<tr>
+<td><code>peers.auto_connect</code></td>
+<td><code>true</code></td>
+<td>Reconnect to all known peers on daemon startup</td>
+</tr>
+<tr>
+<td><code>peers.pairing_code_length</code></td>
+<td><code>16</code></td>
+<td>Length of the numeric pairing code</td>
+</tr>
+</tbody></table>
+<h3>peers.json</h3>
+<p>The peer registry is managed automatically by the pairing flow. It&#39;s stored at
+<code>.thrum/var/peers.json</code>. You don&#39;t edit it directly, but you can read it:</p>
+<pre><code>{
+  &quot;peers&quot;: [
+    {
+      &quot;name&quot;: &quot;mock-salesforce&quot;,
+      &quot;address&quot;: &quot;127.0.0.1:9342&quot;,
+      &quot;repo_path&quot;: &quot;/Users/leon/dev/falcondev/mock-salesforce&quot;,
+      &quot;token&quot;: &quot;...&quot;,
+      &quot;transport&quot;: &quot;local&quot;,
+      &quot;proxy_prefix&quot;: &quot;mock-sf&quot;,
+      &quot;remote_agents&quot;: [&quot;coordinator_main&quot;],
+      &quot;paired_at&quot;: &quot;2026-04-05T20:00:00Z&quot;
+    }
+  ]
+}</code></pre>
+<p>The <code>token</code> field is the long-lived auth token exchanged during pairing. Guard
+this file — it grants access to the peer connection. Don&#39;t commit it to git.</p>
+<p>See <a href="configuration.html">Configuration</a> for the full config reference.</p>
+<hr>
+<h2>Commands</h2>
+<p>All peer commands live under <code>thrum peer</code>. Full reference: <a href="cli.html#peer-management">CLI</a>.</p>
+<h3>Quick Reference</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thrum peer add</code></td>
+<td>Start a pairing session, display peercode, wait for join</td>
+</tr>
+<tr>
+<td><code>thrum peer join --peercode &lt;code&gt;</code></td>
+<td>Join a peer using the peercode from <code>peer add</code></td>
+</tr>
+<tr>
+<td><code>thrum peer list</code></td>
+<td>List all paired peers with address and last sync time</td>
+</tr>
+<tr>
+<td><code>thrum peer status</code></td>
+<td>Detailed per-peer health, auth status, and pairing time</td>
+</tr>
+<tr>
+<td><code>thrum peer remove &lt;name&gt;</code></td>
+<td>Remove a peer, stop syncing immediately</td>
+</tr>
+<tr>
+<td><code>thrum peer configure &lt;name&gt; add-agent</code></td>
+<td>Register a remote agent as a proxy locally</td>
+</tr>
+<tr>
+<td><code>thrum peer configure &lt;name&gt; remove-agent</code></td>
+<td>Unregister a proxy agent</td>
+</tr>
+</tbody></table>
+<h3><code>thrum peer add</code></h3>
+<p>Blocks for up to 5 minutes waiting for the other side. Prints the full peercode
+to share:</p>
+<pre><code>$ thrum peer add
+Waiting for connection...
+
+Share this with the other machine:
+  thrum peer join --peercode alice:100.64.1.5:44123:7392031846291057
+
+Paired with &quot;bob&quot; (100.64.1.9:44123). Syncing started.</code></pre>
+<h3><code>thrum peer join</code></h3>
+<p>Pass the peercode as a flag, a positional argument, or pipe it from stdin:</p>
+<pre><code># Flag
+thrum peer join --peercode alice:100.64.1.5:44123:7392031846291057
+
+# Positional
+thrum peer join alice:100.64.1.5:44123:7392031846291057
+
+# Stdin
+echo &quot;alice:100.64.1.5:44123:7392031846291057&quot; | thrum peer join --peercode -
+
+# Local peer (same machine)
+thrum peer join --peercode alice:127.0.0.1:9342:7392031846291057 \
+  --repo-path /path/to/alice-repo</code></pre>
+<h3><code>thrum peer list</code></h3>
+<pre><code>$ thrum peer list
+NAME                 ADDRESS                LAST SYNC          LAST SEQ
+mock-salesforce      127.0.0.1:9342         5 seconds ago      482
+alice                100.64.1.5:44123       2 minutes ago      1042</code></pre>
+<h3><code>thrum peer status</code></h3>
+<p>More detail than <code>list</code> — includes auth token status, pairing timestamp, and
+sequence numbers. Use <code>--json</code> for scripting.</p>
+<h3><code>thrum peer configure</code></h3>
+<p>Add or remove proxy agents for a peer. Changes take effect immediately if the
+peer is connected — no daemon restart needed:</p>
+<pre><code># Register a remote agent as a proxy
+thrum peer configure mock-salesforce add-agent coordinator_main
+
+# Remove it
+thrum peer configure mock-salesforce remove-agent coordinator_main</code></pre>
+<hr>
+<h2>Troubleshooting</h2>
+<h3>Pairing fails or times out</h3>
+<p>The pairing code expires after 5 minutes. Run <code>thrum peer add</code> again to generate
+a new one. Make sure both machines can reach each other — for Tailscale peers,
+use the <code>100.x.x.x</code> IP shown by <code>tailscale status</code>, not the hostname.</p>
+<h3>Messages not reaching the remote agent</h3>
+<ol>
+<li>Check <code>thrum peer status</code> — is the peer connected? Does it have a token?</li>
+<li>Verify the proxy agent is registered: <code>thrum team</code> should show <code>prefix:name</code>
+entries.</li>
+<li>If the proxy agent is missing, run <code>thrum peer configure &lt;name&gt; add-agent &lt;agent&gt;</code> again.</li>
+<li>Check that <code>auto_connect: true</code> is set in config if the peer disconnected
+after a restart.</li>
+</ol>
+<h3>Address change not detected</h3>
+<p>If you moved networks and the peer connection dropped, the daemon attempts to
+notify peers of the new address using the last-known address. If both machines
+moved simultaneously, this fails — re-pair with <code>thrum peer add</code> and <code>thrum peer join</code>.</p>
+<h3><code>thrum peer status</code> output explained</h3>
+<pre><code>NAME             ADDRESS              HAS_TOKEN  PAIRED_AT               LAST_SYNC
+mock-salesforce  127.0.0.1:9342       true       2026-04-05T20:00:00Z    5s ago
+alice            100.64.1.5:44123     true       2026-03-01T12:00:00Z    2m ago</code></pre>
+<ul>
+<li><code>HAS_TOKEN: false</code> means the token is missing from <code>peers.json</code> — re-pair.</li>
+<li><code>LAST_SYNC</code> stale by more than a few minutes — check daemon logs for
+connection errors.</li>
+</ul>
+<hr>
+<h2>How It Differs from Sync</h2>
+<p>Peers and sync are complementary. They serve different purposes.</p>
+<p><strong>Peers</strong> are live message transport. When you send a message to a proxy agent,
+it&#39;s relayed in real time over the WebSocket connection to the remote daemon.
+Peers are for agent-to-agent coordination — directed messages, replies, and
+group broadcasts across repos.</p>
+<p><strong>Sync</strong> is Git-backed state replication. The <code>a-sync</code> branch replicates JSONL
+event logs between machines so each daemon has a full copy of the message
+history, agent registry, and session state. Sync is eventually consistent and
+works even when daemons are offline — changes merge when both sides reconnect.</p>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Peers</th>
+<th>Sync</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Message delivery</td>
+<td>Live, directed</td>
+<td>Replicated, eventually</td>
+</tr>
+<tr>
+<td>Works while offline</td>
+<td>No</td>
+<td>Yes (merges on reconnect)</td>
+</tr>
+<tr>
+<td>Requires connection</td>
+<td>Yes</td>
+<td>No (Git push/pull)</td>
+</tr>
+<tr>
+<td>State replication</td>
+<td>No</td>
+<td>Yes (full event log)</td>
+</tr>
+<tr>
+<td>Agent addressing</td>
+<td>Yes (<code>prefix:name</code>)</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Cross-machine history</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+</tbody></table>
+<p>You can run both together. A common setup: Tailscale sync keeps the event logs
+replicated across machines, while peers handle live directed messaging between
+agents on those machines.</p>
+<p>See <a href="sync.html">Sync Protocol</a> for how Git-based sync works and
+<a href="tailscale-sync.html">Tailscale Sync</a> for cross-machine sync via Tailscale.</p>
+<hr>
+<h2>Next Steps</h2>
+<ul>
+<li><a href="messaging.html">Messaging</a> — full reference for <code>thrum send</code>, inbox, replies,
+groups, and mention routing</li>
+<li><a href="cli.html#peer-management">CLI Reference</a> — complete flag reference for all
+<code>thrum peer</code> commands</li>
+<li><a href="rpc-api.html#peer-methods-v070">RPC API</a> — <code>peer.*</code> JSON-RPC methods for
+custom integrations</li>
+<li><a href="configuration.html">Configuration</a> — full config reference including the
+<code>peers</code> block</li>
+<li><a href="architecture.html#cross-repo-peer-system-v070">Architecture</a> — internals:
+PeerManager, PeerBridge, PeerTransport, relay logic</li>
+<li><a href="tailscale-sync.html">Tailscale Sync</a> — cross-machine event log replication
+via Tailscale</li>
+<li><a href="tailscale-security.html">Tailscale Security</a> — encryption layers, token auth,
+and threat model</li>
+<li><a href="sync.html">Sync Protocol</a> — Git-backed async state replication</li>
+</ul>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#peers.html')}</script>
+</body>
+</html>
