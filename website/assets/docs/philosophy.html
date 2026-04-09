@@ -85,6 +85,14 @@ going to happen before it happens - not after the damage is done.</p>
 <p>Thrum doesn&#39;t orchestrate your agents. It gives agents a way to message each
 other across worktrees and machines, so you can run several in parallel without
 being the message relay yourself.</p>
+<p>There&#39;s one exception, and it exists because I wanted it: you can hand a plan
+you already wrote to an orchestrator agent. It spins up implementers, runs your
+plan epic by epic, stops at the review gates you put in the prompts, and hands
+you a merge report. It never writes code. It never merges without your say-so.
+You still did the thinking — the orchestrator just handles the babysitting so
+you don&#39;t have to sit at the terminal relaying &quot;okay, move to epic 2&quot; all
+afternoon. If that&#39;s not what you want, don&#39;t use it. The rest of Thrum works
+exactly the same.</p>
 <p>Thrum doesn&#39;t stop agents or interrupt their work. If you need to stop an agent,
 you stop the process. Thrum provides the communication layer — you provide the
 control.</p>
@@ -107,6 +115,8 @@ have agents execute faster than you can type, that&#39;s what Thrum is for.</p>
 <ul>
 <li><a href="quickstart.html">Quickstart Guide</a> — get Thrum installed and running in 5
 minutes, with your first agent registered and sending messages</li>
+<li><a href="orchestrator-role.html">Orchestrator Role</a> — hand off a plan you wrote and let
+the orchestrator run the execution phase while you do other things</li>
 <li><a href="agent-coordination.html">Agent Coordination</a> — practical patterns for running
 multiple agents in parallel using the workflow described above</li>
 <li><a href="workflow-templates.html">Workflow Templates</a> — pre-built skill pipelines for
