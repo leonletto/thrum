@@ -662,6 +662,116 @@ func TestMigration_PurgeMetadata(t *testing.T) {
 	}
 }
 
+func TestMigrationV18CreatesCommandQueue(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "migrate_v18.db")
+
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() failed: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Migrate initializes the DB at CurrentVersion (18) for a new database
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate() failed: %v", err)
+	}
+
+	// Verify command_queue table exists with expected columns
+	rows, err := db.Query("PRAGMA table_info(command_queue)")
+	if err != nil {
+		t.Fatalf("PRAGMA table_info(command_queue): %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	cols := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatal(err)
+		}
+		cols[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows.Err(): %v", err)
+	}
+
+	required := []string{
+		"command_id", "session_name", "requester_agent", "command_text",
+		"state", "timeout_ms", "submitted_at", "sent_at", "completed_at",
+		"captured_output", "position",
+	}
+	for _, c := range required {
+		if !cols[c] {
+			t.Errorf("missing column: %s", c)
+		}
+	}
+
+	// Verify the index exists
+	var indexName string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_queue_session_state'").Scan(&indexName)
+	if err == sql.ErrNoRows {
+		t.Error("idx_queue_session_state index does not exist")
+	} else if err != nil {
+		t.Fatalf("Query index failed: %v", err)
+	}
+}
+
+func TestMigrationV18_FromV17(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "migrate_v17_v18.db")
+
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() failed: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Bootstrap a v17 database manually
+	_, err = db.Exec(`CREATE TABLE schema_version (
+		version INTEGER NOT NULL,
+		applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		t.Fatalf("Create schema_version failed: %v", err)
+	}
+	_, err = db.Exec("INSERT INTO schema_version (version) VALUES (17)")
+	if err != nil {
+		t.Fatalf("Insert version 17 failed: %v", err)
+	}
+
+	// Run migration — should bring DB from v17 to v18
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate() v17→v18 failed: %v", err)
+	}
+
+	// Verify schema version is 18
+	version, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion() failed: %v", err)
+	}
+	if version != 18 {
+		t.Errorf("Expected schema version 18, got %d", version)
+	}
+
+	// Verify command_queue table was created
+	var tableName string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='command_queue'").Scan(&tableName)
+	if err == sql.ErrNoRows {
+		t.Error("command_queue table does not exist after v17→v18 migration")
+	} else if err != nil {
+		t.Fatalf("Query table failed: %v", err)
+	}
+
+	// Verify idempotency — run migration again should not error
+	if err := schema.Migrate(db); err != nil {
+		t.Errorf("Second Migrate() should be idempotent: %v", err)
+	}
+}
+
 func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "cascade.db")

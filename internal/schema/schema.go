@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 17
+const CurrentVersion = 18
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -280,6 +280,21 @@ func createTables(tx *sql.Tx) error {
 			intent_updated_at TEXT,
 			FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 		)`,
+
+		// Command queue table (for tmux session command dispatching)
+		`CREATE TABLE IF NOT EXISTS command_queue (
+			command_id      TEXT PRIMARY KEY,
+			session_name    TEXT NOT NULL,
+			requester_agent TEXT NOT NULL,
+			command_text    TEXT NOT NULL,
+			state           TEXT NOT NULL DEFAULT 'queued',
+			timeout_ms      INTEGER NOT NULL DEFAULT 120000,
+			submitted_at    TEXT NOT NULL,
+			sent_at         TEXT,
+			completed_at    TEXT,
+			captured_output TEXT,
+			position        INTEGER NOT NULL DEFAULT 0
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -337,6 +352,9 @@ func createIndexes(tx *sql.Tx) error {
 		// Work contexts indexes
 		"CREATE INDEX IF NOT EXISTS idx_work_contexts_agent ON agent_work_contexts(agent_id)",
 		"CREATE INDEX IF NOT EXISTS idx_work_contexts_branch ON agent_work_contexts(branch)",
+
+		// Command queue indexes
+		"CREATE INDEX IF NOT EXISTS idx_queue_session_state ON command_queue(session_name, state)",
 	}
 
 	for _, sql := range indexes {
@@ -719,6 +737,30 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 			if err != nil {
 				return fmt.Errorf("migration 16→17: %w", err)
 			}
+		}
+	}
+
+	// Migration from version 17 to 18: Add command_queue table
+	if startVersion < 18 && endVersion >= 18 {
+		_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS command_queue (
+			command_id      TEXT PRIMARY KEY,
+			session_name    TEXT NOT NULL,
+			requester_agent TEXT NOT NULL,
+			command_text    TEXT NOT NULL,
+			state           TEXT NOT NULL DEFAULT 'queued',
+			timeout_ms      INTEGER NOT NULL DEFAULT 120000,
+			submitted_at    TEXT NOT NULL,
+			sent_at         TEXT,
+			completed_at    TEXT,
+			captured_output TEXT,
+			position        INTEGER NOT NULL DEFAULT 0
+		)`)
+		if err != nil {
+			return fmt.Errorf("migration 17→18: create command_queue: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_queue_session_state ON command_queue(session_name, state)`)
+		if err != nil {
+			return fmt.Errorf("migration 17→18: create index: %w", err)
 		}
 	}
 
