@@ -156,6 +156,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(telegramCmd())
 	rootCmd.AddCommand(tmuxCmd())
 	rootCmd.AddCommand(restartCmd())
+	rootCmd.AddCommand(worktreeCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -2783,6 +2784,225 @@ func inferWorktreeBasePath(repoPath string) string {
 	projectName := filepath.Base(repoPath)
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".workspaces", projectName)
+}
+
+func worktreeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "worktree",
+		Short: "Manage git worktrees with thrum/beads setup",
+	}
+	cmd.AddCommand(worktreeCreateCmd())
+	cmd.AddCommand(worktreeTeardownCmd())
+	cmd.AddCommand(worktreeListCmd())
+	return cmd
+}
+
+func worktreeCreateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create <name>",
+		Short: "Create a new worktree with thrum/beads setup",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			detach, _ := cmd.Flags().GetBool("detach")
+			branch, _ := cmd.Flags().GetString("branch")
+
+			repoPath := paths.EffectiveRepoPath(flagRepo)
+			thrumDir := filepath.Join(repoPath, ".thrum")
+			cfg, err := config.LoadThrumConfig(thrumDir)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+
+			basePath := cfg.Worktrees.BasePath
+			if basePath == "" {
+				basePath = inferWorktreeBasePath(repoPath)
+			}
+			worktreePath := filepath.Join(basePath, name)
+
+			// 1. Create git worktree
+			gitArgs := []string{"-C", repoPath, "worktree", "add"}
+			if detach {
+				gitArgs = append(gitArgs, "--detach")
+			} else {
+				if branch == "" {
+					branch = "feature/" + name
+				}
+				gitArgs = append(gitArgs, "-b", branch)
+			}
+			gitArgs = append(gitArgs, worktreePath)
+
+			out, err := exec.Command("git", gitArgs...).CombinedOutput() // #nosec G204 -- repoPath from config, name from user arg
+			if err != nil {
+				return fmt.Errorf("git worktree add: %s\n%s", err, out)
+			}
+			fmt.Printf("✓ Worktree created at %s\n", worktreePath)
+
+			// 2. Set up Thrum redirect if enabled
+			if cfg.Worktrees.ThrumEnabled {
+				wtThrumDir := filepath.Join(worktreePath, ".thrum")
+				if err := os.MkdirAll(wtThrumDir, 0750); err != nil {
+					return fmt.Errorf("create .thrum dir: %w", err)
+				}
+				mainThrumAbs, _ := filepath.Abs(thrumDir)
+				redirectPath := filepath.Join(wtThrumDir, "redirect")
+				if err := os.WriteFile(redirectPath, []byte(mainThrumAbs+"\n"), 0600); err != nil {
+					return fmt.Errorf("write thrum redirect: %w", err)
+				}
+				// Create local identities dir for per-worktree identities
+				if err := os.MkdirAll(filepath.Join(wtThrumDir, "identities"), 0750); err != nil {
+					return fmt.Errorf("create identities dir: %w", err)
+				}
+				fmt.Println("✓ Thrum redirect configured")
+			}
+
+			// 3. Set up Beads redirect if enabled
+			if cfg.Worktrees.BeadsEnabled {
+				mainBeadsDir := filepath.Join(repoPath, ".beads")
+				if _, err := os.Stat(mainBeadsDir); err == nil {
+					wtBeadsDir := filepath.Join(worktreePath, ".beads")
+					if err := os.MkdirAll(wtBeadsDir, 0750); err != nil {
+						return fmt.Errorf("create .beads dir: %w", err)
+					}
+					mainBeadsAbs, _ := filepath.Abs(mainBeadsDir)
+					redirectPath := filepath.Join(wtBeadsDir, "redirect")
+					if err := os.WriteFile(redirectPath, []byte(mainBeadsAbs+"\n"), 0600); err != nil {
+						return fmt.Errorf("write beads redirect: %w", err)
+					}
+					fmt.Println("✓ Beads redirect configured")
+				}
+			}
+
+			return nil
+		},
+	}
+	cmd.Flags().Bool("detach", false, "Create detached HEAD worktree")
+	cmd.Flags().StringP("branch", "b", "", "Branch name (default: feature/<name>)")
+	return cmd
+}
+
+func worktreeTeardownCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "teardown <name>",
+		Short: "Remove a worktree and clean up thrum/beads artifacts",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			repoPath := paths.EffectiveRepoPath(flagRepo)
+			thrumDir := filepath.Join(repoPath, ".thrum")
+			cfg, err := config.LoadThrumConfig(thrumDir)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+
+			basePath := cfg.Worktrees.BasePath
+			if basePath == "" {
+				basePath = inferWorktreeBasePath(repoPath)
+			}
+			worktreePath := filepath.Join(basePath, name)
+
+			// Check worktree exists
+			if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+				return fmt.Errorf("worktree not found: %s", worktreePath)
+			}
+
+			// Clean up identity files that reference this worktree
+			identitiesDir := filepath.Join(worktreePath, ".thrum", "identities")
+			if entries, err := os.ReadDir(identitiesDir); err == nil {
+				for _, entry := range entries {
+					if !entry.IsDir() && filepath.Ext(entry.Name()) == ".json" {
+						agentName := strings.TrimSuffix(entry.Name(), ".json")
+						fmt.Printf("  Removing identity: %s\n", agentName)
+					}
+				}
+			}
+
+			// Remove git worktree
+			out, err := exec.Command("git", "-C", repoPath, "worktree", "remove", "--force", worktreePath).CombinedOutput() // #nosec G204 -- repoPath from config
+			if err != nil {
+				return fmt.Errorf("git worktree remove: %s\n%s", err, out)
+			}
+
+			fmt.Printf("✓ Worktree %s removed\n", name)
+			return nil
+		},
+	}
+}
+
+func worktreeListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List worktrees with thrum agent info",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoPath := paths.EffectiveRepoPath(flagRepo)
+
+			// Get git worktree list
+			out, err := exec.Command("git", "-C", repoPath, "worktree", "list", "--porcelain").Output() // #nosec G204 -- repoPath from config
+			if err != nil {
+				return fmt.Errorf("git worktree list: %w", err)
+			}
+
+			type worktreeInfo struct {
+				path   string
+				branch string
+				head   string
+			}
+			var worktrees []worktreeInfo
+			var current worktreeInfo
+
+			for _, line := range strings.Split(string(out), "\n") {
+				if p, ok := strings.CutPrefix(line, "worktree "); ok {
+					current = worktreeInfo{path: p}
+				} else if h, ok := strings.CutPrefix(line, "HEAD "); ok {
+					current.head = h[:min(7, len(h))]
+				} else if b, ok := strings.CutPrefix(line, "branch "); ok {
+					current.branch = strings.TrimPrefix(b, "refs/heads/")
+				} else if line == "" && current.path != "" {
+					worktrees = append(worktrees, current)
+					current = worktreeInfo{}
+				}
+			}
+
+			if len(worktrees) == 0 {
+				fmt.Println("No worktrees found.")
+				return nil
+			}
+
+			// Print header
+			fmt.Printf("%-30s %-25s %-10s %-20s %-10s\n", "WORKTREE", "BRANCH", "HEAD", "AGENT", "STATUS")
+			fmt.Println(strings.Repeat("─", 100))
+
+			for _, wt := range worktrees {
+				wtName := filepath.Base(wt.path)
+				agentName := ""
+				agentStatus := ""
+
+				// Check for identity files in this worktree
+				idDir := filepath.Join(wt.path, ".thrum", "identities")
+				if entries, err := os.ReadDir(idDir); err == nil {
+					for _, entry := range entries {
+						if !entry.IsDir() && filepath.Ext(entry.Name()) == ".json" {
+							data, err := os.ReadFile(filepath.Join(idDir, entry.Name())) // #nosec G304 -- idDir under .thrum/identities/
+							if err != nil {
+								continue
+							}
+							var idFile config.IdentityFile
+							if err := json.Unmarshal(data, &idFile); err != nil {
+								continue
+							}
+							agentName = idFile.Agent.Name
+							agentStatus = idFile.AgentStatus
+							break // show first agent
+						}
+					}
+				}
+
+				fmt.Printf("%-30s %-25s %-10s %-20s %-10s\n", wtName, wt.branch, wt.head, agentName, agentStatus)
+			}
+
+			return nil
+		},
+	}
 }
 
 func agentSetStatusCmd() *cobra.Command {
