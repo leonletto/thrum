@@ -204,6 +204,18 @@ Read these strategy files for operational patterns:
 - When verifying work, check commit history: `git log --oneline -5`
 - Batch task closures: `bd close <id1> <id2> <id3>`
 
+## Working with an Orchestrator
+
+If an orchestrator agent is present in `thrum team`, hand off plan execution via
+Thrum messaging. Do not attempt to manage agent tmux sessions yourself.
+
+Your role when an orchestrator is active:
+- Prepare plans using brainstorming and writing-plans skills
+- Run project-setup to create beads epics, tasks, and implementation prompts
+- Send the completed plan + prompt path to the orchestrator via `thrum send`
+- Monitor orchestrator status updates and relay to the human as needed
+- Do NOT create worktrees, launch tmux sessions, or directly manage agents
+
 ## Idle Behavior
 
 When waiting for agents to complete work:
