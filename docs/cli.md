@@ -1916,12 +1916,12 @@ for each value.
 thrum telegram configure [flags]
 ```
 
-| Flag       | Description                    | Default |
-| ---------- | ------------------------------ | ------- |
-| `--token`  | Telegram bot token             |         |
-| `--target` | Target chat ID or username     |         |
-| `--user`   | Telegram username to associate |         |
-| `--yes`    | Skip confirmation prompt       | `false` |
+| Flag       | Description                                                                                             | Default |
+| ---------- | ------------------------------------------------------------------------------------------------------- | ------- |
+| `--token`  | Telegram bot token                                                                                      |         |
+| `--target` | Default agent for fresh Telegram messages (e.g. `@coordinator_main`). Replies route to original author. |         |
+| `--user`   | Telegram username to associate                                                                          |         |
+| `--yes`    | Skip confirmation prompt                                                                                | `false` |
 
 Example:
 

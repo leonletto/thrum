@@ -43,8 +43,12 @@ autonomous system running loose.
 ## Control from your phone
 
 Running a long session and stepping away? The
-[Telegram Bridge](../telegram-bridge.md) puts your agent inbox in your pocket.
-Send instructions, read status updates, and approve work from anywhere.
+[Telegram Bridge](../telegram-bridge.md) turns Telegram into a unified inbox for
+the whole team. Any agent that needs your input pings you directly — the
+coordinator asking for a merge approval, an implementer hitting a decision
+point, a tester reporting a failure. Reply in Telegram and your reply routes
+back to whichever agent messaged you. One connection, concurrent threads, no
+context switching.
 
 ## When you're ready for more
 
