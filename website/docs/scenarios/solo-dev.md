@@ -32,7 +32,7 @@ before, start here.
 3. **[Tmux Sessions](../tmux-sessions.md)** — run your agent in a persistent
    tmux session so it keeps working when you close the terminal
 4. **[Multi-Runtime Support](../multi-runtime.md)** — pick the runtime that fits
-   your workflow; Claude Code, Codex, and Aider all work
+   your workflow; Claude Code, Codex, OpenCode, etc. all work
 5. **[Session Restart](../session-restart.md)** — recover cleanly after context
    loss without losing your place
 6. **[Identity](../identity.md)** — how Thrum knows who your agent is and how

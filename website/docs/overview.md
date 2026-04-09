@@ -68,7 +68,7 @@ need it.
 - **Orchestrator role** — a dedicated coordinator agent that reads your plan,
   claims tasks, spawns implementers, and stops at every review gate without
   touching the merge button; see [Orchestrator Role](orchestrator-role.md)
-- **Multi-runtime support** — Claude Code, Codex, and Aider all work; Thrum
+- **Multi-runtime support** — Claude Code, Codex, OpenCode, etc. all work; Thrum
   picks the right tmux launch command for each; see
   [Multi-Runtime](multi-runtime.md)
 - **Peer mesh** — agents on different machines join one team over Tailscale or
