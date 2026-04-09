@@ -107,6 +107,19 @@ func (q *SessionQueue) ClearActive() {
 	q.active = nil
 }
 
+// RemoveByID removes the first queued command matching id and returns it, or nil if not found.
+func (q *SessionQueue) RemoveByID(id string) *QueuedCommand {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for i, cmd := range q.commands {
+		if cmd.ID == id {
+			q.commands = append(q.commands[:i], q.commands[i+1:]...)
+			return cmd
+		}
+	}
+	return nil
+}
+
 // Snapshot returns a copy of the commands slice.
 func (q *SessionQueue) Snapshot() []*QueuedCommand {
 	q.mu.Lock()

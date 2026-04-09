@@ -5943,6 +5943,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("tmux.check-pane", tmuxHandler.HandleCheckPane)
 	server.RegisterHandler("tmux.restart", tmuxHandler.HandleRestart)
 	server.RegisterHandler("tmux.queue", tmuxHandler.HandleQueue)
+	server.RegisterHandler("tmux.cancel", tmuxHandler.HandleCancel)
 	server.RegisterHandler("tmux.queue-status", tmuxHandler.HandleQueueStatus)
 	server.RegisterLongPollHandler("tmux.queue-wait", tmuxHandler.HandleQueueWait)
 

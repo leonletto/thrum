@@ -11,6 +11,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/identity"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
+	"github.com/leonletto/thrum/internal/types"
 )
 
 // QueueRequest is the tmux.queue RPC request.
@@ -278,17 +279,138 @@ func (h *TmuxHandler) HandleQueueStatus(ctx context.Context, params json.RawMess
 }
 
 // sendSystemMessage writes a message from @system to the recipient.
-// TODO Task 2.3: flesh out full delivery.
 func (h *TmuxHandler) sendSystemMessage(ctx context.Context, recipient, body string) {
-	maxLen := len(body)
-	if maxLen > 100 {
-		maxLen = 100
+	if recipient == "" {
+		log.Printf("[queue] sendSystemMessage: empty recipient, skipping")
+		return
 	}
-	log.Printf("[queue] would send @system message to %s: %s", recipient, body[:maxLen])
+
+	event := types.MessageCreateEvent{
+		Type:      "message.create",
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		EventID:   identity.GenerateEventID(),
+		Version:   1,
+		MessageID: identity.GenerateMessageID(),
+		AgentID:   "system",
+		SessionID: "",
+		Body: types.MessageBody{
+			Format:  "markdown",
+			Content: body,
+		},
+		Refs:       []types.Ref{{Type: "mention", Value: recipient}},
+		Recipients: []string{recipient},
+	}
+
+	h.state.Lock()
+	if err := h.state.WriteEvent(ctx, event); err != nil {
+		log.Printf("[queue] write @system message failed: %v", err)
+	}
+	h.state.Unlock()
 }
 
 // handleCommandTimeout transitions a command to timeout_waiting and notifies requester.
-// TODO Task 2.3: flesh out full handling.
 func (h *TmuxHandler) handleCommandTimeout(ctx context.Context, session string, cmd *QueuedCommand) {
-	log.Printf("[queue] timeout fired for %s (session %s)", cmd.ID, session)
+	cmd.State = StateTimeoutWaiting
+
+	h.state.Lock()
+	_ = updateCommandState(ctx, h.state.DB(), cmd)
+	h.state.Unlock()
+
+	body := fmt.Sprintf("Command %s still processing after %ds.\nSession: %s\nSend \"thrum tmux cancel %s\" to abort.",
+		cmd.ID, int(cmd.Timeout.Seconds()), session, cmd.ID)
+	h.sendSystemMessage(ctx, cmd.RequesterAgent, body)
+}
+
+// CancelRequest is the tmux.cancel RPC request.
+type CancelRequest struct {
+	CommandID string `json:"command_id"`
+}
+
+// CancelResponse is the tmux.cancel RPC response.
+type CancelResponse struct {
+	CommandID string `json:"command_id"`
+	State     string `json:"state"`
+	Output    string `json:"output,omitempty"`
+}
+
+// HandleCancel handles the tmux.cancel RPC.
+func (h *TmuxHandler) HandleCancel(ctx context.Context, params json.RawMessage) (any, error) {
+	var req CancelRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if req.CommandID == "" {
+		return nil, fmt.Errorf("command_id is required")
+	}
+
+	// Find the command as an active command across all queues.
+	h.queuesMu.Lock()
+	var foundSession string
+	var foundCmd *QueuedCommand
+	var foundQueue *SessionQueue
+	for session, queue := range h.queues {
+		if active := queue.Active(); active != nil && active.ID == req.CommandID {
+			foundSession = session
+			foundCmd = active
+			foundQueue = queue
+			break
+		}
+	}
+	h.queuesMu.Unlock()
+
+	if foundCmd != nil {
+		// Active command — capture current output, stop timer, transition to cancelled.
+		output, _ := ttmux.CapturePane(foundSession+":0.0", 500)
+		foundCmd.State = StateCancelled
+		foundCmd.CompletedAt = time.Now().UTC()
+		foundCmd.CapturedOutput = output
+		if foundCmd.timer != nil {
+			foundCmd.timer.Stop()
+		}
+
+		h.state.Lock()
+		_ = updateCommandState(ctx, h.state.DB(), foundCmd)
+		h.state.Unlock()
+
+		foundQueue.ClearActive()
+
+		// Notify requester.
+		body := fmt.Sprintf("Command %s cancelled.\nSession: %s\n\nPartial output:\n---\n%s\n---",
+			foundCmd.ID, foundSession, output)
+		h.sendSystemMessage(ctx, foundCmd.RequesterAgent, body)
+
+		// Send next queued command if any.
+		if next := foundQueue.Peek(); next != nil {
+			h.sendQueuedCommand(ctx, foundSession, foundQueue, next)
+		} else {
+			_ = ttmux.SetMonitorSilence(foundSession, 60, h.thrumBin(), h.thrumDir)
+		}
+
+		return &CancelResponse{
+			CommandID: foundCmd.ID,
+			State:     StateCancelled,
+			Output:    output,
+		}, nil
+	}
+
+	// Not active — fall back to DB for queued/waiting commands.
+	loaded, err := loadCommand(ctx, h.state.DB(), req.CommandID)
+	if err != nil {
+		return nil, fmt.Errorf("command not found: %s", req.CommandID)
+	}
+	loaded.State = StateCancelled
+	loaded.CompletedAt = time.Now().UTC()
+
+	h.state.Lock()
+	_ = updateCommandState(ctx, h.state.DB(), loaded)
+	h.state.Unlock()
+
+	// Remove from in-memory queue if present.
+	h.queuesMu.Lock()
+	for _, queue := range h.queues {
+		queue.RemoveByID(req.CommandID)
+	}
+	h.queuesMu.Unlock()
+
+	return &CancelResponse{CommandID: loaded.ID, State: StateCancelled}, nil
 }

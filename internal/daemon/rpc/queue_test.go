@@ -188,6 +188,44 @@ func TestHandleQueueWaitReturnsOnCompletion(t *testing.T) {
 	}
 }
 
+func TestHandleCancelActiveCommand(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	q := h.getOrCreateQueue("test-session")
+
+	cmd := &QueuedCommand{
+		ID:             "cmd_cancel",
+		Text:           "long-running",
+		RequesterAgent: "test_coord",
+		State:          StateActive,
+		SubmittedAt:    time.Now(),
+		SentAt:         time.Now(),
+	}
+	q.SetActive(cmd)
+	if err := persistCommand(ctx, h.state.DB(), "test-session", cmd, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	params := json.RawMessage(`{"command_id":"cmd_cancel"}`)
+	_, err := h.HandleCancel(ctx, params)
+	if err != nil {
+		t.Fatalf("HandleCancel: %v", err)
+	}
+
+	loaded, err := loadCommand(ctx, h.state.DB(), "cmd_cancel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.State != StateCancelled {
+		t.Errorf("state=%s, want cancelled", loaded.State)
+	}
+	if q.Active() != nil {
+		t.Error("active command not cleared")
+	}
+}
+
 func TestSessionQueueFIFO(t *testing.T) {
 	q := NewSessionQueue("test-session")
 
