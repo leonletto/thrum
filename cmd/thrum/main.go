@@ -2804,6 +2804,9 @@ func worktreeCreateCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
+			if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
+				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or ..", name)
+			}
 			detach, _ := cmd.Flags().GetBool("detach")
 			branch, _ := cmd.Flags().GetString("branch")
 
@@ -2844,7 +2847,10 @@ func worktreeCreateCmd() *cobra.Command {
 				if err := os.MkdirAll(wtThrumDir, 0750); err != nil {
 					return fmt.Errorf("create .thrum dir: %w", err)
 				}
-				mainThrumAbs, _ := filepath.Abs(thrumDir)
+				mainThrumAbs, err := filepath.Abs(thrumDir)
+				if err != nil {
+					return fmt.Errorf("resolve thrum dir: %w", err)
+				}
 				redirectPath := filepath.Join(wtThrumDir, "redirect")
 				if err := os.WriteFile(redirectPath, []byte(mainThrumAbs+"\n"), 0600); err != nil {
 					return fmt.Errorf("write thrum redirect: %w", err)
@@ -2864,7 +2870,10 @@ func worktreeCreateCmd() *cobra.Command {
 					if err := os.MkdirAll(wtBeadsDir, 0750); err != nil {
 						return fmt.Errorf("create .beads dir: %w", err)
 					}
-					mainBeadsAbs, _ := filepath.Abs(mainBeadsDir)
+					mainBeadsAbs, err := filepath.Abs(mainBeadsDir)
+					if err != nil {
+						return fmt.Errorf("resolve beads dir: %w", err)
+					}
 					redirectPath := filepath.Join(wtBeadsDir, "redirect")
 					if err := os.WriteFile(redirectPath, []byte(mainBeadsAbs+"\n"), 0600); err != nil {
 						return fmt.Errorf("write beads redirect: %w", err)
@@ -2888,6 +2897,9 @@ func worktreeTeardownCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
+			if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
+				return fmt.Errorf("invalid worktree name %q: must not contain /, \\, or ..", name)
+			}
 			repoPath := paths.EffectiveRepoPath(flagRepo)
 			thrumDir := filepath.Join(repoPath, ".thrum")
 			cfg, err := config.LoadThrumConfig(thrumDir)
@@ -2912,7 +2924,12 @@ func worktreeTeardownCmd() *cobra.Command {
 				for _, entry := range entries {
 					if !entry.IsDir() && filepath.Ext(entry.Name()) == ".json" {
 						agentName := strings.TrimSuffix(entry.Name(), ".json")
-						fmt.Printf("  Removing identity: %s\n", agentName)
+						idPath := filepath.Join(identitiesDir, entry.Name())
+						if err := os.Remove(idPath); err != nil && !os.IsNotExist(err) {
+							fmt.Fprintf(os.Stderr, "  Warning: failed to remove identity %s: %v\n", agentName, err)
+						} else {
+							fmt.Printf("  Removed identity: %s\n", agentName)
+						}
 					}
 				}
 			}
