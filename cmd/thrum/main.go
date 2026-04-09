@@ -584,7 +584,7 @@ Examples:
 
 			if qsResult.Session != nil {
 				// Reload identity file to preserve fields set by
-				// cli.Quickstart enrichment (ClaudePID, TmuxSession).
+				// cli.Quickstart enrichment (AgentPID, TmuxSession).
 				// Only use the reloaded identity if the name matches.
 				if enriched, _, loadErr := config.LoadIdentityWithPath(flagRepo); loadErr == nil && enriched.Agent.Name == agentNameResolved {
 					enriched.SessionID = qsResult.Session.SessionID
@@ -4407,7 +4407,7 @@ Examples:
 				thrumDir := filepath.Join(flagRepo, ".thrum")
 
 				// Load the identity file that cli.Quickstart's enrichment block
-				// already wrote — it contains ClaudePID, TmuxSession, and other
+				// already wrote — it contains AgentPID, TmuxSession, and other
 				// fields set during enrichment. Building a fresh struct here would
 				// overwrite those fields.
 				// Only use the loaded identity if the agent name matches — a stale
@@ -6768,9 +6768,9 @@ func restartCmd() *cobra.Command {
 			sessionID := idFile.SessionID
 			thrumDir := filepath.Join(flagRepo, ".thrum")
 
-			pid := idFile.ClaudePID
+			pid := idFile.AgentPID
 			if pid == 0 {
-				// Fallback: query daemon for the agent's ClaudePID
+				// Fallback: query daemon for the agent's AgentPID
 				client, err := getClient()
 				if err != nil {
 					return fmt.Errorf("connect to daemon: %w", err)
@@ -6778,20 +6778,20 @@ func restartCmd() *cobra.Command {
 				defer func() { _ = client.Close() }()
 
 				var agents []struct {
-					AgentID   string `json:"agent_id"`
-					ClaudePID int    `json:"claude_pid"`
+					AgentID  string `json:"agent_id"`
+					AgentPID int    `json:"agent_pid"`
 				}
 				if err := client.Call("agent.list", nil, &agents); err == nil {
 					for _, a := range agents {
-						if a.AgentID == agentName && a.ClaudePID > 0 {
-							pid = a.ClaudePID
+						if a.AgentID == agentName && a.AgentPID > 0 {
+							pid = a.AgentPID
 							break
 						}
 					}
 				}
 			}
 			if pid == 0 {
-				return fmt.Errorf("no Claude PID found for %s — ensure agent is registered with a Claude PID", agentName)
+				return fmt.Errorf("no agent PID found for %s — ensure agent is registered with an agent PID", agentName)
 			}
 
 			homeDir, err := os.UserHomeDir()

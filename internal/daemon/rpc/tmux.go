@@ -278,7 +278,7 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 			if !ttmux.HasSession(session) {
 				info.State = "dead"
 				h.clearTmuxFromIdentitiesInDir(identitiesDir, session)
-			} else if idFile.ClaudePID > 0 && !isProcessAlive(idFile.ClaudePID) {
+			} else if idFile.AgentPID > 0 && !isProcessAlive(idFile.AgentPID) {
 				info.State = "stale"
 			} else {
 				info.State = "alive"
@@ -420,11 +420,13 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	snapshotLines := 0
 	wtThrumDir := filepath.Dir(idDir) // identities/ parent is .thrum/
 
-	// Extract JSONL snapshot if PID is available and no snapshot already exists
-	if idFile.ClaudePID > 0 && !restart.SnapshotExists(wtThrumDir, agentName) {
+	// Extract JSONL snapshot if PID is available and no snapshot already exists.
+	// Only extract for Claude — other runtimes don't use this conversation file format.
+	if idFile.AgentPID > 0 && !restart.SnapshotExists(wtThrumDir, agentName) &&
+		(idFile.Runtime == "" || idFile.Runtime == "claude") {
 		homeDir, _ := os.UserHomeDir()
 		claudeDir := filepath.Join(homeDir, ".claude")
-		if jsonlPath, err := restart.FindSessionJSONL(claudeDir, idFile.ClaudePID); err == nil {
+		if jsonlPath, err := restart.FindSessionJSONL(claudeDir, idFile.AgentPID); err == nil {
 			cfg, _ := config.LoadThrumConfig(wtThrumDir)
 			maxLines := cfg.Restart.RestartMaxLines()
 			if conversation, err := restart.ExtractConversation(jsonlPath, maxLines); err == nil {

@@ -1243,7 +1243,7 @@ func stringContains(s, substr string) bool {
 	return false
 }
 
-func TestHandleRegister_StoresClaudePID(t *testing.T) {
+func TestHandleRegister_StoresAgentPID(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 
@@ -1255,12 +1255,12 @@ func TestHandleRegister_StoresClaudePID(t *testing.T) {
 
 	handler := NewAgentHandler(s)
 
-	// Register with claude_pid=12345
+	// Register with agent_pid=12345
 	req := RegisterRequest{
 		Role:      "implementer",
 		Module:    "auth",
 		Display:   "Auth Implementer",
-		ClaudePID: 12345,
+		AgentPID: 12345,
 	}
 	reqJSON, _ := json.Marshal(req)
 	resp, err := handler.HandleRegister(context.Background(), reqJSON)
@@ -1276,7 +1276,7 @@ func TestHandleRegister_StoresClaudePID(t *testing.T) {
 		t.Errorf("Status = %s, want registered", regResp.Status)
 	}
 
-	// List agents and verify claude_pid is returned
+	// List agents and verify agent_pid is returned
 	listReq := ListAgentsRequest{}
 	listJSON, _ := json.Marshal(listReq)
 	listResp, err := handler.HandleList(context.Background(), listJSON)
@@ -1288,8 +1288,8 @@ func TestHandleRegister_StoresClaudePID(t *testing.T) {
 	if len(agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(agents))
 	}
-	if agents[0].ClaudePID != 12345 {
-		t.Errorf("ClaudePID = %d, want 12345", agents[0].ClaudePID)
+	if agents[0].AgentPID != 12345 {
+		t.Errorf("AgentPID = %d, want 12345", agents[0].AgentPID)
 	}
 }
 
@@ -1303,11 +1303,11 @@ func TestHandleRegister_RoleModuleConflictWithPID(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	// Insert an existing agent with a known claude_pid directly into the DB.
+	// Insert an existing agent with a known agent_pid directly into the DB.
 	// Using a hash-style agent_id so it differs from the name-based ID the second
 	// registration will generate.
 	_, err = s.RawDB().Exec(`
-		INSERT INTO agents (agent_id, kind, role, module, display, hostname, claude_pid, registered_at)
+		INSERT INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`, "existing_agent_pid", "agent", "implementer", "auth", "", "", 111, "2026-01-01T00:00:00Z")
 	if err != nil {
@@ -1322,7 +1322,7 @@ func TestHandleRegister_RoleModuleConflictWithPID(t *testing.T) {
 		Name:      "different_agent",
 		Role:      "implementer",
 		Module:    "auth",
-		ClaudePID: 222,
+		AgentPID: 222,
 	}
 	reqJSON, _ := json.Marshal(req)
 	resp, err := handler.HandleRegister(context.Background(), reqJSON)
@@ -1370,7 +1370,7 @@ func TestHandleRegister_SamePID_Idempotent(t *testing.T) {
 		Name:      "my-agent",
 		Role:      "implementer",
 		Module:    "auth",
-		ClaudePID: 99999,
+		AgentPID: 99999,
 	}
 
 	// First registration
@@ -1396,7 +1396,7 @@ func TestHandleRegister_SamePID_Idempotent(t *testing.T) {
 		t.Errorf("second Status = %s, want updated", reg2.Status)
 	}
 
-	// List and verify claude_pid is still present
+	// List and verify agent_pid is still present
 	listReq := ListAgentsRequest{}
 	listJSON, _ := json.Marshal(listReq)
 	listResp, err := handler.HandleList(context.Background(), listJSON)
@@ -1408,7 +1408,7 @@ func TestHandleRegister_SamePID_Idempotent(t *testing.T) {
 	if len(agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(agents))
 	}
-	if agents[0].ClaudePID != 99999 {
-		t.Errorf("ClaudePID = %d, want 99999", agents[0].ClaudePID)
+	if agents[0].AgentPID != 99999 {
+		t.Errorf("AgentPID = %d, want 99999", agents[0].AgentPID)
 	}
 }
