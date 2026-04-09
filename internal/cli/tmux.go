@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // CLI-side types mirroring the RPC response types.
@@ -113,6 +114,115 @@ func TmuxCapture(client *Client, name string, lines int) (*TmuxCaptureResponse, 
 	var result TmuxCaptureResponse
 	if err := client.Call("tmux.capture", req, &result); err != nil {
 		return nil, fmt.Errorf("tmux.capture: %w", err)
+	}
+	return &result, nil
+}
+
+// TmuxQueueOptions contains options for queuing a command in a tmux session.
+type TmuxQueueOptions struct {
+	Session          string
+	Text             string
+	TimeoutMs        int64
+	SilenceMs        int64
+	NotifyOnComplete *bool // nil = server default (true)
+	Requester        string
+}
+
+// TmuxQueueResponse is the response from the tmux.queue RPC.
+type TmuxQueueResponse struct {
+	CommandID string `json:"command_id"`
+	Position  int    `json:"position"`
+}
+
+// TmuxQueueWaitOptions contains options for waiting on a queued command.
+type TmuxQueueWaitOptions struct {
+	CommandID string
+	TimeoutMs int64
+}
+
+// TmuxQueueWaitResponse is the response from the tmux.queue-wait RPC.
+type TmuxQueueWaitResponse struct {
+	CommandID string `json:"command_id"`
+	State     string `json:"state"`
+	Output    string `json:"output"`
+	ElapsedMs int64  `json:"elapsed_ms"`
+}
+
+// TmuxQueueStatusResponse is the response from the tmux.queue-status RPC.
+type TmuxQueueStatusResponse struct {
+	Session string            `json:"session"`
+	Active  *TmuxQueuedView   `json:"active"`
+	Queued  []TmuxQueuedView  `json:"queued"`
+}
+
+// TmuxQueuedView describes a single command in the queue.
+type TmuxQueuedView struct {
+	ID    string `json:"ID"`
+	Text  string `json:"Text"`
+	State string `json:"State"`
+}
+
+// TmuxCancelResponse is the response from the tmux.cancel RPC.
+type TmuxCancelResponse struct {
+	CommandID string `json:"command_id"`
+	State     string `json:"state"`
+	Output    string `json:"output"`
+}
+
+// TmuxQueue calls the tmux.queue RPC to submit a command to a session's queue.
+func TmuxQueue(client *Client, opts TmuxQueueOptions) (*TmuxQueueResponse, error) {
+	req := map[string]any{
+		"session":    opts.Session,
+		"text":       opts.Text,
+		"timeout_ms": opts.TimeoutMs,
+		"requester":  opts.Requester,
+	}
+	if opts.SilenceMs > 0 {
+		req["silence_ms"] = opts.SilenceMs
+	}
+	if opts.NotifyOnComplete != nil {
+		req["notify_on_complete"] = *opts.NotifyOnComplete
+	}
+	var result TmuxQueueResponse
+	if err := client.Call("tmux.queue", req, &result); err != nil {
+		return nil, fmt.Errorf("tmux.queue: %w", err)
+	}
+	return &result, nil
+}
+
+// TmuxQueueWait calls the tmux.queue-wait RPC (long-poll) and blocks until
+// the command reaches a terminal state or the timeout expires.
+func TmuxQueueWait(client *Client, opts TmuxQueueWaitOptions) (*TmuxQueueWaitResponse, error) {
+	req := map[string]any{
+		"command_id": opts.CommandID,
+		"timeout_ms": opts.TimeoutMs,
+	}
+	var result TmuxQueueWaitResponse
+	// Use CallWithTimeout so the socket deadline doesn't fire before the
+	// queue's own timeout. Add a small buffer on top of the requested timeout.
+	deadline := time.Duration(opts.TimeoutMs)*time.Millisecond + 15*time.Second
+	if err := client.CallWithTimeout("tmux.queue-wait", req, &result, deadline); err != nil {
+		return nil, fmt.Errorf("tmux.queue-wait: %w", err)
+	}
+	return &result, nil
+}
+
+// TmuxQueueStatus calls the tmux.queue-status RPC to show active and queued commands.
+func TmuxQueueStatus(client *Client, session string) (*TmuxQueueStatusResponse, error) {
+	req := map[string]string{"session": session}
+	var result TmuxQueueStatusResponse
+	if err := client.Call("tmux.queue-status", req, &result); err != nil {
+		return nil, fmt.Errorf("tmux.queue-status: %w", err)
+	}
+	return &result, nil
+}
+
+// TmuxCancel calls the tmux.cancel RPC to cancel a queued or active command.
+func TmuxCancel(client *Client, commandID string) (*TmuxCancelResponse, error) {
+	req := map[string]string{"command_id": commandID}
+	var result TmuxCancelResponse
+	if err := client.Call("tmux.cancel", req, &result); err != nil {
+		return nil, fmt.Errorf("tmux.cancel: %w", err)
 	}
 	return &result, nil
 }

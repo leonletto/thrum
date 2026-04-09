@@ -7697,8 +7697,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Queued %s (position %d)
-", resp.CommandID, resp.Position)
+			fmt.Printf("Queued %s (position %d)\n", resp.CommandID, resp.Position)
 
 			if wait {
 				// Long-poll for the result. Buffer the RPC timeout past the
@@ -7711,11 +7710,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 				if err != nil {
 					return err
 				}
-				fmt.Printf("State: %s
-Elapsed: %dms
-
-%s
-", result.State, result.ElapsedMs, result.Output)
+				fmt.Printf("State: %s\nElapsed: %dms\n\n%s\n", result.State, result.ElapsedMs, result.Output)
 			}
 			return nil
 		},
@@ -7746,22 +7741,18 @@ Elapsed: %dms
 				fmt.Println(string(out))
 				return nil
 			}
-			fmt.Printf("Session: %s
-", resp.Session)
+			fmt.Printf("Session: %s\n", resp.Session)
 			if resp.Active != nil {
-				fmt.Printf("Active: %s "%.40s" (%s)
-", resp.Active.ID, resp.Active.Text, resp.Active.State)
+				fmt.Printf("Active: %s \"%.40s\" (%s)\n", resp.Active.ID, resp.Active.Text, resp.Active.State)
 			} else {
 				fmt.Println("Active: (none)")
 			}
 			if len(resp.Queued) == 0 {
 				fmt.Println("Queued: (empty)")
 			} else {
-				fmt.Printf("Queued: %d commands
-", len(resp.Queued))
+				fmt.Printf("Queued: %d commands\n", len(resp.Queued))
 				for i, q := range resp.Queued {
-					fmt.Printf("  [%d] %s "%.40s"
-", i+1, q.ID, q.Text)
+					fmt.Printf("  [%d] %s \"%.40s\"\n", i+1, q.ID, q.Text)
 				}
 			}
 			return nil
@@ -7790,8 +7781,7 @@ Elapsed: %dms
 				fmt.Println(string(out))
 				return nil
 			}
-			fmt.Printf("Cancelled %s (state: %s)
-", resp.CommandID, resp.State)
+			fmt.Printf("Cancelled %s (state: %s)\n", resp.CommandID, resp.State)
 			return nil
 		},
 	}
