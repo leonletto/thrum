@@ -36,18 +36,63 @@ func IsClaudeProcess(pid int) bool {
 	return processName(pid) == "claude"
 }
 
+// IsRuntimeProcess checks if the given PID belongs to a process matching
+// the specified runtime binary name. If runtime is empty, checks all known runtimes.
+func IsRuntimeProcess(pid int, runtime string) bool {
+	if pid <= 0 {
+		return false
+	}
+	name := processName(pid)
+	if name == "" {
+		return false
+	}
+	if runtime == "" {
+		for _, rt := range knownRuntimes {
+			if name == rt {
+				return true
+			}
+		}
+		return false
+	}
+	// Check specific runtime — handle cursor's dual binary names
+	if runtime == "cursor" {
+		return name == "cursor-agent" || name == "agent"
+	}
+	return name == runtime
+}
+
+// knownRuntimes lists binary names of known AI coding runtimes.
+var knownRuntimes = []string{
+	"claude", "opencode", "aider", "codex",
+	"cursor-agent", "agent", // agent = Cursor
+	"gemini", "auggie", "amp",
+}
+
+// runtimeDisplayName maps ambiguous binary names to canonical runtime names.
+var runtimeDisplayName = map[string]string{
+	"cursor-agent": "cursor",
+	"agent":        "cursor",
+}
+
 // FindClaudeAncestor walks the process tree from the current process
-// up to PID 1, looking for an ancestor named "claude". Returns the
-// PID of the Claude process, or 0 if not running inside Claude.
-func FindClaudeAncestor() int {
+// up to PID 1, looking for an ancestor matching a known AI coding runtime.
+// Returns the PID and runtime name, or (0, "") if not found.
+func FindClaudeAncestor() (int, string) {
 	pid := os.Getppid()
 	for pid > 1 {
-		if processName(pid) == "claude" {
-			return pid
+		name := processName(pid)
+		for _, rt := range knownRuntimes {
+			if name == rt {
+				displayName := rt
+				if mapped, ok := runtimeDisplayName[rt]; ok {
+					displayName = mapped
+				}
+				return pid, displayName
+			}
 		}
 		pid = parentPID(pid)
 	}
-	return 0
+	return 0, ""
 }
 
 // processName returns the command name of a process via ps.
