@@ -7275,12 +7275,9 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 
 			fmt.Printf("Session %s created with %s — waiting for startup...\n", sessionName, runtime)
 
-			// Wait for runtime to initialize, then send prime
-			time.Sleep(8 * time.Second)
-			_ = cli.TmuxSend(client, sessionName, "/thrum:prime")
-
-			// Give prime a moment to start, then attach
-			time.Sleep(2 * time.Second)
+			// launch handles auto-prime via background goroutine; just wait for
+			// the runtime to initialize before attaching.
+			time.Sleep(10 * time.Second)
 			return tmuxAttach(sessionName)
 		},
 	}
