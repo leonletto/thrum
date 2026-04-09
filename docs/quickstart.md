@@ -6,9 +6,9 @@ Install Thrum, register an agent, send your first message. Five minutes.
 
 ### Install Script (recommended)
 
-Downloads the latest release binary with SHA-256 checksum verification. Falls
-back to `go install` or building from source if no release is available for your
-platform.
+This script downloads the latest release binary and verifies the SHA-256
+checksum. If no release is available for your platform, it falls back to
+`go install` or builds from source.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
@@ -119,9 +119,9 @@ For Claude Code and other AI agents, generate Thrum coordination instructions:
 thrum setup claude-md --apply
 ```
 
-This appends agent coordination instructions to your CLAUDE.md file (creates it
-if missing). Agents will automatically use Thrum for coordination when working
-in the repository.
+This appends Thrum coordination instructions to your CLAUDE.md (creates it if
+missing). After that, agents working in the repo will pick up Thrum
+automatically.
 
 ### 4. Register Your Agent and Start a Session
 
@@ -158,8 +158,8 @@ thrum sent
 thrum message read --all     # Mark all messages as read
 ```
 
-View messages from other agents and humans working on the project, and inspect
-the messages you sent with their recipient and read state.
+You'll see messages from other agents and humans on the project. `thrum sent`
+shows what you've sent, who it went to, and whether they've read it.
 
 ## Common Commands
 
@@ -438,36 +438,39 @@ thrum agent register --role=implementer-2 --module=auth
 
 ### Messages
 
-Persistent communication between agents, stored in Git-tracked JSONL. They're
-just text — `cat` them, `grep` them, pipe them through `jq`.
+Messages are persistent records stored in Git-tracked JSONL. They're just text —
+`cat` them, `grep` them, pipe them through `jq`.
 
 ### Sessions
 
-Work periods tracked per agent. Messages require an active session.
+A session is a work period tied to your agent. You need an active session to
+send messages.
 
 ### Scopes
 
-Categorize messages by context (module:auth, file:src/auth.go, etc.)
+Scopes tag messages by context — `module:auth`, `file:src/auth.go`, and so on.
+Use them to filter your inbox and target subscriptions.
 
 ### Subscriptions
 
-Get push notifications for messages matching criteria.
+Subscribe to a scope or mention to get push notifications for matching messages.
 
 ### Sync
 
-Background process (60s interval) that syncs messages via Git. Data lives on the
-`a-sync` orphan branch, accessed through the sync worktree at
-`.git/thrum-sync/a-sync/` with sparse checkout. No branch switching needed.
+The sync process runs in the background every 60 seconds and pushes/pulls
+messages via Git. Data lives on the `a-sync` orphan branch, accessed through a
+sparse-checkout worktree at `.git/thrum-sync/a-sync/`. You never switch branches
+manually.
 
 ### Daemon
 
-Background service handling RPC requests, sync operations, and serving the
-embedded Web UI. WebSocket and SPA are served on the same port (default 9999).
+The daemon runs in the background and handles RPC requests, sync, and the
+embedded Web UI. The WebSocket and SPA share the same port (default 9999).
 
 ### MCP Server
 
-Optional MCP server (`thrum mcp serve`) for environments that support native
-tool integration. The CLI works everywhere — MCP is an alternative transport.
+`thrum mcp serve` starts an MCP server for environments that support native tool
+integration. The CLI works everywhere — MCP is just an alternative transport.
 
 ## Tips
 
@@ -505,6 +508,20 @@ does. Set up the redirect manually:
 cd your-worktree
 mkdir -p .beads && echo /path/to/main/repo/.beads > .beads/redirect
 ```
+
+## Pick your scenario
+
+Once you've got the basics running, pick the scenario that matches what you're
+building:
+
+- [Solo Dev with One Agent](scenarios/solo-dev.md) — single agent, single
+  machine
+- [Team on Your Machine](scenarios/team.md) — multiple agents in parallel
+  worktrees
+- [Agents Across Repos/Machines](scenarios/across-boundaries.md) — peers across
+  repos or machines
+- [Automated Plan Execution](scenarios/orchestration.md) — hand a plan to the
+  orchestrator
 
 ## Next Steps
 

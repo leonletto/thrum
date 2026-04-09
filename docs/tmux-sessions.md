@@ -11,9 +11,6 @@ for how people actually run agent teams. The daemon handles delivery directly,
 agents don't need to manage their own listeners, and the whole setup is simpler
 to understand and operate.
 
-This gives you the same daemon-driven session management you'd expect from
-production agent orchestration tools — without the complexity.
-
 ---
 
 ## Prerequisites
@@ -229,6 +226,10 @@ need attention:
 
 States are always queried live — no caching, nothing to get stale.
 
+When the process dies (crash, compaction, manual kill), the daemon notices and
+can restart it with a snapshot of what it was doing. See
+[Session Restart](session-restart.md) for the snapshot flow.
+
 ---
 
 ## Permission Delegation
@@ -308,6 +309,18 @@ cross-machine tmux operations needed.
 You don't need to think about this. If you have two machines paired via
 `thrum peer`, messages route to the right daemon, and the right daemon nudges
 the right tmux pane. It just works.
+
+---
+
+## Running different runtimes
+
+Tmux sessions work with any supported runtime — Claude Code, Codex, Cursor
+(`agent`), Aider, Gemini, Open Code, Auggie, or Amp. Set the runtime with
+`--runtime` on `thrum tmux launch`, or set `preferred_runtime` in the identity
+file so every launch in that worktree uses the runtime you picked.
+
+For the full runtime resolution order, setup flags, and known limitations, see
+[Multi-Runtime Support](multi-runtime.md).
 
 ---
 

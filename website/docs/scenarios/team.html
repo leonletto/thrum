@@ -36,8 +36,12 @@ a{color:#0366d6}
 <strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
 </nav>
 <main>
-<h1>Team on Your Machine</h1>
-<p>You run a coordinator agent that holds the plan, a few implementers working separate worktrees, and a tester checking their output. They message each other through Thrum. You don&#39;t relay anything — you read the summaries, review the diffs, and merge what passes. It&#39;s a team of agents directed by you, not an autonomous system running loose.</p>
+<h2>Team on Your Machine</h2>
+<p>You run a coordinator agent that holds the plan, a few implementers working
+separate worktrees, and a tester checking their output. They message each other
+through Thrum. You don&#39;t relay anything — you read the summaries, review the
+diffs, and merge what passes. It&#39;s a team of agents directed by you, not an
+autonomous system running loose.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>Thrum installed and the daemon running</li>
@@ -46,20 +50,31 @@ a{color:#0366d6}
 </ul>
 <h2>Walkthrough</h2>
 <ol>
-<li><strong><a href="../quickstart.html">Quickstart</a></strong> — install Thrum, register your first agent, and send a message to confirm the daemon is live.</li>
-<li><strong><a href="../multi-agent.html">Multi-Agent Setup</a></strong> — create multiple agent identities and wire them into separate worktrees.</li>
-<li><strong><a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a></strong> — run a coordinator and an implementer together; see how messages flow between them.</li>
-<li><strong><a href="../role-templates.html">Role Templates</a></strong> — load predefined coordinator, implementer, and tester roles so each agent starts with the right context.</li>
-<li><strong><a href="../messaging.html">Messaging</a></strong> — send targeted messages, check inboxes, and reply; the full messaging API your agents use to stay in sync.</li>
-<li><strong><a href="../guides/review-workflow.html">Review Workflow</a></strong> — route finished work back to the coordinator for code review before you merge.</li>
-<li><strong><a href="../tmux-sessions.html">Tmux Sessions</a></strong> — keep each agent in its own named pane so you can watch them all at once without losing track.</li>
+<li><strong><a href="../quickstart.html">Quickstart</a></strong> — install Thrum, register your first
+agent, and send a message to confirm the daemon is live.</li>
+<li><strong><a href="../multi-agent.html">Multi-Agent Setup</a></strong> — create multiple agent identities
+and wire them into separate worktrees.</li>
+<li><strong><a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a></strong> — run a
+coordinator and an implementer together; see how messages flow between them.</li>
+<li><strong><a href="../role-templates.html">Role Templates</a></strong> — load predefined coordinator,
+implementer, and tester roles so each agent starts with the right context.</li>
+<li><strong><a href="../messaging.html">Messaging</a></strong> — send targeted messages, check inboxes, and
+reply; the full messaging API your agents use to stay in sync.</li>
+<li><strong><a href="../guides/review-workflow.html">Review Workflow</a></strong> — route finished work
+back to the coordinator for code review before you merge.</li>
+<li><strong><a href="../tmux-sessions.html">Tmux Sessions</a></strong> — keep each agent in its own named
+pane so you can watch them all at once without losing track.</li>
 </ol>
 <h2>Control from your phone</h2>
-<p>Running a long session and stepping away? The <a href="../telegram-bridge.html">Telegram Bridge</a> puts your agent inbox in your pocket. Send instructions, read status updates, and approve work from anywhere.</p>
+<p>Running a long session and stepping away? The
+<a href="../telegram-bridge.html">Telegram Bridge</a> puts your agent inbox in your pocket.
+Send instructions, read status updates, and approve work from anywhere.</p>
 <h2>When you&#39;re ready for more</h2>
 <ul>
-<li><a href="across-boundaries.html">Agents Across Repos/Machines</a> — spread your team across multiple repositories or remote machines.</li>
-<li><a href="orchestration.html">Automated Plan Execution</a> — hand a full spec to a coordinator and let it break down and dispatch the work.</li>
+<li><a href="across-boundaries.html">Agents Across Repos/Machines</a> — spread your team across
+multiple repositories or remote machines.</li>
+<li><a href="orchestration.html">Automated Plan Execution</a> — hand a full spec to a
+coordinator and let it break down and dispatch the work.</li>
 </ul>
 
 </main>

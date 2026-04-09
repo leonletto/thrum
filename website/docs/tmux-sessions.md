@@ -237,9 +237,9 @@ need attention:
 
 States are always queried live — no caching, nothing to get stale.
 
-When the process dies (crash, compaction, manual kill), the daemon
-notices and can restart it with a snapshot of what it was doing.
-See [Session Restart](session-restart.md) for the snapshot flow.
+When the process dies (crash, compaction, manual kill), the daemon notices and
+can restart it with a snapshot of what it was doing. See
+[Session Restart](session-restart.md) for the snapshot flow.
 
 ---
 
@@ -325,14 +325,13 @@ the right tmux pane. It just works.
 
 ## Running different runtimes
 
-Tmux sessions work with any supported runtime — Claude Code, Codex,
-Cursor (`agent`), Aider, Gemini, Open Code, Auggie, or Amp. Set the
-runtime with `--runtime` on `thrum tmux launch`, or set
-`preferred_runtime` in the identity file so every launch in that
-worktree uses the runtime you picked.
+Tmux sessions work with any supported runtime — Claude Code, Codex, Cursor
+(`agent`), Aider, Gemini, Open Code, Auggie, or Amp. Set the runtime with
+`--runtime` on `thrum tmux launch`, or set `preferred_runtime` in the identity
+file so every launch in that worktree uses the runtime you picked.
 
-For the full runtime resolution order, setup flags, and known
-limitations, see [Multi-Runtime Support](multi-runtime.md).
+For the full runtime resolution order, setup flags, and known limitations, see
+[Multi-Runtime Support](multi-runtime.md).
 
 ---
 

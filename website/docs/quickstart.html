@@ -313,8 +313,8 @@ thrum agent register --force  # Override
 thrum agent register --role=implementer-2 --module=auth</code></pre>
 <h2>Key Concepts</h2>
 <h3>Messages</h3>
-<p>Messages are persistent records stored in Git-tracked JSONL. They&#39;re just text
-— <code>cat</code> them, <code>grep</code> them, pipe them through <code>jq</code>.</p>
+<p>Messages are persistent records stored in Git-tracked JSONL. They&#39;re just text —
+<code>cat</code> them, <code>grep</code> them, pipe them through <code>jq</code>.</p>
 <h3>Sessions</h3>
 <p>A session is a work period tied to your agent. You need an active session to
 send messages.</p>
@@ -326,8 +326,8 @@ Use them to filter your inbox and target subscriptions.</p>
 <h3>Sync</h3>
 <p>The sync process runs in the background every 60 seconds and pushes/pulls
 messages via Git. Data lives on the <code>a-sync</code> orphan branch, accessed through a
-sparse-checkout worktree at <code>.git/thrum-sync/a-sync/</code>. You never switch
-branches manually.</p>
+sparse-checkout worktree at <code>.git/thrum-sync/a-sync/</code>. You never switch branches
+manually.</p>
 <h3>Daemon</h3>
 <p>The daemon runs in the background and handles RPC requests, sync, and the
 embedded Web UI. The WebSocket and SPA share the same port (default 9999).</p>
@@ -362,13 +362,17 @@ does. Set up the redirect manually:</p>
 <pre><code>cd your-worktree
 mkdir -p .beads &amp;&amp; echo /path/to/main/repo/.beads &gt; .beads/redirect</code></pre>
 <h2>Pick your scenario</h2>
-<p>Once you&#39;ve got the basics running, pick the scenario that matches what
-you&#39;re building:</p>
+<p>Once you&#39;ve got the basics running, pick the scenario that matches what you&#39;re
+building:</p>
 <ul>
-<li><a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> — single agent, single machine</li>
-<li><a href="scenarios/team.html">Team on Your Machine</a> — multiple agents in parallel worktrees</li>
-<li><a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> — peers across repos or machines</li>
-<li><a href="scenarios/orchestration.html">Automated Plan Execution</a> — hand a plan to the orchestrator</li>
+<li><a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> — single agent, single
+machine</li>
+<li><a href="scenarios/team.html">Team on Your Machine</a> — multiple agents in parallel
+worktrees</li>
+<li><a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> — peers across
+repos or machines</li>
+<li><a href="scenarios/orchestration.html">Automated Plan Execution</a> — hand a plan to the
+orchestrator</li>
 </ul>
 <h2>Next Steps</h2>
 <ul>

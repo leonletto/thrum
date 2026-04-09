@@ -36,8 +36,13 @@ a{color:#0366d6}
 <strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
 </nav>
 <main>
-<h1>Automated Plan Execution</h1>
-<p>You still did the thinking. You researched the problem, wrote the spec, broke it into tasks, and drafted the implementation prompt with review gates baked in. Now you hand that prompt to an orchestrator agent and it runs the execution phase — spinning up implementers, watching for review gates, and reporting back. You still merge. You still decide what ships. The orchestrator just removes you from the relay loop.</p>
+<h2>Automated Plan Execution</h2>
+<p>You still did the thinking. You researched the problem, wrote the spec, broke it
+into tasks, and drafted the implementation prompt with review gates baked in.
+Now you hand that prompt to an orchestrator agent and it runs the execution
+phase — spinning up implementers, watching for review gates, and reporting back.
+You still merge. You still decide what ships. The orchestrator just removes you
+from the relay loop.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>A plan file written and approved</li>
@@ -48,15 +53,22 @@ a{color:#0366d6}
 <h2>Walkthrough</h2>
 <p>Read these in order:</p>
 <ol>
-<li><a href="../orchestrator-role.html">Orchestrator Role</a> — what the orchestrator does, what it doesn&#39;t do, and how it stays in its lane</li>
-<li><a href="../workflow-templates.html">Workflow Templates</a> — pre-built pipelines for the full research → plan → implement cycle</li>
-<li><a href="../beads-and-thrum.html">Beads and Thrum</a> — how epic and task tracking give the orchestrator persistent state across sessions</li>
-<li><a href="../multi-agent.html">Multi-Agent Setup</a> — the role model the orchestrator uses to spawn and assign implementers</li>
-<li><a href="../tmux-sessions.html">Tmux Sessions</a> — how the orchestrator launches agents into isolated terminal sessions</li>
-<li><a href="../configuration.html">Configuration</a> — every <code>orchestration.*</code> key and what it controls</li>
+<li><a href="../orchestrator-role.html">Orchestrator Role</a> — what the orchestrator does,
+what it doesn&#39;t do, and how it stays in its lane</li>
+<li><a href="../workflow-templates.html">Workflow Templates</a> — pre-built pipelines for the
+full research → plan → implement cycle</li>
+<li><a href="../beads-and-thrum.html">Beads and Thrum</a> — how epic and task tracking give
+the orchestrator persistent state across sessions</li>
+<li><a href="../multi-agent.html">Multi-Agent Setup</a> — the role model the orchestrator uses
+to spawn and assign implementers</li>
+<li><a href="../tmux-sessions.html">Tmux Sessions</a> — how the orchestrator launches agents
+into isolated terminal sessions</li>
+<li><a href="../configuration.html">Configuration</a> — every <code>orchestration.*</code> key and what
+it controls</li>
 </ol>
 <h2>When you&#39;re ready for more</h2>
-<p>If you&#39;d rather drive execution yourself instead of delegating it, see <a href="team.html">Team on Your Machine</a> — same agents, you hold the wheel.</p>
+<p>If you&#39;d rather drive execution yourself instead of delegating it, see
+<a href="team.html">Team on Your Machine</a> — same agents, you hold the wheel.</p>
 
 </main>
 <footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">

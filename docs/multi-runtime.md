@@ -1,14 +1,3 @@
----
-title: "Multi-Runtime Support"
-description:
-  "Run Claude, Codex, Aider, Gemini, and other agent runtimes in tmux-managed
-  sessions"
-category: "orchestration"
-order: 3
-tags: ["runtime", "tmux", "codex", "aider", "gemini", "claude"]
-last_updated: "2026-04-09"
----
-
 ## What "Runtime" Means in Thrum
 
 A runtime is the CLI you're running inside a tmux pane. Not the agent — the tool

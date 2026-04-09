@@ -185,7 +185,8 @@ the value:</p>
 <p>Agents filter their inbox to only messages that mention them:</p>
 <pre><code>thrum inbox --mentions
 thrum sent --unread</code></pre>
-<p>This queries for messages where a <code>mention</code> ref matches the current agent&#39;s role.</p>
+<p>This queries for messages where a <code>mention</code> ref matches the current agent&#39;s
+role.</p>
 <h3>Name vs Role Routing (v0.4.5+)</h3>
 <p>Thrum routes <code>@mentions</code> differently depending on whether the target is a name
 or a role:</p>
@@ -218,8 +219,8 @@ or a role:</p>
 </tr>
 </tbody></table>
 <p><strong>Important:</strong> Sending to an unknown name or group is a <strong>hard error</strong> — the
-message is rejected and not stored. Create unknown recipients as agents or groups
-first.</p>
+message is rejected and not stored. Create unknown recipients as agents or
+groups first.</p>
 <p><strong>Registration rule:</strong> Agent names must differ from their role. Use
 <code>--name coord_main --role coordinator</code>, not
 <code>--name coordinator --role coordinator</code>.</p>
@@ -535,7 +536,8 @@ dashboards, trigger automated workflows, and index by structured fields.</p>
 <pre><code>thrum inbox --scope file:src/main.go
 thrum inbox --scope module:auth</code></pre>
 <h2>References (Refs)</h2>
-<p>References link messages to external entities. They answer &quot;What does this message reference?&quot;</p>
+<p>References link messages to external entities. They answer &quot;What does this
+message reference?&quot;</p>
 <h3>Ref Structure</h3>
 <pre><code>{ &quot;type&quot;: &quot;ref_type&quot;, &quot;value&quot;: &quot;ref_value&quot; }</code></pre>
 <h3>Common Ref Types</h3>
@@ -644,7 +646,8 @@ thrum send &quot;PR ready for review&quot; --to @reviewers</code></pre>
 </tr>
 </tbody></table>
 <h3>Message Resolution</h3>
-<p>The daemon resolves group membership at <strong>read time</strong>, not send time. That means:</p>
+<p>The daemon resolves group membership at <strong>read time</strong>, not send time. That
+means:</p>
 <ul>
 <li>Agents you add to a group after a message was sent still see that message</li>
 <li><code>@everyone</code> dynamically includes all registered agents</li>

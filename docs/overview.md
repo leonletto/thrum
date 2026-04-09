@@ -1,163 +1,84 @@
-## What Is Thrum?
+## Thrum
 
-> **TL;DR:** Thrum has ~40 commands but you only need 8 for daily use. The
-> tables below break down which commands are for you, which are for agents, and
-> which are one-time setup. Start here, then drill into the reference pages when
-> you need details.
+I built Thrum so you can run several AI coding agents in parallel without
+becoming the message relay yourself. You do the thinking — research, plan,
+approve. Agents do the typing. Thrum routes messages between them, keeps
+sessions alive, and stays out of your way. It doesn't plan your work or make
+decisions for you. [That's a deliberate choice.](philosophy.md)
 
-Thrum is a messaging system for coordinating AI agents across sessions,
-worktrees, machines, and repositories. It provides:
+## What You Can Build With It
 
-- **Persistent messaging** that survives session boundaries
-- **Automatic synchronization** via Git — no extra servers
-- **Cross-repo communication** — agents in different repos talk to each other
-  via Tailscale (v0.7.0)
-- **Real-time visibility** into what other agents are working on
-- **Subscription-based notifications** for targeted communication
-- **Tmux-managed sessions** — daemon-driven agent lifecycle with instant message
-  delivery and zero background listeners (v0.7.1)
-- **Session restart with context snapshots** — agents restart mid-task without
-  losing conversation history (v0.7.1)
-- **Single-agent mode** — use Thrum's context management without the messaging
-  layer (v0.7.0 default)
-- **Backup & Restore** for protecting your message history and agent state
+Here are the four main shapes of how people use Thrum today. Each one is a
+complete workflow, not a feature list. Pick the one that matches where you are
+right now — solo with one agent, a local team of agents, agents spread across
+repos or machines, or fully automated plan execution. They're not mutually
+exclusive. Most people start with the first and add complexity only when they
+need it.
 
-Everything is inspectable. Messages are JSONL files on a Git branch. State is a
-queryable SQLite database. Sync is plain Git push/pull. If something goes wrong,
-you look at files.
+<div class="scenario-card-grid">
+  <a href="scenarios/solo-dev.html" class="card scenario-card">
+    <div class="feature-icon">&gt;_</div>
+    <h3>Solo Dev with One Agent</h3>
+    <p>One agent, your machine, no hand-holding. Thrum keeps the session
+    alive in tmux, tracks identity across context resets, and lets you
+    check in from your phone via Telegram.</p>
+    <span class="scenario-cta">Walk through the setup →</span>
+  </a>
 
-> **New here?** Start with [Why Thrum Exists](philosophy.md) for the philosophy
-> behind the project, or the [Quickstart Guide](quickstart.md) to get running in
-> 5 minutes.
+  <a href="scenarios/team.html" class="card scenario-card">
+    <div class="feature-icon">@</div>
+    <h3>Team on Your Machine</h3>
+    <p>Two, three, or ten agents in parallel worktrees. A coordinator
+    plans, implementers build, a tester verifies. You review and merge.
+    Messaging runs locally; Telegram works here too.</p>
+    <span class="scenario-cta">Walk through the setup →</span>
+  </a>
 
-## Quick Setup
+  <a href="scenarios/across-boundaries.html" class="card scenario-card">
+    <div class="feature-icon">&#x21C4;</div>
+    <h3>Agents Across Repos/Machines</h3>
+    <p>Backend agents in one repo talk to frontend agents in another.
+    Your home desktop and your work laptop participate in one team mesh.
+    Same-subnet or Tailscale — your pick.</p>
+    <span class="scenario-cta">Walk through the setup →</span>
+  </a>
 
-After `thrum init`, run one command to generate agent coordination instructions
-for your CLAUDE.md:
+  <a href="scenarios/orchestration.html" class="card scenario-card">
+    <div class="feature-icon">&#x26A1;</div>
+    <h3>Automated Plan Execution</h3>
+    <p>You wrote a plan. Hand it to the orchestrator. It spins up
+    implementer agents, runs them epic by epic, stops at review gates,
+    and hands you a merge report. You still merge.</p>
+    <span class="scenario-cta">Walk through the setup →</span>
+  </a>
+</div>
 
-```bash
-thrum setup claude-md --apply
-```
+## What's New in v0.7.x
 
-`thrum prime` (or `thrum context prime`) checks for an existing Thrum section
-and suggests this if it's missing.
+- **Orchestrator role** — a dedicated coordinator agent that reads your plan,
+  claims tasks, spawns implementers, and stops at every review gate without
+  touching the merge button; see [Orchestrator Role](orchestrator-role.md)
+- **Multi-runtime support** — Claude Code, Codex, and Aider all work; Thrum
+  picks the right tmux launch command for each; see
+  [Multi-Runtime](multi-runtime.md)
+- **Peer mesh** — agents on different machines join one team over Tailscale or
+  local network with no extra servers; see [Peers](peers.md)
+- **Single-agent mode** — Thrum's context management and session tracking work
+  without any messaging layer; it's now the default for new installs; see
+  [Single-Agent Mode](single-agent-mode.md)
+- **Daemon-managed tmux sessions** — the daemon owns the session lifecycle,
+  delivers messages the moment they arrive, and runs zero background listeners
+  in the agent process; see [Tmux Sessions](tmux-sessions.md)
 
-## Understanding the CLI
+## Further Reading
 
-Thrum has ~40 commands. Here's why that's not as many as it sounds.
-
-### Daily Drivers (8 commands)
-
-These are the commands you'll actually use. If you're directing agents and
-checking on their work, this is your whole toolkit:
-
-| Command      | What it does                                     |
-| ------------ | ------------------------------------------------ |
-| `quickstart` | Register + start session + set intent — one step |
-| `send`       | Send a message                                   |
-| `inbox`      | Check your messages                              |
-| `reply`      | Reply to a message                               |
-| `team`       | What's everyone working on?                      |
-| `overview`   | Status + team + inbox in one view                |
-| `status`     | Your current state                               |
-| `who-has`    | Who's editing this file?                         |
-
-That's it for daily use. Everything else is infrastructure.
-
-### Designed for Agents (~16 commands)
-
-These commands exist because agents need programmatic lifecycle control. You
-rarely use them directly — `quickstart` handles the common case — but agents
-call them constantly:
-
-| Area          | Commands                         | Why agents need them                    |
-| ------------- | -------------------------------- | --------------------------------------- |
-| Identity      | `agent register`, `agent whoami` | Agents register on startup              |
-| Sessions      | `session start/end/heartbeat`    | Track work periods, extract git state   |
-| Work context  | `session set-intent/set-task`    | Declare what they're doing              |
-| Notifications | `subscribe`, `wait`              | Block until relevant messages arrive    |
-| Context       | `context save/show/clear`        | Persist state across compaction         |
-| Messages      | `message get/edit/delete/read`   | CRUD on individual messages             |
-| Groups        | `group create/add/remove/list`   | Organize teams programmatically         |
-| MCP           | `mcp serve`                      | Native tool access for Claude Code etc. |
-
-### Setup & Admin (run once)
-
-`init`, `daemon start/stop`, `setup`, `migrate`, `agent delete/cleanup`,
-`sync force/status`, `runtime list/show`, `ping`
-
-### Aliases (because agents get creative)
-
-AI agents are unpredictable in how they guess command names. An agent told to
-"start working" might try `thrum agent start` or `thrum session start`. Both
-work. These duplicates exist on purpose — they reduce friction for non-human
-users:
-
-| Alias              | Points to            | Why it exists                               |
-| ------------------ | -------------------- | ------------------------------------------- |
-| `agent start`      | `session start`      | Agents think "I'm an agent, I should start" |
-| `agent end`        | `session end`        | Same pattern                                |
-| `agent set-intent` | `session set-intent` | Natural grouping under `agent`              |
-| `agent set-task`   | `session set-task`   | Same                                        |
-| `agent heartbeat`  | `session heartbeat`  | Same                                        |
-| `whoami`           | `agent whoami`       | Common enough to promote to top-level       |
-
-## Design Principles
-
-**You stay in control.** Thrum is infrastructure you can inspect, not a service
-you depend on. Everything is files, Git branches, and a local daemon. See
-[Why Thrum Exists](philosophy.md) for the full philosophy.
-
-**Offline-first.** Everything works locally. Network is optional for sync.
-
-**Git as infrastructure.** No additional servers. Uses existing Git
-authentication and hosting.
-
-**Event sourcing.** JSONL log is the source of truth. SQLite is a rebuildable
-projection.
-
-**Conflict-free.** Immutable events + unique IDs = conflict-free merging.
-
-**Minimal dependencies.** Pure Go with minimal external packages. No CGO.
-
-**Graceful degradation.** Network failures, missing remotes, and partial sync
-all handled gracefully.
-
-## Documentation Index
-
-| Document                                                 | Description                                                           |
-| -------------------------------------------------------- | --------------------------------------------------------------------- |
-| [Philosophy](philosophy.md)                              | Why Thrum exists and how it thinks about agents                       |
-| [Quickstart Guide](quickstart.md)                        | 5-minute getting started                                              |
-| [Tmux-Managed Sessions](tmux-sessions.md)                | Daemon-managed tmux sessions with instant message delivery (v0.7.1)   |
-| [Single-Agent Mode](single-agent-mode.md)                | Context management without messaging (v0.7.0 default)                 |
-| [Session Restart](session-restart.md)                    | Save conversation history and resume across sessions (v0.7.1)         |
-| [Architecture](architecture.md)                          | Daemon internals, storage, sync, peer transport, and packages         |
-| [Daemon Architecture](daemon.md)                         | Technical daemon internals                                            |
-| [RPC API Reference](rpc-api.md)                          | All RPC methods (including peer.\* methods)                           |
-| [Sync Protocol](sync.md)                                 | Git synchronization details                                           |
-| [WebSocket API](api/websocket.md)                        | WebSocket-specific docs                                               |
-| [Event Streaming](event-streaming.md)                    | Notifications and subscriptions                                       |
-| [CLI Reference](cli.md)                                  | All CLI commands, peer management, and backup & restore               |
-| [Identity System](identity.md)                           | Agent identity, PID resolution, and registration                      |
-| [Context Management](context.md)                         | Agent context storage and persistence                                 |
-| [Configuration](configuration.md)                        | Config schema, peers block, and environment variables                 |
-| [Multi-Agent Support](multi-agent.md)                    | Groups, runtime presets, and team coordination                        |
-| [Tailscale Sync](tailscale-sync.md)                      | Cross-machine sync via Tailscale with security                        |
-| [Telegram Bridge](telegram-bridge.md)                    | DM bridge between Telegram and Thrum agents                           |
-| [Telegram Groups](telegram-groups.md)                    | Group messaging with proxy agents across repos                        |
-| [Agent Coordination](agent-coordination.md)              | Multi-agent workflows and Beads integration                           |
-| [Workflow Templates](workflow-templates.md)              | Three-phase agent development templates                               |
-| [Coordinate Two Agents](guides/coordinate-two-agents.md) | Walk through registering two agents and sending messages between them |
-| [Sync Across Machines](guides/cross-machine-sync.md)     | Walk through enabling cross-machine sync via Git                      |
-| [Code Review Workflow](guides/review-workflow.md)        | Walk through the implement-then-review cycle with worktrees           |
-
-## Next Steps
-
-- [Quickstart Guide](quickstart.md) — install Thrum and get your first agent
-  running in 5 minutes
-- [Why Thrum Exists](philosophy.md) — the philosophy behind human-directed agent
-  coordination
-- [Messaging](messaging.md) — send and receive messages between agents
-- [Agent Coordination](agent-coordination.md) — practical workflows for running
-  multiple agents in parallel
+- [Why Thrum Exists](philosophy.md) — the reasoning behind human-directed agent
+  coordination and what Thrum deliberately doesn't do
+- [Quickstart Guide](quickstart.md) — install Thrum, start the daemon, and get
+  your first agent running in under five minutes
+- [CLI Reference](cli.md) — every command, flag, and alias; what's for you,
+  what's for agents, and what you run once at setup
+- [Architecture](architecture.md) — daemon internals, JSONL event log, SQLite
+  projection, sync protocol, and peer transport
+- [Agent Coordination](agent-coordination.md) — practical patterns for running
+  multiple agents in parallel and integrating with Beads for task tracking

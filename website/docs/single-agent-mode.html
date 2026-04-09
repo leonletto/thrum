@@ -108,10 +108,9 @@ listener approach. The coordinator creates and manages agent sessions
 automatically — no listeners, no token burn.</p>
 <hr>
 <h2>Control it from your phone</h2>
-<p>Single-agent mode still supports the Telegram Bridge. Get pinged
-when your agent needs input, reply from Telegram, and the message
-threads back to your agent without you touching the terminal. See
-<a href="telegram-bridge.html">Telegram Bridge</a>.</p>
+<p>Single-agent mode still supports the Telegram Bridge. Get pinged when your agent
+needs input, reply from Telegram, and the message threads back to your agent
+without you touching the terminal. See <a href="telegram-bridge.html">Telegram Bridge</a>.</p>
 <hr>
 <p>Switching is one command:</p>
 <pre><code># Check current mode
@@ -244,11 +243,11 @@ new project state format (<code>/thrum:update-project</code>) and import your ex
 content into it. From then on, Thrum maintains it for you.</p>
 <hr>
 <h2>What&#39;s Next</h2>
-<p>One more thing that shipped in this release: v0.7.0 includes <strong>peer transport</strong> — you pair two Thrum daemons via Tailscale
-(<code>thrum peer add</code> on one machine, <code>thrum peer join</code> on the other), configure
-which agents should be visible across repos (<code>thrum peer configure</code>), and
-messages route between them automatically. No Telegram relay, no manual
-coordination.</p>
+<p>One more thing that shipped in this release: v0.7.0 includes <strong>peer transport</strong>
+— you pair two Thrum daemons via Tailscale (<code>thrum peer add</code> on one machine,
+<code>thrum peer join</code> on the other), configure which agents should be visible across
+repos (<code>thrum peer configure</code>), and messages route between them automatically.
+No Telegram relay, no manual coordination.</p>
 <p>The Telegram group approach turned out to have a real limitation — bots can&#39;t
 see other bots&#39; messages in groups, so agent-to-agent communication didn&#39;t work
 there. The peer system replaces that entirely for cross-repo agent coordination.</p>

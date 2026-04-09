@@ -36,26 +36,34 @@ a{color:#0366d6}
 <strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
 </nav>
 <main>
-<h1>Agents Across Repos/Machines</h1>
-<p>Peers connect Thrum daemons running in separate repos or on completely different machines. On a local network, same-subnet discovery handles the pairing automatically. For remote machines, Tailscale gives you an encrypted mesh — both sides authenticate once and Thrum treats them as neighbors. Either way, it&#39;s the same team, the same message routing, and the same <code>thrum team</code> view you&#39;d get working in a single repo.</p>
+<h2>Agents Across Repos/Machines</h2>
+<p>Peers connect Thrum daemons running in separate repos or on completely different
+machines. On a local network, same-subnet discovery handles the pairing
+automatically. For remote machines, Tailscale gives you an encrypted mesh — both
+sides authenticate once and Thrum treats them as neighbors. Either way, it&#39;s the
+same team, the same message routing, and the same <code>thrum team</code> view you&#39;d get
+working in a single repo.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>Thrum installed on both sides</li>
 <li>Both daemons running (<code>thrum daemon start</code>)</li>
-<li>Same-subnet connectivity <strong>or</strong> Tailscale installed and authenticated on both machines</li>
+<li>Same-subnet connectivity <strong>or</strong> Tailscale installed and authenticated on both
+machines</li>
 </ul>
 <h2>Walkthrough</h2>
 <p>Work through these in order:</p>
 <ol>
 <li><a href="../peers.html">Peers</a> — the concept and the pairing flow</li>
-<li><a href="../guides/cross-machine-sync.html">Cross-Machine Sync</a> — end-to-end walkthrough</li>
+<li><a href="../guides/cross-machine-sync.html">Cross-Machine Sync</a> — end-to-end
+walkthrough</li>
 <li><a href="../tailscale-sync.html">Tailscale Sync</a> — the Tailscale transport</li>
 <li><a href="../tailscale-security.html">Tailscale Security</a> — how the mesh is secured</li>
 <li><a href="../messaging.html">Messaging</a> — how messages flow across peers</li>
 <li><a href="../multi-agent.html">Multi-Agent Setup</a> — coordinator/implementer roles</li>
 </ol>
 <h2>When you&#39;re ready for more</h2>
-<p><a href="orchestration.html">Automated Plan Execution</a> — hand a plan to a coordinator and let agents drive the work end to end.</p>
+<p><a href="orchestration.html">Automated Plan Execution</a> — hand a plan to a coordinator and
+let agents drive the work end to end.</p>
 
 </main>
 <footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">

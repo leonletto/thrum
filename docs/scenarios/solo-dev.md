@@ -1,13 +1,3 @@
----
-title: "Solo Dev with One Agent"
-description:
-  "Use Thrum as a single-developer tool: one agent, one machine, no hand-holding"
-category: "onboarding"
-order: 1
-tags: ["onboarding", "solo", "single-agent", "tmux"]
-last_updated: "2026-04-09"
----
-
 ## Solo Dev with One Agent
 
 This is where most people should start. One machine, one agent, you in control.

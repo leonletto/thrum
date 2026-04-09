@@ -1,13 +1,14 @@
 ---
 title: "Overview"
-description: "Thrum — coordinate AI coding agents across worktrees, repos, and machines"
+description:
+  "Thrum — coordinate AI coding agents across worktrees, repos, and machines"
 category: "overview"
 order: 1
 tags: ["overview", "landing"]
 last_updated: "2026-04-09"
 ---
 
-# Thrum
+## Thrum
 
 I built Thrum so you can run several AI coding agents in parallel without
 becoming the message relay yourself. You do the thinking — research, plan,

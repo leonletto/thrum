@@ -224,9 +224,9 @@ need attention:</p>
 @impl_website_dev  implementer  website-dev  tmux:idle     website-dev
 @remote_sf         implementer  mock-sf      no-tmux       thrum-dev</code></pre>
 <p>States are always queried live — no caching, nothing to get stale.</p>
-<p>When the process dies (crash, compaction, manual kill), the daemon
-notices and can restart it with a snapshot of what it was doing.
-See <a href="session-restart.html">Session Restart</a> for the snapshot flow.</p>
+<p>When the process dies (crash, compaction, manual kill), the daemon notices and
+can restart it with a snapshot of what it was doing. See
+<a href="session-restart.html">Session Restart</a> for the snapshot flow.</p>
 <hr>
 <h2>Permission Delegation</h2>
 <p>Running agents in unrestricted mode is dangerous. But agents that need
@@ -295,13 +295,12 @@ cross-machine tmux operations needed.</p>
 the right tmux pane. It just works.</p>
 <hr>
 <h2>Running different runtimes</h2>
-<p>Tmux sessions work with any supported runtime — Claude Code, Codex,
-Cursor (<code>agent</code>), Aider, Gemini, Open Code, Auggie, or Amp. Set the
-runtime with <code>--runtime</code> on <code>thrum tmux launch</code>, or set
-<code>preferred_runtime</code> in the identity file so every launch in that
-worktree uses the runtime you picked.</p>
-<p>For the full runtime resolution order, setup flags, and known
-limitations, see <a href="multi-runtime.html">Multi-Runtime Support</a>.</p>
+<p>Tmux sessions work with any supported runtime — Claude Code, Codex, Cursor
+(<code>agent</code>), Aider, Gemini, Open Code, Auggie, or Amp. Set the runtime with
+<code>--runtime</code> on <code>thrum tmux launch</code>, or set <code>preferred_runtime</code> in the identity
+file so every launch in that worktree uses the runtime you picked.</p>
+<p>For the full runtime resolution order, setup flags, and known limitations, see
+<a href="multi-runtime.html">Multi-Runtime Support</a>.</p>
 <hr>
 <h2>Migration from Listeners</h2>
 <p>If you&#39;re already running agents with background listeners, switching is

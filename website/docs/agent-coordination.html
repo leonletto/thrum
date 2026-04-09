@@ -105,7 +105,8 @@ thrum who-has src/auth/login.ts
 # Agent B: Coordinate via message
 thrum send &quot;Need to edit login.ts for validation. ETA?&quot; --to @agent_a</code></pre>
 <h3>Code Review</h3>
-<p>Pass review requests through messages. The implementer sends the commit hash and what to look at; the reviewer responds with findings.</p>
+<p>Pass review requests through messages. The implementer sends the commit hash and
+what to look at; the reviewer responds with findings.</p>
 <p><strong>Implementer:</strong></p>
 <pre><code>thrum send &quot;Build script complete (commit abc123). Please review:
 - Markdown processing
@@ -134,15 +135,17 @@ messages and notify the main agent when they arrive.</p>
 <h3>How It Works</h3>
 <ol>
 <li>The main agent spawns a message-listener as a background task</li>
-<li>The listener runs <code>thrum wait</code> — it blocks until a message arrives or times out</li>
+<li>The listener runs <code>thrum wait</code> — it blocks until a message arrives or times
+out</li>
 <li>When a message arrives, the listener returns immediately with the content</li>
-<li>The main agent processes the message; the listener keeps looping automatically (no re-arming needed)</li>
+<li>The main agent processes the message; the listener keeps looping
+automatically (no re-arming needed)</li>
 <li>A cron watchdog respawns the listener every 30 min if it stops</li>
 </ol>
-<p><strong>Use <code>thrum wait</code></strong> — it&#39;s more efficient than polling loops with sleep.
-Use <code>--after -15s</code> to catch messages sent up to 15 seconds ago (<code>--after</code>
-negative value = &quot;N ago&quot;). Omit <code>--after</code> to receive only messages that arrive
-after the wait starts.</p>
+<p><strong>Use <code>thrum wait</code></strong> — it&#39;s more efficient than polling loops with sleep. Use
+<code>--after -15s</code> to catch messages sent up to 15 seconds ago (<code>--after</code> negative
+value = &quot;N ago&quot;). Omit <code>--after</code> to receive only messages that arrive after the
+wait starts.</p>
 <p><strong>Cron watchdog:</strong> Set up a cron job to auto-respawn the listener if it stops:</p>
 <pre><code>CronCreate(cron=&quot;*/30 * * * *&quot;,
   prompt=&quot;If there is no background message listener running, spawn one now:
@@ -160,12 +163,16 @@ TIMESTAMP: [timestamp]
 <pre><code>NO_MESSAGES_TIMEOUT</code></pre>
 <h3>Context Management</h3>
 <ul>
-<li>The listener runs for up to 4 hours (30 cycles of ~8 min each), then stops; the cron watchdog respawns it</li>
-<li>After 5 consecutive timeouts with no pending work, send a status update to the coordinator and stop</li>
+<li>The listener runs for up to 4 hours (30 cycles of ~8 min each), then stops;
+the cron watchdog respawns it</li>
+<li>After 5 consecutive timeouts with no pending work, send a status update to the
+coordinator and stop</li>
 <li>The listener is read-only — it never sends messages</li>
 </ul>
 <h2>Beads Integration</h2>
-<p>Run Thrum and <a href="https://github.com/leonletto/thrum">Beads</a> together. Thrum handles real-time messaging; Beads tracks the work. Neither tries to do the other&#39;s job:</p>
+<p>Run Thrum and <a href="https://github.com/leonletto/thrum">Beads</a> together. Thrum
+handles real-time messaging; Beads tracks the work. Neither tries to do the
+other&#39;s job:</p>
 <table>
 <thead>
 <tr>

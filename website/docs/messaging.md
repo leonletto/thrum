@@ -121,7 +121,8 @@ thrum inbox --mentions
 thrum sent --unread
 ```
 
-This queries for messages where a `mention` ref matches the current agent's role.
+This queries for messages where a `mention` ref matches the current agent's
+role.
 
 ### Name vs Role Routing (v0.4.5+)
 
@@ -137,8 +138,8 @@ or a role:
 | `@sf:coordinator` | Routes to proxy agent `sf:coordinator` (cross-repo via peer transport, v0.7.0)    |
 
 **Important:** Sending to an unknown name or group is a **hard error** — the
-message is rejected and not stored. Create unknown recipients as agents or groups
-first.
+message is rejected and not stored. Create unknown recipients as agents or
+groups first.
 
 **Registration rule:** Agent names must differ from their role. Use
 `--name coord_main --role coordinator`, not
@@ -507,7 +508,8 @@ thrum inbox --scope module:auth
 
 ## References (Refs)
 
-References link messages to external entities. They answer "What does this message reference?"
+References link messages to external entities. They answer "What does this
+message reference?"
 
 ### Ref Structure
 
@@ -579,7 +581,8 @@ thrum send "PR ready for review" --to @reviewers
 
 ### Message Resolution
 
-The daemon resolves group membership at **read time**, not send time. That means:
+The daemon resolves group membership at **read time**, not send time. That
+means:
 
 - Agents you add to a group after a message was sent still see that message
 - `@everyone` dynamically includes all registered agents

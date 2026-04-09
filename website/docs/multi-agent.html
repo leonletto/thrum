@@ -58,9 +58,9 @@ boilerplate. See <a href="tmux-sessions.html">Tmux-Managed Sessions</a> for the 
 <p><strong>Note:</strong> New repos default to single-agent mode (<code>single_agent_mode: true</code>).
 Run <code>thrum single-agent-mode false</code> to enable the features on this page. See
 <a href="single-agent-mode.html">Single-Agent Mode</a>.</p>
-<p>For cross-repo and cross-machine multi-agent setups, see <a href="peers.html">Peers</a>.
-The coordinator/implementer/tester patterns below work the same way
-whether the agents are in one repo or many.</p>
+<p>For cross-repo and cross-machine multi-agent setups, see <a href="peers.html">Peers</a>. The
+coordinator/implementer/tester patterns below work the same way whether the
+agents are in one repo or many.</p>
 <p><strong>Key multi-agent capabilities:</strong></p>
 <ul>
 <li><strong>Tmux-Managed Sessions</strong> (v0.7.1) -- Daemon-driven agent lifecycle with
@@ -376,8 +376,8 @@ thrum context prime --json # Structured JSON for LLM consumption</code></pre>
 format, graceful degradation behavior, and use cases.</p>
 <hr>
 <h2>Multi-Worktree Coordination</h2>
-<p>Multiple agents can work across git worktrees while sharing a single daemon
-and message store.</p>
+<p>Multiple agents can work across git worktrees while sharing a single daemon and
+message store.</p>
 <h3>How It Works</h3>
 <pre><code>┌──────────────────────────────────────────────────────────────┐
 │                     Main Worktree                             │
@@ -624,10 +624,10 @@ with that role are automatically included</li>
 <code>thrum agent list --context</code></li>
 </ul>
 <h2>Running this automatically</h2>
-<p>If you want the coordinator role to be automated — handing off a plan
-and having the orchestrator run the implementers through it — see
-<a href="orchestrator-role.html">Orchestrator Role</a>. You still write the plan
-and you still merge. The orchestrator handles the middle.</p>
+<p>If you want the coordinator role to be automated — handing off a plan and having
+the orchestrator run the implementers through it — see
+<a href="orchestrator-role.html">Orchestrator Role</a>. You still write the plan and you
+still merge. The orchestrator handles the middle.</p>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="agent-coordination.html">Agent Coordination</a> — workflow patterns and Beads

@@ -36,9 +36,9 @@ boilerplate. See [Tmux-Managed Sessions](tmux-sessions.md) for the full story.
 Run `thrum single-agent-mode false` to enable the features on this page. See
 [Single-Agent Mode](single-agent-mode.md).
 
-For cross-repo and cross-machine multi-agent setups, see [Peers](peers.md).
-The coordinator/implementer/tester patterns below work the same way
-whether the agents are in one repo or many.
+For cross-repo and cross-machine multi-agent setups, see [Peers](peers.md). The
+coordinator/implementer/tester patterns below work the same way whether the
+agents are in one repo or many.
 
 **Key multi-agent capabilities:**
 
@@ -313,8 +313,8 @@ format, graceful degradation behavior, and use cases.
 
 ## Multi-Worktree Coordination
 
-Multiple agents can work across git worktrees while sharing a single daemon
-and message store.
+Multiple agents can work across git worktrees while sharing a single daemon and
+message store.
 
 ### How It Works
 
@@ -602,10 +602,10 @@ thrum send "Auth complete, 15 tests passing" --to @coord_main
 
 ## Running this automatically
 
-If you want the coordinator role to be automated — handing off a plan
-and having the orchestrator run the implementers through it — see
-[Orchestrator Role](orchestrator-role.md). You still write the plan
-and you still merge. The orchestrator handles the middle.
+If you want the coordinator role to be automated — handing off a plan and having
+the orchestrator run the implementers through it — see
+[Orchestrator Role](orchestrator-role.md). You still write the plan and you
+still merge. The orchestrator handles the middle.
 
 ## Next Steps
 

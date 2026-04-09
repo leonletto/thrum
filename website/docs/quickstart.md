@@ -449,8 +449,8 @@ thrum agent register --role=implementer-2 --module=auth
 
 ### Messages
 
-Messages are persistent records stored in Git-tracked JSONL. They're just text
-— `cat` them, `grep` them, pipe them through `jq`.
+Messages are persistent records stored in Git-tracked JSONL. They're just text —
+`cat` them, `grep` them, pipe them through `jq`.
 
 ### Sessions
 
@@ -470,8 +470,8 @@ Subscribe to a scope or mention to get push notifications for matching messages.
 
 The sync process runs in the background every 60 seconds and pushes/pulls
 messages via Git. Data lives on the `a-sync` orphan branch, accessed through a
-sparse-checkout worktree at `.git/thrum-sync/a-sync/`. You never switch
-branches manually.
+sparse-checkout worktree at `.git/thrum-sync/a-sync/`. You never switch branches
+manually.
 
 ### Daemon
 
@@ -522,13 +522,17 @@ mkdir -p .beads && echo /path/to/main/repo/.beads > .beads/redirect
 
 ## Pick your scenario
 
-Once you've got the basics running, pick the scenario that matches what
-you're building:
+Once you've got the basics running, pick the scenario that matches what you're
+building:
 
-- [Solo Dev with One Agent](scenarios/solo-dev.md) — single agent, single machine
-- [Team on Your Machine](scenarios/team.md) — multiple agents in parallel worktrees
-- [Agents Across Repos/Machines](scenarios/across-boundaries.md) — peers across repos or machines
-- [Automated Plan Execution](scenarios/orchestration.md) — hand a plan to the orchestrator
+- [Solo Dev with One Agent](scenarios/solo-dev.md) — single agent, single
+  machine
+- [Team on Your Machine](scenarios/team.md) — multiple agents in parallel
+  worktrees
+- [Agents Across Repos/Machines](scenarios/across-boundaries.md) — peers across
+  repos or machines
+- [Automated Plan Execution](scenarios/orchestration.md) — hand a plan to the
+  orchestrator
 
 ## Next Steps
 

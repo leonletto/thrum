@@ -1,12 +1,3 @@
----
-title: "Peers"
-description: "Cross-repo and cross-machine messaging between Thrum daemons"
-category: "messaging"
-order: 2
-tags: ["peers", "cross-repo", "tailscale", "pairing", "sync"]
-last_updated: "2026-04-09"
----
-
 ## What a Peer Is
 
 A peer is a link between two Thrum daemons. Each daemon is bound to one repo.

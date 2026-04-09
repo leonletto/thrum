@@ -1,13 +1,3 @@
----
-title: "Agents Across Repos/Machines"
-description:
-  "Connect Thrum daemons in different repos or on different machines via peers"
-category: "onboarding"
-order: 3
-tags: ["onboarding", "peers", "cross-repo", "tailscale", "mesh"]
-last_updated: "2026-04-09"
----
-
 ## Agents Across Repos/Machines
 
 Peers connect Thrum daemons running in separate repos or on completely different

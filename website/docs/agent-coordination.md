@@ -104,7 +104,8 @@ thrum send "Need to edit login.ts for validation. ETA?" --to @agent_a
 
 ### Code Review
 
-Pass review requests through messages. The implementer sends the commit hash and what to look at; the reviewer responds with findings.
+Pass review requests through messages. The implementer sends the commit hash and
+what to look at; the reviewer responds with findings.
 
 **Implementer:**
 
@@ -146,15 +147,17 @@ messages and notify the main agent when they arrive.
 ### How It Works
 
 1. The main agent spawns a message-listener as a background task
-2. The listener runs `thrum wait` — it blocks until a message arrives or times out
+2. The listener runs `thrum wait` — it blocks until a message arrives or times
+   out
 3. When a message arrives, the listener returns immediately with the content
-4. The main agent processes the message; the listener keeps looping automatically (no re-arming needed)
+4. The main agent processes the message; the listener keeps looping
+   automatically (no re-arming needed)
 5. A cron watchdog respawns the listener every 30 min if it stops
 
-**Use `thrum wait`** — it's more efficient than polling loops with sleep.
-Use `--after -15s` to catch messages sent up to 15 seconds ago (`--after`
-negative value = "N ago"). Omit `--after` to receive only messages that arrive
-after the wait starts.
+**Use `thrum wait`** — it's more efficient than polling loops with sleep. Use
+`--after -15s` to catch messages sent up to 15 seconds ago (`--after` negative
+value = "N ago"). Omit `--after` to receive only messages that arrive after the
+wait starts.
 
 **Cron watchdog:** Set up a cron job to auto-respawn the listener if it stops:
 
@@ -186,13 +189,17 @@ NO_MESSAGES_TIMEOUT
 
 ### Context Management
 
-- The listener runs for up to 4 hours (30 cycles of ~8 min each), then stops; the cron watchdog respawns it
-- After 5 consecutive timeouts with no pending work, send a status update to the coordinator and stop
+- The listener runs for up to 4 hours (30 cycles of ~8 min each), then stops;
+  the cron watchdog respawns it
+- After 5 consecutive timeouts with no pending work, send a status update to the
+  coordinator and stop
 - The listener is read-only — it never sends messages
 
 ## Beads Integration
 
-Run Thrum and [Beads](https://github.com/leonletto/thrum) together. Thrum handles real-time messaging; Beads tracks the work. Neither tries to do the other's job:
+Run Thrum and [Beads](https://github.com/leonletto/thrum) together. Thrum
+handles real-time messaging; Beads tracks the work. Neither tries to do the
+other's job:
 
 | Concern                 | Tool  | Why                                       |
 | ----------------------- | ----- | ----------------------------------------- |

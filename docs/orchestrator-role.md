@@ -1,13 +1,3 @@
----
-title: "Orchestrator Role"
-description:
-  "Hand off a plan you wrote and let the orchestrator run the execution phase"
-category: "orchestration"
-order: 1
-tags: ["orchestrator", "roles", "automation", "plans"]
-last_updated: "2026-04-09"
----
-
 ## What the Orchestrator Is
 
 The orchestrator is a Thrum role that takes a plan you already wrote, spins up

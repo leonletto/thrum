@@ -1,14 +1,3 @@
----
-title: "Team on Your Machine"
-description:
-  "Run multiple agents in parallel worktrees with Thrum as the coordination
-  layer"
-category: "onboarding"
-order: 2
-tags: ["onboarding", "team", "multi-agent", "worktrees"]
-last_updated: "2026-04-09"
----
-
 ## Team on Your Machine
 
 You run a coordinator agent that holds the plan, a few implementers working

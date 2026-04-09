@@ -1,13 +1,3 @@
----
-title: "Automated Plan Execution"
-description:
-  "Hand off a plan you wrote and let the orchestrator run the execution phase"
-category: "onboarding"
-order: 4
-tags: ["onboarding", "orchestrator", "automation", "plans"]
-last_updated: "2026-04-09"
----
-
 ## Automated Plan Execution
 
 You still did the thinking. You researched the problem, wrote the spec, broke it

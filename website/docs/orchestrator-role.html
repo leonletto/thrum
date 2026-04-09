@@ -60,8 +60,8 @@ workstreams, and you&#39;d rather not be the message relay, hand it to the
 orchestrator.</p>
 <p>The orchestrator is a <strong>pre-configured, human-launched agent</strong> — you set it up
 in its own tmux session ahead of time. The coordinator doesn&#39;t launch it. You
-do. That&#39;s intentional. See <a href="tmux-sessions.html">Tmux-Managed Sessions</a> for how
-to get it running.</p>
+do. That&#39;s intentional. See <a href="tmux-sessions.html">Tmux-Managed Sessions</a> for how to
+get it running.</p>
 <hr>
 <h2>Autonomy Levels</h2>
 <p>When you hand the orchestrator a plan, it asks you one question before touching
@@ -83,13 +83,14 @@ anything: how much autonomy do you want?</p>
 </tr>
 </tbody></table>
 <p>There&#39;s no <code>full_auto</code>. The orchestrator never merges without your approval. The
-whole point of working this way is that you understand what got built — you can&#39;t
-do that if code appears on main while you were away.</p>
+whole point of working this way is that you understand what got built — you
+can&#39;t do that if code appears on main while you were away.</p>
 <p><code>per_epic</code> is for when you want to stay close. Each epic gate is a checkpoint:
 you see what passed review, you decide whether to continue. <code>end_only</code> is for
 when you trust the plan and want to come back to a finished report.</p>
 <p>The default is <code>end_only</code>. You can change that in config, or just answer
-differently when the orchestrator asks. It negotiates per-run, not once globally.</p>
+differently when the orchestrator asks. It negotiates per-run, not once
+globally.</p>
 <hr>
 <h2>Handoff: Giving the Orchestrator a Plan</h2>
 <p>The orchestrator validates the handoff before it does anything. It won&#39;t start
@@ -182,20 +183,19 @@ this:</p>
 <pre><code>## Review Gate: thrum-abc
 
 Before proceeding to the next epic:
+
 1. Commit all work for this epic
 2. Run tests: verify all tests pass for changes in this epic
 3. Report completion via Thrum:
    `thrum send &quot;Epic thrum-abc complete. Ready for review.&quot; --to @orchestrator_main`
 4. Set status: `thrum agent set-status idle`
 5. **STOP.** Wait for review approval before continuing.</code></pre>
-<p>When an agent hits a review gate, it sends the orchestrator a completion
-message and stops. The orchestrator dispatches a code review sub-agent. The
-sub-agent diffs the work against the spec, reports findings, and the
-orchestrator either clears the agent to continue or sends findings back for
-fixes.</p>
-<p>At <code>per_epic</code> autonomy, the orchestrator also surfaces the review results to
-you before proceeding. At <code>end_only</code>, it continues automatically if review
-passes.</p>
+<p>When an agent hits a review gate, it sends the orchestrator a completion message
+and stops. The orchestrator dispatches a code review sub-agent. The sub-agent
+diffs the work against the spec, reports findings, and the orchestrator either
+clears the agent to continue or sends findings back for fixes.</p>
+<p>At <code>per_epic</code> autonomy, the orchestrator also surfaces the review results to you
+before proceeding. At <code>end_only</code>, it continues automatically if review passes.</p>
 <p>The orchestrator validates that <code>## Review Gate:</code> headings exist during Phase 1.
 A prompt without gates won&#39;t run — the orchestrator bounces it back.</p>
 <hr>
@@ -209,12 +209,12 @@ do.</li>
 <li><strong>Session dies</strong> — it attempts <code>thrum tmux restart</code> once; if that fails, it
 escalates with the session name and last-known state.</li>
 <li><strong>Review blockers after 3 rounds</strong> — sends you the review findings and the
-agent&#39;s three attempts to fix them, asks whether to continue with exceptions or
-stop.</li>
+agent&#39;s three attempts to fix them, asks whether to continue with exceptions
+or stop.</li>
 <li><strong>Dependency conflict between epics</strong> — two parallel epics touch overlapping
 code in a way that will conflict at merge time.</li>
-<li><strong>Judgment call in the plan</strong> — any ambiguity it can&#39;t resolve from the
-plan file alone.</li>
+<li><strong>Judgment call in the plan</strong> — any ambiguity it can&#39;t resolve from the plan
+file alone.</li>
 </ul>
 <p>Escalation messages include: what happened, what was tried, what specific
 decision you need to make. Not &quot;there was a problem.&quot; Something you can act on.</p>
@@ -229,15 +229,15 @@ reminder after a configured timeout. It doesn&#39;t proceed without your answer.
     &quot;merge_target&quot;: &quot;main&quot;
   }
 }</code></pre>
-<p><strong><code>default_autonomy</code></strong> — pre-selects the answer to the autonomy question at
-plan start. Values: <code>per_epic</code>, <code>end_only</code>. Default: <code>end_only</code>. You can
-override at runtime — the orchestrator always confirms before executing.</p>
-<p><strong><code>merge_target</code></strong> — the branch all agent branches merge to when you approve
-the final report. Default: <code>main</code>. The orchestrator confirms this branch with
-you on first activation. Change it here if you&#39;re working on a release branch
-or a long-lived integration branch.</p>
-<p>The <code>worktrees</code> key is also relevant — the orchestrator uses it to know where
-to create agent worktrees:</p>
+<p><strong><code>default_autonomy</code></strong> — pre-selects the answer to the autonomy question at plan
+start. Values: <code>per_epic</code>, <code>end_only</code>. Default: <code>end_only</code>. You can override at
+runtime — the orchestrator always confirms before executing.</p>
+<p><strong><code>merge_target</code></strong> — the branch all agent branches merge to when you approve the
+final report. Default: <code>main</code>. The orchestrator confirms this branch with you on
+first activation. Change it here if you&#39;re working on a release branch or a
+long-lived integration branch.</p>
+<p>The <code>worktrees</code> key is also relevant — the orchestrator uses it to know where to
+create agent worktrees:</p>
 <pre><code>{
   &quot;worktrees&quot;: {
     &quot;base_path&quot;: &quot;/Users/you/.workspaces/project&quot;,
@@ -248,8 +248,8 @@ to create agent worktrees:</p>
 <p><code>thrum init</code> sets defaults for all of these. See
 <a href="configuration.html">Configuration</a> for the full config reference.</p>
 <h3>Role Template</h3>
-<p>The orchestrator preamble lives at <code>toolkit/templates/roles/orchestrator.md</code>
-in the Thrum repo. It&#39;s the context file the orchestrator loads at startup via
+<p>The orchestrator preamble lives at <code>toolkit/templates/roles/orchestrator.md</code> in
+the Thrum repo. It&#39;s the context file the orchestrator loads at startup via
 <code>thrum prime</code>. You don&#39;t need to edit it. If you register an orchestrator agent
 with <code>thrum quickstart --role orchestrator</code>, the right template loads
 automatically.</p>
@@ -271,7 +271,8 @@ thrum agent set-status working --agent impl_api</code></pre>
 <p><strong>Check team status:</strong></p>
 <pre><code>thrum tmux status    # session state + runtime + branch for all agents
 thrum team           # registered agents with roles and statuses</code></pre>
-<p>See <a href="cli.html">CLI Reference</a> for the full command reference, including <code>thrum tmux</code> subcommands for session lifecycle management.</p>
+<p>See <a href="cli.html">CLI Reference</a> for the full command reference, including
+<code>thrum tmux</code> subcommands for session lifecycle management.</p>
 <hr>
 <h2>Limitations</h2>
 <p><strong>The orchestrator doesn&#39;t create epics or tasks.</strong> That&#39;s the coordinator&#39;s
@@ -282,9 +283,9 @@ the coordinator and re-send.</p>
 agents that do that work. If it needs information from the codebase, it
 dispatches a sub-agent rather than reading source files itself.</p>
 <p><strong>The orchestrator doesn&#39;t merge without your approval.</strong> Phase 5 ends with a
-merge report and a question. You answer it. This isn&#39;t configurable — there&#39;s
-no autonomy level that skips the merge gate. The human always controls what
-lands on the merge target.</p>
+merge report and a question. You answer it. This isn&#39;t configurable — there&#39;s no
+autonomy level that skips the merge gate. The human always controls what lands
+on the merge target.</p>
 <p><strong>The orchestrator doesn&#39;t create the merge target branch.</strong> If <code>merge_target</code>
 is set to a branch that doesn&#39;t exist, the merge will fail. Confirm the branch
 exists before handing off a plan.</p>
@@ -296,7 +297,8 @@ orchestrator&#39;s tmux session, and how the nudge mechanism keeps agents
 responsive</li>
 <li><a href="multi-agent.html">Multi-Agent Support</a> — groups, team coordination, and the
 patterns the orchestrator relies on</li>
-<li><a href="cli.html">CLI Reference</a> — full reference for <code>thrum tmux</code>, <code>thrum agent set-status</code>, <code>thrum worktree</code>, and other commands</li>
+<li><a href="cli.html">CLI Reference</a> — full reference for <code>thrum tmux</code>,
+<code>thrum agent set-status</code>, <code>thrum worktree</code>, and other commands</li>
 <li><a href="configuration.html">Configuration</a> — <code>orchestration</code> and <code>worktrees</code> config
 keys in full</li>
 </ul>

@@ -36,29 +36,46 @@ a{color:#0366d6}
 <strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
 </nav>
 <main>
-<h1>Solo Dev with One Agent</h1>
-<p>This is where most people should start. One machine, one agent, you in control. You do the research and planning, your agent does the typing. Thrum keeps the session alive, routes messages to your phone when you&#39;re away from the terminal, and gets out of your way the rest of the time. If you&#39;ve never used Thrum before, start here.</p>
+<h2>Solo Dev with One Agent</h2>
+<p>This is where most people should start. One machine, one agent, you in control.
+You do the research and planning, your agent does the typing. Thrum keeps the
+session alive, routes messages to your phone when you&#39;re away from the terminal,
+and gets out of your way the rest of the time. If you&#39;ve never used Thrum
+before, start here.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>Thrum installed and on your <code>$PATH</code></li>
 <li>Thrum daemon running (<code>thrum daemon start</code>)</li>
-<li>A runtime ready — Claude Code, Codex, Aider, or anything that runs in a terminal</li>
+<li>A runtime ready — Claude Code, Codex, Aider, or anything that runs in a
+terminal</li>
 </ul>
 <h2>Walkthrough</h2>
 <ol>
-<li><strong><a href="../quickstart.html">Quickstart</a></strong> — install Thrum, start the daemon, and register your first agent</li>
-<li><strong><a href="../single-agent-mode.html">Single Agent Mode</a></strong> — use Thrum without any messaging overhead; just you and one agent</li>
-<li><strong><a href="../tmux-sessions.html">Tmux Sessions</a></strong> — run your agent in a persistent tmux session so it keeps working when you close the terminal</li>
-<li><strong><a href="../multi-runtime.html">Multi-Runtime Support</a></strong> — pick the runtime that fits your workflow; Claude Code, Codex, and Aider all work</li>
-<li><strong><a href="../session-restart.html">Session Restart</a></strong> — recover cleanly after context loss without losing your place</li>
-<li><strong><a href="../identity.html">Identity</a></strong> — how Thrum knows who your agent is and how that persists across restarts</li>
+<li><strong><a href="../quickstart.html">Quickstart</a></strong> — install Thrum, start the daemon, and
+register your first agent</li>
+<li><strong><a href="../single-agent-mode.html">Single Agent Mode</a></strong> — use Thrum without any
+messaging overhead; just you and one agent</li>
+<li><strong><a href="../tmux-sessions.html">Tmux Sessions</a></strong> — run your agent in a persistent
+tmux session so it keeps working when you close the terminal</li>
+<li><strong><a href="../multi-runtime.html">Multi-Runtime Support</a></strong> — pick the runtime that fits
+your workflow; Claude Code, Codex, and Aider all work</li>
+<li><strong><a href="../session-restart.html">Session Restart</a></strong> — recover cleanly after context
+loss without losing your place</li>
+<li><strong><a href="../identity.html">Identity</a></strong> — how Thrum knows who your agent is and how
+that persists across restarts</li>
 </ol>
 <h2>Control from Your Phone</h2>
-<p>Connect the <a href="../telegram-bridge.html">Telegram Bridge</a> and you don&#39;t need to stay at your desk. Thrum pings you when your agent hits a decision point or needs input. You reply from Telegram and the conversation threads back into the session — no terminal required. Close your laptop and your agent keeps running in tmux.</p>
+<p>Connect the <a href="../telegram-bridge.html">Telegram Bridge</a> and you don&#39;t need to stay
+at your desk. Thrum pings you when your agent hits a decision point or needs
+input. You reply from Telegram and the conversation threads back into the
+session — no terminal required. Close your laptop and your agent keeps running
+in tmux.</p>
 <h2>When You&#39;re Ready for More</h2>
 <ul>
-<li><a href="team.html">Team on Your Machine</a> — run two or more agents in parallel on separate worktrees</li>
-<li><a href="orchestration.html">Automated Plan Execution</a> — hand your agent a spec and let it claim tasks and commit autonomously</li>
+<li><a href="team.html">Team on Your Machine</a> — run two or more agents in parallel on
+separate worktrees</li>
+<li><a href="orchestration.html">Automated Plan Execution</a> — hand your agent a spec and let
+it claim tasks and commit autonomously</li>
 </ul>
 
 </main>

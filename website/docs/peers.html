@@ -119,10 +119,10 @@ and can read the port directly.</p>
 <h3>Pairing Code Details</h3>
 <p>The peercode format is <code>name:ip:port:code</code>. Example:</p>
 <pre><code>mock-salesforce:127.0.0.1:9342:4829175036284719</code></pre>
-<p>The 16-digit numeric code is short-lived — it expires after 5 minutes. It&#39;s
-a handshake secret, not a long-term credential. During pairing, both sides
-exchange a 32-byte auth token that gets stored in <code>peers.json</code> and used for
-all future connections.</p>
+<p>The 16-digit numeric code is short-lived — it expires after 5 minutes. It&#39;s a
+handshake secret, not a long-term credential. During pairing, both sides
+exchange a 32-byte auth token that gets stored in <code>peers.json</code> and used for all
+future connections.</p>
 <p>If the pairing code expires, run <code>thrum peer add</code> again to generate a new one.</p>
 <hr>
 <h2>Listener vs Dialer</h2>
@@ -183,8 +183,8 @@ network — automatic reconnection isn&#39;t possible. In that case, re-pair wit
 <code>thrum peer add</code> and <code>thrum peer join</code>. It takes 30 seconds. This scenario is
 rare.</p>
 <p>If a peer is temporarily unreachable when your address changes, the notification
-is queued and retried with backoff. When the peer comes back online, it&#39;ll
-catch up.</p>
+is queued and retried with backoff. When the peer comes back online, it&#39;ll catch
+up.</p>
 <p>See <a href="rpc-api.html#peer.address_changed">RPC API</a> for the <code>peer.address_changed</code>
 method signature.</p>
 <hr>
@@ -278,7 +278,8 @@ this file — it grants access to the peer connection. Don&#39;t commit it to gi
 <p>See <a href="configuration.html">Configuration</a> for the full config reference.</p>
 <hr>
 <h2>Commands</h2>
-<p>All peer commands live under <code>thrum peer</code>. Full reference: <a href="cli.html#peer-management">CLI</a>.</p>
+<p>All peer commands live under <code>thrum peer</code>. Full reference:
+<a href="cli.html#peer-management">CLI</a>.</p>
 <h3>Quick Reference</h3>
 <table>
 <thead>
@@ -367,14 +368,16 @@ use the <code>100.x.x.x</code> IP shown by <code>tailscale status</code>, not th
 <li>Check <code>thrum peer status</code> — is the peer connected? Does it have a token?</li>
 <li>Verify the proxy agent is registered: <code>thrum team</code> should show <code>prefix:name</code>
 entries.</li>
-<li>If the proxy agent is missing, run <code>thrum peer configure &lt;name&gt; add-agent &lt;agent&gt;</code> again.</li>
+<li>If the proxy agent is missing, run
+<code>thrum peer configure &lt;name&gt; add-agent &lt;agent&gt;</code> again.</li>
 <li>Check that <code>auto_connect: true</code> is set in config if the peer disconnected
 after a restart.</li>
 </ol>
 <h3>Address change not detected</h3>
 <p>If you moved networks and the peer connection dropped, the daemon attempts to
 notify peers of the new address using the last-known address. If both machines
-moved simultaneously, this fails — re-pair with <code>thrum peer add</code> and <code>thrum peer join</code>.</p>
+moved simultaneously, this fails — re-pair with <code>thrum peer add</code> and
+<code>thrum peer join</code>.</p>
 <h3><code>thrum peer status</code> output explained</h3>
 <pre><code>NAME             ADDRESS              HAS_TOKEN  PAIRED_AT               LAST_SYNC
 mock-salesforce  127.0.0.1:9342       true       2026-04-05T20:00:00Z    5s ago
@@ -446,14 +449,14 @@ agents on those machines.</p>
 groups, and mention routing</li>
 <li><a href="cli.html#peer-management">CLI Reference</a> — complete flag reference for all
 <code>thrum peer</code> commands</li>
-<li><a href="rpc-api.html#peer-methods-v070">RPC API</a> — <code>peer.*</code> JSON-RPC methods for
-custom integrations</li>
+<li><a href="rpc-api.html#peer-methods-v070">RPC API</a> — <code>peer.*</code> JSON-RPC methods for custom
+integrations</li>
 <li><a href="configuration.html">Configuration</a> — full config reference including the
 <code>peers</code> block</li>
 <li><a href="architecture.html#cross-repo-peer-system-v070">Architecture</a> — internals:
 PeerManager, PeerBridge, PeerTransport, relay logic</li>
-<li><a href="tailscale-sync.html">Tailscale Sync</a> — cross-machine event log replication
-via Tailscale</li>
+<li><a href="tailscale-sync.html">Tailscale Sync</a> — cross-machine event log replication via
+Tailscale</li>
 <li><a href="tailscale-security.html">Tailscale Security</a> — encryption layers, token auth,
 and threat model</li>
 <li><a href="sync.html">Sync Protocol</a> — Git-backed async state replication</li>

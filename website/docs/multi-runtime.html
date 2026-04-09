@@ -37,9 +37,9 @@ a{color:#0366d6}
 </nav>
 <main>
 <h2>What &quot;Runtime&quot; Means in Thrum</h2>
-<p>A runtime is the CLI you&#39;re running inside a tmux pane. Not the agent — the
-tool the agent uses to think and type. When Thrum launches a session, it starts
-one of these:</p>
+<p>A runtime is the CLI you&#39;re running inside a tmux pane. Not the agent — the tool
+the agent uses to think and type. When Thrum launches a session, it starts one
+of these:</p>
 <ul>
 <li><strong>Claude Code</strong> — <code>claude</code>, full hook and plugin integration</li>
 <li><strong>Open Code</strong> — <code>opencode</code>, cheaper for parallel grunt work</li>
@@ -64,8 +64,8 @@ runtimes. Test writers on something fast. The decision should be yours, per
 worktree, not a system-wide setting you forget to change.</p>
 <p>The team mesh works regardless of what each agent is running. A coordinator on
 Claude can send a message to an implementer on Open Code, get a reply, and route
-a follow-up to another implementer on Codex. The messaging layer doesn&#39;t know
-or care about runtimes.</p>
+a follow-up to another implementer on Codex. The messaging layer doesn&#39;t know or
+care about runtimes.</p>
 <pre><code># Coordinator decides who runs what
 thrum tmux launch coordinator-main --runtime claude
 thrum tmux launch impl-api --runtime opencode
@@ -90,8 +90,8 @@ daemon — there&#39;s no ambiguity at the server side.</p>
 <code>--runtime</code> again for that worktree. The resolution chain just finds it.</p>
 <hr>
 <h2>Setting <code>preferred_runtime</code> at Init</h2>
-<p>Pass <code>--runtime</code> when you first set up a worktree. Thrum writes the value to
-the identity file as <code>preferred_runtime</code>.</p>
+<p>Pass <code>--runtime</code> when you first set up a worktree. Thrum writes the value to the
+identity file as <code>preferred_runtime</code>.</p>
 <pre><code># Init a worktree for an Open Code implementer
 thrum init --runtime=opencode
 
@@ -126,9 +126,9 @@ runtime ever claims the <code>agent</code> binary name, we handle it then.</p>
 a running process. That check now works for any runtime, not just Claude.</p>
 <p><strong>Auto-detection at prime time.</strong> When <code>thrum prime</code> or <code>thrum quickstart</code> runs
 inside a session, it calls the process walker, finds the actual running runtime,
-and writes it to the <code>runtime</code> field in the identity file. This is the
-<em>what&#39;s actually running</em> field — distinct from <code>preferred_runtime</code>, which is
-the <em>what should run here</em> field.</p>
+and writes it to the <code>runtime</code> field in the identity file. This is the <em>what&#39;s
+actually running</em> field — distinct from <code>preferred_runtime</code>, which is the <em>what
+should run here</em> field.</p>
 <table>
 <thead>
 <tr>
@@ -172,7 +172,8 @@ where it left off.</p>
 <p><strong>This only works for Claude Code.</strong> Claude stores conversation history in a
 JSONL file that Thrum knows how to read and replay. Other runtimes don&#39;t use
 that format. When you restart a non-Claude session, Thrum skips the snapshot
-step and logs a note. The agent relaunches clean, without its prior conversation.</p>
+step and logs a note. The agent relaunches clean, without its prior
+conversation.</p>
 <p>If you need to preserve context across a non-Claude restart, the options are:</p>
 <ul>
 <li>Have the orchestrator send a summary message to the agent after restart</li>
@@ -217,9 +218,9 @@ next starts.</p>
     &quot;primary&quot;: &quot;opencode&quot;
   }
 }</code></pre>
-<p>This is step 3 in the resolution chain. Any worktree without a <code>preferred_runtime</code>
-in its identity file uses this value. Any worktree with <code>preferred_runtime</code> set
-ignores it.</p>
+<p>This is step 3 in the resolution chain. Any worktree without a
+<code>preferred_runtime</code> in its identity file uses this value. Any worktree with
+<code>preferred_runtime</code> set ignores it.</p>
 <p>The config value is per-repo. If you have separate repos where you want
 different defaults, set it in each one&#39;s <code>.thrum/config.json</code>.</p>
 <p>See <a href="configuration.html">Configuration</a> for the full config reference.</p>
