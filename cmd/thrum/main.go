@@ -327,6 +327,19 @@ Examples:
 				}
 				cfg.Runtime.Primary = selectedRuntime
 				cfg.Daemon.SingleAgentMode = true // Default: single-agent mode
+				if cfg.Worktrees.BasePath == "" {
+					cfg.Worktrees = config.WorktreesConfig{
+						BasePath:     inferWorktreeBasePath(flagRepo),
+						BeadsEnabled: true,
+						ThrumEnabled: true,
+					}
+				}
+				if cfg.Orchestration.MergeTarget == "" {
+					cfg.Orchestration = config.OrchestrationConfig{
+						MergeTarget:     "main",
+						DefaultAutonomy: "end_only",
+					}
+				}
 				if err := config.SaveThrumConfig(thrumDir, cfg); err != nil {
 					return fmt.Errorf("failed to save config: %w", err)
 				}
@@ -2762,6 +2775,14 @@ Examples:
 	cmd.AddCommand(agentSetStatusCmd())
 
 	return cmd
+}
+
+// inferWorktreeBasePath returns the conventional worktree base path for a repo.
+// Checks ~/.workspaces/<project>; returns it whether or not it exists yet.
+func inferWorktreeBasePath(repoPath string) string {
+	projectName := filepath.Base(repoPath)
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".workspaces", projectName)
 }
 
 func agentSetStatusCmd() *cobra.Command {

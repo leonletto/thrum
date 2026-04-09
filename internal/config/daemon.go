@@ -10,12 +10,27 @@ import (
 
 // ThrumConfig represents the top-level .thrum/config.json file.
 type ThrumConfig struct {
-	Runtime  RuntimeConfig  `json:"runtime"`
-	Daemon   DaemonConfig   `json:"daemon"`
-	Backup   BackupConfig   `json:"backup"`
-	Telegram TelegramConfig `json:"telegram"`
-	Peers    PeersConfig    `json:"peers"`
-	Restart  RestartConfig  `json:"restart"`
+	Runtime       RuntimeConfig       `json:"runtime"`
+	Daemon        DaemonConfig        `json:"daemon"`
+	Backup        BackupConfig        `json:"backup"`
+	Telegram      TelegramConfig      `json:"telegram"`
+	Peers         PeersConfig         `json:"peers"`
+	Restart       RestartConfig       `json:"restart"`
+	Worktrees     WorktreesConfig     `json:"worktrees,omitempty"`
+	Orchestration OrchestrationConfig `json:"orchestration,omitempty"`
+}
+
+// WorktreesConfig holds worktree management settings.
+type WorktreesConfig struct {
+	BasePath     string `json:"base_path,omitempty"`
+	BeadsEnabled bool   `json:"beads_enabled"`
+	ThrumEnabled bool   `json:"thrum_enabled"`
+}
+
+// OrchestrationConfig holds orchestrator role settings.
+type OrchestrationConfig struct {
+	MergeTarget     string `json:"merge_target,omitempty"`
+	DefaultAutonomy string `json:"default_autonomy,omitempty"`
 }
 
 // TelegramConfig holds Telegram bridge settings.
@@ -326,6 +341,16 @@ func SaveThrumConfig(thrumDir string, cfg *ThrumConfig) error {
 		var telegramMap any
 		_ = json.Unmarshal(telegramBytes, &telegramMap)
 		existing["telegram"] = telegramMap
+	}
+
+	// Marshal and merge the worktrees section (only if base_path is set)
+	if cfg.Worktrees.BasePath != "" {
+		existing["worktrees"] = cfg.Worktrees
+	}
+
+	// Marshal and merge the orchestration section (only if merge_target is set)
+	if cfg.Orchestration.MergeTarget != "" {
+		existing["orchestration"] = cfg.Orchestration
 	}
 
 	data, err := json.MarshalIndent(existing, "", "  ")
