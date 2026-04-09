@@ -10,7 +10,7 @@ before, start here.
 
 - Thrum installed and on your `$PATH`
 - Thrum daemon running (`thrum daemon start`)
-- A runtime ready — Claude Code, Codex, Aider, or anything that runs in a
+- A runtime ready — Claude Code, Codex, OpenCode, or anything that runs in a
   terminal
 
 ## Walkthrough
