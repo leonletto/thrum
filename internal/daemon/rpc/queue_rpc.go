@@ -20,6 +20,17 @@ type QueueRequest struct {
 	Text      string `json:"text"`
 	TimeoutMs int64  `json:"timeout_ms"`
 	Requester string `json:"requester"`
+	// SilenceMs is the per-command silence threshold for completion detection.
+	// Default 5000ms. --wait mode users with fast shell commands may lower this.
+	SilenceMs int64 `json:"silence_ms,omitempty"`
+	// NotifyOnComplete controls whether the daemon sends an @system inbox
+	// message when the command reaches a terminal state. Default true. --wait
+	// mode sets this to false — the caller gets the result via the queue-wait
+	// RPC response instead.
+	//
+	// Uses a pointer so we can distinguish "not set" (default → true) from
+	// "explicitly false". Omitted/null ⇒ default true; true ⇒ true; false ⇒ false.
+	NotifyOnComplete *bool `json:"notify_on_complete,omitempty"`
 }
 
 // QueueResponse is the tmux.queue RPC response.
@@ -52,14 +63,23 @@ func (h *TmuxHandler) HandleQueue(ctx context.Context, params json.RawMessage) (
 	if req.TimeoutMs == 0 {
 		req.TimeoutMs = 120000 // default 2 minutes
 	}
+	if req.SilenceMs <= 0 {
+		req.SilenceMs = 5000 // default 5s silence threshold
+	}
+	notify := true
+	if req.NotifyOnComplete != nil {
+		notify = *req.NotifyOnComplete
+	}
 
 	cmd := &QueuedCommand{
-		ID:             generateCommandID(),
-		Text:           req.Text,
-		RequesterAgent: req.Requester,
-		Timeout:        time.Duration(req.TimeoutMs) * time.Millisecond,
-		State:          StateQueued,
-		SubmittedAt:    time.Now().UTC(),
+		ID:               generateCommandID(),
+		Text:             req.Text,
+		RequesterAgent:   req.Requester,
+		Timeout:          time.Duration(req.TimeoutMs) * time.Millisecond,
+		SilenceMs:        req.SilenceMs,
+		NotifyOnComplete: notify,
+		State:            StateQueued,
+		SubmittedAt:      time.Now().UTC(),
 	}
 
 	queue := h.getOrCreateQueue(req.Session)
@@ -103,11 +123,14 @@ func (h *TmuxHandler) completeCommand(ctx context.Context, session string, queue
 
 	queue.ClearActive()
 
-	// Deliver result as @system message
-	elapsed := cmd.CompletedAt.Sub(cmd.SentAt)
-	msgBody := fmt.Sprintf("Command %s completed.\nSession: %s\nElapsed: %ds\n\nOutput:\n---\n%s\n---",
-		cmd.ID, session, int(elapsed.Seconds()), output)
-	h.sendSystemMessage(ctx, cmd.RequesterAgent, msgBody)
+	// Deliver result as @system message unless the caller opted out (e.g. --wait
+	// mode, where the result is returned via the queue-wait RPC response).
+	if cmd.NotifyOnComplete {
+		elapsed := cmd.CompletedAt.Sub(cmd.SentAt)
+		msgBody := fmt.Sprintf("Command %s completed.\nSession: %s\nElapsed: %ds\n\nOutput:\n---\n%s\n---",
+			cmd.ID, session, int(elapsed.Seconds()), output)
+		h.sendSystemMessage(ctx, cmd.RequesterAgent, msgBody)
+	}
 
 	// Send the next queued command if any
 	if next := queue.Peek(); next != nil {
@@ -145,10 +168,19 @@ func (h *TmuxHandler) sendQueuedCommand(ctx context.Context, session string, que
 	queue.Pop()
 	queue.SetActive(cmd)
 
-	// Switch monitor-silence to 5s for tight completion detection
+	// Switch monitor-silence to the command's configured silence threshold.
+	// SetMonitorSilence takes seconds; round cmd.SilenceMs up so values below
+	// 1000ms still produce a 1s timer. Defensive fallback to 5s if unset.
+	silenceSec := 5
+	if cmd.SilenceMs > 0 {
+		silenceSec = int((cmd.SilenceMs + 999) / 1000)
+		if silenceSec < 1 {
+			silenceSec = 1
+		}
+	}
 	bin := h.thrumBin()
-	if err := ttmux.SetMonitorSilence(session, 5, bin, h.thrumDir); err != nil {
-		log.Printf("[queue] SetMonitorSilence(5) failed for %s: %v", session, err)
+	if err := ttmux.SetMonitorSilence(session, silenceSec, bin, h.thrumDir); err != nil {
+		log.Printf("[queue] SetMonitorSilence(%d) failed for %s: %v", silenceSec, session, err)
 	}
 
 	// Start timeout goroutine

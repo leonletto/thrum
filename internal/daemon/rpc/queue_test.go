@@ -102,6 +102,103 @@ func TestHandleQueueEnqueuesCommand(t *testing.T) {
 	if loaded.Text != "echo hi" {
 		t.Errorf("text=%s, want 'echo hi'", loaded.Text)
 	}
+	// Defaults: silence_ms=5000, notify_on_complete=true (both unset in request).
+	if loaded.SilenceMs != 5000 {
+		t.Errorf("default SilenceMs=%d, want 5000", loaded.SilenceMs)
+	}
+	if !loaded.NotifyOnComplete {
+		t.Errorf("default NotifyOnComplete=%v, want true", loaded.NotifyOnComplete)
+	}
+}
+
+func TestHandleQueueRespectsSilenceAndNotifyOverrides(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	// Explicit silence_ms override, notify_on_complete=false (e.g. --wait mode).
+	req := `{"session":"test-session","text":"echo hi","timeout_ms":60000,"requester":"test_coord","silence_ms":2500,"notify_on_complete":false}`
+	resp, err := h.HandleQueue(context.Background(), json.RawMessage(req))
+	if err != nil {
+		t.Fatalf("HandleQueue: %v", err)
+	}
+	result := resp.(*QueueResponse)
+
+	loaded, err := loadCommand(context.Background(), h.state.DB(), result.CommandID)
+	if err != nil {
+		t.Fatalf("loadCommand: %v", err)
+	}
+	if loaded.SilenceMs != 2500 {
+		t.Errorf("SilenceMs=%d, want 2500", loaded.SilenceMs)
+	}
+	if loaded.NotifyOnComplete {
+		t.Errorf("NotifyOnComplete=%v, want false", loaded.NotifyOnComplete)
+	}
+
+	// In-memory copy should also reflect the overrides.
+	q := h.getQueue("test-session")
+	snap := q.Snapshot()
+	if len(snap) != 1 {
+		t.Fatalf("snapshot len=%d, want 1", len(snap))
+	}
+	if snap[0].SilenceMs != 2500 || snap[0].NotifyOnComplete {
+		t.Errorf("in-memory cmd: SilenceMs=%d NotifyOnComplete=%v, want 2500/false",
+			snap[0].SilenceMs, snap[0].NotifyOnComplete)
+	}
+}
+
+// TestCompleteCommandSkipsSystemMessageWhenNotifyFalse verifies that a command
+// with NotifyOnComplete=false does NOT write a @system message on completion.
+// This is the --wait mode's quiet path — the caller gets the result via the
+// queue-wait RPC response instead of an inbox notification.
+func TestCompleteCommandSkipsSystemMessageWhenNotifyFalse(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	q := h.getOrCreateQueue("test-session")
+
+	// Baseline: count existing message events authored by @system.
+	countSystemMessages := func() int {
+		var n int
+		if err := h.state.DB().QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM messages WHERE agent_id = 'system'`).Scan(&n); err != nil {
+			t.Fatalf("count system messages: %v", err)
+		}
+		return n
+	}
+	before := countSystemMessages()
+
+	cmd := &QueuedCommand{
+		ID:               "cmd_quiet",
+		Text:             "echo quiet",
+		RequesterAgent:   "test_coord",
+		State:            StateActive,
+		SilenceMs:        5000,
+		NotifyOnComplete: false, // --wait mode: suppress @system completion notification
+		SubmittedAt:      time.Now().UTC(),
+		SentAt:           time.Now().UTC(),
+	}
+	if err := persistCommand(ctx, h.state.DB(), "test-session", cmd, 0); err != nil {
+		t.Fatal(err)
+	}
+	q.SetActive(cmd)
+
+	h.completeCommand(ctx, "test-session", q, cmd)
+
+	// Verify state transitioned to completed in DB.
+	loaded, err := loadCommand(ctx, h.state.DB(), "cmd_quiet")
+	if err != nil {
+		t.Fatalf("loadCommand: %v", err)
+	}
+	if loaded.State != StateCompleted {
+		t.Errorf("state=%s, want %s", loaded.State, StateCompleted)
+	}
+
+	// No new @system messages should have been written.
+	after := countSystemMessages()
+	if after != before {
+		t.Errorf("@system message count changed: before=%d after=%d — expected no new messages when NotifyOnComplete=false", before, after)
+	}
 }
 
 func TestCheckPaneCompletesActiveCommand(t *testing.T) {
