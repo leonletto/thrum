@@ -35,12 +35,14 @@ func TestPersistCommand(t *testing.T) {
 
 	ctx := context.Background()
 	cmd := &QueuedCommand{
-		ID:             "cmd_persist",
-		Text:           "echo test",
-		RequesterAgent: "test_coord",
-		Timeout:        120 * time.Second,
-		State:          StateQueued,
-		SubmittedAt:    time.Now().UTC(),
+		ID:               "cmd_persist",
+		Text:             "echo test",
+		RequesterAgent:   "test_coord",
+		Timeout:          120 * time.Second,
+		SilenceMs:        2500,
+		NotifyOnComplete: false,
+		State:            StateQueued,
+		SubmittedAt:      time.Now().UTC(),
 	}
 
 	if err := persistCommand(ctx, h.state.DB(), "test-session", cmd, 0); err != nil {
@@ -56,6 +58,12 @@ func TestPersistCommand(t *testing.T) {
 	}
 	if loaded.State != StateQueued {
 		t.Errorf("State=%s, want %s", loaded.State, StateQueued)
+	}
+	if loaded.SilenceMs != 2500 {
+		t.Errorf("SilenceMs=%d, want 2500", loaded.SilenceMs)
+	}
+	if loaded.NotifyOnComplete != false {
+		t.Errorf("NotifyOnComplete=%v, want false", loaded.NotifyOnComplete)
 	}
 }
 

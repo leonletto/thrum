@@ -701,8 +701,8 @@ func TestMigrationV18CreatesCommandQueue(t *testing.T) {
 
 	required := []string{
 		"command_id", "session_name", "requester_agent", "command_text",
-		"state", "timeout_ms", "submitted_at", "sent_at", "completed_at",
-		"captured_output", "position",
+		"state", "timeout_ms", "silence_ms", "notify_on_complete",
+		"submitted_at", "sent_at", "completed_at", "captured_output", "position",
 	}
 	for _, c := range required {
 		if !cols[c] {
@@ -717,6 +717,112 @@ func TestMigrationV18CreatesCommandQueue(t *testing.T) {
 		t.Error("idx_queue_session_state index does not exist")
 	} else if err != nil {
 		t.Fatalf("Query index failed: %v", err)
+	}
+}
+
+func TestMigrationV19AddsSilenceAndNotifyColumns(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "migrate_v18_v19.db")
+
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() failed: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Bootstrap a v18 database manually: create schema_version + the v18
+	// shape of command_queue (no silence_ms / notify_on_complete columns).
+	_, err = db.Exec(`CREATE TABLE schema_version (
+		version INTEGER NOT NULL,
+		applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		t.Fatalf("Create schema_version failed: %v", err)
+	}
+	_, err = db.Exec("INSERT INTO schema_version (version) VALUES (18)")
+	if err != nil {
+		t.Fatalf("Insert version 18 failed: %v", err)
+	}
+	_, err = db.Exec(`CREATE TABLE command_queue (
+		command_id      TEXT PRIMARY KEY,
+		session_name    TEXT NOT NULL,
+		requester_agent TEXT NOT NULL,
+		command_text    TEXT NOT NULL,
+		state           TEXT NOT NULL DEFAULT 'queued',
+		timeout_ms      INTEGER NOT NULL DEFAULT 120000,
+		submitted_at    TEXT NOT NULL,
+		sent_at         TEXT,
+		completed_at    TEXT,
+		captured_output TEXT,
+		position        INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		t.Fatalf("Create v18 command_queue failed: %v", err)
+	}
+
+	// Seed an existing row to prove NOT NULL defaults are applied on ALTER.
+	_, err = db.Exec(`INSERT INTO command_queue
+		(command_id, session_name, requester_agent, command_text, state, submitted_at)
+		VALUES ('cmd_pre_v19', 'test', 'a', 'echo', 'queued', '2026-04-09T00:00:00Z')`)
+	if err != nil {
+		t.Fatalf("Insert v18 row failed: %v", err)
+	}
+
+	// Run migration — should bring DB from v18 to v19.
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate() v18→v19 failed: %v", err)
+	}
+
+	version, err := schema.GetSchemaVersion(db)
+	if err != nil {
+		t.Fatalf("GetSchemaVersion() failed: %v", err)
+	}
+	if version != 19 {
+		t.Errorf("Expected schema version 19, got %d", version)
+	}
+
+	// Verify the two new columns are present.
+	rows, err := db.Query("PRAGMA table_info(command_queue)")
+	if err != nil {
+		t.Fatalf("PRAGMA table_info failed: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	cols := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatal(err)
+		}
+		cols[name] = true
+	}
+	if !cols["silence_ms"] {
+		t.Error("silence_ms column missing after v18→v19 migration")
+	}
+	if !cols["notify_on_complete"] {
+		t.Error("notify_on_complete column missing after v18→v19 migration")
+	}
+
+	// Existing row should have received defaults (5000, 1).
+	var silenceMs int64
+	var notifyOnComplete int
+	err = db.QueryRow(`SELECT silence_ms, notify_on_complete FROM command_queue WHERE command_id = 'cmd_pre_v19'`).Scan(&silenceMs, &notifyOnComplete)
+	if err != nil {
+		t.Fatalf("Query pre-v19 row failed: %v", err)
+	}
+	if silenceMs != 5000 {
+		t.Errorf("silence_ms default: got %d, want 5000", silenceMs)
+	}
+	if notifyOnComplete != 1 {
+		t.Errorf("notify_on_complete default: got %d, want 1", notifyOnComplete)
+	}
+
+	// Verify idempotency — re-running should be a no-op.
+	if err := schema.Migrate(db); err != nil {
+		t.Errorf("Second Migrate() should be idempotent: %v", err)
 	}
 }
 
@@ -743,18 +849,18 @@ func TestMigrationV18_FromV17(t *testing.T) {
 		t.Fatalf("Insert version 17 failed: %v", err)
 	}
 
-	// Run migration — should bring DB from v17 to v18
+	// Run migration — should bring DB from v17 to CurrentVersion (v19)
 	if err := schema.Migrate(db); err != nil {
-		t.Fatalf("Migrate() v17→v18 failed: %v", err)
+		t.Fatalf("Migrate() v17→%d failed: %v", schema.CurrentVersion, err)
 	}
 
-	// Verify schema version is 18
+	// Verify schema version reached CurrentVersion
 	version, err := schema.GetSchemaVersion(db)
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() failed: %v", err)
 	}
-	if version != 18 {
-		t.Errorf("Expected schema version 18, got %d", version)
+	if version != schema.CurrentVersion {
+		t.Errorf("Expected schema version %d, got %d", schema.CurrentVersion, version)
 	}
 
 	// Verify command_queue table was created

@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 18
+const CurrentVersion = 19
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -283,17 +283,19 @@ func createTables(tx *sql.Tx) error {
 
 		// Command queue table (for tmux session command dispatching)
 		`CREATE TABLE IF NOT EXISTS command_queue (
-			command_id      TEXT PRIMARY KEY,
-			session_name    TEXT NOT NULL,
-			requester_agent TEXT NOT NULL,
-			command_text    TEXT NOT NULL,
-			state           TEXT NOT NULL DEFAULT 'queued',
-			timeout_ms      INTEGER NOT NULL DEFAULT 120000,
-			submitted_at    TEXT NOT NULL,
-			sent_at         TEXT,
-			completed_at    TEXT,
-			captured_output TEXT,
-			position        INTEGER NOT NULL DEFAULT 0
+			command_id         TEXT PRIMARY KEY,
+			session_name       TEXT NOT NULL,
+			requester_agent    TEXT NOT NULL,
+			command_text       TEXT NOT NULL,
+			state              TEXT NOT NULL DEFAULT 'queued',
+			timeout_ms         INTEGER NOT NULL DEFAULT 120000,
+			silence_ms         INTEGER NOT NULL DEFAULT 5000,
+			notify_on_complete INTEGER NOT NULL DEFAULT 1,
+			submitted_at       TEXT NOT NULL,
+			sent_at            TEXT,
+			completed_at       TEXT,
+			captured_output    TEXT,
+			position           INTEGER NOT NULL DEFAULT 0
 		)`,
 	}
 
@@ -764,6 +766,29 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		}
 	}
 
+	// Migration from version 18 to 19: Add silence_ms and notify_on_complete
+	// columns to command_queue. SQLite does not support ADD COLUMN IF NOT
+	// EXISTS, so we check PRAGMA table_info for idempotency (supports running
+	// the migration against a fresh createTables() schema too).
+	if startVersion < 19 && endVersion >= 19 {
+		existing, err := queueColumnSet(tx)
+		if err != nil {
+			return fmt.Errorf("migration 18→19: inspect command_queue: %w", err)
+		}
+		if !existing["silence_ms"] {
+			_, err = tx.Exec(`ALTER TABLE command_queue ADD COLUMN silence_ms INTEGER NOT NULL DEFAULT 5000`)
+			if err != nil {
+				return fmt.Errorf("migration 18→19: add silence_ms: %w", err)
+			}
+		}
+		if !existing["notify_on_complete"] {
+			_, err = tx.Exec(`ALTER TABLE command_queue ADD COLUMN notify_on_complete INTEGER NOT NULL DEFAULT 1`)
+			if err != nil {
+				return fmt.Errorf("migration 18→19: add notify_on_complete: %w", err)
+			}
+		}
+	}
+
 	// Update schema version
 	_, err = tx.Exec("UPDATE schema_version SET version = ?", endVersion)
 	if err != nil {
@@ -775,6 +800,34 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 	}
 
 	return nil
+}
+
+// queueColumnSet returns the set of column names currently present on the
+// command_queue table. Used by the v18→v19 migration for idempotent ALTER TABLE
+// ADD COLUMN (SQLite does not support IF NOT EXISTS on ADD COLUMN).
+func queueColumnSet(tx *sql.Tx) (map[string]bool, error) {
+	rows, err := tx.Query("PRAGMA table_info(command_queue)")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cols := map[string]bool{}
+	for rows.Next() {
+		var (
+			cid     int
+			name    string
+			ctype   string
+			notnull int
+			dflt    sql.NullString
+			pk      int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return nil, err
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
 }
 
 // BackfillEventID backfills event_id fields for events in JSONL files that lack them.
