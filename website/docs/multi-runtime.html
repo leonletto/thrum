@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Multi-Runtime Support — Thrum</title>
+<meta name="description" content="Run Claude, Codex, Aider, Gemini, and other agent runtimes in tmux-managed sessions">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#multi-runtime.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; orchestration &rsaquo; Multi-Runtime Support
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <strong>Multi-Runtime Support</strong> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+</nav>
+<main>
+<h2>What &quot;Runtime&quot; Means in Thrum</h2>
+<p>A runtime is the CLI you&#39;re running inside a tmux pane. Not the agent — the tool
+the agent uses to think and type. When Thrum launches a session, it starts one
+of these:</p>
+<ul>
+<li><strong>Claude Code</strong> — <code>claude</code>, full hook and plugin integration</li>
+<li><strong>Open Code</strong> — <code>opencode</code>, cheaper for parallel grunt work</li>
+<li><strong>Codex</strong> — <code>codex</code>, OpenAI&#39;s CLI agent</li>
+<li><strong>Aider</strong> — <code>aider</code>, terminal-based with git-native editing</li>
+<li><strong>Cursor</strong> — <code>cursor-agent</code> / <code>agent</code>, Cursor&#39;s headless mode</li>
+<li><strong>Gemini</strong> — <code>gemini</code>, Google&#39;s CLI agent</li>
+<li><strong>Auggie</strong> — <code>auggie</code></li>
+<li><strong>Amp</strong> — <code>amp</code></li>
+<li><strong>Shell</strong> — plain bash, for human operators who want to be part of the team</li>
+</ul>
+<p>Each is a first-class citizen. Thrum doesn&#39;t care which one you&#39;re running. The
+nudge mechanism, messaging, identity system, and session lifecycle work the same
+regardless.</p>
+<hr>
+<h2>Why Multi-Runtime Matters</h2>
+<p>Different runtimes are good at different things. Claude Opus is expensive but
+sharp. Open Code costs less per token and handles implementation tasks fine.
+Aider is fast for targeted file edits. Gemini has a long context window.</p>
+<p>You want to match runtime to role. Coordinator on Opus. Implementers on cheaper
+runtimes. Test writers on something fast. The decision should be yours, per
+worktree, not a system-wide setting you forget to change.</p>
+<p>The team mesh works regardless of what each agent is running. A coordinator on
+Claude can send a message to an implementer on Open Code, get a reply, and route
+a follow-up to another implementer on Codex. The messaging layer doesn&#39;t know or
+care about runtimes.</p>
+<pre><code># Coordinator decides who runs what
+thrum tmux launch coordinator-main --runtime claude
+thrum tmux launch impl-api --runtime opencode
+thrum tmux launch impl-tests --runtime codex
+thrum tmux launch debug-session --runtime shell</code></pre>
+<p>The <code>runtime</code> field shows up in <code>thrum tmux status</code> and <code>thrum team</code> so you can
+see at a glance what each agent is running.</p>
+<hr>
+<h2>Runtime Resolution Order</h2>
+<p>Every tmux command that starts or restarts a runtime resolves which runtime to
+use in this order:</p>
+<ol>
+<li><strong><code>--runtime</code> flag</strong> on the command (explicit, always wins)</li>
+<li><strong><code>preferred_runtime</code></strong> in the worktree&#39;s identity file</li>
+<li><strong><code>runtime.primary</code></strong> in <code>.thrum/config.json</code></li>
+<li><strong>Default:</strong> <code>&quot;claude&quot;</code></li>
+</ol>
+<p>This is consistent across <code>thrum tmux launch</code>, <code>thrum tmux start</code>, and
+<code>thrum tmux restart</code>. The CLI resolves the runtime before sending the RPC to the
+daemon — there&#39;s no ambiguity at the server side.</p>
+<p>If you set <code>preferred_runtime</code> in the identity file once, you never need to pass
+<code>--runtime</code> again for that worktree. The resolution chain just finds it.</p>
+<hr>
+<h2>Setting <code>preferred_runtime</code> at Init</h2>
+<p>Pass <code>--runtime</code> when you first set up a worktree. Thrum writes the value to the
+identity file as <code>preferred_runtime</code>.</p>
+<pre><code># Init a worktree for an Open Code implementer
+thrum init --runtime=opencode
+
+# Or set it during quickstart
+thrum quickstart \
+  --name impl_api \
+  --role implementer \
+  --module api \
+  --runtime opencode</code></pre>
+<p>After either command, the identity file at <code>.thrum/identities/&lt;name&gt;.json</code> has:</p>
+<pre><code>{
+  &quot;version&quot;: 5,
+  &quot;preferred_runtime&quot;: &quot;opencode&quot;,
+  ...
+}</code></pre>
+<p>When <code>thrum tmux launch</code> runs later with no <code>--runtime</code> flag, it reads
+<code>preferred_runtime</code> from the identity file and launches Open Code, not Claude.</p>
+<p>You can set a different runtime per launch by passing <code>--runtime</code> explicitly.
+The <code>preferred_runtime</code> value doesn&#39;t change — it stays as the default for that
+worktree.</p>
+<hr>
+<h2>Process Detection Across Runtimes</h2>
+<p>When Thrum needs to find the agent process in a tmux pane, it walks the process
+tree from the pane&#39;s shell upward, looking for any of the eight known runtime
+binaries:</p>
+<pre><code>claude  opencode  aider  codex  cursor-agent  agent  gemini  auggie  amp</code></pre>
+<p><code>cursor-agent</code> and <code>agent</code> both map to the <code>cursor</code> runtime name. If another
+runtime ever claims the <code>agent</code> binary name, we handle it then.</p>
+<p>This powers two things:</p>
+<p><strong>Status checks.</strong> The <code>tmux:alive</code> vs <code>tmux:stale</code> state in <code>thrum team</code> and
+<code>thrum tmux status</code> comes from checking whether the stored <code>agent_pid</code> is still
+a running process. That check now works for any runtime, not just Claude.</p>
+<p><strong>Auto-detection at prime time.</strong> When <code>thrum prime</code> or <code>thrum quickstart</code> runs
+inside a session, it calls the process walker, finds the actual running runtime,
+and writes it to the <code>runtime</code> field in the identity file. This is the <em>what&#39;s
+actually running</em> field — distinct from <code>preferred_runtime</code>, which is the <em>what
+should run here</em> field.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Set by</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>preferred_runtime</code></td>
+<td><code>thrum init</code>, <code>thrum quickstart</code></td>
+<td>What runtime should run in this worktree</td>
+</tr>
+<tr>
+<td><code>runtime</code></td>
+<td>Auto-detected at session start</td>
+<td>What runtime is actually running</td>
+</tr>
+</tbody></table>
+<p>The distinction matters when you manually launch a different runtime than the
+one in <code>preferred_runtime</code>. Thrum tracks what&#39;s actually there.</p>
+<hr>
+<h2>tmux Launch and Restart Per Runtime</h2>
+<h3>Launching</h3>
+<pre><code>thrum tmux launch implementer-api
+# → resolves runtime from identity/config/default
+# → starts the right binary in the tmux pane
+# → waits for the pane to produce output
+# → sends the prime command for that runtime
+
+thrum tmux launch implementer-api --runtime aider
+# → overrides resolution, launches aider regardless of identity file</code></pre>
+<p>The prime command varies by runtime. Claude Code gets <code>/thrum:prime</code>. Open Code
+and other runtimes get a shell equivalent that loads the same session context.
+The right command is chosen automatically — you don&#39;t configure this.</p>
+<h3>Restart and Context Snapshots</h3>
+<pre><code>thrum tmux restart implementer-api</code></pre>
+<p>Restart extracts the conversation history, kills the session, creates a fresh
+one, and relaunches. The new session loads the snapshot so the agent picks up
+where it left off.</p>
+<p><strong>This only works for Claude Code.</strong> Claude stores conversation history in a
+JSONL file that Thrum knows how to read and replay. Other runtimes don&#39;t use
+that format. When you restart a non-Claude session, Thrum skips the snapshot
+step and logs a note. The agent relaunches clean, without its prior
+conversation.</p>
+<p>If you need to preserve context across a non-Claude restart, the options are:</p>
+<ul>
+<li>Have the orchestrator send a summary message to the agent after restart</li>
+<li>Use the runtime&#39;s own session-save mechanism if it has one</li>
+<li>For short tasks: just re-send the task description</li>
+</ul>
+<p>This is a known limitation, not a bug. Extending restart snapshots to other
+runtimes is deferred until there&#39;s a clear format to work with.</p>
+<p>See <a href="session-restart.html">Session Restart</a> for the full Claude restart story.</p>
+<hr>
+<h2>Identity File Fields (Version 5)</h2>
+<p>The identity file format is version 5 as of this feature. Two changes from
+version 4:</p>
+<p><strong><code>preferred_runtime</code></strong> is new. It&#39;s the runtime this worktree should use by
+default. Set via <code>thrum init --runtime=...</code> or <code>thrum quickstart --runtime=...</code>.
+Consumed by <code>thrum tmux launch</code> and <code>thrum tmux start</code> when no <code>--runtime</code> flag
+is passed.</p>
+<p><strong><code>agent_pid</code></strong> replaces <code>claude_pid</code>. Same semantics — the OS PID of the agent
+process running in the tmux pane. The rename drops the Claude-specific name.
+PIDs are ephemeral. They&#39;re repopulated on every session start, so there&#39;s no
+migration path for old values — old <code>&quot;claude_pid&quot;</code> entries are simply ignored on
+next load.</p>
+<p>If you read an old identity file and see <code>&quot;claude_pid&quot;</code> but no <code>&quot;agent_pid&quot;</code>,
+that&#39;s a v4 file. It works fine — the PID will be repopulated when the agent
+next starts.</p>
+<p>The full v5 shape, with the relevant fields:</p>
+<pre><code>{
+  &quot;version&quot;: 5,
+  &quot;agent_pid&quot;: 12345,
+  &quot;preferred_runtime&quot;: &quot;opencode&quot;,
+  &quot;runtime&quot;: &quot;opencode&quot;,
+  &quot;tmux_session&quot;: &quot;implementer-api:0.0&quot;,
+  ...
+}</code></pre>
+<p>See <a href="identity.html">Identity System</a> for the complete field reference.</p>
+<hr>
+<h2>Config: System-Wide Runtime Default</h2>
+<p>If you want all new agents to default to a specific runtime without passing
+<code>--runtime</code> every time, set it in <code>.thrum/config.json</code>:</p>
+<pre><code>{
+  &quot;runtime&quot;: {
+    &quot;primary&quot;: &quot;opencode&quot;
+  }
+}</code></pre>
+<p>This is step 3 in the resolution chain. Any worktree without a
+<code>preferred_runtime</code> in its identity file uses this value. Any worktree with
+<code>preferred_runtime</code> set ignores it.</p>
+<p>The config value is per-repo. If you have separate repos where you want
+different defaults, set it in each one&#39;s <code>.thrum/config.json</code>.</p>
+<p>See <a href="configuration.html">Configuration</a> for the full config reference.</p>
+<hr>
+<h2>Known Limitations</h2>
+<p><strong>Restart snapshots are Claude-only.</strong> When you restart a non-Claude session,
+context is not preserved. The agent relaunches without its conversation history.
+Use the orchestrator or manual re-briefing to restore context.</p>
+<p><strong><code>FindClaudeAncestor()</code> keeps its name.</strong> The internal function that detects
+runtimes is still named after Claude. The behavior is fully runtime-agnostic —
+it detects all eight known binaries — but the name is cosmetic legacy. A future
+cleanup will rename it. Don&#39;t rely on the function name as documentation.</p>
+<p><strong>Cursor&#39;s <code>agent</code> binary.</strong> The process name <code>agent</code> maps to Cursor. If a
+different runtime ships a binary named <code>agent</code> in the future, detection will
+misattribute. This hasn&#39;t happened yet.</p>
+<hr>
+<h2>Full Setup Example</h2>
+<p>Here&#39;s what a coordinator does to spin up a mixed-runtime team:</p>
+<pre><code># 1. Create worktrees
+git worktree add ../worktrees/api-feature feature/api-refactor
+git worktree add ../worktrees/tests-feature feature/api-refactor-tests
+
+# 2. Init each worktree with its preferred runtime
+cd ../worktrees/api-feature
+thrum init --runtime=opencode
+
+cd ../worktrees/tests-feature
+thrum init --runtime=codex
+
+# 3. Create tmux sessions
+thrum tmux create impl-api --cwd ../worktrees/api-feature
+thrum tmux create impl-tests --cwd ../worktrees/tests-feature
+
+# 4. Register agents
+thrum tmux send impl-api &quot;thrum quickstart --name impl_api --role implementer --module api&quot;
+thrum tmux send impl-tests &quot;thrum quickstart --name impl_tests --role implementer --module tests&quot;
+
+# 5. Launch — each session reads its own preferred_runtime
+thrum tmux launch impl-api      # launches opencode (from identity file)
+thrum tmux launch impl-tests    # launches codex (from identity file)
+
+# 6. Send tasks
+thrum send &quot;Implement the API changes per thrum-zmm.1&quot; --to @impl_api
+thrum send &quot;Write tests for the API changes&quot; --to @impl_tests</code></pre>
+<p>Both agents run different runtimes, receive messages through the same nudge
+mechanism, and report status through the same <code>thrum tmux status</code> output:</p>
+<pre><code>SESSION        AGENT        STATE        RUNTIME    BRANCH
+impl-api       impl_api     alive        opencode   feature/api-refactor
+impl-tests     impl_tests   alive        codex      feature/api-refactor-tests</code></pre>
+<hr>
+<h2>Next Steps</h2>
+<ul>
+<li><a href="tmux-sessions.html">Tmux-Managed Sessions</a> — how sessions are created, nudged,
+and monitored; the full lifecycle before you add multi-runtime to the picture</li>
+<li><a href="session-restart.html">Session Restart</a> — snapshot extraction and context
+restoration for Claude sessions</li>
+<li><a href="identity.html">Identity System</a> — full field reference for the v5 identity file</li>
+<li><a href="configuration.html">Configuration</a> — <code>runtime.primary</code> and other config keys</li>
+<li><a href="orchestrator-role.html">Orchestrator Role</a> — how a coordinator manages a
+mixed-runtime team end-to-end</li>
+<li><a href="cli.html">CLI Reference</a> — <code>thrum tmux launch</code>, <code>thrum quickstart</code>,
+<code>thrum init</code> flags</li>
+</ul>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#multi-runtime.html')}</script>
+</body>
+</html>

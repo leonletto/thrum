@@ -3,7 +3,8 @@ title: "Messaging"
 description:
   "Thrum messaging system — sending, receiving, replies, priorities, scopes,
   mentions, and inbox filtering"
-category: "guides"
+category: "messaging"
+last_updated: "2026-04-09"
 ---
 
 ## Thrum Messaging System
@@ -16,18 +17,27 @@ category: "guides"
 
 ## Overview
 
-The Thrum messaging system provides structured communication between agents with
-support for direct messaging, read tracking, scoping, references, and rich
-content formats. Messages are persisted in a Git-backed event log and projected
-into SQLite for fast queries.
+Thrum messaging connects agents with direct messages, read tracking, scopes,
+references, and structured content. Messages go into a Git-backed event log and
+project into SQLite for fast queries.
 
-**Message delivery:** For agents running in
-[tmux-managed sessions](tmux-sessions.md), the daemon delivers notifications
-instantly via `tmux send-keys` — no background listener needed. For agents
-without tmux, the existing listener/hook-based pull mechanism still works.
+**Message delivery:** For agents in [tmux-managed sessions](tmux-sessions.md),
+the daemon delivers notifications instantly via `tmux send-keys` — no background
+listener needed. Agents without tmux fall back to the listener/hook-based pull
+mechanism.
 
-This document covers the CLI commands and behaviors for sending, receiving,
-replying to, and managing messages.
+This document covers the CLI commands for sending, receiving, replying to, and
+managing messages.
+
+## Messaging across repos and machines
+
+Same-repo messaging is the default. When you want agents in different repos, or
+on different machines, to talk to each other, you pair their daemons as peers.
+The messaging API is the same — `thrum send`, `thrum inbox`, groups, threads —
+but messages route through peers instead of staying local.
+
+For pairing, address handling, and the two transports (same-machine and
+Tailscale), see [Peers](peers.md).
 
 ## Quick Reference
 
@@ -58,9 +68,9 @@ replying to, and managing messages.
 thrum send "Test suite is green, ready for review"
 ```
 
-The daemon resolves the current agent identity and session automatically. The
-message is written as a `message.create` event to the agent's sharded JSONL log
-(`.git/thrum-sync/a-sync/messages/{agent_name}.jsonl`) and projected into
+The daemon resolves your current agent identity and session automatically. It
+writes the message as a `message.create` event to the agent's sharded JSONL log
+(`.git/thrum-sync/a-sync/messages/{agent_name}.jsonl`) and projects it into
 SQLite.
 
 ### Flags
@@ -76,9 +86,9 @@ SQLite.
 
 ### Direct Messaging with --to
 
-The `--to` flag provides a shorthand for directing a message to a specific
-agent, role, or group. Under the hood, `--to @reviewer` appends `@reviewer` to
-the mentions list, which is stored as a `mention` ref on the message.
+`--to` is shorthand for directing a message to a specific agent, role, or group.
+Under the hood, `--to @reviewer` appends `@reviewer` to the mentions list,
+stored as a `mention` ref on the message.
 
 ```bash
 # These are equivalent:
@@ -96,15 +106,15 @@ The `@` prefix is optional -- `--to reviewer` and `--to @reviewer` both work.
 
 ### Mention Routing
 
-When a message includes mentions (via `--to`, `--mention`, or `@role` in the
-mentions list), Thrum stores them as refs with type `mention` and the role name
-as the value:
+When a message has mentions (via `--to`, `--mention`, or `@role` in the mentions
+list), Thrum stores each one as a ref with type `mention` and the role name as
+the value:
 
 ```json
 { "type": "mention", "value": "reviewer" }
 ```
 
-Agents can then filter their inbox to only messages that mention them:
+Agents filter their inbox to only messages that mention them:
 
 ```bash
 thrum inbox --mentions
@@ -127,12 +137,12 @@ or a role:
 | `@mygroup`        | Routes to the named custom group                                                  |
 | `@sf:coordinator` | Routes to proxy agent `sf:coordinator` (cross-repo via peer transport, v0.7.0)    |
 
-**Important:** Sending to an unknown name/group that doesn't exist is a **hard
-error** — the message is rejected and not stored. Unknown recipients must be
-created as agents or groups first.
+**Important:** Sending to an unknown name or group is a **hard error** — the
+message is rejected and not stored. Create unknown recipients as agents or
+groups first.
 
-**Registration rule:** Agent names must differ from their role. Use distinct
-names like `--name coord_main --role coordinator` rather than
+**Registration rule:** Agent names must differ from their role. Use
+`--name coord_main --role coordinator`, not
 `--name coordinator --role coordinator`.
 
 ### Example: Agent-to-Agent Coordination
@@ -156,8 +166,7 @@ thrum reply msg_01HXE... "Looks good, merging now"
 
 ## Replying to Messages
 
-The `reply` command creates a reply-to reference linking your message to the
-original:
+`reply` links your message back to the original with a `reply_to` reference:
 
 ```bash
 thrum reply MSG_ID "Your reply text"
@@ -194,9 +203,9 @@ thrum reply msg_01HXF... "Acknowledged" --format plain
 
 ### Auto-Threading (v0.5.0+)
 
-When you reply to a message, Thrum automatically assigns a shared `thread_id` to
-both the reply and the original message. This creates implicit conversation
-threads without any explicit thread creation.
+When you reply, Thrum automatically assigns a shared `thread_id` to both the
+reply and the original message. Threads are implicit — you don't create them
+explicitly.
 
 **How it works:**
 
@@ -219,9 +228,8 @@ thrum reply msg_01HXE... "Looking at it now"
 thrum reply msg_01HXE... "Approved, merging"
 ```
 
-The UI groups conversations by `thread_id` for efficient display. Messages
-without a `thread_id` fall back to `reply_to` chain-walking for backward
-compatibility.
+The UI groups conversations by `thread_id`. Messages without a `thread_id` fall
+back to `reply_to` chain-walking for backward compatibility.
 
 ## Inbox
 
@@ -263,10 +271,9 @@ displayed with a `↳` prefix and grouped with the original message.
 
 ### Auto Mark-as-Read
 
-Viewing the inbox automatically marks all displayed messages as read
-(best-effort; failure does not block the command). This behavior is skipped when
-using the `--unread` filter, so that repeatedly checking unread messages does
-not clear them before you act on them.
+Viewing the inbox marks all displayed messages as read (best-effort; failure
+doesn't block the command). The `--unread` filter skips this — so you can check
+what's unread without immediately clearing it.
 
 The footer shows pagination and unread count:
 
@@ -293,8 +300,8 @@ thrum inbox --scope module:auth
 
 ### Get
 
-Retrieve a single message with its full details: author, timestamps, scopes,
-refs, edit and delete status.
+Pull a single message with its full details: author, timestamps, scopes, refs,
+edit and delete status.
 
 ```bash
 thrum message get msg_01HXE...
@@ -317,8 +324,8 @@ The `get` command automatically marks the message as read.
 
 ### Edit
 
-Replace a message's content entirely. Only the original author (matching
-`agent_id`) can edit their own messages. Deleted messages cannot be edited.
+Replace a message's content entirely. Only the original author (matched by
+`agent_id`) can edit. Deleted messages can't be edited.
 
 ```bash
 thrum message edit msg_01HXE... "Updated: auth module complete with rate limiting"
@@ -330,10 +337,10 @@ thrum message edit msg_01HXE... "Updated: auth module complete with rate limitin
 > Message edited: msg_01HXE... (version 2)
 ```
 
-Each edit is recorded in the `message_edits` table with before/after content,
-the editor's session, and a timestamp. The version number reflects the total
-number of edits applied to the message. Edits trigger subscription notifications
-just like new messages.
+Each edit lands in the `message_edits` table with before/after content, the
+editor's session, and a timestamp. The version number is the total number of
+edits on that message. Edits trigger subscription notifications just like new
+messages.
 
 ### Delete
 
@@ -360,9 +367,9 @@ Deleted messages:
 
 ### Mark Read
 
-Explicitly mark one or more messages as read. This is useful when auto
-mark-as-read was skipped or when processing messages programmatically. Use
-`--all` to mark every unread message as read at once.
+Explicitly mark one or more messages as read — useful when auto mark-as-read was
+skipped or when you're processing messages programmatically. Use `--all` to
+clear everything at once.
 
 ```bash
 thrum message read msg_01HXE...
@@ -376,9 +383,9 @@ thrum message read --all
 > Marked 3 messages as read
 ```
 
-Read state is tracked per session and per agent in the `message_reads` table. A
-message is considered "read" if any session or agent matching the current
-identity has a read record for it.
+Read state is tracked per session and per agent in `message_reads`. A message is
+"read" if any session or agent matching your current identity has a read record
+for it.
 
 ### Auto Mark-as-Read Summary
 
@@ -392,7 +399,7 @@ Several commands mark messages as read automatically:
 | `thrum message get MSG_ID` | Marks the retrieved message as read                       |
 | `thrum message read --all` | Explicitly marks all unread messages as read              |
 
-All auto mark-as-read operations are best-effort: if they fail, the parent
+All auto mark-as-read operations are best-effort — if they fail, the parent
 command still succeeds.
 
 ## Message Structure
@@ -457,13 +464,12 @@ thrum send "Test results for feature X" \
   --structured '{"type":"test_result","passed":45,"failed":2,"coverage":85.9}'
 ```
 
-The `structured` field allows agents to parse machine-readable payloads, build
+The `structured` field lets agents parse machine-readable payloads, build
 dashboards, trigger automated workflows, and index by structured fields.
 
 ## Scopes
 
-Scopes define the context and visibility of a message. They answer "What is this
-message about?"
+Scopes tag the context of a message. They answer "What is this message about?"
 
 ### Scope Structure
 
@@ -534,13 +540,13 @@ thrum send "Implemented feature from design doc, closes issue" \
 
 ## Groups
 
-Groups allow you to send messages to collections of agents and roles using a
-single `--to @groupname` address.
+Groups let you address a collection of agents and roles with a single
+`--to @groupname`.
 
 ### Built-in Groups
 
-**`@everyone`** — Automatically created on daemon startup. All registered agents
-are implicit members. This group cannot be deleted.
+**`@everyone`** — Created automatically on daemon startup. All registered agents
+are implicit members. You can't delete it.
 
 ```bash
 # Send to all agents
@@ -575,12 +581,12 @@ thrum send "PR ready for review" --to @reviewers
 
 ### Message Resolution
 
-When a message is sent to a group, the daemon resolves group membership at
-**read time**. This means:
+The daemon resolves group membership at **read time**, not send time. That
+means:
 
-- New agents added to a group automatically receive messages sent to that group
-- The `@everyone` group dynamically includes all registered agents
-- Role-based members are resolved to all agents with that role at query time
+- Agents you add to a group after a message was sent still see that message
+- `@everyone` dynamically includes all registered agents
+- Role-based members resolve to all agents with that role at query time
 
 ### Broadcast
 
@@ -721,10 +727,10 @@ Optimized for common query patterns:
 
 ## MCP Server Integration
 
-The MCP server (`thrum mcp serve`) provides native messaging tools for AI agents
-running in Claude Code or similar environments. It exposes 10 MCP tools: 4 core
+The MCP server (`thrum mcp serve`) gives AI agents running in Claude Code or
+similar environments native messaging tools. It exposes 10 MCP tools: 4 core
 messaging tools (`send_message`, `check_messages`, `wait_for_message`,
-`list_agents`) and 6 group management tools. MCP tools use the same underlying
+`list_agents`) and 6 group management tools. MCP tools run the same underlying
 RPC methods but add `@role` addressing and real-time WebSocket push
 notifications.
 
@@ -733,8 +739,8 @@ configuration.
 
 ## Agent Identity
 
-Agents are identified by name using identity files stored at
-`.thrum/identities/{name}.json`. Identity is resolved in this priority order:
+Each agent has an identity file at `.thrum/identities/{name}.json`. Identity
+resolves in this priority order:
 
 1. `THRUM_NAME` environment variable (selects which identity file to load)
 2. `THRUM_ROLE` and `THRUM_MODULE` environment variables
@@ -744,11 +750,11 @@ Agents are identified by name using identity files stored at
 Agent names must match `[a-z0-9_]+`. Reserved names: `daemon`, `system`,
 `thrum`, `all`, `broadcast`.
 
-For multi-agent worktrees, each agent gets its own identity file and JSONL
-shard.
+In multi-agent worktrees, each agent gets its own identity file and JSONL shard.
 
 ## Next Steps
 
+- [Peers](peers.md) — pair daemons to route messages across repos and machines
 - [Subscriptions & Notifications](subscriptions.md) — subscribe to scopes and
   mentions so messages arrive as push notifications instead of requiring polling
 - [MCP Server](mcp-server.md) — optional native tool integration for

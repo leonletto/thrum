@@ -3,7 +3,7 @@ title: "Sync Protocol"
 description:
   "Git-based message synchronization using orphan branch, sync worktree,
   conflict-free merging, and offline-first design"
-category: "sync"
+category: "infrastructure"
 order: 1
 tags: ["sync", "git", "worktree", "merge", "offline", "jsonl"]
 last_updated: "2026-02-10"

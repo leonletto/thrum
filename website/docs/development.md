@@ -3,7 +3,7 @@ title: "Development Guide"
 description:
   "Setup, testing, building, contributing - complete guide for developing and
   extending Thrum"
-category: "development"
+category: "reference"
 order: 2
 tags: ["development", "contributing", "testing", "building", "makefile", "go"]
 last_updated: "2026-04-06"

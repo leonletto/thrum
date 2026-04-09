@@ -3,7 +3,7 @@ title: "Session Restart & Context Recovery"
 description:
   "Save conversation history and resume where you left off — from daily shutdown
   to automated mid-task restarts"
-category: "guides"
+category: "orchestration"
 order: 5
 tags: ["restart", "context", "snapshot", "recovery", "session"]
 last_updated: "2026-04-07"

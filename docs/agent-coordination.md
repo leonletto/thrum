@@ -1,8 +1,8 @@
 ## Agent Coordination
 
-Thrum helps you coordinate multiple AI agents across sessions, worktrees, and
-machines. This guide covers practical coordination patterns, integration with
-the Beads issue tracker, and session workflow templates.
+You run agents in parallel. This page covers the practical patterns: how they
+message each other, how Beads and Thrum work together, and what a typical
+session looks like start to finish.
 
 > For the philosophy behind this approach — why you direct the work instead of
 > handing it off — see [Why Thrum Exists](philosophy.md).
@@ -23,8 +23,8 @@ thrum reply <msg-id> "Here's my update"
 
 ### MCP Server (Optional)
 
-For environments that support MCP, Thrum also provides an MCP server with native
-tool integration. See [MCP Server](mcp-server.md) for configuration.
+If your environment supports MCP, Thrum has an MCP server with native tool
+integration. See [MCP Server](mcp-server.md) for configuration.
 
 > **Note:** Use agent names (e.g., `@coord_main`), not role names (e.g.,
 > `@coordinator`). Sending to a role fans out to ALL agents with that role. Run
@@ -34,8 +34,7 @@ tool integration. See [MCP Server](mcp-server.md) for configuration.
 
 ### Planner-Implementer Coordination
 
-The most common pattern: a planner agent assigns work and an implementer
-executes it.
+The most common setup: a planner assigns work, an implementer executes it.
 
 **Planner:**
 
@@ -77,7 +76,7 @@ thrum send "Build script complete. Tests passing. Ready for review." \
 
 ### Peer Collaboration
 
-Agents working on related areas coordinate to avoid conflicts.
+Two agents working in overlapping areas need to stay out of each other's way.
 
 ```bash
 # Agent A: Announce work area
@@ -93,7 +92,8 @@ thrum send "Need to edit login.ts for validation. ETA?" --to @agent_a
 
 ### Code Review
 
-Request and respond to code reviews via messaging.
+Pass review requests through messages. The implementer sends the commit hash and
+what to look at; the reviewer responds with findings.
 
 **Implementer:**
 
@@ -122,52 +122,30 @@ See beads: thrum-abc (bug filed). Otherwise looks good."
 
 ### Multi-Worktree Coordination
 
-Agents in different git worktrees share the same daemon and message store.
-
-**Agent in main worktree:**
-
-```bash
-cd /path/to/repo
-export THRUM_NAME=main_agent
-thrum quickstart --name main_agent --role coordinator --module main \
-  --intent "Main branch coordination"
-
-thrum send "Feature branch ready for integration testing" --to @feature_agent
-```
-
-**Agent in feature worktree:**
-
-```bash
-cd ~/.workspaces/repo/feature
-thrum setup --main-repo /path/to/repo
-export THRUM_NAME=feature_agent
-thrum quickstart --name feature_agent --role implementer --module feature \
-  --intent "Feature implementation"
-
-# Check inbox (sees messages from main_agent)
-thrum inbox
-```
+Agents in different git worktrees share the same daemon and message store — you
+set up a redirect once and they all connect through it. For the full setup
+walkthrough, architecture diagram, and running-multiple-agents examples, see
+[Multi-Agent Support](multi-agent.md#multi-worktree-coordination).
 
 ## Message-Listener Pattern
 
-For async message handling, spawn a background sub-agent that listens for
-incoming messages and notifies the main agent when they arrive.
+For async message handling, spawn a background sub-agent to wait for incoming
+messages and notify the main agent when they arrive.
 
 ### How It Works
 
 1. The main agent spawns a message-listener as a background task
-2. The listener uses `thrum wait` (blocks until message arrives or timeout)
-3. When a message arrives, the listener returns immediately with the message
-   content
-4. The main agent processes the message; the listener continues looping
-   automatically (no manual re-arming needed)
-5. A cron watchdog respawns the listener every 30 min if it is not running
+2. The listener runs `thrum wait` — it blocks until a message arrives or times
+   out
+3. When a message arrives, the listener returns immediately with the content
+4. The main agent processes the message; the listener keeps looping
+   automatically (no re-arming needed)
+5. A cron watchdog respawns the listener every 30 min if it stops
 
-**Recommended approach:** Use `thrum wait` which blocks until a message arrives
-or times out. This is more efficient than polling loops with sleep intervals.
-Use `--after -15s` to include messages sent up to 1 second ago (`--after`
-negative value = "N ago"). Omit `--after` to receive only messages that arrive
-after the wait starts.
+**Use `thrum wait`** — it's more efficient than polling loops with sleep. Use
+`--after -15s` to catch messages sent up to 15 seconds ago (`--after` negative
+value = "N ago"). Omit `--after` to receive only messages that arrive after the
+wait starts.
 
 **Cron watchdog:** Set up a cron job to auto-respawn the listener if it stops:
 
@@ -199,16 +177,17 @@ NO_MESSAGES_TIMEOUT
 
 ### Context Management
 
-- The listener loops for up to 4 hours (30 cycles of ~8 min each) before
-  stopping; the cron watchdog will respawn it automatically
-- After 5 consecutive timeouts with no pending work, send status to the
-  coordinator and stop the listener
-- The listener is read-only; it never sends messages
+- The listener runs for up to 4 hours (30 cycles of ~8 min each), then stops;
+  the cron watchdog respawns it
+- After 5 consecutive timeouts with no pending work, send a status update to the
+  coordinator and stop
+- The listener is read-only — it never sends messages
 
 ## Beads Integration
 
-When both Thrum and [Beads](https://github.com/leonletto/thrum) are available,
-use them together for full coordination:
+Run Thrum and [Beads](https://github.com/leonletto/thrum) together. Thrum
+handles real-time messaging; Beads tracks the work. Neither tries to do the
+other's job:
 
 | Concern                 | Tool  | Why                                       |
 | ----------------------- | ----- | ----------------------------------------- |

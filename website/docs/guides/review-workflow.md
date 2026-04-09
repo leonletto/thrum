@@ -3,7 +3,7 @@ title: "Code Review Workflow"
 description:
   "Walk through the implement-then-review cycle: one agent writes code on a
   feature branch, another reviews it, Thrum handles the communication"
-category: "guides"
+category: "coordination"
 order: 12
 tags:
   ["review", "workflow", "worktree", "feature-branch", "coordination", "how-to"]

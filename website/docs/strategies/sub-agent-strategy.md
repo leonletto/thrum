@@ -2,7 +2,7 @@
 title: "Sub-Agent Strategy"
 description:
   "When and how to delegate work to sub-agents for context efficiency"
-category: "strategies"
+category: "agent-protocols"
 order: 1
 tags: ["agents", "sub-agents", "delegation", "parallelization"]
 last_updated: "2026-03-03"

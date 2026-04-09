@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Team on Your Machine — Thrum</title>
+<meta name="description" content="Run multiple agents in parallel worktrees with Thrum as the coordination layer">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#scenarios/team.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; onboarding &rsaquo; Team on Your Machine
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="../peers.html">Peers</a> | <a href="../subscriptions.html">Subscriptions & Notifications</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../telegram-bridge.html">Telegram Bridge</a> | <a href="../telegram-groups.html">Telegram Groups</a> | <a href="../messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../context.html">Agent Context Management</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="../daemon.html">Daemon Architecture</a> | <a href="../sync.html">Sync Protocol</a> | <a href="../event-streaming.html">Event Streaming</a> | <a href="../configuration.html">Configuration</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="../web-ui.html">Web UI</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="../scenarios/solo-dev.html">Solo Dev with One Agent</a> | <strong>Team on Your Machine</strong> | <a href="../scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="../scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="../orchestrator-role.html">Orchestrator Role</a> | <a href="../tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="../multi-runtime.html">Multi-Runtime Support</a> | <a href="../single-agent-mode.html">Single-Agent Mode</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
+</nav>
+<main>
+<h2>Team on Your Machine</h2>
+<p>You run a coordinator agent that holds the plan, a few implementers working
+separate worktrees, and a tester checking their output. They message each other
+through Thrum. You don&#39;t relay anything — you read the summaries, review the
+diffs, and merge what passes. It&#39;s a team of agents directed by you, not an
+autonomous system running loose.</p>
+<h2>Prerequisites</h2>
+<ul>
+<li>Thrum installed and the daemon running</li>
+<li>Git worktrees: know how to create and switch between them</li>
+<li>Two or more runtime sessions available (tmux panes, terminal tabs, or similar)</li>
+</ul>
+<h2>Walkthrough</h2>
+<ol>
+<li><strong><a href="../quickstart.html">Quickstart</a></strong> — install Thrum, register your first
+agent, and send a message to confirm the daemon is live.</li>
+<li><strong><a href="../multi-agent.html">Multi-Agent Setup</a></strong> — create multiple agent identities
+and wire them into separate worktrees.</li>
+<li><strong><a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a></strong> — run a
+coordinator and an implementer together; see how messages flow between them.</li>
+<li><strong><a href="../role-templates.html">Role Templates</a></strong> — load predefined coordinator,
+implementer, and tester roles so each agent starts with the right context.</li>
+<li><strong><a href="../messaging.html">Messaging</a></strong> — send targeted messages, check inboxes, and
+reply; the full messaging API your agents use to stay in sync.</li>
+<li><strong><a href="../guides/review-workflow.html">Review Workflow</a></strong> — route finished work
+back to the coordinator for code review before you merge.</li>
+<li><strong><a href="../tmux-sessions.html">Tmux Sessions</a></strong> — keep each agent in its own named
+pane so you can watch them all at once without losing track.</li>
+</ol>
+<h2>Control from your phone</h2>
+<p>Running a long session and stepping away? The
+<a href="../telegram-bridge.html">Telegram Bridge</a> turns Telegram into a unified inbox for
+the whole team. Any agent that needs your input pings you directly — the
+coordinator asking for a merge approval, an implementer hitting a decision
+point, a tester reporting a failure. Reply in Telegram and your reply routes
+back to whichever agent messaged you. One connection, concurrent threads, no
+context switching.</p>
+<h2>When you&#39;re ready for more</h2>
+<ul>
+<li><a href="across-boundaries.html">Agents Across Repos/Machines</a> — spread your team across
+multiple repositories or remote machines.</li>
+<li><a href="orchestration.html">Automated Plan Execution</a> — hand a full spec to a
+coordinator and let it break down and dispatch the work.</li>
+</ul>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../../llms.txt">llms.txt</a> | <a href="../../llms-full.txt">llms-full.txt</a> | <a href="../../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#scenarios/team.html')}</script>
+</body>
+</html>

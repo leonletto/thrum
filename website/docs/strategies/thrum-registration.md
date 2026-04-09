@@ -2,7 +2,7 @@
 title: "Thrum Registration"
 description:
   "How to register with Thrum at session start and communicate with other agents"
-category: "strategies"
+category: "agent-protocols"
 order: 2
 tags: ["registration", "messaging", "thrum", "coordination"]
 last_updated: "2026-03-03"

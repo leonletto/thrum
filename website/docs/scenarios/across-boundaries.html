@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Agents Across Repos/Machines — Thrum</title>
+<meta name="description" content="Connect Thrum daemons in different repos or on different machines via peers">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#scenarios/across-boundaries.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; onboarding &rsaquo; Agents Across Repos/Machines
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="../peers.html">Peers</a> | <a href="../subscriptions.html">Subscriptions & Notifications</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../telegram-bridge.html">Telegram Bridge</a> | <a href="../telegram-groups.html">Telegram Groups</a> | <a href="../messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../context.html">Agent Context Management</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="../daemon.html">Daemon Architecture</a> | <a href="../sync.html">Sync Protocol</a> | <a href="../event-streaming.html">Event Streaming</a> | <a href="../configuration.html">Configuration</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="../web-ui.html">Web UI</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="../scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="../scenarios/team.html">Team on Your Machine</a> | <strong>Agents Across Repos/Machines</strong> | <a href="../scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="../orchestrator-role.html">Orchestrator Role</a> | <a href="../tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="../multi-runtime.html">Multi-Runtime Support</a> | <a href="../single-agent-mode.html">Single-Agent Mode</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
+</nav>
+<main>
+<h2>Agents Across Repos/Machines</h2>
+<p>Peers connect Thrum daemons running in separate repos or on completely different
+machines. On a local network, same-subnet discovery handles the pairing
+automatically. For remote machines, Tailscale gives you an encrypted mesh — both
+sides authenticate once and Thrum treats them as neighbors. Either way, it&#39;s the
+same team, the same message routing, and the same <code>thrum team</code> view you&#39;d get
+working in a single repo.</p>
+<h2>Prerequisites</h2>
+<ul>
+<li>Thrum installed on both sides</li>
+<li>Both daemons running (<code>thrum daemon start</code>)</li>
+<li>Same-subnet connectivity <strong>or</strong> Tailscale installed and authenticated on both
+machines</li>
+</ul>
+<h2>Walkthrough</h2>
+<p>Work through these in order:</p>
+<ol>
+<li><a href="../peers.html">Peers</a> — the concept and the pairing flow</li>
+<li><a href="../guides/cross-machine-sync.html">Cross-Machine Sync</a> — end-to-end
+walkthrough</li>
+<li><a href="../tailscale-sync.html">Tailscale Sync</a> — the Tailscale transport</li>
+<li><a href="../tailscale-security.html">Tailscale Security</a> — how the mesh is secured</li>
+<li><a href="../messaging.html">Messaging</a> — how messages flow across peers</li>
+<li><a href="../multi-agent.html">Multi-Agent Setup</a> — coordinator/implementer roles</li>
+</ol>
+<h2>When you&#39;re ready for more</h2>
+<p><a href="orchestration.html">Automated Plan Execution</a> — hand a plan to a coordinator and
+let agents drive the work end to end.</p>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../../llms.txt">llms.txt</a> | <a href="../../llms-full.txt">llms-full.txt</a> | <a href="../../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#scenarios/across-boundaries.html')}</script>
+</body>
+</html>

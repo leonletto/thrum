@@ -3,7 +3,7 @@ title: "MCP Server"
 description:
   "Thrum MCP server for native AI agent integration — tools, identity, message
   handling, and Claude Code setup"
-category: "reference"
+category: "integrations"
 ---
 
 ## MCP Server

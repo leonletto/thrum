@@ -21,41 +21,39 @@
   // Display order and labels for top-level categories
   var CATEGORY_ORDER = [
     'overview',
+    'onboarding',
     'quickstart',
-    'webui',
-    'cli',
-    'messaging',
+    'orchestration',
     'identity',
-    'guides',
-    'strategies',
-    'api',
-    'daemon',
-    'mcp',
-    'sync',
-    'development'
+    'messaging',
+    'coordination',
+    'integrations',
+    'infrastructure',
+    'reference',
+    'api'
   ];
 
   var CATEGORY_LABELS = {
     overview: 'Overview',
+    onboarding: 'Onboarding',
     quickstart: 'Getting Started',
     tools: 'Recommended Tools',
-    webui: 'Web UI',
-    cli: 'CLI',
+    orchestration: 'Orchestration',
+    identity: 'Identity & Agents',
     messaging: 'Messaging',
-    identity: 'Identity',
-    guides: 'Guides',
-    strategies: 'Strategies',
-    api: 'API Reference',
-    daemon: 'Daemon',
-    mcp: 'MCP Server',
-    sync: 'Sync',
-    development: 'Development'
+    coordination: 'Coordination',
+    integrations: 'Integrations',
+    infrastructure: 'Infrastructure',
+    reference: 'Reference',
+    'agent-protocols': 'Agent Protocols',
+    api: 'API Reference'
   };
 
   // Sub-categories nested under a parent. Rendered indented and collapsible.
   // Key = parent category, value = array of child categories in display order.
   var CATEGORY_CHILDREN = {
-    quickstart: ['tools']
+    quickstart: ['tools'],
+    reference: ['agent-protocols']
   };
 
   var sidebarNav = document.getElementById('sidebar-nav');
@@ -364,6 +362,12 @@
 
   function rewriteInternalLinks() {
     var links = contentInner.querySelectorAll('a[href]');
+    // Directory of the currently-loaded doc, used to resolve relative links
+    // like `../multi-agent.html` from `guides/coordinate-two-agents.html`.
+    var currentDir = '';
+    if (currentPath && currentPath.indexOf('/') !== -1) {
+      currentDir = currentPath.substring(0, currentPath.lastIndexOf('/') + 1);
+    }
     links.forEach(function (a) {
       var href = a.getAttribute('href');
       // Skip external links and anchors
@@ -374,7 +378,18 @@
       }
       // Rewrite relative .html links to hash navigation
       if (href.endsWith('.html') || href.indexOf('.html#') !== -1) {
-        a.setAttribute('href', '#' + href);
+        // Resolve relative paths (including `../`) against the current doc's
+        // directory so the resulting hash is flat relative to DOCS_BASE.
+        // Uses URL() with a fake scheme for portable path normalization.
+        var resolved = href;
+        try {
+          var u = new URL(href, 'http://x/' + currentDir);
+          resolved = u.pathname.slice(1) + u.hash;
+        } catch (e) {
+          // Fall back to raw href if URL() parsing fails
+          resolved = href;
+        }
+        a.setAttribute('href', '#' + resolved);
         a.addEventListener('click', function (e) {
           e.preventDefault();
           var target = this.getAttribute('href').slice(1);

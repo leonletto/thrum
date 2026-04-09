@@ -1,23 +1,45 @@
 ---
 title: "Telegram Bridge"
 description:
-  "Bidirectional Telegram integration — relay messages between Telegram and
-  Thrum agents via a bridge goroutine inside the daemon"
-category: "guides"
+  "One Telegram connection, unified inbox for your whole team of agents — any
+  agent can ping you, replies route back to the original author"
+category: "messaging"
 order: 12
 tags:
   ["telegram", "bridge", "messaging", "mobile", "notifications", "integration"]
-last_updated: "2026-03-24"
+last_updated: "2026-04-09"
 ---
 
 ## Telegram Bridge
 
-The Telegram bridge connects your Telegram account to Thrum's messaging system.
-Messages you send from Telegram appear as Thrum messages from your user
-identity, and messages sent to your Thrum inbox are forwarded to Telegram.
+**One connection, one unified inbox for your whole team of agents.**
 
-This lets you communicate with your agents from your phone — send instructions,
-receive status updates, and reply to messages without being at your terminal.
+Configure the Telegram bridge once and Telegram becomes the inbox for every
+agent in your repo. Any agent that needs your input can ping you directly — the
+coordinator asking for a merge approval, an implementer hitting a design
+decision, a tester reporting a failure. You reply from Telegram and your reply
+routes back to whichever agent messaged you, not through a middle layer. Close
+the laptop, put your phone in your pocket, and your team still has a way to
+reach you.
+
+This isn't a 1:1 channel to one "target" agent. It's a shared phone line for the
+entire team. You just configure a default agent for fresh messages you start
+from Telegram — everything else routes by context.
+
+### What you can do with it
+
+- **Get pinged by any agent, any time.** An implementer hits an ambiguous spec
+  and asks for your call without going through the coordinator first.
+- **Reply threading works by author.** When you reply to a message in Telegram,
+  your reply goes back to the agent that sent it — even if that's five different
+  agents in the same day, each in its own thread.
+- **Start a fresh conversation by typing a new message.** A new message from
+  Telegram (no reply-to) lands in the configured default agent's inbox, so
+  you've still got a "tell the coordinator" path when you need one.
+- **Hold concurrent conversations** with multiple agents without them colliding
+  — each Telegram thread maps to one Thrum thread with one author.
+- **Stay off the terminal.** Review, decide, approve, nudge, cancel — all from
+  your phone.
 
 ### How It Works
 
@@ -30,12 +52,22 @@ Telegram ←→ Bridge Goroutine ←→ Daemon WebSocket ←→ Agents
               (inside daemon)    (JSON-RPC 2.0)
 ```
 
-- **Inbound:** Telegram message → bridge registers as your user identity → sends
-  via `message.send` RPC to the target agent
-- **Outbound:** Agent sends message to your inbox → bridge receives via
-  WebSocket notification → forwards to your Telegram chat
-- **Threading:** Telegram replies map to Thrum `reply_to`; new messages create
-  new Thrum threads
+**Outbound (Thrum → Telegram):** any agent that sends a message with your bridge
+user as a recipient gets forwarded to Telegram. Your coordinator can ping you,
+an implementer can ping you, a tester can ping you — they all land in the same
+chat.
+
+**Inbound (Telegram → Thrum)** routes by context:
+
+| What you send from Telegram                   | Where it lands                           |
+| --------------------------------------------- | ---------------------------------------- |
+| Fresh message (no Telegram reply-to)          | The configured `--target` agent          |
+| Reply to a message an agent sent you          | The agent that sent the original message |
+| Reply to one of your own messages (edge case) | Falls back to the configured `--target`  |
+
+**Threading:** Telegram replies map to Thrum `reply_to` on the matching thread,
+so the agent sees your reply as a continuation of the original conversation, not
+a new thread.
 
 The bridge is isolated — it connects via the public WebSocket RPC interface and
 never imports internal daemon packages.
@@ -73,15 +105,15 @@ Paired! Allowed users: [123456789]
   Bridge is live — no further restart needed.
 ```
 
-| Flag             | Description                                              |
-| ---------------- | -------------------------------------------------------- |
-| `--token`        | Bot token from BotFather                                 |
-| `--target`       | Agent that receives your Telegram messages (with `@`)    |
-| `--user`         | Your Thrum username (e.g., `your-username`)              |
-| `--allow-from`   | Skip pairing — set Telegram user ID directly             |
-| `--chat-id`      | Telegram chat ID for outbound (defaults to --allow-from) |
-| `--pair-timeout` | How long to wait for pairing message (default: 60s)      |
-| `--skip-pair`    | Write config only, don't pair                            |
+| Flag             | Description                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `--token`        | Bot token from BotFather                                                                                                          |
+| `--target`       | Default agent for fresh messages you start from Telegram (with `@`). Replies route to the author of the message being replied to. |
+| `--user`         | Your Thrum username (e.g., `your-username`)                                                                                       |
+| `--allow-from`   | Skip pairing — set Telegram user ID directly                                                                                      |
+| `--chat-id`      | Telegram chat ID for outbound (defaults to --allow-from)                                                                          |
+| `--pair-timeout` | How long to wait for pairing message (default: 60s)                                                                               |
+| `--skip-pair`    | Write config only, don't pair                                                                                                     |
 
 #### Re-pairing
 
@@ -115,20 +147,25 @@ thrum daemon restart
 
 #### 3. Test It
 
-Send a message from Telegram to your bot. It should appear in the target agent's
-inbox:
+Send a fresh message from Telegram to your bot. It lands in the configured
+default agent's inbox:
 
 ```bash
 thrum inbox --unread
 ```
 
-Send a message back:
+Now have any agent in the team send you a message:
 
 ```bash
 thrum send "Hello from the terminal!" --to @your-username
 ```
 
-It should appear in your Telegram chat.
+It should appear in your Telegram chat. Reply to that Telegram message and your
+reply goes back to the sending agent — not the default target. That's the
+reply-aware routing doing its job.
+
+You can repeat this with a different agent and each thread stays independent:
+fresh message → default agent, reply → original author.
 
 ### Configuration Reference
 
@@ -148,15 +185,15 @@ The full configuration lives in `.thrum/config.json` under the `telegram` key:
 }
 ```
 
-| Field        | Type   | Description                                                                 |
-| ------------ | ------ | --------------------------------------------------------------------------- |
-| `token`      | string | Telegram bot token from BotFather. Required.                                |
-| `target`     | string | Target agent mention (e.g., `@coordinator_main`). Required.                 |
-| `user_id`    | string | Your Thrum username. Required.                                              |
-| `chat_id`    | int    | Telegram chat ID for outbound messages. For DMs, same as your user ID.      |
-| `allow_from` | int[]  | Telegram user IDs allowed to send messages. Empty = block all.              |
-| `allow_all`  | bool   | If true, allow all Telegram users (overrides `allow_from`). Default: false. |
-| `enabled`    | bool   | Explicit enable/disable. Default: true when token is set.                   |
+| Field        | Type   | Description                                                                                                                                   |
+| ------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `token`      | string | Telegram bot token from BotFather. Required.                                                                                                  |
+| `target`     | string | Default agent mention (e.g., `@coordinator_main`) for fresh messages you start from Telegram. Replies route to the original author. Required. |
+| `user_id`    | string | Your Thrum username. Required.                                                                                                                |
+| `chat_id`    | int    | Telegram chat ID for outbound messages. For DMs, same as your user ID.                                                                        |
+| `allow_from` | int[]  | Telegram user IDs allowed to send messages. Empty = block all.                                                                                |
+| `allow_all`  | bool   | If true, allow all Telegram users (overrides `allow_from`). Default: false.                                                                   |
+| `enabled`    | bool   | Explicit enable/disable. Default: true when token is set.                                                                                     |
 
 ### CLI Commands
 
@@ -255,8 +292,18 @@ thrum telegram status
 **Messages not forwarding to Telegram:**
 
 - Verify `chat_id` is set (for DMs, same as your user ID)
-- Check that the target agent is sending to your Thrum username
-  (`--to @your-username`)
+- Check that the sending agent addressed you by username
+  (`--to @your-username`). Any agent can DM you this way — not just the
+  configured default target.
+
+**Reply from Telegram went to the wrong agent:**
+
+- Confirm you used Telegram's "reply" feature on the agent's message, not a
+  fresh message in the chat.
+- Fresh messages always route to the configured default (`--target`). Only
+  replies use the reply-aware routing.
+- If you replied to one of your own past messages, the bridge falls back to the
+  default target to avoid a self-mention loop.
 
 **Connection drops after idle:**
 

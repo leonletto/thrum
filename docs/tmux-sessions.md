@@ -1,18 +1,15 @@
 ## What This Is
 
-Background message listeners were the #1 source of operational problems in
-Thrum. Agents forgot to launch them. The cron watchdog didn't always respawn
-them. They burned tokens polling for messages that might never arrive. And if
-the parent agent didn't re-arm after timeout, messages were silently missed.
+Tmux-managed sessions are how multi-agent orchestration frameworks run their
+agents. The daemon creates tmux sessions, launches AI tools inside them, and
+delivers message notifications directly into the pane. No background process, no
+polling, no token cost. The coordinator manages the whole team from one place.
 
-Tmux-managed sessions replace all of that. The daemon delivers message
-notifications directly into agent tmux panes. No listeners, no polling, no cron
-watchdogs, no token burn. Your coordinator creates sessions, launches agents,
-and manages the whole team from one place.
-
-This is how production agent orchestration frameworks handle agent lifecycle.
-Thrum's implementation gives you the same daemon-driven session management you'd
-expect from those tools — without the complexity.
+Thrum's original approach — a background listener sub-agent watching for
+messages — worked well and got us this far. But tmux sessions are a better fit
+for how people actually run agent teams. The daemon handles delivery directly,
+agents don't need to manage their own listeners, and the whole setup is simpler
+to understand and operate.
 
 ---
 
@@ -229,6 +226,10 @@ need attention:
 
 States are always queried live — no caching, nothing to get stale.
 
+When the process dies (crash, compaction, manual kill), the daemon notices and
+can restart it with a snapshot of what it was doing. See
+[Session Restart](session-restart.md) for the snapshot flow.
+
 ---
 
 ## Permission Delegation
@@ -308,6 +309,18 @@ cross-machine tmux operations needed.
 You don't need to think about this. If you have two machines paired via
 `thrum peer`, messages route to the right daemon, and the right daemon nudges
 the right tmux pane. It just works.
+
+---
+
+## Running different runtimes
+
+Tmux sessions work with any supported runtime — Claude Code, Codex, Cursor
+(`agent`), Aider, Gemini, Open Code, Auggie, or Amp. Set the runtime with
+`--runtime` on `thrum tmux launch`, or set `preferred_runtime` in the identity
+file so every launch in that worktree uses the runtime you picked.
+
+For the full runtime resolution order, setup flags, and known limitations, see
+[Multi-Runtime Support](multi-runtime.md).
 
 ---
 

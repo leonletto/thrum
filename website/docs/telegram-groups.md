@@ -4,25 +4,25 @@ description:
   "Share a Telegram group with your team so everyone can interact with the same
   Thrum agent — send instructions, see responses, and coordinate through one
   chat"
-category: "guides"
+category: "messaging"
 order: 13
 tags: ["telegram", "groups", "team", "collaboration", "coordination"]
-last_updated: "2026-04-05"
+last_updated: "2026-04-09"
 ---
 
 ## Telegram Groups
 
-The [DM bridge](telegram-bridge.md) connects one person to their agents. That's
-great when you're the only one working with a repo. But if you're on a team — a
-few engineers, maybe a PM — and you all want to interact with the same agent,
-DMs don't work. Everyone would need their own bot, their own pairing, their own
-private conversation. Nobody sees what anyone else asked or what the agent said
-back.
+The [DM bridge](telegram-bridge.md) turns Telegram into a unified inbox for one
+person talking to their entire team of agents. That's great when you're the only
+human working with a repo. But if you're on a team — a few engineers, maybe a PM
+— and you all want to interact with the same agents, DMs don't work. Everyone
+would need their own bot, their own pairing, their own private conversation.
+Nobody sees what anyone else asked or what an agent said back.
 
 Telegram group support fixes this. You create a Telegram group, add your repo's
 bot, and invite your team. Anyone in the group can send instructions to the
 agent. The agent's responses appear in the group where everyone can see them.
-You get a shared conversation with your agent that the whole team can
+You get a shared conversation with your agents that the whole team can
 participate in.
 
 ### How It Works

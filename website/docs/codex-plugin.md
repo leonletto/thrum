@@ -3,7 +3,7 @@ title: "Codex Plugin"
 description:
   "Install and use Thrum's Codex skill bundle — the Claude thrum skill surface,
   mirrored as top-level Codex skills"
-category: "guides"
+category: "integrations"
 order: 4
 tags: ["codex", "skills", "thrum", "installation", "agent-coordination"]
 last_updated: "2026-02-24"
