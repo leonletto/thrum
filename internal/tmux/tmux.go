@@ -61,7 +61,7 @@ func CreateSession(name, cwd string) error {
 		args = append(args, "-c", cwd)
 	}
 	cmd := exec.Command("tmux", args...) // #nosec G204 -- args are constructed from sanitized name and validated cwd path
-	cmd.Env = []string{}                 // stripped environment
+	cmd.Env = cleanEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("tmux new-session failed: %w: %s", err, out)

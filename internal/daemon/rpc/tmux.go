@@ -146,6 +146,11 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 		runtime = "claude"
 	}
 
+	// Validate runtime name to prevent shell injection via SendKeys
+	if !isValidRuntimeName(runtime) {
+		return nil, fmt.Errorf("invalid runtime name %q: must contain only alphanumeric, hyphen, or underscore characters", runtime)
+	}
+
 	launchCmd := runtimeToLaunchCmd(runtime)
 
 	target := req.Name + ":0.0"
@@ -320,6 +325,11 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
 	identitiesDir := filepath.Join(h.thrumDir, "identities")
 	entries, _ := os.ReadDir(identitiesDir)
+
+	// Two-pass: first match by existing tmux_session, then by agent name.
+	// On first launch, no identity has tmux_session set yet, so we fall back
+	// to matching the session name against the agent name.
+	var nameMatch *config.IdentityFile
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
@@ -333,14 +343,27 @@ func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
 		if err := json.Unmarshal(data, &idFile); err != nil {
 			continue
 		}
-		// Match by existing tmux_session association
-		sess, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
-		if sess == sessionName {
-			idFile.TmuxSession = target
-			idFile.Runtime = runtime
-			_ = config.SaveIdentityFile(filepath.Dir(identitiesDir), &idFile)
-			return // write to first matching identity
+		// Pass 1: Match by existing tmux_session association
+		if idFile.TmuxSession != "" {
+			sess, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+			if sess == sessionName {
+				idFile.TmuxSession = target
+				idFile.Runtime = runtime
+				_ = config.SaveIdentityFile(filepath.Dir(identitiesDir), &idFile)
+				return // write to first matching identity
+			}
 		}
+		// Pass 2 candidate: match by agent name
+		if nameMatch == nil && ttmux.SanitizeSessionName(idFile.Agent.Name) == sessionName {
+			copied := idFile
+			nameMatch = &copied
+		}
+	}
+	// Fallback: match by agent name (first launch, no tmux_session yet)
+	if nameMatch != nil {
+		nameMatch.TmuxSession = target
+		nameMatch.Runtime = runtime
+		_ = config.SaveIdentityFile(filepath.Dir(identitiesDir), nameMatch)
 	}
 }
 
@@ -483,6 +506,19 @@ func runtimeToLaunchCmd(runtime string) string {
 	default:
 		return runtime // best-effort: use the runtime name as the command
 	}
+}
+
+// isValidRuntimeName checks that a runtime name contains only safe characters.
+func isValidRuntimeName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 // primeCommandForRuntime returns the slash command to send after launch

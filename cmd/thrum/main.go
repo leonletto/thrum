@@ -519,11 +519,13 @@ Examples:
 			// Step 7: Write identity file
 			thrumDir := filepath.Join(flagRepo, ".thrum")
 
-			// Resolve preferred runtime: --runtime flag → auto-detect → config → empty
+			// Resolve preferred runtime: --runtime flag → auto-detect → config runtime.primary → empty
 			preferredRuntime := runtimeFlag
 			if preferredRuntime == "" || preferredRuntime == "all" {
 				if _, detectedRT := process.FindClaudeAncestor(); detectedRT != "" {
 					preferredRuntime = detectedRT
+				} else if cfg, err := config.LoadThrumConfig(thrumDir); err == nil && cfg.Runtime.Primary != "" {
+					preferredRuntime = cfg.Runtime.Primary
 				}
 			}
 
@@ -7303,13 +7305,9 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 
 			fmt.Printf("Session %s created with %s — waiting for startup...\n", sessionName, runtime)
 
-			// Wait for runtime to initialize, then send prime
-			time.Sleep(8 * time.Second)
-			primeCmd := primeForRuntime(runtime)
-			_ = cli.TmuxSend(client, sessionName, primeCmd)
-
-			// Give prime a moment to start, then attach
-			time.Sleep(2 * time.Second)
+			// HandleLaunch sends the prime command via a background goroutine;
+			// just wait for the runtime to initialize before attaching.
+			time.Sleep(10 * time.Second)
 			return tmuxAttach(sessionName)
 		},
 	}
@@ -7318,16 +7316,6 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 	cmd.AddCommand(startCmd)
 
 	return cmd
-}
-
-// primeForRuntime returns the slash command to send after launching a runtime.
-func primeForRuntime(rt string) string {
-	switch rt {
-	case "opencode":
-		return "/thrum-prime"
-	default:
-		return "/thrum:prime"
-	}
 }
 
 func tmuxAttach(session string) error {

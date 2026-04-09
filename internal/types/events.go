@@ -112,7 +112,8 @@ type AgentRegisterEvent struct {
 	Worktree     string `json:"worktree,omitempty"` // Worktree name (Decision 24)
 	Display      string `json:"display,omitempty"`
 	Hostname     string `json:"hostname,omitempty"`
-	AgentPID     int    `json:"agent_pid,omitempty"` // Agent process PID for identity resolution
+	AgentPID     int    `json:"agent_pid,omitempty"`   // Agent process PID for identity resolution
+	ClaudePID    int    `json:"claude_pid,omitempty"` // Backward compat: old events use this JSON key
 }
 
 // AgentSessionStartEvent represents an agent.session.start event.
