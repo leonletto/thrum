@@ -86,6 +86,74 @@ func (cmd *QueuedCommand) stateSnapshot() string {
 	return cmd.State
 }
 
+// QueuedCommandView is a point-in-time snapshot of a QueuedCommand, safe to
+// return across RPC boundaries and to marshal as JSON without acquiring any
+// lock. Populated by (*QueuedCommand).view() under cmd.mu so the mutable
+// fields (State, SentAt, CompletedAt, CapturedOutput) are internally
+// consistent.
+//
+// JSON shape matches the original *QueuedCommand marshalling so the
+// QueueStatusResponse over the wire stays unchanged.
+type QueuedCommandView struct {
+	ID               string        `json:"id"`
+	Text             string        `json:"text"`
+	RequesterAgent   string        `json:"requester_agent"`
+	Timeout          time.Duration `json:"timeout_ns,omitempty"`
+	SilenceMs        int64         `json:"silence_ms,omitempty"`
+	NotifyOnComplete bool          `json:"notify_on_complete"`
+	State            string        `json:"state"`
+	SubmittedAt      time.Time     `json:"submitted_at"`
+	SentAt           time.Time     `json:"sent_at,omitempty"`
+	CompletedAt     time.Time     `json:"completed_at,omitempty"`
+	CapturedOutput   string        `json:"captured_output,omitempty"`
+	SessionName      string        `json:"session_name,omitempty"`
+}
+
+// view returns an immutable copy of the command's fields, taken under cmd.mu.
+// Safe to pass to JSON encoders or return across goroutines.
+func (cmd *QueuedCommand) view() QueuedCommandView {
+	cmd.mu.Lock()
+	defer cmd.mu.Unlock()
+	return QueuedCommandView{
+		// Immutable fields — OK to read without the lock, but including
+		// them here keeps the copy atomic from a reader's perspective.
+		ID:               cmd.ID,
+		Text:             cmd.Text,
+		RequesterAgent:   cmd.RequesterAgent,
+		Timeout:          cmd.Timeout,
+		SilenceMs:        cmd.SilenceMs,
+		NotifyOnComplete: cmd.NotifyOnComplete,
+		SubmittedAt:      cmd.SubmittedAt,
+		SessionName:      cmd.sessionName,
+		// Protected by cmd.mu.
+		State:          cmd.State,
+		SentAt:         cmd.SentAt,
+		CompletedAt:    cmd.CompletedAt,
+		CapturedOutput: cmd.CapturedOutput,
+	}
+}
+
+// StatusSnapshot returns a race-free view of the queue's active command and
+// pending commands. Lock ordering: acquire q.mu first, then acquire cmd.mu
+// on each command in turn (active and queued). This matches the ordering
+// used everywhere else in the file (q.mu → cmd.mu is unidirectional — no
+// mutation path takes cmd.mu then q.mu).
+func (q *SessionQueue) StatusSnapshot() (active *QueuedCommandView, queued []QueuedCommandView) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.active != nil {
+		v := q.active.view()
+		active = &v
+	}
+	if len(q.commands) > 0 {
+		queued = make([]QueuedCommandView, 0, len(q.commands))
+		for _, c := range q.commands {
+			queued = append(queued, c.view())
+		}
+	}
+	return active, queued
+}
+
 // Enqueue adds a command to the back of the queue.
 func (q *SessionQueue) Enqueue(cmd *QueuedCommand) {
 	q.mu.Lock()

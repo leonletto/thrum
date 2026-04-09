@@ -348,10 +348,14 @@ type QueueStatusRequest struct {
 }
 
 // QueueStatusResponse is the tmux.queue-status RPC response.
+//
+// Uses QueuedCommandView (not *QueuedCommand) so the JSON encoder can marshal
+// the mutable fields without racing against concurrent state transitions.
+// StatusSnapshot() populates the views under cmd.mu.
 type QueueStatusResponse struct {
-	Session string           `json:"session"`
-	Active  *QueuedCommand   `json:"active,omitempty"`
-	Queued  []*QueuedCommand `json:"queued,omitempty"`
+	Session string              `json:"session"`
+	Active  *QueuedCommandView  `json:"active,omitempty"`
+	Queued  []QueuedCommandView `json:"queued,omitempty"`
 }
 
 // HandleQueueStatus returns the current queue state for a session.
@@ -369,12 +373,15 @@ func (h *TmuxHandler) HandleQueueStatus(ctx context.Context, params json.RawMess
 		return &QueueStatusResponse{Session: req.Session}, nil
 	}
 
-	// Use public accessors — they handle locking internally.
-	// Never call q.mu.Lock() directly here — that would deadlock.
+	// StatusSnapshot locks q.mu and then each cmd.mu in turn, returning
+	// scalar copies. The JSON encoder can marshal the views without racing
+	// against concurrent transitions in completeCommand / HandleCancel /
+	// handleCommandTimeout.
+	active, queued := q.StatusSnapshot()
 	return &QueueStatusResponse{
 		Session: req.Session,
-		Active:  q.Active(),
-		Queued:  q.Snapshot(),
+		Active:  active,
+		Queued:  queued,
 	}, nil
 }
 

@@ -610,6 +610,135 @@ func TestSendSystemMessageUsesSentinelSessionID(t *testing.T) {
 	}
 }
 
+// TestStatusSnapshotIsRaceFreeVsTransitions fires HandleQueueStatus
+// concurrently with a transition path (completeCommand) for the same
+// command. Under -race any unsynchronised read of cmd.State / SentAt /
+// CompletedAt / CapturedOutput via the snapshot path is caught.
+//
+// The test runs several iterations to increase the chance of overlap — a
+// single pairing might serialise cleanly by luck; N pairings make a latent
+// race far more likely to manifest.
+func TestStatusSnapshotIsRaceFreeVsTransitions(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	const iterations = 50
+	for i := 0; i < iterations; i++ {
+		sess := fmt.Sprintf("sess-%d", i)
+		q := h.getOrCreateQueue(sess)
+
+		cmd := &QueuedCommand{
+			ID:               fmt.Sprintf("cmd_race_%d", i),
+			Text:             "echo",
+			RequesterAgent:   "test_coord",
+			State:            StateSent,
+			Timeout:          60 * time.Second,
+			SilenceMs:        5000,
+			NotifyOnComplete: false,
+			SubmittedAt:      time.Now().UTC(),
+			SentAt:           time.Now().UTC(),
+		}
+		if err := persistCommand(ctx, h.state.DB(), sess, cmd, 0); err != nil {
+			t.Fatalf("iter %d: persist: %v", i, err)
+		}
+		q.SetActive(cmd)
+
+		// Start barrier: two goroutines, one transitions the command to
+		// terminal, the other repeatedly calls HandleQueueStatus.
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			<-start
+			h.completeCommand(ctx, sess, q, cmd)
+		}()
+
+		go func() {
+			defer wg.Done()
+			<-start
+			// Hammer the status path a few times so at least one call
+			// overlaps with the mutation window.
+			req := json.RawMessage(fmt.Sprintf(`{"session":%q}`, sess))
+			for j := 0; j < 10; j++ {
+				_, _ = h.HandleQueueStatus(ctx, req)
+			}
+		}()
+
+		close(start)
+		wg.Wait()
+
+		// Final state must be terminal.
+		if s := cmd.stateSnapshot(); !isTerminalState(s) {
+			t.Errorf("iter %d: final state %q not terminal", i, s)
+		}
+	}
+}
+
+// TestStatusSnapshotFieldsMatchCommand is a correctness check on the view
+// conversion — every exposed field in QueuedCommandView must reflect the
+// original command's value.
+func TestStatusSnapshotFieldsMatchCommand(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	q := h.getOrCreateQueue("test-session")
+
+	cmd := &QueuedCommand{
+		ID:               "cmd_view",
+		Text:             "echo hello",
+		RequesterAgent:   "test_coord",
+		State:            StateActive,
+		Timeout:          120 * time.Second,
+		SilenceMs:        2500,
+		NotifyOnComplete: false,
+		SubmittedAt:      time.Now().UTC().Add(-5 * time.Second),
+		SentAt:           time.Now().UTC().Add(-3 * time.Second),
+	}
+	if err := persistCommand(ctx, h.state.DB(), "test-session", cmd, 1); err != nil {
+		t.Fatalf("persist: %v", err)
+	}
+	q.Enqueue(cmd)
+
+	active, queued := q.StatusSnapshot()
+	if active != nil {
+		t.Errorf("expected no active command, got %+v", active)
+	}
+	if len(queued) != 1 {
+		t.Fatalf("queued len=%d, want 1", len(queued))
+	}
+	v := queued[0]
+
+	if v.ID != cmd.ID {
+		t.Errorf("ID=%q, want %q", v.ID, cmd.ID)
+	}
+	if v.Text != cmd.Text {
+		t.Errorf("Text=%q, want %q", v.Text, cmd.Text)
+	}
+	if v.RequesterAgent != cmd.RequesterAgent {
+		t.Errorf("RequesterAgent=%q, want %q", v.RequesterAgent, cmd.RequesterAgent)
+	}
+	if v.State != StateActive {
+		t.Errorf("State=%q, want %q", v.State, StateActive)
+	}
+	if v.SilenceMs != 2500 {
+		t.Errorf("SilenceMs=%d, want 2500", v.SilenceMs)
+	}
+	if v.NotifyOnComplete {
+		t.Errorf("NotifyOnComplete=%v, want false", v.NotifyOnComplete)
+	}
+	if !v.SubmittedAt.Equal(cmd.SubmittedAt) {
+		t.Errorf("SubmittedAt: got %v, want %v", v.SubmittedAt, cmd.SubmittedAt)
+	}
+	if !v.SentAt.Equal(cmd.SentAt) {
+		t.Errorf("SentAt: got %v, want %v", v.SentAt, cmd.SentAt)
+	}
+}
+
 // TestHandleQueueWaitElapsedFromSentAt verifies that the elapsed_ms field in
 // a queue-wait response is measured from SentAt (not SubmittedAt) once the
 // command has been typed — matching the convention used by the completion
