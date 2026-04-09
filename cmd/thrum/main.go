@@ -5947,6 +5947,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("tmux.queue-status", tmuxHandler.HandleQueueStatus)
 	server.RegisterLongPollHandler("tmux.queue-wait", tmuxHandler.HandleQueueWait)
 
+	// Recover queue state after restart — mark interrupted commands, reload queued.
+	if err := tmuxHandler.RecoverQueueState(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "[queue] recovery failed: %v\n", err)
+	}
+
 	// Auto-connect to dialer-role peers after the WS server is ready.
 	if peerManager != nil && thrumCfg.Peers.AutoConnect {
 		go func() {
@@ -7647,6 +7652,150 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 	startCmd.Flags().String("name", "", "Override session name (default: directory name)")
 	startCmd.Flags().String("runtime", "", "Override runtime (default: from config or claude)")
 	cmd.AddCommand(startCmd)
+
+	// queue
+	queueCmd := &cobra.Command{
+		Use:   "queue <session> <command>",
+		Short: "Submit a command to a tmux session's queue",
+		Args:  cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			session := args[0]
+			text := strings.Join(args[1:], " ")
+			timeoutSecs, _ := cmd.Flags().GetInt("timeout")
+			wait, _ := cmd.Flags().GetBool("wait")
+			silenceSecs, _ := cmd.Flags().GetFloat64("silence")
+
+			idFile, _, err := config.LoadIdentityWithPath(flagRepo)
+			if err != nil || idFile == nil {
+				return fmt.Errorf("resolve requester identity: %w", err)
+			}
+			requester := idFile.Agent.Name
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			opts := cli.TmuxQueueOptions{
+				Session:   session,
+				Text:      text,
+				TimeoutMs: int64(timeoutSecs) * 1000,
+				Requester: requester,
+			}
+			if silenceSecs > 0 {
+				opts.SilenceMs = int64(silenceSecs * 1000)
+			}
+			if wait {
+				// --wait mode: caller reads result from queue-wait response,
+				// so suppress the @system inbox notification.
+				f := false
+				opts.NotifyOnComplete = &f
+			}
+
+			resp, err := cli.TmuxQueue(client, opts)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Queued %s (position %d)
+", resp.CommandID, resp.Position)
+
+			if wait {
+				// Long-poll for the result. Buffer the RPC timeout past the
+				// queue own timeout so the socket deadline does not fire first.
+				waitOpts := cli.TmuxQueueWaitOptions{
+					CommandID: resp.CommandID,
+					TimeoutMs: int64(timeoutSecs+10) * 1000,
+				}
+				result, err := cli.TmuxQueueWait(client, waitOpts)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("State: %s
+Elapsed: %dms
+
+%s
+", result.State, result.ElapsedMs, result.Output)
+			}
+			return nil
+		},
+	}
+	queueCmd.Flags().Int("timeout", 120, "Command timeout in seconds")
+	queueCmd.Flags().Bool("wait", false, "Block until the command reaches a terminal state")
+	queueCmd.Flags().Float64("silence", 0, "Silence threshold in seconds (fractional OK; default 5.0 server-side)")
+	cmd.AddCommand(queueCmd)
+
+	// queue-status
+	queueStatusCmd := &cobra.Command{
+		Use:   "queue-status <session>",
+		Short: "Show the command queue for a tmux session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			resp, err := cli.TmuxQueueStatus(client, args[0])
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				out, _ := json.MarshalIndent(resp, "", "  ")
+				fmt.Println(string(out))
+				return nil
+			}
+			fmt.Printf("Session: %s
+", resp.Session)
+			if resp.Active != nil {
+				fmt.Printf("Active: %s "%.40s" (%s)
+", resp.Active.ID, resp.Active.Text, resp.Active.State)
+			} else {
+				fmt.Println("Active: (none)")
+			}
+			if len(resp.Queued) == 0 {
+				fmt.Println("Queued: (empty)")
+			} else {
+				fmt.Printf("Queued: %d commands
+", len(resp.Queued))
+				for i, q := range resp.Queued {
+					fmt.Printf("  [%d] %s "%.40s"
+", i+1, q.ID, q.Text)
+				}
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(queueStatusCmd)
+
+	// cancel
+	cancelCmd := &cobra.Command{
+		Use:   "cancel <command-id>",
+		Short: "Cancel a queued or active command",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			resp, err := cli.TmuxCancel(client, args[0])
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				out, _ := json.MarshalIndent(resp, "", "  ")
+				fmt.Println(string(out))
+				return nil
+			}
+			fmt.Printf("Cancelled %s (state: %s)
+", resp.CommandID, resp.State)
+			return nil
+		},
+	}
+	cmd.AddCommand(cancelCmd)
 
 	return cmd
 }

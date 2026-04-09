@@ -309,8 +309,16 @@ func loadCommand(ctx context.Context, db *safedb.DB, commandID string) (*QueuedC
 	return &cmd, nil
 }
 
-// loadPendingCommands reads all non-terminal commands across all sessions, ordered by position.
-// Each returned command has its sessionName field populated for restart recovery.
+// loadPendingCommands reads all non-terminal commands across all sessions,
+// ordered by session_name then position. Each returned command has its
+// sessionName field populated so callers can route commands to the correct
+// SessionQueue without an additional lookup.
+//
+// Used by RecoverQueueState for both recovery phases: the interrupt phase
+// (marking sent/active/timeout_waiting commands as interrupted) and the reload
+// phase (rebuilding in-memory queues from queued rows). Not restricted to
+// either phase alone.
+//
 // Note: the 'waiting' state from the spec is not assigned by any production
 // code path, so it is not included in the filter (see state-constant comment
 // above for rationale).
