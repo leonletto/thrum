@@ -1,8 +1,12 @@
 package rpc
 
 import (
+	"context"
+	"database/sql"
 	"sync"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon/safedb"
 )
 
 // Queue state constants.
@@ -29,7 +33,8 @@ type QueuedCommand struct {
 	CompletedAt    time.Time
 	CapturedOutput string
 
-	timer *time.Timer // timeout goroutine handle
+	sessionName string      // populated by loadPendingCommands for restart recovery
+	timer       *time.Timer // timeout goroutine handle
 }
 
 // SessionQueue manages a FIFO command queue for one tmux session.
@@ -112,4 +117,100 @@ func (q *SessionQueue) Snapshot() []*QueuedCommand {
 	out := make([]*QueuedCommand, len(q.commands))
 	copy(out, q.commands)
 	return out
+}
+
+// persistCommand writes a new command row to the DB.
+func persistCommand(ctx context.Context, db *safedb.DB, session string, cmd *QueuedCommand, position int) error {
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO command_queue
+		 (command_id, session_name, requester_agent, command_text, state, timeout_ms, submitted_at, position)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		cmd.ID, session, cmd.RequesterAgent, cmd.Text, cmd.State,
+		cmd.Timeout.Milliseconds(), cmd.SubmittedAt.UTC().Format(time.RFC3339Nano), position,
+	)
+	return err
+}
+
+// updateCommandState updates state and optionally timestamps on an existing row.
+func updateCommandState(ctx context.Context, db *safedb.DB, cmd *QueuedCommand) error {
+	var sentAt, completedAt sql.NullString
+	if !cmd.SentAt.IsZero() {
+		sentAt = sql.NullString{String: cmd.SentAt.UTC().Format(time.RFC3339Nano), Valid: true}
+	}
+	if !cmd.CompletedAt.IsZero() {
+		completedAt = sql.NullString{String: cmd.CompletedAt.UTC().Format(time.RFC3339Nano), Valid: true}
+	}
+
+	_, err := db.ExecContext(ctx,
+		`UPDATE command_queue
+		 SET state = ?, sent_at = ?, completed_at = ?, captured_output = ?
+		 WHERE command_id = ?`,
+		cmd.State, sentAt, completedAt, cmd.CapturedOutput, cmd.ID,
+	)
+	return err
+}
+
+// loadCommand reads a single command by ID.
+func loadCommand(ctx context.Context, db *safedb.DB, commandID string) (*QueuedCommand, error) {
+	row := db.QueryRowContext(ctx,
+		`SELECT command_id, command_text, requester_agent, state, timeout_ms,
+		        submitted_at, sent_at, completed_at, captured_output
+		 FROM command_queue WHERE command_id = ?`,
+		commandID,
+	)
+
+	var cmd QueuedCommand
+	var timeoutMs int64
+	var submittedAt string
+	var sentAt, completedAt, capturedOutput sql.NullString
+
+	if err := row.Scan(&cmd.ID, &cmd.Text, &cmd.RequesterAgent, &cmd.State,
+		&timeoutMs, &submittedAt, &sentAt, &completedAt, &capturedOutput); err != nil {
+		return nil, err
+	}
+
+	cmd.Timeout = time.Duration(timeoutMs) * time.Millisecond
+	cmd.SubmittedAt, _ = time.Parse(time.RFC3339Nano, submittedAt)
+	if sentAt.Valid {
+		cmd.SentAt, _ = time.Parse(time.RFC3339Nano, sentAt.String)
+	}
+	if completedAt.Valid {
+		cmd.CompletedAt, _ = time.Parse(time.RFC3339Nano, completedAt.String)
+	}
+	if capturedOutput.Valid {
+		cmd.CapturedOutput = capturedOutput.String
+	}
+	return &cmd, nil
+}
+
+// loadPendingCommands reads all non-terminal commands across all sessions, ordered by position.
+// Each returned command has its sessionName field populated for restart recovery.
+func loadPendingCommands(ctx context.Context, db *safedb.DB) ([]*QueuedCommand, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT command_id, session_name, command_text, requester_agent, state, timeout_ms, submitted_at
+		 FROM command_queue
+		 WHERE state IN ('queued', 'waiting', 'sent', 'active', 'timeout_waiting')
+		 ORDER BY session_name, position ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cmds []*QueuedCommand
+	for rows.Next() {
+		var cmd QueuedCommand
+		var sessionName string
+		var timeoutMs int64
+		var submittedAt string
+		if err := rows.Scan(&cmd.ID, &sessionName, &cmd.Text, &cmd.RequesterAgent, &cmd.State,
+			&timeoutMs, &submittedAt); err != nil {
+			return nil, err
+		}
+		cmd.Timeout = time.Duration(timeoutMs) * time.Millisecond
+		cmd.SubmittedAt, _ = time.Parse(time.RFC3339Nano, submittedAt)
+		cmd.sessionName = sessionName
+		cmds = append(cmds, &cmd)
+	}
+	return cmds, rows.Err()
 }

@@ -1,9 +1,11 @@
 package rpc
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/state"
 )
@@ -24,6 +26,36 @@ func setupTmuxHandlerTest(t *testing.T) (*TmuxHandler, func()) {
 	handler := NewTmuxHandler(thrumDir, st)
 	cleanup := func() { _ = st.Close() }
 	return handler, cleanup
+}
+
+func TestPersistCommand(t *testing.T) {
+	h, cleanup := setupTmuxHandlerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	cmd := &QueuedCommand{
+		ID:             "cmd_persist",
+		Text:           "echo test",
+		RequesterAgent: "test_coord",
+		Timeout:        120 * time.Second,
+		State:          StateQueued,
+		SubmittedAt:    time.Now().UTC(),
+	}
+
+	if err := persistCommand(ctx, h.state.DB(), "test-session", cmd, 0); err != nil {
+		t.Fatalf("persistCommand: %v", err)
+	}
+
+	loaded, err := loadCommand(ctx, h.state.DB(), "cmd_persist")
+	if err != nil {
+		t.Fatalf("loadCommand: %v", err)
+	}
+	if loaded.ID != cmd.ID {
+		t.Errorf("ID=%s, want %s", loaded.ID, cmd.ID)
+	}
+	if loaded.State != StateQueued {
+		t.Errorf("State=%s, want %s", loaded.State, StateQueued)
+	}
 }
 
 func TestSessionQueueFIFO(t *testing.T) {
