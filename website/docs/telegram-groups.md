@@ -4,7 +4,7 @@ description:
   "Share a Telegram group with your team so everyone can interact with the same
   Thrum agent — send instructions, see responses, and coordinate through one
   chat"
-category: "guides"
+category: "messaging"
 order: 13
 tags: ["telegram", "groups", "team", "collaboration", "coordination"]
 last_updated: "2026-04-05"

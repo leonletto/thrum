@@ -3,7 +3,7 @@ title: "Agent Configurations"
 description:
   "Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task
   tracking"
-category: "guides"
+category: "identity"
 order: 2
 tags: ["agents", "claude-code", "configuration", "setup", "toolkit"]
 last_updated: "2026-02-10"

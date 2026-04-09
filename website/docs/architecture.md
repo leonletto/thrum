@@ -3,7 +3,7 @@ title: "Architecture"
 description:
   "Thrum architecture — daemon design, storage, sync engine, transport layer,
   key features, and foundation packages"
-category: "architecture"
+category: "reference"
 last_updated: "2026-04-06"
 ---
 

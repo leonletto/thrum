@@ -3,7 +3,7 @@ title: "Telegram Bridge"
 description:
   "Bidirectional Telegram integration — relay messages between Telegram and
   Thrum agents via a bridge goroutine inside the daemon"
-category: "guides"
+category: "messaging"
 order: 12
 tags:
   ["telegram", "bridge", "messaging", "mobile", "notifications", "integration"]

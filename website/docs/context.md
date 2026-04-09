@@ -3,7 +3,7 @@ title: "Agent Context Management"
 description:
   "Per-agent context storage for persisting volatile project state across
   sessions and machines"
-category: "guides"
+category: "coordination"
 order: 6
 tags: ["context", "agents", "persistence", "markdown", "state"]
 last_updated: "2026-02-12"

@@ -3,7 +3,7 @@ title: "Web UI"
 description:
   "Browser-based dashboard for monitoring agents, reading messages, and managing
   groups — served from the daemon on a single port"
-category: "webui"
+category: "integrations"
 order: 1
 tags: ["web-ui", "dashboard", "browser", "live-feed", "inbox"]
 last_updated: "2026-02-23"

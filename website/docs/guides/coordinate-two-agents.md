@@ -3,7 +3,7 @@ title: "Coordinate Two Agents"
 description:
   "Walk through registering two agents, sending messages between them, and
   seeing what everyone is working on — the most common Thrum use case"
-category: "guides"
+category: "coordination"
 order: 10
 tags:
   [

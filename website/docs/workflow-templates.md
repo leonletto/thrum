@@ -3,7 +3,7 @@ title: "Workflow Templates"
 description:
   "Four-phase skill pipeline for designing, planning, setting up, and
   implementing features with AI agents"
-category: "guides"
+category: "orchestration"
 order: 3
 tags:
   ["templates", "workflow", "planning", "implementation", "agents", "toolkit"]

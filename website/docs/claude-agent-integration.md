@@ -3,7 +3,7 @@ title: "Claude Code Agent Integration"
 description:
   "Agent definitions for multi-agent coordination in Claude Code — thrum-agent
   and message-listener setup"
-category: "guides"
+category: "identity"
 ---
 
 ## Claude Code Agent Integration

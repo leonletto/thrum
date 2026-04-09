@@ -3,7 +3,7 @@ title: "Tmux-Managed Sessions"
 description:
   "Run agent teams in daemon-managed tmux sessions with instant message
   delivery, zero background listeners, and coordinator-managed lifecycle"
-category: "overview"
+category: "orchestration"
 order: 2
 tags: ["tmux", "sessions", "multi-agent", "nudge", "coordinator"]
 last_updated: "2026-04-07"

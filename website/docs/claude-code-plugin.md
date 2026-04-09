@@ -3,7 +3,7 @@ title: "Claude Code Plugin"
 description:
   "Install and use the Thrum plugin for Claude Code — slash commands, automatic
   context injection, and multi-agent coordination without manual configuration"
-category: "guides"
+category: "integrations"
 order: 3
 tags:
   ["claude-code", "plugin", "installation", "slash-commands", "mcp", "hooks"]

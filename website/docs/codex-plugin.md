@@ -3,7 +3,7 @@ title: "Codex Plugin"
 description:
   "Install and use Thrum's Codex skill bundle — split skills for coordination,
   operations, role template generation, and project setup"
-category: "guides"
+category: "integrations"
 order: 4
 tags: ["codex", "skills", "thrum", "installation", "agent-coordination"]
 last_updated: "2026-02-24"

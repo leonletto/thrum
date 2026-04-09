@@ -1,35 +1,45 @@
 [
   {
-    "path": "event-streaming.html",
-    "title": "Event Streaming",
-    "description": "Real-time push notifications via Broadcaster and Dispatcher - subscription matching, delivery, and client registries",
-    "category": "api",
-    "order": 2,
+    "path": "strategies/sub-agent-strategy.html",
+    "title": "Sub-Agent Strategy",
+    "description": "When and how to delegate work to sub-agents for context efficiency",
+    "category": "agent-protocols",
+    "order": 1,
     "tags": [
-      "events",
-      "streaming",
-      "notifications",
-      "websocket",
-      "broadcaster",
-      "dispatcher"
+      "agents",
+      "sub-agents",
+      "delegation",
+      "parallelization"
     ],
-    "lastUpdated": "2026-02-08"
+    "lastUpdated": "2026-03-03"
   },
   {
-    "path": "inbox-query-methods.html",
-    "title": "Inbox Query Methods",
-    "description": "RPC methods for querying messages, agents, and managing read state with filtering and pagination",
-    "category": "api",
+    "path": "strategies/thrum-registration.html",
+    "title": "Thrum Registration",
+    "description": "How to register with Thrum at session start and communicate with other agents",
+    "category": "agent-protocols",
+    "order": 2,
+    "tags": [
+      "registration",
+      "messaging",
+      "thrum",
+      "coordination"
+    ],
+    "lastUpdated": "2026-03-03"
+  },
+  {
+    "path": "strategies/resume-after-context-loss.html",
+    "title": "Resume After Context Loss",
+    "description": "How to recover and pick up work after compaction, a new session, or a crash",
+    "category": "agent-protocols",
     "order": 3,
     "tags": [
-      "inbox",
-      "query",
-      "filtering",
-      "pagination",
-      "read-state",
-      "rpc"
+      "resume",
+      "context",
+      "recovery",
+      "compaction"
     ],
-    "lastUpdated": "2026-02-08"
+    "lastUpdated": "2026-03-03"
   },
   {
     "path": "api/authentication.html",
@@ -50,15 +60,6 @@
     "lastUpdated": ""
   },
   {
-    "path": "rpc-api.html",
-    "title": "RPC API",
-    "description": "Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats",
-    "category": "api",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
     "path": "api/websocket.html",
     "title": "WebSocket API",
     "description": "Thrum WebSocket API — real-time bidirectional communication, JSON-RPC over WebSocket, subscriptions, and events",
@@ -68,67 +69,10 @@
     "lastUpdated": ""
   },
   {
-    "path": "architecture.html",
-    "title": "Architecture",
-    "description": "Thrum architecture — daemon design, storage, sync engine, transport layer, key features, and foundation packages",
-    "category": "architecture",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": "2026-04-06"
-  },
-  {
-    "path": "daemon.html",
-    "title": "Daemon Architecture",
-    "description": "Background service managing state, RPC handlers, sync loop, WebSocket server, and embedded UI on single port",
-    "category": "daemon",
-    "order": 1,
-    "tags": [
-      "daemon",
-      "background-service",
-      "rpc",
-      "websocket",
-      "lifecycle",
-      "sync"
-    ],
-    "lastUpdated": "2026-02-10"
-  },
-  {
-    "path": "development.html",
-    "title": "Development Guide",
-    "description": "Setup, testing, building, contributing - complete guide for developing and extending Thrum",
-    "category": "development",
-    "order": 2,
-    "tags": [
-      "development",
-      "contributing",
-      "testing",
-      "building",
-      "makefile",
-      "go"
-    ],
-    "lastUpdated": "2026-04-06"
-  },
-  {
-    "path": "security-cicd.html",
-    "title": "Security & CI/CD",
-    "description": "Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum",
-    "category": "development",
-    "order": 3,
-    "tags": [
-      "security",
-      "ci",
-      "cd",
-      "github-actions",
-      "workflows",
-      "deployment"
-    ],
-    "lastUpdated": "2026-02-10"
-  },
-  {
     "path": "agent-coordination.html",
     "title": "Agent Coordination",
     "description": "Multi-agent workflows, Beads integration, session templates, and coordination patterns for AI agent teams",
-    "category": "guides",
+    "category": "coordination",
     "order": 1,
     "tags": [
       "coordination",
@@ -141,25 +85,10 @@
     "lastUpdated": "2026-02-09"
   },
   {
-    "path": "agent-configs.html",
-    "title": "Agent Configurations",
-    "description": "Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking",
-    "category": "guides",
-    "order": 2,
-    "tags": [
-      "agents",
-      "claude-code",
-      "configuration",
-      "setup",
-      "toolkit"
-    ],
-    "lastUpdated": "2026-02-10"
-  },
-  {
     "path": "multi-agent.html",
     "title": "Multi-Agent Support",
     "description": "Agent groups, runtime presets, context prime, and coordination patterns for running multiple AI agents across worktrees and platforms",
-    "category": "guides",
+    "category": "coordination",
     "order": 2,
     "tags": [
       "multi-agent",
@@ -172,104 +101,10 @@
     "lastUpdated": "2026-04-06"
   },
   {
-    "path": "claude-code-plugin.html",
-    "title": "Claude Code Plugin",
-    "description": "Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration",
-    "category": "guides",
-    "order": 3,
-    "tags": [
-      "claude-code",
-      "plugin",
-      "installation",
-      "slash-commands",
-      "mcp",
-      "hooks"
-    ],
-    "lastUpdated": "2026-04-06"
-  },
-  {
-    "path": "configuration.html",
-    "title": "Configuration",
-    "description": "Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command",
-    "category": "guides",
-    "order": 3,
-    "tags": [
-      "configuration",
-      "config",
-      "runtime",
-      "daemon",
-      "settings",
-      "config-show"
-    ],
-    "lastUpdated": "2026-04-06"
-  },
-  {
-    "path": "workflow-templates.html",
-    "title": "Workflow Templates",
-    "description": "Four-phase skill pipeline for designing, planning, setting up, and implementing features with AI agents",
-    "category": "guides",
-    "order": 3,
-    "tags": [
-      "templates",
-      "workflow",
-      "planning",
-      "implementation",
-      "agents",
-      "toolkit"
-    ],
-    "lastUpdated": "2026-03-03"
-  },
-  {
-    "path": "beads-and-thrum.html",
-    "title": "Beads and Thrum",
-    "description": "How persistent task tracking and agent messaging work together for multi-agent development",
-    "category": "guides",
-    "order": 4,
-    "tags": [
-      "beads",
-      "thrum",
-      "agents",
-      "coordination",
-      "memory",
-      "messaging"
-    ],
-    "lastUpdated": "2026-02-10"
-  },
-  {
-    "path": "codex-plugin.html",
-    "title": "Codex Plugin",
-    "description": "Install and use Thrum's Codex skill bundle — split skills for coordination, operations, role template generation, and project setup",
-    "category": "guides",
-    "order": 4,
-    "tags": [
-      "codex",
-      "skills",
-      "thrum",
-      "installation",
-      "agent-coordination"
-    ],
-    "lastUpdated": "2026-02-24"
-  },
-  {
-    "path": "session-restart.html",
-    "title": "Session Restart & Context Recovery",
-    "description": "Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts",
-    "category": "guides",
-    "order": 5,
-    "tags": [
-      "restart",
-      "context",
-      "snapshot",
-      "recovery",
-      "session"
-    ],
-    "lastUpdated": "2026-04-07"
-  },
-  {
     "path": "context.html",
     "title": "Agent Context Management",
     "description": "Per-agent context storage for persisting volatile project state across sessions and machines",
-    "category": "guides",
+    "category": "coordination",
     "order": 6,
     "tags": [
       "context",
@@ -284,7 +119,7 @@
     "path": "guides/coordinate-two-agents.html",
     "title": "Coordinate Two Agents",
     "description": "Walk through registering two agents, sending messages between them, and seeing what everyone is working on — the most common Thrum use case",
-    "category": "guides",
+    "category": "coordination",
     "order": 10,
     "tags": [
       "coordination",
@@ -297,26 +132,10 @@
     "lastUpdated": "2026-03-13"
   },
   {
-    "path": "guides/cross-machine-sync.html",
-    "title": "Sync Across Machines",
-    "description": "Walk through enabling cross-machine sync, sending a message from one machine and receiving it on another, and verifying sync status",
-    "category": "guides",
-    "order": 11,
-    "tags": [
-      "sync",
-      "cross-machine",
-      "git",
-      "remote",
-      "tailscale",
-      "how-to"
-    ],
-    "lastUpdated": "2026-03-13"
-  },
-  {
     "path": "guides/review-workflow.html",
     "title": "Code Review Workflow",
     "description": "Walk through the implement-then-review cycle: one agent writes code on a feature branch, another reviews it, Thrum handles the communication",
-    "category": "guides",
+    "category": "coordination",
     "order": 12,
     "tags": [
       "review",
@@ -327,73 +146,6 @@
       "how-to"
     ],
     "lastUpdated": "2026-03-13"
-  },
-  {
-    "path": "telegram-bridge.html",
-    "title": "Telegram Bridge",
-    "description": "Bidirectional Telegram integration — relay messages between Telegram and Thrum agents via a bridge goroutine inside the daemon",
-    "category": "guides",
-    "order": 12,
-    "tags": [
-      "telegram",
-      "bridge",
-      "messaging",
-      "mobile",
-      "notifications",
-      "integration"
-    ],
-    "lastUpdated": "2026-03-24"
-  },
-  {
-    "path": "telegram-groups.html",
-    "title": "Telegram Groups",
-    "description": "Share a Telegram group with your team so everyone can interact with the same Thrum agent — send instructions, see responses, and coordinate through one chat",
-    "category": "guides",
-    "order": 13,
-    "tags": [
-      "telegram",
-      "groups",
-      "team",
-      "collaboration",
-      "coordination"
-    ],
-    "lastUpdated": "2026-04-05"
-  },
-  {
-    "path": "claude-agent-integration.html",
-    "title": "Claude Code Agent Integration",
-    "description": "Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup",
-    "category": "guides",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "messaging.html",
-    "title": "Messaging",
-    "description": "Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering",
-    "category": "guides",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "tailscale-sync.html",
-    "title": "Tailscale Sync",
-    "description": "Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands",
-    "category": "guides",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "tailscale-security.html",
-    "title": "Tailscale Sync Security",
-    "description": "Security model for Thrum's Tailscale peer sync — pairing, encryption, access control, and threat mitigations",
-    "category": "guides",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
   },
   {
     "path": "identity.html",
@@ -412,6 +164,208 @@
     "lastUpdated": "2026-04-06"
   },
   {
+    "path": "agent-configs.html",
+    "title": "Agent Configurations",
+    "description": "Ready-to-use Claude Code agent definitions for Thrum messaging and Beads task tracking",
+    "category": "identity",
+    "order": 2,
+    "tags": [
+      "agents",
+      "claude-code",
+      "configuration",
+      "setup",
+      "toolkit"
+    ],
+    "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "claude-agent-integration.html",
+    "title": "Claude Code Agent Integration",
+    "description": "Agent definitions for multi-agent coordination in Claude Code — thrum-agent and message-listener setup",
+    "category": "identity",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "role-templates.html",
+    "title": "Role-Based Preamble Templates",
+    "description": "Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives",
+    "category": "identity",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "daemon.html",
+    "title": "Daemon Architecture",
+    "description": "Background service managing state, RPC handlers, sync loop, WebSocket server, and embedded UI on single port",
+    "category": "infrastructure",
+    "order": 1,
+    "tags": [
+      "daemon",
+      "background-service",
+      "rpc",
+      "websocket",
+      "lifecycle",
+      "sync"
+    ],
+    "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "sync.html",
+    "title": "Sync Protocol",
+    "description": "Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design",
+    "category": "infrastructure",
+    "order": 1,
+    "tags": [
+      "sync",
+      "git",
+      "worktree",
+      "merge",
+      "offline",
+      "jsonl"
+    ],
+    "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "event-streaming.html",
+    "title": "Event Streaming",
+    "description": "Real-time push notifications via Broadcaster and Dispatcher - subscription matching, delivery, and client registries",
+    "category": "infrastructure",
+    "order": 2,
+    "tags": [
+      "events",
+      "streaming",
+      "notifications",
+      "websocket",
+      "broadcaster",
+      "dispatcher"
+    ],
+    "lastUpdated": "2026-02-08"
+  },
+  {
+    "path": "configuration.html",
+    "title": "Configuration",
+    "description": "Thrum configuration model — config.json schema, runtime tiers, priority chain, and the config show command",
+    "category": "infrastructure",
+    "order": 3,
+    "tags": [
+      "configuration",
+      "config",
+      "runtime",
+      "daemon",
+      "settings",
+      "config-show"
+    ],
+    "lastUpdated": "2026-04-06"
+  },
+  {
+    "path": "guides/cross-machine-sync.html",
+    "title": "Sync Across Machines",
+    "description": "Walk through enabling cross-machine sync, sending a message from one machine and receiving it on another, and verifying sync status",
+    "category": "infrastructure",
+    "order": 11,
+    "tags": [
+      "sync",
+      "cross-machine",
+      "git",
+      "remote",
+      "tailscale",
+      "how-to"
+    ],
+    "lastUpdated": "2026-03-13"
+  },
+  {
+    "path": "tailscale-sync.html",
+    "title": "Tailscale Sync",
+    "description": "Direct machine-to-machine sync via Tailscale — setup, architecture, pairing, and CLI commands",
+    "category": "infrastructure",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "tailscale-security.html",
+    "title": "Tailscale Sync Security",
+    "description": "Security model for Thrum's Tailscale peer sync — pairing, encryption, access control, and threat mitigations",
+    "category": "infrastructure",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "web-ui.html",
+    "title": "Web UI",
+    "description": "Browser-based dashboard for monitoring agents, reading messages, and managing groups — served from the daemon on a single port",
+    "category": "integrations",
+    "order": 1,
+    "tags": [
+      "web-ui",
+      "dashboard",
+      "browser",
+      "live-feed",
+      "inbox"
+    ],
+    "lastUpdated": "2026-02-23"
+  },
+  {
+    "path": "claude-code-plugin.html",
+    "title": "Claude Code Plugin",
+    "description": "Install and use the Thrum plugin for Claude Code — slash commands, automatic context injection, and multi-agent coordination without manual configuration",
+    "category": "integrations",
+    "order": 3,
+    "tags": [
+      "claude-code",
+      "plugin",
+      "installation",
+      "slash-commands",
+      "mcp",
+      "hooks"
+    ],
+    "lastUpdated": "2026-04-06"
+  },
+  {
+    "path": "beads-and-thrum.html",
+    "title": "Beads and Thrum",
+    "description": "How persistent task tracking and agent messaging work together for multi-agent development",
+    "category": "integrations",
+    "order": 4,
+    "tags": [
+      "beads",
+      "thrum",
+      "agents",
+      "coordination",
+      "memory",
+      "messaging"
+    ],
+    "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "codex-plugin.html",
+    "title": "Codex Plugin",
+    "description": "Install and use Thrum's Codex skill bundle — split skills for coordination, operations, role template generation, and project setup",
+    "category": "integrations",
+    "order": 4,
+    "tags": [
+      "codex",
+      "skills",
+      "thrum",
+      "installation",
+      "agent-coordination"
+    ],
+    "lastUpdated": "2026-02-24"
+  },
+  {
+    "path": "mcp-server.html",
+    "title": "MCP Server",
+    "description": "Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup",
+    "category": "integrations",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
     "path": "subscriptions.html",
     "title": "Subscriptions & Notifications",
     "description": "Real-time push notification system with scope, mention, and all-message filters - subscription lifecycle and dispatch",
@@ -426,6 +380,121 @@
       "broadcaster"
     ],
     "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "inbox-query-methods.html",
+    "title": "Inbox Query Methods",
+    "description": "RPC methods for querying messages, agents, and managing read state with filtering and pagination",
+    "category": "messaging",
+    "order": 3,
+    "tags": [
+      "inbox",
+      "query",
+      "filtering",
+      "pagination",
+      "read-state",
+      "rpc"
+    ],
+    "lastUpdated": "2026-02-08"
+  },
+  {
+    "path": "telegram-bridge.html",
+    "title": "Telegram Bridge",
+    "description": "Bidirectional Telegram integration — relay messages between Telegram and Thrum agents via a bridge goroutine inside the daemon",
+    "category": "messaging",
+    "order": 12,
+    "tags": [
+      "telegram",
+      "bridge",
+      "messaging",
+      "mobile",
+      "notifications",
+      "integration"
+    ],
+    "lastUpdated": "2026-03-24"
+  },
+  {
+    "path": "telegram-groups.html",
+    "title": "Telegram Groups",
+    "description": "Share a Telegram group with your team so everyone can interact with the same Thrum agent — send instructions, see responses, and coordinate through one chat",
+    "category": "messaging",
+    "order": 13,
+    "tags": [
+      "telegram",
+      "groups",
+      "team",
+      "collaboration",
+      "coordination"
+    ],
+    "lastUpdated": "2026-04-05"
+  },
+  {
+    "path": "messaging.html",
+    "title": "Messaging",
+    "description": "Thrum messaging system — sending, receiving, replies, priorities, scopes, mentions, and inbox filtering",
+    "category": "messaging",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": ""
+  },
+  {
+    "path": "tmux-sessions.html",
+    "title": "Tmux-Managed Sessions",
+    "description": "Run agent teams in daemon-managed tmux sessions with instant message delivery, zero background listeners, and coordinator-managed lifecycle",
+    "category": "orchestration",
+    "order": 2,
+    "tags": [
+      "tmux",
+      "sessions",
+      "multi-agent",
+      "nudge",
+      "coordinator"
+    ],
+    "lastUpdated": "2026-04-07"
+  },
+  {
+    "path": "single-agent-mode.html",
+    "title": "Single-Agent Mode",
+    "description": "Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent",
+    "category": "orchestration",
+    "order": 3,
+    "tags": [
+      "single-agent",
+      "context",
+      "getting-started"
+    ],
+    "lastUpdated": "2026-04-04"
+  },
+  {
+    "path": "workflow-templates.html",
+    "title": "Workflow Templates",
+    "description": "Four-phase skill pipeline for designing, planning, setting up, and implementing features with AI agents",
+    "category": "orchestration",
+    "order": 3,
+    "tags": [
+      "templates",
+      "workflow",
+      "planning",
+      "implementation",
+      "agents",
+      "toolkit"
+    ],
+    "lastUpdated": "2026-03-03"
+  },
+  {
+    "path": "session-restart.html",
+    "title": "Session Restart & Context Recovery",
+    "description": "Save conversation history and resume where you left off — from daily shutdown to automated mid-task restarts",
+    "category": "orchestration",
+    "order": 5,
+    "tags": [
+      "restart",
+      "context",
+      "snapshot",
+      "recovery",
+      "session"
+    ],
+    "lastUpdated": "2026-04-07"
   },
   {
     "path": "philosophy.html",
@@ -451,34 +520,6 @@
     "lastUpdated": "2026-04-06"
   },
   {
-    "path": "tmux-sessions.html",
-    "title": "Tmux-Managed Sessions",
-    "description": "Run agent teams in daemon-managed tmux sessions with instant message delivery, zero background listeners, and coordinator-managed lifecycle",
-    "category": "overview",
-    "order": 2,
-    "tags": [
-      "tmux",
-      "sessions",
-      "multi-agent",
-      "nudge",
-      "coordinator"
-    ],
-    "lastUpdated": "2026-04-07"
-  },
-  {
-    "path": "single-agent-mode.html",
-    "title": "Single-Agent Mode",
-    "description": "Use Thrum's context management without the messaging layer — single-agent mode as default, three-tier context, and when to switch to multi-agent",
-    "category": "overview",
-    "order": 3,
-    "tags": [
-      "single-agent",
-      "context",
-      "getting-started"
-    ],
-    "lastUpdated": "2026-04-04"
-  },
-  {
     "path": "quickstart.html",
     "title": "Quickstart Guide",
     "description": "Get up and running with Thrum in 5 minutes - initialization, daemon setup, agent registration, and first message",
@@ -494,6 +535,47 @@
     "lastUpdated": "2026-04-06"
   },
   {
+    "path": "development.html",
+    "title": "Development Guide",
+    "description": "Setup, testing, building, contributing - complete guide for developing and extending Thrum",
+    "category": "reference",
+    "order": 2,
+    "tags": [
+      "development",
+      "contributing",
+      "testing",
+      "building",
+      "makefile",
+      "go"
+    ],
+    "lastUpdated": "2026-04-06"
+  },
+  {
+    "path": "security-cicd.html",
+    "title": "Security & CI/CD",
+    "description": "Automated security scanning, CI/CD pipelines, and deployment workflows for Thrum",
+    "category": "reference",
+    "order": 3,
+    "tags": [
+      "security",
+      "ci",
+      "cd",
+      "github-actions",
+      "workflows",
+      "deployment"
+    ],
+    "lastUpdated": "2026-02-10"
+  },
+  {
+    "path": "architecture.html",
+    "title": "Architecture",
+    "description": "Thrum architecture — daemon design, storage, sync engine, transport layer, key features, and foundation packages",
+    "category": "reference",
+    "order": 999,
+    "tags": [],
+    "lastUpdated": "2026-04-06"
+  },
+  {
     "path": "cli.html",
     "title": "CLI Reference",
     "description": "Complete reference for the thrum command-line interface — all commands, flags, and usage examples",
@@ -503,71 +585,13 @@
     "lastUpdated": ""
   },
   {
-    "path": "mcp-server.html",
-    "title": "MCP Server",
-    "description": "Thrum MCP server for native AI agent integration — tools, identity, message handling, and Claude Code setup",
+    "path": "rpc-api.html",
+    "title": "RPC API",
+    "description": "Thrum daemon JSON-RPC 2.0 API reference — all RPC methods, parameters, and response formats",
     "category": "reference",
     "order": 999,
     "tags": [],
     "lastUpdated": ""
-  },
-  {
-    "path": "strategies/sub-agent-strategy.html",
-    "title": "Sub-Agent Strategy",
-    "description": "When and how to delegate work to sub-agents for context efficiency",
-    "category": "strategies",
-    "order": 1,
-    "tags": [
-      "agents",
-      "sub-agents",
-      "delegation",
-      "parallelization"
-    ],
-    "lastUpdated": "2026-03-03"
-  },
-  {
-    "path": "strategies/thrum-registration.html",
-    "title": "Thrum Registration",
-    "description": "How to register with Thrum at session start and communicate with other agents",
-    "category": "strategies",
-    "order": 2,
-    "tags": [
-      "registration",
-      "messaging",
-      "thrum",
-      "coordination"
-    ],
-    "lastUpdated": "2026-03-03"
-  },
-  {
-    "path": "strategies/resume-after-context-loss.html",
-    "title": "Resume After Context Loss",
-    "description": "How to recover and pick up work after compaction, a new session, or a crash",
-    "category": "strategies",
-    "order": 3,
-    "tags": [
-      "resume",
-      "context",
-      "recovery",
-      "compaction"
-    ],
-    "lastUpdated": "2026-03-03"
-  },
-  {
-    "path": "sync.html",
-    "title": "Sync Protocol",
-    "description": "Git-based message synchronization using orphan branch, sync worktree, conflict-free merging, and offline-first design",
-    "category": "sync",
-    "order": 1,
-    "tags": [
-      "sync",
-      "git",
-      "worktree",
-      "merge",
-      "offline",
-      "jsonl"
-    ],
-    "lastUpdated": "2026-02-10"
   },
   {
     "path": "guides/recommended-tools.html",
@@ -632,29 +656,5 @@
       "guide"
     ],
     "lastUpdated": "2026-02-27"
-  },
-  {
-    "path": "role-templates.html",
-    "title": "Role-Based Preamble Templates",
-    "description": "Auto-generate agent preambles from role templates with scope boundaries, task protocol, communication patterns, and behavioral directives",
-    "category": "uncategorized",
-    "order": 999,
-    "tags": [],
-    "lastUpdated": ""
-  },
-  {
-    "path": "web-ui.html",
-    "title": "Web UI",
-    "description": "Browser-based dashboard for monitoring agents, reading messages, and managing groups — served from the daemon on a single port",
-    "category": "webui",
-    "order": 1,
-    "tags": [
-      "web-ui",
-      "dashboard",
-      "browser",
-      "live-feed",
-      "inbox"
-    ],
-    "lastUpdated": "2026-02-23"
   }
 ]

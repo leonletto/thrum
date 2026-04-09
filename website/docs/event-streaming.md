@@ -3,7 +3,7 @@ title: "Event Streaming"
 description:
   "Real-time push notifications via Broadcaster and Dispatcher - subscription
   matching, delivery, and client registries"
-category: "api"
+category: "infrastructure"
 order: 2
 tags:
   [

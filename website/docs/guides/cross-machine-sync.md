@@ -3,7 +3,7 @@ title: "Sync Across Machines"
 description:
   "Walk through enabling cross-machine sync, sending a message from one machine
   and receiving it on another, and verifying sync status"
-category: "guides"
+category: "infrastructure"
 order: 11
 tags: ["sync", "cross-machine", "git", "remote", "tailscale", "how-to"]
 last_updated: "2026-03-13"

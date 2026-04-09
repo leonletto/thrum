@@ -2,7 +2,7 @@
 title: "Resume After Context Loss"
 description:
   "How to recover and pick up work after compaction, a new session, or a crash"
-category: "strategies"
+category: "agent-protocols"
 order: 3
 tags: ["resume", "context", "recovery", "compaction"]
 last_updated: "2026-03-03"

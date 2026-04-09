@@ -3,7 +3,7 @@ title: "Single-Agent Mode"
 description:
   "Use Thrum's context management without the messaging layer — single-agent
   mode as default, three-tier context, and when to switch to multi-agent"
-category: "overview"
+category: "orchestration"
 order: 3
 tags: ["single-agent", "context", "getting-started"]
 last_updated: "2026-04-04"
