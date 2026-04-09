@@ -4450,6 +4450,12 @@ Examples:
 					}
 				}
 
+				// Default agent status to "idle" for new or re-registered agents
+				if idFile.AgentStatus == "" {
+					idFile.AgentStatus = "idle"
+					idFile.AgentStatusUpdatedAt = time.Now().UTC()
+				}
+
 				// Update fields that the cobra handler is responsible for
 				if display != "" {
 					idFile.Agent.Display = display

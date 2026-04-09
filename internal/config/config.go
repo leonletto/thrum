@@ -32,20 +32,22 @@ type AgentConfig struct {
 
 // IdentityFile represents the identity file structure stored in .thrum/identities/{name}.json.
 type IdentityFile struct {
-	Version     int         `json:"version"`
-	RepoID      string      `json:"repo_id"`
-	Agent       AgentConfig `json:"agent"`
-	Worktree    string      `json:"worktree"`
-	Branch      string      `json:"branch,omitempty"`
-	Intent      string      `json:"intent,omitempty"`
-	SessionID   string      `json:"session_id,omitempty"`
-	ConfirmedBy string      `json:"confirmed_by,omitempty"`
-	ContextFile      string      `json:"context_file,omitempty"`
-	AgentPID         int         `json:"agent_pid,omitempty"`
-	PreferredRuntime string      `json:"preferred_runtime,omitempty"`
-	TmuxSession      string      `json:"tmux_session,omitempty"`
-	Runtime          string      `json:"runtime,omitempty"`
-	UpdatedAt        time.Time   `json:"updated_at"`
+	Version              int         `json:"version"`
+	RepoID               string      `json:"repo_id"`
+	Agent                AgentConfig `json:"agent"`
+	Worktree             string      `json:"worktree"`
+	Branch               string      `json:"branch,omitempty"`
+	Intent               string      `json:"intent,omitempty"`
+	SessionID            string      `json:"session_id,omitempty"`
+	ConfirmedBy          string      `json:"confirmed_by,omitempty"`
+	ContextFile          string      `json:"context_file,omitempty"`
+	AgentPID             int         `json:"agent_pid,omitempty"`
+	PreferredRuntime     string      `json:"preferred_runtime,omitempty"`
+	TmuxSession          string      `json:"tmux_session,omitempty"`
+	Runtime              string      `json:"runtime,omitempty"`
+	AgentStatus          string      `json:"agent_status,omitempty"`
+	AgentStatusUpdatedAt time.Time   `json:"agent_status_updated_at,omitempty"`
+	UpdatedAt            time.Time   `json:"updated_at"`
 }
 
 // Load loads configuration with the following priority:
