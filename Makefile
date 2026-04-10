@@ -98,7 +98,8 @@ build-ui:
 # Sync root llms.txt to embed location before Go build
 sync-embed-reference:
 	@mkdir -p internal/context/reference
-	cp llms.txt internal/context/reference/llms.txt
+	@test -f llms.txt || (echo "ERROR: llms.txt not found at repo root - cannot sync embed reference" && exit 1)
+	@cp llms.txt internal/context/reference/llms.txt
 	@echo "Synced llms.txt to internal/context/reference/"
 
 # Build Go binary only (skip UI rebuild, uses existing internal/web/dist/)
