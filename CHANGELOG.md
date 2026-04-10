@@ -6,6 +6,90 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-04-10
+
+### Added
+
+- **Tmux command queue** — daemon-managed per-session FIFO queue for sending
+  commands to tmux panes. `thrum tmux queue`, `thrum tmux queue-status`, and
+  `thrum tmux cancel` CLI commands. `tmux.queue`, `tmux.queue-wait`,
+  `tmux.queue-status`, and `tmux.cancel` RPC methods. SQLite persistence
+  (schema v18/v19), configurable per-command `silence_ms` and
+  `notify_on_complete` flags, `@system` virtual identity for result delivery,
+  restart recovery for interrupted commands, dead session drain.
+- **Multi-runtime tmux** — `ClaudePID` renamed to `AgentPID` across RPC,
+  projection, and schema (v17). `PreferredRuntime` field in identity file.
+  `--runtime` flag on `thrum quickstart`. Runtime-agnostic `HandleLaunch` —
+  OpenCode, Codex, and other runtimes now launch via tmux alongside Claude Code.
+  JSONL extraction skipped for non-Claude runtimes.
+- **Orchestrator role** — `thrum worktree create/teardown/list` commands for
+  managing agent worktrees. `thrum agent set-status` CLI + `agent.set-status`
+  RPC. Auto-nudge for agents with working status but idle pane. Orchestrator
+  role preamble template. `thrum:orchestrate` execution playbook skill.
+  `COORDINATOR` renamed to `SUPERVISOR` in implementation prompts.
+  Review gate template between epics.
+- **Daemon logging** — lumberjack log rotation for `daemon.log`.
+  `thrum daemon logs` command with `--since`, `--tail`, `--follow` flags.
+  Configurable `daemon.log_level` via slog. Telegram debug logging gated
+  behind log level.
+- **Open Code plugin** — `opencode-thrum` npm package with TS hooks, asset
+  installer, runtime-aware prime. `opencode` runtime preset in registry.
+- **Codex plugin** — skill bundle aligned with claude-plugin source of truth.
+- **Website restructure** — hub-and-spoke landing page, scenario-based
+  onboarding, new sidebar categories, orchestrator/multi-runtime/peers
+  reference docs, voice pass across all pages.
+
+### Changed
+
+- **safecmd migration** — 47 `exec.Command` call sites migrated to `safecmd`
+  wrappers across 11 production files (thrum-xir.3). New `safecmd.Tmux`,
+  `safecmd.TmuxRun`, `safecmd.TmuxLocal` with 5-second timeouts and clean
+  environment. `safecmd.GitConfig` wrapper for reading git config without thrum
+  user overrides. `cleanEnv` consolidated from tmux package into safecmd as
+  `cleanTmuxEnv`.
+- **`who-has` live git extraction** — `HandleListContext` now calls
+  `gitctx.ExtractWorkContext` on each result's worktree path, replacing stale
+  cached data with live git state (~500ms for all worktrees).
+- **Prime identity refresh** — `thrum prime` now updates `PreferredRuntime` and
+  `Branch` in the identity file when they differ from detected values.
+  Previously only `TmuxSession` was written back.
+- **Queue RPC logging** — all 11 `log.Printf` calls in `queue_rpc.go` migrated
+  to `slog` structured logging, routing through the daemon log handler.
+- **Unified sync-skills.sh** — single script syncs all runtime plugins from
+  claude-plugin source of truth.
+- **Telegram docs reframed** — positioned as "unified team inbox" rather than
+  standalone bridge feature.
+- **Documentation** — 11 doc pages updated for v0.8.0: CLI reference (8 new
+  commands), RPC API (5 new methods), identity v4→v5, schema v16→v19,
+  configuration (log_level, worktrees, orchestration), tmux command queue
+  dispatch, orchestrator role.
+
+### Fixed
+
+- **Queue dispatch for detached sessions** — `alert-silence` tmux hooks only
+  fire for sessions with an attached client. Added `IsSilent` immediate dispatch
+  when a command is enqueued at position 1 with no active command, plus
+  `pollSilenceFlag` fallback that polls the tmux `window_silence_flag` at the
+  configured threshold interval.
+- **Queue `detectPaneState` gate** — `check-pane` CLI now always calls the
+  daemon instead of returning early for normal state, enabling queue dispatch
+  notifications for all sessions.
+- **Telegram reply routing** — inbound replies now route to the parent message's
+  author instead of hardcoded `@coordinator_main`.
+- **Prime inbox filtering** — two bugs fixed: `ContextPrime` missing
+  `ForAgent`/`ForAgentRole` (new agents saw 380+ messages); time boundary
+  missing in `buildForAgentClause` (new agents saw all historical
+  group/broadcast). Fixed with whoami fields + `registered_at` floor.
+- **TUI retry Enter** — 3-second delayed second Enter in `HandleLaunch` and
+  `HandleRestart` for Bubble Tea TUI runtimes (OpenCode) that swallow the first
+  Enter during startup.
+- **Duplicate prime removed** — CLI `/thrum:prime` send removed;
+  `HandleLaunch` owns the T+10s prime.
+- **tmux-exec quoting** — `printf '%q'` preserves multi-word arguments in
+  `scripts/tmux-exec` run command.
+- **slog timestamp parsing** — `thrum daemon logs --since` now parses slog's
+  timestamp format correctly.
+
 ## [0.7.2] - 2026-04-08
 
 ### Changed

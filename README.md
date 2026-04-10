@@ -13,7 +13,7 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.7.2 highlights:**
+**v0.8.0 highlights:**
 
 - **Tmux server isolation fix** — Daemon tmux commands now use the default tmux
   server regardless of inherited environment, fixing `thrum tmux launch/restart`
