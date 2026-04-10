@@ -67,6 +67,7 @@ internal/web/dist/*
 # Node.js / Playwright
 node_modules/
 package-lock.json
+!opencode-plugin/package-lock.json
 test-results/
 playwright-report/
 
