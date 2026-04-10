@@ -5264,9 +5264,12 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	//   - Repos initialized before this feature landed (backfill on first daemon restart)
 	//   - Files accidentally deleted between init and daemon start
 	//   - Version bumps: keeps the on-disk reference in sync with the installed binary
-	// A failure here must not prevent daemon startup — log and continue.
+	// A failure here must not prevent daemon startup - log and continue.
+	// NOTE: thrumDir is the redirect target (shared .thrum/) in worktree setups -
+	// correct here, because reference files are binary-version content, not
+	// per-checkout data like identities.
 	if err := agentcontext.WriteStrategies(thrumDir); err != nil {
-		log.Printf("daemon: warning: failed to refresh embedded reference files: %v", err)
+		fmt.Fprintf(os.Stderr, "Warning: failed to refresh embedded reference files: %v\n", err)
 	}
 
 	// Generate repo ID (use directory name for now)
