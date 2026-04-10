@@ -294,8 +294,11 @@ its identity file has <code>tmux_session</code> set, the tmux session exists, an
 PID is alive. The daemon clears <code>tmux_session</code> when it detects the session is
 gone or the PID is dead, preventing stale state.</p>
 <p><strong>Canonical writer:</strong> <code>thrum tmux launch</code> is the primary writer of both fields.
-<code>thrum prime</code> confirms the values on startup — if <code>tmux_session</code> is missing or
-mismatched, it writes the current value from <code>$TMUX</code>.</p>
+<code>thrum prime</code> also refreshes identity on every run — if <code>tmux_session</code>,
+<code>preferred_runtime</code>, or <code>branch</code> differ from detected values, prime writes them
+back. This matters for agents relaunched under a different runtime (e.g. Claude
+→ OpenCode) or moved between branches; the identity file stays accurate without
+manual re-registration.</p>
 <p><strong>Auto-selection rules</strong> for identity files (in priority order):</p>
 <ol>
 <li>If <code>THRUM_NAME</code> is set, load <code>{THRUM_NAME}.json</code> directly (error if not

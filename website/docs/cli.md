@@ -1268,6 +1268,10 @@ Check which agents are currently editing a file. Shows agents with the file in
 their uncommitted changes or changed files, along with branch and change count
 information.
 
+The daemon extracts live git state from each agent's worktree on every call
+(about 500ms for a handful of worktrees) rather than serving stale cached data
+from the last heartbeat. What you see is what's actually on disk right now.
+
 ```text
 thrum who-has FILE
 ```
@@ -2164,19 +2168,22 @@ thrum tmux capture implementer-api --lines 10
 
 ### thrum tmux restart
 
-Restart a tmux-managed agent session with a context snapshot. Extracts the
-agent's conversation history from the JSONL transcript, kills the session,
-creates a new one, and relaunches. The new session loads the snapshot via
-`thrum prime`. See [Session Restart](session-restart.md) for details.
+Restart a tmux-managed agent session with a context snapshot. By default, the
+daemon asks the agent to save its own snapshot (graceful flow), falling back to
+JSONL extraction only on timeout. With `--force`, the daemon skips the graceful
+prompt and extracts directly from the JSONL transcript. Either way, the session
+is killed, a new one is created, and the new session loads the snapshot via
+`thrum prime`. See [Session Restart](session-restart.md) for details on the
+graceful vs force flows.
 
 ```text
 thrum tmux restart <name> [flags]
 ```
 
-| Flag        | Description                                   | Default |
-| ----------- | --------------------------------------------- | ------- |
-| `--force`   | Skip graceful signal, force restart           | `false` |
-| `--runtime` | Runtime override for relaunch (default: same) |         |
+| Flag        | Description                                                     | Default |
+| ----------- | --------------------------------------------------------------- | ------- |
+| `--force`   | Skip graceful save prompt, extract snapshot from JSONL directly | `false` |
+| `--runtime` | Runtime override for relaunch (default: same)                   |         |
 
 Example:
 
