@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Codex Plugin — Thrum</title>
-<meta name="description" content="Install and use Thrum's Codex skill bundle — split skills for coordination, operations, role template generation, and project setup">
+<meta name="description" content="Install and use Thrum's Codex skill bundle — the Claude thrum skill surface, mirrored as top-level Codex skills">
 <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#codex-plugin.html">
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
@@ -45,12 +45,25 @@ installed with a local skills directory (<code>~/.codex/skills</code>).</p>
 <p>Codex does not currently use the Claude-style plugin marketplace model. Instead,
 Thrum integration is packaged as a <strong>Codex skill bundle</strong> in
 <code>codex-plugin/skills</code>.</p>
-<p>The bundle is split into focused skills:</p>
+<p>The Codex bundle mirrors the Claude plugin&#39;s <code>thrum:*</code> command surface as
+top-level Codex skills.</p>
+<p>Registered skills:</p>
 <ul>
-<li><code>thrum-core</code> — durable messaging, groups, identity, worktree boundaries</li>
-<li><code>thrum-ops</code> — quickstart/inbox/sent/wait/context/daemon/sync operational flows</li>
-<li><code>thrum-role-config</code> — generate or update <code>.thrum/role_templates</code></li>
-<li><code>project-setup</code> — turn design docs into Beads epics/tasks before coding</li>
+<li><code>thrum</code></li>
+<li><code>thrum-prime</code></li>
+<li><code>thrum-overview</code></li>
+<li><code>thrum-update-project</code></li>
+<li><code>thrum-team</code></li>
+<li><code>thrum-inbox</code></li>
+<li><code>thrum-group</code></li>
+<li><code>thrum-send</code></li>
+<li><code>thrum-reply</code></li>
+<li><code>thrum-wait</code></li>
+<li><code>thrum-restart</code></li>
+<li><code>thrum-load-context</code></li>
+<li><code>thrum-quickstart</code></li>
+<li><code>thrum-configure-roles</code></li>
+<li><code>thrum-project-setup</code></li>
 </ul>
 <h2>Prerequisites</h2>
 <ul>
@@ -67,6 +80,8 @@ thrum quickstart --name myagent --role implementer --module auth</code></pre>
 <pre><code>git clone https://github.com/leonletto/thrum.git
 cd thrum
 ./codex-plugin/scripts/install-skills.sh</code></pre>
+<p>You can also use the packaged installer guide in <code>codex-plugin/INSTALL.md</code>,
+which points at the same script and lists the expected 15 installed skills.</p>
 <h3>From Local Clone</h3>
 <p>If you already have the Thrum repository cloned locally:</p>
 <pre><code>cd /path/to/thrum
@@ -74,34 +89,31 @@ cd thrum
 <p>This installs the bundled skills into <code>~/.codex/skills</code> (or <code>$CODEX_HOME/skills</code>
 if <code>CODEX_HOME</code> is set).</p>
 <h3>Verify installed skills</h3>
-<pre><code>find &quot;${CODEX_HOME:-$HOME/.codex}/skills&quot; -maxdepth 1 -type d -name &quot;thrum-*&quot; -o -name &quot;project-setup&quot;</code></pre>
+<pre><code>find &quot;${CODEX_HOME:-$HOME/.codex}/skills&quot; -maxdepth 1 -type d \( -name &quot;thrum&quot; -o -name &quot;thrum-*&quot; \)</code></pre>
 <h3>Restart Codex</h3>
 <p>Restart Codex after installation so the new skills are loaded.</p>
 <h2>Updating Skills During Development</h2>
-<p>After editing files under <code>codex-plugin/skills/</code>, sync updates into your local
-Codex installation:</p>
+<p>After editing the Claude plugin source or Codex bundle files, sync updates into
+your local Codex installation:</p>
 <pre><code>./codex-plugin/scripts/sync-skills.sh</code></pre>
 <p><code>sync-skills.sh</code> replaces installed copies with your local versions.</p>
 <h2>Usage Patterns</h2>
 <h3>Multi-agent coordination</h3>
-<p>Ask Codex to coordinate work across agents using Thrum. The <code>thrum-core</code> skill
-handles audience routing (<code>@agent</code>, <code>@group</code>, <code>@everyone</code>) and durable
-message/reply workflows.</p>
+<p>Ask Codex to coordinate work across agents using <code>thrum</code>. It acts as the main
+entry point and routes into the specific <code>thrum-*</code> command skills when the work
+becomes command-specific.</p>
 <h3>Session operations and triage</h3>
-<p>When you need to bootstrap sessions, triage unread messages, verify delivery on
-messages you authored, or check daemon health, <code>thrum-ops</code> provides operational
-workflows and command references.</p>
+<p>When you need one explicit workflow, invoke the matching command skill:
+<code>thrum-prime</code>, <code>thrum-overview</code>, <code>thrum-inbox</code>, <code>thrum-send</code>, and so on.</p>
 <h3>Role template generation</h3>
-<p>When team structure changes, use <code>thrum-role-config</code> to detect environment
+<p>When team structure changes, use <code>thrum-configure-roles</code> to detect environment
 context and regenerate <code>.thrum/role_templates/&lt;role&gt;.md</code> with clear autonomy and
 scope boundaries.</p>
 <h2>Manual Installation (Optional)</h2>
 <p>If you prefer manual copy instead of scripts:</p>
 <pre><code>mkdir -p &quot;${CODEX_HOME:-$HOME/.codex}/skills&quot;
-cp -R codex-plugin/skills/thrum-core &quot;${CODEX_HOME:-$HOME/.codex}/skills/&quot;
-cp -R codex-plugin/skills/thrum-ops &quot;${CODEX_HOME:-$HOME/.codex}/skills/&quot;
-cp -R codex-plugin/skills/thrum-role-config &quot;${CODEX_HOME:-$HOME/.codex}/skills/&quot;
-cp -R codex-plugin/skills/project-setup &quot;${CODEX_HOME:-$HOME/.codex}/skills/&quot;</code></pre>
+cp -R codex-plugin/skills/thrum &quot;${CODEX_HOME:-$HOME/.codex}/skills/&quot;
+cp -R codex-plugin/skills/thrum-* &quot;${CODEX_HOME:-$HOME/.codex}/skills/&quot;</code></pre>
 <h2>Troubleshooting</h2>
 <h3>Skills do not appear in Codex</h3>
 <ul>
@@ -151,13 +163,13 @@ cp -R codex-plugin/skills/project-setup &quot;${CODEX_HOME:-$HOME/.codex}/skills
 </tr>
 <tr>
 <td>Role customization</td>
-<td><code>thrum-role-config</code> skill</td>
-<td>Configure-roles plugin skill</td>
+<td><code>thrum-configure-roles</code> skill</td>
+<td><code>/thrum:configure-roles</code></td>
 </tr>
 <tr>
 <td>Project decomposition</td>
-<td><code>project-setup</code> skill</td>
-<td>project-setup plugin skill</td>
+<td><code>thrum-project-setup</code> skill</td>
+<td><code>/thrum:project-setup</code></td>
 </tr>
 </tbody></table>
 <h2>Next Steps</h2>
@@ -167,7 +179,7 @@ Code users, with slash commands and automatic hooks</li>
 <li><a href="agent-coordination.html">Agent Coordination</a> — practical multi-agent workflows
 that the Codex skills support</li>
 <li><a href="role-templates.html">Role Templates</a> — role-based preamble templates that
-<code>thrum-role-config</code> generates</li>
+<code>thrum-configure-roles</code> generates</li>
 <li><a href="workflow-templates.html">Workflow Templates</a> — the <code>project-setup</code> skill&#39;s
 design → plan → implement pipeline in detail</li>
 </ul>

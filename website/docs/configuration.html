@@ -48,11 +48,21 @@ config.json when you want to change something.</p>
     &quot;sync_interval&quot;: 60,
     &quot;ws_port&quot;: &quot;auto&quot;,
     &quot;peer_port&quot;: &quot;auto&quot;,
-    &quot;single_agent_mode&quot;: true
+    &quot;single_agent_mode&quot;: true,
+    &quot;log_level&quot;: &quot;info&quot;
   },
   &quot;peers&quot;: {
     &quot;auto_connect&quot;: true,
     &quot;pairing_code_length&quot;: 16
+  },
+  &quot;worktrees&quot;: {
+    &quot;base_path&quot;: &quot;~/.workspaces/myproject&quot;,
+    &quot;beads_enabled&quot;: true,
+    &quot;thrum_enabled&quot;: true
+  },
+  &quot;orchestration&quot;: {
+    &quot;merge_target&quot;: &quot;main&quot;,
+    &quot;default_autonomy&quot;: &quot;end_only&quot;
   },
   &quot;restart&quot;: {
     &quot;max_lines&quot;: 1000,
@@ -125,6 +135,57 @@ remain active.</p>
 <li><strong>Toggle:</strong> <code>thrum single-agent-mode true|false</code></li>
 </ul>
 <p>See <a href="single-agent-mode.html">Single-Agent Mode</a> for details.</p>
+<h3><code>daemon.log_level</code></h3>
+<p>Slog log level for the daemon log file (<code>.thrum/var/daemon.log</code>).</p>
+<ul>
+<li><strong>Type:</strong> string</li>
+<li><strong>Default:</strong> <code>&quot;info&quot;</code></li>
+<li><strong>Values:</strong> <code>&quot;debug&quot;</code>, <code>&quot;info&quot;</code>, <code>&quot;warn&quot;</code> (or <code>&quot;warning&quot;</code>), <code>&quot;error&quot;</code></li>
+<li><strong>Case:</strong> insensitive</li>
+</ul>
+<p>The daemon uses <a href="https://github.com/natefinch/lumberjack">lumberjack</a> for log
+rotation: 10 MB max file size, 4 rotated backups, 28-day retention, gzip
+compression. View logs with <code>thrum daemon logs</code> (see
+<a href="cli.html#thrum-daemon-logs">CLI Reference</a>).</p>
+<h2>Worktrees</h2>
+<p>Settings for <code>thrum worktree create/teardown/list</code>. These are written
+automatically by <code>thrum init</code> and can be edited in <code>config.json</code>. See
+<a href="orchestrator-role.html">Orchestrator Role</a> for how the orchestrator uses these.</p>
+<h3><code>worktrees.base_path</code></h3>
+<p>Directory where <code>thrum worktree create</code> puts new worktrees.</p>
+<ul>
+<li><strong>Type:</strong> string (absolute path)</li>
+<li><strong>Default:</strong> <code>~/.workspaces/&lt;project&gt;</code> (inferred from repo name)</li>
+</ul>
+<h3><code>worktrees.beads_enabled</code></h3>
+<p>Whether to create <code>.beads/redirect</code> in new worktrees.</p>
+<ul>
+<li><strong>Type:</strong> boolean</li>
+<li><strong>Default:</strong> <code>true</code> (set by <code>thrum init</code>)</li>
+</ul>
+<h3><code>worktrees.thrum_enabled</code></h3>
+<p>Whether to create <code>.thrum/redirect</code> and <code>.thrum/identities/</code> in new worktrees.</p>
+<ul>
+<li><strong>Type:</strong> boolean</li>
+<li><strong>Default:</strong> <code>true</code> (set by <code>thrum init</code>)</li>
+</ul>
+<h2>Orchestration</h2>
+<p>Settings for the orchestrator role&#39;s execution lifecycle. See
+<a href="orchestrator-role.html">Orchestrator Role</a> for details.</p>
+<h3><code>orchestration.merge_target</code></h3>
+<p>Branch for the final merge after all epics complete.</p>
+<ul>
+<li><strong>Type:</strong> string</li>
+<li><strong>Default:</strong> <code>&quot;main&quot;</code></li>
+</ul>
+<h3><code>orchestration.default_autonomy</code></h3>
+<p>When to request human approval during plan execution.</p>
+<ul>
+<li><strong>Type:</strong> string</li>
+<li><strong>Default:</strong> <code>&quot;end_only&quot;</code></li>
+<li><strong>Values:</strong> <code>&quot;per_epic&quot;</code> (approve after each epic) or <code>&quot;end_only&quot;</code> (approve
+only at the end)</li>
+</ul>
 <h2>Peers</h2>
 <p>Settings for cross-repo peer connections. See
 <a href="architecture.html#cross-repo-peer-system">Architecture — Peer System</a> for how
@@ -381,8 +442,9 @@ coding runtimes:</p>
 <li><strong>CLI-only</strong> - No runtime configuration files</li>
 </ul>
 <p>Use <code>thrum init --runtime &lt;name&gt;</code> to specify which runtime template to generate.
-Runtime templates are created during initialization and are not tracked in
-<code>config.json</code>.</p>
+The selected runtime is saved as <code>runtime.primary</code> in <code>config.json</code>. The
+generated template files (CLAUDE.md, .cursorrules, etc.) are not tracked in
+<code>config.json</code> — only the primary runtime choice is.</p>
 <h2>Viewing Configuration</h2>
 <p>Use <code>thrum config show</code> to see the effective configuration and where each value
 comes from:</p>

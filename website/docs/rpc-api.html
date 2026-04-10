@@ -2980,6 +2980,58 @@ otherwise.</li>
 <td>Success indicator</td>
 </tr>
 </tbody></table>
+<h2>Agent Methods (v0.8.0)</h2>
+<h3>agent.set-status</h3>
+<p>Set an agent&#39;s operational status. The daemon locates the agent&#39;s identity file
+(including across worktrees) and writes the status directly.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Agent name</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>string</td>
+<td>yes</td>
+<td><code>&quot;working&quot;</code>, <code>&quot;idle&quot;</code>, or <code>&quot;blocked&quot;</code></td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent</code></td>
+<td>string</td>
+<td>Agent name</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>string</td>
+<td>The status that was set</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>invalid status &quot;&lt;value&gt;&quot;: must be working, idle, or blocked</code>: Invalid status
+value</li>
+</ul>
 <h2>Tmux Methods (v0.7.1)</h2>
 <h3>tmux.create</h3>
 <p>Create a tmux session for an agent with a clean environment and
@@ -3299,6 +3351,278 @@ creates a new one, and relaunches.</p>
 <td><code>snapshot_lines</code></td>
 <td>integer</td>
 <td>Lines in the saved snapshot</td>
+</tr>
+</tbody></table>
+<h2>Queue Methods (v0.8.0)</h2>
+<h3>tmux.queue</h3>
+<p>Submit a command to a tmux session&#39;s queue. Commands are dispatched FIFO — one
+at a time. The daemon sends the command to the pane when it goes silent, detects
+completion via the next silence event, captures output, and optionally sends an
+<code>@system</code> inbox message to the requester.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Tmux session name</td>
+</tr>
+<tr>
+<td><code>text</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Command text to send</td>
+</tr>
+<tr>
+<td><code>requester</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Agent name of the requester (for <code>@system</code> notifications)</td>
+</tr>
+<tr>
+<td><code>timeout_ms</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Command timeout in ms (default: 120000)</td>
+</tr>
+<tr>
+<td><code>silence_ms</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Silence threshold in ms (default: 5000)</td>
+</tr>
+<tr>
+<td><code>notify_on_complete</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Send <code>@system</code> inbox message on completion (default: <code>true</code>)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>command_id</code></td>
+<td>string</td>
+<td>Command ID (<code>cmd_</code> prefix + ULID)</td>
+</tr>
+<tr>
+<td><code>position</code></td>
+<td>integer</td>
+<td>Queue position</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>session is required</code>: Missing <code>session</code> field</li>
+<li><code>text is required</code>: Missing <code>text</code> field</li>
+<li><code>requester is required</code>: Missing <code>requester</code> field</li>
+</ul>
+<p><strong><code>@system</code> messages:</strong> When <code>notify_on_complete</code> is <code>true</code>, the daemon sends
+inbox messages from agent <code>&quot;system&quot;</code> for completion, timeout, cancellation, and
+interruption events. The message includes the command ID, session name, elapsed
+time, and captured output (last 500 lines). Timeout warnings are sent when the
+command exceeds its timeout but is still running — the message includes a
+<code>thrum tmux cancel</code> hint. On daemon restart, interrupted commands always send
+notifications regardless of <code>notify_on_complete</code>.</p>
+<h3>tmux.queue-wait</h3>
+<p>Long-poll until a queued command reaches a terminal state (<code>completed</code>,
+<code>cancelled</code>, or <code>interrupted</code>). Polls the database every 500ms.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>command_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Command ID to wait on</td>
+</tr>
+<tr>
+<td><code>timeout_ms</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Max wait time in ms (default: 120000)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>command_id</code></td>
+<td>string</td>
+<td>Command ID</td>
+</tr>
+<tr>
+<td><code>state</code></td>
+<td>string</td>
+<td>Terminal state</td>
+</tr>
+<tr>
+<td><code>output</code></td>
+<td>string</td>
+<td>Captured output (only on terminal states)</td>
+</tr>
+<tr>
+<td><code>elapsed_ms</code></td>
+<td>integer</td>
+<td>Elapsed time from send to completion</td>
+</tr>
+</tbody></table>
+<p><strong>States:</strong> <code>queued</code>, <code>sent</code>, <code>completed</code>, <code>timeout_waiting</code>, <code>cancelled</code>,
+<code>interrupted</code>. Terminal states: <code>completed</code>, <code>cancelled</code>, <code>interrupted</code>.</p>
+<h3>tmux.queue-status</h3>
+<p>Show the active command and queued commands for a session.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Tmux session name</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session</code></td>
+<td>string</td>
+<td>Session name</td>
+</tr>
+<tr>
+<td><code>active</code></td>
+<td>object</td>
+<td>Active command (nullable)</td>
+</tr>
+<tr>
+<td><code>active.id</code></td>
+<td>string</td>
+<td>Command ID</td>
+</tr>
+<tr>
+<td><code>active.text</code></td>
+<td>string</td>
+<td>Command text</td>
+</tr>
+<tr>
+<td><code>active.requester_agent</code></td>
+<td>string</td>
+<td>Requester agent name</td>
+</tr>
+<tr>
+<td><code>active.state</code></td>
+<td>string</td>
+<td>Current state</td>
+</tr>
+<tr>
+<td><code>active.silence_ms</code></td>
+<td>integer</td>
+<td>Silence threshold</td>
+</tr>
+<tr>
+<td><code>active.notify_on_complete</code></td>
+<td>boolean</td>
+<td>Whether notifications are enabled</td>
+</tr>
+<tr>
+<td><code>active.submitted_at</code></td>
+<td>string</td>
+<td>ISO 8601 submission timestamp</td>
+</tr>
+<tr>
+<td><code>active.sent_at</code></td>
+<td>string</td>
+<td>ISO 8601 send timestamp</td>
+</tr>
+<tr>
+<td><code>queued</code></td>
+<td>array</td>
+<td>List of queued command objects (same shape as <code>active</code>)</td>
+</tr>
+</tbody></table>
+<h3>tmux.cancel</h3>
+<p>Cancel a queued or active command.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>command_id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Command ID</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>command_id</code></td>
+<td>string</td>
+<td>Cancelled command ID</td>
+</tr>
+<tr>
+<td><code>state</code></td>
+<td>string</td>
+<td>Final state (<code>cancelled</code>)</td>
+</tr>
+<tr>
+<td><code>output</code></td>
+<td>string</td>
+<td>Partial captured output</td>
 </tr>
 </tbody></table>
 <h2>Using the API</h2>

@@ -174,26 +174,20 @@ and relaunches. The new session loads the snapshot via `thrum prime`. See
 Here's what a coordinator does to spin up an agent from scratch:
 
 ```bash
-# 1. Create a worktree for the agent
-git worktree add ../worktrees/api-feature feature/api-refactor
+# 1. Create a worktree for the agent (sets up thrum + beads redirects automatically)
+thrum worktree create api-feature -b feature/api-refactor
 
-# 2. Initialize thrum + beads in the worktree
-cd ../worktrees/api-feature
-thrum init
-# Beads doesn't auto-detect worktrees, so set up the redirect manually:
-mkdir -p .beads && echo /path/to/main/repo/.beads > .beads/redirect
+# 2. Create the tmux session
+thrum tmux create implementer-api --cwd ~/.workspaces/myproject/api-feature
 
-# 3. Create the tmux session
-thrum tmux create implementer-api --cwd ../worktrees/api-feature
-
-# 4. Register the agent identity (must happen before launch)
+# 3. Register the agent identity (must happen before launch)
 thrum tmux send implementer-api "thrum quickstart --name impl_api --role implementer --module api --intent 'API refactor'"
 
-# 5. Launch the runtime
+# 4. Launch the runtime
 thrum tmux launch implementer-api
 
-# 6. Agent boots → prime detects tmux → agent checks inbox → starts working
-# 7. Send it a task
+# 5. Agent boots → prime detects tmux → agent checks inbox → starts working
+# 6. Send it a task
 thrum send "Your epic is thrum-abc. Run bd show thrum-abc and start working." --to @impl_api
 ```
 
@@ -307,6 +301,98 @@ output. The nudge mechanism is identical regardless of runtime.
 > **Note:** Only Claude Code has the `UserPromptSubmit` hook as a fallback
 > safety net. Other runtimes rely solely on the tmux nudge for notification.
 > This is fine — the nudge is the primary and reliable delivery path.
+
+---
+
+## Command Queue Dispatch
+
+Beyond message delivery, the daemon can dispatch commands to agent panes and
+track their execution. This is the `thrum tmux queue` system — a per-session
+FIFO that serializes commands, detects completion, captures output, and notifies
+the requester.
+
+### How It Works
+
+1. A coordinator (or script) submits a command via
+   `thrum tmux queue <session> <command>`
+2. The daemon adds it to the session's queue and assigns a `cmd_` ID
+3. When the pane goes silent, the daemon sends the next queued command via
+   `send-keys`
+4. The daemon monitors for the next silence event to detect completion
+5. On completion, the daemon captures the pane output and sends an `@system`
+   inbox message to the requester
+
+Commands progress through states: `queued` → `sent` → `completed` (or
+`timeout_waiting` → `cancelled`/`interrupted`).
+
+### Example
+
+```bash
+# Fire and forget — get notified via inbox when done
+thrum tmux queue implementer-api "make test"
+# → Queued cmd_01KNTF2A9... (position 1)
+
+# Block until done — get output directly
+thrum tmux queue implementer-api "git log --oneline -5" --wait
+# → State: completed
+# → Elapsed: 1200ms
+# → (output here)
+
+# Check what's running
+thrum tmux queue-status implementer-api
+
+# Cancel a stuck command
+thrum tmux cancel cmd_01KNTF2A9
+```
+
+### `@system` Notifications
+
+When `notify_on_complete` is `true` (the default), the daemon sends inbox
+messages from agent `"system"` for these events:
+
+- **Completion** — includes command ID, session, elapsed time, and captured
+  output (last 500 lines)
+- **Timeout** — the command exceeded its timeout but is still running. The
+  message includes a `thrum tmux cancel` hint.
+- **Cancellation** — includes partial captured output
+- **Interruption** — on daemon restart or session kill. Always sent regardless
+  of `notify_on_complete`, since the caller's long-poll lost its connection.
+
+Using `--wait` sets `notify_on_complete` to `false` — the CLI gets the result
+directly, so inbox notifications are suppressed.
+
+### Restart Recovery
+
+Queued commands survive daemon restarts. On startup, the daemon:
+
+1. Interrupts any in-flight commands (`sent`/`active`/`timeout_waiting`) and
+   sends `@system` notifications
+2. Reloads `queued` commands back into memory for dispatch on the next silence
+   event
+
+### Configuration
+
+Per-command settings (no global config needed):
+
+| Parameter | CLI Flag    | Default | Description                                |
+| --------- | ----------- | ------- | ------------------------------------------ |
+| timeout   | `--timeout` | 120s    | Max time before the command times out      |
+| silence   | `--silence` | 5.0s    | Silence threshold for completion detection |
+
+See [CLI Reference](cli.md#thrum-tmux-queue) for full flag details and
+[RPC API](rpc-api.md#tmuxqueue) for the underlying RPC methods.
+
+---
+
+## Auto-Nudge
+
+The daemon watches for a status mismatch: if an agent's `agent_status` is
+`"working"` but its tmux pane has been silent, the daemon fires a nudge on the
+next silence event. This catches agents that are stuck — waiting on something
+without producing output — and wakes them up.
+
+Set agent status with `thrum agent set-status working|idle|blocked`. See
+[CLI Reference](cli.md#thrum-agent-set-status).
 
 ---
 

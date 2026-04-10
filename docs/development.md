@@ -62,7 +62,7 @@ thrum/
 │   ├── mcp/                 # MCP stdio server (11 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
-│   ├── schema/              # SQLite schema, DDL, and migrations (v16)
+│   ├── schema/              # SQLite schema, DDL, and migrations (v19)
 │   ├── subscriptions/       # Notification dispatcher and subscription service
 │   ├── sync/                # Sync engine (loop, merge, push, dedup, branch management)
 │   ├── tmux/                # Tmux operations, nudge delivery, session management (v0.7.1)
@@ -337,7 +337,7 @@ case "my.new":
 ### Modifying Database Schema
 
 1. Update table definitions in `internal/schema/schema.go`
-2. Increment `CurrentVersion` constant (currently v16)
+2. Increment `CurrentVersion` constant (currently v19)
 3. Add migration logic in the `Migrate()` function
 4. Write tests for the new schema
 5. Update `docs/architecture.md`
@@ -508,7 +508,14 @@ socket, with a WebSocket server and embedded SPA all on a single port (default
   and SQLite projection. `NewState(thrumDir, syncDir, repoID)` separates runtime
   state from sync data.
 - **RPC handlers** (`internal/daemon/rpc/`): Method implementations for agent,
-  session, message, thread, health, sync, subscribe, and user operations
+  session, message, thread, health, sync, subscribe, queue, and user operations
+- **Queue** (`internal/daemon/rpc/queue.go`, `queue_rpc.go`): Command queue
+  dispatch for tmux sessions — per-session FIFO, silence-based completion
+  detection, `@system` notifications, restart recovery
+- **Logging** (`internal/daemon/logging.go`): Slog-based structured logging with
+  lumberjack rotation (10 MB, 4 backups, 28 days, gzip)
+- **safecmd** (`internal/daemon/safecmd/`): Git command wrapper with 5s/10s
+  timeouts and automatic `-c user.name` injection for sync worktree commits
 - **Client** (`internal/daemon/client.go`): Connection library for CLI-to-daemon
   communication
 - **WebSocket** (`internal/websocket/`): Server, connection registry, event
@@ -579,7 +586,16 @@ echo '{"jsonrpc":"2.0","method":"health","id":1}' | nc -U .thrum/var/thrum.sock
 **View daemon logs:**
 
 ```bash
-# Check daemon logs
+# View last 50 lines (default)
+thrum daemon logs
+
+# Stream live
+thrum daemon logs -f
+
+# Last hour
+thrum daemon logs --since 1h
+
+# Raw file access (for development introspection)
 cat .thrum/var/daemon.log
 
 # Check daemon status (shows PID, repo path, WebSocket port)

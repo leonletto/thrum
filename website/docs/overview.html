@@ -103,6 +103,17 @@ without any messaging layer; it&#39;s now the default for new installs; see
 <li><strong>Daemon-managed tmux sessions</strong> — the daemon owns the session lifecycle,
 delivers messages the moment they arrive, and runs zero background listeners
 in the agent process; see <a href="tmux-sessions.html">Tmux Sessions</a></li>
+<li><strong>Command queue dispatch</strong> — coordinators submit commands to agent panes via
+<code>thrum tmux queue</code>, with completion tracking, <code>@system</code> notifications, and
+restart recovery; see
+<a href="tmux-sessions.html#command-queue-dispatch">Tmux Sessions — Queue Dispatch</a></li>
+<li><strong>Worktree management</strong> — <code>thrum worktree create/teardown/list</code> handles git
+worktree setup with automatic Thrum and Beads redirect wiring</li>
+<li><strong>Daemon logging</strong> — structured slog output with lumberjack rotation; view
+with <code>thrum daemon logs</code>; configurable via <code>daemon.log_level</code></li>
+<li><strong>Orchestrator role</strong> — a dedicated role for plan execution with review gates,
+worktree lifecycle, and agent spawning; see
+<a href="orchestrator-role.html">Orchestrator Role</a></li>
 </ul>
 <h2>Further Reading</h2>
 <ul>

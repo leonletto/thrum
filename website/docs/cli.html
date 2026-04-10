@@ -154,6 +154,10 @@ for AI agent coordination.</p>
 <td>Set current task (alias)</td>
 </tr>
 <tr>
+<td><code>thrum agent set-status</code></td>
+<td>Set agent operational status</td>
+</tr>
+<tr>
 <td><code>thrum agent heartbeat</code></td>
 <td>Send heartbeat (alias)</td>
 </tr>
@@ -322,6 +326,10 @@ for AI agent coordination.</p>
 <td>Restart the daemon</td>
 </tr>
 <tr>
+<td><code>thrum daemon logs</code></td>
+<td>View daemon log file</td>
+</tr>
+<tr>
 <td><code>thrum sync status</code></td>
 <td>Show sync loop status</td>
 </tr>
@@ -390,6 +398,18 @@ for AI agent coordination.</p>
 <td>Restart a tmux session with context snapshot</td>
 </tr>
 <tr>
+<td><code>thrum tmux queue</code></td>
+<td>Submit a command to a session&#39;s queue</td>
+</tr>
+<tr>
+<td><code>thrum tmux queue-status</code></td>
+<td>Show the command queue for a session</td>
+</tr>
+<tr>
+<td><code>thrum tmux cancel</code></td>
+<td>Cancel a queued or active command</td>
+</tr>
+<tr>
 <td><code>thrum restart save</code></td>
 <td>Save conversation snapshot for session restart</td>
 </tr>
@@ -400,6 +420,18 @@ for AI agent coordination.</p>
 <tr>
 <td><code>thrum restart check</code></td>
 <td>Check if a restart snapshot exists (exit code)</td>
+</tr>
+<tr>
+<td><code>thrum worktree create</code></td>
+<td>Create a new worktree with thrum/beads setup</td>
+</tr>
+<tr>
+<td><code>thrum worktree teardown</code></td>
+<td>Remove a worktree and clean up artifacts</td>
+</tr>
+<tr>
+<td><code>thrum worktree list</code></td>
+<td>List worktrees with thrum agent info</td>
 </tr>
 <tr>
 <td><code>thrum mcp serve</code></td>
@@ -641,9 +673,35 @@ the <code>--name</code> flag or <code>THRUM_NAME</code> environment variable.</p
 <td>Initial work intent</td>
 <td></td>
 </tr>
+<tr>
+<td><code>--runtime</code></td>
+<td>Runtime preset (<code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>opencode</code>, <code>auggie</code>, <code>cli-only</code>)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--preamble-file</code></td>
+<td>Path to custom preamble file</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--dry-run</code></td>
+<td>Preview without writing</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--no-init</code></td>
+<td>Skip config file generation</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--force</code></td>
+<td>Overwrite existing identity</td>
+<td><code>false</code></td>
+</tr>
 </tbody></table>
 <p>Requires <code>--role</code> and <code>--module</code> (via flags or <code>THRUM_ROLE</code>/<code>THRUM_MODULE</code> env
-vars).</p>
+vars). The <code>--runtime</code> value is written to <code>preferred_runtime</code> in the identity
+file.</p>
 <p>The <code>THRUM_NAME</code> environment variable takes priority over the <code>--name</code> flag.</p>
 <p>Example:</p>
 <pre><code>$ thrum quickstart --name implementer_auth --role implementer --module auth --intent &quot;Fixing token refresh&quot;
@@ -728,9 +786,9 @@ ahead of the default branch, and the list of changed files on each heartbeat.</p
     internal/auth/refresh.go      5m ago   +15 -3
 
 $ thrum team --all     # Include agents with no active session</code></pre>
-<p>The <code>PID</code> line shows the agent&#39;s Claude process ID with a liveness indicator:
-<code>[live]</code> if the process is running, <code>[stale]</code> if it has exited. Agents without a
-<code>claude_pid</code> skip this line. See
+<p>The <code>PID</code> line shows the agent&#39;s runtime process ID with a liveness indicator:
+<code>[live]</code> if the process is running, <code>[stale]</code> if it has exited. Agents without
+an <code>agent_pid</code> skip this line. See
 <a href="identity.html#pid-liveness-indicators">PID Liveness Indicators</a> for details.</p>
 <h2>Messaging</h2>
 <h3>thrum send</h3>
@@ -1268,6 +1326,35 @@ must be registered first.</p>
 <p>Example:</p>
 <pre><code>$ thrum agent set-task beads:thrum-42
 ✓ Task set: beads:thrum-42</code></pre>
+<h3>thrum agent set-status</h3>
+<p>Set the operational status of an agent. Without <code>--agent</code>, updates the local
+identity file directly. With <code>--agent</code>, sends an RPC to the daemon to update a
+remote agent&#39;s identity file (including across worktrees).</p>
+<pre><code>thrum agent set-status &lt;working|idle|blocked&gt; [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--agent</code></td>
+<td>Target agent name (uses daemon RPC for update)</td>
+<td></td>
+</tr>
+</tbody></table>
+<p>Valid values: <code>working</code>, <code>idle</code>, <code>blocked</code>.</p>
+<p>The daemon uses <code>agent_status</code> for auto-nudge detection — if a tmux agent&#39;s pane
+has been silent but its status is <code>&quot;working&quot;</code>, the daemon fires a nudge on the
+next silence event to wake the agent.</p>
+<p>Example:</p>
+<pre><code>$ thrum agent set-status working
+✓ Status set: working
+
+$ thrum agent set-status idle --agent implementer_api
+✓ Status set: idle (agent: implementer_api)</code></pre>
 <h3>thrum agent heartbeat</h3>
 <p>Send a heartbeat for the current session. This is an alias for
 <code>thrum session heartbeat</code>. Triggers git context extraction and updates the
@@ -1818,6 +1905,52 @@ served.</p>
 <h3>thrum daemon restart</h3>
 <p>Restart the daemon (stop + start).</p>
 <pre><code>thrum daemon restart</code></pre>
+<h3>thrum daemon logs</h3>
+<p>View the daemon log file. By default prints the last 50 lines from
+<code>.thrum/var/daemon.log</code>. Supports streaming, line limits, and time filtering.</p>
+<pre><code>thrum daemon logs [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--follow</code>, <code>-f</code></td>
+<td>Stream new log lines as they are written</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--lines</code>, <code>-n</code></td>
+<td>Number of lines to show (0 = all)</td>
+<td><code>50</code></td>
+</tr>
+<tr>
+<td><code>--since</code></td>
+<td>Only show lines at or after this time (<code>1h</code>, <code>7d</code>, <code>2026-04-09</code>, RFC3339)</td>
+<td></td>
+</tr>
+</tbody></table>
+<p>Example:</p>
+<pre><code>$ thrum daemon logs
+2026/04/09 21:15:03.000000 [daemon] started (v0.8.0)
+2026/04/09 21:15:03.100000 [sync] loop started (interval: 60s)
+...
+
+$ thrum daemon logs -f
+# Streams new lines until Ctrl+C
+
+$ thrum daemon logs --since 1h -n 0
+# All lines from the last hour
+
+$ thrum daemon logs --since 2026-04-09
+# All lines since midnight April 9</code></pre>
+<p>The daemon uses <a href="https://github.com/natefinch/lumberjack">lumberjack</a> for log
+rotation: 10 MB max file size, 4 rotated backups, 28-day retention, gzip
+compression. The log level is controlled by the <code>daemon.log_level</code> config key
+(see <a href="configuration.html">Configuration</a>).</p>
 <p><strong>Note:</strong> Running <code>thrum sync</code> without a subcommand just prints help — use
 <code>thrum sync force</code> or <code>thrum sync status</code> to take action.</p>
 <h3>thrum sync status</h3>
@@ -2307,6 +2440,124 @@ Session implementer-api restarted (847 snapshot lines)
 
 $ thrum tmux restart implementer-api --runtime opencode
 Session implementer-api restarted (847 snapshot lines)</code></pre>
+<h3>thrum tmux queue</h3>
+<p>Submit a command to a tmux session&#39;s queue. Commands are dispatched FIFO — one
+at a time per session. The daemon sends the command when the pane goes silent,
+waits for completion (detected by the next silence event), and captures the
+output.</p>
+<pre><code>thrum tmux queue &lt;session&gt; &lt;command&gt; [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--timeout</code></td>
+<td><code>int</code></td>
+<td><code>120</code></td>
+<td>Command timeout in seconds</td>
+</tr>
+<tr>
+<td><code>--wait</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>Block until the command reaches a terminal state</td>
+</tr>
+<tr>
+<td><code>--silence</code></td>
+<td><code>float</code></td>
+<td><code>0</code></td>
+<td>Silence threshold in seconds (server default: 5.0 if omitted)</td>
+</tr>
+</tbody></table>
+<p>Without <code>--wait</code>, the command is enqueued and the CLI returns immediately. The
+daemon sends an <code>@system</code> inbox message to the requester when the command
+completes, times out, or is cancelled. With <code>--wait</code>, the CLI blocks until the
+command finishes and <code>@system</code> notifications are suppressed (you get the output
+directly).</p>
+<p>Example:</p>
+<pre><code>$ thrum tmux queue implementer-api &quot;git status&quot;
+Queued cmd_01KNTF2A9... (position 1)
+
+$ thrum tmux queue implementer-api &quot;make test&quot; --wait --timeout 300
+State: completed
+Elapsed: 45200ms
+
+ok   github.com/user/repo/... 45.1s</code></pre>
+<h3>thrum tmux queue-status</h3>
+<p>Show the command queue for a tmux session — the active command (if any) and all
+queued commands waiting to run.</p>
+<pre><code>thrum tmux queue-status &lt;session&gt;</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum tmux queue-status implementer-api
+Active: cmd_01KNTF2A9 &quot;git status&quot; (sent)
+Queued: 2 commands
+  [0] cmd_01KNTF3B1 &quot;make test&quot;
+  [1] cmd_01KNTF4C2 &quot;make lint&quot;</code></pre>
+<h3>thrum tmux cancel</h3>
+<p>Cancel a queued or active command by its command ID.</p>
+<pre><code>thrum tmux cancel &lt;command-id&gt;</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum tmux cancel cmd_01KNTF2A9
+Canceled cmd_01KNTF2A9 (state: cancelled)</code></pre>
+<h2>Worktree Management</h2>
+<h3>thrum worktree create</h3>
+<p>Create a git worktree with Thrum and Beads setup. Sets up <code>.thrum/redirect</code> and
+<code>.thrum/identities/</code> so the new worktree shares the daemon with the main repo.
+Optionally sets up <code>.beads/redirect</code> if Beads is enabled.</p>
+<pre><code>thrum worktree create &lt;name&gt; [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--branch</code>, <code>-b</code></td>
+<td>Branch name</td>
+<td><code>feature/&lt;name&gt;</code></td>
+</tr>
+<tr>
+<td><code>--detach</code></td>
+<td>Create detached HEAD worktree</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
+<p>The worktree is created at <code>worktrees.base_path/&lt;name&gt;</code> (default:
+<code>~/.workspaces/&lt;project&gt;/&lt;name&gt;</code>). The name cannot contain <code>/</code>, <code>\</code>, or <code>..</code>.</p>
+<p>Example:</p>
+<pre><code>$ thrum worktree create api-feature
+Worktree created: ~/.workspaces/thrum/api-feature
+  Branch: feature/api-feature
+  Thrum: .thrum/redirect → /path/to/main/.thrum
+  Beads: .beads/redirect → /path/to/main/.beads
+
+$ thrum worktree create hotfix -b fix/urgent-bug
+Worktree created: ~/.workspaces/thrum/hotfix
+  Branch: fix/urgent-bug</code></pre>
+<h3>thrum worktree teardown</h3>
+<p>Remove a worktree and clean up Thrum artifacts (identity files).</p>
+<pre><code>thrum worktree teardown &lt;name&gt;</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum worktree teardown api-feature
+✓ Cleaned up 1 identity file(s)
+✓ Worktree removed: ~/.workspaces/thrum/api-feature</code></pre>
+<h3>thrum worktree list</h3>
+<p>List git worktrees with Thrum agent info. Reads identity files from each
+worktree to show which agent is active there.</p>
+<pre><code>thrum worktree list</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum worktree list
+WORKTREE                            BRANCH              HEAD       AGENT                STATUS
+/path/to/thrum                      thrum-dev           b3c6352    coordinator_main     working
+/home/user/.workspaces/thrum/api    feature/api         a1b2c3d    impl_api             idle
+/home/user/.workspaces/thrum/web    website-dev         21908a3    impl_website_dev     -</code></pre>
 <h2>Session Restart</h2>
 <p>Save and restore conversation snapshots for session restart. See
 <a href="session-restart.html">Session Restart &amp; Context Recovery</a> for the full story.</p>
@@ -2510,7 +2761,7 @@ select the correct one.</p>
 automatically on successful registration. The filename is derived from the agent
 name (e.g., <code>furiosa.json</code> or <code>implementer_35HV62T9B9.json</code>).</p>
 <pre><code>{
-  &quot;version&quot;: 4,
+  &quot;version&quot;: 5,
   &quot;repo_id&quot;: &quot;r_0123456789AB&quot;,
   &quot;agent&quot;: {
     &quot;kind&quot;: &quot;agent&quot;,
@@ -2522,7 +2773,10 @@ name (e.g., <code>furiosa.json</code> or <code>implementer_35HV62T9B9.json</code
   &quot;worktree&quot;: &quot;main&quot;,
   &quot;tmux_session&quot;: &quot;implementer-auth:0.0&quot;,
   &quot;runtime&quot;: &quot;claude&quot;,
-  &quot;claude_pid&quot;: 12345,
+  &quot;preferred_runtime&quot;: &quot;claude&quot;,
+  &quot;agent_pid&quot;: 12345,
+  &quot;agent_status&quot;: &quot;working&quot;,
+  &quot;agent_status_updated_at&quot;: &quot;2026-02-03T10:05:00Z&quot;,
   &quot;confirmed_by&quot;: &quot;&quot;,
   &quot;updated_at&quot;: &quot;2026-02-03T10:00:00Z&quot;
 }</code></pre>
@@ -2565,6 +2819,10 @@ name (e.g., <code>furiosa.json</code> or <code>implementer_35HV62T9B9.json</code
 <tr>
 <td><code>.thrum/var/ws.port</code></td>
 <td>WebSocket port file</td>
+</tr>
+<tr>
+<td><code>.thrum/var/daemon.log</code></td>
+<td>Daemon log file (lumberjack-rotated)</td>
 </tr>
 <tr>
 <td><code>.thrum/var/thrum.lock</code></td>

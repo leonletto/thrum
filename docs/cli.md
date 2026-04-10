@@ -37,6 +37,7 @@ for AI agent coordination.
 | `thrum agent end`          | End current session (alias)                          |
 | `thrum agent set-intent`   | Set work intent (alias)                              |
 | `thrum agent set-task`     | Set current task (alias)                             |
+| `thrum agent set-status`   | Set agent operational status                         |
 | `thrum agent heartbeat`    | Send heartbeat (alias)                               |
 | `thrum session start`      | Start a new work session                             |
 | `thrum session end`        | End the current session                              |
@@ -79,6 +80,7 @@ for AI agent coordination.
 | `thrum daemon stop`        | Stop the daemon gracefully                           |
 | `thrum daemon status`      | Show daemon status                                   |
 | `thrum daemon restart`     | Restart the daemon                                   |
+| `thrum daemon logs`        | View daemon log file                                 |
 | `thrum sync status`        | Show sync loop status                                |
 | `thrum sync force`         | Trigger an immediate sync                            |
 | `thrum backup`             | Snapshot all thrum data to a backup directory        |
@@ -96,9 +98,15 @@ for AI agent coordination.
 | `thrum tmux send`          | Send text into a tmux session                        |
 | `thrum tmux capture`       | Capture pane content from a tmux session             |
 | `thrum tmux restart`       | Restart a tmux session with context snapshot         |
+| `thrum tmux queue`         | Submit a command to a session's queue                |
+| `thrum tmux queue-status`  | Show the command queue for a session                 |
+| `thrum tmux cancel`        | Cancel a queued or active command                    |
 | `thrum restart save`       | Save conversation snapshot for session restart       |
 | `thrum restart restore`    | Output a restart snapshot to stdout                  |
 | `thrum restart check`      | Check if a restart snapshot exists (exit code)       |
+| `thrum worktree create`    | Create a new worktree with thrum/beads setup         |
+| `thrum worktree teardown`  | Remove a worktree and clean up artifacts             |
+| `thrum worktree list`      | List worktrees with thrum agent info                 |
 | `thrum mcp serve`          | Start MCP stdio server for agent messaging           |
 
 ## Global Flags
@@ -277,14 +285,20 @@ the `--name` flag or `THRUM_NAME` environment variable.
 thrum quickstart --name AGENT_NAME --role ROLE --module MODULE [flags]
 ```
 
-| Flag        | Description                                                   | Default |
-| ----------- | ------------------------------------------------------------- | ------- |
-| `--name`    | Human-readable agent name (optional, defaults to `role_hash`) |         |
-| `--display` | Display name for the agent                                    |         |
-| `--intent`  | Initial work intent                                           |         |
+| Flag              | Description                                                                              | Default |
+| ----------------- | ---------------------------------------------------------------------------------------- | ------- |
+| `--name`          | Human-readable agent name (optional, defaults to `role_hash`)                            |         |
+| `--display`       | Display name for the agent                                                               |         |
+| `--intent`        | Initial work intent                                                                      |         |
+| `--runtime`       | Runtime preset (`claude`, `codex`, `cursor`, `gemini`, `opencode`, `auggie`, `cli-only`) |         |
+| `--preamble-file` | Path to custom preamble file                                                             |         |
+| `--dry-run`       | Preview without writing                                                                  | `false` |
+| `--no-init`       | Skip config file generation                                                              | `false` |
+| `--force`         | Overwrite existing identity                                                              | `false` |
 
 Requires `--role` and `--module` (via flags or `THRUM_ROLE`/`THRUM_MODULE` env
-vars).
+vars). The `--runtime` value is written to `preferred_runtime` in the identity
+file.
 
 The `THRUM_NAME` environment variable takes priority over the `--name` flag.
 
@@ -393,9 +407,9 @@ $ thrum team
 $ thrum team --all     # Include agents with no active session
 ```
 
-The `PID` line shows the agent's Claude process ID with a liveness indicator:
-`[live]` if the process is running, `[stale]` if it has exited. Agents without a
-`claude_pid` skip this line. See
+The `PID` line shows the agent's runtime process ID with a liveness indicator:
+`[live]` if the process is running, `[stale]` if it has exited. Agents without
+an `agent_pid` skip this line. See
 [PID Liveness Indicators](identity.md#pid-liveness-indicators) for details.
 
 ## Messaging
@@ -906,6 +920,36 @@ Example:
 ```text
 $ thrum agent set-task beads:thrum-42
 ✓ Task set: beads:thrum-42
+```
+
+### thrum agent set-status
+
+Set the operational status of an agent. Without `--agent`, updates the local
+identity file directly. With `--agent`, sends an RPC to the daemon to update a
+remote agent's identity file (including across worktrees).
+
+```text
+thrum agent set-status <working|idle|blocked> [flags]
+```
+
+| Flag      | Description                                    | Default |
+| --------- | ---------------------------------------------- | ------- |
+| `--agent` | Target agent name (uses daemon RPC for update) |         |
+
+Valid values: `working`, `idle`, `blocked`.
+
+The daemon uses `agent_status` for auto-nudge detection — if a tmux agent's pane
+has been silent but its status is `"working"`, the daemon fires a nudge on the
+next silence event to wake the agent.
+
+Example:
+
+```text
+$ thrum agent set-status working
+✓ Status set: working
+
+$ thrum agent set-status idle --agent implementer_api
+✓ Status set: idle (agent: implementer_api)
 ```
 
 ### thrum agent heartbeat
@@ -1521,6 +1565,44 @@ Restart the daemon (stop + start).
 thrum daemon restart
 ```
 
+### thrum daemon logs
+
+View the daemon log file. By default prints the last 50 lines from
+`.thrum/var/daemon.log`. Supports streaming, line limits, and time filtering.
+
+```text
+thrum daemon logs [flags]
+```
+
+| Flag             | Description                                                               | Default |
+| ---------------- | ------------------------------------------------------------------------- | ------- |
+| `--follow`, `-f` | Stream new log lines as they are written                                  | `false` |
+| `--lines`, `-n`  | Number of lines to show (0 = all)                                         | `50`    |
+| `--since`        | Only show lines at or after this time (`1h`, `7d`, `2026-04-09`, RFC3339) |         |
+
+Example:
+
+```text
+$ thrum daemon logs
+2026/04/09 21:15:03.000000 [daemon] started (v0.8.0)
+2026/04/09 21:15:03.100000 [sync] loop started (interval: 60s)
+...
+
+$ thrum daemon logs -f
+# Streams new lines until Ctrl+C
+
+$ thrum daemon logs --since 1h -n 0
+# All lines from the last hour
+
+$ thrum daemon logs --since 2026-04-09
+# All lines since midnight April 9
+```
+
+The daemon uses [lumberjack](https://github.com/natefinch/lumberjack) for log
+rotation: 10 MB max file size, 4 rotated backups, 28-day retention, gzip
+compression. The log level is controlled by the `daemon.log_level` config key
+(see [Configuration](configuration.md)).
+
 **Note:** Running `thrum sync` without a subcommand just prints help — use
 `thrum sync force` or `thrum sync status` to take action.
 
@@ -2098,6 +2180,145 @@ $ thrum tmux restart implementer-api --runtime opencode
 Session implementer-api restarted (847 snapshot lines)
 ```
 
+### thrum tmux queue
+
+Submit a command to a tmux session's queue. Commands are dispatched FIFO — one
+at a time per session. The daemon sends the command when the pane goes silent,
+waits for completion (detected by the next silence event), and captures the
+output.
+
+```text
+thrum tmux queue <session> <command> [flags]
+```
+
+| Flag        | Type    | Default | Description                                                   |
+| ----------- | ------- | ------- | ------------------------------------------------------------- |
+| `--timeout` | `int`   | `120`   | Command timeout in seconds                                    |
+| `--wait`    | `bool`  | `false` | Block until the command reaches a terminal state              |
+| `--silence` | `float` | `0`     | Silence threshold in seconds (server default: 5.0 if omitted) |
+
+Without `--wait`, the command is enqueued and the CLI returns immediately. The
+daemon sends an `@system` inbox message to the requester when the command
+completes, times out, or is cancelled. With `--wait`, the CLI blocks until the
+command finishes and `@system` notifications are suppressed (you get the output
+directly).
+
+Example:
+
+```text
+$ thrum tmux queue implementer-api "git status"
+Queued cmd_01KNTF2A9... (position 1)
+
+$ thrum tmux queue implementer-api "make test" --wait --timeout 300
+State: completed
+Elapsed: 45200ms
+
+ok   github.com/user/repo/... 45.1s
+```
+
+### thrum tmux queue-status
+
+Show the command queue for a tmux session — the active command (if any) and all
+queued commands waiting to run.
+
+```text
+thrum tmux queue-status <session>
+```
+
+Example:
+
+```text
+$ thrum tmux queue-status implementer-api
+Active: cmd_01KNTF2A9 "git status" (sent)
+Queued: 2 commands
+  [0] cmd_01KNTF3B1 "make test"
+  [1] cmd_01KNTF4C2 "make lint"
+```
+
+### thrum tmux cancel
+
+Cancel a queued or active command by its command ID.
+
+```text
+thrum tmux cancel <command-id>
+```
+
+Example:
+
+```text
+$ thrum tmux cancel cmd_01KNTF2A9
+Canceled cmd_01KNTF2A9 (state: cancelled)
+```
+
+## Worktree Management
+
+### thrum worktree create
+
+Create a git worktree with Thrum and Beads setup. Sets up `.thrum/redirect` and
+`.thrum/identities/` so the new worktree shares the daemon with the main repo.
+Optionally sets up `.beads/redirect` if Beads is enabled.
+
+```text
+thrum worktree create <name> [flags]
+```
+
+| Flag             | Description                   | Default          |
+| ---------------- | ----------------------------- | ---------------- |
+| `--branch`, `-b` | Branch name                   | `feature/<name>` |
+| `--detach`       | Create detached HEAD worktree | `false`          |
+
+The worktree is created at `worktrees.base_path/<name>` (default:
+`~/.workspaces/<project>/<name>`). The name cannot contain `/`, `\`, or `..`.
+
+Example:
+
+```text
+$ thrum worktree create api-feature
+Worktree created: ~/.workspaces/thrum/api-feature
+  Branch: feature/api-feature
+  Thrum: .thrum/redirect → /path/to/main/.thrum
+  Beads: .beads/redirect → /path/to/main/.beads
+
+$ thrum worktree create hotfix -b fix/urgent-bug
+Worktree created: ~/.workspaces/thrum/hotfix
+  Branch: fix/urgent-bug
+```
+
+### thrum worktree teardown
+
+Remove a worktree and clean up Thrum artifacts (identity files).
+
+```text
+thrum worktree teardown <name>
+```
+
+Example:
+
+```text
+$ thrum worktree teardown api-feature
+✓ Cleaned up 1 identity file(s)
+✓ Worktree removed: ~/.workspaces/thrum/api-feature
+```
+
+### thrum worktree list
+
+List git worktrees with Thrum agent info. Reads identity files from each
+worktree to show which agent is active there.
+
+```text
+thrum worktree list
+```
+
+Example:
+
+```text
+$ thrum worktree list
+WORKTREE                            BRANCH              HEAD       AGENT                STATUS
+/path/to/thrum                      thrum-dev           b3c6352    coordinator_main     working
+/home/user/.workspaces/thrum/api    feature/api         a1b2c3d    impl_api             idle
+/home/user/.workspaces/thrum/web    website-dev         21908a3    impl_website_dev     -
+```
+
 ## Session Restart
 
 Save and restore conversation snapshots for session restart. See
@@ -2258,7 +2479,7 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
 
 ```json
 {
-  "version": 4,
+  "version": 5,
   "repo_id": "r_0123456789AB",
   "agent": {
     "kind": "agent",
@@ -2270,7 +2491,10 @@ name (e.g., `furiosa.json` or `implementer_35HV62T9B9.json`).
   "worktree": "main",
   "tmux_session": "implementer-auth:0.0",
   "runtime": "claude",
-  "claude_pid": 12345,
+  "preferred_runtime": "claude",
+  "agent_pid": 12345,
+  "agent_status": "working",
+  "agent_status_updated_at": "2026-02-03T10:05:00Z",
   "confirmed_by": "",
   "updated_at": "2026-02-03T10:00:00Z"
 }
@@ -2294,6 +2518,7 @@ Messages and events are stored on the `a-sync` Git branch in a worktree at
 | `.thrum/var/thrum.sock`                         | Unix socket for CLI-daemon RPC                       |
 | `.thrum/var/thrum.pid`                          | JSON PID file with daemon metadata                   |
 | `.thrum/var/ws.port`                            | WebSocket port file                                  |
+| `.thrum/var/daemon.log`                         | Daemon log file (lumberjack-rotated)                 |
 | `.thrum/var/thrum.lock`                         | flock() lock file for SIGKILL resilience             |
 | `.thrum/redirect`                               | Redirect pointer for feature worktrees               |
 

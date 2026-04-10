@@ -117,6 +117,8 @@ and sets your intent in one step:</p>
 thrum session start</code></pre>
 <p>Agent names must be lowercase alphanumeric with underscores (<code>[a-z0-9_]+</code>).
 Reserved names: <code>daemon</code>, <code>system</code>, <code>thrum</code>, <code>all</code>, <code>broadcast</code>.</p>
+<p>Optional flags: <code>--runtime &lt;name&gt;</code> sets <code>preferred_runtime</code> in the identity file
+(useful for mixed-runtime teams). <code>--dry-run</code> previews without writing.</p>
 <h3>5. Send Your First Message</h3>
 <pre><code>thrum send &quot;Started working on user authentication&quot; \
   --scope module:auth \

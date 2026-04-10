@@ -136,26 +136,20 @@ and relaunches. The new session loads the snapshot via <code>thrum prime</code>.
 <a href="session-restart.html">Session Restart</a> for the full story.</p>
 <h3>The Full Flow</h3>
 <p>Here&#39;s what a coordinator does to spin up an agent from scratch:</p>
-<pre><code># 1. Create a worktree for the agent
-git worktree add ../worktrees/api-feature feature/api-refactor
+<pre><code># 1. Create a worktree for the agent (sets up thrum + beads redirects automatically)
+thrum worktree create api-feature -b feature/api-refactor
 
-# 2. Initialize thrum + beads in the worktree
-cd ../worktrees/api-feature
-thrum init
-# Beads doesn&#39;t auto-detect worktrees, so set up the redirect manually:
-mkdir -p .beads &amp;&amp; echo /path/to/main/repo/.beads &gt; .beads/redirect
+# 2. Create the tmux session
+thrum tmux create implementer-api --cwd ~/.workspaces/myproject/api-feature
 
-# 3. Create the tmux session
-thrum tmux create implementer-api --cwd ../worktrees/api-feature
-
-# 4. Register the agent identity (must happen before launch)
+# 3. Register the agent identity (must happen before launch)
 thrum tmux send implementer-api &quot;thrum quickstart --name impl_api --role implementer --module api --intent &#39;API refactor&#39;&quot;
 
-# 5. Launch the runtime
+# 4. Launch the runtime
 thrum tmux launch implementer-api
 
-# 6. Agent boots → prime detects tmux → agent checks inbox → starts working
-# 7. Send it a task
+# 5. Agent boots → prime detects tmux → agent checks inbox → starts working
+# 6. Send it a task
 thrum send &quot;Your epic is thrum-abc. Run bd show thrum-abc and start working.&quot; --to @impl_api</code></pre>
 <p><strong>Important:</strong> <code>thrum quickstart</code> must run before <code>thrum tmux launch</code>. It
 creates the identity file that <code>thrum prime</code> reads on startup. Without it, the
@@ -284,6 +278,97 @@ output. The nudge mechanism is identical regardless of runtime.</p>
 safety net. Other runtimes rely solely on the tmux nudge for notification.
 This is fine — the nudge is the primary and reliable delivery path.</p>
 </blockquote>
+<hr>
+<h2>Command Queue Dispatch</h2>
+<p>Beyond message delivery, the daemon can dispatch commands to agent panes and
+track their execution. This is the <code>thrum tmux queue</code> system — a per-session
+FIFO that serializes commands, detects completion, captures output, and notifies
+the requester.</p>
+<h3>How It Works</h3>
+<ol>
+<li>A coordinator (or script) submits a command via
+<code>thrum tmux queue &lt;session&gt; &lt;command&gt;</code></li>
+<li>The daemon adds it to the session&#39;s queue and assigns a <code>cmd_</code> ID</li>
+<li>When the pane goes silent, the daemon sends the next queued command via
+<code>send-keys</code></li>
+<li>The daemon monitors for the next silence event to detect completion</li>
+<li>On completion, the daemon captures the pane output and sends an <code>@system</code>
+inbox message to the requester</li>
+</ol>
+<p>Commands progress through states: <code>queued</code> → <code>sent</code> → <code>completed</code> (or
+<code>timeout_waiting</code> → <code>cancelled</code>/<code>interrupted</code>).</p>
+<h3>Example</h3>
+<pre><code># Fire and forget — get notified via inbox when done
+thrum tmux queue implementer-api &quot;make test&quot;
+# → Queued cmd_01KNTF2A9... (position 1)
+
+# Block until done — get output directly
+thrum tmux queue implementer-api &quot;git log --oneline -5&quot; --wait
+# → State: completed
+# → Elapsed: 1200ms
+# → (output here)
+
+# Check what&#39;s running
+thrum tmux queue-status implementer-api
+
+# Cancel a stuck command
+thrum tmux cancel cmd_01KNTF2A9</code></pre>
+<h3><code>@system</code> Notifications</h3>
+<p>When <code>notify_on_complete</code> is <code>true</code> (the default), the daemon sends inbox
+messages from agent <code>&quot;system&quot;</code> for these events:</p>
+<ul>
+<li><strong>Completion</strong> — includes command ID, session, elapsed time, and captured
+output (last 500 lines)</li>
+<li><strong>Timeout</strong> — the command exceeded its timeout but is still running. The
+message includes a <code>thrum tmux cancel</code> hint.</li>
+<li><strong>Cancellation</strong> — includes partial captured output</li>
+<li><strong>Interruption</strong> — on daemon restart or session kill. Always sent regardless
+of <code>notify_on_complete</code>, since the caller&#39;s long-poll lost its connection.</li>
+</ul>
+<p>Using <code>--wait</code> sets <code>notify_on_complete</code> to <code>false</code> — the CLI gets the result
+directly, so inbox notifications are suppressed.</p>
+<h3>Restart Recovery</h3>
+<p>Queued commands survive daemon restarts. On startup, the daemon:</p>
+<ol>
+<li>Interrupts any in-flight commands (<code>sent</code>/<code>active</code>/<code>timeout_waiting</code>) and
+sends <code>@system</code> notifications</li>
+<li>Reloads <code>queued</code> commands back into memory for dispatch on the next silence
+event</li>
+</ol>
+<h3>Configuration</h3>
+<p>Per-command settings (no global config needed):</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>CLI Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>timeout</td>
+<td><code>--timeout</code></td>
+<td>120s</td>
+<td>Max time before the command times out</td>
+</tr>
+<tr>
+<td>silence</td>
+<td><code>--silence</code></td>
+<td>5.0s</td>
+<td>Silence threshold for completion detection</td>
+</tr>
+</tbody></table>
+<p>See <a href="cli.html#thrum-tmux-queue">CLI Reference</a> for full flag details and
+<a href="rpc-api.html#tmuxqueue">RPC API</a> for the underlying RPC methods.</p>
+<hr>
+<h2>Auto-Nudge</h2>
+<p>The daemon watches for a status mismatch: if an agent&#39;s <code>agent_status</code> is
+<code>&quot;working&quot;</code> but its tmux pane has been silent, the daemon fires a nudge on the
+next silence event. This catches agents that are stuck — waiting on something
+without producing output — and wakes them up.</p>
+<p>Set agent status with <code>thrum agent set-status working|idle|blocked</code>. See
+<a href="cli.html#thrum-agent-set-status">CLI Reference</a>.</p>
 <hr>
 <h2>Remote Transparency</h2>
 <p>Tmux sessions work transparently over Tailscale. Each daemon manages its own
