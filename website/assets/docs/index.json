@@ -344,7 +344,7 @@
   {
     "path": "codex-plugin.html",
     "title": "Codex Plugin",
-    "description": "Install and use Thrum's Codex skill bundle — split skills for coordination, operations, role template generation, and project setup",
+    "description": "Install and use Thrum's Codex skill bundle — the Claude thrum skill surface, mirrored as top-level Codex skills",
     "category": "integrations",
     "order": 4,
     "tags": [

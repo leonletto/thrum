@@ -27,11 +27,21 @@ Located at `.thrum/config.json` in your repository:
     "sync_interval": 60,
     "ws_port": "auto",
     "peer_port": "auto",
-    "single_agent_mode": true
+    "single_agent_mode": true,
+    "log_level": "info"
   },
   "peers": {
     "auto_connect": true,
     "pairing_code_length": 16
+  },
+  "worktrees": {
+    "base_path": "~/.workspaces/myproject",
+    "beads_enabled": true,
+    "thrum_enabled": true
+  },
+  "orchestration": {
+    "merge_target": "main",
+    "default_autonomy": "end_only"
   },
   "restart": {
     "max_lines": 1000,
@@ -117,6 +127,68 @@ remain active.
 - **Toggle:** `thrum single-agent-mode true|false`
 
 See [Single-Agent Mode](single-agent-mode.md) for details.
+
+### `daemon.log_level`
+
+Slog log level for the daemon log file (`.thrum/var/daemon.log`).
+
+- **Type:** string
+- **Default:** `"info"`
+- **Values:** `"debug"`, `"info"`, `"warn"` (or `"warning"`), `"error"`
+- **Case:** insensitive
+
+The daemon uses [lumberjack](https://github.com/natefinch/lumberjack) for log
+rotation: 10 MB max file size, 4 rotated backups, 28-day retention, gzip
+compression. View logs with `thrum daemon logs` (see
+[CLI Reference](cli.md#thrum-daemon-logs)).
+
+## Worktrees
+
+Settings for `thrum worktree create/teardown/list`. These are written
+automatically by `thrum init` and can be edited in `config.json`. See
+[Orchestrator Role](orchestrator-role.md) for how the orchestrator uses these.
+
+### `worktrees.base_path`
+
+Directory where `thrum worktree create` puts new worktrees.
+
+- **Type:** string (absolute path)
+- **Default:** `~/.workspaces/<project>` (inferred from repo name)
+
+### `worktrees.beads_enabled`
+
+Whether to create `.beads/redirect` in new worktrees.
+
+- **Type:** boolean
+- **Default:** `true` (set by `thrum init`)
+
+### `worktrees.thrum_enabled`
+
+Whether to create `.thrum/redirect` and `.thrum/identities/` in new worktrees.
+
+- **Type:** boolean
+- **Default:** `true` (set by `thrum init`)
+
+## Orchestration
+
+Settings for the orchestrator role's execution lifecycle. See
+[Orchestrator Role](orchestrator-role.md) for details.
+
+### `orchestration.merge_target`
+
+Branch for the final merge after all epics complete.
+
+- **Type:** string
+- **Default:** `"main"`
+
+### `orchestration.default_autonomy`
+
+When to request human approval during plan execution.
+
+- **Type:** string
+- **Default:** `"end_only"`
+- **Values:** `"per_epic"` (approve after each epic) or `"end_only"` (approve
+  only at the end)
 
 ## Peers
 
@@ -338,8 +410,9 @@ coding runtimes:
 - **CLI-only** - No runtime configuration files
 
 Use `thrum init --runtime <name>` to specify which runtime template to generate.
-Runtime templates are created during initialization and are not tracked in
-`config.json`.
+The selected runtime is saved as `runtime.primary` in `config.json`. The
+generated template files (CLAUDE.md, .cursorrules, etc.) are not tracked in
+`config.json` — only the primary runtime choice is.
 
 ## Viewing Configuration
 

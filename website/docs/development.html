@@ -92,7 +92,7 @@ thrum daemon status</code></pre>
 │   ├── mcp/                 # MCP stdio server (11 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
-│   ├── schema/              # SQLite schema, DDL, and migrations (v16)
+│   ├── schema/              # SQLite schema, DDL, and migrations (v19)
 │   ├── subscriptions/       # Notification dispatcher and subscription service
 │   ├── sync/                # Sync engine (loop, merge, push, dedup, branch management)
 │   ├── tmux/                # Tmux operations, nudge delivery, session management (v0.7.1)
@@ -403,7 +403,7 @@ case &quot;my.new&quot;:
 <h3>Modifying Database Schema</h3>
 <ol>
 <li>Update table definitions in <code>internal/schema/schema.go</code></li>
-<li>Increment <code>CurrentVersion</code> constant (currently v16)</li>
+<li>Increment <code>CurrentVersion</code> constant (currently v19)</li>
 <li>Add migration logic in the <code>Migrate()</code> function</li>
 <li>Write tests for the new schema</li>
 <li>Update <code>docs/architecture.md</code></li>
@@ -546,7 +546,14 @@ stubs for non-Unix platforms.</li>
 and SQLite projection. <code>NewState(thrumDir, syncDir, repoID)</code> separates runtime
 state from sync data.</li>
 <li><strong>RPC handlers</strong> (<code>internal/daemon/rpc/</code>): Method implementations for agent,
-session, message, thread, health, sync, subscribe, and user operations</li>
+session, message, thread, health, sync, subscribe, queue, and user operations</li>
+<li><strong>Queue</strong> (<code>internal/daemon/rpc/queue.go</code>, <code>queue_rpc.go</code>): Command queue
+dispatch for tmux sessions — per-session FIFO, silence-based completion
+detection, <code>@system</code> notifications, restart recovery</li>
+<li><strong>Logging</strong> (<code>internal/daemon/logging.go</code>): Slog-based structured logging with
+lumberjack rotation (10 MB, 4 backups, 28 days, gzip)</li>
+<li><strong>safecmd</strong> (<code>internal/daemon/safecmd/</code>): Git command wrapper with 5s/10s
+timeouts and automatic <code>-c user.name</code> injection for sync worktree commits</li>
 <li><strong>Client</strong> (<code>internal/daemon/client.go</code>): Connection library for CLI-to-daemon
 communication</li>
 <li><strong>WebSocket</strong> (<code>internal/websocket/</code>): Server, connection registry, event
@@ -596,7 +603,16 @@ ls -l .thrum/var/thrum.sock</code></pre>
 <pre><code># Using netcat
 echo &#39;{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;health&quot;,&quot;id&quot;:1}&#39; | nc -U .thrum/var/thrum.sock</code></pre>
 <p><strong>View daemon logs:</strong></p>
-<pre><code># Check daemon logs
+<pre><code># View last 50 lines (default)
+thrum daemon logs
+
+# Stream live
+thrum daemon logs -f
+
+# Last hour
+thrum daemon logs --since 1h
+
+# Raw file access (for development introspection)
 cat .thrum/var/daemon.log
 
 # Check daemon status (shows PID, repo path, WebSocket port)

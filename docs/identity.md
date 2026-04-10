@@ -141,7 +141,7 @@ Which `.thrum/identities/*.json` file gets loaded:
    ↓
 2. Solo-agent auto-select → only one .json file exists
    ↓
-3. PID match (v0.7.0) → match claude_pid in identity files
+3. PID match (v0.7.0) → match agent_pid in identity files
    ↓
 4. Worktree match (v0.7.0) → filter by current worktree name
    ↓
@@ -227,8 +227,9 @@ out which identity belongs to the current session by walking the process tree.
 **How it works:**
 
 1. **PID match:** Walk the process tree from `getppid()` up to PID 1, looking
-   for a process named `claude`. If found, check that PID against `claude_pid`
-   in each identity file. Match found and process alive? That identity wins.
+   for a runtime process (Claude, Codex, Gemini, etc.). If found, check that PID
+   against `agent_pid` in each identity file. Match found and process alive?
+   That identity wins.
 
 2. **Worktree match:** Check the current git worktree name against the
    `worktree` field in each identity. One match wins. Multiple matches? Pick the
@@ -236,17 +237,17 @@ out which identity belongs to the current session by walking the process tree.
 
 3. **Give up:** If nothing matches, error out and tell you to set `THRUM_NAME`.
 
-**Adoption:** After picking an identity, if its `claude_pid` is zero or points
-to a dead process, the current Claude PID gets written in. The identity file
-self-updates when a new session picks it up. If `claude_pid` points to a
-different live Claude process, adoption is skipped — that's a genuine conflict,
-two sessions claiming the same identity.
+**Adoption:** After picking an identity, if its `agent_pid` is zero or points to
+a dead process, the current runtime PID gets written in. The identity file
+self-updates when a new session picks it up. If `agent_pid` points to a
+different live process, adoption is skipped — that's a genuine conflict, two
+sessions claiming the same identity.
 
-The `claude_pid` field is also in the SQLite `agents` table (schema v16).
+The `agent_pid` field is also in the SQLite `agents` table (schema v17+).
 
 ### PID Liveness Indicators
 
-`thrum team` uses the `claude_pid` field to show whether each agent's Claude
+`thrum team` uses the `agent_pid` field to show whether each agent's runtime
 process is still running:
 
 ```text
@@ -265,16 +266,16 @@ Intent:   Reviewing PR #42
 Inbox:    0 unread / 5 total
 ```
 
-- **`[live]`** — The Claude process at that PID is running. The agent session is
-  genuinely active.
+- **`[live]`** — The runtime process at that PID is running. The agent session
+  is genuinely active.
 - **`[stale]`** — The PID exists in the identity file but the process is no
   longer running. The session ended without cleaning up, or the process crashed.
 
 Liveness is checked via the OS process table (`kill -0`), not heartbeats. It's
 instantaneous and doesn't require the agent to be responsive — just alive.
 
-Agents with no `claude_pid` (registered before v0.7.0 or not running under
-Claude) skip the PID line entirely.
+Agents with no `agent_pid` (registered before v0.7.0 or not running under a
+detected runtime) skip the PID line entirely.
 
 ### Identity Files
 
@@ -288,11 +289,11 @@ after the agent:
 └── coordinator_1B9K33T6RK.json  # Unnamed agent (hash-based)
 ```
 
-**Identity file format** (version 4):
+**Identity file format** (version 5):
 
 ```json
 {
-  "version": 4,
+  "version": 5,
   "repo_id": "r_7K2Q1X9M3P0B",
   "agent": {
     "kind": "agent",
@@ -302,29 +303,41 @@ after the agent:
     "display": "Auth Implementer"
   },
   "worktree": "auth",
-  "claude_pid": 12345,
-  "tmux_session": "implementer-auth:0.0",
+  "agent_pid": 12345,
+  "preferred_runtime": "claude",
   "runtime": "claude",
+  "tmux_session": "implementer-auth:0.0",
+  "agent_status": "working",
+  "agent_status_updated_at": "2026-02-03T18:05:00.000Z",
   "confirmed_by": "human:leon",
   "updated_at": "2026-02-03T18:02:10.000Z"
 }
 ```
 
-The `claude_pid` field (v0.7.0) stores the PID of the Claude process that owns
-this identity. It is automatically maintained by the adoption logic described
-above.
+**Field reference:**
 
-The `tmux_session` and `runtime` fields (v0.7.1) support
-[tmux-managed sessions](tmux-sessions.md). `tmux_session` is the full pane
-target (e.g., `implementer-auth:0.0`) used by the daemon to route nudge
-notifications. `runtime` indicates which AI tool is running in the session
-(`claude`, `opencode`, `shell`, etc.). Both fields are `omitempty` — legacy
-agents without tmux sessions won't have them.
+- `agent_pid` (v0.7.0 as `claude_pid`, renamed in v0.8.0) — PID of the runtime
+  process that owns this identity. Automatically maintained by the adoption
+  logic described above.
+- `preferred_runtime` (v0.8.0) — Runtime set via `--runtime` on `quickstart`.
+  Used in the runtime resolution chain when launching via `thrum tmux launch`.
+- `runtime` (v0.7.1) — Auto-detected runtime (`claude`, `codex`, `opencode`,
+  `gemini`, etc.).
+- `tmux_session` (v0.7.1) — Full pane target (e.g., `implementer-auth:0.0`) used
+  by the daemon to route nudge notifications.
+- `agent_status` (v0.8.0) — Operational status: `working`, `idle`, or `blocked`.
+  Set via `thrum agent set-status`. The daemon uses this for auto-nudge
+  detection — if a tmux pane is silent but `agent_status` is `"working"`, the
+  daemon fires a nudge.
+- `agent_status_updated_at` (v0.8.0) — UTC timestamp of the last status change.
+
+The `tmux_session` and `runtime` fields are `omitempty` — legacy agents without
+tmux sessions won't have them.
 
 **Tmux-mode determination** (live, not stored): An agent is in tmux-mode when
-its identity file has `tmux_session` set, the tmux session exists, and the
-Claude PID is alive. The daemon clears `tmux_session` when it detects the
-session is gone or the PID is dead, preventing stale state.
+its identity file has `tmux_session` set, the tmux session exists, and the agent
+PID is alive. The daemon clears `tmux_session` when it detects the session is
+gone or the PID is dead, preventing stale state.
 
 **Canonical writer:** `thrum tmux launch` is the primary writer of both fields.
 `thrum prime` confirms the values on startup — if `tmux_session` is missing or
@@ -336,8 +349,8 @@ mismatched, it writes the current value from `$TMUX`.
    found)
 2. If only **one** `.json` file exists in `identities/`, load it automatically
    (solo-agent worktree backward compatibility)
-3. **PID match** (v0.7.0): If the calling process is inside a Claude session,
-   match by `claude_pid` field
+3. **PID match** (v0.7.0): If the calling process is inside a runtime session,
+   match by `agent_pid` field
 4. **Worktree match** (v0.7.0): Filter by current git worktree name; if multiple
    match, pick the most recently updated
 5. If **multiple** files exist and no selection is possible, return an error

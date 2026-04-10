@@ -79,6 +79,17 @@ need it.
 - **Daemon-managed tmux sessions** — the daemon owns the session lifecycle,
   delivers messages the moment they arrive, and runs zero background listeners
   in the agent process; see [Tmux Sessions](tmux-sessions.md)
+- **Command queue dispatch** — coordinators submit commands to agent panes via
+  `thrum tmux queue`, with completion tracking, `@system` notifications, and
+  restart recovery; see
+  [Tmux Sessions — Queue Dispatch](tmux-sessions.md#command-queue-dispatch)
+- **Worktree management** — `thrum worktree create/teardown/list` handles git
+  worktree setup with automatic Thrum and Beads redirect wiring
+- **Daemon logging** — structured slog output with lumberjack rotation; view
+  with `thrum daemon logs`; configurable via `daemon.log_level`
+- **Orchestrator role** — a dedicated role for plan execution with review gates,
+  worktree lifecycle, and agent spawning; see
+  [Orchestrator Role](orchestrator-role.md)
 
 ## Further Reading
 

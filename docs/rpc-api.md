@@ -1215,6 +1215,32 @@ Notify this daemon that a remote peer's address has changed.
 | ----- | ------- | ----------------- |
 | `ok`  | boolean | Success indicator |
 
+## Agent Methods (v0.8.0)
+
+### agent.set-status
+
+Set an agent's operational status. The daemon locates the agent's identity file
+(including across worktrees) and writes the status directly.
+
+**Request:**
+
+| Parameter | Type   | Required | Description                           |
+| --------- | ------ | -------- | ------------------------------------- |
+| `agent`   | string | yes      | Agent name                            |
+| `status`  | string | yes      | `"working"`, `"idle"`, or `"blocked"` |
+
+**Response:**
+
+| Field    | Type   | Description             |
+| -------- | ------ | ----------------------- |
+| `agent`  | string | Agent name              |
+| `status` | string | The status that was set |
+
+**Errors:**
+
+- `invalid status "<value>": must be working, idle, or blocked`: Invalid status
+  value
+
 ## Tmux Methods (v0.7.1)
 
 ### tmux.create
@@ -1354,6 +1380,115 @@ creates a new one, and relaunches.
 | ---------------- | ------- | --------------------------- |
 | `session`        | string  | New session name            |
 | `snapshot_lines` | integer | Lines in the saved snapshot |
+
+## Queue Methods (v0.8.0)
+
+### tmux.queue
+
+Submit a command to a tmux session's queue. Commands are dispatched FIFO — one
+at a time. The daemon sends the command to the pane when it goes silent, detects
+completion via the next silence event, captures output, and optionally sends an
+`@system` inbox message to the requester.
+
+**Request:**
+
+| Parameter            | Type    | Required | Description                                                  |
+| -------------------- | ------- | -------- | ------------------------------------------------------------ |
+| `session`            | string  | yes      | Tmux session name                                            |
+| `text`               | string  | yes      | Command text to send                                         |
+| `requester`          | string  | yes      | Agent name of the requester (for `@system` notifications)    |
+| `timeout_ms`         | integer | no       | Command timeout in ms (default: 120000)                      |
+| `silence_ms`         | integer | no       | Silence threshold in ms (default: 5000)                      |
+| `notify_on_complete` | boolean | no       | Send `@system` inbox message on completion (default: `true`) |
+
+**Response:**
+
+| Field        | Type    | Description                       |
+| ------------ | ------- | --------------------------------- |
+| `command_id` | string  | Command ID (`cmd_` prefix + ULID) |
+| `position`   | integer | Queue position                    |
+
+**Errors:**
+
+- `session is required`: Missing `session` field
+- `text is required`: Missing `text` field
+- `requester is required`: Missing `requester` field
+
+**`@system` messages:** When `notify_on_complete` is `true`, the daemon sends
+inbox messages from agent `"system"` for completion, timeout, cancellation, and
+interruption events. The message includes the command ID, session name, elapsed
+time, and captured output (last 500 lines). Timeout warnings are sent when the
+command exceeds its timeout but is still running — the message includes a
+`thrum tmux cancel` hint. On daemon restart, interrupted commands always send
+notifications regardless of `notify_on_complete`.
+
+### tmux.queue-wait
+
+Long-poll until a queued command reaches a terminal state (`completed`,
+`cancelled`, or `interrupted`). Polls the database every 500ms.
+
+**Request:**
+
+| Parameter    | Type    | Required | Description                           |
+| ------------ | ------- | -------- | ------------------------------------- |
+| `command_id` | string  | yes      | Command ID to wait on                 |
+| `timeout_ms` | integer | no       | Max wait time in ms (default: 120000) |
+
+**Response:**
+
+| Field        | Type    | Description                               |
+| ------------ | ------- | ----------------------------------------- |
+| `command_id` | string  | Command ID                                |
+| `state`      | string  | Terminal state                            |
+| `output`     | string  | Captured output (only on terminal states) |
+| `elapsed_ms` | integer | Elapsed time from send to completion      |
+
+**States:** `queued`, `sent`, `completed`, `timeout_waiting`, `cancelled`,
+`interrupted`. Terminal states: `completed`, `cancelled`, `interrupted`.
+
+### tmux.queue-status
+
+Show the active command and queued commands for a session.
+
+**Request:**
+
+| Parameter | Type   | Required | Description       |
+| --------- | ------ | -------- | ----------------- |
+| `session` | string | yes      | Tmux session name |
+
+**Response:**
+
+| Field                       | Type    | Description                                             |
+| --------------------------- | ------- | ------------------------------------------------------- |
+| `session`                   | string  | Session name                                            |
+| `active`                    | object  | Active command (nullable)                               |
+| `active.id`                 | string  | Command ID                                              |
+| `active.text`               | string  | Command text                                            |
+| `active.requester_agent`    | string  | Requester agent name                                    |
+| `active.state`              | string  | Current state                                           |
+| `active.silence_ms`         | integer | Silence threshold                                       |
+| `active.notify_on_complete` | boolean | Whether notifications are enabled                       |
+| `active.submitted_at`       | string  | ISO 8601 submission timestamp                           |
+| `active.sent_at`            | string  | ISO 8601 send timestamp                                 |
+| `queued`                    | array   | List of queued command objects (same shape as `active`) |
+
+### tmux.cancel
+
+Cancel a queued or active command.
+
+**Request:**
+
+| Parameter    | Type   | Required | Description |
+| ------------ | ------ | -------- | ----------- |
+| `command_id` | string | yes      | Command ID  |
+
+**Response:**
+
+| Field        | Type   | Description               |
+| ------------ | ------ | ------------------------- |
+| `command_id` | string | Cancelled command ID      |
+| `state`      | string | Final state (`cancelled`) |
+| `output`     | string | Partial captured output   |
 
 ## Using the API
 

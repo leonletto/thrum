@@ -153,6 +153,9 @@ thrum session start
 Agent names must be lowercase alphanumeric with underscores (`[a-z0-9_]+`).
 Reserved names: `daemon`, `system`, `thrum`, `all`, `broadcast`.
 
+Optional flags: `--runtime <name>` sets `preferred_runtime` in the identity file
+(useful for mixed-runtime teams). `--dry-run` previews without writing.
+
 ### 5. Send Your First Message
 
 ```bash

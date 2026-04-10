@@ -373,7 +373,7 @@ Which identity file to load (in priority order):
 
 1. `THRUM_NAME` env var → load `{name}.json` directly
 2. Solo-agent auto-select → only one `.json` file in `identities/`
-3. PID match → walk process tree to find Claude PID, match against `claude_pid`
+3. PID match → walk process tree to find runtime PID, match against `agent_pid`
    field in identity files
 4. Worktree match → filter by current git worktree name
 5. Error if no unambiguous selection
@@ -392,7 +392,7 @@ Identity files are stored at `.thrum/identities/{agent_name}.json`
 
 ```json
 {
-  "version": 3,
+  "version": 5,
   "repo_id": "r_7K2Q1X9M3P0B",
   "agent": {
     "kind": "agent",
@@ -402,7 +402,12 @@ Identity files are stored at `.thrum/identities/{agent_name}.json`
     "display": "Sync Implementer"
   },
   "worktree": "daemon",
-  "claude_pid": 12345,
+  "agent_pid": 12345,
+  "preferred_runtime": "claude",
+  "runtime": "claude",
+  "tmux_session": "implementer-daemon:0.0",
+  "agent_status": "working",
+  "agent_status_updated_at": "2026-02-03T18:05:00.000Z",
   "confirmed_by": "human:leon",
   "updated_at": "2026-02-03T18:02:10.000Z"
 }
@@ -634,7 +639,7 @@ schema_version      # Migration tracking
 
 ### Schema Version
 
-Current version: **16**
+Current version: **19**
 
 Key migrations:
 
@@ -659,6 +664,11 @@ Key migrations:
   filtering)
 - v15 -> v16: `claude_pid INTEGER NOT NULL DEFAULT 0` added to `agents` table
   (PID-first identity resolution)
+- v16 -> v17: `claude_pid` renamed to `agent_pid` in `agents` table
+  (multi-runtime support)
+- v17 -> v18: `command_queue` table added (queue dispatch for tmux sessions)
+- v18 -> v19: `silence_ms` and `notify_on_complete` columns added to
+  `command_queue`
 
 ### Initialization
 

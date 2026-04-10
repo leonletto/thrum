@@ -9,6 +9,10 @@ that work to the orchestrator — which manages every agent session, monitors
 progress, dispatches code reviews, and stops at the gates you defined. One agent
 doing the dispatch loop so you don't have to.
 
+The `thrum:orchestrate` Claude Code skill is the implementation of this
+playbook. It guides the orchestrator through each phase — from accepting the
+handoff to delivering the final merge report.
+
 ---
 
 ## When to Use It
