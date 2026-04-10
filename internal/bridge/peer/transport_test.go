@@ -85,12 +85,14 @@ func TestPeerTransport_ConnectAndCall(t *testing.T) {
 	}
 }
 
-func TestPeerTransport_TokenInURL(t *testing.T) {
+func TestPeerTransport_TokenInAuthHeader(t *testing.T) {
 	t.Parallel()
 
-	tokenCh := make(chan string, 1)
+	authCh := make(chan string, 1)
+	queryCh := make(chan string, 1)
 	srv := newTestWSServer(t, func(conn *websocket.Conn, r *http.Request) {
-		tokenCh <- r.URL.Query().Get("token")
+		authCh <- r.Header.Get("Authorization")
+		queryCh <- r.URL.Query().Get("token")
 		echoHandler(conn, r)
 	})
 
@@ -106,12 +108,19 @@ func TestPeerTransport_TokenInURL(t *testing.T) {
 	defer transport.Close()
 
 	select {
-	case capturedToken := <-tokenCh:
-		if capturedToken != "my-secret-token" {
-			t.Fatalf("token = %q, want my-secret-token", capturedToken)
+	case auth := <-authCh:
+		want := "Bearer my-secret-token"
+		if auth != want {
+			t.Fatalf("Authorization = %q, want %q", auth, want)
 		}
 	case <-ctx.Done():
-		t.Fatal("timeout waiting for token capture")
+		t.Fatal("timeout waiting for auth header capture")
+	}
+
+	// Token MUST NOT appear in the URL — that is the whole point of this
+	// refactor. URL query strings leak into access logs, proxies, and history.
+	if q := <-queryCh; q != "" {
+		t.Fatalf("token leaked into URL query: %q", q)
 	}
 }
 

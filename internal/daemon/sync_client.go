@@ -32,8 +32,10 @@ func NewSyncClient() *SyncClient {
 
 // wsCall dials a WebSocket connection to wsURL, calls the given JSON-RPC method
 // with params, and returns the raw result. The connection is closed when done.
-func (c *SyncClient) wsCall(ctx context.Context, wsURL string, method string, params map[string]any) (json.RawMessage, error) {
-	client := bridge.NewWSClient(wsURL)
+// Extra DialOptions (e.g. WithBearerToken) are forwarded to the WSClient so
+// credentials travel in handshake headers instead of the URL.
+func (c *SyncClient) wsCall(ctx context.Context, wsURL string, method string, params map[string]any, opts ...bridge.DialOption) (json.RawMessage, error) {
+	client := bridge.NewWSClient(wsURL, opts...)
 
 	dialCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -49,13 +51,20 @@ func (c *SyncClient) wsCall(ctx context.Context, wsURL string, method string, pa
 	return client.Call(callCtx, method, params)
 }
 
-// syncWSURL builds the WebSocket URL for a peer's sync endpoint using a token.
-// PeerAddr is the "host:port" address stored in PeerInfo.Address.
-func syncWSURL(peerAddr, token string) string {
-	if token != "" {
-		return fmt.Sprintf("ws://%s/ws?token=%s", peerAddr, token)
-	}
+// syncWSURL builds the WebSocket URL for a peer's sync endpoint.
+// The peer token is NOT included — callers pass it via bridge.WithBearerToken
+// so it travels in the Authorization header instead of the URL.
+func syncWSURL(peerAddr string) string {
 	return fmt.Sprintf("ws://%s/ws", peerAddr)
+}
+
+// tokenDialOpts returns DialOptions that attach the peer token as a
+// Bearer credential. Returns an empty slice when token is empty.
+func tokenDialOpts(token string) []bridge.DialOption {
+	if token == "" {
+		return nil
+	}
+	return []bridge.DialOption{bridge.WithBearerToken(token)}
 }
 
 // pairingWSURL builds the WebSocket URL for a peer's pairing endpoint.
@@ -64,17 +73,17 @@ func pairingWSURL(peerAddr, code string) string {
 }
 
 // PullEvents connects to a peer and pulls events after the given sequence number.
-// Token is included in the URL query string for authentication.
+// Token is sent as an Authorization: Bearer header on the WebSocket handshake.
 func (c *SyncClient) PullEvents(peerAddr string, afterSeq int64, token string) (*PullResponse, error) {
 	ctx := context.Background()
-	wsURL := syncWSURL(peerAddr, token)
+	wsURL := syncWSURL(peerAddr)
 
 	params := map[string]any{
 		"after_sequence": afterSeq,
 		"max_batch":      1000,
 	}
 
-	raw, err := c.wsCall(ctx, wsURL, "sync.pull", params)
+	raw, err := c.wsCall(ctx, wsURL, "sync.pull", params, tokenDialOpts(token)...)
 	if err != nil {
 		return nil, fmt.Errorf("sync.pull from %s: %w", peerAddr, err)
 	}
@@ -87,13 +96,13 @@ func (c *SyncClient) PullEvents(peerAddr string, afterSeq int64, token string) (
 }
 
 // PullAllEvents pulls all events from a peer in batches, continuing until no more are available.
-// Token is included in the URL query string for authentication.
+// Token is sent as an Authorization: Bearer header on the WebSocket handshake.
 func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, token string, onBatch func(events []eventlog.Event, nextSeq int64) error) error {
 	ctx := context.Background()
-	wsURL := syncWSURL(peerAddr, token)
+	wsURL := syncWSURL(peerAddr)
 
 	// Open a single WebSocket connection and reuse it for all batches.
-	client := bridge.NewWSClient(wsURL)
+	client := bridge.NewWSClient(wsURL, tokenDialOpts(token)...)
 
 	dialCtx, dialCancel := context.WithTimeout(ctx, c.timeout)
 	if err := client.Connect(dialCtx); err != nil {
@@ -140,10 +149,10 @@ func (c *SyncClient) PullAllEvents(peerAddr string, afterSeq int64, token string
 }
 
 // SendNotify sends a sync.notify RPC to a peer, signaling that new events are available.
-// Token is included in the URL query string for authentication. This is fire-and-forget.
+// Token is sent as an Authorization: Bearer header. This is fire-and-forget.
 func (c *SyncClient) SendNotify(peerAddr string, daemonID string, latestSeq int64, eventCount int, token string) error {
 	ctx := context.Background()
-	wsURL := syncWSURL(peerAddr, token)
+	wsURL := syncWSURL(peerAddr)
 
 	params := map[string]any{
 		"daemon_id":   daemonID,
@@ -151,17 +160,17 @@ func (c *SyncClient) SendNotify(peerAddr string, daemonID string, latestSeq int6
 		"event_count": eventCount,
 	}
 
-	_, err := c.wsCall(ctx, wsURL, "sync.notify", params)
+	_, err := c.wsCall(ctx, wsURL, "sync.notify", params, tokenDialOpts(token)...)
 	return err
 }
 
 // QueryPeerInfo calls sync.peer_info on a peer and returns daemon identity.
-// Token is included in the URL query string for authentication.
+// Token is sent as an Authorization: Bearer header.
 func (c *SyncClient) QueryPeerInfo(peerAddr string, token string) (*PeerInfoResult, error) {
 	ctx := context.Background()
-	wsURL := syncWSURL(peerAddr, token)
+	wsURL := syncWSURL(peerAddr)
 
-	raw, err := c.wsCall(ctx, wsURL, "sync.peer_info", nil)
+	raw, err := c.wsCall(ctx, wsURL, "sync.peer_info", nil, tokenDialOpts(token)...)
 	if err != nil {
 		return nil, err
 	}

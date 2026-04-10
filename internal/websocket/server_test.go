@@ -839,8 +839,9 @@ func TestServer_TokenAuth_ValidToken(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Connect with valid token — should succeed
-	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:9983/?token=valid-token", nil)
+	// Connect with valid token via Authorization header — should succeed.
+	headers := http.Header{"Authorization": []string{"Bearer valid-token"}}
+	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:9983/", headers)
 	if err != nil {
 		t.Fatalf("expected successful connection with valid token, got: %v", err)
 	}
@@ -860,8 +861,9 @@ func TestServer_TokenAuth_InvalidToken(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Connect with wrong token — should get 401
-	_, resp, err := websocket.DefaultDialer.Dial("ws://localhost:9982/?token=wrong", nil)
+	// Connect with wrong token via Authorization header — should get 401.
+	headers := http.Header{"Authorization": []string{"Bearer wrong"}}
+	_, resp, err := websocket.DefaultDialer.Dial("ws://localhost:9982/", headers)
 	if err == nil {
 		t.Fatal("expected connection to be rejected, but it succeeded")
 	}
