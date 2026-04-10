@@ -604,7 +604,6 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 	}
 
 	h.state.Lock()
-	defer h.state.Unlock()
 
 	// Build query with filters — only return contexts for active (non-ended) sessions
 	query := `SELECT wc.session_id, wc.agent_id, wc.branch, wc.worktree_path,
@@ -639,6 +638,7 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 
 	rows, err := h.state.DB().QueryContext(ctx, query, args...)
 	if err != nil {
+		h.state.Unlock()
 		return nil, fmt.Errorf("query work contexts: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
@@ -666,6 +666,7 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 			&intentUpdatedAt,
 		)
 		if err != nil {
+			h.state.Unlock()
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
 
@@ -730,7 +731,29 @@ func (h *AgentHandler) HandleListContext(ctx context.Context, params json.RawMes
 	}
 
 	if err := rows.Err(); err != nil {
+		h.state.Unlock()
 		return nil, fmt.Errorf("iterate rows: %w", err)
+	}
+
+	h.state.Unlock()
+
+	// Live git extraction: re-extract from worktree paths so callers see
+	// current uncommitted_files / changed_files instead of stale heartbeat data.
+	for i := range contexts {
+		wc := &contexts[i]
+		if wc.WorktreePath == "" {
+			continue
+		}
+		live, err := gitctx.ExtractWorkContext(ctx, wc.WorktreePath)
+		if err != nil || live == nil || live.WorktreePath == "" {
+			continue // not a valid git repo (e.g. test env), keep cached data
+		}
+		wc.Branch = live.Branch
+		wc.UnmergedCommits = live.UnmergedCommits
+		wc.UncommittedFiles = live.UncommittedFiles
+		wc.ChangedFiles = live.ChangedFiles
+		wc.FileChanges = live.FileChanges
+		wc.GitUpdatedAt = live.ExtractedAt.Format(time.RFC3339Nano)
 	}
 
 	return &ListContextResponse{
