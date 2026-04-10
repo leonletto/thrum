@@ -214,6 +214,12 @@ func SnapshotExists(thrumDir, agentName string) bool {
 	return err == nil
 }
 
+// DeleteSnapshot removes an existing restart snapshot (and any .consumed file).
+func DeleteSnapshot(thrumDir, agentName string) {
+	_ = os.Remove(restartSnapshotPath(thrumDir, agentName))
+	_ = os.Remove(restartSnapshotPath(thrumDir, agentName) + ".consumed")
+}
+
 // SaveSnapshot writes a restart snapshot to disk.
 // Creates the restart/ directory if needed.
 func SaveSnapshot(thrumDir, agentName, content string) error {
