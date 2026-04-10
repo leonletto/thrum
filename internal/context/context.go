@@ -270,6 +270,7 @@ Read these strategy files for operational patterns. They are in ` + "`.thrum/str
 - ` + "`.thrum/strategies/sub-agent-strategy.md`" + ` — When and how to delegate work to sub-agents
 - ` + "`.thrum/strategies/thrum-registration.md`" + ` — Registration, messaging, and coordination patterns
 - ` + "`.thrum/strategies/resume-after-context-loss.md`" + ` — How to resume work after compaction or session restart
+- ` + "`.thrum/llms.txt`" + ` — Full CLI/config/RPC reference. Grep this before asking about thrum commands, config keys, or RPC methods. Version-locked to your installed binary (do not WebFetch the website copy — it may drift).
 `)
 }
 
