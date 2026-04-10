@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go install deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks sync-skills
+.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go sync-embed-reference install deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks sync-skills
 
 # Tool versions - pinned for supply chain security
 GOLANGCI_LINT_VERSION := v1.64.5
@@ -95,8 +95,14 @@ build-ui:
 	@touch internal/web/dist/.gitkeep
 	@echo "UI built and copied to internal/web/dist/"
 
+# Sync root llms.txt to embed location before Go build
+sync-embed-reference:
+	@mkdir -p internal/context/reference
+	cp llms.txt internal/context/reference/llms.txt
+	@echo "Synced llms.txt to internal/context/reference/"
+
 # Build Go binary only (skip UI rebuild, uses existing internal/web/dist/)
-build-go:
+build-go: sync-embed-reference
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
 	go build -ldflags="-X main.Version=$(VERSION) -X main.Build=$$(git rev-parse --short HEAD)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/$(BINARY_NAME)
