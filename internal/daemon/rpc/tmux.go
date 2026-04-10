@@ -306,8 +306,9 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 			}
 
 			if !ttmux.HasSession(session) {
+				// Report as dead but do NOT clear identity — status is a read
+				// operation. HandleKill/HandleRestart own the write paths.
 				info.State = "dead"
-				h.clearTmuxFromIdentitiesInDir(identitiesDir, session)
 			} else if idFile.AgentPID > 0 && !process.IsRunning(idFile.AgentPID) {
 				info.State = "stale"
 			} else {
