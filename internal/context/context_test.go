@@ -785,8 +785,8 @@ func TestWriteStrategiesWritesLlmsTxt(t *testing.T) {
 }
 
 // TestWriteStrategiesSelfHealsLlmsTxt verifies that WriteStrategies recreates
-// .thrum/llms.txt when it has been deleted — matching the daemon self-heal
-// behavior on restart.
+// .thrum/llms.txt and strategy files when they have been deleted — matching
+// the daemon self-heal behavior on restart (thrum-w71.3: strategies + llms.txt).
 func TestWriteStrategiesSelfHealsLlmsTxt(t *testing.T) {
 	thrumDir := t.TempDir()
 
@@ -801,7 +801,7 @@ func TestWriteStrategiesSelfHealsLlmsTxt(t *testing.T) {
 		t.Fatalf("read initial llms.txt: %v", err)
 	}
 
-	// Simulate accidental deletion.
+	// Simulate accidental deletion of llms.txt.
 	if err := os.Remove(llmsPath); err != nil {
 		t.Fatalf("remove llms.txt: %v", err)
 	}
@@ -821,6 +821,30 @@ func TestWriteStrategiesSelfHealsLlmsTxt(t *testing.T) {
 	if !bytes.Equal(original, restored) {
 		t.Errorf("restored llms.txt (%d bytes) differs from original (%d bytes)", len(restored), len(original))
 	}
+
+	// Also verify strategy file self-heal (thrum-w71.3 spec covers both).
+	strategyPath := filepath.Join(thrumDir, "strategies", "sub-agent-strategy.md")
+
+	// Delete the strategy file.
+	if err := os.Remove(strategyPath); err != nil {
+		t.Fatalf("remove strategy file: %v", err)
+	}
+	if _, err := os.Stat(strategyPath); !os.IsNotExist(err) {
+		t.Fatal("strategy file should not exist after removal")
+	}
+
+	// Self-heal: WriteStrategies should recreate it.
+	if err := WriteStrategies(thrumDir); err != nil {
+		t.Fatalf("third WriteStrategies failed: %v", err)
+	}
+
+	restoredStrategy, err := os.ReadFile(strategyPath) //nolint:gosec // G304 - test helper reading temp file
+	if err != nil {
+		t.Fatalf("strategy file not recreated after self-heal at %s: %v", strategyPath, err)
+	}
+	if len(restoredStrategy) == 0 {
+		t.Errorf("restored strategy file at %s is empty", strategyPath)
+	}
 }
 
 // TestEmbeddedLlmsMatchesRoot fails if the root llms.txt has drifted from the
@@ -830,13 +854,13 @@ func TestEmbeddedLlmsMatchesRoot(t *testing.T) {
 	rootPath := filepath.Join("..", "..", "llms.txt")
 	rootData, err := os.ReadFile(rootPath) //nolint:gosec // G304 - test helper reading root llms.txt
 	if err != nil {
-		t.Fatalf("read root llms.txt: %v", err)
+		t.Fatalf("read root llms.txt at %s: %v", rootPath, err)
 	}
 
 	embeddedPath := filepath.Join("reference", "llms.txt")
 	embeddedData, err := os.ReadFile(embeddedPath) //nolint:gosec // G304 - test helper reading reference file
 	if err != nil {
-		t.Fatalf("read embedded llms.txt: %v", err)
+		t.Fatalf("read embedded llms.txt at %s: %v", embeddedPath, err)
 	}
 
 	if !bytes.Equal(rootData, embeddedData) {
