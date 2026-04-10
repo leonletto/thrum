@@ -150,9 +150,9 @@ type TmuxQueueWaitResponse struct {
 
 // TmuxQueueStatusResponse is the response from the tmux.queue-status RPC.
 type TmuxQueueStatusResponse struct {
-	Session string            `json:"session"`
-	Active  *TmuxQueuedView   `json:"active"`
-	Queued  []TmuxQueuedView  `json:"queued"`
+	Session string           `json:"session"`
+	Active  *TmuxQueuedView  `json:"active"`
+	Queued  []TmuxQueuedView `json:"queued"`
 }
 
 // TmuxQueuedView describes a single command in the queue. JSON tags MUST

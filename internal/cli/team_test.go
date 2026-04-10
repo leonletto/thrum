@@ -304,11 +304,11 @@ func TestFormatTeam_LiveIndicator(t *testing.T) {
 	resp := &TeamListResponse{
 		Members: []TeamMember{
 			{
-				AgentID:   "test_agent",
-				Role:      "implementer",
-				Module:    "test",
+				AgentID:  "test_agent",
+				Role:     "implementer",
+				Module:   "test",
 				AgentPID: os.Getpid(), // current process = alive
-				Status:    "active",
+				Status:   "active",
 			},
 		},
 	}
@@ -322,11 +322,11 @@ func TestFormatTeam_StaleIndicator(t *testing.T) {
 	resp := &TeamListResponse{
 		Members: []TeamMember{
 			{
-				AgentID:   "test_agent",
-				Role:      "implementer",
-				Module:    "test",
+				AgentID:  "test_agent",
+				Role:     "implementer",
+				Module:   "test",
 				AgentPID: 999999, // dead PID
-				Status:    "active",
+				Status:   "active",
 			},
 		},
 	}
@@ -340,11 +340,11 @@ func TestFormatTeam_NoPIDNoIndicator(t *testing.T) {
 	resp := &TeamListResponse{
 		Members: []TeamMember{
 			{
-				AgentID:   "test_agent",
-				Role:      "implementer",
-				Module:    "test",
+				AgentID:  "test_agent",
+				Role:     "implementer",
+				Module:   "test",
 				AgentPID: 0, // no PID
-				Status:    "active",
+				Status:   "active",
 			},
 		},
 	}

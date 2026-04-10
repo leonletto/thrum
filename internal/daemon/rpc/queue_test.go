@@ -160,9 +160,9 @@ func countSystemMessages(t *testing.T, h *TmuxHandler) int {
 	return n
 }
 
-// TestHandleCancelSkipsSystemMessageWhenNotifyFalse verifies that cancelling a
+// TestHandleCancelSkipsSystemMessageWhenNotifyFalse verifies that canceling a
 // command with NotifyOnComplete=false does NOT write a @system message.
-// --wait callers get the cancelled terminal state via the queue-wait RPC
+// --wait callers get the canceled terminal state via the queue-wait RPC
 // response directly, so an inbox message would be redundant.
 func TestHandleCancelSkipsSystemMessageWhenNotifyFalse(t *testing.T) {
 	h, cleanup := setupTmuxHandlerTest(t)
@@ -419,7 +419,7 @@ func TestHandleCancelActiveCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	if loaded.State != StateCancelled {
-		t.Errorf("state=%s, want cancelled", loaded.State)
+		t.Errorf("state=%s, want canceled", loaded.State)
 	}
 	if q.Active() != nil {
 		t.Error("active command not cleared")
@@ -517,7 +517,7 @@ func TestHandleQueuePositionNoTOCTOU(t *testing.T) {
 
 // TestConcurrentTransitionsSingleFinalState fires completeCommand,
 // HandleCancel, and the timeout callback for the SAME command on three
-// goroutines "simultaneously" to stress the cmd.mu serialisation. Under -race
+// goroutines "simultaneously" to stress the cmd.mu serialization. Under -race
 // this will flag any unsynchronised read/write on cmd.State / SentAt /
 // CompletedAt / CapturedOutput / timer. Only ONE path should win the
 // transition; the other two must short-circuit on the isTerminalState check.
@@ -571,7 +571,7 @@ func TestConcurrentTransitionsSingleFinalState(t *testing.T) {
 	// Final state must be terminal. Read via the thread-safe helper.
 	final := cmd.stateSnapshot()
 	if !isTerminalState(final) {
-		t.Errorf("final state = %q, want one of completed/cancelled/interrupted", final)
+		t.Errorf("final state = %q, want one of completed/canceled/interrupted", final)
 	}
 
 	// DB should agree with the in-memory state.
@@ -584,7 +584,7 @@ func TestConcurrentTransitionsSingleFinalState(t *testing.T) {
 	// but that's not terminal, so if it ran first the completeCommand or
 	// cancel path would still have run and produced a terminal state.
 	if loaded.State != StateCompleted && loaded.State != StateCancelled {
-		t.Errorf("DB state = %q, want completed or cancelled", loaded.State)
+		t.Errorf("DB state = %q, want completed or canceled", loaded.State)
 	}
 }
 
@@ -616,7 +616,7 @@ func TestSendSystemMessageUsesSentinelSessionID(t *testing.T) {
 // CompletedAt / CapturedOutput via the snapshot path is caught.
 //
 // The test runs several iterations to increase the chance of overlap — a
-// single pairing might serialise cleanly by luck; N pairings make a latent
+// single pairing might serialize cleanly by luck; N pairings make a latent
 // race far more likely to manifest.
 func TestStatusSnapshotIsRaceFreeVsTransitions(t *testing.T) {
 	h, cleanup := setupTmuxHandlerTest(t)

@@ -81,15 +81,15 @@ run review gates, and present results for human-controlled merging.
 
 Before doing anything, ask: "Can someone else do this?"
 
-| Task type | Action |
-|---|---|
-| Coordination (status checks, messaging, beads management) | Do it yourself |
-| Information gathering (codebase questions, test results) | Dispatch a sub-agent |
-| Implementation (any code change) | Send to an agent via Thrum |
-| Unsure | **Delegate** — the default is always delegate |
+| Task type                                                 | Action                                        |
+| --------------------------------------------------------- | --------------------------------------------- |
+| Coordination (status checks, messaging, beads management) | Do it yourself                                |
+| Information gathering (codebase questions, test results)  | Dispatch a sub-agent                          |
+| Implementation (any code change)                          | Send to an agent via Thrum                    |
+| Unsure                                                    | **Delegate** — the default is always delegate |
 
-If you catch yourself reading source files, stop. Spawn an Explore sub-agent.
-If you catch yourself writing code, stop. That is an agent's job.
+If you catch yourself reading source files, stop. Spawn an Explore sub-agent. If
+you catch yourself writing code, stop. That is an agent's job.
 
 The only code you should ever see is in diff output from review sub-agents.
 
@@ -153,16 +153,16 @@ thrum worktree teardown <name>
 
 ## Anti-Confusion Command Table
 
-| Want to... | Correct | NOT this |
-|---|---|---|
-| Send message to agent | `thrum send "msg" --to @name` | `SendMessage` tool / `--to @role` |
-| Check agent health | `thrum tmux status` | `thrum team` alone |
-| Close a task | `bd close <id>` | `bd update --status done` |
-| Set agent working | `thrum agent set-status working --agent <name>` | `bd set-state working` |
-| Create worktree | `thrum worktree create <name>` | `git worktree add` manually |
-| Kill agent session | `thrum tmux kill <name>` | `tmux kill-session` directly |
-| Read agent code | Spawn Explore sub-agent | Read files into your context |
-| Run code review | Spawn `feature-dev:code-reviewer` sub-agent | Read the diff yourself |
+| Want to...            | Correct                                         | NOT this                          |
+| --------------------- | ----------------------------------------------- | --------------------------------- |
+| Send message to agent | `thrum send "msg" --to @name`                   | `SendMessage` tool / `--to @role` |
+| Check agent health    | `thrum tmux status`                             | `thrum team` alone                |
+| Close a task          | `bd close <id>`                                 | `bd update --status done`         |
+| Set agent working     | `thrum agent set-status working --agent <name>` | `bd set-state working`            |
+| Create worktree       | `thrum worktree create <name>`                  | `git worktree add` manually       |
+| Kill agent session    | `thrum tmux kill <name>`                        | `tmux kill-session` directly      |
+| Read agent code       | Spawn Explore sub-agent                         | Read files into your context      |
+| Run code review       | Spawn `feature-dev:code-reviewer` sub-agent     | Read the diff yourself            |
 
 ---
 
@@ -174,8 +174,8 @@ playbook. The playbook handles:
 1. **Validate** — confirm epics, tasks, prompts, review gates, merge target
 2. **Configure** — negotiate autonomy level with the human:
    - `per_epic`: pause after each epic for human review and approval
-   - `end_only`: run all epics, present final report before merge
-   The default comes from `.thrum/config.json` (`orchestration.default_autonomy`)
+   - `end_only`: run all epics, present final report before merge The default
+     comes from `.thrum/config.json` (`orchestration.default_autonomy`)
 3. **Launch** — create worktrees, spin up tmux sessions, verify agents alive
 4. **Execute** — epic-by-epic loop with review gates between each:
    - Send prompt to agent → set agent working → wait for completion
@@ -205,8 +205,8 @@ handles this automatically based on the beads dependency graph.
 6. CHECK SESSIONS — thrum tmux status (any orphaned sessions?)
 ```
 
-If you have a plan, execute it. Do not announce that you have a plan. Do not
-ask if you should start. The plan is the authorization.
+If you have a plan, execute it. Do not announce that you have a plan. Do not ask
+if you should start. The plan is the authorization.
 
 ---
 
@@ -281,14 +281,14 @@ You never need to understand the architecture. Your agents understand it. Every
 file you read burns context you need for coordination. Spawn sub-agents for
 information gathering.
 
-**The Micromanager** — You send a prompt to an agent, then 30 seconds later
-send "How's it going?" Give agents time to work. Monitor via inbox, not by
-pinging. Check `thrum tmux status` for session health.
+**The Micromanager** — You send a prompt to an agent, then 30 seconds later send
+"How's it going?" Give agents time to work. Monitor via inbox, not by pinging.
+Check `thrum tmux status` for session health.
 
 **The Silent Orchestrator** — Agents complete epics. Reviews pass. You proceed
 to the next epic without telling anyone. The human has no idea what's happening.
-Send status updates at every review gate — even if autonomy is `end_only`,
-a brief update keeps trust.
+Send status updates at every review gate — even if autonomy is `end_only`, a
+brief update keeps trust.
 
 **The Hoarder** — Work is merged but worktrees and sessions are still alive.
 Dead sessions consume resources and confuse `thrum team` output. Clean up after

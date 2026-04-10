@@ -1257,9 +1257,9 @@ func TestHandleRegister_StoresAgentPID(t *testing.T) {
 
 	// Register with agent_pid=12345
 	req := RegisterRequest{
-		Role:      "implementer",
-		Module:    "auth",
-		Display:   "Auth Implementer",
+		Role:     "implementer",
+		Module:   "auth",
+		Display:  "Auth Implementer",
 		AgentPID: 12345,
 	}
 	reqJSON, _ := json.Marshal(req)
@@ -1319,9 +1319,9 @@ func TestHandleRegister_RoleModuleConflictWithPID(t *testing.T) {
 	// Register a different agent with the same role+module but different name,
 	// so GenerateAgentID produces a different agent_id → role+module conflict path.
 	req := RegisterRequest{
-		Name:      "different_agent",
-		Role:      "implementer",
-		Module:    "auth",
+		Name:     "different_agent",
+		Role:     "implementer",
+		Module:   "auth",
 		AgentPID: 222,
 	}
 	reqJSON, _ := json.Marshal(req)
@@ -1367,9 +1367,9 @@ func TestHandleRegister_SamePID_Idempotent(t *testing.T) {
 	handler := NewAgentHandler(s)
 
 	req := RegisterRequest{
-		Name:      "my-agent",
-		Role:      "implementer",
-		Module:    "auth",
+		Name:     "my-agent",
+		Role:     "implementer",
+		Module:   "auth",
 		AgentPID: 99999,
 	}
 

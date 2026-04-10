@@ -30,7 +30,7 @@ type RegisterRequest struct {
 	Display    string `json:"display,omitempty"`
 	Force      bool   `json:"force,omitempty"`       // Override existing
 	ReRegister bool   `json:"re_register,omitempty"` // Same agent returning
-	AgentPID  int    `json:"agent_pid,omitempty"`  // Claude process PID for identity resolution
+	AgentPID   int    `json:"agent_pid,omitempty"`   // Claude process PID for identity resolution
 }
 
 // RegisterResponse represents the response from agent.register RPC.
@@ -68,7 +68,7 @@ type AgentInfo struct {
 	Display      string `json:"display"`
 	RegisteredAt string `json:"registered_at"`
 	LastSeenAt   string `json:"last_seen_at,omitempty"`
-	AgentPID    int    `json:"agent_pid,omitempty"` // Claude process PID for identity resolution
+	AgentPID     int    `json:"agent_pid,omitempty"` // Claude process PID for identity resolution
 }
 
 // WhoamiResponse represents the response from agent.whoami RPC.
@@ -486,7 +486,7 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 		Worktree:  worktree,
 		Display:   display,
 		Hostname:  resolveHostname(),
-		AgentPID: agentPID,
+		AgentPID:  agentPID,
 	}
 
 	// Write event to JSONL and SQLite

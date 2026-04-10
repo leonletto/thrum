@@ -65,7 +65,7 @@ func TestLoadIdentity_PIDMatch(t *testing.T) {
 	// agent_a has the current process PID and more recent UpdatedAt.
 	writeIdentityInternal(t, identitiesDir, "agent_a", IdentityFile{
 		Version:   3,
-		AgentPID: myPID,
+		AgentPID:  myPID,
 		Agent:     AgentConfig{Kind: "agent", Name: "agent_a", Role: "implementer", Module: "test"},
 		Worktree:  worktreeName,
 		UpdatedAt: time.Now(),
@@ -73,7 +73,7 @@ func TestLoadIdentity_PIDMatch(t *testing.T) {
 	// agent_b has a dead PID and older UpdatedAt.
 	writeIdentityInternal(t, identitiesDir, "agent_b", IdentityFile{
 		Version:   3,
-		AgentPID: 999999, // dead PID
+		AgentPID:  999999, // dead PID
 		Agent:     AgentConfig{Kind: "agent", Name: "agent_b", Role: "tester", Module: "test"},
 		Worktree:  worktreeName,
 		UpdatedAt: time.Now().Add(-time.Hour),
@@ -113,14 +113,14 @@ func TestLoadIdentity_NoPIDMatch_FallsThrough(t *testing.T) {
 	// Both have dead PIDs and the same worktree — most-recent UpdatedAt should win.
 	writeIdentityInternal(t, identitiesDir, "agent_a", IdentityFile{
 		Version:   3,
-		AgentPID: 999998, // dead PID
+		AgentPID:  999998, // dead PID
 		Agent:     AgentConfig{Kind: "agent", Name: "agent_a", Role: "implementer", Module: "test"},
 		Worktree:  worktreeName,
 		UpdatedAt: time.Now().Add(-time.Hour), // older
 	})
 	writeIdentityInternal(t, identitiesDir, "agent_b", IdentityFile{
 		Version:   3,
-		AgentPID: 999999, // dead PID
+		AgentPID:  999999, // dead PID
 		Agent:     AgentConfig{Kind: "agent", Name: "agent_b", Role: "tester", Module: "test"},
 		Worktree:  worktreeName,
 		UpdatedAt: time.Now(), // more recent
@@ -148,7 +148,7 @@ func TestLoadIdentity_AdoptsDeadPID(t *testing.T) {
 
 	writeIdentityInternal(t, dir, "agent_a", IdentityFile{
 		Version:   3,
-		AgentPID: 999999, // dead PID
+		AgentPID:  999999, // dead PID
 		Agent:     AgentConfig{Kind: "agent", Name: "agent_a", Role: "implementer", Module: "test"},
 		Worktree:  "main",
 		UpdatedAt: time.Now(),

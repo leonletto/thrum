@@ -943,9 +943,9 @@ func TestIdentityV1RoundTrip(t *testing.T) {
 
 func TestIdentityFile_AgentPID_Serialization(t *testing.T) {
 	identity := config.IdentityFile{
-		Version:   3,
+		Version:  3,
 		AgentPID: 12345,
-		Agent:     config.AgentConfig{Name: "test"},
+		Agent:    config.AgentConfig{Name: "test"},
 	}
 	data, err := json.Marshal(identity)
 	if err != nil {
@@ -1035,7 +1035,7 @@ func TestLoad_PIDFirstResolution_ZeroPIDFallsThrough(t *testing.T) {
 	agent1 := config.IdentityFile{
 		Version:   3,
 		RepoID:    "r_TEST",
-		AgentPID: 0,
+		AgentPID:  0,
 		Worktree:  "worktree_x",
 		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_x", Role: "implementer", Module: "test"},
 		UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -1043,7 +1043,7 @@ func TestLoad_PIDFirstResolution_ZeroPIDFallsThrough(t *testing.T) {
 	agent2 := config.IdentityFile{
 		Version:   3,
 		RepoID:    "r_TEST",
-		AgentPID: 0,
+		AgentPID:  0,
 		Worktree:  "worktree_y",
 		Agent:     config.AgentConfig{Kind: "agent", Name: "agent_y", Role: "tester", Module: "test"},
 		UpdatedAt: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
@@ -1176,10 +1176,10 @@ func TestIdentityFile_AdoptionDoesNotBlock(t *testing.T) {
 	// the code path doesn't panic.
 	dir := t.TempDir()
 	writeTestIdentity(t, dir, "agent_dead", config.IdentityFile{
-		Version:   3,
+		Version:  3,
 		AgentPID: 999999,
-		Agent:     config.AgentConfig{Name: "agent_dead", Role: "test", Module: "test"},
-		Worktree:  "main",
+		Agent:    config.AgentConfig{Name: "agent_dead", Role: "test", Module: "test"},
+		Worktree: "main",
 	})
 	// Single file → should load successfully
 	// We can't easily call loadIdentityFromDir directly, so just verify the file roundtrips

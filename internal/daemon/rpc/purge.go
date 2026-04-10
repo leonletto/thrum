@@ -21,14 +21,14 @@ type PurgeRequest struct {
 
 // PurgeResponse is the result of the purge.execute RPC method.
 type PurgeResponse struct {
-	Before               string `json:"before"`
-	DryRun               bool   `json:"dry_run"`
-	MessagesDeleted      int    `json:"messages_deleted"`
-	SessionsDeleted      int    `json:"sessions_deleted"`
-	EventsDeleted        int    `json:"events_deleted"`
-	CommandQueueDeleted  int    `json:"command_queue_deleted"`
-	SyncMessageFiles     int    `json:"sync_message_files"`
-	SyncEventsFiltered   int    `json:"sync_events_filtered"`
+	Before              string `json:"before"`
+	DryRun              bool   `json:"dry_run"`
+	MessagesDeleted     int    `json:"messages_deleted"`
+	SessionsDeleted     int    `json:"sessions_deleted"`
+	EventsDeleted       int    `json:"events_deleted"`
+	CommandQueueDeleted int    `json:"command_queue_deleted"`
+	SyncMessageFiles    int    `json:"sync_message_files"`
+	SyncEventsFiltered  int    `json:"sync_events_filtered"`
 }
 
 // PurgeHandler handles the purge.execute RPC method.

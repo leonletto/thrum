@@ -1,7 +1,6 @@
 # Codex Session Notes - 2026-04-09
 
-This is a temporary handoff note for the Codex/plugin work done in this
-session.
+This is a temporary handoff note for the Codex/plugin work done in this session.
 
 ## Goal
 

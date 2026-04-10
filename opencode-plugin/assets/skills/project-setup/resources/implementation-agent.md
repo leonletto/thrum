@@ -504,9 +504,11 @@ thrum agent set-intent "Working on {{TASK_ID}}: <description>"
 ---
 
 <!-- REVIEW_GATE_TEMPLATE_START -->
+
 ## Review Gate: {{EPIC_ID}}
 
 Before proceeding to the next epic:
+
 1. Commit all work for this epic
 2. Run tests: verify all tests pass for changes in this epic
 3. Report completion via Thrum:

@@ -26,7 +26,7 @@ const (
 	StateActive         = "active"
 	StateCompleted      = "completed"
 	StateTimeoutWaiting = "timeout_waiting"
-	StateCancelled      = "cancelled"
+	StateCancelled      = "canceled"
 	StateInterrupted    = "interrupted"
 )
 
@@ -34,7 +34,7 @@ const (
 //
 // Concurrency: immutable fields (ID, Text, RequesterAgent, Timeout, SilenceMs,
 // NotifyOnComplete, SubmittedAt) are set once in HandleQueue and never mutated,
-// so they are safe to read without synchronisation. Mutable fields
+// so they are safe to read without synchronization. Mutable fields
 // (State, SentAt, CompletedAt, CapturedOutput, timer) are protected by mu and
 // MUST only be read or written while holding it. The three transition paths
 // (completeCommand, HandleCancel, handleCommandTimeout) can race — e.g. the
@@ -92,7 +92,7 @@ func (cmd *QueuedCommand) stateSnapshot() string {
 // fields (State, SentAt, CompletedAt, CapturedOutput) are internally
 // consistent.
 //
-// JSON shape matches the original *QueuedCommand marshalling so the
+// JSON shape matches the original *QueuedCommand marshaling so the
 // QueueStatusResponse over the wire stays unchanged.
 type QueuedCommandView struct {
 	ID               string        `json:"id"`
@@ -104,7 +104,7 @@ type QueuedCommandView struct {
 	State            string        `json:"state"`
 	SubmittedAt      time.Time     `json:"submitted_at"`
 	SentAt           time.Time     `json:"sent_at,omitempty"`
-	CompletedAt     time.Time     `json:"completed_at,omitempty"`
+	CompletedAt      time.Time     `json:"completed_at,omitempty"`
 	CapturedOutput   string        `json:"captured_output,omitempty"`
 	SessionName      string        `json:"session_name,omitempty"`
 }

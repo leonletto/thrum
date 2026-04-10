@@ -258,7 +258,7 @@ func TestTmuxQueueStatus_RPC(t *testing.T) {
 }
 
 func TestTmuxCancel_RPC(t *testing.T) {
-	mockResp := TmuxCancelResponse{CommandID: "cmd_abc123", State: "cancelled", Output: ""}
+	mockResp := TmuxCancelResponse{CommandID: "cmd_abc123", State: "canceled", Output: ""}
 	daemon, socketPath := newMockDaemon(t)
 	defer daemon.stop()
 
@@ -284,7 +284,7 @@ func TestTmuxCancel_RPC(t *testing.T) {
 	if result.CommandID != "cmd_abc123" {
 		t.Errorf("CommandID = %q, want %q", result.CommandID, "cmd_abc123")
 	}
-	if result.State != "cancelled" {
-		t.Errorf("State = %q, want %q", result.State, "cancelled")
+	if result.State != "canceled" {
+		t.Errorf("State = %q, want %q", result.State, "canceled")
 	}
 }

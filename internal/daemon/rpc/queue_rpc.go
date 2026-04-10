@@ -86,7 +86,7 @@ func (h *TmuxHandler) HandleQueue(ctx context.Context, params json.RawMessage) (
 	// between concurrent HandleQueue calls for the same session. We count the
 	// rows that are still live in the queue (non-terminal states) and assign
 	// position = count + 1. Holding state.Lock() across both the SELECT and
-	// the INSERT serialises concurrent submitters.
+	// the INSERT serializes concurrent submitters.
 	h.state.Lock()
 	var count int
 	if err := h.state.DB().QueryRowContext(ctx,
@@ -115,8 +115,8 @@ func (h *TmuxHandler) HandleQueue(ctx context.Context, params json.RawMessage) (
 	if position == 1 && queue.Active() == nil {
 		if ttmux.IsSilent(req.Session) {
 			// Pane already idle — dispatch now. Use Background context because
-			// the RPC request context will be cancelled after we return.
-			go h.sendQueuedCommand(context.Background(), req.Session, queue, cmd)
+			// the RPC request context will be canceled after we return.
+			go h.sendQueuedCommand(context.Background(), req.Session, queue, cmd) // #nosec G118 -- intentional: goroutine outlives RPC request
 		} else {
 			// Pane is busy — lower the silence threshold so the hook fires
 			// sooner once the pane goes idle.
@@ -143,7 +143,7 @@ func (h *TmuxHandler) HandleQueue(ctx context.Context, params json.RawMessage) (
 // completeCommand captures pane output, delivers the result, and advances the queue.
 //
 // Concurrency: completeCommand races against HandleCancel and the timeout timer
-// (handleCommandTimeout). All three paths mutate cmd.State, so we serialise
+// (handleCommandTimeout). All three paths mutate cmd.State, so we serialize
 // them via cmd.mu. The first entrant transitions the command to StateCompleted
 // while holding the lock; any subsequent caller that observes a terminal state
 // bails immediately. Pane capture (I/O) runs BEFORE acquiring the lock so we
@@ -164,7 +164,7 @@ func (h *TmuxHandler) completeCommand(ctx context.Context, session string, queue
 		notify   bool
 		body     string
 		skip     bool
-		shortCut bool // true if another path already finalised this command
+		shortCut bool // true if another path already finalized this command
 	)
 	cmd.mu.Lock()
 	if isTerminalState(cmd.State) {
@@ -219,7 +219,7 @@ func (h *TmuxHandler) completeCommand(ctx context.Context, session string, queue
 }
 
 // sendQueuedCommand pops the head of the queue, types the command, and starts
-// timeout tracking. cmd.State, cmd.SentAt, and cmd.timer are all protected by
+// timeout tracking. Cmd.State, cmd.SentAt, and cmd.timer are all protected by
 // cmd.mu; we acquire it around the mutation + persist sequence. Typing keys is
 // done OUTSIDE the lock (it's I/O and the command is not yet visible as
 // "active" to any other goroutine).
@@ -250,7 +250,7 @@ func (h *TmuxHandler) sendQueuedCommand(ctx context.Context, session string, que
 
 	cmd.mu.Lock()
 	if isTerminalState(cmd.State) {
-		// Cancelled between our dispatch decision and the actual send.
+		// Canceled between our dispatch decision and the actual send.
 		cmd.mu.Unlock()
 		return
 	}
@@ -292,7 +292,7 @@ func (h *TmuxHandler) sendQueuedCommand(ctx context.Context, session string, que
 	// IsSilent at the configured threshold interval. If the hook fires first
 	// (attached session), we'll see a terminal state and exit immediately.
 	// Use Background — this goroutine outlives the RPC request that triggered dispatch.
-	go h.pollSilenceFlag(context.Background(), session, queue, cmd, silenceSec)
+	go h.pollSilenceFlag(context.Background(), session, queue, cmd, silenceSec) // #nosec G118 -- intentional: goroutine outlives RPC request
 }
 
 // pollSilenceFlag polls the tmux window_silence_flag as a fallback completion
@@ -550,7 +550,7 @@ type CancelResponse struct {
 // queuesMu before calling any queue methods. This avoids a nested
 // queuesMu → q.mu acquisition pattern (via queue.Active()) and respects the
 // "don't hold queue.mu from outside queue.go" rule. Command-level mutations go
-// through cmd.mu; HandleCancel serialises against completeCommand and the
+// through cmd.mu; HandleCancel serializes against completeCommand and the
 // timeout timer via that mutex.
 func (h *TmuxHandler) HandleCancel(ctx context.Context, params json.RawMessage) (any, error) {
 	var req CancelRequest
@@ -615,7 +615,7 @@ func (h *TmuxHandler) HandleCancel(ctx context.Context, params json.RawMessage) 
 
 			notify = foundCmd.NotifyOnComplete
 			if notify {
-				body = fmt.Sprintf("Command %s cancelled.\nSession: %s\n\nPartial output:\n---\n%s\n---",
+				body = fmt.Sprintf("Command %s canceled.\nSession: %s\n\nPartial output:\n---\n%s\n---",
 					foundCmd.ID, foundSession, output)
 			}
 		}
@@ -623,7 +623,7 @@ func (h *TmuxHandler) HandleCancel(ctx context.Context, params json.RawMessage) 
 
 		if shortCut {
 			// Report the current terminal state rather than pretending we
-			// cancelled.
+			// canceled.
 			return &CancelResponse{
 				CommandID: foundCmd.ID,
 				State:     foundCmd.stateSnapshot(),
@@ -634,7 +634,7 @@ func (h *TmuxHandler) HandleCancel(ctx context.Context, params json.RawMessage) 
 		foundQueue.ClearActive()
 
 		// Notify requester unless they opted out (queue-wait returns on any
-		// terminal state including CANCELLED, so --wait callers get the
+		// terminal state including CANCELED, so --wait callers get the
 		// result via the RPC response and the @system message is redundant).
 		if notify {
 			h.sendSystemMessage(ctx, foundCmd.RequesterAgent, body)
@@ -767,7 +767,7 @@ func (h *TmuxHandler) handleSendFailure(ctx context.Context, session string, cau
 // StateInterrupted, persists the transition, notifies each requester (if
 // NotifyOnComplete is set), then removes the queue from the in-memory map.
 //
-// reasonFmt is a printf-style template that receives the session name and
+// ReasonFmt is a printf-style template that receives the session name and
 // produces the user-facing message body suffix (e.g. "session %s was killed"
 // or "session %s no longer exists").
 func (h *TmuxHandler) drainSession(ctx context.Context, session, reasonFmt string) {

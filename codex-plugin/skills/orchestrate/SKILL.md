@@ -1,6 +1,9 @@
 ---
 name: orchestrate
-description: Execute a plan by launching agents in tmux sessions, managing epic-by-epic execution with review gates, and preparing merge reports. Use when the orchestrator receives a plan handoff from the coordinator.
+description:
+  Execute a plan by launching agents in tmux sessions, managing epic-by-epic
+  execution with review gates, and preparing merge reports. Use when the
+  orchestrator receives a plan handoff from the coordinator.
 ---
 
 # Orchestrate: Managed Plan Execution
@@ -74,6 +77,7 @@ cat .thrum/config.json | grep default_autonomy
 Present to the human:
 
 > "Autonomy level is `<default>`. Options:
+>
 > - `per_epic`: I'll pause after each epic for your review and approval
 > - `end_only`: I'll run all epics and present a final report before merge
 >
@@ -131,8 +135,8 @@ thrum tmux launch <name> --runtime <runtime>
 thrum tmux status
 ```
 
-All sessions must show as active. If any session fails to launch, retry once.
-If it fails again, escalate to the human.
+All sessions must show as active. If any session fails to launch, retry once. If
+it fails again, escalate to the human.
 
 ### Step 4: Set initial status
 
@@ -151,8 +155,8 @@ thrum team
 ```
 
 Confirm each launched agent appears in `thrum team` output. If an agent doesn't
-register within 30 seconds, check its session with `thrum tmux status` and
-retry the launch if needed.
+register within 30 seconds, check its session with `thrum tmux status` and retry
+the launch if needed.
 
 ### Step 6: Report to human
 
@@ -194,6 +198,7 @@ thrum inbox --unread
 Handle each message type:
 
 **Completion report:**
+
 1. Acknowledge: `thrum reply <msg-id> "Received. Running review."`
 2. Dispatch code review sub-agent (use `feature-dev:code-reviewer`)
 3. If review passes → close the task: `bd close <task-id>`
@@ -201,11 +206,13 @@ Handle each message type:
    rounds, then escalate)
 
 **Blocker:**
+
 1. Assess if you can unblock (dependency issue, config problem)
 2. If yes → fix and reply
 3. If no → escalate to human with full context
 
 **Question:**
+
 1. If coordination-level (which file to modify, task priority) → answer
 2. If judgment call (design decision, architecture choice) → escalate to human
 
@@ -243,6 +250,7 @@ Spawn a sub-agent to check for conflicts:
 ### Step 2: Prepare merge report
 
 Compile:
+
 - Changes per branch (summary of commits)
 - All review results (per-epic + cross-branch)
 - Test results as reported by agents during their review gates

@@ -17,7 +17,7 @@ type RegisterRequest struct {
 	Display    string `json:"display,omitempty"`
 	Force      bool   `json:"force,omitempty"`
 	ReRegister bool   `json:"re_register,omitempty"`
-	AgentPID  int    `json:"agent_pid,omitempty"`
+	AgentPID   int    `json:"agent_pid,omitempty"`
 }
 
 // RegisterResponse represents the response from agent.register RPC.
@@ -44,7 +44,7 @@ type AgentInfo struct {
 	Display      string `json:"display"`
 	RegisteredAt string `json:"registered_at"`
 	LastSeenAt   string `json:"last_seen_at,omitempty"`
-	AgentPID    int    `json:"agent_pid,omitempty"`
+	AgentPID     int    `json:"agent_pid,omitempty"`
 }
 
 // ListAgentsRequest represents the request for agent.list RPC.
@@ -66,7 +66,7 @@ type AgentRegisterOptions struct {
 	Display    string
 	Force      bool
 	ReRegister bool
-	AgentPID  int
+	AgentPID   int
 }
 
 // AgentListOptions contains options for listing agents.

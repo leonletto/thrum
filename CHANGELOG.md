@@ -13,10 +13,10 @@ and this project adheres to
 - **Tmux command queue** — daemon-managed per-session FIFO queue for sending
   commands to tmux panes. `thrum tmux queue`, `thrum tmux queue-status`, and
   `thrum tmux cancel` CLI commands. `tmux.queue`, `tmux.queue-wait`,
-  `tmux.queue-status`, and `tmux.cancel` RPC methods. SQLite persistence
-  (schema v18/v19), configurable per-command `silence_ms` and
-  `notify_on_complete` flags, `@system` virtual identity for result delivery,
-  restart recovery for interrupted commands, dead session drain.
+  `tmux.queue-status`, and `tmux.cancel` RPC methods. SQLite persistence (schema
+  v18/v19), configurable per-command `silence_ms` and `notify_on_complete`
+  flags, `@system` virtual identity for result delivery, restart recovery for
+  interrupted commands, dead session drain.
 - **Multi-runtime tmux** — `ClaudePID` renamed to `AgentPID` across RPC,
   projection, and schema (v17). `PreferredRuntime` field in identity file.
   `--runtime` flag on `thrum quickstart`. Runtime-agnostic `HandleLaunch` —
@@ -26,18 +26,18 @@ and this project adheres to
   managing agent worktrees. `thrum agent set-status` CLI + `agent.set-status`
   RPC. Auto-nudge for agents with working status but idle pane. Orchestrator
   role preamble template. `thrum:orchestrate` execution playbook skill.
-  `COORDINATOR` renamed to `SUPERVISOR` in implementation prompts.
-  Review gate template between epics.
+  `COORDINATOR` renamed to `SUPERVISOR` in implementation prompts. Review gate
+  template between epics.
 - **Daemon logging** — lumberjack log rotation for `daemon.log`.
   `thrum daemon logs` command with `--since`, `--tail`, `--follow` flags.
-  Configurable `daemon.log_level` via slog. Telegram debug logging gated
-  behind log level.
+  Configurable `daemon.log_level` via slog. Telegram debug logging gated behind
+  log level.
 - **Open Code plugin** — `opencode-thrum` npm package with TS hooks, asset
   installer, runtime-aware prime. `opencode` runtime preset in registry.
 - **Codex plugin** — skill bundle aligned with claude-plugin source of truth.
 - **Website restructure** — hub-and-spoke landing page, scenario-based
-  onboarding, new sidebar categories, orchestrator/multi-runtime/peers
-  reference docs, voice pass across all pages.
+  onboarding, new sidebar categories, orchestrator/multi-runtime/peers reference
+  docs, voice pass across all pages.
 
 ### Changed
 
@@ -83,8 +83,8 @@ and this project adheres to
 - **TUI retry Enter** — 3-second delayed second Enter in `HandleLaunch` and
   `HandleRestart` for Bubble Tea TUI runtimes (OpenCode) that swallow the first
   Enter during startup.
-- **Duplicate prime removed** — CLI `/thrum:prime` send removed;
-  `HandleLaunch` owns the T+10s prime.
+- **Duplicate prime removed** — CLI `/thrum:prime` send removed; `HandleLaunch`
+  owns the T+10s prime.
 - **tmux-exec quoting** — `printf '%q'` preserves multi-word arguments in
   `scripts/tmux-exec` run command.
 - **slog timestamp parsing** — `thrum daemon logs --since` now parses slog's
