@@ -20,8 +20,17 @@ import (
 //go:embed strategies/*.md
 var strategyFS embed.FS
 
-// WriteStrategies writes embedded strategy files to .thrum/strategies/.
-// Overwrites existing files (keeps strategies in sync with binary version).
+//go:embed reference/llms.txt
+var referenceFS embed.FS
+
+// WriteStrategies writes embedded reference files to .thrum/:
+//   - Strategy markdown files at .thrum/strategies/*.md
+//   - Full CLI/config/RPC reference at .thrum/llms.txt
+//
+// Overwrites existing files on every call (keeps reference content in sync
+// with the installed binary version). The .thrum/llms.txt file is written
+// here rather than hand-edited; user edits will be overwritten on next
+// daemon start or 'thrum init'.
 func WriteStrategies(thrumDir string) error {
 	strategiesDir := filepath.Join(thrumDir, "strategies")
 	if err := os.MkdirAll(strategiesDir, 0750); err != nil {
@@ -45,6 +54,15 @@ func WriteStrategies(thrumDir string) error {
 		if err := os.WriteFile(outPath, data, 0644); err != nil { //#nosec G306 -- markdown strategy file, not sensitive data
 			return fmt.Errorf("write strategy %s: %w", entry.Name(), err)
 		}
+	}
+
+	llmsData, err := referenceFS.ReadFile("reference/llms.txt")
+	if err != nil {
+		return fmt.Errorf("read embedded llms.txt: %w", err)
+	}
+	llmsPath := filepath.Join(thrumDir, "llms.txt")
+	if err := os.WriteFile(llmsPath, llmsData, 0644); err != nil { //#nosec G306 -- reference content file, not sensitive data
+		return fmt.Errorf("write llms.txt: %w", err)
 	}
 
 	return nil
