@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 )
@@ -308,7 +308,7 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 			if !ttmux.HasSession(session) {
 				info.State = "dead"
 				h.clearTmuxFromIdentitiesInDir(identitiesDir, session)
-			} else if idFile.AgentPID > 0 && !isProcessAlive(idFile.AgentPID) {
+			} else if idFile.AgentPID > 0 && !process.IsRunning(idFile.AgentPID) {
 				info.State = "stale"
 			} else {
 				info.State = "alive"
@@ -724,12 +724,4 @@ func (h *TmuxHandler) clearTmuxFromIdentitiesInDir(idDir, sessionName string) {
 			_ = os.WriteFile(path, updated, 0600) // #nosec G306
 		}
 	}
-}
-
-func isProcessAlive(pid int) bool {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return process.Signal(syscall.Signal(0)) == nil
 }

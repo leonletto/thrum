@@ -11,6 +11,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/process"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 )
@@ -198,7 +199,7 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 			session, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
 			if !ttmux.HasSession(session) {
 				members[i].TmuxState = "dead"
-			} else if m.AgentPID > 0 && !isProcessAlive(m.AgentPID) {
+			} else if m.AgentPID > 0 && !process.IsRunning(m.AgentPID) {
 				members[i].TmuxState = "stale"
 			} else {
 				members[i].TmuxState = "alive"
