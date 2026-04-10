@@ -5259,6 +5259,16 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		return fmt.Errorf("failed to create identities directory: %w", err)
 	}
 
+	// Self-heal embedded reference files (.thrum/strategies/*.md + .thrum/llms.txt).
+	// Re-running this is idempotent and covers:
+	//   - Repos initialized before this feature landed (backfill on first daemon restart)
+	//   - Files accidentally deleted between init and daemon start
+	//   - Version bumps: keeps the on-disk reference in sync with the installed binary
+	// A failure here must not prevent daemon startup — log and continue.
+	if err := agentcontext.WriteStrategies(thrumDir); err != nil {
+		log.Printf("daemon: warning: failed to refresh embedded reference files: %v", err)
+	}
+
 	// Generate repo ID (use directory name for now)
 	repoID := filepath.Base(absPath)
 
