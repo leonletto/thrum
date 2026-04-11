@@ -5,11 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/process"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
@@ -181,29 +178,30 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("iterate team members: %w", err)
 	}
 
-	// Enrich with tmux state from identity files
+	// Enrich with identity file data from ALL worktrees. The identity file
+	// is authoritative for runtime, tmux_session, and tmux_state; the DB is
+	// authoritative for agent_pid.
 	if h.thrumDir != "" {
-		for i, m := range members {
-			idPath := filepath.Join(h.thrumDir, "identities", m.AgentID+".json")
-			data, err := os.ReadFile(idPath) // #nosec G304 -- internal identity file path
-			if err != nil {
+		identityMap := ReadIdentitiesAcrossWorktrees(ctx, h.thrumDir)
+		for i := range members {
+			m := &members[i]
+			idFile := identityMap[m.AgentID]
+			if idFile == nil {
 				continue
 			}
-			var idFile config.IdentityFile
-			if err := json.Unmarshal(data, &idFile); err != nil {
-				continue
-			}
-			if idFile.TmuxSession == "" {
-				continue
-			}
-			members[i].TmuxSession = idFile.TmuxSession
-			session, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
-			if !ttmux.HasSession(session) {
-				members[i].TmuxState = "dead"
-			} else if m.AgentPID > 0 && !process.IsRunning(m.AgentPID) {
-				members[i].TmuxState = "stale"
-			} else {
-				members[i].TmuxState = "alive"
+
+			m.Runtime = idFile.Runtime
+			m.TmuxSession = idFile.TmuxSession
+
+			switch {
+			case idFile.TmuxSession == "":
+				m.TmuxState = ""
+			case !ttmux.HasSession(parseSessionName(idFile.TmuxSession)):
+				m.TmuxState = "dead"
+			case m.AgentPID > 0 && !process.IsRunning(m.AgentPID):
+				m.TmuxState = "stale"
+			default:
+				m.TmuxState = "alive"
 			}
 		}
 	}
@@ -273,4 +271,11 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 	}
 
 	return &TeamListResponse{Members: members, SharedMessages: sharedPtr}, nil
+}
+
+// parseSessionName extracts the tmux session name portion from a
+// "session:window.pane" target string.
+func parseSessionName(target string) string {
+	name, _, _ := ttmux.ParseTarget(target)
+	return name
 }
