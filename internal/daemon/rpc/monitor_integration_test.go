@@ -78,7 +78,7 @@ func TestMonitorIntegration_SubmitMatchDebounceStop(t *testing.T) {
 	msgHandler := NewMessageHandler(st)
 	delivery := monitor.NewDelivery(msgHandler)
 	supervisor := monitor.NewMonitorSupervisor(store, delivery)
-	monHandler := NewMonitorHandler(supervisor, store)
+	monHandler := NewMonitorHandler(supervisor, store, st)
 
 	// Spin up the daemon server and register only what the test needs.
 	server := daemon.NewServer(socketPath)
@@ -153,7 +153,8 @@ func TestMonitorIntegration_SubmitMatchDebounceStop(t *testing.T) {
 	// Sleep 2.5s so the flushTimer (2s window) fires and delivers the trailing summary.
 	time.Sleep(2500 * time.Millisecond)
 
-	// Poll for 2 total messages: leading-edge + trailing summary.
+	// Poll for exactly 2 messages at this point: leading-edge + trailing
+	// summary from batch 1.
 	require.Eventually(t, func() bool {
 		var count int
 		row := st.DB().QueryRowContext(context.Background(),
@@ -162,13 +163,15 @@ func TestMonitorIntegration_SubmitMatchDebounceStop(t *testing.T) {
 		)
 		_ = row.Scan(&count)
 		return count >= 2
-	}, 10*time.Second, 200*time.Millisecond, "trailing summary message should appear in DB within 10s")
+	}, 10*time.Second, 200*time.Millisecond,
+		"trailing summary should appear in DB within 10s")
 
-	// Assert the trailing summary contains the suppression notice.
-	// The debounce window is 2s, and we wrote 5 matching lines.
-	// Leading edge consumed line 1; lines 2-5 are suppressed (pendingCount=4).
-	// extra = pendingCount - 1 = 3, so the format is:
+	// Assert the batch-1 trailing summary contains the multi-suppress
+	// notice. Leading edge consumed line 1; lines 2-5 are suppressed
+	// (pendingCount=4). extra = pendingCount - 1 = 3, so the format is:
 	//   "<pendingFirst>\n(+3 more matches suppressed in the last 2s)"
+	// We check content BEFORE writing the 6th line so a second trailing
+	// summary can't race the assertion.
 	var trailingContent string
 	row2 := st.DB().QueryRowContext(context.Background(),
 		`SELECT body_content FROM messages WHERE agent_id = ? ORDER BY created_at DESC LIMIT 1`,
@@ -177,6 +180,39 @@ func TestMonitorIntegration_SubmitMatchDebounceStop(t *testing.T) {
 	require.NoError(t, row2.Scan(&trailingContent))
 	assert.Contains(t, trailingContent, "more matches suppressed in the last",
 		"trailing summary should contain suppression notice")
+
+	// Review finding R2.6 — plan Task 12 Step 6 says 'write one more
+	// ERROR line to trigger a new emit'. The first flush set lastEmitAt
+	// to ~2s-mark, so a fresh match within the next 2s is still
+	// suppressed; advance past the reset window first. Sleep 2.2s so the
+	// next OnMatch is >= window after lastEmitAt and qualifies as a new
+	// leading edge.
+	time.Sleep(2200 * time.Millisecond)
+	_, err = fmt.Fprintf(logFile, "ERROR: boom 6 (post-flush)\n")
+	require.NoError(t, err)
+
+	// Poll for a 3rd message: the new leading-edge emit for line 6.
+	require.Eventually(t, func() bool {
+		var count int
+		row := st.DB().QueryRowContext(context.Background(),
+			`SELECT COUNT(*) FROM messages WHERE agent_id = ?`,
+			callerID,
+		)
+		_ = row.Scan(&count)
+		return count >= 3
+	}, 10*time.Second, 200*time.Millisecond,
+		"6th-line leading-edge emit should appear in DB within 10s")
+
+	// Assert the 3rd message IS the 6th line (leading edge for the new
+	// window), not a suppressed-summary variant.
+	var thirdContent string
+	row3 := st.DB().QueryRowContext(context.Background(),
+		`SELECT body_content FROM messages WHERE agent_id = ? ORDER BY created_at DESC LIMIT 1`,
+		callerID,
+	)
+	require.NoError(t, row3.Scan(&thirdContent))
+	assert.Contains(t, thirdContent, "ERROR: boom 6",
+		"6th-line message must contain the 6th match content")
 
 	// Send monitor.stop RPC via the unix socket.
 	conn, err := net.Dial("unix", socketPath)
@@ -220,4 +256,18 @@ func TestMonitorIntegration_SubmitMatchDebounceStop(t *testing.T) {
 	)
 	require.NoError(t, monRow.Scan(&monCount))
 	assert.Equal(t, 0, monCount, "monitors row should be deleted after stop")
+
+	// Review finding R2.7 — plan Task 12 Step 7 says 'assert the tempfile
+	// is released and the monitor row is deleted'. The row check above
+	// handles half of that; this block proves the child actually exited
+	// by polling supervisor.HasRunner(jobID) until it returns false.
+	// When the runner goroutine returns, launch's defer removes the
+	// handle from s.runners, which directly implies cmd.Wait() has
+	// returned — which in turn implies the OS process is gone and the
+	// tempfile is no longer held open by this monitor's child.
+	require.Eventually(t, func() bool {
+		return !supervisor.HasRunner(jobID)
+	}, 5*time.Second, 50*time.Millisecond,
+		"supervisor.runners must no longer contain %s after monitor.stop — "+
+			"indicates the child exited and the runner goroutine returned", jobID)
 }

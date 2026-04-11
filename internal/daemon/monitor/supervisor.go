@@ -298,6 +298,16 @@ func (s *MonitorSupervisor) Stop(ctx context.Context, id string) error {
 	return s.store.Delete(ctx, id)
 }
 
+// HasRunner reports whether a live runner with the given ID is currently
+// registered. Intended for integration tests that need to verify a
+// monitor's lifecycle externally; not used in production code paths.
+func (s *MonitorSupervisor) HasRunner(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.runners[id]
+	return ok
+}
+
 // Restart stops any live runner for the given ID and re-launches it with
 // the persisted spec, PRESERVING the monitor ID. Unlike Stop+Add, the DB
 // row is retained across the restart so downstream subscribers that track
