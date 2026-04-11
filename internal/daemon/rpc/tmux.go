@@ -508,8 +508,10 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 			"Restart requested. Please save your context now using `/thrum:restart`.")
 
 		// Nudge the tmux session so the agent sees the message immediately.
+		// InterruptNudge is intentional here: the restart flow needs to
+		// interrupt in-progress work so the agent can save its snapshot.
 		target := name + ":0.0"
-		_ = ttmux.Nudge(target, "system")
+		_ = ttmux.InterruptNudge(target, "system")
 
 		// Poll for the snapshot to appear, up to GracefulTimeout.
 		cfg, _ := config.LoadThrumConfig(wtThrumDir)
