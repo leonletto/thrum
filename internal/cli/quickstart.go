@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -97,7 +98,7 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	}
 
 	// Capture agent PID and detected runtime for identity resolution
-	agentPID, detectedRuntime := process.FindClaudeAncestor()
+	agentPID, detectedRuntime := process.FindClaudeAncestor(context.Background())
 
 	// Step 1: Register agent
 	regOpts := AgentRegisterOptions{
@@ -118,7 +119,7 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	if regResult.Status == "conflict" {
 		if regResult.Conflict != nil {
 			conflictPID := regResult.Conflict.ConflictPID
-			if conflictPID > 0 && conflictPID != agentPID && process.IsRunning(conflictPID) && process.IsRuntimeProcess(conflictPID, "") {
+			if conflictPID > 0 && conflictPID != agentPID && process.IsRunning(conflictPID) && process.IsRuntimeProcess(context.Background(), conflictPID, "") {
 				return nil, fmt.Errorf("cannot register as %q: name is held by a running agent session (PID %d)", opts.Name, conflictPID)
 			}
 		}

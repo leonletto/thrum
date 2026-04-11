@@ -539,7 +539,7 @@ Examples:
 			// Resolve preferred runtime: --runtime flag → auto-detect → config runtime.primary → empty
 			preferredRuntime := runtimeFlag
 			if preferredRuntime == "" || preferredRuntime == "all" {
-				if _, detectedRT := process.FindClaudeAncestor(); detectedRT != "" {
+				if _, detectedRT := process.FindClaudeAncestor(context.Background()); detectedRT != "" {
 					preferredRuntime = detectedRT
 				} else if cfg, err := config.LoadThrumConfig(thrumDir); err == nil && cfg.Runtime.Primary != "" {
 					preferredRuntime = cfg.Runtime.Primary

@@ -183,7 +183,7 @@ func loadIdentityFromDir(dirPath string, thrumName string) (*IdentityFile, error
 	}
 
 	// Compute agent PID once for all resolution paths
-	agentPID, _ := process.FindClaudeAncestor()
+	agentPID, _ := process.FindClaudeAncestor(context.Background())
 
 	// If exactly one identity file, load it (solo-agent worktree)
 	if len(jsonFiles) == 1 {
@@ -254,7 +254,7 @@ func adoptIdentity(dirPath string, id *IdentityFile, agentPID int) *IdentityFile
 		// Dead or missing PID — silently adopt
 		id.AgentPID = agentPID
 		_ = SaveIdentityFile(filepath.Dir(dirPath), id) // best-effort rewrite; dirPath is identities dir, SaveIdentityFile expects .thrum dir
-	} else if !process.IsRuntimeProcess(id.AgentPID, id.Runtime) {
+	} else if !process.IsRuntimeProcess(context.Background(), id.AgentPID, id.Runtime) {
 		// Alive but not a known runtime — adopt
 		id.AgentPID = agentPID
 		_ = SaveIdentityFile(filepath.Dir(dirPath), id)
