@@ -209,14 +209,15 @@ func TestRunner_ExitNoticeCalledOnChildExit(t *testing.T) {
 	type exitRecord struct {
 		name     string
 		code     int
+		pid      int
 		duration time.Duration
 	}
 	var notices []exitRecord
 	var noticeMu sync.Mutex
 
-	exitNotice := func(name string, code int, dur time.Duration, _ string) {
+	exitNotice := func(name string, code, pid int, dur time.Duration, _ string) {
 		noticeMu.Lock()
-		notices = append(notices, exitRecord{name, code, dur})
+		notices = append(notices, exitRecord{name, code, pid, dur})
 		noticeMu.Unlock()
 	}
 
@@ -234,6 +235,9 @@ func TestRunner_ExitNoticeCalledOnChildExit(t *testing.T) {
 	assert.Equal(t, "test", notices[0].name)
 	assert.Equal(t, 42, notices[0].code, "exit code must match the child's exit status")
 	assert.Greater(t, int64(notices[0].duration), int64(0), "duration must be positive")
+	// Review finding 5: PID must be surfaced so the exit notice can include
+	// "(pid N)" per design spec §Child exit.
+	assert.Greater(t, notices[0].pid, 0, "PID must be captured after cmd.Start()")
 }
 
 // TestRunner_CwdIsRespected: the child runs in the requested working directory.
@@ -353,7 +357,7 @@ func TestRunner_ExitNoticeContainsTailOutput(t *testing.T) {
 
 	var tailReceived string
 	var tailMu sync.Mutex
-	exitNotice := func(_ string, _ int, _ time.Duration, tail string) {
+	exitNotice := func(_ string, _, _ int, _ time.Duration, tail string) {
 		tailMu.Lock()
 		tailReceived = tail
 		tailMu.Unlock()

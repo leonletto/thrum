@@ -37,8 +37,9 @@ type DeliverFn func(jobName, content string)
 
 // ExitNoticeFn is the callback invoked when the child process exits.
 // The supervisor uses it to send an exit-notice message and mark the
-// monitor dead in the store.
-type ExitNoticeFn func(jobName string, exitCode int, duration time.Duration, lastStdoutTail string)
+// monitor dead in the store. pid is the OS process id captured after
+// cmd.Start() (may be 0 if the child never started).
+type ExitNoticeFn func(jobName string, exitCode, pid int, duration time.Duration, lastStdoutTail string)
 
 // Runner manages a single child process for a monitor job.
 type Runner struct {
@@ -115,6 +116,12 @@ func (r *Runner) Run(ctx context.Context) error {
 		_ = pipeW.Close()
 		_ = pipeR.Close()
 		return fmt.Errorf("runner: start %q: %w", r.job.GetArgv()[0], err)
+	}
+	// Capture the child PID for the exit notice (design spec §Child exit
+	// requires "(pid N)" in the formatted notice).
+	childPID := 0
+	if cmd.Process != nil {
+		childPID = cmd.Process.Pid
 	}
 	// Close the daemon's copy of the write end. The child still holds its
 	// copy (inherited via fork/exec), so pipeR will receive EOF exactly
@@ -203,7 +210,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	if r.exitNotice != nil {
-		r.exitNotice(r.job.GetName(), exitCode, time.Since(start), tail.String())
+		r.exitNotice(r.job.GetName(), exitCode, childPID, time.Since(start), tail.String())
 	}
 
 	return nil

@@ -291,10 +291,12 @@ func (s *MonitorSupervisor) launch(ctx context.Context, job *MonitorJob) error {
 	jobID := job.ID
 	jobTarget := job.Target
 
-	exitNotice := func(jobName string, exitCode int, duration time.Duration, tail string) {
+	exitNotice := func(jobName string, exitCode, pid int, duration time.Duration, tail string) {
+		// Per design spec §Child exit, exit notices include the child PID so
+		// the operator can correlate with ps / system logs.
 		content := fmt.Sprintf(
-			"[monitor:%s] exited with code %d after %s\nrestart: thrum monitor restart %s\nstdout (last 500 bytes): %s",
-			jobName, exitCode, duration.Round(time.Second), jobID, tail,
+			"[monitor:%s] exited with code %d after %s (pid %d)\nrestart: thrum monitor restart %s\nstdout (last 500 bytes): %s",
+			jobName, exitCode, duration.Round(time.Second), pid, jobID, tail,
 		)
 		_ = s.delivery.Deliver(context.Background(), jobName, jobTarget, content)
 		_ = s.store.MarkDead(context.Background(), jobID, exitCode, time.Now())
