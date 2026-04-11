@@ -129,9 +129,34 @@ The coordinator decides an agent needs a fresh session:
 thrum tmux restart implementer-api
 ```
 
-This extracts the agent's JSONL conversation directly — no agent cooperation
-needed. Then it kills the session, creates a new one, and relaunches. The new
-session loads the snapshot via `thrum prime`.
+There are two flows — graceful (default) and force. The daemon picks based on
+the `--force` flag:
+
+**Graceful flow (default)** — the daemon asks the agent to save its own snapshot
+before killing the session. The flow:
+
+1. Daemon sends an `@system` message asking the agent to save a snapshot
+2. Daemon nudges the pane to wake the agent
+3. Daemon polls for the snapshot file up to `restart.graceful_timeout` seconds
+   (default 30)
+4. If the snapshot appears, the daemon uses it
+5. If the timeout expires, the daemon falls back to JSONL extraction
+
+Use the graceful flow when possible — the agent's own snapshot tends to be more
+useful than the raw JSONL extraction (the agent can synthesize what matters
+rather than dumping the whole conversation).
+
+**Force flow (`--force`)** — the daemon skips the graceful prompt and extracts
+directly from the JSONL conversation file. This is faster but only works for
+Claude Code (other runtimes don't use the same JSONL format). Use `--force` when
+the agent is unresponsive or you know it can't save.
+
+```bash
+thrum tmux restart implementer-api --force
+```
+
+Either way, the daemon kills the session, creates a new one, and relaunches. The
+new session loads the snapshot via `thrum prime`.
 
 Use `--runtime` to switch runtimes on relaunch:
 

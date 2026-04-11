@@ -125,9 +125,28 @@ the restart.</p>
 <h3>External</h3>
 <p>The coordinator decides an agent needs a fresh session:</p>
 <pre><code>thrum tmux restart implementer-api</code></pre>
-<p>This extracts the agent&#39;s JSONL conversation directly — no agent cooperation
-needed. Then it kills the session, creates a new one, and relaunches. The new
-session loads the snapshot via <code>thrum prime</code>.</p>
+<p>There are two flows — graceful (default) and force. The daemon picks based on
+the <code>--force</code> flag:</p>
+<p><strong>Graceful flow (default)</strong> — the daemon asks the agent to save its own snapshot
+before killing the session. The flow:</p>
+<ol>
+<li>Daemon sends an <code>@system</code> message asking the agent to save a snapshot</li>
+<li>Daemon nudges the pane to wake the agent</li>
+<li>Daemon polls for the snapshot file up to <code>restart.graceful_timeout</code> seconds
+(default 30)</li>
+<li>If the snapshot appears, the daemon uses it</li>
+<li>If the timeout expires, the daemon falls back to JSONL extraction</li>
+</ol>
+<p>Use the graceful flow when possible — the agent&#39;s own snapshot tends to be more
+useful than the raw JSONL extraction (the agent can synthesize what matters
+rather than dumping the whole conversation).</p>
+<p><strong>Force flow (<code>--force</code>)</strong> — the daemon skips the graceful prompt and extracts
+directly from the JSONL conversation file. This is faster but only works for
+Claude Code (other runtimes don&#39;t use the same JSONL format). Use <code>--force</code> when
+the agent is unresponsive or you know it can&#39;t save.</p>
+<pre><code>thrum tmux restart implementer-api --force</code></pre>
+<p>Either way, the daemon kills the session, creates a new one, and relaunches. The
+new session loads the snapshot via <code>thrum prime</code>.</p>
 <p>Use <code>--runtime</code> to switch runtimes on relaunch:</p>
 <pre><code>thrum tmux restart implementer-api --runtime opencode</code></pre>
 <h3>Automatic</h3>

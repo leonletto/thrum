@@ -1362,17 +1362,25 @@ Check a tmux pane for permission prompts or idle state. Called by the
 
 ### tmux.restart
 
-Restart a tmux-managed agent session with a context snapshot. Extracts the
-agent's conversation history from the JSONL transcript, kills the session,
-creates a new one, and relaunches.
+Restart a tmux-managed agent session with a context snapshot. The daemon picks
+between two flows based on `force`:
+
+- **Graceful (default)** — sends an `@system` message asking the agent to save
+  its own snapshot, nudges the pane, and polls for the snapshot file up to
+  `restart.graceful_timeout` seconds. Falls back to JSONL extraction on timeout.
+- **Force (`force: true`)** — skips the graceful prompt and extracts directly
+  from the JSONL conversation transcript. Only works for Claude Code (other
+  runtimes don't use the same JSONL format).
+
+Either way, the daemon kills the session, creates a new one, and relaunches.
 
 **Request:**
 
-| Parameter | Type    | Required | Description                                |
-| --------- | ------- | -------- | ------------------------------------------ |
-| `name`    | string  | yes      | Session name                               |
-| `force`   | boolean | no       | Skip graceful signal (default: `false`)    |
-| `runtime` | string  | no       | Runtime override (default: same as before) |
+| Parameter | Type    | Required | Description                                                      |
+| --------- | ------- | -------- | ---------------------------------------------------------------- |
+| `name`    | string  | yes      | Session name                                                     |
+| `force`   | boolean | no       | Skip graceful save prompt, extract from JSONL (default: `false`) |
+| `runtime` | string  | no       | Runtime override (default: same as before)                       |
 
 **Response:**
 

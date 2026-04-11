@@ -1,6 +1,7 @@
 package context
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -733,5 +734,137 @@ func TestWriteStrategiesIdempotent(t *testing.T) {
 	}
 	if err := WriteStrategies(thrumDir); err != nil {
 		t.Fatalf("second WriteStrategies failed: %v", err)
+	}
+}
+
+// TestWriteStrategiesWritesLlmsTxt verifies that WriteStrategies creates
+// .thrum/llms.txt with expected content. This covers the init path since
+// thrum init calls WriteStrategies directly.
+func TestWriteStrategiesWritesLlmsTxt(t *testing.T) {
+	thrumDir := t.TempDir()
+
+	if err := WriteStrategies(thrumDir); err != nil {
+		t.Fatalf("WriteStrategies failed: %v", err)
+	}
+
+	llmsPath := filepath.Join(thrumDir, "llms.txt")
+
+	data, err := os.ReadFile(llmsPath) //nolint:gosec // G304 - test helper reading temp file
+	if err != nil {
+		t.Fatalf("llms.txt not created: %v", err)
+	}
+
+	if len(data) == 0 {
+		t.Fatal("llms.txt is empty")
+	}
+
+	if !strings.HasPrefix(string(data), "# Thrum v") {
+		prefix := string(data)
+		if len(prefix) > 20 {
+			prefix = prefix[:20]
+		}
+		t.Errorf("llms.txt does not start with expected header; got prefix: %q", prefix)
+	}
+
+	info, err := os.Stat(llmsPath)
+	if err != nil {
+		t.Fatalf("Stat llms.txt: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0644 {
+		t.Errorf("llms.txt permission: got %o, want 0644", perm)
+	}
+
+	// Verify content matches the embedded reference file on disk.
+	embeddedData, err := os.ReadFile(filepath.Join("reference", "llms.txt")) //nolint:gosec // G304 - test helper reading reference file
+	if err != nil {
+		t.Fatalf("read reference/llms.txt: %v", err)
+	}
+	if !bytes.Equal(data, embeddedData) {
+		t.Errorf("llms.txt content (%d bytes) does not match embedded reference (%d bytes)", len(data), len(embeddedData))
+	}
+}
+
+// TestWriteStrategiesSelfHealsLlmsTxt verifies that WriteStrategies recreates
+// .thrum/llms.txt and strategy files when they have been deleted — matching
+// the daemon self-heal behavior on restart (thrum-w71.3: strategies + llms.txt).
+func TestWriteStrategiesSelfHealsLlmsTxt(t *testing.T) {
+	thrumDir := t.TempDir()
+
+	// Initial write.
+	if err := WriteStrategies(thrumDir); err != nil {
+		t.Fatalf("initial WriteStrategies failed: %v", err)
+	}
+
+	llmsPath := filepath.Join(thrumDir, "llms.txt")
+	original, err := os.ReadFile(llmsPath) //nolint:gosec // G304 - test helper reading temp file
+	if err != nil {
+		t.Fatalf("read initial llms.txt: %v", err)
+	}
+
+	// Simulate accidental deletion of llms.txt.
+	if err := os.Remove(llmsPath); err != nil {
+		t.Fatalf("remove llms.txt: %v", err)
+	}
+	if _, err := os.Stat(llmsPath); !os.IsNotExist(err) {
+		t.Fatal("llms.txt should not exist after removal")
+	}
+
+	// Self-heal: call WriteStrategies again (what the daemon does on restart).
+	if err := WriteStrategies(thrumDir); err != nil {
+		t.Fatalf("second WriteStrategies failed: %v", err)
+	}
+
+	restored, err := os.ReadFile(llmsPath) //nolint:gosec // G304 - test helper reading temp file
+	if err != nil {
+		t.Fatalf("llms.txt not recreated after self-heal: %v", err)
+	}
+	if !bytes.Equal(original, restored) {
+		t.Errorf("restored llms.txt (%d bytes) differs from original (%d bytes)", len(restored), len(original))
+	}
+
+	// Also verify strategy file self-heal (thrum-w71.3 spec covers both).
+	strategyPath := filepath.Join(thrumDir, "strategies", "sub-agent-strategy.md")
+
+	// Delete the strategy file.
+	if err := os.Remove(strategyPath); err != nil {
+		t.Fatalf("remove strategy file: %v", err)
+	}
+	if _, err := os.Stat(strategyPath); !os.IsNotExist(err) {
+		t.Fatal("strategy file should not exist after removal")
+	}
+
+	// Self-heal: WriteStrategies should recreate it.
+	if err := WriteStrategies(thrumDir); err != nil {
+		t.Fatalf("third WriteStrategies failed: %v", err)
+	}
+
+	restoredStrategy, err := os.ReadFile(strategyPath) //nolint:gosec // G304 - test helper reading temp file
+	if err != nil {
+		t.Fatalf("strategy file not recreated after self-heal at %s: %v", strategyPath, err)
+	}
+	if len(restoredStrategy) == 0 {
+		t.Errorf("restored strategy file at %s is empty", strategyPath)
+	}
+}
+
+// TestEmbeddedLlmsMatchesRoot fails if the root llms.txt has drifted from the
+// embedded copy at internal/context/reference/llms.txt. Run
+// 'make sync-embed-reference' to fix.
+func TestEmbeddedLlmsMatchesRoot(t *testing.T) {
+	rootPath := filepath.Join("..", "..", "llms.txt")
+	rootData, err := os.ReadFile(rootPath) //nolint:gosec // G304 - test helper reading root llms.txt
+	if err != nil {
+		t.Fatalf("read root llms.txt at %s: %v", rootPath, err)
+	}
+
+	embeddedPath := filepath.Join("reference", "llms.txt")
+	embeddedData, err := os.ReadFile(embeddedPath) //nolint:gosec // G304 - test helper reading reference file
+	if err != nil {
+		t.Fatalf("read embedded llms.txt at %s: %v", embeddedPath, err)
+	}
+
+	if !bytes.Equal(rootData, embeddedData) {
+		t.Fatalf("root llms.txt (%d bytes) differs from internal/context/reference/llms.txt (%d bytes); run 'make sync-embed-reference'",
+			len(rootData), len(embeddedData))
 	}
 }

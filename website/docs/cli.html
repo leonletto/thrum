@@ -1617,6 +1617,9 @@ Members of reviewers (2):
 <p>Check which agents are currently editing a file. Shows agents with the file in
 their uncommitted changes or changed files, along with branch and change count
 information.</p>
+<p>The daemon extracts live git state from each agent&#39;s worktree on every call
+(about 500ms for a handful of worktrees) rather than serving stale cached data
+from the last heartbeat. What you see is what&#39;s actually on disk right now.</p>
 <pre><code>thrum who-has FILE</code></pre>
 <p>Example:</p>
 <pre><code>$ thrum who-has internal/auth/auth.go
@@ -2410,10 +2413,13 @@ permission prompt detection.</p>
 <p>Example:</p>
 <pre><code>thrum tmux capture implementer-api --lines 10</code></pre>
 <h3>thrum tmux restart</h3>
-<p>Restart a tmux-managed agent session with a context snapshot. Extracts the
-agent&#39;s conversation history from the JSONL transcript, kills the session,
-creates a new one, and relaunches. The new session loads the snapshot via
-<code>thrum prime</code>. See <a href="session-restart.html">Session Restart</a> for details.</p>
+<p>Restart a tmux-managed agent session with a context snapshot. By default, the
+daemon asks the agent to save its own snapshot (graceful flow), falling back to
+JSONL extraction only on timeout. With <code>--force</code>, the daemon skips the graceful
+prompt and extracts directly from the JSONL transcript. Either way, the session
+is killed, a new one is created, and the new session loads the snapshot via
+<code>thrum prime</code>. See <a href="session-restart.html">Session Restart</a> for details on the
+graceful vs force flows.</p>
 <pre><code>thrum tmux restart &lt;name&gt; [flags]</code></pre>
 <table>
 <thead>
@@ -2425,7 +2431,7 @@ creates a new one, and relaunches. The new session loads the snapshot via
 </thead>
 <tbody><tr>
 <td><code>--force</code></td>
-<td>Skip graceful signal, force restart</td>
+<td>Skip graceful save prompt, extract snapshot from JSONL directly</td>
 <td><code>false</code></td>
 </tr>
 <tr>

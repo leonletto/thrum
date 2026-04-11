@@ -122,7 +122,7 @@ func Init(opts InitOptions) error {
 		return retErr
 	}
 
-	// 2c. Write strategy reference files to .thrum/strategies/
+	// 2c. Write strategy/reference files to .thrum/ (strategies/*.md + llms.txt)
 	if err := context.WriteStrategies(thrumDir); err != nil {
 		retErr = fmt.Errorf("failed to write strategies: %w", err)
 		return retErr

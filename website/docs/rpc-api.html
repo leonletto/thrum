@@ -3301,9 +3301,17 @@ files.</p>
 </tbody></table>
 <p><strong>Response:</strong> <code>null</code></p>
 <h3>tmux.restart</h3>
-<p>Restart a tmux-managed agent session with a context snapshot. Extracts the
-agent&#39;s conversation history from the JSONL transcript, kills the session,
-creates a new one, and relaunches.</p>
+<p>Restart a tmux-managed agent session with a context snapshot. The daemon picks
+between two flows based on <code>force</code>:</p>
+<ul>
+<li><strong>Graceful (default)</strong> — sends an <code>@system</code> message asking the agent to save
+its own snapshot, nudges the pane, and polls for the snapshot file up to
+<code>restart.graceful_timeout</code> seconds. Falls back to JSONL extraction on timeout.</li>
+<li><strong>Force (<code>force: true</code>)</strong> — skips the graceful prompt and extracts directly
+from the JSONL conversation transcript. Only works for Claude Code (other
+runtimes don&#39;t use the same JSONL format).</li>
+</ul>
+<p>Either way, the daemon kills the session, creates a new one, and relaunches.</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -3324,7 +3332,7 @@ creates a new one, and relaunches.</p>
 <td><code>force</code></td>
 <td>boolean</td>
 <td>no</td>
-<td>Skip graceful signal (default: <code>false</code>)</td>
+<td>Skip graceful save prompt, extract from JSONL (default: <code>false</code>)</td>
 </tr>
 <tr>
 <td><code>runtime</code></td>
