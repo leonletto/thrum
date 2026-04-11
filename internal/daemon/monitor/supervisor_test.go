@@ -351,6 +351,18 @@ func TestSupervisor_AddValidation(t *testing.T) {
 		wantErr error
 	}{
 		{
+			// Review finding 10: name must be explicitly validated. An
+			// empty name would otherwise insert an unlabeled row and
+			// silently take the unique slot for name=''.
+			name: "empty name",
+			spec: SubmitSpec{
+				Name: "", Argv: []string{"true"}, MatchPattern: ".",
+				Target: "@t", Cwd: "/tmp", Env: map[string]string{},
+				DebounceSeconds: 30,
+			},
+			wantErr: nil, // checked by require.Error below
+		},
+		{
 			name: "debounce too short",
 			spec: SubmitSpec{
 				Name: "x", Argv: []string{"true"}, MatchPattern: ".",

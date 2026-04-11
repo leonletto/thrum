@@ -168,6 +168,9 @@ func (s *MonitorSupervisor) Add(ctx context.Context, spec SubmitSpec) (string, e
 	if _, err := regexp.Compile(spec.MatchPattern); err != nil {
 		return "", fmt.Errorf("%w: %v", ErrInvalidRegex, err)
 	}
+	if spec.Name == "" {
+		return "", errors.New("name required")
+	}
 	if len(spec.Argv) == 0 {
 		return "", errors.New("argv required")
 	}
