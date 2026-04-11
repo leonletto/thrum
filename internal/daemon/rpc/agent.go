@@ -35,9 +35,11 @@ type RegisterRequest struct {
 
 // RegisterResponse represents the response from agent.register RPC.
 type RegisterResponse struct {
-	AgentID  string        `json:"agent_id"`
-	Status   string        `json:"status"` // "registered", "conflict", "updated"
-	Conflict *ConflictInfo `json:"conflict,omitempty"`
+	AgentID        string        `json:"agent_id"`
+	Status         string        `json:"status"`                     // "registered", "conflict", "updated"
+	SessionID      string        `json:"session_id,omitempty"`       // populated when a session was resurrected
+	SessionResumed bool          `json:"session_resumed,omitempty"`  // true when ensureActiveSession emitted a fresh session.start (thrum-xir.18)
+	Conflict       *ConflictInfo `json:"conflict,omitempty"`
 }
 
 // ConflictInfo represents information about a registration conflict.

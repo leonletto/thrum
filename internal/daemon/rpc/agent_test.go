@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -1541,4 +1542,49 @@ func TestHandleRegister_SamePID_Idempotent(t *testing.T) {
 	if agents[0].AgentPID != 99999 {
 		t.Errorf("AgentPID = %d, want 99999", agents[0].AgentPID)
 	}
+}
+
+// TestRegisterResponse_SessionResumedJSON verifies the new SessionResumed +
+// SessionID fields round-trip correctly and stay omitted when unset
+// (thrum-xir.18.1).
+func TestRegisterResponse_SessionResumedJSON(t *testing.T) {
+	t.Run("omits when unset", func(t *testing.T) {
+		resp := RegisterResponse{
+			AgentID: "agt_test",
+			Status:  "registered",
+		}
+		data, err := json.Marshal(resp)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		s := string(data)
+		if strings.Contains(s, "session_id") {
+			t.Errorf("expected session_id omitted, got %s", s)
+		}
+		if strings.Contains(s, "session_resumed") {
+			t.Errorf("expected session_resumed omitted, got %s", s)
+		}
+	})
+	t.Run("round-trips when set", func(t *testing.T) {
+		original := RegisterResponse{
+			AgentID:        "agt_test",
+			Status:         "registered",
+			SessionID:      "ses_01ABC",
+			SessionResumed: true,
+		}
+		data, err := json.Marshal(original)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var decoded RegisterResponse
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if decoded.SessionID != "ses_01ABC" {
+			t.Errorf("SessionID = %q, want ses_01ABC", decoded.SessionID)
+		}
+		if !decoded.SessionResumed {
+			t.Errorf("SessionResumed = false, want true")
+		}
+	})
 }
