@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -48,9 +49,25 @@ func runPS(ctx context.Context, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, "ps", args...).Output() // #nosec G204
 }
 
+// matchRuntimeName compares a ps "comm" string against a known runtime
+// binary name after stripping any leading directory components.
+//
+// On macOS, `ps -o comm=` returns the contents of the kernel's `p_comm`
+// field, which is set at exec time. Some binaries (e.g. claude via its
+// npm wrapper) record a plain basename; others (e.g. codex via a
+// node-spawned native binary) record the full executable path. The
+// literal string comparison only matches the first shape, so codex PIDs
+// were being classified as "not a runtime" across the codebase.
+//
+// filepath.Base is a no-op on already-basename inputs, so this helper
+// is safe for every known runtime without a per-runtime branch.
+func matchRuntimeName(psComm, runtime string) bool {
+	return filepath.Base(psComm) == runtime
+}
+
 // IsClaudeProcess checks if the given PID belongs to a Claude process.
 func IsClaudeProcess(ctx context.Context, pid int) bool {
-	return processName(ctx, pid) == "claude"
+	return matchRuntimeName(processName(ctx, pid), "claude")
 }
 
 // IsRuntimeProcess checks if the given PID belongs to a process matching
@@ -65,7 +82,7 @@ func IsRuntimeProcess(ctx context.Context, pid int, runtime string) bool {
 	}
 	if runtime == "" {
 		for _, rt := range knownRuntimes {
-			if name == rt {
+			if matchRuntimeName(name, rt) {
 				return true
 			}
 		}
@@ -73,9 +90,9 @@ func IsRuntimeProcess(ctx context.Context, pid int, runtime string) bool {
 	}
 	// Check specific runtime — handle cursor's dual binary names
 	if runtime == "cursor" {
-		return name == "cursor-agent" || name == "agent"
+		return matchRuntimeName(name, "cursor-agent") || matchRuntimeName(name, "agent")
 	}
-	return name == runtime
+	return matchRuntimeName(name, runtime)
 }
 
 // knownRuntimes lists binary names of known AI coding runtimes.
@@ -99,7 +116,7 @@ func FindClaudeAncestor(ctx context.Context) (int, string) {
 	for pid > 1 {
 		name := processName(ctx, pid)
 		for _, rt := range knownRuntimes {
-			if name == rt {
+			if matchRuntimeName(name, rt) {
 				displayName := rt
 				if mapped, ok := runtimeDisplayName[rt]; ok {
 					displayName = mapped

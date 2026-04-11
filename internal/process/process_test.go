@@ -112,3 +112,36 @@ func TestRunPS_TimeoutEnforced(t *testing.T) {
 	}
 	_ = err
 }
+
+// TestMatchRuntimeName_BasenameAndFullPath covers thrum-pxz.15: macOS
+// `ps -o comm=` returns the full executable path for some binaries
+// (e.g. codex native binary launched via node wrapper). The comparison
+// must strip directory components before matching the runtime name.
+// Regression: without filepath.Base, codex PIDs were classified as
+// not-a-runtime and bypassed FindClaudeAncestor entirely.
+func TestMatchRuntimeName_BasenameAndFullPath(t *testing.T) {
+	cases := []struct {
+		psComm, runtime string
+		want            bool
+	}{
+		{"claude", "claude", true},
+		{"codex", "codex", true},
+		{
+			"/opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/codex/codex",
+			"codex",
+			true,
+		},
+		{"/usr/local/bin/claude", "claude", true},
+		{"node", "codex", false},
+		{"opencode", "claude", false},
+		{"/opt/homebrew/bin/opencode", "opencode", true},
+		{"/usr/bin/cursor-agent", "cursor-agent", true},
+	}
+	for _, c := range cases {
+		t.Run(c.psComm, func(t *testing.T) {
+			if got := matchRuntimeName(c.psComm, c.runtime); got != c.want {
+				t.Errorf("matchRuntimeName(%q, %q) = %v, want %v", c.psComm, c.runtime, got, c.want)
+			}
+		})
+	}
+}
