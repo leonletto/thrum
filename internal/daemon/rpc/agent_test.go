@@ -1776,6 +1776,261 @@ func TestEnsureActiveSession_ZeroPIDNoResurrect(t *testing.T) {
 	}
 }
 
+// --- thrum-xir.18.3: HandleRegister wiring tests ------------------------
+
+// TestHandleRegister_ResurrectOfflineSession — Test 5 (Rule 6 critical):
+// MUST use os.Getpid() as the request PID. Zero or a hardcoded constant
+// would cause ensureActiveSession to short-circuit before exercising the
+// resurrect path, and the test would pass for the wrong reason.
+//
+// Arrange: existing agent with stored PID == os.Getpid() (so the
+// same-agent same-PID no-op branch is taken — no agent.register event
+// emitted) plus an ended session row. Act: call HandleRegister with
+// AgentPID = os.Getpid(). Assert: response surfaces SessionResumed=true
+// with a fresh session_id, exactly one new agent.session.start event,
+// zero new agent.register events, one active session row.
+func TestHandleRegister_ResurrectOfflineSession(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_resurrect", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	livePID := os.Getpid()
+
+	// Step 1: register the agent normally so the daemon-generated agent_id
+	// matches what HandleRegister will look up on the second call.
+	handler := NewAgentHandler(s)
+	regReq := RegisterRequest{
+		Role:     "implementer",
+		Module:   "resurrect",
+		Display:  "Resurrect Test",
+		AgentPID: livePID,
+	}
+	regJSON, _ := json.Marshal(regReq)
+	firstResp, err := handler.HandleRegister(context.Background(), regJSON)
+	if err != nil {
+		t.Fatalf("initial register: %v", err)
+	}
+	agentID := firstResp.(*RegisterResponse).AgentID
+	if agentID == "" {
+		t.Fatalf("initial register returned empty agent_id")
+	}
+
+	// Step 2: end any active session for this agent (simulating the
+	// scenario where pre-pxz.14 self-heal killed the session row).
+	endedAt := time.Now().UTC().Add(-30 * time.Minute).Format(time.RFC3339Nano)
+	if _, err := s.RawDB().Exec(`
+		UPDATE sessions SET ended_at = ?, end_reason = 'test_seed_ended'
+		WHERE agent_id = ? AND ended_at IS NULL
+	`, endedAt, agentID); err != nil {
+		t.Fatalf("seed ended session: %v", err)
+	}
+	if n := countActiveSessionRows(t, s, agentID); n != 0 {
+		t.Fatalf("active sessions after seeding ended_at = %d, want 0", n)
+	}
+
+	// Snapshot event counts.
+	var registerEventsBefore int
+	if err := s.RawDB().QueryRow(`SELECT COUNT(*) FROM events WHERE type = 'agent.register'`).Scan(&registerEventsBefore); err != nil {
+		t.Fatalf("count register events: %v", err)
+	}
+	startEventsBefore := countSessionStartEvents(t, s)
+
+	// Step 3: re-register with the SAME live PID. No PID drift, no
+	// ReRegister — this hits the no-op same-agent branch, then the new
+	// resurrect call kicks in.
+	secondResp, err := handler.HandleRegister(context.Background(), regJSON)
+	if err != nil {
+		t.Fatalf("second register: %v", err)
+	}
+	regResp := secondResp.(*RegisterResponse)
+
+	if !regResp.SessionResumed {
+		t.Errorf("SessionResumed = false, want true")
+	}
+	if regResp.SessionID == "" {
+		t.Errorf("SessionID = empty, want fresh session id")
+	}
+	if !strings.HasPrefix(regResp.SessionID, "ses_") {
+		t.Errorf("SessionID = %q, want ses_ prefix", regResp.SessionID)
+	}
+
+	// Zero new agent.register events (PID matched).
+	var registerEventsAfter int
+	if err := s.RawDB().QueryRow(`SELECT COUNT(*) FROM events WHERE type = 'agent.register'`).Scan(&registerEventsAfter); err != nil {
+		t.Fatalf("count register events after: %v", err)
+	}
+	if registerEventsAfter != registerEventsBefore {
+		t.Errorf("agent.register event count grew: before=%d after=%d (PID matched, expected no event)",
+			registerEventsBefore, registerEventsAfter)
+	}
+
+	// Exactly one new agent.session.start event.
+	if n := countSessionStartEvents(t, s); n != startEventsBefore+1 {
+		t.Errorf("session.start events: before=%d after=%d, want +1", startEventsBefore, n)
+	}
+
+	// One active session row.
+	if n := countActiveSessionRows(t, s, agentID); n != 1 {
+		t.Errorf("active session rows = %d, want 1", n)
+	}
+}
+
+// TestHandleRegister_ResurrectWithPIDDrift — both Fix A (PID self-heal)
+// and the new resurrect must fire when the stored PID is dead and the
+// caller passes a new live PID. Asserts both events are written.
+func TestHandleRegister_ResurrectWithPIDDrift(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_drift_resurrect", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	livePID := os.Getpid()
+	deadPID := 999999
+
+	// Step 1: register normally so the daemon picks the agent_id and
+	// emits the initial agent.register + session.start events.
+	handler := NewAgentHandler(s)
+	regReq := RegisterRequest{
+		Role:     "implementer",
+		Module:   "drift",
+		AgentPID: deadPID,
+	}
+	regJSON, _ := json.Marshal(regReq)
+	firstResp, err := handler.HandleRegister(context.Background(), regJSON)
+	if err != nil {
+		t.Fatalf("initial register: %v", err)
+	}
+	agentID := firstResp.(*RegisterResponse).AgentID
+	if agentID == "" {
+		t.Fatalf("initial register returned empty agent_id")
+	}
+
+	// Step 2: end any active session — simulates the recovery scenario
+	// the resurrect path is built for.
+	endedAt := time.Now().UTC().Add(-30 * time.Minute).Format(time.RFC3339Nano)
+	if _, err := s.RawDB().Exec(`
+		UPDATE sessions SET ended_at = ?, end_reason = 'test_seed_ended'
+		WHERE agent_id = ? AND ended_at IS NULL
+	`, endedAt, agentID); err != nil {
+		t.Fatalf("seed ended session: %v", err)
+	}
+	if n := countActiveSessionRows(t, s, agentID); n != 0 {
+		t.Fatalf("active sessions after seeding ended_at = %d, want 0", n)
+	}
+
+	// Snapshot event counts after the initial register but before the
+	// drift act, so the assertions count only the second register's
+	// emissions.
+	var registerBefore int
+	if err := s.RawDB().QueryRow(`SELECT COUNT(*) FROM events WHERE type = 'agent.register'`).Scan(&registerBefore); err != nil {
+		t.Fatalf("count register events: %v", err)
+	}
+	startBefore := countSessionStartEvents(t, s)
+
+	// Step 3: re-register with a DIFFERENT live PID. Hits the PID-drift
+	// branch (writes an agent.register "updated" event via Fix A) AND
+	// the resurrect (writes a fresh session.start event).
+	driftReq := regReq
+	driftReq.AgentPID = livePID
+	driftJSON, _ := json.Marshal(driftReq)
+	driftResp, err := handler.HandleRegister(context.Background(), driftJSON)
+	if err != nil {
+		t.Fatalf("drift register: %v", err)
+	}
+	regResp := driftResp.(*RegisterResponse)
+
+	if !regResp.SessionResumed {
+		t.Errorf("SessionResumed = false, want true")
+	}
+	if regResp.SessionID == "" {
+		t.Errorf("SessionID = empty, want fresh session id")
+	}
+	if regResp.Status != "updated" {
+		t.Errorf("Status = %q, want updated (PID drift branch)", regResp.Status)
+	}
+
+	var registerAfter int
+	if err := s.RawDB().QueryRow(`SELECT COUNT(*) FROM events WHERE type = 'agent.register'`).Scan(&registerAfter); err != nil {
+		t.Fatalf("count register events after: %v", err)
+	}
+	if registerAfter != registerBefore+1 {
+		t.Errorf("agent.register events: before=%d after=%d, want +1", registerBefore, registerAfter)
+	}
+	if n := countSessionStartEvents(t, s); n != startBefore+1 {
+		t.Errorf("session.start events: before=%d after=%d, want +1", startBefore, n)
+	}
+	if n := countActiveSessionRows(t, s, agentID); n != 1 {
+		t.Errorf("active session rows = %d, want 1", n)
+	}
+}
+
+// TestHandleRegister_NoResurrectAlreadyActive — agent with active session
+// must not trigger resurrect; SessionResumed=false and no new events.
+func TestHandleRegister_NoResurrectAlreadyActive(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_already_active", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	livePID := os.Getpid()
+
+	handler := NewAgentHandler(s)
+	regReq := RegisterRequest{
+		Role:     "implementer",
+		Module:   "active",
+		AgentPID: livePID,
+	}
+	regJSON, _ := json.Marshal(regReq)
+	firstResp, err := handler.HandleRegister(context.Background(), regJSON)
+	if err != nil {
+		t.Fatalf("initial register: %v", err)
+	}
+	agentID := firstResp.(*RegisterResponse).AgentID
+
+	// Seed an active session manually so the helper sees it on the
+	// second call.
+	seedSessionRow(t, s, "ses_already_active", agentID, "")
+	if n := countActiveSessionRows(t, s, agentID); n < 1 {
+		t.Fatalf("expected at least 1 active session, got %d", n)
+	}
+
+	startBefore := countSessionStartEvents(t, s)
+	var registerBefore int
+	_ = s.RawDB().QueryRow(`SELECT COUNT(*) FROM events WHERE type = 'agent.register'`).Scan(&registerBefore)
+
+	// Re-register with same PID. Both branches must no-op.
+	secondResp, err := handler.HandleRegister(context.Background(), regJSON)
+	if err != nil {
+		t.Fatalf("second register: %v", err)
+	}
+	regResp := secondResp.(*RegisterResponse)
+	if regResp.SessionResumed {
+		t.Errorf("SessionResumed = true, want false (active session present)")
+	}
+	if regResp.SessionID != "" {
+		t.Errorf("SessionID = %q, want empty (no resurrect)", regResp.SessionID)
+	}
+
+	var registerAfter int
+	_ = s.RawDB().QueryRow(`SELECT COUNT(*) FROM events WHERE type = 'agent.register'`).Scan(&registerAfter)
+	if registerAfter != registerBefore {
+		t.Errorf("agent.register events grew: before=%d after=%d", registerBefore, registerAfter)
+	}
+	if n := countSessionStartEvents(t, s); n != startBefore {
+		t.Errorf("session.start events grew on already-active path: before=%d after=%d", startBefore, n)
+	}
+}
+
 // TestRegisterResponse_SessionResumedJSON verifies the new SessionResumed +
 // SessionID fields round-trip correctly and stay omitted when unset
 // (thrum-xir.18.1).

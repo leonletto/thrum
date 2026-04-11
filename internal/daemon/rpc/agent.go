@@ -270,18 +270,41 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 			// command after a daemon rebuild would fire false-positive
 			// dead-agent self-heals on every pre-existing agent whose
 			// DB PID predates the refresh feature (thrum-pxz.14 Fix A).
-			if req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID {
-				return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
-			}
-			if req.ReRegister {
+			var resp *RegisterResponse
+			var regErr error
+			switch {
+			case req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID:
+				resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+			case req.ReRegister:
 				// Update registration
-				return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+				resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+			default:
+				// Same agent, same PID (or no PID provided) — no-op return
+				resp = &RegisterResponse{
+					AgentID: agentID,
+					Status:  "registered",
+				}
 			}
-			// Same agent, same PID (or no PID provided) — no-op return
-			return &RegisterResponse{
-				AgentID: agentID,
-				Status:  "registered",
-			}, nil
+			if regErr != nil {
+				return nil, regErr
+			}
+
+			// Auto-resurrect (thrum-xir.18): if the agent has no active
+			// session and the caller's PID is alive, emit a fresh
+			// agent.session.start inline. Best-effort — log and continue
+			// on error so the register RPC stays resilient. Failing
+			// register because resurrection failed would break every
+			// agent on every command, which is worse than the bug we are
+			// fixing. ensureActiveSession runs under the same write
+			// lock taken at the top of this method.
+			resumedID, resumeErr := h.ensureActiveSession(ctx, agentID, req.AgentPID)
+			if resumeErr != nil {
+				log.Printf("agent.register: session resurrect failed: agent=%s err=%v", agentID, resumeErr)
+			} else if resumedID != "" {
+				resp.SessionID = resumedID
+				resp.SessionResumed = true
+			}
+			return resp, nil
 		}
 
 		// Different agent, same role+module
