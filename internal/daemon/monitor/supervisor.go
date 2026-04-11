@@ -77,6 +77,11 @@ type runnerHandle struct {
 	cancel        context.CancelFunc
 	done          chan struct{}
 	stoppedByUser atomic.Bool
+	// pid is the OS process id of the currently running child, set by the
+	// onStart callback right after cmd.Start succeeds. 0 if not yet
+	// started or already exited. Read by Supervisor.List / GetByID to
+	// enrich jobToView responses (review finding R2.3).
+	pid atomic.Int64
 }
 
 // MonitorSupervisor owns the set of running monitor jobs.  It loads persisted
@@ -344,14 +349,47 @@ func (s *MonitorSupervisor) Restart(ctx context.Context, id string) error {
 	return s.launch(job)
 }
 
-// List returns all monitor jobs from the store regardless of status.
+// List returns all monitor jobs from the store regardless of status, with
+// the runtime PID populated from the live runnerHandle map for any monitor
+// whose child is currently running. Review finding R2.3: the RPC layer
+// needs this so monitor.list can render a PID column.
 func (s *MonitorSupervisor) List(ctx context.Context) ([]*MonitorJob, error) {
-	return s.store.ListAll(ctx)
+	jobs, err := s.store.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.enrichPIDs(jobs)
+	return jobs, nil
 }
 
-// GetByID returns the persisted MonitorJob for the given ID.
+// GetByID returns the persisted MonitorJob for the given ID, with the
+// runtime PID populated from the live runnerHandle if present.
 func (s *MonitorSupervisor) GetByID(ctx context.Context, id string) (*MonitorJob, error) {
-	return s.store.GetByID(ctx, id)
+	job, err := s.store.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	s.enrichPIDs([]*MonitorJob{job})
+	return job, nil
+}
+
+// enrichPIDs overlays each job's PID field with the value published by its
+// live runner (if any) so the RPC response reflects real-time state rather
+// than whatever was last persisted. Safe to call on any slice; jobs with
+// no live handle are left untouched. Acquires s.mu.
+func (s *MonitorSupervisor) enrichPIDs(jobs []*MonitorJob) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, job := range jobs {
+		h, ok := s.runners[job.ID]
+		if !ok {
+			continue
+		}
+		if pid := h.pid.Load(); pid > 0 {
+			p := int(pid)
+			job.PID = &p
+		}
+	}
 }
 
 // launch creates a Runner for job and starts its goroutine.  The runner's
@@ -397,6 +435,12 @@ func (s *MonitorSupervisor) launch(job *MonitorJob) error {
 		done:   done,
 	}
 
+	// onStart publishes the child PID into the handle so monitor.show /
+	// monitor.list can render it in real time (review finding R2.3).
+	onStart := func(pid int) {
+		handle.pid.Store(int64(pid))
+	}
+
 	exitNotice := func(jobName string, exitCode, pid int, duration time.Duration, tail string) {
 		// Per design spec §Child exit, exit notices include the child PID so
 		// the operator can correlate with ps / system logs.
@@ -424,7 +468,7 @@ func (s *MonitorSupervisor) launch(job *MonitorJob) error {
 	// NewRunner without adding accessor methods to the job.go struct.
 	adapter := &monitorJobAdapter{job: job}
 
-	r, err := NewRunner(adapter, re, exitNotice, deliver)
+	r, err := NewRunner(adapter, re, exitNotice, deliver, onStart)
 	if err != nil {
 		cancel()
 		return err

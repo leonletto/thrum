@@ -194,7 +194,7 @@ func TestMonitorList_Empty(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	if err := MonitorList(client, &buf); err != nil {
+	if err := MonitorList(client, false, &buf); err != nil {
 		t.Fatalf("MonitorList: %v", err)
 	}
 	if !strings.Contains(buf.String(), "No monitors") {
@@ -216,7 +216,7 @@ func TestMonitorList_WithEntries(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	if err := MonitorList(client, &buf); err != nil {
+	if err := MonitorList(client, false, &buf); err != nil {
 		t.Fatalf("MonitorList: %v", err)
 	}
 	output := buf.String()
@@ -228,6 +228,10 @@ func TestMonitorList_WithEntries(t *testing.T) {
 	}
 	if !strings.Contains(output, "running") {
 		t.Errorf("expected running status in output, got: %s", output)
+	}
+	// R2.3: UPTIME and PID columns must be present in the header row.
+	if !strings.Contains(output, "UPTIME") || !strings.Contains(output, "PID") {
+		t.Errorf("expected UPTIME and PID columns in header, got:\n%s", output)
 	}
 }
 

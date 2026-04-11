@@ -40,20 +40,28 @@ type DeliverFn func(jobName, content string)
 // cmd.Start() (may be 0 if the child never started).
 type ExitNoticeFn func(jobName string, exitCode, pid int, duration time.Duration, lastStdoutTail string)
 
+// OnChildStartFn is the callback invoked immediately after cmd.Start()
+// with the freshly-assigned OS pid of the child. The supervisor uses it
+// to publish the pid via runnerHandle so monitor.show / monitor.list
+// RPC responses can include it in real time. May be nil.
+type OnChildStartFn func(pid int)
+
 // Runner manages a single child process for a monitor job.
 type Runner struct {
 	job           RunnerJob
 	re            *regexp.Regexp
 	deliver       DeliverFn
 	exitNotice    ExitNoticeFn
+	onStart       OnChildStartFn
 	debouncer     *Debouncer
 	shutdownGrace time.Duration
 }
 
 // NewRunner constructs a Runner for the given job spec and compiled regex.
 // ExitNotice may be nil in unit tests that do not exercise exit handling.
-// Deliver must not be nil.
-func NewRunner(job RunnerJob, re *regexp.Regexp, exitNotice ExitNoticeFn, deliver DeliverFn) (*Runner, error) {
+// OnStart may be nil; when set it is called with the child PID right
+// after cmd.Start succeeds. Deliver must not be nil.
+func NewRunner(job RunnerJob, re *regexp.Regexp, exitNotice ExitNoticeFn, deliver DeliverFn, onStart OnChildStartFn) (*Runner, error) {
 	if len(job.GetArgv()) == 0 {
 		return nil, fmt.Errorf("runner: empty argv")
 	}
@@ -74,6 +82,7 @@ func NewRunner(job RunnerJob, re *regexp.Regexp, exitNotice ExitNoticeFn, delive
 		re:            re,
 		deliver:       deliver,
 		exitNotice:    exitNotice,
+		onStart:       onStart,
 		shutdownGrace: defaultShutdownGrace,
 	}
 	r.debouncer = NewDebouncer(
@@ -117,10 +126,15 @@ func (r *Runner) Run(ctx context.Context) error {
 		return fmt.Errorf("runner: start %q: %w", r.job.GetArgv()[0], err)
 	}
 	// Capture the child PID for the exit notice (design spec §Child exit
-	// requires "(pid N)" in the formatted notice).
+	// requires "(pid N)" in the formatted notice) and publish it to the
+	// supervisor via onStart so monitor.show / monitor.list can render
+	// the PID in real time (review finding R2.3 / R2.5).
 	childPID := 0
 	if cmd.Process != nil {
 		childPID = cmd.Process.Pid
+		if r.onStart != nil {
+			r.onStart(childPID)
+		}
 	}
 	// Close the daemon's copy of the write end. The child still holds its
 	// copy (inherited via fork/exec), so pipeR will receive EOF exactly

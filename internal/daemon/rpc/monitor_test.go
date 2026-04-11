@@ -158,6 +158,59 @@ func TestMonitorList_ReturnsAllRunning(t *testing.T) {
 	assert.Len(t, views, 2)
 }
 
+// TestMonitorList_FiltersByStatus verifies that default HandleList returns
+// only running monitors, and include_all=true also returns dead/stopped
+// monitors younger than 1 week. Review finding R2.3.
+func TestMonitorList_FiltersByStatus(t *testing.T) {
+	h, store, _ := newMonitorTestSetup(t)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	weekAgo := now.Add(-8 * 24 * time.Hour)
+
+	cases := []struct {
+		id, name string
+		status   monitor.Status
+		updated  time.Time
+	}{
+		{"mon_r", "running-one", monitor.StatusRunning, now},
+		{"mon_d_fresh", "dead-recent", monitor.StatusDead, now.Add(-1 * time.Hour)},
+		{"mon_s_fresh", "stopped-recent", monitor.StatusStopped, now.Add(-12 * time.Hour)},
+		{"mon_d_stale", "dead-old", monitor.StatusDead, weekAgo},
+	}
+	for _, tc := range cases {
+		job := &monitor.MonitorJob{
+			ID: tc.id, Name: tc.name,
+			Argv: []string{"true"}, MatchPattern: ".", Target: "@t",
+			Cwd: os.TempDir(), Env: map[string]string{},
+			DebounceSeconds: 60, CreatedAt: now, UpdatedAt: tc.updated,
+			Status: tc.status,
+		}
+		require.NoError(t, store.Insert(context.Background(), job))
+	}
+
+	// Default: running only.
+	resp, err := h.HandleList(context.Background(), json.RawMessage(`{}`))
+	require.NoError(t, err)
+	views, _ := resp.([]monitorJobView)
+	require.Len(t, views, 1, "default list should only return running monitors")
+	assert.Equal(t, "mon_r", views[0].ID)
+
+	// --all: running + dead/stopped younger than 1 week (stale dead excluded).
+	resp, err = h.HandleList(context.Background(), json.RawMessage(`{"include_all":true}`))
+	require.NoError(t, err)
+	views, _ = resp.([]monitorJobView)
+	require.Len(t, views, 3, "--all should include fresh dead + fresh stopped + running, "+
+		"but exclude week-old dead row")
+	gotIDs := map[string]bool{}
+	for _, v := range views {
+		gotIDs[v.ID] = true
+	}
+	assert.True(t, gotIDs["mon_r"])
+	assert.True(t, gotIDs["mon_d_fresh"])
+	assert.True(t, gotIDs["mon_s_fresh"])
+	assert.False(t, gotIDs["mon_d_stale"], "week-old dead monitor must be hidden even with --all")
+}
+
 func TestMonitorHandler_ListRedactsEnvValues(t *testing.T) {
 	h, store, _ := newMonitorTestSetup(t)
 

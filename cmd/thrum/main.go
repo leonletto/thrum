@@ -2409,20 +2409,26 @@ The command and its arguments must be separated from monitor flags with '--':
 	_ = addCmd.MarkFlagRequired("to")
 	cmd.AddCommand(addCmd)
 
-	// thrum monitor list
-	cmd.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "List all monitor jobs",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-			return cli.MonitorList(client, os.Stdout)
-		},
-	})
+	// thrum monitor list [--all]
+	{
+		var includeAll bool
+		listCmd := &cobra.Command{
+			Use:   "list",
+			Short: "List monitor jobs (default: running only; --all shows stopped/dead <1wk)",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				client, err := getClient()
+				if err != nil {
+					return fmt.Errorf("connect to daemon: %w", err)
+				}
+				defer func() { _ = client.Close() }()
+				return cli.MonitorList(client, includeAll, os.Stdout)
+			},
+		}
+		listCmd.Flags().BoolVar(&includeAll, "all", false,
+			"Include stopped/dead monitors (younger than a week)")
+		cmd.AddCommand(listCmd)
+	}
 
 	// thrum monitor show <id>
 	cmd.AddCommand(&cobra.Command{

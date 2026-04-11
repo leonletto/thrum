@@ -24,7 +24,8 @@ type MonitorStartRequest struct {
 
 // MonitorStartResult is the response from monitor.start.
 type MonitorStartResult struct {
-	ID string `json:"id"`
+	ID  string `json:"id"`
+	PID int    `json:"pid,omitempty"` // 0 until the child has actually started
 }
 
 // MonitorJobView is the JSON shape returned by monitor.show and (per element)
@@ -39,8 +40,9 @@ type MonitorJobView struct {
 	Env             map[string]string `json:"env"`
 	DebounceSeconds int               `json:"debounce_seconds"`
 	Status          string            `json:"status"`
-	CreatedAt       string            `json:"created_at"`
-	UpdatedAt       string            `json:"updated_at"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
+	PID             *int              `json:"pid,omitempty"` // nil if stopped/dead
 }
 
 // ----- CLI helpers -----
@@ -55,10 +57,18 @@ func MonitorStart(client *Client, req MonitorStartRequest) (*MonitorStartResult,
 	return &result, nil
 }
 
-// MonitorList fetches all monitors and writes a table to out.
-func MonitorList(client *Client, out io.Writer) error {
+// MonitorList fetches monitors and writes a table to out.
+// If includeAll is true, stopped/dead monitors younger than 1 week are
+// also included (the daemon does the filtering). Default is running-only.
+// Columns: ID / NAME / STATUS / TARGET / UPTIME / PID per design doc
+// §'thrum monitor list' (review finding R2.3).
+func MonitorList(client *Client, includeAll bool, out io.Writer) error {
+	req := struct {
+		IncludeAll bool `json:"include_all,omitempty"`
+	}{IncludeAll: includeAll}
+
 	var jobs []MonitorJobView
-	if err := client.Call("monitor.list", struct{}{}, &jobs); err != nil {
+	if err := client.Call("monitor.list", req, &jobs); err != nil {
 		return fmt.Errorf("monitor list: %w", err)
 	}
 
@@ -67,11 +77,46 @@ func MonitorList(client *Client, out io.Writer) error {
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(out, "%-28s %-20s %-10s %s\n", "ID", "NAME", "STATUS", "TARGET")
+	_, _ = fmt.Fprintf(out, "%-28s %-20s %-10s %-20s %-10s %s\n",
+		"ID", "NAME", "STATUS", "TARGET", "UPTIME", "PID")
 	for _, j := range jobs {
-		_, _ = fmt.Fprintf(out, "%-28s %-20s %-10s %s\n", j.ID, j.Name, j.Status, j.Target)
+		uptime := "-"
+		if j.Status == "running" && !j.CreatedAt.IsZero() {
+			uptime = formatUptime(time.Since(j.CreatedAt))
+		}
+		pidStr := "-"
+		if j.PID != nil {
+			pidStr = fmt.Sprintf("%d", *j.PID)
+		}
+		_, _ = fmt.Fprintf(out, "%-28s %-20s %-10s %-20s %-10s %s\n",
+			j.ID, j.Name, j.Status, j.Target, uptime, pidStr)
 	}
 	return nil
+}
+
+// formatUptime returns a compact human-readable duration for a monitor
+// uptime cell: "3h42m", "15m", "2d4h", or "<1s" for sub-second values.
+func formatUptime(d time.Duration) string {
+	if d < time.Second {
+		return "<1s"
+	}
+	days := int(d / (24 * time.Hour))
+	d -= time.Duration(days) * 24 * time.Hour
+	hours := int(d / time.Hour)
+	d -= time.Duration(hours) * time.Hour
+	minutes := int(d / time.Minute)
+	d -= time.Duration(minutes) * time.Minute
+	seconds := int(d / time.Second)
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%dd%dh", days, hours)
+	case hours > 0:
+		return fmt.Sprintf("%dh%dm", hours, minutes)
+	case minutes > 0:
+		return fmt.Sprintf("%dm%ds", minutes, seconds)
+	default:
+		return fmt.Sprintf("%ds", seconds)
+	}
 }
 
 // MonitorShow fetches and renders a single monitor's full spec to out.

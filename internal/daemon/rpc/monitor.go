@@ -42,6 +42,11 @@ type monitorStartParams struct {
 // monitorStartResponse is returned on success.
 type monitorStartResponse struct {
 	ID string `json:"id"`
+	// PID is the child's OS process id once Runner.Run has started the
+	// child. May be 0 immediately after Add returns if the onStart
+	// callback has not yet fired; callers that want a guaranteed PID
+	// should re-fetch via monitor.show. Review finding R2.5.
+	PID int `json:"pid,omitempty"`
 }
 
 // monitorIDParams is the JSON body for stop/show/restart/logs.
@@ -61,8 +66,11 @@ type monitorJobView struct {
 	Env             map[string]string `json:"env"`
 	DebounceSeconds int               `json:"debounce_seconds"`
 	Status          string            `json:"status"`
-	CreatedAt       string            `json:"created_at"`
-	UpdatedAt       string            `json:"updated_at"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
+	// PID of the running child (nil if stopped/dead). Added for R2.5 so
+	// CLI list/show can render a pid column per design doc §'thrum monitor list'.
+	PID *int `json:"pid,omitempty"`
 }
 
 // redactEnv returns a new map with the same keys as src but all values replaced
@@ -90,8 +98,9 @@ func jobToView(job *monitor.MonitorJob) monitorJobView {
 		Env:             redactEnv(job.Env), // security-critical: redact before wire
 		DebounceSeconds: job.DebounceSeconds,
 		Status:          string(job.Status),
-		CreatedAt:       job.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:       job.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		CreatedAt:       job.CreatedAt,
+		UpdatedAt:       job.UpdatedAt,
+		PID:             job.PID,
 	}
 }
 
@@ -153,7 +162,17 @@ func (h *MonitorHandler) HandleStart(ctx context.Context, params json.RawMessage
 	if err != nil {
 		return nil, translateMonitorError(err)
 	}
-	return monitorStartResponse{ID: id}, nil
+	// Include the child PID in the response so the CLI can echo
+	// "Started monitor <name> (<id>) — pid <N>, target <target>" per
+	// design doc §'thrum monitor add' (review finding R2.5). We re-fetch
+	// the job via GetByID (which consults the live handle) because the
+	// onStart callback may fire a few ms after Add returns — GetByID
+	// reads whatever the handle has published by now.
+	resp := monitorStartResponse{ID: id}
+	if job, gerr := h.supervisor.GetByID(ctx, id); gerr == nil && job.PID != nil {
+		resp.PID = *job.PID
+	}
+	return resp, nil
 }
 
 // HandleStop handles monitor.stop — signals the child and removes the row.
@@ -171,14 +190,40 @@ func (h *MonitorHandler) HandleStop(ctx context.Context, params json.RawMessage)
 	return map[string]string{"status": "stopped"}, nil
 }
 
-// HandleList handles monitor.list — returns all monitors with env redacted.
+// monitorListParams holds optional filters for monitor.list.
+type monitorListParams struct {
+	// IncludeAll, when true, also returns stopped/dead monitors. By
+	// default only monitors with Status=running are returned. When true,
+	// dead/stopped monitors older than 1 week are still hidden (review
+	// finding R2.3, matches design doc §'thrum monitor list').
+	IncludeAll bool `json:"include_all,omitempty"`
+}
+
+// HandleList handles monitor.list — returns monitors with env redacted.
+// By default only running monitors are returned; pass include_all=true to
+// include stopped/dead entries (younger than 1 week).
 func (h *MonitorHandler) HandleList(ctx context.Context, params json.RawMessage) (any, error) {
+	var req monitorListParams
+	if len(params) > 0 {
+		_ = json.Unmarshal(params, &req) // optional params; errors ignored
+	}
 	jobs, err := h.supervisor.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
 	views := make([]monitorJobView, 0, len(jobs))
+	cutoff := time.Now().Add(-7 * 24 * time.Hour)
 	for _, job := range jobs {
+		// Default mode: running only.
+		if !req.IncludeAll && job.Status != monitor.StatusRunning {
+			continue
+		}
+		// --all mode: still hide dead/stopped older than a week.
+		if req.IncludeAll && job.Status != monitor.StatusRunning {
+			if job.UpdatedAt.Before(cutoff) {
+				continue
+			}
+		}
 		views = append(views, jobToView(job)) // env redacted inside jobToView
 	}
 	return views, nil
