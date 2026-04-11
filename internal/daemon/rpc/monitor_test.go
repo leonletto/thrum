@@ -123,6 +123,38 @@ func TestMonitorStart_RejectsMissingCwd(t *testing.T) {
 	assert.Contains(t, err.Error(), "cwd")
 }
 
+// TestMonitorStart_RejectsMissingTarget exercises the handler→supervisor→
+// translate chain for the missing-target validation. Supervisor-level
+// tests cover the same check directly, but the RPC handler layer might
+// accidentally add its own required-field check (or mangle the error
+// translation) in the future. Review finding R2.8.
+func TestMonitorStart_RejectsMissingTarget(t *testing.T) {
+	h, _, _ := newMonitorTestSetup(t)
+	p := monitorStartParams{
+		Name: "no-target", Argv: []string{"true"}, Match: ".*",
+		Target: "", Cwd: os.TempDir(), DebounceSeconds: 60,
+	}
+	b, _ := json.Marshal(p)
+	_, err := h.HandleStart(context.Background(), b)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "target")
+}
+
+// TestMonitorStart_RejectsMissingName exercises the handler layer for the
+// name validation added in review finding 10 (fix at supervisor layer).
+// Mirror of the missing-target test for symmetry.
+func TestMonitorStart_RejectsMissingName(t *testing.T) {
+	h, _, _ := newMonitorTestSetup(t)
+	p := monitorStartParams{
+		Name: "", Argv: []string{"true"}, Match: ".*",
+		Target: "@test", Cwd: os.TempDir(), DebounceSeconds: 60,
+	}
+	b, _ := json.Marshal(p)
+	_, err := h.HandleStart(context.Background(), b)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "name")
+}
+
 func TestMonitorStart_RejectsCapExceeded(t *testing.T) {
 	// We can't actually launch 100 real processes in a unit test, so we test
 	// the error translation path directly by confirming ErrCapExceeded is
