@@ -75,7 +75,7 @@ func TestRunner_MatchesAndEmits(t *testing.T) {
 	re := regexp.MustCompile(job.matchPattern)
 
 	deliver, getEmits := collectEmits(t)
-	r, err := NewRunner(job, re, nil, deliver)
+	r, err := NewRunner(job, re, nil, deliver, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -106,7 +106,7 @@ func TestRunner_TrailingSummaryFires(t *testing.T) {
 	re := regexp.MustCompile(job.matchPattern)
 
 	deliver, getEmits := collectEmits(t)
-	r, err := NewRunner(job, re, nil, deliver)
+	r, err := NewRunner(job, re, nil, deliver, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -133,7 +133,7 @@ func TestRunner_NonMatchingLinesAreFiltered(t *testing.T) {
 	re := regexp.MustCompile(job.matchPattern)
 
 	deliver, getEmits := collectEmits(t)
-	r, err := NewRunner(job, re, nil, deliver)
+	r, err := NewRunner(job, re, nil, deliver, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -153,7 +153,7 @@ func TestRunner_MergesStderrIntoFilter(t *testing.T) {
 	re := regexp.MustCompile(job.matchPattern)
 
 	deliver, getEmits := collectEmits(t)
-	r, err := NewRunner(job, re, nil, deliver)
+	r, err := NewRunner(job, re, nil, deliver, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -177,7 +177,7 @@ func TestRunner_OversizedLineTruncated(t *testing.T) {
 	re := regexp.MustCompile(job.matchPattern)
 
 	deliver, getEmits := collectEmits(t)
-	r, err := NewRunner(job, re, nil, deliver)
+	r, err := NewRunner(job, re, nil, deliver, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -222,7 +222,7 @@ func TestRunner_ExitNoticeCalledOnChildExit(t *testing.T) {
 	}
 
 	deliver, _ := collectEmits(t)
-	r, err := NewRunner(job, re, exitNotice, deliver)
+	r, err := NewRunner(job, re, exitNotice, deliver, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -250,7 +250,7 @@ func TestRunner_CwdIsRespected(t *testing.T) {
 	re := regexp.MustCompile(job.matchPattern)
 
 	deliver, getEmits := collectEmits(t)
-	r, err := NewRunner(job, re, nil, deliver)
+	r, err := NewRunner(job, re, nil, deliver, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -278,7 +278,7 @@ func TestRunner_EnvIsolation(t *testing.T) {
 	re := regexp.MustCompile(job.matchPattern)
 
 	deliver, getEmits := collectEmits(t)
-	r, err := NewRunner(job, re, nil, deliver)
+	r, err := NewRunner(job, re, nil, deliver, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -319,7 +319,7 @@ func TestRunner_SIGTERMThenSIGKILL(t *testing.T) {
 	re := regexp.MustCompile(job.matchPattern)
 
 	deliver, _ := collectEmits(t)
-	r, err := NewRunner(job, re, nil, deliver)
+	r, err := NewRunner(job, re, nil, deliver, nil)
 	require.NoError(t, err)
 
 	// Override grace period to 300ms so the test doesn't wait the full 5 seconds.
@@ -364,7 +364,7 @@ func TestRunner_ExitNoticeContainsTailOutput(t *testing.T) {
 	}
 
 	deliver, _ := collectEmits(t)
-	r, err := NewRunner(job, re, exitNotice, deliver)
+	r, err := NewRunner(job, re, exitNotice, deliver, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -382,7 +382,7 @@ func TestRunner_NewRunnerRejectsEmptyArgv(t *testing.T) {
 	job := defaultJob(t)
 	job.argv = []string{}
 	re := regexp.MustCompile(".")
-	_, err := NewRunner(job, re, nil, func(_, _ string) {})
+	_, err := NewRunner(job, re, nil, func(_, _ string) {}, nil)
 	require.Error(t, err)
 }
 
