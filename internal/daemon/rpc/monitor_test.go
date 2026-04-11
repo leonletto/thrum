@@ -36,7 +36,7 @@ func newMonitorTestSetup(t *testing.T) (*MonitorHandler, *monitor.MonitorStore, 
 	delivery := monitor.NewDelivery(&noopSender{})
 	sup := monitor.NewMonitorSupervisor(store, delivery)
 
-	h := NewMonitorHandler(sup, store)
+	h := NewMonitorHandler(sup, store, st)
 	return h, store, st
 }
 
@@ -334,11 +334,82 @@ func TestMonitorRestart_ReturnsNotFoundForUnknownID(t *testing.T) {
 
 // ----- HandleLogs tests -----
 
-func TestMonitorLogs_ReturnsNotImplemented(t *testing.T) {
+// TestMonitorLogs_ReturnsRecentMatches verifies HandleLogs queries the
+// messages table and returns the last N synthetic messages with
+// agent_id = "monitor:<name>" (the caller ID used by Delivery).
+// Review finding R2.2.
+func TestMonitorLogs_ReturnsRecentMatches(t *testing.T) {
+	h, store, st := newMonitorTestSetup(t)
+
+	// Pre-insert a monitor row so HandleLogs can resolve id → name.
+	now := time.Now().UTC().Truncate(time.Second)
+	const monID = "mon_logs_test"
+	const monName = "logs-watch"
+	job := &monitor.MonitorJob{
+		ID: monID, Name: monName,
+		Argv: []string{"true"}, MatchPattern: ".", Target: "@t",
+		Cwd: os.TempDir(), Env: map[string]string{},
+		DebounceSeconds: 60, CreatedAt: now, UpdatedAt: now,
+		Status: monitor.StatusRunning,
+	}
+	require.NoError(t, store.Insert(context.Background(), job))
+
+	// Pre-seed a synthetic agent+session for "monitor:logs-watch" so
+	// MessageHandler.HandleSend can resolve the caller when Delivery
+	// submits the synthetic message.
+	callerID := "monitor:" + monName
+	nowStr := now.Format(time.RFC3339)
+	_, err := st.DB().ExecContext(context.Background(), `
+		INSERT INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at, last_seen_at)
+		VALUES (?, 'monitor', 'monitor', 'monitor', ?, '', 0, ?, ?)
+	`, callerID, monName, nowStr, nowStr)
+	require.NoError(t, err)
+	sessionID := fmt.Sprintf("ses_logs_test_%d", time.Now().UnixNano())
+	_, err = st.DB().ExecContext(context.Background(), `
+		INSERT INTO sessions (session_id, agent_id, started_at, last_seen_at)
+		VALUES (?, ?, ?, ?)
+	`, sessionID, callerID, nowStr, nowStr)
+	require.NoError(t, err)
+
+	// Insert 3 matches via the real Delivery pipeline so the messages
+	// table gets rows with agent_id = "monitor:logs-watch".
+	msgHandler := NewMessageHandler(st)
+	delivery := monitor.NewDelivery(msgHandler)
+	for i := 1; i <= 3; i++ {
+		content := fmt.Sprintf("ERROR: match %d", i)
+		require.NoError(t, delivery.Deliver(context.Background(), monName, "", content))
+		time.Sleep(10 * time.Millisecond) // ensure distinct created_at
+	}
+
+	// Query via HandleLogs.
+	params, _ := json.Marshal(monitorLogsParams{ID: monID, Limit: 10})
+	resp, err := h.HandleLogs(context.Background(), params)
+	require.NoError(t, err)
+	entries, ok := resp.([]monitorLogEntry)
+	require.True(t, ok, "expected []monitorLogEntry, got %T", resp)
+	require.Len(t, entries, 3, "expected all 3 inserted matches")
+
+	// Verify contents and ordering (DESC so most recent first).
+	for _, e := range entries {
+		assert.Contains(t, e.Content, "ERROR: match",
+			"content should include the inserted match body")
+		assert.NotEmpty(t, e.MessageID)
+	}
+}
+
+func TestMonitorLogs_RejectsMissingID(t *testing.T) {
 	h, _, _ := newMonitorTestSetup(t)
-	_, err := h.HandleLogs(context.Background(), json.RawMessage(`{"id":"mon_X"}`))
+	_, err := h.HandleLogs(context.Background(), json.RawMessage(`{}`))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not yet implemented")
+	assert.Contains(t, err.Error(), "id is required")
+}
+
+func TestMonitorLogs_ReturnsNotFoundForUnknownID(t *testing.T) {
+	h, _, _ := newMonitorTestSetup(t)
+	params, _ := json.Marshal(monitorLogsParams{ID: "mon_GHOST"})
+	_, err := h.HandleLogs(context.Background(), params)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "monitor not found")
 }
 
 // ----- error translation tests -----

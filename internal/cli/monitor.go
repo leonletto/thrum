@@ -144,17 +144,37 @@ func MonitorRestart(client *Client, id string) (*MonitorStartResult, error) {
 	return &result, nil
 }
 
-// MonitorLogs sends monitor.logs for the given monitor ID.
-// v1: the daemon returns a not-implemented error; this surfaces it to the user.
-func MonitorLogs(client *Client, id string, out io.Writer) error {
-	req := struct {
-		ID string `json:"id"`
-	}{ID: id}
+// MonitorLogEntry matches the daemon's monitorLogEntry shape — one
+// historical match record returned by monitor.logs.
+type MonitorLogEntry struct {
+	MessageID string    `json:"message_id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
-	var result map[string]any
-	if err := client.Call("monitor.logs", req, &result); err != nil {
+// MonitorLogs fetches the last N recent monitor matches from the messages
+// table and renders them as a newline-separated log. Default limit is
+// whatever the daemon decides (20) unless the caller passes a non-zero
+// value.
+func MonitorLogs(client *Client, id string, limit int, out io.Writer) error {
+	req := struct {
+		ID    string `json:"id"`
+		Limit int    `json:"limit,omitempty"`
+	}{ID: id, Limit: limit}
+
+	var entries []MonitorLogEntry
+	if err := client.Call("monitor.logs", req, &entries); err != nil {
 		return fmt.Errorf("monitor logs: %w", err)
 	}
-	_, _ = fmt.Fprintln(out, result)
+	if len(entries) == 0 {
+		_, _ = fmt.Fprintln(out, "No matches recorded.")
+		return nil
+	}
+	// Daemon returns DESC (most recent first). Render oldest-first so the
+	// log reads like a normal tail.
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		_, _ = fmt.Fprintf(out, "%s  %s\n", e.CreatedAt.Format(time.RFC3339), e.Content)
+	}
 	return nil
 }

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/monitor"
+	"github.com/leonletto/thrum/internal/daemon/state"
 )
 
 // MonitorHandler handles all monitor.* RPC methods. It is registered only on
@@ -15,11 +17,13 @@ import (
 type MonitorHandler struct {
 	supervisor *monitor.MonitorSupervisor
 	store      *monitor.MonitorStore
+	state      *state.State // for HandleLogs — queries the messages table
 }
 
-// NewMonitorHandler constructs a MonitorHandler.
-func NewMonitorHandler(sup *monitor.MonitorSupervisor, store *monitor.MonitorStore) *MonitorHandler {
-	return &MonitorHandler{supervisor: sup, store: store}
+// NewMonitorHandler constructs a MonitorHandler. The state argument is used by
+// HandleLogs to query recent monitor matches from the messages table.
+func NewMonitorHandler(sup *monitor.MonitorSupervisor, store *monitor.MonitorStore, st *state.State) *MonitorHandler {
+	return &MonitorHandler{supervisor: sup, store: store, state: st}
 }
 
 // ----- request / response types -----
@@ -217,11 +221,74 @@ func (h *MonitorHandler) HandleRestart(ctx context.Context, params json.RawMessa
 	return monitorStartResponse{ID: req.ID}, nil
 }
 
-// HandleLogs handles monitor.logs — v1 stub.
+// monitorLogsParams holds the parameters for monitor.logs.
+type monitorLogsParams struct {
+	ID    string `json:"id"`
+	Limit int    `json:"limit,omitempty"` // defaults to 20 if unset
+}
+
+// monitorLogEntry is one row in the HandleLogs response. It maps directly
+// to a messages-table row for a monitor match.
+type monitorLogEntry struct {
+	MessageID string    `json:"message_id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// HandleLogs returns the last N synthetic messages delivered by the monitor
+// with the given ID. Queries the messages table on agent_id = "monitor:<name>"
+// (the caller ID used by the Delivery helper) ordered by created_at DESC.
 //
-// Raw stdout streaming is deferred to thrum-86r.4.  In v1 we return a
-// not-implemented error so the CLI can surface a clear message rather than
-// hanging or returning an empty response.
+// Raw stdout streaming ('thrum monitor tail') is a separate feature deferred
+// to thrum-86r.4; this handler is the historical-match lookup required by
+// v1 design doc §'thrum monitor logs'. Review finding R2.2.
 func (h *MonitorHandler) HandleLogs(ctx context.Context, params json.RawMessage) (any, error) {
-	return nil, fmt.Errorf("monitor logs streaming is not yet implemented (deferred to thrum-86r.4); use 'thrum monitor show <id>' to view status")
+	var req monitorLogsParams
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if req.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+	if req.Limit <= 0 {
+		req.Limit = 20
+	}
+
+	// Resolve ID → monitor name so we can build the sender caller ID that
+	// Delivery used ("monitor:<name>").
+	job, err := h.store.GetByID(ctx, req.ID)
+	if err != nil {
+		return nil, translateMonitorError(err)
+	}
+	callerID := "monitor:" + job.Name
+
+	rows, err := h.state.DB().QueryContext(ctx, `
+		SELECT message_id, body_content, created_at
+		FROM messages
+		WHERE agent_id = ?
+		ORDER BY created_at DESC
+		LIMIT ?
+	`, callerID, req.Limit)
+	if err != nil {
+		return nil, fmt.Errorf("internal error: query monitor logs: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	entries := make([]monitorLogEntry, 0, req.Limit)
+	for rows.Next() {
+		var e monitorLogEntry
+		var createdAt string
+		if scanErr := rows.Scan(&e.MessageID, &e.Content, &createdAt); scanErr != nil {
+			return nil, fmt.Errorf("internal error: scan monitor log row: %w", scanErr)
+		}
+		if t, parseErr := time.Parse(time.RFC3339, createdAt); parseErr == nil {
+			e.CreatedAt = t
+		}
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("internal error: iterate monitor log rows: %w", err)
+	}
+
+	return entries, nil
 }

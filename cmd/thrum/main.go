@@ -2479,19 +2479,24 @@ The command and its arguments must be separated from monitor flags with '--':
 	})
 
 	// thrum monitor logs <id>
-	cmd.AddCommand(&cobra.Command{
-		Use:   "logs <id>",
-		Short: "Stream logs from a monitor job (v1: not yet implemented)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-			return cli.MonitorLogs(client, args[0], os.Stdout)
-		},
-	})
+	{
+		var logsLimit int
+		logsCmd := &cobra.Command{
+			Use:   "logs <id>",
+			Short: "Show the most recent monitor matches (historical lookup)",
+			Args:  cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				client, err := getClient()
+				if err != nil {
+					return fmt.Errorf("connect to daemon: %w", err)
+				}
+				defer func() { _ = client.Close() }()
+				return cli.MonitorLogs(client, args[0], logsLimit, os.Stdout)
+			},
+		}
+		logsCmd.Flags().IntVarP(&logsLimit, "limit", "n", 20, "Max number of matches to return")
+		cmd.AddCommand(logsCmd)
+	}
 
 	return cmd
 }
@@ -5637,7 +5642,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	monitorStore := monitor.NewMonitorStore(st.DB())
 	monitorDelivery := monitor.NewDelivery(messageHandler)
 	monitorSupervisor := monitor.NewMonitorSupervisor(monitorStore, monitorDelivery)
-	monitorHandler := rpc.NewMonitorHandler(monitorSupervisor, monitorStore)
+	monitorHandler := rpc.NewMonitorHandler(monitorSupervisor, monitorStore, st)
 	server.RegisterHandler("monitor.start", monitorHandler.HandleStart)
 	server.RegisterHandler("monitor.stop", monitorHandler.HandleStop)
 	server.RegisterHandler("monitor.list", monitorHandler.HandleList)
