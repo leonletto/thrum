@@ -262,7 +262,7 @@ func (h *TmuxHandler) HandleCapture(ctx context.Context, params json.RawMessage)
 
 // HandleStatus scans identity files across all worktrees for managed tmux sessions.
 func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) (any, error) {
-	dirs := h.allIdentityDirs(ctx)
+	dirs := AllIdentityDirs(ctx, h.thrumDir)
 
 	seen := make(map[string]bool) // deduplicate by session name
 	var sessions []TmuxSessionInfo
@@ -436,7 +436,7 @@ func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
 // clearTmuxFromIdentities removes tmux_session and runtime from identity files
 // matching the given session name, scanning all worktrees.
 func (h *TmuxHandler) clearTmuxFromIdentities(sessionName string) {
-	for _, dir := range h.allIdentityDirs(context.Background()) {
+	for _, dir := range AllIdentityDirs(context.Background(), h.thrumDir) {
 		h.clearTmuxFromIdentitiesInDir(dir, sessionName)
 	}
 }
@@ -661,7 +661,7 @@ func resolveWorktreePath(ctx context.Context, repoDir, worktreeName string) stri
 // findIdentityForSession searches all worktree identity dirs for an agent
 // associated with the given tmux session name.
 func (h *TmuxHandler) findIdentityForSession(ctx context.Context, sessionName string) (string, *config.IdentityFile, string) {
-	for _, idDir := range h.allIdentityDirs(ctx) {
+	for _, idDir := range AllIdentityDirs(ctx, h.thrumDir) {
 		entries, _ := os.ReadDir(idDir)
 		for _, entry := range entries {
 			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
@@ -684,25 +684,6 @@ func (h *TmuxHandler) findIdentityForSession(ctx context.Context, sessionName st
 		}
 	}
 	return "", nil, ""
-}
-
-// allIdentityDirs returns all identity directories across worktrees.
-// It looks for .thrum/identities directories in known worktree locations.
-func (h *TmuxHandler) allIdentityDirs(ctx context.Context) []string {
-	var dirs []string
-	// Primary identities dir
-	primary := filepath.Join(h.thrumDir, "identities")
-	dirs = append(dirs, primary)
-
-	// Also scan worktrees via git
-	repoDir := filepath.Dir(h.thrumDir)
-	for _, wtPath := range safecmd.WorktreePaths(ctx, repoDir) {
-		idDir := filepath.Join(wtPath, ".thrum", "identities")
-		if idDir != primary {
-			dirs = append(dirs, idDir)
-		}
-	}
-	return dirs
 }
 
 // clearTmuxFromIdentitiesInDir removes tmux_session and runtime from identity files
