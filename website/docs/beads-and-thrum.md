@@ -6,7 +6,7 @@ description:
 category: "integrations"
 order: 4
 tags: ["beads", "thrum", "agents", "coordination", "memory", "messaging"]
-last_updated: "2026-02-10"
+last_updated: "2026-04-11"
 ---
 
 ## Beads and Thrum
@@ -39,6 +39,16 @@ tell me?" or "who's working on what?", Thrum provides the answer.
 Both use Git as the persistence layer. No external services, no databases, no
 state that lives outside the repository. Everything survives session boundaries
 because everything is committed to version control.
+
+> **Running bd 1.0+?** As of bd 1.0, beads defaults to an **embedded Dolt
+> store** (single-writer, file-locked) rather than the separate
+> `dolt sql-server` process used in 0.59–0.63. The embedded mode removes the
+> server lifecycle entirely — one binary, one lock file, one data directory at
+> `.beads/embeddeddolt/<prefix>/`. If you're coming from an existing bd 0.62
+> install, the upgrade is machine-wide and breaks unmigrated repos at once, so
+> follow the
+> [Beads Migration to Embedded Mode](guides/beads-migration-to-embedded.md)
+> guide before running any `bd` commands against your existing repos.
 
 ## What Each Tool Covers
 
@@ -230,9 +240,9 @@ blocker must close before the blocked task becomes ready. The alternative syntax
 is `bd dep add <blocked> <blocker>` (reversed order).
 ````
 
-You can also generate a minimal starter block with `bd onboard`, but the block
-above is more comprehensive and covers the epic/dependency patterns that
-sub-agents most commonly get wrong.
+You can also generate a minimal starter block with `bd prime` (formerly
+`bd onboard` in pre-1.0 releases), but the block above is more comprehensive and
+covers the epic/dependency patterns that sub-agents most commonly get wrong.
 
 ## Next Steps
 
@@ -244,3 +254,6 @@ sub-agents most commonly get wrong.
   the full research → plan → implement cycle using both tools
 - [Beads Setup Guide](guides/beads-setup.md) — install and configure Beads for
   task tracking alongside Thrum
+- [Beads Migration to Embedded Mode](guides/beads-migration-to-embedded.md) —
+  field report for upgrading existing bd 0.59–0.63 installs to bd 1.0 embedded
+  mode
