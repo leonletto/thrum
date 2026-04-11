@@ -1,4 +1,10 @@
-package monitor
+// Package monitor_test uses an external test package (not package monitor)
+// because one of its integration tests imports internal/daemon/rpc, and
+// internal/daemon/rpc/monitor.go imports internal/daemon/monitor — putting
+// the test file in `package monitor` would create an "import cycle in test"
+// compile error. External test packages are the standard Go escape hatch
+// for exactly this situation.
+package monitor_test
 
 import (
 	"context"
@@ -8,8 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
+	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +36,7 @@ func (f *fakeSender) HandleSend(_ context.Context, params json.RawMessage) (any,
 // invocation results in exactly one HandleSend call.
 func TestDelivery_SenderReceivesExactlyOneCall(t *testing.T) {
 	fake := &fakeSender{}
-	d := NewDelivery(fake)
+	d := monitor.NewDelivery(fake)
 
 	err := d.Deliver(context.Background(), "dev-errors", "@impl_api", "ERROR: boom")
 	require.NoError(t, err)
@@ -40,7 +47,7 @@ func TestDelivery_SenderReceivesExactlyOneCall(t *testing.T) {
 // "monitor:<name>" — the leading "monitor:" prefix must be present.
 func TestDelivery_CorrectSenderPrefix(t *testing.T) {
 	fake := &fakeSender{}
-	d := NewDelivery(fake)
+	d := monitor.NewDelivery(fake)
 
 	err := d.Deliver(context.Background(), "dev-errors", "@impl_api", "ERROR: test")
 	require.NoError(t, err)
@@ -59,7 +66,7 @@ func TestDelivery_CorrectSenderPrefix(t *testing.T) {
 // mentions list so the existing mention-resolution path routes the message.
 func TestDelivery_CorrectTarget(t *testing.T) {
 	fake := &fakeSender{}
-	d := NewDelivery(fake)
+	d := monitor.NewDelivery(fake)
 
 	err := d.Deliver(context.Background(), "watchdog", "@coordinator_main", "WARN: disk full")
 	require.NoError(t, err)
@@ -77,7 +84,7 @@ func TestDelivery_CorrectTarget(t *testing.T) {
 // TestDelivery_CorrectContent asserts that the content is forwarded verbatim.
 func TestDelivery_CorrectContent(t *testing.T) {
 	fake := &fakeSender{}
-	d := NewDelivery(fake)
+	d := monitor.NewDelivery(fake)
 
 	const content = "ERROR: connection refused on port 8080"
 	err := d.Deliver(context.Background(), "net-watch", "@ops", content)
@@ -106,7 +113,7 @@ func TestDelivery_MonitorNamePrefix(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := &fakeSender{}
-			d := NewDelivery(fake)
+			d := monitor.NewDelivery(fake)
 			require.NoError(t, d.Deliver(context.Background(), tc.name, "@x", "line"))
 
 			var payload map[string]any
@@ -122,7 +129,7 @@ func TestDelivery_MonitorNamePrefix(t *testing.T) {
 // in bulk. Review finding 6.
 func TestDelivery_MonitorScopeTagged(t *testing.T) {
 	fake := &fakeSender{}
-	d := NewDelivery(fake)
+	d := monitor.NewDelivery(fake)
 
 	err := d.Deliver(context.Background(), "dev-errors", "@impl_api", "ERROR: boom")
 	require.NoError(t, err)
@@ -146,7 +153,7 @@ func TestDelivery_MonitorScopeTagged(t *testing.T) {
 func TestDelivery_PropagatesSenderError(t *testing.T) {
 	sentinelErr := errors.New("pipeline down")
 	fake := &fakeSender{err: sentinelErr}
-	d := NewDelivery(fake)
+	d := monitor.NewDelivery(fake)
 
 	err := d.Deliver(context.Background(), "watch", "@x", "line")
 	require.Error(t, err)
@@ -188,7 +195,7 @@ func TestDelivery_MessageLandsInDB(t *testing.T) {
 	// Build a real MessageHandler (no dispatcher/thrumDir needed for this test).
 	msgHandler := rpc.NewMessageHandler(st)
 
-	d := NewDelivery(msgHandler)
+	d := monitor.NewDelivery(msgHandler)
 	err = d.Deliver(context.Background(), monitorName, "", "ERROR: boom")
 	require.NoError(t, err)
 
