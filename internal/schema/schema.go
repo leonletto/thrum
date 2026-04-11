@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 19
+const CurrentVersion = 20
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -297,6 +297,24 @@ func createTables(tx *sql.Tx) error {
 			captured_output    TEXT,
 			position           INTEGER NOT NULL DEFAULT 0
 		)`,
+
+		// Monitors table (for thrum monitor feature — v20)
+		`CREATE TABLE IF NOT EXISTS monitors (
+			id                TEXT PRIMARY KEY,
+			name              TEXT NOT NULL UNIQUE,
+			argv              TEXT NOT NULL,       -- JSON array
+			match_pattern     TEXT NOT NULL,
+			target            TEXT NOT NULL,
+			cwd               TEXT NOT NULL,
+			env               TEXT NOT NULL,       -- JSON object
+			debounce_seconds  INTEGER NOT NULL,
+			created_at        TEXT NOT NULL,
+			updated_at        TEXT NOT NULL,
+			status            TEXT NOT NULL,       -- "running" | "dead" | "stopped"
+			last_exit_code    INTEGER,
+			last_exit_at      TEXT,
+			pid               INTEGER
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -357,6 +375,9 @@ func createIndexes(tx *sql.Tx) error {
 
 		// Command queue indexes
 		"CREATE INDEX IF NOT EXISTS idx_queue_session_state ON command_queue(session_name, state)",
+
+		// Monitors indexes (v20)
+		"CREATE INDEX IF NOT EXISTS idx_monitors_status ON monitors(status)",
 	}
 
 	for _, sql := range indexes {
@@ -786,6 +807,38 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 			if err != nil {
 				return fmt.Errorf("migration 18→19: add notify_on_complete: %w", err)
 			}
+		}
+	}
+
+	// Migration from version 19 to 20: Add monitors table for the
+	// thrum monitor feature. Uses CREATE TABLE IF NOT EXISTS so the
+	// migration is safe to run after createTables() (which already
+	// creates the table on fresh installs).
+	if startVersion < 20 && endVersion >= 20 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS monitors (
+				id                TEXT PRIMARY KEY,
+				name              TEXT NOT NULL UNIQUE,
+				argv              TEXT NOT NULL,
+				match_pattern     TEXT NOT NULL,
+				target            TEXT NOT NULL,
+				cwd               TEXT NOT NULL,
+				env               TEXT NOT NULL,
+				debounce_seconds  INTEGER NOT NULL,
+				created_at        TEXT NOT NULL,
+				updated_at        TEXT NOT NULL,
+				status            TEXT NOT NULL,
+				last_exit_code    INTEGER,
+				last_exit_at      TEXT,
+				pid               INTEGER
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 19→20: create monitors: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_monitors_status ON monitors(status)`)
+		if err != nil {
+			return fmt.Errorf("migration 19→20: idx_monitors_status: %w", err)
 		}
 	}
 
