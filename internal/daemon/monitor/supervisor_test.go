@@ -452,6 +452,58 @@ func TestSupervisor_DuplicateNameRejected(t *testing.T) {
 		"duplicate-name Add must return ErrNameTaken, not a raw sqlite error")
 }
 
+// TestSupervisor_AddRunnerSurvivesCallerCtxCancel proves that a monitor
+// submitted via Add() keeps running even after the caller's context is
+// cancelled — the runner's lifetime is tied to the supervisor's base
+// context (captured by Start), not to the short-lived RPC request context.
+//
+// Regression test for the bug caught by dd1.6 Smoke 1: RPC-submitted
+// monitors were dying the moment the RPC handler returned because
+// launch() used the caller's ctx as the runner's parent.
+func TestSupervisor_AddRunnerSurvivesCallerCtxCancel(t *testing.T) {
+	sup, _ := newTestSupervisor(t)
+
+	supCtx, supCancel := context.WithCancel(context.Background())
+	defer supCancel()
+
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		sup.Start(supCtx)
+	}()
+	<-started
+	time.Sleep(20 * time.Millisecond)
+
+	// Submit via Add with a SHORT-LIVED caller ctx that mimics an RPC
+	// request.
+	callerCtx, callerCancel := context.WithCancel(context.Background())
+	spec := makeSpec("rpc-sim")
+	// Use a long-running child so we can observe whether the runner
+	// survives after the caller ctx is cancelled.
+	spec.Argv = []string{"sh", "-c", "while true; do echo hi; sleep 0.05; done"}
+
+	id, err := sup.Add(callerCtx, spec)
+	require.NoError(t, err)
+	require.NotEmpty(t, id)
+
+	// Mimic RPC request completion.
+	callerCancel()
+
+	// Give the runner ample time to notice a canceled ctx and exit (if
+	// the bug were still present).
+	time.Sleep(300 * time.Millisecond)
+
+	// The runner MUST still be in the supervisor's map after caller ctx
+	// cancellation. If the old bug were present, the runner would have
+	// exited via its natural exit path and removed itself from the map.
+	sup.mu.Lock()
+	_, stillRunning := sup.runners[id]
+	sup.mu.Unlock()
+	assert.True(t, stillRunning,
+		"monitor %s must still be registered after caller ctx cancel; "+
+			"runner lifetime must be tied to supervisor base ctx, not RPC request ctx", id)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────

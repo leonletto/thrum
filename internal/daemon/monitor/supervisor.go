@@ -67,11 +67,11 @@ type SubmitSpec struct {
 // runnerHandle groups the per-runner context cancel function and a done channel
 // that is closed when the runner goroutine returns.
 //
-// stoppedByUser is set by Stop() before it cancels the runner context. The
+// StoppedByUser is set by Stop() before it cancels the runner context. The
 // runner's exitNotice closure reads this flag and skips store.MarkDead when
 // true, because Stop is about to call store.Delete on the same row and the
 // MarkDead write would just be wasted I/O overwritten by the immediate delete.
-// atomic.Bool avoids a lock here — the flag is set once and read once.
+// Atomic.Bool avoids a lock here — the flag is set once and read once.
 type runnerHandle struct {
 	job           *MonitorJob
 	cancel        context.CancelFunc
@@ -94,6 +94,14 @@ type MonitorSupervisor struct {
 	// Used to prevent a TOCTOU race where two concurrent Adds see
 	// len(runners) == 99 and both proceed to launch, ending with 101 runners.
 	pending int
+
+	// baseCtx is the long-lived supervisor context captured by Start(). All
+	// runner contexts derive from baseCtx so their lifetime is tied to the
+	// daemon's lifetime, NOT to the ctx of whatever RPC call happened to
+	// invoke Add(). Without this, an RPC-submitted monitor is killed the
+	// moment the RPC handler returns because its derived child context
+	// dies with the request. Set exactly once by Start; read by launch().
+	baseCtx context.Context
 }
 
 // NewMonitorSupervisor constructs a supervisor backed by store and delivery.
@@ -116,12 +124,20 @@ func NewMonitorSupervisor(store *MonitorStore, delivery *Delivery) *MonitorSuper
 func (s *MonitorSupervisor) Start(ctx context.Context) {
 	log.Printf("monitor_supervisor: starting, reloading persisted jobs")
 
+	// Capture the long-lived daemon context so subsequent Add() calls via
+	// RPC can derive runner contexts from it rather than from the
+	// transient RPC request context. Guarded by mu because launch() reads
+	// it and launch() may be called from an RPC handler goroutine.
+	s.mu.Lock()
+	s.baseCtx = ctx
+	s.mu.Unlock()
+
 	persisted, err := s.store.ListByStatus(ctx, StatusRunning)
 	if err != nil {
 		log.Printf("monitor_supervisor: reload failed: %v", err)
 	} else {
 		for _, job := range persisted {
-			if launchErr := s.launch(ctx, job); launchErr != nil {
+			if launchErr := s.launch(job); launchErr != nil {
 				log.Printf("monitor_supervisor: relaunch %s failed: %v", job.Name, launchErr)
 				_ = s.store.MarkDead(ctx, job.ID, -1, time.Now())
 			}
@@ -234,7 +250,7 @@ func (s *MonitorSupervisor) Add(ctx context.Context, spec SubmitSpec) (string, e
 		}
 		return "", err
 	}
-	if err := s.launch(ctx, job); err != nil {
+	if err := s.launch(job); err != nil {
 		// Roll back the DB insert so the caller sees no partial state.
 		_ = s.store.Delete(context.Background(), job.ID)
 		releasePending()
@@ -288,20 +304,33 @@ func (s *MonitorSupervisor) GetByID(ctx context.Context, id string) (*MonitorJob
 }
 
 // launch creates a Runner for job and starts its goroutine.  The runner's
-// context is derived from the provided parent so that supervisor shutdown
-// (ctx.Done) propagates into every child.  The done channel is closed when the
-// goroutine returns.
+// context is derived from s.baseCtx (captured by Start) so the runner's
+// lifetime is tied to the DAEMON, not to whatever RPC request happened to
+// invoke Add. Using the caller's ctx would kill the runner the moment an
+// RPC handler returns — a subtle bug that only appears under real RPC
+// traffic, not in direct-call tests.
+//
+// If baseCtx has not been set yet (Start hasn't been called), launch falls
+// back to context.Background so the reload path can still work when Start
+// calls launch from its own goroutine before the baseCtx field is read.
 //
 // The caller is responsible for holding s.mu when appropriate; during the
 // startup reload phase no concurrent mutation is possible, and during Add the
 // mu is released before launch is called.
-func (s *MonitorSupervisor) launch(ctx context.Context, job *MonitorJob) error {
+func (s *MonitorSupervisor) launch(job *MonitorJob) error {
 	re, err := regexp.Compile(job.MatchPattern)
 	if err != nil {
 		return fmt.Errorf("compile regex for %s: %w", job.Name, err)
 	}
 
-	runnerCtx, cancel := context.WithCancel(ctx)
+	// Use the supervisor's long-lived base context as parent. See type doc.
+	s.mu.Lock()
+	baseCtx := s.baseCtx
+	s.mu.Unlock()
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	runnerCtx, cancel := context.WithCancel(baseCtx)
 	done := make(chan struct{})
 
 	// Capture a stable copy of the ID for the closures below.
@@ -371,9 +400,9 @@ type monitorJobAdapter struct {
 	job *MonitorJob
 }
 
-func (a *monitorJobAdapter) GetID() string              { return a.job.ID }
-func (a *monitorJobAdapter) GetName() string            { return a.job.Name }
-func (a *monitorJobAdapter) GetArgv() []string          { return a.job.Argv }
-func (a *monitorJobAdapter) GetCwd() string             { return a.job.Cwd }
-func (a *monitorJobAdapter) GetEnv() map[string]string  { return a.job.Env }
-func (a *monitorJobAdapter) GetDebounceSeconds() int    { return a.job.DebounceSeconds }
+func (a *monitorJobAdapter) GetID() string             { return a.job.ID }
+func (a *monitorJobAdapter) GetName() string           { return a.job.Name }
+func (a *monitorJobAdapter) GetArgv() []string         { return a.job.Argv }
+func (a *monitorJobAdapter) GetCwd() string            { return a.job.Cwd }
+func (a *monitorJobAdapter) GetEnv() map[string]string { return a.job.Env }
+func (a *monitorJobAdapter) GetDebounceSeconds() int   { return a.job.DebounceSeconds }
