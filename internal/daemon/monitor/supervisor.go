@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -65,10 +66,17 @@ type SubmitSpec struct {
 
 // runnerHandle groups the per-runner context cancel function and a done channel
 // that is closed when the runner goroutine returns.
+//
+// stoppedByUser is set by Stop() before it cancels the runner context. The
+// runner's exitNotice closure reads this flag and skips store.MarkDead when
+// true, because Stop is about to call store.Delete on the same row and the
+// MarkDead write would just be wasted I/O overwritten by the immediate delete.
+// atomic.Bool avoids a lock here — the flag is set once and read once.
 type runnerHandle struct {
-	job    *MonitorJob
-	cancel context.CancelFunc
-	done   chan struct{}
+	job           *MonitorJob
+	cancel        context.CancelFunc
+	done          chan struct{}
+	stoppedByUser atomic.Bool
 }
 
 // MonitorSupervisor owns the set of running monitor jobs.  It loads persisted
@@ -250,6 +258,12 @@ func (s *MonitorSupervisor) Stop(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 
+	// Signal the runner's exitNotice closure to skip store.MarkDead — Stop
+	// is about to call store.Delete on the same row, so MarkDead would just
+	// be wasted I/O overwritten by the immediate delete. Must be set BEFORE
+	// cancel so the flag is visible when exitNotice fires. Review finding 9.
+	h.stoppedByUser.Store(true)
+
 	h.cancel()
 	select {
 	case <-h.done:
@@ -291,6 +305,15 @@ func (s *MonitorSupervisor) launch(ctx context.Context, job *MonitorJob) error {
 	jobID := job.ID
 	jobTarget := job.Target
 
+	// The handle is allocated up front so the exitNotice closure can read
+	// stoppedByUser without needing another map lookup. The same handle
+	// object is installed in s.runners below.
+	handle := &runnerHandle{
+		job:    job,
+		cancel: cancel,
+		done:   done,
+	}
+
 	exitNotice := func(jobName string, exitCode, pid int, duration time.Duration, tail string) {
 		// Per design spec §Child exit, exit notices include the child PID so
 		// the operator can correlate with ps / system logs.
@@ -299,7 +322,12 @@ func (s *MonitorSupervisor) launch(ctx context.Context, job *MonitorJob) error {
 			jobName, exitCode, duration.Round(time.Second), pid, jobID, tail,
 		)
 		_ = s.delivery.Deliver(context.Background(), jobName, jobTarget, content)
-		_ = s.store.MarkDead(context.Background(), jobID, exitCode, time.Now())
+		// Review finding 9: skip MarkDead when Stop already set the flag —
+		// Stop is about to call store.Delete on this row, so the MarkDead
+		// write is wasted I/O that would be immediately overwritten.
+		if !handle.stoppedByUser.Load() {
+			_ = s.store.MarkDead(context.Background(), jobID, exitCode, time.Now())
+		}
 		s.mu.Lock()
 		delete(s.runners, jobID)
 		s.mu.Unlock()
@@ -320,11 +348,7 @@ func (s *MonitorSupervisor) launch(ctx context.Context, job *MonitorJob) error {
 	}
 
 	s.mu.Lock()
-	s.runners[jobID] = &runnerHandle{
-		job:    job,
-		cancel: cancel,
-		done:   done,
-	}
+	s.runners[jobID] = handle
 	s.mu.Unlock()
 
 	go func() {
