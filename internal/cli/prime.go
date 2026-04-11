@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/runtime"
+	ttmux "github.com/leonletto/thrum/internal/tmux"
 )
 
 // PrimeContext contains all context sections gathered by `thrum prime`.
@@ -171,6 +173,21 @@ func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 				UptimeMs:     health.UptimeMs,
 				SyncState:    health.SyncState,
 				Version:      health.Version,
+			}
+		}
+	}
+
+	// 7. TmuxMode detection. We're in a tmux-managed session if either the
+	// current process is running inside tmux (TMUX env var set) or the
+	// agent's identity file points at a still-live tmux session we can
+	// reach. The identity-file lookup is best-effort — errors are silent.
+	if ttmux.InTmux() {
+		ctx.TmuxMode = true
+	} else if whoami != nil && ctx.RepoPath != "" {
+		if idFile, _, err := config.LoadIdentityWithPath(ctx.RepoPath); err == nil && idFile != nil && idFile.TmuxSession != "" {
+			sessionName, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+			if ttmux.HasSession(sessionName) {
+				ctx.TmuxMode = true
 			}
 		}
 	}

@@ -4349,45 +4349,9 @@ Examples:
 					}
 				}
 
-				// Refresh identity file with current runtime state.
-				// Fields like runtime, branch, and tmux target can change between
-				// sessions (e.g. agent relaunched under OpenCode instead of Claude).
-				if idFile, _, err := config.LoadIdentityWithPath(result.RepoPath); err == nil {
-					dirty := false
-
-					// Update runtime if it changed (e.g. claude → opencode)
-					if result.Runtime != "" && idFile.PreferredRuntime != result.Runtime {
-						idFile.PreferredRuntime = result.Runtime
-						dirty = true
-					}
-
-					// Update branch if it changed
-					if result.WorkContext != nil && result.WorkContext.Branch != "" && idFile.Branch != result.WorkContext.Branch {
-						idFile.Branch = result.WorkContext.Branch
-						dirty = true
-					}
-
-					// Update tmux target if inside tmux
-					if ttmux.InTmux() {
-						if currentTarget, err := ttmux.PaneTarget(); err == nil && currentTarget != "" {
-							if idFile.TmuxSession != currentTarget {
-								idFile.TmuxSession = currentTarget
-								dirty = true
-							}
-							result.TmuxMode = true
-						}
-					} else if idFile.TmuxSession != "" {
-						sessionName, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
-						if ttmux.HasSession(sessionName) {
-							result.TmuxMode = true
-						}
-					}
-
-					if dirty {
-						idFile.UpdatedAt = time.Now().UTC()
-						_ = config.SaveIdentityFile(thrumDir, idFile)
-					}
-				}
+				// Identity refresh and TmuxMode detection are now handled
+				// inside getClient() → RefreshLocalIdentity and ContextPrime
+				// respectively. See thrum-pxz.5 and thrum-pxz.7.
 			}
 
 			if flagJSON {
