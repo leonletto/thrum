@@ -89,6 +89,41 @@ func TestRunner_MatchesAndEmits(t *testing.T) {
 	assert.Contains(t, emits[0], "ERROR: boom")
 }
 
+// TestRunner_TrailingSummaryFires: when a burst of 5 matching lines arrives
+// inside a short debounce window, the runner must emit exactly 2 messages:
+// the leading-edge match and a trailing summary with the suppressed count.
+// This exercises the flushTimer wiring in Run that calls FlushExpired after
+// the window elapses. Without the timer, every suppressed match would be
+// silently dropped (the review-finding-1 regression).
+func TestRunner_TrailingSummaryFires(t *testing.T) {
+	job := defaultJob(t)
+	// Emit 5 matching lines back-to-back, then sleep long enough for the
+	// trailing timer to fire (debounce=1s, so sleep ~1.5s inside the child).
+	job.argv = []string{"sh", "-c",
+		"echo M1; echo M2; echo M3; echo M4; echo M5; sleep 1.5"}
+	job.matchPattern = "^M"
+	job.debounceSeconds = 1
+	re := regexp.MustCompile(job.matchPattern)
+
+	deliver, getEmits := collectEmits(t)
+	r, err := NewRunner(job, re, nil, deliver)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, r.Run(ctx))
+
+	emits := getEmits()
+	require.Len(t, emits, 2,
+		"expected 2 emits: leading edge + trailing summary, got %d (%v)",
+		len(emits), emits)
+	assert.Equal(t, "M1", emits[0], "first emit is the leading-edge match")
+	assert.Contains(t, emits[1], "M2",
+		"trailing summary should contain the first suppressed match")
+	assert.Contains(t, emits[1], "+3 more matches suppressed",
+		"trailing summary should report the suppressed count")
+}
+
 // TestRunner_NonMatchingLinesAreFiltered: a child that emits lines that do NOT
 // match the regex should produce zero deliveries.
 func TestRunner_NonMatchingLinesAreFiltered(t *testing.T) {

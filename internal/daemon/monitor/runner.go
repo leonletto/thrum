@@ -126,8 +126,8 @@ func (r *Runner) Run(ctx context.Context) error {
 	tee := io.TeeReader(pipeR, tail)
 	lr := NewLineReader(tee, maxLineBytes)
 
-	// processDone is closed by the read-loop goroutine after cmd.Wait()
-	// returns, signalling the shutdown watcher that the process has exited.
+	// processDone is closed after cmd.Wait() returns, signalling the shutdown
+	// watcher goroutine that the process has fully exited.
 	processDone := make(chan struct{})
 
 	// Shutdown watcher: on ctx cancellation, SIGTERM → 5s → SIGKILL.
@@ -149,6 +149,19 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 	}()
 
+	// flushTimer fires r.debouncer.FlushExpired() after the debounce window
+	// elapses, so any matches suppressed since the leading-edge emit are
+	// delivered as a trailing summary. The timer is reset on every match so
+	// a fresh wave of activity extends the window; an inactive stream lets
+	// it fire once at (lastEmitAt + window). time.AfterFunc is used so
+	// Reset is safe to call from the read-loop goroutine without drain
+	// gymnastics (Go 1.23+ timer semantics).
+	flushTimer := time.AfterFunc(24*time.Hour, func() {
+		r.debouncer.FlushExpired()
+	})
+	flushTimer.Stop()
+	defer flushTimer.Stop()
+
 	// Read, filter, and emit matches through the debouncer.
 	for {
 		line, err := lr.ReadLine()
@@ -160,7 +173,10 @@ func (r *Runner) Run(ctx context.Context) error {
 			break
 		}
 		if r.re.MatchString(line.Content) {
-			r.debouncer.OnMatch(line.Content)
+			delay := r.debouncer.OnMatch(line.Content)
+			if delay > 0 {
+				flushTimer.Reset(delay)
+			}
 		}
 	}
 
