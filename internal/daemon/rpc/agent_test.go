@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/state"
 )
@@ -1541,6 +1542,237 @@ func TestHandleRegister_SamePID_Idempotent(t *testing.T) {
 	}
 	if agents[0].AgentPID != 99999 {
 		t.Errorf("AgentPID = %d, want 99999", agents[0].AgentPID)
+	}
+}
+
+// --- thrum-xir.18.2: ensureActiveSession helper tests --------------------
+
+// seedAgentRow inserts a minimal agent row directly so the test can drive
+// ensureActiveSession without going through HandleRegister (which would
+// itself emit events and confound event-count assertions).
+func seedAgentRow(t *testing.T, s *state.State, agentID string, pid int) {
+	t.Helper()
+	_, err := s.RawDB().Exec(`
+		INSERT INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at)
+		VALUES (?, 'agent', 'implementer', 'test', '', '', ?, ?)
+	`, agentID, pid, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		t.Fatalf("seed agent row: %v", err)
+	}
+}
+
+// seedSessionRow inserts a sessions row with the supplied ended_at value.
+// Pass empty string for an active session, or a timestamp string for an
+// ended one.
+func seedSessionRow(t *testing.T, s *state.State, sessionID, agentID, endedAt string) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if endedAt == "" {
+		_, err := s.RawDB().Exec(`
+			INSERT INTO sessions (session_id, agent_id, started_at, last_seen_at)
+			VALUES (?, ?, ?, ?)
+		`, sessionID, agentID, now, now)
+		if err != nil {
+			t.Fatalf("seed active session: %v", err)
+		}
+		return
+	}
+	_, err := s.RawDB().Exec(`
+		INSERT INTO sessions (session_id, agent_id, started_at, last_seen_at, ended_at, end_reason)
+		VALUES (?, ?, ?, ?, ?, 'test_seeded')
+	`, sessionID, agentID, now, now, endedAt)
+	if err != nil {
+		t.Fatalf("seed ended session: %v", err)
+	}
+}
+
+// countSessionStartEvents returns the total number of agent.session.start
+// events recorded in the events table. Tests use isolated tmpDir-backed
+// state, so a global count is unambiguous per-test.
+func countSessionStartEvents(t *testing.T, s *state.State) int {
+	t.Helper()
+	var n int
+	err := s.RawDB().QueryRow(`
+		SELECT COUNT(*) FROM events WHERE type = 'agent.session.start'
+	`).Scan(&n)
+	if err != nil {
+		t.Fatalf("count session.start events: %v", err)
+	}
+	return n
+}
+
+// countActiveSessionRows returns the number of sessions rows with ended_at
+// IS NULL for the given agent_id.
+func countActiveSessionRows(t *testing.T, s *state.State, agentID string) int {
+	t.Helper()
+	var n int
+	err := s.RawDB().QueryRow(`
+		SELECT COUNT(*) FROM sessions
+		WHERE agent_id = ? AND ended_at IS NULL
+	`, agentID).Scan(&n)
+	if err != nil {
+		t.Fatalf("count active sessions: %v", err)
+	}
+	return n
+}
+
+// TestEnsureActiveSession_AlreadyActive — happy path: an active session
+// already exists, the helper must no-op and write zero events.
+func TestEnsureActiveSession_AlreadyActive(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_eas_active", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	const agentID = "agt_already_active"
+	seedAgentRow(t, s, agentID, os.Getpid())
+	seedSessionRow(t, s, "ses_existing_active", agentID, "")
+
+	handler := NewAgentHandler(s)
+	s.Lock()
+	defer s.Unlock()
+
+	eventsBefore := countSessionStartEvents(t, s)
+	rowsBefore := countActiveSessionRows(t, s, agentID)
+
+	got, err := handler.ensureActiveSession(context.Background(), agentID, os.Getpid())
+	if err != nil {
+		t.Fatalf("ensureActiveSession: %v", err)
+	}
+	if got != "" {
+		t.Errorf("returned session_id = %q, want empty (already-active no-op)", got)
+	}
+
+	if n := countSessionStartEvents(t, s); n != eventsBefore {
+		t.Errorf("session.start events grew: before=%d after=%d", eventsBefore, n)
+	}
+	if n := countActiveSessionRows(t, s, agentID); n != rowsBefore {
+		t.Errorf("active session row count grew: before=%d after=%d", rowsBefore, n)
+	}
+}
+
+// TestEnsureActiveSession_OfflineAgentLivePID — resurrect path: ended
+// session and a live PID; helper must emit one session.start event.
+func TestEnsureActiveSession_OfflineAgentLivePID(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_eas_offline", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	const agentID = "agt_offline_live"
+	seedAgentRow(t, s, agentID, os.Getpid())
+	endedAt := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339Nano)
+	seedSessionRow(t, s, "ses_old_ended", agentID, endedAt)
+
+	handler := NewAgentHandler(s)
+	s.Lock()
+	defer s.Unlock()
+
+	eventsBefore := countSessionStartEvents(t, s)
+
+	got, err := handler.ensureActiveSession(context.Background(), agentID, os.Getpid())
+	if err != nil {
+		t.Fatalf("ensureActiveSession: %v", err)
+	}
+	if got == "" {
+		t.Fatalf("returned empty session_id, want non-empty resurrected ID")
+	}
+	if !strings.HasPrefix(got, "ses_") {
+		t.Errorf("session_id = %q, want ses_ prefix", got)
+	}
+	if got == "ses_old_ended" {
+		t.Errorf("returned the ended session_id %q, want a fresh ULID", got)
+	}
+
+	if n := countSessionStartEvents(t, s); n != eventsBefore+1 {
+		t.Errorf("session.start events: before=%d after=%d, want +1", eventsBefore, n)
+	}
+	if n := countActiveSessionRows(t, s, agentID); n != 1 {
+		t.Errorf("active session rows = %d, want 1", n)
+	}
+}
+
+// TestEnsureActiveSession_DeadPIDNoResurrect — dead PID short-circuits the
+// resurrect path; helper must return "" with no side effects.
+func TestEnsureActiveSession_DeadPIDNoResurrect(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_eas_dead", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	const agentID = "agt_dead_pid"
+	seedAgentRow(t, s, agentID, 999999)
+	endedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	seedSessionRow(t, s, "ses_old_dead", agentID, endedAt)
+
+	handler := NewAgentHandler(s)
+	s.Lock()
+	defer s.Unlock()
+
+	eventsBefore := countSessionStartEvents(t, s)
+	rowsBefore := countActiveSessionRows(t, s, agentID)
+
+	got, err := handler.ensureActiveSession(context.Background(), agentID, 999999)
+	if err != nil {
+		t.Fatalf("ensureActiveSession: %v", err)
+	}
+	if got != "" {
+		t.Errorf("returned session_id = %q, want empty (dead-PID skip)", got)
+	}
+	if n := countSessionStartEvents(t, s); n != eventsBefore {
+		t.Errorf("session.start events grew on dead-PID skip: before=%d after=%d", eventsBefore, n)
+	}
+	if n := countActiveSessionRows(t, s, agentID); n != rowsBefore {
+		t.Errorf("active session rows grew on dead-PID skip: before=%d after=%d", rowsBefore, n)
+	}
+}
+
+// TestEnsureActiveSession_ZeroPIDNoResurrect — pid=0 short-circuits before
+// the IsRunning check; helper must return "" with no side effects. This
+// guards Rule 6 (test 5 must pass a real PID, not zero) by giving the
+// zero-PID case its own dedicated test.
+func TestEnsureActiveSession_ZeroPIDNoResurrect(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_eas_zero", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	const agentID = "agt_zero_pid"
+	seedAgentRow(t, s, agentID, 0)
+	endedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	seedSessionRow(t, s, "ses_old_zero", agentID, endedAt)
+
+	handler := NewAgentHandler(s)
+	s.Lock()
+	defer s.Unlock()
+
+	eventsBefore := countSessionStartEvents(t, s)
+	rowsBefore := countActiveSessionRows(t, s, agentID)
+
+	got, err := handler.ensureActiveSession(context.Background(), agentID, 0)
+	if err != nil {
+		t.Fatalf("ensureActiveSession: %v", err)
+	}
+	if got != "" {
+		t.Errorf("returned session_id = %q, want empty (zero-PID skip)", got)
+	}
+	if n := countSessionStartEvents(t, s); n != eventsBefore {
+		t.Errorf("session.start events grew on zero-PID skip: before=%d after=%d", eventsBefore, n)
+	}
+	if n := countActiveSessionRows(t, s, agentID); n != rowsBefore {
+		t.Errorf("active session rows grew on zero-PID skip: before=%d after=%d", rowsBefore, n)
 	}
 }
 
