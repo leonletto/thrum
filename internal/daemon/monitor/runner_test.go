@@ -186,8 +186,16 @@ func TestRunner_OversizedLineTruncated(t *testing.T) {
 
 	emits := getEmits()
 	require.Len(t, emits, 1, "truncated oversized line should still match and emit once")
-	assert.LessOrEqual(t, len(emits[0]), maxLineBytes,
-		"delivered content must not exceed the 2KB cap")
+	// The truncated-content prefix itself must not exceed the 2KB cap.
+	// Per design spec §Line-length cap, the runner appends a
+	// "[line truncated, original length ≥ 2048 bytes]" marker after the
+	// capped content so the receiver can distinguish truncation from EOL.
+	const truncMarker = "[line truncated, original length ≥ 2048 bytes]"
+	assert.True(t, strings.HasSuffix(emits[0], truncMarker),
+		"truncated match must end with the truncation marker; got %q", emits[0])
+	prefix := strings.TrimSuffix(emits[0], "\n"+truncMarker)
+	assert.LessOrEqual(t, len(prefix), maxLineBytes,
+		"capped content must not exceed the 2KB cap")
 }
 
 // TestRunner_ExitNoticeCalledOnChildExit: when the child exits, the runner

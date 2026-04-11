@@ -173,7 +173,14 @@ func (r *Runner) Run(ctx context.Context) error {
 			break
 		}
 		if r.re.MatchString(line.Content) {
-			delay := r.debouncer.OnMatch(line.Content)
+			// Per design spec §Line-length cap, a truncated line that matches
+			// is delivered as the first 2KB followed by an explicit marker so
+			// the receiver can distinguish truncation from natural EOL.
+			content := line.Content
+			if line.Truncated {
+				content += "\n[line truncated, original length ≥ 2048 bytes]"
+			}
+			delay := r.debouncer.OnMatch(content)
 			if delay > 0 {
 				flushTimer.Reset(delay)
 			}
