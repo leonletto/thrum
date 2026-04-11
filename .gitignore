@@ -94,3 +94,9 @@ scripts/thrum-startup.sh
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# Beads / Dolt files (added by bd init)
+.beads-credential-key
+
+# Safety snapshot from bd 0.62 → 1.0 embedded migration (delete once verified)
+.beads.server-backup/
