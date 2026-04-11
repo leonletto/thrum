@@ -63,6 +63,11 @@ type MonitorSupervisor struct {
 
 	mu      sync.Mutex
 	runners map[string]*runnerHandle // id → handle
+	// pending counts Add calls that have passed the cap check but not yet
+	// populated runners (still doing DB insert / launch). Guarded by mu.
+	// Used to prevent a TOCTOU race where two concurrent Adds see
+	// len(runners) == 99 and both proceed to launch, ending with 101 runners.
+	pending int
 }
 
 // NewMonitorSupervisor constructs a supervisor backed by store and delivery.
@@ -150,14 +155,28 @@ func (s *MonitorSupervisor) Add(ctx context.Context, spec SubmitSpec) (string, e
 		spec.Env = make(map[string]string)
 	}
 
-	// Cap check — must hold the lock to avoid a TOCTOU race when multiple
-	// goroutines submit concurrently.
+	// Cap check + slot reservation — must hold the lock across BOTH the
+	// count check and the reservation to avoid a TOCTOU race: without this
+	// reservation, two concurrent Add calls with 99 runners active could
+	// both pass the cap check and end up launching the 100th AND 101st
+	// runners. We can't put the real handle in the runners map yet (we
+	// don't have a job ID until after Insert), so reserve a slot by
+	// incrementing a pending counter. The counter is decremented after
+	// launch succeeds or fails.
 	s.mu.Lock()
-	if len(s.runners) >= MaxConcurrentMonitors {
+	if len(s.runners)+s.pending >= MaxConcurrentMonitors {
 		s.mu.Unlock()
 		return "", ErrCapExceeded
 	}
+	s.pending++
 	s.mu.Unlock()
+	// Always release the reservation — success path removes it after launch
+	// has populated the runners map; failure path removes it before return.
+	releasePending := func() {
+		s.mu.Lock()
+		s.pending--
+		s.mu.Unlock()
+	}
 
 	now := time.Now().UTC()
 	job := &MonitorJob{
@@ -175,13 +194,16 @@ func (s *MonitorSupervisor) Add(ctx context.Context, spec SubmitSpec) (string, e
 	}
 
 	if err := s.store.Insert(ctx, job); err != nil {
+		releasePending()
 		return "", err
 	}
 	if err := s.launch(ctx, job); err != nil {
 		// Roll back the DB insert so the caller sees no partial state.
 		_ = s.store.Delete(context.Background(), job.ID)
+		releasePending()
 		return "", err
 	}
+	releasePending()
 	return job.ID, nil
 }
 
