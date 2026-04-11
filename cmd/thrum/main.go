@@ -7886,12 +7886,20 @@ func tmuxAttach(session string) error {
 	return c.Run()
 }
 
+// detectPaneState scans visible pane content for an explicit permission
+// prompt. Requires both "allow" and an explicit prompt indicator
+// ("y/n", "yes/no", or "allow/deny") on the same line to avoid matching
+// unrelated text that merely mentions "allow" and "yes".
 func detectPaneState(content string) string {
 	lines := strings.Split(strings.TrimSpace(content), "\n")
 	for _, line := range lines {
 		lower := strings.ToLower(line)
-		if strings.Contains(lower, "allow") && (strings.Contains(lower, "y/n") ||
-			strings.Contains(lower, "yes") || strings.Contains(lower, "deny")) {
+		if !strings.Contains(lower, "allow") {
+			continue
+		}
+		if strings.Contains(lower, "y/n") ||
+			strings.Contains(lower, "yes/no") ||
+			strings.Contains(lower, "allow/deny") {
 			return "permission:" + strings.TrimSpace(line)
 		}
 	}

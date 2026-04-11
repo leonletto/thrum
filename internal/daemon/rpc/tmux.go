@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 )
@@ -145,6 +145,10 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 	if thrumBin != "" {
 		_ = ttmux.SetMonitorSilence(name, 60, thrumBin, h.thrumDir)
 	}
+
+	// Write tmux_session to identity so HandleLaunch can match by session name.
+	target := name + ":0.0"
+	h.writeTmuxToIdentity(name, target, "")
 
 	// Try to read identity file from worktree
 	var identity *config.IdentityFile
@@ -302,9 +306,10 @@ func (h *TmuxHandler) HandleStatus(ctx context.Context, params json.RawMessage) 
 			}
 
 			if !ttmux.HasSession(session) {
+				// Report as dead but do NOT clear identity — status is a read
+				// operation. HandleKill/HandleRestart own the write paths.
 				info.State = "dead"
-				h.clearTmuxFromIdentitiesInDir(identitiesDir, session)
-			} else if idFile.AgentPID > 0 && !isProcessAlive(idFile.AgentPID) {
+			} else if idFile.AgentPID > 0 && !process.IsRunning(idFile.AgentPID) {
 				info.State = "stale"
 			} else {
 				info.State = "alive"
@@ -492,9 +497,36 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 	snapshotLines := 0
 	wtThrumDir := filepath.Dir(idDir) // identities/ parent is .thrum/
 
-	// Extract JSONL snapshot if PID is available and no snapshot already exists.
-	// Only extract for Claude — other runtimes don't use this conversation file format.
-	if idFile.AgentPID > 0 && !restart.SnapshotExists(wtThrumDir, agentName) &&
+	// Graceful flow: ask agent to save its own snapshot before killing.
+	// Force flow: extract snapshot directly from JSONL conversation logs.
+	if !req.Force && !restart.SnapshotExists(wtThrumDir, agentName) {
+		// Delete any stale snapshot/consumed so we can detect a fresh one.
+		restart.DeleteSnapshot(wtThrumDir, agentName)
+
+		// Send a message requesting the agent save its snapshot.
+		h.sendSystemMessage(ctx, agentName,
+			"Restart requested. Please save your context now using `/thrum:restart`.")
+
+		// Nudge the tmux session so the agent sees the message immediately.
+		target := name + ":0.0"
+		_ = ttmux.Nudge(target, "system")
+
+		// Poll for the snapshot to appear, up to GracefulTimeout.
+		cfg, _ := config.LoadThrumConfig(wtThrumDir)
+		timeout := time.Duration(cfg.Restart.RestartGracefulTimeout()) * time.Second
+		deadline := time.Now().Add(timeout)
+		for time.Now().Before(deadline) {
+			if restart.SnapshotExists(wtThrumDir, agentName) {
+				break
+			}
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	// Force flow fallback: extract JSONL snapshot if no snapshot exists yet.
+	// Only for Claude — other runtimes don't use this conversation file format.
+	if !restart.SnapshotExists(wtThrumDir, agentName) &&
+		idFile.AgentPID > 0 &&
 		(idFile.Runtime == "" || idFile.Runtime == "claude") {
 		homeDir, _ := os.UserHomeDir()
 		claudeDir := filepath.Join(homeDir, ".claude")
@@ -507,6 +539,13 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 					snapshotLines = strings.Count(snapshot, "\n")
 				}
 			}
+		}
+	}
+
+	// Count snapshot lines if one was saved (either gracefully or by force).
+	if snapshotLines == 0 && restart.SnapshotExists(wtThrumDir, agentName) {
+		if data, err := os.ReadFile(filepath.Join(wtThrumDir, "restart", agentName+".md")); err == nil { // #nosec G304
+			snapshotLines = strings.Count(string(data), "\n")
 		}
 	}
 
@@ -686,12 +725,4 @@ func (h *TmuxHandler) clearTmuxFromIdentitiesInDir(idDir, sessionName string) {
 			_ = os.WriteFile(path, updated, 0600) // #nosec G306
 		}
 	}
-}
-
-func isProcessAlive(pid int) bool {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return process.Signal(syscall.Signal(0)) == nil
 }

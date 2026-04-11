@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -38,6 +39,25 @@ func WithAddressValidator(fn func(string) error) DialOption {
 // WithPeerName sets the human-readable name for the remote peer.
 func WithPeerName(name string) DialOption {
 	return func(c *WSClient) { c.peerName = name }
+}
+
+// WithHeaders sets HTTP headers to send on the WebSocket handshake.
+// Use this to pass credentials out-of-band (e.g. Authorization: Bearer)
+// instead of encoding them in the URL, where they would leak into
+// access logs, browser history, and intermediate proxies.
+func WithHeaders(h http.Header) DialOption {
+	return func(c *WSClient) { c.headers = h }
+}
+
+// WithBearerToken is a convenience wrapper that sets
+// "Authorization: Bearer <token>" on the handshake.
+func WithBearerToken(token string) DialOption {
+	return func(c *WSClient) {
+		if c.headers == nil {
+			c.headers = http.Header{}
+		}
+		c.headers.Set("Authorization", "Bearer "+token)
+	}
 }
 
 // LoopbackValidator rejects non-loopback addresses.
@@ -84,6 +104,7 @@ type WSClient struct {
 	conn          *websocket.Conn
 	url           string
 	peerName      string
+	headers       http.Header
 	nextID        atomic.Int64
 	pending       map[int64]chan rpcResponse
 	notifyCh      chan Notification
@@ -133,7 +154,7 @@ func (c *WSClient) Connect(ctx context.Context) error {
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 	}
-	conn, _, err := dialer.DialContext(ctx, c.url, nil)
+	conn, _, err := dialer.DialContext(ctx, c.url, c.headers)
 	if err != nil {
 		return fmt.Errorf("websocket dial: %w", err)
 	}

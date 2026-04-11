@@ -133,8 +133,8 @@ func (pm *PeerManager) NotifyAddressChange(ctx context.Context, ip, port, myToke
 		if p.Token == "" || p.Address == "" {
 			continue
 		}
-		url := fmt.Sprintf("ws://%s/ws?token=%s", p.Address, p.Token)
-		ws := bridge.NewWSClient(url, bridge.WithPeerName(p.Name))
+		url := fmt.Sprintf("ws://%s/ws", p.Address)
+		ws := bridge.NewWSClient(url, bridge.WithPeerName(p.Name), bridge.WithBearerToken(p.Token))
 		if err := ws.Connect(ctx); err != nil {
 			pm.logger.Printf("notify %s address change: connect: %v", p.Name, err)
 			continue

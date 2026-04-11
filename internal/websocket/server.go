@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,8 +22,9 @@ type DisconnectFunc func(sessionID string)
 type ServerOption func(*Server)
 
 // WithTokenValidator sets a token validation function on the server.
-// When set, WebSocket upgrade requests must either provide a valid ?token=
-// query parameter, or originate from a loopback address without a token.
+// When set, WebSocket upgrade requests must either provide a valid
+// Authorization: Bearer <token> header, or originate from a loopback
+// address without a token.
 func WithTokenValidator(fn func(string) bool) ServerOption {
 	return func(s *Server) { s.tokenValidator = fn }
 }
@@ -268,6 +270,17 @@ func splitHostPort(addr string) (host, port string, err error) {
 	return addr[:lastColon], addr[lastColon+1:], nil
 }
 
+// bearerToken extracts the Bearer token from the Authorization header.
+// Returns "" if the header is missing or does not use the Bearer scheme.
+func bearerToken(r *http.Request) string {
+	auth := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if len(auth) > len(prefix) && strings.EqualFold(auth[:len(prefix)], prefix) {
+		return auth[len(prefix):]
+	}
+	return ""
+}
+
 // isLoopbackAddr reports whether remoteAddr (in "host:port" format) is a loopback address.
 func isLoopbackAddr(remoteAddr string) bool {
 	host, _, err := net.SplitHostPort(remoteAddr)
@@ -292,7 +305,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		// Pairing connections proceed without token validation — fall through.
 	} else if s.tokenValidator != nil {
 		// Token authentication: only enforced when a validator is configured.
-		token := r.URL.Query().Get("token")
+		// Token is read from the Authorization: Bearer header so it does not
+		// leak into access logs, browser history, or intermediate proxies.
+		token := bearerToken(r)
 		if token != "" {
 			if !s.tokenValidator(token) {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)

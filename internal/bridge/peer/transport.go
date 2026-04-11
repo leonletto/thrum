@@ -41,8 +41,12 @@ func (t *PeerTransport) Connect(ctx context.Context) error {
 		return fmt.Errorf("resolve address for %s: %w", t.name, err)
 	}
 
-	url := fmt.Sprintf("ws://%s/ws?token=%s", addr, t.token)
-	t.client = bridge.NewWSClient(url, bridge.WithPeerName(t.name))
+	url := fmt.Sprintf("ws://%s/ws", addr)
+	opts := []bridge.DialOption{bridge.WithPeerName(t.name)}
+	if t.token != "" {
+		opts = append(opts, bridge.WithBearerToken(t.token))
+	}
+	t.client = bridge.NewWSClient(url, opts...)
 	return t.client.Connect(ctx)
 }
 

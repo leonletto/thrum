@@ -162,14 +162,3 @@ func TestTmuxHandler_ClearTmuxFromIdentities(t *testing.T) {
 	}
 }
 
-func TestIsProcessAlive(t *testing.T) {
-	// Current process should be alive
-	if !isProcessAlive(os.Getpid()) {
-		t.Error("current process should be alive")
-	}
-
-	// Dead PID
-	if isProcessAlive(999999) {
-		t.Error("PID 999999 should not be alive")
-	}
-}
