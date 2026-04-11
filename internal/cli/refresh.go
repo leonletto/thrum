@@ -92,7 +92,17 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 		DetectedRuntime: detectedRuntime,
 	}
 
-	// Step 3: DIFF + mutate idFile in place
+	// Step 3: DIFF + mutate idFile in place.
+	//
+	// Runtime vs PreferredRuntime: the two fields are tracked independently
+	// because only PreferredRuntime is observed by the daemon-reconcile
+	// branch in Step 5. A `--runtime` flag override on `thrum quickstart`
+	// sets PreferredRuntime directly (user intent) without implying a
+	// matching process-tree Runtime. In the refresh path, however, we do
+	// want both to follow the detected runtime: if the agent's live
+	// ancestor is codex, both Runtime and PreferredRuntime should reflect
+	// that. The dual-update below keeps them in sync for detection-driven
+	// writes while leaving user-intent writes in quickstart untouched.
 	if detectedPID > 0 && idFile.AgentPID != detectedPID {
 		idFile.AgentPID = detectedPID
 		result.FileChanged = append(result.FileChanged, "agent_pid")

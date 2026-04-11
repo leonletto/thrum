@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -259,6 +260,109 @@ func TestRefreshLocalIdentity_HappyPath(t *testing.T) {
 // is out of scope for this task; skipped as a placeholder.
 func TestRefreshLocalIdentity_LiveConflict(t *testing.T) {
 	t.Skip("requires mockable client; see TODO in plan Task 4")
+}
+
+// TestRefreshLocalIdentity_TmuxDrift asserts that when the stored
+// tmux_session is stale and the agent is outside tmux, the refresh
+// leaves the field alone rather than blanking it. The detector stub
+// returns (0, "") so no PID/runtime drift fires either. Depends on
+// the test process running outside tmux — skip if TMUX is set.
+func TestRefreshLocalIdentity_TmuxDrift(t *testing.T) {
+	if os.Getenv("TMUX") != "" {
+		t.Skip("test requires non-tmux environment")
+	}
+
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("THRUM_HOME", tmpDir)
+	t.Setenv("THRUM_NAME", "test_agent")
+
+	idFile := &config.IdentityFile{
+		Version: 5,
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "test_agent", Role: "tester", Module: "unit",
+		},
+		TmuxSession: "old:0.0",
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := detectAncestor
+	detectAncestor = func(_ context.Context) (int, string) { return 0, "" }
+	t.Cleanup(func() { detectAncestor = orig })
+
+	result, err := RefreshLocalIdentity(nil, tmpDir)
+	if err != nil {
+		t.Fatalf("RefreshLocalIdentity: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if containsString(result.FileChanged, "tmux_session") {
+		t.Errorf("tmux_session should not be marked changed when agent is outside tmux; got FileChanged=%v", result.FileChanged)
+	}
+
+	// Raw file read bypasses LoadIdentityWithPath's side effects.
+	loaded := readIdentityFile(t, thrumDir, "test_agent")
+	if loaded.TmuxSession != "old:0.0" {
+		t.Errorf("TmuxSession was mutated: got %q, want old:0.0", loaded.TmuxSession)
+	}
+}
+
+// TestRefreshLocalIdentity_SaveFailure asserts that when drift is
+// detected but SaveIdentityFile fails, the returned error bubbles out
+// with a wrapped "save identity" prefix and the result is still non-nil
+// so the caller can inspect DetectedPID/DetectedRuntime.
+func TestRefreshLocalIdentity_SaveFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("THRUM_HOME", tmpDir)
+	t.Setenv("THRUM_NAME", "test_agent")
+
+	idFile := &config.IdentityFile{
+		Version: 5,
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "test_agent", Role: "tester", Module: "unit",
+		},
+		AgentPID: 99999,
+		Runtime:  "claude",
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make the identities directory read-only to force SaveIdentityFile
+	// to fail. On Unix, os.WriteFile into a dir with mode 0500 errors with
+	// EACCES. Restore in Cleanup so t.TempDir can clean up.
+	if err := os.Chmod(identitiesDir, 0500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(identitiesDir, 0750) })
+
+	orig := detectAncestor
+	detectAncestor = func(_ context.Context) (int, string) { return os.Getpid(), "claude" }
+	t.Cleanup(func() { detectAncestor = orig })
+
+	result, err := RefreshLocalIdentity(nil, tmpDir)
+	if err == nil {
+		t.Skip("save did not fail in this environment; cannot exercise save-failure path (e.g. running as root)")
+	}
+	// When save fails, refresh.go returns (result, wrapped error). Both
+	// should be non-nil; the caller can still inspect what was detected.
+	if result == nil {
+		t.Errorf("expected non-nil result alongside save error, got nil")
+	}
+	if !strings.Contains(err.Error(), "save identity") {
+		t.Errorf("expected error to be wrapped with 'save identity', got %v", err)
+	}
 }
 
 // containsString is a small helper for checking FileChanged membership.

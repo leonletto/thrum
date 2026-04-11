@@ -225,3 +225,12 @@ func TestTeamHandleList_EmptyDB(t *testing.T) {
 		t.Errorf("expected 0 members, got %d", len(result.Members))
 	}
 }
+
+// TestTeamList_EnrichesFromWorktreeIdentityFile asserts that team.list
+// enriches members from identity files scanned across all worktrees via
+// ReadIdentitiesAcrossWorktrees. Full coverage requires a daemon test
+// harness with DB fixtures and fake worktrees; skipped as a placeholder.
+// The manual smoke test in plan task thrum-pxz.13 is the real gate.
+func TestTeamList_EnrichesFromWorktreeIdentityFile(t *testing.T) {
+	t.Skip("requires daemon test harness with DB + fake worktree fixtures")
+}
