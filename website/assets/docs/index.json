@@ -339,7 +339,7 @@
       "memory",
       "messaging"
     ],
-    "lastUpdated": "2026-02-10"
+    "lastUpdated": "2026-04-11"
   },
   {
     "path": "codex-plugin.html",
@@ -728,7 +728,7 @@
       "agents",
       "guide"
     ],
-    "lastUpdated": "2026-03-09"
+    "lastUpdated": "2026-04-11"
   },
   {
     "path": "guides/beads-ui-setup.html",
@@ -745,6 +745,21 @@
       "guide"
     ],
     "lastUpdated": "2026-03-09"
+  },
+  {
+    "path": "guides/beads-migration-to-embedded.html",
+    "title": "Beads Migration to Embedded Mode (bd 1.0+)",
+    "description": "Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.",
+    "category": "tools",
+    "order": 3,
+    "tags": [
+      "beads",
+      "migration",
+      "bd-1.0",
+      "embedded-mode",
+      "guide"
+    ],
+    "lastUpdated": "2026-04-11"
   },
   {
     "path": "guides/playwright-cli-setup.html",

@@ -23,7 +23,7 @@ a{color:#0366d6}
 <hr>
 <strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
 <strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
-  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
 <strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
 <strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
 <strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
@@ -58,6 +58,17 @@ tell me?&quot; or &quot;who&#39;s working on what?&quot;, Thrum provides the ans
 <p>Both use Git as the persistence layer. No external services, no databases, no
 state that lives outside the repository. Everything survives session boundaries
 because everything is committed to version control.</p>
+<blockquote>
+<p><strong>Running bd 1.0+?</strong> As of bd 1.0, beads defaults to an <strong>embedded Dolt
+store</strong> (single-writer, file-locked) rather than the separate
+<code>dolt sql-server</code> process used in 0.59–0.63. The embedded mode removes the
+server lifecycle entirely — one binary, one lock file, one data directory at
+<code>.beads/embeddeddolt/&lt;prefix&gt;/</code>. If you&#39;re coming from an existing bd 0.62
+install, the upgrade is machine-wide and breaks unmigrated repos at once, so
+follow the
+<a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode</a>
+guide before running any <code>bd</code> commands against your existing repos.</p>
+</blockquote>
 <h2>What Each Tool Covers</h2>
 <table>
 <thead>
@@ -242,9 +253,9 @@ bd epic status thrum-abc
 **Dependency direction:** `bd dep &lt;blocker&gt; --blocks &lt;blocked&gt;` means the
 blocker must close before the blocked task becomes ready. The alternative syntax
 is `bd dep add &lt;blocked&gt; &lt;blocker&gt;` (reversed order).</code></pre>
-<p>You can also generate a minimal starter block with <code>bd onboard</code>, but the block
-above is more comprehensive and covers the epic/dependency patterns that
-sub-agents most commonly get wrong.</p>
+<p>You can also generate a minimal starter block with <code>bd prime</code> (formerly
+<code>bd onboard</code> in pre-1.0 releases), but the block above is more comprehensive and
+covers the epic/dependency patterns that sub-agents most commonly get wrong.</p>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="quickstart.html">Quickstart Guide</a> — get Thrum initialized and your first agent
@@ -255,6 +266,9 @@ showing how Beads and Thrum work together in practice</li>
 the full research → plan → implement cycle using both tools</li>
 <li><a href="guides/beads-setup.html">Beads Setup Guide</a> — install and configure Beads for
 task tracking alongside Thrum</li>
+<li><a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode</a> —
+field report for upgrading existing bd 0.59–0.63 installs to bd 1.0 embedded
+mode</li>
 </ul>
 
 </main>

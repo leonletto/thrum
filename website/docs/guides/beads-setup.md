@@ -6,7 +6,7 @@ description:
 category: "tools"
 order: 1
 tags: ["beads", "setup", "task-tracking", "dependencies", "agents", "guide"]
-last_updated: "2026-03-09"
+last_updated: "2026-04-11"
 ---
 
 ## Beads Setup Guide
@@ -14,6 +14,13 @@ last_updated: "2026-03-09"
 [Beads](https://github.com/steveyegge/beads) is a Dolt-backed, dependency-aware
 issue tracker designed for AI agent workflows. It pairs with Thrum to give
 agents persistent task memory that survives session boundaries.
+
+> **Upgrading from bd 0.62 or earlier?** bd 1.0 switched the default backend
+> from a separate `dolt sql-server` process to an embedded, single-writer store
+> and can't read the old on-disk layouts. If you have existing bd data, follow
+> the [Beads Migration to Embedded Mode](beads-migration-to-embedded.md) guide
+> before running any `bd` commands — several commands (`bd dolt push`,
+> `bd dolt start`, `bd backup --force`) have been removed or replaced.
 
 ### Why Beads with Thrum
 
@@ -29,32 +36,31 @@ they solve the two halves of the agent context-loss problem:
 
 ### Installation
 
-Beads requires [Dolt](https://github.com/dolthub/dolt) as a prerequisite.
-Install it first.
+bd 1.0+ ships with an embedded Dolt store baked into the binary. There is no
+separate `dolt` prerequisite for the default install — you just need `bd`. (The
+`dolt` CLI is only needed if you want to run raw SQL against the embedded
+database, or for some advanced backup/migration workflows.)
 
-**Minimum versions:** bd 0.59.0+, dolt 1.81.8+
+**Minimum versions:** bd 1.0.0+
 
 ```bash
-# 1. Install Dolt (required dependency)
-
 # Option A: Homebrew
-brew install dolt
+brew install beads
 
-# Option B: Install script (Linux/macOS — installs to /usr/local/bin)
-sudo bash -c 'curl -L https://github.com/dolthub/dolt/releases/latest/download/install.sh | bash'
-
-# 2. Install Beads CLI
-
-# Option A: Homebrew
-brew install steveyegge/beads/bd
-
-# Option B: Install script (installs to ~/.local/bin/bd)
+# Option B: Install script (installs to /usr/local/bin)
 curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
 
-# 3. Verify
-bd version    # must be 0.59.0+
-dolt version  # must be 1.81.8+
+# Verify
+bd version    # must be 1.0.0+
 ```
+
+> **Already have bd installed at 0.62 or earlier?** Upgrade is machine-wide (the
+> `bd` binary lives in a shared path like `/usr/local/bin/bd`) and will break
+> every unmigrated repo on the machine at once. Before running
+> `brew upgrade beads` or the install script, follow the
+> [migration guide](beads-migration-to-embedded.md) — it walks through
+> inventorying your repos, capturing each one's data via `dolt dump` or JSONL
+> export, and loading everything back into the fresh embedded store.
 
 ### Initialize in Your Project
 
@@ -63,24 +69,30 @@ cd your-project
 bd init
 ```
 
-`bd init` v0.59.0+ defaults to a **Dolt backend** (not SQLite) running in server
-mode. It spawns a background `dolt sql-server` process and auto-restarts it on
-each `bd` command if it's not running.
+`bd init` in bd 1.0+ creates an **embedded Dolt store** inside the repo — no
+background server, no port coordination, no dolt-server process to manage. All
+writes go through a single-writer file lock.
 
 The `.beads/` directory it creates:
 
-| Path                       | Purpose                                                |
-| -------------------------- | ------------------------------------------------------ |
-| `config.yaml`              | Team-level config (committed to git)                   |
-| `metadata.json`            | Local state: backend, mode, database name (gitignored) |
-| `.gitignore`               | Ignores lock files, pid files, dolt internals          |
-| `interactions.jsonl`       | Interaction log                                        |
-| `README.md`                | Quick reference                                        |
-| `dolt/config.yaml`         | Dolt server config                                     |
-| `dolt/<reponame>/`         | Dolt database (synced via `refs/dolt/data`)            |
-| `dolt-server.pid/port/log` | Server process files (gitignored)                      |
+| Path                     | Purpose                                                |
+| ------------------------ | ------------------------------------------------------ |
+| `config.yaml`            | Team-level config (committed to git)                   |
+| `metadata.json`          | Local state: backend, mode, database name (gitignored) |
+| `.gitignore`             | Ignores lock files and internal dolt data              |
+| `interactions.jsonl`     | Interaction log                                        |
+| `README.md`              | Quick reference                                        |
+| `embeddeddolt/<prefix>/` | Embedded Dolt database (single-writer, file-locked)    |
 
 `bd init` also creates `AGENTS.md` in the repo root with agent instructions.
+
+> **Tradeoff:** Embedded mode is single-writer. Multiple concurrent `bd`
+> processes serialize through the file lock. For Thrum's agent topologies
+> (14-ish agents, serial coordinator-driven writes) this is fine. For heavy
+> concurrent workloads, opt in to server mode explicitly by setting
+> `dolt.mode: server` in `.beads/config.yaml` — but the server-mode lifecycle
+> commands (`bd dolt start`/`stop`/`push`) are gone in 1.0, so you'd be managing
+> `dolt sql-server` directly.
 
 ### Core Workflow
 
@@ -125,48 +137,70 @@ bd close <id1> <id2> <id3>
 bd stats
 ```
 
-### Dolt Sync Setup
+### Sync Setup (bd 1.0+ embedded mode)
 
-Beads uses `refs/dolt/data` to sync task state via your Git remote — no separate
-database server needed.
+Beads stores its state inside the embedded Dolt database at
+`.beads/embeddeddolt/<prefix>/.dolt/`. For off-machine sync, bd 1.0 offers two
+complementary mechanisms:
 
-```bash
-# Add remote (using your existing git remote)
-bd dolt remote add origin "file:///path/to/your/repo/.git"
+- **`backup.git-push`** in `.beads/config.yaml` — auto-exports to
+  `.beads/backup/*.jsonl` and pushes those files alongside your normal commits.
+  Useful when beads data should travel as tracked files in the repo.
+- **`dolt.auto-push`** (set via `bd config set dolt.auto-push true`) — pushes
+  the embedded Dolt store to a hidden `refs/dolt/data` git ref on the remote at
+  an interval. The hidden ref is invisible to `git log` / `git clone` but
+  travels with `git push --all` / `git fetch origin 'refs/dolt/*'`. `bd init`
+  auto-configures a dolt remote pointed at your current git origin.
 
-# For GitHub:
-bd dolt remote add origin "git+ssh://git@github.com/org/repo.git"
-```
-
-On a fresh repo with no prior `refs/dolt/data`, the auto-push after `remote add`
-succeeds without `--force`.
-
-**Daily sync workflow:**
-
-```bash
-bd dolt commit    # commit working set changes
-bd dolt push      # push to remote
-bd dolt pull      # pull (must commit first — see common errors)
-```
-
-**Important:** Never run raw `dolt` CLI commands while the server is running —
-it causes journal corruption. Always use `bd dolt ...` commands instead.
-
-**Verify sync:**
+**Typical private-repo setup (Dolt ref sync, no tracked files):**
 
 ```bash
-git show-ref | grep dolt
-# Expected: <hash> refs/dolt/data
+# 1. Turn on auto-commit (required for auto-push to have anything to push)
+bd config set dolt.auto-commit on
+
+# 2. Turn on auto-push
+bd config set dolt.auto-push true
+
+# 3. Run one initial manual push to establish the remote baseline
+cd .beads/embeddeddolt/<prefix>
+dolt push origin main
+cd -
+
+# Verify the ref is live:
+git ls-remote origin 'refs/dolt/*'
+# Expected: <hash>  refs/dolt/data
 ```
 
-### Setting Up Beads from an Existing Clone
+**Typical public-repo setup (external backup script, no dolt-ref sync):**
 
-When you clone a repo that already has beads data (stored in `refs/dolt/data` on
-the Git remote), a standard `git clone` does **not** fetch this ref. You need to
-bootstrap the dolt database manually.
+```yaml
+# .beads/config.yaml — don't publish the hidden dolt ref publicly
+backup:
+  git-push: false
+```
 
-This guide was verified end-to-end on bd 0.61.0 and dolt 1.81.8+. Follow the
-steps in order — each step depends on the previous one.
+> **bd 0.62 sync commands removed in 1.0.** `bd dolt push`, `bd dolt pull`,
+> `bd dolt start`, `bd dolt stop`, and `bd dolt commit` no longer exist in
+> embedded mode. If your scripts or CLAUDE.md reference them, update to
+> `bd config set dolt.auto-push true` (or run `dolt push origin main` directly
+> from inside `.beads/embeddeddolt/<prefix>` when you need an explicit push).
+> The [migration guide](beads-migration-to-embedded.md) has the full
+> before/after command table.
+
+### Setting Up Beads from an Existing Clone (legacy bd 0.59–0.63 server mode)
+
+> **This procedure applies to bd 0.59–0.63 server mode only.** On bd 1.0+
+> embedded mode, a fresh clone is usually `bd init` followed by
+> `dolt pull origin main` from inside `.beads/embeddeddolt/<prefix>/` (if the
+> remote has a `refs/dolt/data` ref) or `bd import <jsonl-file>` (if the data
+> travels as `.beads/backup/*.jsonl` tracked files). If you're on bd 1.0 and
+> want to bootstrap from an existing remote, see the
+> [migration guide](beads-migration-to-embedded.md) — the `bd init` → data load
+> → verify flow is the same shape as a fresh migration.
+
+The steps below are preserved for teams still on bd 0.59–0.63 server mode. They
+assume bd 0.61.0 and dolt 1.81.8+. Follow the steps in order — each step depends
+on the previous one.
 
 #### Prerequisites
 
@@ -398,42 +432,41 @@ context compaction.
 
 ### Common Errors and Fixes
 
-**"no store available" on `bd dolt push` or `bd dolt commit`** Bug in bd
-v0.55.4. Upgrade: `brew upgrade beads` (must be 0.59.0+).
+**`bd dolt ...` errors with "not supported in embedded mode"** Expected on bd
+1.0+. Use `bd config set dolt.auto-push true` or run `dolt push origin main`
+directly from inside `.beads/embeddeddolt/<prefix>/`. See the
+[migration guide](beads-migration-to-embedded.md) for the full before/after
+command table.
 
 **"no common ancestor" on push** Stale `refs/dolt/data` from a previous
-database. Clear it and retry:
+database. Clear the remote ref and retry:
 
 ```bash
-git update-ref -d refs/dolt/data
+# Delete the stale remote ref:
+git push origin :refs/dolt/data
+
+# Re-push from the embedded store:
+cd .beads/embeddeddolt/<prefix>
+dolt push origin main
 ```
 
-**"cannot merge with uncommitted changes" on pull** Run `bd dolt commit` before
-`bd dolt pull`.
+**"database is locked" or "lock file already exists"** Another `bd` process is
+already writing. Embedded mode is single-writer via file lock. Wait for the
+other process to exit, or inspect `.beads/embeddeddolt/<prefix>/.dolt/` for a
+stale lock if no process is running.
 
-**"fatal: Unable to read current working directory"** The dolt server's CWD no
-longer exists. Restart it:
+**`bd doctor` says "not yet supported in embedded mode"** Known placeholder on
+bd 1.0. Use `bd migrate` (no args) for the schema/metadata health check and
+`ls -la .beads/embeddeddolt/` to verify the database exists.
 
-```bash
-pkill -f "dolt sql-server"
-bd list   # auto-restarts
-```
+**`bd ready` errors with `column "no_history" could not be found`** Schema drift
+from a very old bd version's data being loaded into a fresh bd 1.0 store. The
+[migration guide](beads-migration-to-embedded.md) Step 6C has the ALTER + CREATE
+TABLE fixes.
 
 **brew / dolt / bd not found over SSH** Homebrew on ARM64 Mac installs to
 `/opt/homebrew/bin`, not in the default SSH PATH. Use a login shell:
 `ssh host 'bash -lc "bd version"'`
-
-### Stale LOCK files after crash
-
-```bash
-bd doctor --fix --yes
-# If noms LOCK persists:
-rm .beads/dolt/<reponame>/.dolt/noms/LOCK
-```
-
-**Journal corruption from mixed CLI/server access** Caused by running raw `dolt`
-CLI while the server is running. Prevention: always use `bd dolt ...` commands.
-Recovery: stop the server, delete the journal, and restart.
 
 ### Commands Reference
 
@@ -447,17 +480,25 @@ Recovery: stop the server, delete the journal, and restart.
 | `bd stats`                                         | Project health overview                    |
 | `bd create --title="..." --type=task --priority=2` | Create an issue                            |
 | `bd update <id> --status=in_progress`              | Claim work                                 |
+| `bd update <id> --claim`                           | Atomic claim (assign + in_progress)        |
 | `bd close <id>`                                    | Mark complete                              |
+| `bd close <id> --suggest-next`                     | Close and show newly unblocked work        |
 | `bd dep <blocker> --blocks <blocked>`              | Blocker must close before blocked is ready |
 | `bd dep tree <epic-id>`                            | Show dependency graph                      |
 | `bd epic status <epic-id>`                         | Progress on epic children                  |
 | `bd comments add <id> "msg"`                       | Add comment (subcommand before ID)         |
 | `bd search "query"`                                | Search issues by text                      |
-| `bd dolt commit`                                   | Commit working set changes                 |
-| `bd dolt push`                                     | Push to remote                             |
-| `bd dolt pull`                                     | Pull from remote (commit first)            |
-| `bd doctor`                                        | Health check                               |
-| `bd doctor --fix --yes`                            | Auto-fix stale locks and metadata          |
+| `bd import <file.jsonl>`                           | Load issues from a JSONL file              |
+| `bd export --all -o <file.jsonl>`                  | Export all issues to JSONL                 |
+| `bd config set dolt.auto-commit on`                | Auto-commit dolt writes (recommended)      |
+| `bd config set dolt.auto-push true`                | Auto-push embedded store to `refs/dolt/*`  |
+| `bd migrate`                                       | Schema/metadata health check               |
+
+> **bd 0.62 commands removed or replaced in 1.0+:** `bd dolt start`,
+> `bd dolt stop`, `bd dolt push`, `bd dolt pull`, `bd dolt commit`,
+> `bd dolt status`, `bd backup --force`, `bd sync`, `bd onboard`, `bd doctor`
+> (as a health check). See the [migration guide](beads-migration-to-embedded.md)
+> for the full before/after mapping.
 
 **Comments syntax note:** The correct syntax is `bd comments add <id> "msg"` —
 subcommand comes before the issue ID.
@@ -466,6 +507,8 @@ subcommand comes before the issue ID.
 
 - [Beads and Thrum](../beads-and-thrum.md) — Conceptual overview of how the two
   tools complement each other
+- [Beads Migration to Embedded Mode](beads-migration-to-embedded.md) — Field
+  report on upgrading existing installs to bd 1.0 embedded mode
 - [Beads UI Setup](beads-ui-setup.md) — Visual dashboard for Beads
 - [Beads GitHub](https://github.com/steveyegge/beads) — Full documentation and
   source

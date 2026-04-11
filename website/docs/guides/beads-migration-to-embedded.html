@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Beads Migration to Embedded Mode (bd 1.0+) — Thrum</title>
+<meta name="description" content="Field report on migrating beads from any pre-1.0 source state (SQLite-era, transitional, or server-mode Dolt) to bd 1.0 embedded mode. Two recovery paths, schema-drift fixes, sync re-establishment, and the full troubleshooting checklist.">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#guides/beads-migration-to-embedded.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../../docs.html">Thrum Docs</a></strong> &rsaquo; Recommended Tools &rsaquo; Beads Migration to Embedded Mode (bd 1.0+)
+<hr>
+<strong>Overview</strong>: <a href="../philosophy.html">Philosophy</a> | <a href="../overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="../quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="../guides/recommended-tools.html">Recommended Tools</a> | <a href="../guides/beads-setup.html">Beads Setup Guide</a> | <a href="../guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <strong>Beads Migration to Embedded Mode (bd 1.0+)</strong> | <a href="../guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="../peers.html">Peers</a> | <a href="../subscriptions.html">Subscriptions & Notifications</a> | <a href="../inbox-query-methods.html">Inbox Query Methods</a> | <a href="../telegram-bridge.html">Telegram Bridge</a> | <a href="../telegram-groups.html">Telegram Groups</a> | <a href="../messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="../identity.html">Agent Identity & Registration</a> | <a href="../agent-configs.html">Agent Configurations</a> | <a href="../claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="../role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="../api/authentication.html">Authentication</a> | <a href="../api/events.html">Event Reference</a> | <a href="../api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="../strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="../strategies/thrum-registration.html">Thrum Registration</a> | <a href="../strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="../agent-coordination.html">Agent Coordination</a> | <a href="../multi-agent.html">Multi-Agent Support</a> | <a href="../context.html">Agent Context Management</a> | <a href="../guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="../guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="../daemon.html">Daemon Architecture</a> | <a href="../sync.html">Sync Protocol</a> | <a href="../event-streaming.html">Event Streaming</a> | <a href="../configuration.html">Configuration</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="../web-ui.html">Web UI</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="../scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="../scenarios/team.html">Team on Your Machine</a> | <a href="../scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="../scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="../orchestrator-role.html">Orchestrator Role</a> | <a href="../tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="../multi-runtime.html">Multi-Runtime Support</a> | <a href="../single-agent-mode.html">Single-Agent Mode</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
+</nav>
+<main>
+<h2>Beads Migration to Embedded Mode (bd 1.0+)</h2>
+<blockquote>
+<p><strong>Field report, not official beads documentation.</strong> This is a user-written
+walkthrough based on a real-world sweep of a handful of personal and work
+repos from pre-1.0 beads to bd 1.0 embedded mode.
+<a href="https://github.com/steveyegge/beads">Beads</a> is Steve Yegge&#39;s project — for
+canonical docs see the <a href="https://github.com/steveyegge/beads">beads repo</a>,
+especially <code>docs/INSTALLING.md</code> and <code>docs/DOLT.md</code>. The full long-form version
+of this guide (with the extended origin story and cross-incident notes) lives
+as a
+<a href="https://gist.github.com/leonletto/606e8afbb3603870d14b4123707416a2">public gist</a>.</p>
+</blockquote>
+<p>How to upgrade any pre-1.0 beads install — <strong>SQLite-era (bd &lt; 0.55)</strong>,
+<strong>server-mode Dolt (bd 0.55–0.63)</strong>, or <strong>orphaned JSONL export</strong> — to bd
+v1.0.0+ (embedded Dolt, no server).</p>
+<p>This guide was born from a machine-wide bd 0.62 → 1.0 upgrade that
+simultaneously broke every beads repo on the machine across a range of source
+states (clean server-mode, old-schema server-mode, transitional SQLite → Dolt,
+and SQLite-era). It collapses what used to be multiple migration guides into a
+single source-state-aware procedure with two recovery paths: <strong><code>bd import</code> from
+JSONL</strong> (the clean path, preferred whenever a <code>.beads/issues.jsonl</code> exists or
+can be regenerated), and <strong>raw <code>dolt sql dump</code> + replay</strong> (the fallback for
+server-mode Dolt installs where <code>bd export</code> isn&#39;t available because bd was
+already upgraded). If you have more than one unmigrated repo on the machine,
+read the
+<a href="#before-you-start-inventory-all-bd-repos-on-the-machine">inventory section</a>
+first — all your stale repos break at once and the order of migration matters.</p>
+<p>This migration is <strong>not automatic</strong>. bd 1.0.0 defaults to embedded mode on a
+fresh install and cannot read a v0.62 server-mode layout, a SQLite
+<code>.beads/beads.db</code>, or the Dolt-native incremental archives (<code>.darc</code> files under
+<code>.beads/backup/</code>). <code>bd backup restore</code> on the <code>.darc</code> files against a fresh
+embedded db reports success but produces an empty database. It&#39;s a silent
+failure that will burn you if you don&#39;t know to look for it.</p>
+<p>Two recovery paths:</p>
+<ul>
+<li><strong>Path A — <code>bd import</code> from JSONL.</strong> The simple path. Works when a current
+<code>.beads/issues.jsonl</code> exists (bd 0.55+ auto-exports one; SQLite-era repos
+often have one too), or when you can regenerate one from SQLite via <code>sqlite3</code>.
+Preserves all issues, dependencies, comments, labels, and memories. No raw
+dolt surgery.</li>
+<li><strong>Path B — raw <code>dolt sql dump</code> + replay.</strong> Only needed when the source is
+server-mode Dolt <strong>without</strong> a usable JSONL and you can&#39;t run <code>bd export</code>
+because bd was already upgraded. Works directly against the
+content-addressable Dolt store, preserves everything, but has more steps and
+more ways to go wrong.</li>
+</ul>
+<p>Pick your path in <a href="#step-3-choose-your-recovery-path-a-or-b">Step 3</a> after
+inventorying what you have.</p>
+<hr>
+<h3>⚠ STOP — Read this first if bd has already been upgraded machine-wide</h3>
+<p><strong>If <code>bd version</code> already prints 1.0.0 or higher, DO NOT run any <code>bd</code> commands
+against this repo until you have completed Steps 1–3 manually with raw <code>dolt</code>
+only.</strong></p>
+<p>The <code>bd</code> binary is machine-wide (usually at <code>/usr/local/bin/bd</code>). When you
+upgrade it (via <code>brew upgrade beads</code> or the install script), <strong>every repo on the
+machine that was on bd 0.62 server mode breaks at once</strong>. The wrong move now is
+running <code>bd</code> commands against the stale data — bd 1.0 can&#39;t read the 0.62
+server-mode layout and will give you misleading errors like:</p>
+<pre><code>Error: failed to open database: embeddeddolt: init schema:
+  creating schema_migrations table: Error 1105: no database selected
+warning: no beads configuration found in .beads/dolt/.beads</code></pre>
+<p>or</p>
+<pre><code>Error: &#39;bd dolt start&#39; is not supported in embedded mode (no Dolt server)</code></pre>
+<p>These errors do <strong>not</strong> mean your data is gone. Your data is at
+<code>.beads/dolt/&lt;dbname&gt;/.dolt/</code> (the REAL database dir — not
+<code>.beads/dolt/.dolt/</code>), and raw <code>dolt</code> can still read it fine. You just have to
+bypass bd for the export step.</p>
+<h4>The safe order of operations when bd is already 1.0</h4>
+<ol>
+<li><strong>Do not run <code>bd stop</code>, <code>bd dolt stop</code>, <code>bd backup</code>, <code>bd backup --force</code>,
+<code>bd export</code>, <code>bd dolt push</code>, <code>bd doctor</code>, or any other <code>bd</code> command against
+the unmigrated repo.</strong> They&#39;ll either fail or make bd think the repo is
+broken — it isn&#39;t, bd just can&#39;t see into the old layout.</li>
+<li><strong>Kill any stale dolt server processes manually</strong> (Step 1 below).</li>
+<li><strong>Capture your data before touching anything bd-managed.</strong> How depends on
+what you have:<ul>
+<li><strong>SQLite-era / has <code>.beads/issues.jsonl</code></strong> → <strong>Path A</strong>. The JSONL is
+already your export. If you need to regenerate it from SQLite, do that with
+plain <code>sqlite3</code> (Step 3A-2). No dolt surgery needed.</li>
+<li><strong>Server-mode Dolt, no usable JSONL</strong> → <strong>Path B</strong>. Run <code>dolt sql dump</code>
+directly against the content-addressable store at <code>.beads/dolt/&lt;dbname&gt;/</code>.
+The dolt binary is separate from bd and reads the old layout just fine.</li>
+</ul>
+</li>
+<li><strong>Rename <code>.beads/</code> aside</strong>, then run <code>bd init</code> to create a fresh embedded db.</li>
+<li><strong>Load the data into the new embedded db:</strong><ul>
+<li><strong>Path A</strong>: <code>bd import &lt;path-to-issues.jsonl&gt;</code> — clean, committed,
+auto-pushed if configured. Use this if you can.</li>
+<li><strong>Path B</strong>: <code>dolt sql &lt; dump.sql</code> against the embedded store, then manually
+commit the working set (<code>dolt add -A &amp;&amp; dolt commit -m ...</code>) — see Step
+6B + Step 7 for why this matters. Do NOT use <code>bd backup restore</code> against
+<code>.beads/backup/*.jsonl</code> — those are Dolt-native <code>.darc</code> archives and
+silently restore nothing.</li>
+</ul>
+</li>
+<li>Verify with <code>bd stats</code> and <code>bd ready</code>. Now bd is safe to use.</li>
+</ol>
+<h4>Why this matters if you have multiple unmigrated repos</h4>
+<p>If bd got upgraded while you had several repos still on 0.62 server mode, every
+one of them is in this broken-but-recoverable state. The dolt binary is separate
+from bd and can still read the old server-mode data at
+<code>.beads/dolt/&lt;dbname&gt;/.dolt/</code> — so the data is never at risk as long as you
+don&#39;t run destructive <code>bd</code> commands against it. Go repo by repo, use raw dolt
+for the export step only, and each repo will come up clean on the new embedded
+backend.</p>
+<p>If bd has NOT been upgraded yet (still v0.62.x), you can follow the guide top to
+bottom normally — <code>bd dolt stop</code>, <code>bd export</code>, etc. will all work because bd
+still understands server mode at that point.</p>
+<hr>
+<h3>Why migrate</h3>
+<ul>
+<li><strong>bd 1.0 stable release.</strong> v1.0.0 completes the embedded Dolt migration that
+started in v0.55. Server mode still works but isn&#39;t the default anymore and
+has known version-skew issues.</li>
+<li><strong>No server lifecycle.</strong> Embedded mode kills the separate <code>dolt sql-server</code>
+process entirely. No port coordination, no stale server pids, no
+&quot;<code>bd dolt push</code> spawns a fresh process on a different port than the running
+server&quot; class of bugs. That last one was especially annoying.</li>
+<li><strong>Simpler layout.</strong> One binary, one lock file, one data directory.</li>
+</ul>
+<p><strong>Tradeoff:</strong> Embedded mode is single-writer (enforced via file lock). Multiple
+concurrent <code>bd</code> processes serialize through the lock. For Thrum&#39;s 14-agent
+topology this is fine — bd operations are fast and mostly serial from the
+coordinator. For heavy concurrent workloads, stay on server mode with
+<code>dolt.mode: server</code> explicit in <code>config.yaml</code>.</p>
+<h3>Prerequisites</h3>
+<ul>
+<li>Any pre-1.0 bd install. Supported source states:<ul>
+<li><strong>SQLite-era</strong> (bd ≤ 0.54): <code>.beads/beads.db</code> SQLite file, often with a
+<code>.beads/issues.jsonl</code> export alongside it.</li>
+<li><strong>Transitional SQLite → Dolt</strong> (bd 0.55 when migration stalled):
+<code>.beads/beads.db</code> plus an empty <code>.beads/dolt/config.yaml</code> but no actual dolt
+data directory.</li>
+<li><strong>Server-mode Dolt</strong> (bd 0.55–0.63): <code>.beads/dolt/&lt;dbname&gt;/.dolt/</code> with a
+separate <code>dolt sql-server</code> process.</li>
+<li><strong>JSONL only</strong>: orphaned <code>.beads/issues.jsonl</code> from a deleted or corrupted
+database.</li>
+</ul>
+</li>
+<li><code>dolt</code> CLI 1.81+ (only needed for <strong>Path B</strong>; <code>dolt dump</code> / <code>dolt sql</code>)</li>
+<li><code>sqlite3</code> CLI (only needed for <strong>Path A</strong> when migrating a SQLite-era source
+that has no <code>.beads/issues.jsonl</code>)</li>
+<li>A working git checkout of the project repo</li>
+<li>Enough disk space to keep <code>.beads/</code> aside as a safety copy</li>
+</ul>
+<p>Verify versions before starting:</p>
+<pre><code>bd version
+dolt version
+which bd
+which dolt</code></pre>
+<p>The paths tell you which channel to use for upgrades:</p>
+<ul>
+<li><code>/usr/local/bin/bd</code> → installed via the
+<a href="https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh">quick-install script</a></li>
+<li><code>/opt/homebrew/bin/bd</code> or <code>/usr/local/homebrew/bin/bd</code> → installed via
+Homebrew</li>
+<li><code>/opt/homebrew/bin/dolt</code> → installed via Homebrew</li>
+</ul>
+<h3>Before you start: inventory ALL bd repos on the machine</h3>
+<p>If you have multiple bd 0.62 repos on this machine, <strong>upgrading bd is
+machine-wide</strong> and breaks all of them at once. Before migrating any single repo,
+build a list of every stale install so you can work through them in order.</p>
+<p>A minimal discovery one-liner — lists every <code>.beads/</code> directory under your
+common dev roots and classifies it:</p>
+<pre><code>for beads in $(find ~/dev ~/work /srv -type d -name .beads 2&gt;/dev/null); do
+  if   [ -f &quot;$beads/redirect&quot; ];            then mode=redirect
+  elif [ -d &quot;$beads/embeddeddolt&quot; ];        then mode=embedded
+  elif [ -d &quot;$beads/dolt&quot; ];                then mode=server
+  elif [ -f &quot;$beads/metadata.json&quot; ];       then mode=unknown
+  else                                          mode=nonbd
+  fi
+  printf &#39;%-9s %s\n&#39; &quot;$mode&quot; &quot;$beads&quot;
+done
+
+# Cross-reference orphan dolt servers with their data directories:
+for pid in $(pgrep -f &#39;dolt sql-server&#39;); do
+  cwd=$(lsof -p &quot;$pid&quot; 2&gt;/dev/null | awk &#39;$4==&quot;cwd&quot;{print $NF; exit}&#39;)
+  echo &quot;PID $pid  cwd=$cwd&quot;
+done</code></pre>
+<p>Mode meanings:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Meaning</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>server</code></td>
+<td>Old bd 0.62 layout with <code>.beads/dolt/</code>. Needs migration.</td>
+<td>Run this guide.</td>
+</tr>
+<tr>
+<td><code>embedded</code></td>
+<td>Already migrated to bd 1.0 <code>.beads/embeddeddolt/</code>.</td>
+<td>Done.</td>
+</tr>
+<tr>
+<td><code>redirect</code></td>
+<td>Worktree pointing at another <code>.beads/</code> via <code>.beads/redirect</code> file.</td>
+<td>Follows the target repo&#39;s state.</td>
+</tr>
+<tr>
+<td><code>unknown</code></td>
+<td>bd-managed (has metadata.json) but neither <code>dolt/</code> nor <code>embeddeddolt/</code>.</td>
+<td>Investigate — partial init?</td>
+</tr>
+<tr>
+<td><code>nonbd</code></td>
+<td>Directory happens to be named <code>.beads</code> but is not a bd install.</td>
+<td>Ignore. Hidden by default; use <code>--show-nonbd</code> to list.</td>
+</tr>
+</tbody></table>
+<p>The script also lists every orphan <code>dolt sql-server</code> process and
+cross-references each one with the repo that owns it. You can see at a glance
+which repos still have a stale background server and which processes are
+pointing at deleted or trashed paths that can be killed outright.</p>
+<p><strong>Pick a migration order:</strong></p>
+<ol>
+<li>Repos you actively work in, most important first</li>
+<li>Then the rest, in any order</li>
+</ol>
+<p>Orphan processes for already-deleted repos (e.g. cwd inside <code>~/.Trash/dolt</code> or a
+path that <code>ls</code> says doesn&#39;t exist) are safe to kill immediately — they&#39;re
+holding nothing useful.</p>
+<hr>
+<h3>Step 1: Stop any running bd / dolt server</h3>
+<p><strong>Critical.</strong> The old bd server can&#39;t be holding the dolt database open when you
+dump it.</p>
+<pre><code># If bd is still 0.62.x (has `bd dolt stop`):
+bd dolt stop 2&gt;/dev/null || true
+
+# If bd has already been upgraded to 1.0+, skip the bd command entirely
+# and go straight to killing orphan dolt processes.</code></pre>
+<h4>Orphan <code>dolt sql-server</code> processes across the machine</h4>
+<p>On a machine with multiple bd 0.62 repos, upgrading to 1.0 leaves <strong>one orphan
+<code>dolt sql-server</code> per unmigrated repo</strong> running in the background. bd 1.0 has no
+concept of the server lifecycle, so it can&#39;t clean them up. They keep running
+indefinitely and can block dolt dumps if they still hold a file lock on the data
+directory.</p>
+<p>List them:</p>
+<pre><code>ps aux | grep &#39;[d]olt sql-server&#39;</code></pre>
+<p>Typical output looks like:</p>
+<pre><code>youruser  &lt;pid1&gt;  ... /opt/homebrew/bin/dolt sql-server -H 127.0.0.1 -P &lt;port1&gt;
+youruser  &lt;pid2&gt;  ... /opt/homebrew/bin/dolt sql-server -H 127.0.0.1 -P &lt;port2&gt;
+...</code></pre>
+<p>Figure out which process belongs to which repo by checking its working
+directory:</p>
+<pre><code>for pid in $(pgrep -f &#39;dolt sql-server&#39;); do
+  cwd=$(lsof -p $pid 2&gt;/dev/null | awk &#39;$4==&quot;cwd&quot;{print $NF; exit}&#39;)
+  echo &quot;PID $pid  cwd=$cwd&quot;
+done</code></pre>
+<p><strong>For this migration</strong>, kill ONLY the process whose <code>cwd</code> is the repo you&#39;re
+migrating. Leave the others running until you migrate their repos — killing them
+now just means bd would fail to read their data if it tried (which it won&#39;t,
+since you&#39;re not running bd in those repos until they migrate).</p>
+<pre><code>kill &lt;pid-for-this-repo&gt;</code></pre>
+<p>Verify:</p>
+<pre><code>ps aux | grep &#39;[d]olt sql-server&#39;  # should no longer show this repo&#39;s pid</code></pre>
+<h4>If you have many repos to migrate</h4>
+<p>Use the discovery one-liner in the <strong>&quot;Before you start&quot;</strong> section to inventory
+every <code>.beads/</code> directory before touching any of them. Work through the
+<code>server</code>-mode entries one at a time, killing each repo&#39;s orphan
+<code>dolt sql-server</code> process as part of its own migration.</p>
+<h3>Step 2: Locate the real database directory</h3>
+<p>This is where every manual recovery goes wrong. In bd 0.62 server mode, the data
+layout is:</p>
+<pre><code>.beads/
+├── dolt/                     # bd&#39;s dolt data root
+│   ├── config.yaml           # dolt server config
+│   ├── .dolt/                # ← server-level config (empty branches)
+│   └── thrum/                # ← THIS is the actual database
+│       └── .dolt/            # ← THIS is the real content-addressable store
+│           └── noms/         # ← dolt data blocks</code></pre>
+<p><strong>The database lives at <code>.beads/dolt/thrum/</code>, not <code>.beads/dolt/</code>.</strong> The outer
+<code>.beads/dolt/.dolt/</code> is just the dolt-sql-server workspace config with
+<code>&quot;branches&quot;: {}</code> — it&#39;s not a Dolt database. Run <code>dolt sql</code> or <code>dolt status</code>
+from <code>.beads/dolt/</code> and you&#39;ll get confusing errors like
+<code>database not found: thrum</code> (show databases lists it, but use fails) or
+<code>non-string column in &#39;SELECT active_branch()&#39;</code>.</p>
+<p>Confirm the real location:</p>
+<pre><code>ls .beads/dolt/&lt;project-name&gt;/.dolt/
+# Should contain: noms/, repo_state.json, config.json</code></pre>
+<p>Replace <code>&lt;project-name&gt;</code> with your bd database name (check the <code>&quot;dolt_database&quot;</code>
+field in <code>.beads/metadata.json</code>).</p>
+<h4>Git worktrees: per-worktree migration vs shared DB via redirect</h4>
+<p>If your project has git worktrees that each have their own <code>.beads/dolt/</code>
+directory, you have two options post-migration:</p>
+<ol>
+<li><p><strong>Per-worktree embedded dbs.</strong> Run this whole guide inside each worktree
+independently. Each ends up with its own <code>.beads/embeddeddolt/&lt;prefix&gt;/</code> — no
+shared state, no coordination cost, but diverged issue histories per branch.</p>
+</li>
+<li><p><strong>Shared db via <code>.beads/redirect</code></strong> (recommended for most setups). Migrate
+only the main repo, then in each worktree create a <code>.beads/redirect</code> file
+pointing at the main repo&#39;s <code>.beads/</code> directory. All worktrees read/write the
+same database:</p>
+<pre><code># In the main repo (already migrated to embedded):
+MAIN_BEADS=&quot;$(cd &lt;main-repo&gt;/.beads &amp;&amp; pwd)&quot;
+
+# In each worktree:
+cd &lt;worktree&gt;
+rm -rf .beads         # remove the old server-mode .beads/dolt/
+mkdir .beads
+echo &quot;$MAIN_BEADS&quot; &gt; .beads/redirect
+bd ready              # sanity check — should list the main repo&#39;s issues</code></pre>
+<p>This is the bd 1.0 worktree pattern (see <code>docs/ADVANCED.md</code> in the beads
+repo: &quot;Database Redirects&quot;). Single-level redirects only; the target
+<code>.beads/</code> must exist and have a valid embedded database.</p>
+</li>
+</ol>
+<p>If you went with option 2, each worktree&#39;s old <code>.beads/dolt/</code> can be safely
+deleted after the main repo migration is verified — no safety backups needed for
+the worktree deletions, since the data all lives in the main repo now.</p>
+<h3>Step 3: Choose your recovery path (A or B)</h3>
+<p>The <code>.beads/backup/</code> directory contains dolt-native incremental archives
+(<code>.darc</code> files plus a manifest referencing dolt commit hashes). These are <strong>NOT
+full database snapshots</strong>. <code>bd backup restore</code> on them against a fresh embedded
+db will report success and restore nothing. Don&#39;t rely on them as your only
+backup. The two working paths are:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>When to use</th>
+<th>Mechanism</th>
+<th>Preserves</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>A</strong></td>
+<td>SQLite-era source, OR you have a current <code>.beads/issues.jsonl</code>, OR you can regenerate one from SQLite</td>
+<td><code>bd init</code> + <code>bd import &lt;file.jsonl&gt;</code> — cleanest, one command to load everything</td>
+<td>Issues, dependencies, comments, labels, memories. Commits automatically under auto-commit=on.</td>
+</tr>
+<tr>
+<td><strong>B</strong></td>
+<td>Server-mode Dolt without a usable JSONL, and you can&#39;t run <code>bd export</code> because bd was already upgraded</td>
+<td>Raw <code>dolt sql dump</code> from the content-addressable store, then <code>dolt sql &lt;</code> replay into the fresh embedded db</td>
+<td>Everything in the source Dolt — full row-level fidelity, but raw; requires manual schema-drift fixes and a manual <code>dolt commit</code> on the working set (Step 6B)</td>
+</tr>
+</tbody></table>
+<p><strong>Path A is strongly preferred</strong> whenever a JSONL export is available or can be
+produced. It&#39;s simpler, auto-commits, and avoids schema-drift surprises from
+very old bd versions (see Troubleshooting: &quot;<code>bd ready</code> errors with column
+<code>no_history</code> could not be found&quot;). If you have a JSONL, use it.</p>
+<h4>Step 3.1: Move the entire <code>.beads/</code> directory aside (filesystem snapshot) — COMMON</h4>
+<p>Same for both paths. This is your ground-truth recovery point if anything goes
+wrong later.</p>
+<pre><code>cp -a .beads .beads.server-backup
+# or (saves space, only if you&#39;re confident):
+# mv .beads .beads.server-backup</code></pre>
+<p>Keep the safety copy until the new embedded install has been exercised for at
+least a day.</p>
+<h4>Step 3A: Produce a JSONL export (PATH A)</h4>
+<p>If <code>.beads.server-backup/issues.jsonl</code> already exists and is current — line
+count matches the source database&#39;s issue count — you can skip ahead to
+<a href="#step-6a-import-the-jsonl-into-the-new-embedded-database-path-a">Step 6A</a>.
+Otherwise regenerate it.</p>
+<h5>Verify an existing <code>.beads/issues.jsonl</code></h5>
+<pre><code># Count lines (= number of issue records):
+wc -l .beads.server-backup/issues.jsonl
+
+# Spot-check against the source database if possible. For SQLite-era:
+sqlite3 .beads.server-backup/beads.db &quot;select count(*) from issues;&quot;
+
+# For server-mode dolt — count via the old store:
+cd .beads.server-backup/dolt/&lt;dbname&gt;
+dolt sql -q &quot;select count(*) from issues;&quot;</code></pre>
+<p>If the counts match, the JSONL is usable — proceed to Step 4. If it&#39;s stale or
+missing, regenerate it:</p>
+<h5>Regenerate the JSONL from SQLite (bd ≤ 0.54 source)</h5>
+<p>bd 1.0 can read its own <code>bd export</code> JSONL format but can&#39;t read the old SQLite
+directly. The re-export path is plain <code>sqlite3</code>:</p>
+<pre><code>sqlite3 .beads.server-backup/beads.db &quot;SELECT json_object(
+  &#39;id&#39;, id,
+  &#39;title&#39;, title,
+  &#39;description&#39;, description,
+  &#39;design&#39;, coalesce(design, &#39;&#39;),
+  &#39;acceptance_criteria&#39;, coalesce(acceptance_criteria, &#39;&#39;),
+  &#39;notes&#39;, coalesce(notes, &#39;&#39;),
+  &#39;status&#39;, status,
+  &#39;priority&#39;, priority,
+  &#39;issue_type&#39;, issue_type,
+  &#39;assignee&#39;, coalesce(assignee, &#39;&#39;),
+  &#39;created_at&#39;, created_at,
+  &#39;updated_at&#39;, updated_at,
+  &#39;closed_at&#39;, closed_at,
+  &#39;close_reason&#39;, close_reason
+) FROM issues ORDER BY created_at;&quot; \
+  &gt; .beads.server-backup/issues.jsonl
+
+wc -l .beads.server-backup/issues.jsonl   # should equal SQLite issue count</code></pre>
+<p>This gives you a minimal but <code>bd import</code>-compatible JSONL. Dependencies and
+comments need separate SELECTs if you want them — in practice most SQLite-era
+repos are small enough (&lt; 100 issues) that losing dep/comment history is
+acceptable. If you do need them, add <code>dependencies</code> and <code>comments</code> table SELECTs
+following the same pattern.</p>
+<h5>Regenerate the JSONL from server-mode Dolt (bd 0.55–0.63 source)</h5>
+<p>If the old install has a <code>.beads/issues.jsonl</code> exported by <code>bd export</code> at any
+point, use that file — it already has the full schema. If you only have the Dolt
+data directory and the JSONL is missing, use Path B instead. Raw dolt → JSONL
+conversion isn&#39;t worth the effort when <code>dolt sql dump</code> works end-to-end.</p>
+<h4>Step 3B: Produce a full SQL dump via raw dolt (PATH B)</h4>
+<p>The fallback path. <code>dolt dump</code> writes a complete SQL file — every table schema
+and every row.</p>
+<blockquote>
+<p><strong>⚠ Do NOT write the dump to a shared path like <code>/tmp/doltdump.sql</code>.</strong> If
+you&#39;re migrating more than one repo — even sequentially, let alone in parallel
+— every repo would dump to the same file and clobber each other. In a real
+multi-repo migration I ran, a 3 MB dump was silently overwritten by a smaller
+dump from a different repo mid-verification because another session was
+running a parallel migration to the same path.</p>
+<p><strong>Always write the dump INSIDE <code>.beads.server-backup/</code> with a repo-scoped
+name.</strong> That way there&#39;s no collision with other repos and the dump gets
+cleaned up automatically when you <code>rm -rf .beads.server-backup/</code> in Step 12.</p>
+</blockquote>
+<pre><code>cd .beads.server-backup/dolt/&lt;project-name&gt;
+
+# Derive the repo name from git (or set REPO_NAME manually)
+REPO_NAME=$(git -C ../../.. rev-parse --show-toplevel 2&gt;/dev/null | xargs basename)
+REPO_NAME=${REPO_NAME:-$(basename &quot;$PWD&quot;)}
+
+# Write the dump into .beads.server-backup/ (two levels up from dolt/&lt;dbname&gt;/)
+dolt dump -f -fn &quot;../../${REPO_NAME}-bd-dump.sql&quot;
+
+# Output: &quot;Successfully exported data.&quot;
+DUMP_PATH=&quot;$(cd ../.. &amp;&amp; pwd)/${REPO_NAME}-bd-dump.sql&quot;
+ls -lh &quot;$DUMP_PATH&quot;
+head -5 &quot;$DUMP_PATH&quot;
+# Should start with: CREATE DATABASE IF NOT EXISTS `&lt;project-name&gt;`; USE `&lt;project-name&gt;`;</code></pre>
+<p>Verify the dump contains your current state by grepping for a recent issue ID
+you know exists:</p>
+<pre><code>grep -c &quot;your-issue-id&quot; &quot;$DUMP_PATH&quot;</code></pre>
+<p>Hold onto the <code>$DUMP_PATH</code> value —
+<a href="#step-6b-load-the-dolt-sql-dump-into-the-new-embedded-database-path-b">Step 6B</a>
+needs it.</p>
+<h3>Step 4: Upgrade bd and dolt</h3>
+<p>Use the channel that matches your current install.</p>
+<h4>bd via quick-install script (path: <code>/usr/local/bin/bd</code>)</h4>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash</code></pre>
+<p>The installer detects your platform, downloads and verifies the release
+checksum, installs the binary in place (overwrites <code>/usr/local/bin/bd</code>), and
+creates a <code>beads</code> alias.</p>
+<h4>bd via Homebrew</h4>
+<pre><code>brew upgrade beads</code></pre>
+<h4>dolt via Homebrew</h4>
+<pre><code>brew upgrade dolt</code></pre>
+<h4>Verify</h4>
+<pre><code>bd version   # should print 1.0.0 or later
+dolt version # should print 1.86.0 or later</code></pre>
+<h3>Step 5: Initialize the new embedded database</h3>
+<p><code>bd init</code> creates a fresh <code>.beads/</code> directory in embedded mode. Since the old
+<code>.beads/</code> has been moved aside, bd sees nothing and initializes cleanly.</p>
+<pre><code>cd &lt;project-root&gt;
+bd init --prefix=&lt;your-prefix&gt; --non-interactive --role=maintainer</code></pre>
+<p>Replace <code>&lt;your-prefix&gt;</code> with your original issue prefix (e.g. <code>thrum</code>,
+<code>my-project</code>, <code>MYPROJECT</code>). Check <code>.beads.server-backup/metadata.json</code> if you
+can&#39;t remember it.</p>
+<p><code>bd init</code> will:</p>
+<ul>
+<li>Create <code>.beads/embeddeddolt/&lt;prefix&gt;/.dolt/</code> (the new embedded store)</li>
+<li>Create <code>.beads/metadata.json</code> with <code>&quot;dolt_mode&quot;: &quot;embedded&quot;</code></li>
+<li>Create <code>.beads/config.yaml</code> (template with all options commented out)</li>
+<li>Install git hooks (pre-commit, post-merge, etc.)</li>
+<li>Add a beads section to <code>CLAUDE.md</code> / <code>AGENTS.md</code> (see Step 9 caveat)</li>
+<li>Register a Claude Code SessionStart/PreCompact hook in <code>.claude/settings.json</code></li>
+<li>Set a dolt remote pointing at the current git origin</li>
+</ul>
+<p>Verify the init:</p>
+<pre><code>bd version
+bd stats
+# Expected: 0 total issues (the db is empty at this point)</code></pre>
+<h3>Step 6: Load your data into the new embedded database</h3>
+<h4>Step 6A: Import the JSONL into the new embedded database (PATH A)</h4>
+<p>From the project root, with the fresh embedded db in place:</p>
+<pre><code>cd &lt;project-root&gt;
+bd import .beads.server-backup/issues.jsonl
+# Output: &quot;Imported N issues from .beads.server-backup/issues.jsonl&quot;</code></pre>
+<p><code>bd import</code> is the bd 1.0 replacement for the old <code>bd init --from-jsonl</code> flow.
+It creates or upserts issues from the file, auto-detects memory records
+(<code>&quot;_type&quot;:&quot;memory&quot;</code>) and imports them as persistent memories (equivalent to
+<code>bd remember</code>), then commits the new rows to the embedded Dolt working set. If
+you set <code>dolt.auto-commit=on</code> before importing (recommended — see Step 7), the
+import commits automatically. Otherwise it sits in the working set and you&#39;ll
+need to commit it manually like Path B (see Step 6C).</p>
+<p>Verify the import:</p>
+<pre><code>bd stats
+bd ready
+bd show &lt;known-issue-id&gt;</code></pre>
+<p>If <code>bd ready</code> and <code>bd show</code> both work and the issue count matches the source,
+<strong>skip ahead to
+<a href="#step-7-verify-dolt-auto-commit-and-commit-the-working-set-if-needed">Step 7</a></strong>.
+Path A is done for this repo.</p>
+<h4>Step 6B: Load the dolt SQL dump into the new embedded database (PATH B)</h4>
+<p>The new embedded db is a standard dolt database, so <code>dolt sql</code> works against it
+directly. Load the dump produced in Step 3B:</p>
+<pre><code>cd .beads/embeddeddolt/&lt;your-prefix&gt;
+# $DUMP_PATH was set in Step 3B; the file lives inside .beads.server-backup/
+dolt sql &lt; &quot;$DUMP_PATH&quot;
+# Silent on success. Takes 5–30 seconds for a typical project.</code></pre>
+<blockquote>
+<p><strong>⚠ Database name mismatch when prefix contains a dash.</strong> If your prefix has a
+dash (e.g. <code>my-project</code>), the dump&#39;s <code>CREATE DATABASE IF NOT EXISTS</code> / <code>USE</code>
+statements use the dashed name — that&#39;s what the old server-mode dolt used —
+but <code>bd init</code> may have created the embedded db under an underscore-normalized
+name (e.g. <code>my_project</code>) or a short name like <code>MP</code>. The dump will then fail
+silently or create an unlinked orphan database. Fix with a one-liner sed on
+the dump before loading:</p>
+<pre><code># Edit the dump&#39;s CREATE DATABASE / USE lines to match the embedded db name.
+# Replace &lt;old-dash-name&gt; and &lt;new-name&gt; with the actual names for your repo:
+sed -i &#39;&#39; &#39;s/`&lt;old-dash-name&gt;`/`&lt;new-name&gt;`/g&#39; \
+  .beads.server-backup/&lt;your-repo&gt;-bd-dump.sql</code></pre>
+<p>Then re-run <code>dolt sql &lt; $DUMP_PATH</code>. Verify with
+<code>dolt sql -q &quot;show databases;&quot;</code> — there should be exactly one project
+database.</p>
+</blockquote>
+<p>Verify the load worked:</p>
+<pre><code>dolt sql -q &quot;select count(*) from issues;&quot;
+# Should match the count from the old database
+
+dolt sql -q &quot;select id, status, title from issues where id like &#39;&lt;your-prefix&gt;%&#39; order by id;&quot;
+# Substitute your own recent-work prefix</code></pre>
+<h4>Step 6C: Patch schema drift from very old bd versions (PATH B, old sources only)</h4>
+<p>If the source dolt data came from a very old bd version (pre-0.60ish), the
+loaded schema will be missing columns and tables that bd 1.0 requires at query
+time. Symptoms:</p>
+<pre><code>bd ready
+# Error: get ready work: fetch issues: get issues by IDs from issues:
+#   Error 1105: column &quot;no_history&quot; could not be found in any table in scope</code></pre>
+<p>or</p>
+<pre><code>bd close &lt;id&gt;
+# Error: resolving ID &lt;id&gt;: failed to search issues: search wisps (merge):
+#   search wisps: Error 1105: column &quot;no_history&quot; could not be found in any table in scope</code></pre>
+<p>The dump replayed the old CREATE TABLE DDL, which overwrote the fresh bd 1.0
+schema with the old one. Patch in place against the embedded store:</p>
+<pre><code>cd .beads/embeddeddolt/&lt;your-prefix&gt;
+
+# Add missing columns to issues and wisps:
+dolt sql -q &quot;ALTER TABLE issues ADD COLUMN no_history TINYINT(1) DEFAULT 0;&quot;
+dolt sql -q &quot;ALTER TABLE wisps ADD COLUMN no_history TINYINT(1) DEFAULT 0;&quot;
+
+# Add missing tables (bd 1.0 expects them to exist, even if empty):
+dolt sql -q &quot;CREATE TABLE IF NOT EXISTS custom_statuses (
+  name varchar(64) NOT NULL,
+  category varchar(32) NOT NULL DEFAULT &#39;unspecified&#39;,
+  PRIMARY KEY (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;&quot;
+
+dolt sql -q &quot;CREATE TABLE IF NOT EXISTS custom_types (
+  name varchar(64) NOT NULL,
+  PRIMARY KEY (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;&quot;</code></pre>
+<p>The leftover <code>crystallizes</code> and <code>quality_score</code> columns from the old <code>issues</code>
+schema are harmless — bd 1.0 ignores unknown columns. Leave them alone; dropping
+them is unnecessary risk.</p>
+<p>To diff an old-source schema against a known-good bd 1.0 schema (e.g. from a
+freshly-initialized reference repo):</p>
+<pre><code>(cd &lt;reference-repo&gt;/.beads/embeddeddolt/&lt;prefix&gt; &amp;&amp; dolt sql -q &quot;describe issues;&quot;) &gt; /tmp/good.txt
+(cd .beads/embeddeddolt/&lt;your-prefix&gt; &amp;&amp; dolt sql -q &quot;describe issues;&quot;) &gt; /tmp/mine.txt
+diff /tmp/good.txt /tmp/mine.txt</code></pre>
+<p>Re-run <code>bd ready</code> and <code>bd close &lt;id&gt;</code> after the ALTERs to confirm the drift is
+fixed.</p>
+<h3>Step 7: Verify dolt auto-commit and commit the working set if needed</h3>
+<p><strong>bd 1.0 defaults <code>dolt.auto-commit</code> to <code>off</code>.</strong> After a Path B migration — or
+any Path A migration where you didn&#39;t set auto-commit <em>before</em> running
+<code>bd import</code> — the loaded rows are sitting in the dolt <strong>working set</strong>. They&#39;re
+queryable by bd, but never committed to dolt history and never pushed to any
+remote. Subsequent bd writes will also stay in the working set until you either
+turn auto-commit on or commit manually.</p>
+<p>Fix in this order:</p>
+<pre><code>cd &lt;project-root&gt;
+
+# 1. Tell bd to commit to dolt on every write from now on:
+bd config set dolt.auto-commit on
+
+# 2. Commit the existing working set (the Path B data or pre-auto-commit Path A data):
+cd .beads/embeddeddolt/&lt;your-prefix&gt;
+dolt status   # should show modified tables: issues, wisps, events, etc.
+dolt add -A
+dolt commit -m &quot;migrate: import historical data from bd &lt;old-version&gt; &lt;mode&gt;&quot;
+dolt log --oneline | head -5   # should now show your migrate commit at HEAD
+cd -</code></pre>
+<blockquote>
+<p><strong>auto-commit values:</strong> <code>bd config set dolt.auto-commit &lt;value&gt;</code> accepts
+<code>off</code>, <code>on</code>, or <code>batch</code>. Default is <code>off</code>. <code>on</code> commits synchronously after
+every bd write. <code>batch</code> defers commits to <code>bd dolt commit</code> but flushes on
+SIGTERM/SIGHUP. For migrated repos, use <code>on</code> unless you have a specific reason
+to batch.</p>
+</blockquote>
+<p>Now verify bd can read the restored data end-to-end:</p>
+<pre><code>cd &lt;project-root&gt;
+bd stats
+bd ready
+bd show &lt;some-issue-id&gt;
+bd migrate   # confirms schema version is current</code></pre>
+<p>All of these should succeed. <code>bd migrate</code> with no subcommand is a schema check —
+no-op if everything is current — and should print:</p>
+<pre><code>Dolt database version: 1.0.0
+✓ Version matches
+✓ All metadata fields present</code></pre>
+<h3>Step 8: Configure backup and sync per repo</h3>
+<p>bd 1.0 has two sync mechanisms that got conflated in pre-1.0 docs:</p>
+<ul>
+<li><strong><code>backup.git-push</code></strong> (<code>.beads/config.yaml</code>) — enables JSONL auto-export to
+<code>.beads/backup/*.jsonl</code> and <strong>git push of those files</strong> when a git remote is
+detected. Useful when beads data should travel as tracked files in the repo.
+Leave <code>false</code> if you already have an external backup script handling
+off-machine backup.</li>
+<li><strong><code>dolt.auto-push</code></strong> (<code>bd config set</code>) — enables background <strong>dolt push</strong> of
+the embedded store to a hidden <code>refs/dolt/data</code> git ref on the remote. This is
+the native Dolt sync path; the hidden ref is invisible to <code>git log</code> /
+<code>git clone</code> but travels with <code>git push --all</code> /
+<code>git fetch origin &#39;refs/dolt/*&#39;</code>. Interval is controlled by
+<code>dolt.auto-push-interval</code> (default 5m). Useful for private repos where you
+want beads history to sync across machines without living in tracked files.</li>
+</ul>
+<p><strong>Public repos / external backup workflow</strong> (e.g. thrum):</p>
+<pre><code># .beads/config.yaml
+backup:
+  git-push: false</code></pre>
+<p>Don&#39;t set <code>dolt.auto-push=true</code> on a public repo unless you want the hidden dolt
+ref published to the public git remote.</p>
+<p><strong>Private repos with no external backup script</strong> (most personal repos):</p>
+<pre><code># .beads/config.yaml:
+backup:
+  git-push: true
+
+# And via bd config (stored in-db):
+bd config set dolt.auto-push true
+# (dolt.auto-commit=on was already set in Step 7)</code></pre>
+<p><strong>Initial push to establish the remote baseline:</strong></p>
+<p>After <code>bd init</code> auto-configures the dolt remote and you commit the working set
+in Step 7, run one initial manual push. <code>dolt.auto-push</code> only fires on an
+interval, so the remote won&#39;t have your data until the first scheduled push —
+don&#39;t wait for that:</p>
+<pre><code>cd .beads/embeddeddolt/&lt;your-prefix&gt;
+dolt push origin main
+# Expect: &quot;[new branch] main -&gt; main&quot; on first run</code></pre>
+<p>If the push fails with <code>unknown push error; no common ancestor</code>, the remote
+already has a divergent <code>refs/dolt/data</code> ref from a prior install. See
+Troubleshooting: &quot;dolt push fails with &#39;no common ancestor&#39;&quot;.</p>
+<p><strong>Verify the remote ref:</strong></p>
+<pre><code>cd &lt;project-root&gt;
+git ls-remote origin &#39;refs/dolt/*&#39;
+# Should show a single hash next to refs/dolt/data</code></pre>
+<h3>Step 9: Clean up <code>CLAUDE.md</code> / <code>AGENTS.md</code> integration</h3>
+<p><code>bd init</code> adds a &quot;Beads Issue Tracker&quot; section to <code>CLAUDE.md</code> (between
+<code>&lt;!-- BEGIN BEADS INTEGRATION --&gt;</code> and <code>&lt;!-- END BEADS INTEGRATION --&gt;</code>
+markers). In embedded mode, the boilerplate session-close workflow in that
+section references <code>bd dolt push</code>, which is <strong>server-mode only</strong>:</p>
+<pre><code>git pull --rebase
+bd dolt push        # ← invalid in embedded mode
+git push</code></pre>
+<p>Remove that line, or the whole section if you maintain your own. It&#39;s safe to
+edit inside the markers — bd won&#39;t regenerate the section on subsequent
+<code>bd init</code> runs unless you pass <code>--force</code>.</p>
+<h3>Step 10: Smoke test</h3>
+<pre><code># Read path
+bd ready
+bd show &lt;some-open-issue&gt;
+
+# Write path (create a throwaway test issue)
+bd create --title=&quot;migration smoke test&quot; --type=task --priority=4
+# Note the ID, then:
+bd close &lt;that-id&gt;
+
+# Dependency path
+bd dep --help</code></pre>
+<h3>Step 11: Audit your agent memory for stale bd guidance</h3>
+<p><strong>This step is easy to skip and will bite you later.</strong> If you have any AI agent
+with persistent memory — <code>MEMORY.md</code> files, Claude Code memory, <code>bd remember</code>
+entries, CLAUDE.md project instructions, user global CLAUDE.md, notes in
+<code>.claude/</code>, or equivalent in other runtimes — those memory stores almost
+certainly contain bd 0.62-era commands that won&#39;t work anymore. Future sessions
+will confidently quote them and burn time debugging why <code>bd dolt push</code> fails or
+why <code>bd import</code> doesn&#39;t exist.</p>
+<p>Grep your memory stores for stale bd patterns and fix each hit:</p>
+<pre><code># Adjust paths to match where your agent keeps persistent memory.
+# Include global agent definitions — they apply to ALL projects on the
+# machine and almost always contain stale bd guidance.
+grep -rn &quot;bd backup --force\|bd import\|bd sync\|bd onboard\|bd dolt push\|bd dolt start\|bd dolt stop\|bd dolt status\|bd dolt show&quot; \
+  ~/.claude/projects/*/memory/ \
+  ~/.claude/CLAUDE.md \
+  ~/.claude/*.md \
+  ~/.claude/agents/*.md \
+  ~/.codex/ \
+  ~/.config/opencode/ \
+  .claude/ \
+  CLAUDE.md \
+  AGENTS.md \
+  .beads/memories/ 2&gt;/dev/null</code></pre>
+<h4>⚠ Global agent definitions: hold until ALL repos on the machine are migrated</h4>
+<p>Files under <code>~/.claude/agents/*.md</code> (and equivalent global agent definitions in
+other runtimes) apply to <strong>every project on the machine</strong>, not just this one. If
+you still have other repos stuck in bd 0.62 server mode, <strong>updating the global
+files now will break them</strong> — they depend on the old commands like <code>bd sync</code> and
+<code>bd dolt push</code>.</p>
+<p>Two safe orderings:</p>
+<ol>
+<li><strong>Migrate all repos first, then update global files.</strong> Run the discovery
+script (Step 1) to find every stale repo, migrate each one, then do the
+global memory audit last. Cleaner if you have ≤10 repos.</li>
+<li><strong>Update global files immediately, but annotate them</strong> with &quot;requires bd 1.0+
+embedded mode; see the <a href="https://leonletto.github.io/thrum/guides/beads-migration-to-embedded.html">migration guide</a>
+(or its long-form version on the
+<a href="https://gist.github.com/leonletto/606e8afbb3603870d14b4123707416a2">public gist</a>)&quot;.
+Unmigrated repos will still break, but you won&#39;t accumulate drift across
+future sessions.</li>
+</ol>
+<p>Project-level files (<code>.claude/</code>, project CLAUDE.md, <code>AGENTS.md</code>) are <strong>always
+safe to update immediately</strong> — they only affect this repo, which is now on bd
+1.0.</p>
+<p>Patterns to fix:</p>
+<table>
+<thead>
+<tr>
+<th>Stale (bd 0.62)</th>
+<th>Replace with (bd 1.0+)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>bd backup --force</code></td>
+<td><code>bd export --all -o &lt;path&gt;</code></td>
+</tr>
+<tr>
+<td><code>bd import &lt; file.jsonl</code> (shell-redirect form)</td>
+<td><code>bd import file.jsonl</code> (positional arg — the command still exists in 1.0, syntax changed)</td>
+</tr>
+<tr>
+<td><code>bd sync</code></td>
+<td>Removed — no replacement, delete the line</td>
+</tr>
+<tr>
+<td><code>bd onboard</code></td>
+<td><code>bd prime</code></td>
+</tr>
+<tr>
+<td><code>bd dolt push</code> / <code>bd dolt pull</code></td>
+<td>Removed in embedded mode. Delete from session-close workflows. For private repos wanting dolt sync, use <code>bd config set dolt.auto-push true</code> or run <code>dolt push origin main</code> directly from <code>.beads/embeddeddolt/&lt;prefix&gt;</code>.</td>
+</tr>
+<tr>
+<td><code>bd dolt start</code> / <code>bd dolt stop</code></td>
+<td>Removed in embedded mode</td>
+</tr>
+<tr>
+<td><code>bd dolt status</code> / <code>bd dolt show</code></td>
+<td>Removed in embedded mode; use <code>bd stats</code> and <code>bd migrate</code></td>
+</tr>
+<tr>
+<td><code>bd doctor</code> (as a health check)</td>
+<td><code>bd migrate</code> (no args) — <code>bd doctor</code> is a no-op placeholder in embedded mode</td>
+</tr>
+<tr>
+<td>&quot;dolt server on port X&quot;</td>
+<td>No server. Single binary, file lock.</td>
+</tr>
+<tr>
+<td><code>.beads/dolt/</code> as the data path</td>
+<td><code>.beads/embeddeddolt/&lt;prefix&gt;/.dolt/</code></td>
+</tr>
+</tbody></table>
+<p>Also update:</p>
+<ul>
+<li>Any <strong>session-close scripts</strong> that call <code>bd dolt push</code> before <code>git push</code>.</li>
+<li>Any <strong>worktree setup scripts</strong> that initialize bd via <code>bd import</code>.</li>
+<li>Any <strong>tooling notes</strong> that describe the beads backend as &quot;Dolt via
+sql-server&quot;.</li>
+<li>Any <strong>backup scripts</strong> that pipe through <code>bd backup --force</code> — these fail
+silently with <code>|| true</code> and produce stale backups without telling you.</li>
+</ul>
+<p>If your memory system has index files (e.g. <code>MEMORY.md</code> listing topic files),
+update the one-line descriptions so future memory-recall picks up the refreshed
+content rather than the stale entries.</p>
+<h3>Step 12: Clean up the safety copy</h3>
+<p><strong>Only after</strong> you&#39;ve exercised the new install for at least a day and are
+confident nothing is missing:</p>
+<pre><code>rm -rf .beads.server-backup
+# If you also took a .beads.pre-migration/ copy (double-safety), remove it too:
+rm -rf .beads.pre-migration 2&gt;/dev/null || true</code></pre>
+<p>The dump file lives inside <code>.beads.server-backup/</code> (per Step 3b), so removing
+the directory removes the dump too. No <code>/tmp/</code> cleanup needed.</p>
+<p>Keep them longer if you have any doubt. Disk is cheap; re-migrating is not.</p>
+<h4>.gitignore the safety copies</h4>
+<p>Before committing anything post-migration, add the safety copies to your ignore
+list so they don&#39;t get accidentally staged:</p>
+<pre><code>cat &gt;&gt; .git/info/exclude &lt;&lt;&#39;EOF&#39;
+# Beads 0.62 → 1.0 migration safety copies (see migration guide Step 12)
+.beads.server-backup/
+.beads.pre-migration/
+EOF</code></pre>
+<p><code>.git/info/exclude</code> (per-clone, untracked) is better than <code>.gitignore</code> for
+temporary entries — otherwise the <code>.gitignore</code> entry lingers in history forever.</p>
+<hr>
+<h3>Troubleshooting</h3>
+<h4><code>bd doctor</code> says &quot;No dolt database found&quot; but one exists</h4>
+<p><code>bd doctor</code> in 1.0.0 isn&#39;t supported in embedded mode. It prints a placeholder
+pointing you at manual checks:</p>
+<pre><code>Note: &#39;bd doctor&#39; is not yet supported in embedded mode.
+  • Verify database exists:  ls -la .beads/embeddeddolt/
+  • Check bd version:        bd version
+  • Reinitialize if needed:  bd init --force</code></pre>
+<p>Use <code>bd migrate</code> (no args) instead — it verifies the schema version and metadata
+fields.</p>
+<h4><code>bd dolt start</code> / <code>bd dolt push</code> / <code>bd dolt status</code> all error</h4>
+<p>Expected. Embedded mode has no dolt server, so all <code>bd dolt &lt;server-lifecycle&gt;</code>
+commands return:</p>
+<pre><code>Error: &#39;bd dolt ...&#39; is not supported in embedded mode (no Dolt server)</code></pre>
+<p>That includes <code>bd dolt push</code>. For dolt-native off-machine backup in embedded
+mode, use <code>bd backup sync</code> (writes to a local directory or DoltHub remote) or
+run <code>dolt</code> directly against the embedded store.</p>
+<h4><code>bd backup restore &lt;path&gt;</code> succeeds but database is empty</h4>
+<p>The <code>.beads/backup/*.jsonl</code> files from a v0.62 server-mode install are <strong>Dolt
+archive <code>.darc</code> format</strong>, not full snapshots. <code>bd backup restore</code> doesn&#39;t
+extract row data from them against a fresh embedded db — it reports success and
+inserts nothing. This one is especially annoying to discover after you thought
+you were done.</p>
+<p>Use one of:</p>
+<ul>
+<li><strong>Path A</strong> (preferred): regenerate a JSONL via <code>bd export</code> (if the source bd
+version can still open the database) or via raw <code>sqlite3</code> for SQLite-era
+sources, then <code>bd import</code> it. See Step 3A and Step 6A.</li>
+<li><strong>Path B</strong>: raw <code>dolt sql dump</code> against the content-addressable store
+directly. See Step 3B and Step 6B.</li>
+</ul>
+<h4><code>bd ready</code> errors with <code>column &quot;no_history&quot; could not be found</code></h4>
+<p>Full error:</p>
+<pre><code>Error: get ready work: fetch issues: get issues by IDs from issues:
+  Error 1105: column &quot;no_history&quot; could not be found in any table in scope</code></pre>
+<p>Path B only, and only when the source dolt data came from a very old bd version
+(pre-0.60ish). The dump replayed the old CREATE TABLE DDL, which overwrote the
+fresh bd 1.0 schema with the old one. Fix with the ALTER + CREATE TABLE
+statements in
+<a href="#step-6c-patch-schema-drift-from-very-old-bd-versions-path-b-old-sources-only">Step 6C</a>.</p>
+<p>Write operations show the same symptom:</p>
+<pre><code>Error: resolving ID &lt;id&gt;: failed to search issues: search wisps (merge):
+  search wisps: Error 1105: column &quot;no_history&quot; could not be found in any table in scope</code></pre>
+<p>Same fix — the <code>wisps</code> table needs the column too.</p>
+<h4><code>dolt push origin main</code> fails with <code>unknown push error; no common ancestor</code></h4>
+<p>The remote already has a <code>refs/dolt/data</code> ref from a prior install. The
+freshly-migrated local dolt history has no commits in common with it.</p>
+<p>Fix:</p>
+<pre><code>cd &lt;project-root&gt;
+
+# Verify the stale remote ref exists:
+git ls-remote origin &#39;refs/dolt/*&#39;
+# e.g.: abc1234def5678...  refs/dolt/data
+
+# Delete the remote ref (destructive — but this is a migrated repo,
+# and the old ref is no longer reachable from any current install):
+git push origin :refs/dolt/data
+
+# Confirm it&#39;s gone:
+git ls-remote origin &#39;refs/dolt/*&#39;
+# (no output)
+
+# Now the dolt push will establish a new baseline:
+cd .beads/embeddeddolt/&lt;your-prefix&gt;
+dolt push origin main
+# Expect: &quot;[new branch] main -&gt; main&quot;</code></pre>
+<p>Safe if you&#39;re the only active consumer of that beads database. If multiple
+machines still have copies pointing at the old ref, migrate them all before
+deleting the remote ref.</p>
+<h4><code>dolt push origin main</code> says <code>Everything up-to-date</code> but local has uncommitted data</h4>
+<p><code>dolt push</code> only pushes committed data. If you loaded data via Path B&#39;s
+<code>dolt sql &lt; dump.sql</code> and didn&#39;t commit the working set, the push sees no new
+commits to send. Exit code is 0, the remote looks current, but the issues you
+just loaded are stranded locally in the dolt working set.</p>
+<p>Verify:</p>
+<pre><code>cd .beads/embeddeddolt/&lt;your-prefix&gt;
+dolt status
+# If it shows &quot;Changes not staged for commit&quot; on issues/wisps/events/etc.,
+# you have uncommitted data in the working set.
+
+dolt log --oneline
+# HEAD should be at a &quot;migrate: ...&quot; commit, not at &quot;bd init&quot;</code></pre>
+<p>Fix: commit and push.</p>
+<pre><code>dolt add -A
+dolt commit -m &quot;migrate: import historical data&quot;
+dolt push origin main</code></pre>
+<p>Set <code>bd config set dolt.auto-commit on</code> (Step 7) so future writes don&#39;t
+accumulate in the working set.</p>
+<h4><code>dolt sql -q &quot;use &lt;dbname&gt;;&quot;</code> says &quot;database not found&quot; but <code>show databases</code> lists it</h4>
+<p>You&#39;re running dolt from the wrong directory. The actual database is at
+<code>.beads/dolt/&lt;dbname&gt;/.dolt/</code>, not <code>.beads/dolt/.dolt/</code>. The outer <code>.dolt/</code> is a
+dolt-sql-server workspace config with no branches.</p>
+<pre><code>cd .beads/dolt/&lt;dbname&gt;
+dolt status          # should show branch info, not nil-column error
+dolt sql -q &quot;select count(*) from issues;&quot;</code></pre>
+<h4><code>dolt dump</code> fails with &quot;The current directory is not a valid dolt repository&quot;</h4>
+<p>Same cause: you need to be inside <code>.beads/dolt/&lt;dbname&gt;/</code> (or
+<code>.beads.server-backup/dolt/&lt;dbname&gt;/</code>), not its parent.</p>
+<h4><code>.beads/dolt/</code> only contains <code>config.yaml</code> — no database subdirectory</h4>
+<p>This is a <strong>transitional SQLite → Dolt</strong> source: bd 0.55 was installed and
+started setting up dolt (creating <code>.beads/dolt/config.yaml</code>) but the actual
+<code>bd migrate --to-dolt</code> step never ran. All the issue data is still in
+<code>.beads/beads.db</code> (SQLite). Don&#39;t use Path B — there&#39;s nothing to dump. Use
+<strong>Path A</strong>:</p>
+<ol>
+<li>Check for an existing <code>.beads/issues.jsonl</code>. If its line count matches
+<code>sqlite3 .beads/beads.db &quot;select count(*) from issues;&quot;</code>, use it as-is.</li>
+<li>If not, regenerate via raw <code>sqlite3</code> (see Step 3A).</li>
+<li>Proceed to Step 4 (upgrade) → Step 5 (<code>bd init</code>) → Step 6A (<code>bd import</code>).</li>
+</ol>
+<h4><code>dolt dump -d /path</code> or <code>dolt dump --data-dir</code> errors</h4>
+<p><code>dolt dump</code> doesn&#39;t support global data-dir flags. Run from inside the database
+directory and use <code>-fn /path/to/output.sql</code> instead:</p>
+<pre><code>cd .beads.server-backup/dolt/&lt;dbname&gt;
+dolt dump -f -fn /tmp/doltdump.sql</code></pre>
+<h4><code>bd init</code> says &quot;database &#39;thrum&#39; already exists&quot;</h4>
+<p>The embedded store at <code>.beads/embeddeddolt/&lt;prefix&gt;/</code> already has schema and
+schema_migrations rows. Pass <code>--force</code>:</p>
+<pre><code>bd init --force --prefix=&lt;your-prefix&gt; --non-interactive --role=maintainer</code></pre>
+<p>Or delete <code>.beads/embeddeddolt/</code> first.</p>
+<h4><code>bd backup restore --force /tmp/dump</code> says &quot;Error 1105: database already exists, use --force&quot;</h4>
+<p>That error refers to the dolt database itself, not the backup destination. Pass
+<code>--force</code>:</p>
+<pre><code>bd backup restore --force /path/to/backup</code></pre>
+<p>Only useful for restoring from a proper <code>bd backup sync</code> destination, not from
+the old server-mode <code>.beads/backup/</code> directory.</p>
+<h4><code>bd dolt pull</code> fails with merge conflict on the <code>issues</code> table (pre-upgrade)</h4>
+<p>This is usually what triggers the migration in the first place. When an old
+server-mode bd 0.62 client and a freshly-upgraded bd 1.0 client share the same
+<code>.beads/dolt/</code> data, they talk to the server on different ports and the remote
+sync can drift. Complete the migration from Step 2 onward — don&#39;t force-merge.</p>
+<h4><code>/tmp/doltdump.sql</code> got overwritten mid-migration</h4>
+<p>Another session (or a parallel migration loop) writing to the same hardcoded
+path. Two dumps racing to the same file is not fun. The fix is baked into Step
+3b: write to <code>.beads.server-backup/&lt;repo&gt;-bd-dump.sql</code> instead, so each repo&#39;s
+dump lives inside its own safety directory. If you already hit this, re-run Step
+3b with the corrected path — the source data in
+<code>.beads.server-backup/dolt/&lt;dbname&gt;/</code> is still intact.</p>
+<h4>Orphan <code>dolt sql-server</code> processes accumulating over time</h4>
+<p>Every unmigrated bd 0.62 repo on the machine has exactly one orphan
+<code>dolt sql-server</code> process that bd 1.0 can&#39;t stop. They&#39;re <strong>safe but
+pointless</strong>: they hold locks on their <code>.beads/dolt/</code> directories and consume a
+tiny bit of RAM. They don&#39;t interfere with bd 1.0 operations in other repos
+(each server listens on a different port).</p>
+<p>To clean them up, run the discovery script (see Step 1) to cross-reference each
+PID with its repo, then migrate repos one by one. Each migration naturally kills
+its own orphan in Step 1.</p>
+<p>If you find an orphan whose <code>cwd</code> points at a deleted directory or the trash,
+just kill it — nothing depends on it:</p>
+<pre><code>lsof -p &lt;pid&gt; 2&gt;&amp;1 | grep cwd  # sanity check the cwd first
+kill &lt;pid&gt;</code></pre>
+<h4>Worktrees still have old <code>.beads/dolt/</code> directories</h4>
+<p>See the worktree subsection after Step 2: per-worktree migration vs shared DB
+via <code>.beads/redirect</code> file. The redirect option is the bd 1.0 documented pattern
+for sharing a database across worktrees.</p>
+<h4>The dolt remote bd init created is pointed at the wrong place</h4>
+<p><code>bd init</code> on a repo with a git remote auto-configures a dolt remote pointed at
+the git origin. In an offline-backup workflow (where you have your own external
+script) this is harmless noise. But if it causes confusion:</p>
+<pre><code># Remove the auto-configured dolt remote:
+bd dolt remote remove origin 2&gt;/dev/null || true
+
+# Or disable auto-push in .beads/config.yaml:
+# (covered in Step 8 of this guide)</code></pre>
+<h4>Backup scripts break: <code>bd backup --force</code> no longer exists</h4>
+<p>In bd 0.62 your script probably does:</p>
+<pre><code>(cd &quot;$PROJECT&quot; &amp;&amp; bd backup --force 2&gt;/dev/null || true)
+cp &quot;$PROJECT/.beads/backup/&quot;*.jsonl &quot;$BACKUP_DEST/&quot; 2&gt;/dev/null || true</code></pre>
+<p>The <code>|| true</code> silently swallows the error, and the <code>cp</code> copies whatever JSONL
+files happen to be lying around — which after the migration may be <strong>empty or
+stale</strong>. Update the script to use <code>bd export</code>:</p>
+<pre><code>(cd &quot;$PROJECT&quot; &amp;&amp; bd export --all -o &quot;$PROJECT/.beads/backup/issues.jsonl&quot;) \
+  2&gt;/dev/null || true
+cp &quot;$PROJECT/.beads/backup/&quot;*.jsonl &quot;$BACKUP_DEST/&quot; 2&gt;/dev/null || true</code></pre>
+<p><code>bd export</code> writes a single JSONL containing all issues (and memories,
+dependencies, comments, labels, etc.) in a format that&#39;s human-readable and
+greppable — which is usually what these backup scripts actually want.</p>
+<hr>
+<h3>References</h3>
+<ul>
+<li>Beads docs: <code>docs/INSTALLING.md</code>, <code>docs/DOLT.md</code>, <code>docs/DOLT-BACKEND.md</code> in
+the <a href="https://github.com/steveyegge/beads">beads repo</a></li>
+<li>Changelog entries for the 0.55 → 1.0 embedded-mode transition: search the
+beads CHANGELOG.md for &quot;embedded&quot; and &quot;schema version&quot;</li>
+<li>Originating incidents:<ul>
+<li><strong>First session (Path B discovery):</strong> recovery of a recently-filed epic in
+the <code>thrum</code> public repo via raw <code>dolt sql dump</code> after <code>bd backup restore</code> on
+the <code>.beads/backup/*.jsonl</code> files produced an empty database. That incident
+produced Step 6B / Step 3B and made clear that the <code>.darc</code> archives in
+<code>.beads/backup/</code> are not full snapshots.</li>
+<li><strong>Second session (multi-repo migration sweep):</strong> systematic migration of
+several personal and work-private repos across a range of source states —
+SQLite-era (bd ≤ 0.54), transitional SQLite → Dolt, old-schema server-mode
+(bd 0.55 range), and clean server-mode (bd 0.62). That sweep turned up: (1)
+<code>bd import &lt;file.jsonl&gt;</code> exists in bd 1.0 and is the preferred path for any
+source with a JSONL or SQLite backend, (2) very old server-mode sources have
+schema drift (missing <code>no_history</code> column, missing <code>custom_statuses</code> /
+<code>custom_types</code> tables) that the dolt dump replays back onto the fresh
+embedded schema, (3) <code>dolt.auto-commit</code> defaults to <code>off</code> in bd 1.0 so
+loaded data sits in the working set and is never pushed until committed
+manually, and (4) a stale <code>refs/dolt/data</code> on the remote from a prior
+install causes <code>no common ancestor</code> push errors that must be cleared with
+<code>git push origin :refs/dolt/data</code> before the fresh baseline will push.</li>
+</ul>
+</li>
+</ul>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../../llms.txt">llms.txt</a> | <a href="../../llms-full.txt">llms-full.txt</a> | <a href="../../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../../docs.html#guides/beads-migration-to-embedded.html')}</script>
+</body>
+</html>
