@@ -625,13 +625,18 @@ func isValidRuntimeName(name string) bool {
 	return true
 }
 
-// primeCommandForRuntime returns the slash command to send after launch
-// for each supported runtime. Open Code uses /thrum-prime (command filenames
-// are the command names), while Claude Code uses /thrum:prime (plugin namespace).
+// primeCommandForRuntime returns the command to send after launch for each
+// supported runtime. Each runtime has its own skill-invocation syntax:
+//   - Claude Code: /thrum:prime (plugin namespace, colon-separated)
+//   - Open Code: /thrum-prime (slash + skill name)
+//   - Codex: $thrum-prime (dollar-prefix skill invocation; slash commands
+//     with colons are rejected as unrecognized)
 func primeCommandForRuntime(runtime string) string {
 	switch runtime {
 	case "opencode":
 		return "/thrum-prime"
+	case "codex":
+		return "$thrum-prime"
 	default:
 		return "/thrum:prime"
 	}
