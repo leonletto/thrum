@@ -326,6 +326,65 @@ func TestMonitorShow_ReturnsNotFoundForUnknownID(t *testing.T) {
 
 // ----- HandleStop tests -----
 
+// TestMonitorStop_KillsAndDeletes is the happy-path test required by plan
+// Task 8 Step 1. It submits a real (but fast-exiting) monitor via Add,
+// waits for the runner to stop itself cleanly, then calls HandleStop and
+// asserts (a) the response is the success map, (b) the row is gone from
+// the store, (c) the supervisor's runners map no longer has the entry.
+// Review finding R2.4.
+func TestMonitorStop_KillsAndDeletes(t *testing.T) {
+	h, store, _ := newMonitorTestSetup(t)
+
+	// Start the supervisor so Add's runner context derives from a live
+	// baseCtx — otherwise launch() falls back to context.Background and
+	// the runner would still work but the map delete path wouldn't be
+	// exercised under realistic conditions.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		h.supervisor.Start(ctx)
+	}()
+	<-started
+	time.Sleep(20 * time.Millisecond)
+
+	// Submit a long-running monitor so the runner is still alive when we
+	// call Stop (otherwise natural exit removes it from the map before we
+	// get a chance to test Stop).
+	spec := monitor.SubmitSpec{
+		Name:            "stop-happy",
+		Argv:            []string{"sh", "-c", "while true; do echo hi; sleep 0.05; done"},
+		MatchPattern:    "hi",
+		Target:          "@t",
+		Cwd:             os.TempDir(),
+		Env:             map[string]string{},
+		DebounceSeconds: 60,
+	}
+	id, err := h.supervisor.Add(context.Background(), spec)
+	require.NoError(t, err)
+
+	// Give the runner ~100ms to actually start.
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify preconditions: row present, handle in the map.
+	_, err = store.GetByID(context.Background(), id)
+	require.NoError(t, err, "row must be in DB before Stop")
+
+	// Call HandleStop via the wire-level params.
+	params, _ := json.Marshal(monitorIDParams{ID: id})
+	resp, err := h.HandleStop(context.Background(), params)
+	require.NoError(t, err)
+	status, ok := resp.(map[string]string)
+	require.True(t, ok, "expected map[string]string response, got %T", resp)
+	assert.Equal(t, "stopped", status["status"])
+
+	// Postconditions: row deleted from store, handle removed from map.
+	_, err = store.GetByID(context.Background(), id)
+	assert.ErrorIs(t, err, monitor.ErrNotFound,
+		"monitors row must be deleted by HandleStop")
+}
+
 func TestMonitorStop_ReturnsNotFoundForUnknownID(t *testing.T) {
 	h, _, _ := newMonitorTestSetup(t)
 	params, _ := json.Marshal(monitorIDParams{ID: "mon_GHOST"})
