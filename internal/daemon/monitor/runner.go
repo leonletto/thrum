@@ -1,7 +1,6 @@
 package monitor
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -256,4 +255,4 @@ func (b *ringBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (b *ringBuffer) String() string { return string(bytes.TrimRight(b.buf, "\x00")) }
+func (b *ringBuffer) String() string { return string(b.buf) }
