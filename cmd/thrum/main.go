@@ -4779,7 +4779,12 @@ Examples:
 			var client *cli.Client
 			if !dryRun {
 				var err error
-				client, err = getClient()
+				// Use non-refreshing client: quickstart runs its own explicit
+				// RefreshLocalIdentity call after SessionStart succeeds (or
+				// as part of the identity enrichment block). Running an
+				// auto-refresh here would race against the registration
+				// the quickstart itself is performing.
+				client, err = getClientNoRefresh()
 				if err != nil {
 					return fmt.Errorf("failed to connect to daemon: %w", err)
 				}
@@ -5177,7 +5182,36 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 
 // getClient returns a configured RPC client.
 // Respects THRUM_SOCKET env var if set, otherwise uses DefaultSocketPath.
+// getClient opens a daemon connection and refreshes the local identity
+// file + daemon's agent record from live process/tmux/git state. Use for
+// every command except daemon lifecycle, init, and quickstart — those
+// should call getClientNoRefresh().
+//
+// Refresh failures are non-fatal: they log to stderr and the underlying
+// command proceeds normally. See RefreshLocalIdentity doc for details.
 func getClient() (*cli.Client, error) {
+	client, err := getClientNoRefresh()
+	if err != nil {
+		return nil, err
+	}
+
+	repoPath := flagRepo
+	if repoPath == "" {
+		repoPath = "."
+	}
+	if _, refreshErr := cli.RefreshLocalIdentity(client, repoPath); refreshErr != nil {
+		fmt.Fprintf(os.Stderr, "thrum: identity refresh failed: %v\n", refreshErr)
+	}
+
+	return client, nil
+}
+
+// getClientNoRefresh opens a daemon connection without running the identity
+// refresh. Use for:
+//   - daemon lifecycle commands (start/stop/restart/status/logs)
+//   - init and quickstart (before/during initial registration)
+//   - any test or diagnostic tool that must not side-effect the identity
+func getClientNoRefresh() (*cli.Client, error) {
 	socketPath := os.Getenv("THRUM_SOCKET")
 	if socketPath == "" {
 		socketPath = cli.DefaultSocketPath(flagRepo)
