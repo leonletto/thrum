@@ -182,7 +182,7 @@ func TestMonitorHandler_ListRedactsEnvValues(t *testing.T) {
 	require.True(t, ok, "expected []monitorJobView, got %T", resp)
 	require.Len(t, views, 1)
 
-	// Also verify via JSON serialisation so we catch any unexpected leaks.
+	// Also verify via JSON serialization so we catch any unexpected leaks.
 	jsonBody, err := json.Marshal(resp)
 	require.NoError(t, err)
 	jsonStr := string(jsonBody)
@@ -251,16 +251,16 @@ func TestMonitorHandler_ShowRedactsEnvValues(t *testing.T) {
 	assert.Equal(t, "<redacted>", view.Env["DB_PASSWORD"],
 		"DB_PASSWORD value must be '<redacted>' in show response")
 
-	// 4. Also verify via JSON serialisation (catches any accidental double-encoding).
+	// 4. Also verify via JSON serialization (catches any accidental double-encoding).
 	jsonBody, err := json.Marshal(resp)
 	require.NoError(t, err)
 	jsonStr := string(jsonBody)
 	assert.False(t, strings.Contains(jsonStr, "supersecretvalue"),
-		"raw env value 'supersecretvalue' must not appear in serialised show response")
+		"raw env value 'supersecretvalue' must not appear in serialized show response")
 	assert.False(t, strings.Contains(jsonStr, "hunter2"),
-		"raw env value 'hunter2' must not appear in serialised show response")
+		"raw env value 'hunter2' must not appear in serialized show response")
 	assert.True(t, strings.Contains(jsonStr, `"API_KEY"`),
-		"env key 'API_KEY' must be visible in serialised show response")
+		"env key 'API_KEY' must be visible in serialized show response")
 }
 
 func TestMonitorShow_ReturnsNotFoundForUnknownID(t *testing.T) {
@@ -290,15 +290,16 @@ func TestMonitorStop_MissingIDReturnsError(t *testing.T) {
 
 // ----- HandleRestart tests -----
 
-func TestMonitorRestart_ReusesSpec(t *testing.T) {
+func TestMonitorRestart_PreservesID(t *testing.T) {
+	// Review finding R2.1: HandleRestart must preserve the monitor ID per
+	// the design doc. This test asserts the returned ID equals the input
+	// ID and that the same row remains in the store (not a fresh one).
 	h, store, _ := newMonitorTestSetup(t)
 
-	// Insert a job at stopped status so Stop's ErrNotFound path fires,
-	// which then deletes and re-adds via Add.  This tests the restart code
-	// path without needing a live runner process.
 	now := time.Now().UTC().Truncate(time.Second)
+	const stableID = "mon_restart_test"
 	job := &monitor.MonitorJob{
-		ID: "mon_restart_test", Name: "restart-test",
+		ID: stableID, Name: "restart-test",
 		Argv: []string{"true"}, MatchPattern: ".*", Target: "@t",
 		Cwd: os.TempDir(), Env: map[string]string{},
 		DebounceSeconds: 60, CreatedAt: now, UpdatedAt: now,
@@ -306,13 +307,21 @@ func TestMonitorRestart_ReusesSpec(t *testing.T) {
 	}
 	require.NoError(t, store.Insert(context.Background(), job))
 
-	params, _ := json.Marshal(monitorIDParams{ID: "mon_restart_test"})
+	params, _ := json.Marshal(monitorIDParams{ID: stableID})
 	resp, err := h.HandleRestart(context.Background(), params)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	r, ok := resp.(monitorStartResponse)
 	require.True(t, ok, "expected monitorStartResponse, got %T", resp)
-	assert.NotEmpty(t, r.ID, "restarted monitor must have an ID")
+	assert.Equal(t, stableID, r.ID,
+		"restart MUST preserve the monitor ID (design doc §'thrum monitor restart')")
+
+	// The original row must still exist in the DB with the same ID.
+	after, err := store.GetByID(context.Background(), stableID)
+	require.NoError(t, err, "restarted monitor row must still exist with the same ID")
+	assert.Equal(t, stableID, after.ID)
+	assert.Equal(t, monitor.StatusRunning, after.Status,
+		"restart should transition status back to running")
 }
 
 func TestMonitorRestart_ReturnsNotFoundForUnknownID(t *testing.T) {

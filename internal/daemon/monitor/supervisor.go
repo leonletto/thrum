@@ -293,6 +293,57 @@ func (s *MonitorSupervisor) Stop(ctx context.Context, id string) error {
 	return s.store.Delete(ctx, id)
 }
 
+// Restart stops any live runner for the given ID and re-launches it with
+// the persisted spec, PRESERVING the monitor ID. Unlike Stop+Add, the DB
+// row is retained across the restart so downstream subscribers that track
+// the monitor by ID continue to match. Review finding R2.1.
+//
+// If no monitor row exists with the given ID, returns ErrNotFound.
+//
+// Note: concurrent Restart calls on the SAME ID are not supported; callers
+// should serialize externally. The RPC dispatcher is single-threaded per
+// method-name + ID tuple in practice so this is safe for the current RPC
+// caller pattern.
+func (s *MonitorSupervisor) Restart(ctx context.Context, id string) error {
+	// Fetch the persisted job row first. ErrNotFound if absent.
+	job, err := s.store.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Cancel any live runner for this ID. stoppedByUser is set so the
+	// exitNotice closure skips store.MarkDead — we do NOT want the row
+	// marked dead during a restart.
+	s.mu.Lock()
+	h, hasRunner := s.runners[id]
+	if hasRunner {
+		delete(s.runners, id)
+	}
+	s.mu.Unlock()
+
+	if hasRunner {
+		h.stoppedByUser.Store(true)
+		h.cancel()
+		select {
+		case <-h.done:
+		case <-time.After(10 * time.Second):
+			return errors.New("runner did not exit within restart timeout")
+		}
+	}
+
+	// Refresh mutable fields before re-launch. Status back to running;
+	// clear any prior exit record so the restarted runner starts clean.
+	job.Status = StatusRunning
+	job.UpdatedAt = time.Now().UTC()
+	job.LastExitCode = nil
+	job.LastExitAt = nil
+	if err := s.store.Update(ctx, job); err != nil {
+		return fmt.Errorf("monitor restart: update row: %w", err)
+	}
+
+	return s.launch(job)
+}
+
 // List returns all monitor jobs from the store regardless of status.
 func (s *MonitorSupervisor) List(ctx context.Context) ([]*MonitorJob, error) {
 	return s.store.ListAll(ctx)

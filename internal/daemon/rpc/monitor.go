@@ -74,7 +74,7 @@ func redactEnv(src map[string]string) map[string]string {
 }
 
 // jobToView converts a MonitorJob into a safe wire representation.
-// ALL env values are replaced with "<redacted>" before serialisation.
+// ALL env values are replaced with "<redacted>" before serialization.
 func jobToView(job *monitor.MonitorJob) monitorJobView {
 	return monitorJobView{
 		ID:              job.ID,
@@ -196,19 +196,12 @@ func (h *MonitorHandler) HandleShow(ctx context.Context, params json.RawMessage)
 	return jobToView(job), nil // env redacted inside jobToView
 }
 
-// HandleRestart handles monitor.restart — stops the existing child and launches
-// a new one using the persisted spec, preserving the original monitor ID.
+// HandleRestart handles monitor.restart — stops the existing child and
+// re-launches it with the persisted spec, PRESERVING the monitor ID.
 //
-// Implementation: Stop the running child without deleting the DB row, then
-// re-launch via the supervisor's internal Add path is not directly reusable
-// here because Add generates a new ID and inserts a new row.  Instead we stop,
-// read the spec from the store, and call Add with the same spec (which will
-// generate a new ID).  We update the response ID accordingly.
-//
-// Note: the supervisor does not expose a Restart method in Epic A. This handler
-// implements Restart as Stop-then-Add using the stored spec.  The new monitor
-// gets a fresh ID. If this behaviour needs to preserve the original ID, a
-// Restart method should be added to MonitorSupervisor in a follow-up task.
+// Delegates to Supervisor.Restart, which atomically stops (without
+// deleting the row), refreshes mutable fields, and re-launches using the
+// supervisor's long-lived base context. See review finding R2.1.
 func (h *MonitorHandler) HandleRestart(ctx context.Context, params json.RawMessage) (any, error) {
 	var req monitorIDParams
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -218,39 +211,10 @@ func (h *MonitorHandler) HandleRestart(ctx context.Context, params json.RawMessa
 		return nil, fmt.Errorf("id is required")
 	}
 
-	// Fetch the spec before stopping (Stop deletes the row).
-	job, err := h.store.GetByID(ctx, req.ID)
-	if err != nil {
+	if err := h.supervisor.Restart(ctx, req.ID); err != nil {
 		return nil, translateMonitorError(err)
 	}
-
-	// Stop (and delete) the current runner.
-	if stopErr := h.supervisor.Stop(ctx, req.ID); stopErr != nil {
-		// If it's already gone (stopped/dead), we can still restart from the spec.
-		if !errors.Is(stopErr, monitor.ErrNotFound) {
-			return nil, translateMonitorError(stopErr)
-		}
-		// ErrNotFound from Stop means it wasn't running — delete the stale row
-		// so Add can insert a fresh one without a uniqueness conflict.
-		if delErr := h.store.Delete(ctx, req.ID); delErr != nil {
-			return nil, fmt.Errorf("internal error: %v", delErr)
-		}
-	}
-
-	// Re-launch with the same spec.
-	newID, err := h.supervisor.Add(ctx, monitor.SubmitSpec{
-		Name:            job.Name,
-		Argv:            job.Argv,
-		MatchPattern:    job.MatchPattern,
-		Target:          job.Target,
-		Cwd:             job.Cwd,
-		Env:             job.Env,
-		DebounceSeconds: job.DebounceSeconds,
-	})
-	if err != nil {
-		return nil, translateMonitorError(err)
-	}
-	return monitorStartResponse{ID: newID}, nil
+	return monitorStartResponse{ID: req.ID}, nil
 }
 
 // HandleLogs handles monitor.logs — v1 stub.

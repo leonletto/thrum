@@ -2461,7 +2461,7 @@ The command and its arguments must be separated from monitor flags with '--':
 	// thrum monitor restart <id>
 	cmd.AddCommand(&cobra.Command{
 		Use:   "restart <id>",
-		Short: "Restart a monitor job (assigns a new ID)",
+		Short: "Restart a monitor job (preserves the same ID)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
@@ -5330,7 +5330,7 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 
 // getClient returns a configured RPC client.
 // Respects THRUM_SOCKET env var if set, otherwise uses DefaultSocketPath.
-// getClient opens a daemon connection and refreshes the local identity
+// GetClient opens a daemon connection and refreshes the local identity
 // file + daemon's agent record from live process/tmux/git state. Use for
 // every command except daemon lifecycle, init, and quickstart — those
 // should call getClientNoRefresh().
