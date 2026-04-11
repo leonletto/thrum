@@ -116,6 +116,31 @@ func TestDelivery_MonitorNamePrefix(t *testing.T) {
 	}
 }
 
+// TestDelivery_MonitorScopeTagged asserts that every monitor-originated
+// message carries a reserved {type: "monitor", value: <monitorName>} scope so
+// subscription filters can match all monitor messages or a specific monitor
+// in bulk. Review finding 6.
+func TestDelivery_MonitorScopeTagged(t *testing.T) {
+	fake := &fakeSender{}
+	d := NewDelivery(fake)
+
+	err := d.Deliver(context.Background(), "dev-errors", "@impl_api", "ERROR: boom")
+	require.NoError(t, err)
+	require.Len(t, fake.calls, 1)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(fake.calls[0], &payload))
+
+	scopes, ok := payload["scopes"].([]any)
+	require.True(t, ok, "scopes must be present in the payload")
+	require.Len(t, scopes, 1, "exactly one scope per monitor message")
+	scope := scopes[0].(map[string]any)
+	assert.Equal(t, "monitor", scope["type"],
+		"scope type must be the reserved 'monitor' tag")
+	assert.Equal(t, "dev-errors", scope["value"],
+		"scope value must be the monitor name for precise-filter support")
+}
+
 // TestDelivery_PropagatesSenderError asserts that a MessageSender error is
 // wrapped and returned to the caller.
 func TestDelivery_PropagatesSenderError(t *testing.T) {
