@@ -132,8 +132,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	tee := io.TeeReader(pipeR, tail)
 	lr := NewLineReader(tee, maxLineBytes)
 
-	// processDone is closed after cmd.Wait() returns, signalling the shutdown
-	// watcher goroutine that the process has fully exited.
+	// processDone is closed by Run() after cmd.Wait() returns, signalling
+	// the shutdown watcher goroutine that the process has fully exited so
+	// it can stop waiting on the SIGTERM grace window.
 	processDone := make(chan struct{})
 
 	// Shutdown watcher: on ctx cancellation, SIGTERM → 5s → SIGKILL.
