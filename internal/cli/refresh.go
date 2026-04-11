@@ -122,8 +122,43 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 		}
 	}
 
-	// Step 5: RECONCILE DAEMON — stub. Full path lands in thrum-pxz.12.
-	_ = client
+	// Step 5: RECONCILE DAEMON
+	if client != nil {
+		needsReconcile := false
+		for _, f := range result.FileChanged {
+			if f == "agent_pid" || f == "runtime" {
+				needsReconcile = true
+				break
+			}
+		}
+		if needsReconcile {
+			regResp, regErr := AgentRegister(client, AgentRegisterOptions{
+				Name:       idFile.Agent.Name,
+				Role:       idFile.Agent.Role,
+				Module:     idFile.Agent.Module,
+				Display:    idFile.Agent.Display,
+				AgentPID:   detectedPID,
+				ReRegister: true,
+			})
+			if regErr != nil {
+				return result, fmt.Errorf("re-register with daemon: %w", regErr)
+			}
+			if regResp != nil && regResp.Status == "conflict" && regResp.Conflict != nil {
+				// Live-conflict guard: if a DIFFERENT, still-running PID
+				// owns this name, warn and bail out without marking the
+				// daemon as updated. The file is already saved with our
+				// detected PID — this is intentional: the client state
+				// is authoritative locally, but we refuse to steal the
+				// name in the daemon's view.
+				cp := regResp.Conflict.ConflictPID
+				if cp > 0 && cp != detectedPID && process.IsRunning(cp) {
+					fmt.Fprintf(os.Stderr, "thrum: refusing to overwrite live agent %q at PID %d\n", idFile.Agent.Name, cp)
+					return result, nil
+				}
+			}
+			result.DaemonUpdated = true
+		}
+	}
 
 	return result, nil
 }
