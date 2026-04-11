@@ -133,40 +133,57 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 	}
 
 	// Step 5: RECONCILE DAEMON
-	if client != nil {
-		needsReconcile := false
-		for _, f := range result.FileChanged {
-			if f == "agent_pid" || f == "runtime" {
-				needsReconcile = true
-				break
+	//
+	// Always call AgentRegister when the file has a valid PID, even on
+	// the happy path. The daemon's agent.register handler (Fix A in
+	// thrum-pxz.14) is a no-op when the stored PID already matches, so
+	// the happy-path cost is just one local socket RPC (~1ms). When the
+	// DB is stale (legacy data from before this feature, rebuild from
+	// events, or recovery scenarios), this ensures the DB catches up
+	// without requiring an explicit drift event from the client.
+	//
+	// DaemonUpdated is set to true only when the client actually caused
+	// a state change — i.e., when FileChanged included "agent_pid" or
+	// "runtime". A bare no-op call does not set it.
+	//
+	// Anti-Pattern 4 (silent happy path): this block produces zero log
+	// output when nothing drifted. The AgentRegister call is silent on
+	// success, and the daemon's matching no-op branch is also silent.
+	// The only log emission is the live-conflict guard below.
+	if client != nil && idFile.AgentPID > 0 {
+		// idFile.AgentPID is already the most current PID by this point:
+		// if detectedPID drifted, Step 3 updated idFile.AgentPID in place,
+		// so reading it here unconditionally covers both drift and no-drift
+		// paths without branching.
+		regResp, regErr := AgentRegister(client, AgentRegisterOptions{
+			Name:       idFile.Agent.Name,
+			Role:       idFile.Agent.Role,
+			Module:     idFile.Agent.Module,
+			Display:    idFile.Agent.Display,
+			AgentPID:   idFile.AgentPID,
+			ReRegister: false,
+		})
+		if regErr != nil {
+			return result, fmt.Errorf("re-register with daemon: %w", regErr)
+		}
+		if regResp != nil && regResp.Status == "conflict" && regResp.Conflict != nil {
+			// Live-conflict guard: if a DIFFERENT, still-running PID
+			// owns this name, warn and bail out without marking the
+			// daemon as updated. The file is already saved with our
+			// detected PID — this is intentional: the client state
+			// is authoritative locally, but we refuse to steal the
+			// name in the daemon's view.
+			cp := regResp.Conflict.ConflictPID
+			if cp > 0 && cp != idFile.AgentPID && process.IsRunning(cp) {
+				fmt.Fprintf(os.Stderr, "thrum: refusing to overwrite live agent %q at PID %d\n", idFile.Agent.Name, cp)
+				return result, nil
 			}
 		}
-		if needsReconcile {
-			regResp, regErr := AgentRegister(client, AgentRegisterOptions{
-				Name:       idFile.Agent.Name,
-				Role:       idFile.Agent.Role,
-				Module:     idFile.Agent.Module,
-				Display:    idFile.Agent.Display,
-				AgentPID:   detectedPID,
-				ReRegister: true,
-			})
-			if regErr != nil {
-				return result, fmt.Errorf("re-register with daemon: %w", regErr)
+		for _, f := range result.FileChanged {
+			if f == "agent_pid" || f == "runtime" {
+				result.DaemonUpdated = true
+				break
 			}
-			if regResp != nil && regResp.Status == "conflict" && regResp.Conflict != nil {
-				// Live-conflict guard: if a DIFFERENT, still-running PID
-				// owns this name, warn and bail out without marking the
-				// daemon as updated. The file is already saved with our
-				// detected PID — this is intentional: the client state
-				// is authoritative locally, but we refuse to steal the
-				// name in the daemon's view.
-				cp := regResp.Conflict.ConflictPID
-				if cp > 0 && cp != detectedPID && process.IsRunning(cp) {
-					fmt.Fprintf(os.Stderr, "thrum: refusing to overwrite live agent %q at PID %d\n", idFile.Agent.Name, cp)
-					return result, nil
-				}
-			}
-			result.DaemonUpdated = true
 		}
 	}
 

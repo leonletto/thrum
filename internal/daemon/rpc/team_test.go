@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
 )
 
@@ -233,4 +234,113 @@ func TestTeamHandleList_EmptyDB(t *testing.T) {
 // The manual smoke test in plan task thrum-pxz.13 is the real gate.
 func TestTeamList_EnrichesFromWorktreeIdentityFile(t *testing.T) {
 	t.Skip("requires daemon test harness with DB + fake worktree fixtures")
+}
+
+// TestTeamList_SelfHealSkipsLiveFilePID covers Fix B from thrum-pxz.14:
+// when the DB reports an agent's PID as dead but the identity file
+// reports a different, live PID, the self-heal must NOT emit session.end
+// and the agent must remain active. This is the first-deploy bootstrap
+// scenario: legacy DB state that predates the refresh feature.
+func TestTeamList_SelfHealSkipsLiveFilePID(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(thrumDir, "sync")
+	messagesDir := filepath.Join(syncDir, "messages")
+	if err := os.MkdirAll(messagesDir, 0750); err != nil {
+		t.Fatalf("create messages dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750); err != nil {
+		t.Fatalf("create identities dir: %v", err)
+	}
+
+	s, err := state.NewState(thrumDir, syncDir, "test_repo_team", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	agentHandler := NewAgentHandler(s)
+	sessionHandler := NewSessionHandler(s)
+	teamHandler := NewTeamHandler(s, thrumDir)
+
+	// Register an agent with a DEAD PID (simulating legacy/stale DB state).
+	// PID 999999 is nearly guaranteed to not be running on a developer box.
+	reg := RegisterRequest{
+		Role:     "implementer",
+		Module:   "selfheal",
+		Display:  "Self-Heal Test Agent",
+		AgentPID: 999999,
+	}
+	regJSON, _ := json.Marshal(reg)
+	regResp, err := agentHandler.HandleRegister(ctx, regJSON)
+	if err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+	agentID := regResp.(*RegisterResponse).AgentID
+
+	// Start a session so the agent appears as "active" in team.list.
+	startReq := SessionStartRequest{AgentID: agentID}
+	startJSON, _ := json.Marshal(startReq)
+	if _, err := sessionHandler.HandleStart(ctx, startJSON); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	// Write an identity file reporting a LIVE, different PID (os.Getpid()).
+	// This simulates the "agent restarted under a new PID and wrote the
+	// new PID to its local file, but the DB is still stuck on the old
+	// legacy PID" scenario that triggered thrum-pxz.14.
+	idFile := &config.IdentityFile{
+		Version: 5,
+		Agent: config.AgentConfig{
+			Kind:    "agent",
+			Name:    agentID,
+			Role:    "implementer",
+			Module:  "selfheal",
+			Display: "Self-Heal Test Agent",
+		},
+		AgentPID: os.Getpid(),
+		Runtime:  "claude",
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatalf("save identity file: %v", err)
+	}
+
+	// Snapshot session.end event count before.
+	var endBefore int
+	if err := s.RawDB().QueryRow("SELECT COUNT(*) FROM events WHERE type = 'agent.session.end'").Scan(&endBefore); err != nil {
+		t.Fatalf("query session.end count before: %v", err)
+	}
+
+	// Call team.list — self-heal must be skipped for this agent.
+	req := TeamListRequest{}
+	reqJSON, _ := json.Marshal(req)
+	resp, err := teamHandler.HandleList(ctx, reqJSON)
+	if err != nil {
+		t.Fatalf("HandleList error: %v", err)
+	}
+	result := resp.(*TeamListResponse)
+
+	var got *TeamMember
+	for i := range result.Members {
+		if result.Members[i].AgentID == agentID {
+			got = &result.Members[i]
+			break
+		}
+	}
+	if got == nil {
+		t.Fatalf("agent %s missing from team list", agentID)
+	}
+	if got.Status != "active" {
+		t.Errorf("Status = %q, want active (self-heal should have skipped this agent)", got.Status)
+	}
+
+	// Verify NO session.end event was emitted.
+	var endAfter int
+	if err := s.RawDB().QueryRow("SELECT COUNT(*) FROM events WHERE type = 'agent.session.end'").Scan(&endAfter); err != nil {
+		t.Fatalf("query session.end count after: %v", err)
+	}
+	if endAfter != endBefore {
+		t.Errorf("session.end event count changed: before=%d after=%d (expected no new event)", endBefore, endAfter)
+	}
 }

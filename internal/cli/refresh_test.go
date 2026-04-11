@@ -189,9 +189,24 @@ func TestRefreshLocalIdentity_RuntimeDrift(t *testing.T) {
 	}
 }
 
-// TestRefreshLocalIdentity_HappyPath asserts no file write when detected
-// state exactly matches the identity file.
-func TestRefreshLocalIdentity_HappyPath(t *testing.T) {
+// TestRefreshLocalIdentity_HappyPath_IdempotentReconcile asserts that
+// when detected state exactly matches the identity file:
+//   - no file write occurs (FileChanged empty, mtime unchanged)
+//   - DaemonUpdated remains false (no actual state change happened)
+//
+// With thrum-pxz.14 Fix C, RefreshLocalIdentity now always calls
+// AgentRegister when the file has a valid PID — even on the happy path
+// — so the DB can catch up to a stale state (e.g., legacy data from
+// before this feature). The daemon's agent.register handler (Fix A) is
+// a no-op when the stored PID already matches, so the happy-path cost
+// is one local RPC (~1ms) that produces no state change.
+//
+// This test uses client=nil so Fix C's reconcile branch is skipped and
+// only the file-write side of the happy path is exercised. Full
+// validation of the idempotent-reconcile RPC behavior would require a
+// mockable client or a real daemon — that coverage lives in the
+// daemon-side TestAgentRegister_SameAgentSamePID test.
+func TestRefreshLocalIdentity_HappyPath_IdempotentReconcile(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750); err != nil {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/process"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
@@ -101,7 +102,7 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 
 	// PHASE 1: build team list and collect dead-agent session IDs under RLock.
 	h.state.RLock()
-	members, shared, err := h.buildTeamListLocked(ctx, req)
+	members, shared, identityMap, err := h.buildTeamListLocked(ctx, req)
 	if err != nil {
 		h.state.RUnlock()
 		return nil, err
@@ -109,16 +110,35 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 
 	var deadAgents []deadAgent
 	for _, m := range members {
-		if m.Status == "active" &&
-			m.AgentPID > 0 &&
-			!process.IsRunning(m.AgentPID) &&
-			m.SessionID != "" {
-			deadAgents = append(deadAgents, deadAgent{
-				SessionID: m.SessionID,
-				AgentID:   m.AgentID,
-				PID:       m.AgentPID,
-			})
+		if m.Status != "active" ||
+			m.AgentPID <= 0 ||
+			process.IsRunning(m.AgentPID) ||
+			m.SessionID == "" {
+			continue
 		}
+
+		// Cross-check identity file: if the file reports a live PID that
+		// differs from the DB's stored PID, the DB is stale but the agent
+		// is actually alive. Skip the self-heal — the next
+		// RefreshLocalIdentity call from that agent will reconcile the DB
+		// via the always-on Fix C path into agent.register Fix A. Without
+		// this guard, a fresh daemon (rebuilt from events) would emit
+		// false-positive session.end events against every pre-existing
+		// agent whose DB PID predates the refresh feature (thrum-pxz.14
+		// Fix B).
+		if idFile, ok := identityMap[m.AgentID]; ok && idFile != nil {
+			if idFile.AgentPID > 0 && idFile.AgentPID != m.AgentPID && process.IsRunning(idFile.AgentPID) {
+				log.Printf("team.list: stale DB PID but identity file reports live PID — skipping self-heal: agent=%s db_pid=%d file_pid=%d",
+					m.AgentID, m.AgentPID, idFile.AgentPID)
+				continue
+			}
+		}
+
+		deadAgents = append(deadAgents, deadAgent{
+			SessionID: m.SessionID,
+			AgentID:   m.AgentID,
+			PID:       m.AgentPID,
+		})
 	}
 	h.state.RUnlock()
 
@@ -160,7 +180,11 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 // buildTeamListLocked runs the three SQL queries and identity-file enrichment
 // pass. The caller MUST hold h.state.RLock() (or Lock()) for the duration of
 // this call. It does not acquire, release, upgrade, or downgrade any lock.
-func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListRequest) ([]TeamMember, *SharedMessages, error) {
+//
+// Returns the enriched member list, the shared-messages summary, and the
+// identity map used for enrichment so callers (HandleList) can cross-check
+// file-vs-DB state without re-walking worktrees.
+func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListRequest) ([]TeamMember, *SharedMessages, map[string]*config.IdentityFile, error) {
 	// Query 1: Agents + sessions + work contexts
 	query := `SELECT
 		a.agent_id, a.role, a.module, a.display, a.hostname, a.agent_pid,
@@ -180,7 +204,7 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 
 	rows, err := h.state.DB().QueryContext(ctx, query)
 	if err != nil {
-		return nil, nil, fmt.Errorf("query team members: %w", err)
+		return nil, nil, nil, fmt.Errorf("query team members: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -200,7 +224,7 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 			&branch, &worktreePath, &intent, &currentTask,
 			&unmergedCommitsJSON, &fileChangesJSON,
 		); err != nil {
-			return nil, nil, fmt.Errorf("scan team member: %w", err)
+			return nil, nil, nil, fmt.Errorf("scan team member: %w", err)
 		}
 
 		if display.Valid {
@@ -254,14 +278,17 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("iterate team members: %w", err)
+		return nil, nil, nil, fmt.Errorf("iterate team members: %w", err)
 	}
 
 	// Enrich with identity file data from ALL worktrees. The identity file
 	// is authoritative for runtime, tmux_session, and tmux_state; the DB is
-	// authoritative for agent_pid.
+	// authoritative for agent_pid. The identityMap is returned to the
+	// caller so Phase 1's dead-agent cross-check can reuse it without a
+	// second worktree scan.
+	var identityMap map[string]*config.IdentityFile
 	if h.thrumDir != "" {
-		identityMap := ReadIdentitiesAcrossWorktrees(ctx, h.thrumDir)
+		identityMap = ReadIdentitiesAcrossWorktrees(ctx, h.thrumDir)
 		for i := range members {
 			m := &members[i]
 			idFile := identityMap[m.AgentID]
@@ -343,7 +370,7 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 		members = []TeamMember{}
 	}
 
-	return members, shared, nil
+	return members, shared, identityMap, nil
 }
 
 // emitSessionEndForDeadAgent writes an agent.session.end event to the
