@@ -28,6 +28,7 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
+	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -150,6 +151,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(syncCmd())
 	rootCmd.AddCommand(backupCmd())
 	rootCmd.AddCommand(peerCmd())
+	rootCmd.AddCommand(monitorCmd())
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(setupCmd())
 	rootCmd.AddCommand(mcpCmd())
@@ -2308,6 +2310,199 @@ Five input methods:
 			return nil
 		},
 	})
+
+	return cmd
+}
+
+func monitorCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "monitor",
+		Short: "Manage long-running monitor jobs",
+		Long: `Monitor runs a command, filters its stdout/stderr through a regex, and
+delivers matching lines as thrum messages to the specified target.
+
+Examples:
+  thrum monitor add --name errors --match "ERROR" --to @team -- tail -F /tmp/app.log
+  thrum monitor list
+  thrum monitor show <id>
+  thrum monitor stop <id>
+  thrum monitor restart <id>`,
+	}
+
+	// thrum monitor add -- COMMAND ARGS...
+	var addName, addMatch, addTo, addCwd string
+	var addDebounce time.Duration
+	var addEnv []string
+
+	addCmd := &cobra.Command{
+		Use:   "add -- COMMAND ARGS...",
+		Short: "Start a new monitor job",
+		Long: `Start a monitor job that runs COMMAND, filters output through a regex,
+and delivers matching lines as messages to the specified target.
+
+The command and its arguments must be separated from monitor flags with '--':
+  thrum monitor add --name errors --match "ERROR" --to @team -- tail -F /var/log/app.log`,
+		Args: cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Extract post-'--' argv using cobra's native mechanism.
+			// ArgsLenAtDash() returns the index in args where '--' appeared.
+			// If '--' was not present, it returns -1.
+			dashPos := cmd.ArgsLenAtDash()
+			if dashPos < 0 {
+				return fmt.Errorf("monitor add requires a command after '--'\nExample: thrum monitor add --name x --match y --to @t -- /bin/cmd arg1")
+			}
+			argv := args[dashPos:]
+			if len(argv) == 0 {
+				return fmt.Errorf("monitor add requires at least one command token after '--'")
+			}
+
+			cwd := addCwd
+			if cwd == "" {
+				var err error
+				cwd, err = os.Getwd()
+				if err != nil {
+					return fmt.Errorf("get working directory: %w", err)
+				}
+			}
+
+			env := make(map[string]string)
+			for _, e := range addEnv {
+				k, v, ok := strings.Cut(e, "=")
+				if !ok {
+					return fmt.Errorf("invalid --env %q: expected KEY=VALUE", e)
+				}
+				env[k] = v
+			}
+
+			req := cli.MonitorStartRequest{
+				Name:            addName,
+				Argv:            argv,
+				Match:           addMatch,
+				Target:          addTo,
+				Cwd:             cwd,
+				Env:             env,
+				DebounceSeconds: int(addDebounce.Seconds()),
+			}
+
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+
+			result, err := cli.MonitorStart(client, req)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Started monitor %s (%s) — target %s\n", addName, result.ID, addTo)
+			return nil
+		},
+	}
+	addCmd.Flags().StringVar(&addName, "name", "", "Unique monitor name (required)")
+	addCmd.Flags().StringVar(&addMatch, "match", "", "Regex pattern to filter output (required)")
+	addCmd.Flags().StringVar(&addTo, "to", "", "Target agent or group for matched messages (required)")
+	addCmd.Flags().StringVar(&addCwd, "cwd", "", "Working directory for the command (default: current directory)")
+	addCmd.Flags().DurationVar(&addDebounce, "debounce", 60*time.Second, "Leading-edge debounce window (minimum 30s)")
+	addCmd.Flags().StringArrayVar(&addEnv, "env", nil, "Environment variable in KEY=VALUE form (repeatable)")
+	_ = addCmd.MarkFlagRequired("name")
+	_ = addCmd.MarkFlagRequired("match")
+	_ = addCmd.MarkFlagRequired("to")
+	cmd.AddCommand(addCmd)
+
+	// thrum monitor list [--all]
+	{
+		var includeAll bool
+		listCmd := &cobra.Command{
+			Use:   "list",
+			Short: "List monitor jobs (default: running only; --all shows stopped/dead <1wk)",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				client, err := getClient()
+				if err != nil {
+					return fmt.Errorf("connect to daemon: %w", err)
+				}
+				defer func() { _ = client.Close() }()
+				return cli.MonitorList(client, includeAll, os.Stdout)
+			},
+		}
+		listCmd.Flags().BoolVar(&includeAll, "all", false,
+			"Include stopped/dead monitors (younger than a week)")
+		cmd.AddCommand(listCmd)
+	}
+
+	// thrum monitor show <id>
+	cmd.AddCommand(&cobra.Command{
+		Use:   "show <id>",
+		Short: "Show details of a monitor job",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+			return cli.MonitorShow(client, args[0], os.Stdout)
+		},
+	})
+
+	// thrum monitor stop <id>
+	cmd.AddCommand(&cobra.Command{
+		Use:   "stop <id>",
+		Short: "Stop and remove a monitor job",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+			if err := cli.MonitorStop(client, args[0]); err != nil {
+				return err
+			}
+			fmt.Printf("Stopped monitor %s\n", args[0])
+			return nil
+		},
+	})
+
+	// thrum monitor restart <id>
+	cmd.AddCommand(&cobra.Command{
+		Use:   "restart <id>",
+		Short: "Restart a monitor job (preserves the same ID)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := getClient()
+			if err != nil {
+				return fmt.Errorf("connect to daemon: %w", err)
+			}
+			defer func() { _ = client.Close() }()
+			result, err := cli.MonitorRestart(client, args[0])
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Restarted — new ID: %s\n", result.ID)
+			return nil
+		},
+	})
+
+	// thrum monitor logs <id>
+	{
+		var logsLimit int
+		logsCmd := &cobra.Command{
+			Use:   "logs <id>",
+			Short: "Show the most recent monitor matches (historical lookup)",
+			Args:  cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				client, err := getClient()
+				if err != nil {
+					return fmt.Errorf("connect to daemon: %w", err)
+				}
+				defer func() { _ = client.Close() }()
+				return cli.MonitorLogs(client, args[0], logsLimit, os.Stdout)
+			},
+		}
+		logsCmd.Flags().IntVarP(&logsLimit, "limit", "n", 20, "Max number of matches to return")
+		cmd.AddCommand(logsCmd)
+	}
 
 	return cmd
 }
@@ -5146,7 +5341,7 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 
 // getClient returns a configured RPC client.
 // Respects THRUM_SOCKET env var if set, otherwise uses DefaultSocketPath.
-// getClient opens a daemon connection and refreshes the local identity
+// GetClient opens a daemon connection and refreshes the local identity
 // file + daemon's agent record from live process/tmux/git state. Use for
 // every command except daemon lifecycle, init, and quickstart — those
 // should call getClientNoRefresh().
@@ -5442,6 +5637,24 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("message.deleteByScope", messageHandler.HandleDeleteByScope)
 	server.RegisterHandler("message.deleteByAgent", messageHandler.HandleDeleteByAgent)
 	server.RegisterHandler("message.archive", messageHandler.HandleArchive)
+
+	// Monitor jobs — SECURITY: these handlers spawn child processes with the
+	// daemon's privileges, so they are registered on the unix-socket `server`
+	// ONLY and NEVER on the WebSocket / peer transport. The trust boundary
+	// test at internal/daemon/rpc/monitor_trust_boundary_test.go scans this
+	// file and will fail CI if a monitor.* method is ever registered on the
+	// WebSocket registry. See dev-docs/specs/2026-04-11-monitor-jobs-design.md
+	// §"Trust boundary".
+	monitorStore := monitor.NewMonitorStore(st.DB())
+	monitorDelivery := monitor.NewDelivery(messageHandler)
+	monitorSupervisor := monitor.NewMonitorSupervisor(monitorStore, monitorDelivery)
+	monitorHandler := rpc.NewMonitorHandler(monitorSupervisor, monitorStore, st)
+	server.RegisterHandler("monitor.start", monitorHandler.HandleStart)
+	server.RegisterHandler("monitor.stop", monitorHandler.HandleStop)
+	server.RegisterHandler("monitor.list", monitorHandler.HandleList)
+	server.RegisterHandler("monitor.show", monitorHandler.HandleShow)
+	server.RegisterHandler("monitor.restart", monitorHandler.HandleRestart)
+	server.RegisterHandler("monitor.logs", monitorHandler.HandleLogs)
 
 	// Subscription management
 	subscriptionHandler := rpc.NewSubscriptionHandler(st)
@@ -6001,6 +6214,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			fmt.Fprintf(os.Stderr, "  Backup:      every %s\n", backupInterval)
 		}
 	}
+
+	// Monitor jobs supervisor — launches runner goroutines for every monitor
+	// in the DB with status=running and blocks on ctx.Done(). Must start
+	// AFTER the backup scheduler and BEFORE lifecycle.Run(ctx).
+	go monitorSupervisor.Start(ctx)
 
 	// Telegram bridge RPC handlers + goroutine
 	telegramHandler := rpc.NewTelegramHandler(absPath)

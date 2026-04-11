@@ -32,6 +32,18 @@ func (r *SimpleRegistry) GetHandler(method string) (Handler, bool) {
 	return h, ok
 }
 
+// RegisteredMethods returns a sorted list of all method names registered in
+// this registry. Used by security tests to enumerate the WebSocket surface.
+func (r *SimpleRegistry) RegisteredMethods() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	methods := make([]string, 0, len(r.handlers))
+	for m := range r.handlers {
+		methods = append(methods, m)
+	}
+	return methods
+}
+
 // DaemonHandlerAdapter adapts a daemon.Server to the HandlerRegistry interface.
 type DaemonHandlerAdapter struct {
 	getHandler func(string) (Handler, bool)

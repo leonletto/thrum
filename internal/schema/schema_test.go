@@ -768,17 +768,17 @@ func TestMigrationV19AddsSilenceAndNotifyColumns(t *testing.T) {
 		t.Fatalf("Insert v18 row failed: %v", err)
 	}
 
-	// Run migration — should bring DB from v18 to v19.
+	// Run migration — should bring DB from v18 to CurrentVersion.
 	if err := schema.Migrate(db); err != nil {
-		t.Fatalf("Migrate() v18→v19 failed: %v", err)
+		t.Fatalf("Migrate() v18→CurrentVersion failed: %v", err)
 	}
 
 	version, err := schema.GetSchemaVersion(db)
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() failed: %v", err)
 	}
-	if version != 19 {
-		t.Errorf("Expected schema version 19, got %d", version)
+	if version != schema.CurrentVersion {
+		t.Errorf("Expected schema version %d, got %d", schema.CurrentVersion, version)
 	}
 
 	// Verify the two new columns are present.
@@ -875,6 +875,107 @@ func TestMigrationV18_FromV17(t *testing.T) {
 	// Verify idempotency — run migration again should not error
 	if err := schema.Migrate(db); err != nil {
 		t.Errorf("Second Migrate() should be idempotent: %v", err)
+	}
+}
+
+func TestSchema_FreshInstall_HasMonitorsTable(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "monitors_fresh.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() failed: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB() failed: %v", err)
+	}
+
+	var count int
+	err = db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='monitors'`,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("query monitors table: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("monitors table should exist on fresh install, got count=%d", count)
+	}
+
+	// Expected columns
+	expected := []string{
+		"id", "name", "argv", "match_pattern", "target", "cwd", "env",
+		"debounce_seconds", "created_at", "updated_at", "status",
+		"last_exit_code", "last_exit_at", "pid",
+	}
+	for _, col := range expected {
+		var n int
+		err := db.QueryRow(
+			`SELECT COUNT(*) FROM pragma_table_info('monitors') WHERE name=?`, col,
+		).Scan(&n)
+		if err != nil {
+			t.Fatalf("query column %q: %v", col, err)
+		}
+		if n != 1 {
+			t.Errorf("column %q should exist in monitors table", col)
+		}
+	}
+}
+
+func TestSchema_Migration_v19_to_v20_CreatesMonitors(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "monitors_migrate.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() failed: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Bootstrap a v19 schema by hand (omit monitors table)
+	_, err = db.Exec(`CREATE TABLE schema_version (
+		version INTEGER NOT NULL,
+		applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		t.Fatalf("Create schema_version failed: %v", err)
+	}
+	_, err = db.Exec("INSERT INTO schema_version (version) VALUES (19)")
+	if err != nil {
+		t.Fatalf("Insert version 19 failed: %v", err)
+	}
+	// Create the v19-era command_queue table so migration prerequisites are met
+	_, err = db.Exec(`CREATE TABLE command_queue (
+		command_id         TEXT PRIMARY KEY,
+		session_name       TEXT NOT NULL,
+		requester_agent    TEXT NOT NULL,
+		command_text       TEXT NOT NULL,
+		state              TEXT NOT NULL DEFAULT 'queued',
+		timeout_ms         INTEGER NOT NULL DEFAULT 120000,
+		silence_ms         INTEGER NOT NULL DEFAULT 5000,
+		notify_on_complete INTEGER NOT NULL DEFAULT 1,
+		submitted_at       TEXT NOT NULL,
+		sent_at            TEXT,
+		completed_at       TEXT,
+		captured_output    TEXT,
+		position           INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		t.Fatalf("Create v19 command_queue failed: %v", err)
+	}
+
+	// Run migration up to current (v20)
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate() v19→v20 failed: %v", err)
+	}
+
+	var count int
+	err = db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='monitors'`,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("query monitors table: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("monitors table should exist after v19→v20 migration, got count=%d", count)
 	}
 }
 
