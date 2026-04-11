@@ -33,6 +33,20 @@ type RefreshResult struct {
 	// if nothing changed downstream.
 	DetectedPID     int
 	DetectedRuntime string
+
+	// SessionResumed is true when the daemon's agent.register handler
+	// emitted a fresh agent.session.start because the agent's prior
+	// session row was ended. Surfaced from RegisterResponse.SessionResumed
+	// (thrum-xir.18). Implies the agent was offline in team.list before
+	// this refresh and is now back to active.
+	SessionResumed bool
+
+	// ResumedSessionID is the new session_id created by the daemon's
+	// resurrect path. Empty when SessionResumed is false. Callers may
+	// log it for audit but should not cache it across quickstart, since
+	// quickstart's recoverOrphanedSessions will close it and start a
+	// fresh one.
+	ResumedSessionID string
 }
 
 // detectAncestor is a package-level var so tests can swap in fakes via
@@ -178,6 +192,15 @@ func RefreshLocalIdentity(client *Client, repoPath string) (*RefreshResult, erro
 				fmt.Fprintf(os.Stderr, "thrum: refusing to overwrite live agent %q at PID %d\n", idFile.Agent.Name, cp)
 				return result, nil
 			}
+		}
+		// Session resurrect surfacing (thrum-xir.18): if the daemon's
+		// register handler emitted a fresh session.start because the
+		// agent had no active session, propagate the flag and new
+		// session_id so callers can observe the recovery without
+		// re-querying whoami.
+		if regResp != nil && regResp.SessionResumed {
+			result.SessionResumed = true
+			result.ResumedSessionID = regResp.SessionID
 		}
 		for _, f := range result.FileChanged {
 			if f == "agent_pid" || f == "runtime" {

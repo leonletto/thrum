@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -404,4 +405,191 @@ func readIdentityFile(t *testing.T, thrumDir, agentName string) *config.Identity
 		t.Fatalf("unmarshal identity: %v", err)
 	}
 	return &id
+}
+
+// startMockRegisterDaemon spins up a mock JSON-RPC daemon that responds to
+// "agent.register" RPCs with the supplied response. Other methods receive
+// a method-not-found error. Returns a connected *Client and a teardown
+// function that the test should defer. Used by the thrum-xir.18.4 refresh
+// surfacing tests.
+func startMockRegisterDaemon(t *testing.T, response RegisterResponse) (*Client, func()) {
+	t.Helper()
+	// macOS sun_path is capped at 104 bytes; t.TempDir() with the long
+	// per-test-name prefix overflows, so use a short os.MkdirTemp path
+	// under the system temp root and clean it up via t.Cleanup.
+	tmpDir, err := os.MkdirTemp("", "tx18sock")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	socketPath := filepath.Join(tmpDir, "d.sock")
+	listener, listenErr := net.Listen("unix", socketPath)
+	if listenErr != nil {
+		t.Fatalf("listen: %v", listenErr)
+	}
+	stopChan := make(chan struct{})
+
+	go func() {
+		for {
+			select {
+			case <-stopChan:
+				return
+			default:
+				if ul, ok := listener.(*net.UnixListener); ok {
+					_ = ul.SetDeadline(time.Now().Add(100 * time.Millisecond))
+				}
+				conn, err := listener.Accept()
+				if err != nil {
+					continue
+				}
+				go func(c net.Conn) {
+					defer func() { _ = c.Close() }()
+					decoder := json.NewDecoder(c)
+					encoder := json.NewEncoder(c)
+					var req map[string]any
+					if err := decoder.Decode(&req); err != nil {
+						return
+					}
+					method, _ := req["method"].(string)
+					if method != "agent.register" {
+						_ = encoder.Encode(map[string]any{
+							"jsonrpc": "2.0",
+							"id":      req["id"],
+							"error": map[string]any{
+								"code":    -32601,
+								"message": "Method not found: " + method,
+							},
+						})
+						return
+					}
+					_ = encoder.Encode(map[string]any{
+						"jsonrpc": "2.0",
+						"id":      req["id"],
+						"result":  response,
+					})
+				}(conn)
+			}
+		}
+	}()
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		_ = listener.Close()
+		t.Fatalf("connect mock daemon: %v", err)
+	}
+
+	teardown := func() {
+		_ = client.Close()
+		close(stopChan)
+		_ = listener.Close()
+	}
+	return client, teardown
+}
+
+// TestRefreshLocalIdentity_SurfacesSessionResumedFlag asserts that when
+// the daemon's agent.register response includes SessionResumed=true,
+// RefreshLocalIdentity propagates the flag and resumed session ID to
+// RefreshResult so callers can observe the recovery without a follow-up
+// whoami query (thrum-xir.18.4).
+func TestRefreshLocalIdentity_SurfacesSessionResumedFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("THRUM_HOME", tmpDir)
+	t.Setenv("THRUM_NAME", "test_agent_resume")
+
+	idFile := &config.IdentityFile{
+		Version: 5,
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "test_agent_resume", Role: "tester", Module: "unit",
+		},
+		AgentPID:         os.Getpid(),
+		Runtime:          "claude",
+		PreferredRuntime: "claude",
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := detectAncestor
+	detectAncestor = func(_ context.Context) (int, string) { return os.Getpid(), "claude" }
+	t.Cleanup(func() { detectAncestor = orig })
+
+	mockResp := RegisterResponse{
+		AgentID:        "agt_test_resume",
+		Status:         "registered",
+		SessionID:      "ses_resumed_xyz",
+		SessionResumed: true,
+	}
+	client, teardown := startMockRegisterDaemon(t, mockResp)
+	defer teardown()
+
+	result, err := RefreshLocalIdentity(client, tmpDir)
+	if err != nil {
+		t.Fatalf("RefreshLocalIdentity: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if !result.SessionResumed {
+		t.Errorf("SessionResumed = false, want true")
+	}
+	if result.ResumedSessionID != "ses_resumed_xyz" {
+		t.Errorf("ResumedSessionID = %q, want ses_resumed_xyz", result.ResumedSessionID)
+	}
+}
+
+// TestRefreshLocalIdentity_NoSessionResumedWhenAlreadyActive asserts that
+// when the daemon returns SessionResumed=false, the refresh result keeps
+// both new fields zero-valued — the field surfaces are observable only
+// on actual recovery (thrum-xir.18.4).
+func TestRefreshLocalIdentity_NoSessionResumedWhenAlreadyActive(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("THRUM_HOME", tmpDir)
+	t.Setenv("THRUM_NAME", "test_agent_active")
+
+	idFile := &config.IdentityFile{
+		Version: 5,
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "test_agent_active", Role: "tester", Module: "unit",
+		},
+		AgentPID:         os.Getpid(),
+		Runtime:          "claude",
+		PreferredRuntime: "claude",
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := detectAncestor
+	detectAncestor = func(_ context.Context) (int, string) { return os.Getpid(), "claude" }
+	t.Cleanup(func() { detectAncestor = orig })
+
+	mockResp := RegisterResponse{
+		AgentID:        "agt_test_active",
+		Status:         "registered",
+		SessionResumed: false,
+	}
+	client, teardown := startMockRegisterDaemon(t, mockResp)
+	defer teardown()
+
+	result, err := RefreshLocalIdentity(client, tmpDir)
+	if err != nil {
+		t.Fatalf("RefreshLocalIdentity: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.SessionResumed {
+		t.Errorf("SessionResumed = true, want false")
+	}
+	if result.ResumedSessionID != "" {
+		t.Errorf("ResumedSessionID = %q, want empty", result.ResumedSessionID)
+	}
 }
