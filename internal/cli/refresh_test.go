@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon"
+	"github.com/leonletto/thrum/internal/daemon/rpc"
+	"github.com/leonletto/thrum/internal/daemon/state"
 )
 
 // TestRefreshLocalIdentity_NoRuntime asserts that when FindClaudeAncestor
@@ -404,4 +407,253 @@ func readIdentityFile(t *testing.T, thrumDir, agentName string) *config.Identity
 		t.Fatalf("unmarshal identity: %v", err)
 	}
 	return &id
+}
+
+// resurrectTestEnv bundles a real in-process daemon (with the actual
+// rpc.AgentHandler.HandleRegister registered), a connected *cli.Client,
+// the underlying *state.State (so tests can seed/inspect rows directly),
+// the on-disk thrum dir (for SaveIdentityFile), and a teardown closure.
+//
+// This is the end-to-end harness for thrum-xir.18.4 — the cli refresh
+// tests must exercise the full RefreshLocalIdentity → AgentRegister →
+// HandleRegister → ensureActiveSession chain through the real handler,
+// not via a mock that bypasses the daemon-side decision logic.
+type resurrectTestEnv struct {
+	client    *Client
+	state     *state.State
+	server    *daemon.Server
+	thrumDir  string
+	repoPath  string
+	teardown  func()
+}
+
+// startResurrectTestDaemon stands up a real daemon.Server with the
+// rpc.AgentHandler bound to a fresh state.State, listens on a short
+// socket path (macOS sun_path is capped at 104 bytes — t.TempDir's long
+// per-test-name prefix overflows), and returns a connected client.
+func startResurrectTestDaemon(t *testing.T) *resurrectTestEnv {
+	t.Helper()
+
+	// Short os.MkdirTemp path for the unix socket; the per-test repo
+	// dir lives under the same short root so identity file paths stay
+	// short too.
+	root, err := os.MkdirTemp("", "tx18env")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
+
+	thrumDir := filepath.Join(root, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0750); err != nil {
+		_ = os.RemoveAll(root)
+		t.Fatalf("mkdir identities: %v", err)
+	}
+
+	st, err := state.NewState(thrumDir, thrumDir, "test_repo_xir18", "")
+	if err != nil {
+		_ = os.RemoveAll(root)
+		t.Fatalf("create state: %v", err)
+	}
+
+	socketPath := filepath.Join(root, "d.sock")
+	server := daemon.NewServer(socketPath)
+	agentHandler := rpc.NewAgentHandler(st)
+	server.RegisterHandler("agent.register", agentHandler.HandleRegister)
+
+	if err := server.Start(context.Background()); err != nil {
+		_ = st.Close()
+		_ = os.RemoveAll(root)
+		t.Fatalf("start daemon server: %v", err)
+	}
+
+	client, err := NewClient(socketPath)
+	if err != nil {
+		_ = server.Stop()
+		_ = st.Close()
+		_ = os.RemoveAll(root)
+		t.Fatalf("connect client: %v", err)
+	}
+
+	env := &resurrectTestEnv{
+		client:   client,
+		state:    st,
+		server:   server,
+		thrumDir: thrumDir,
+		repoPath: root,
+	}
+	env.teardown = func() {
+		_ = client.Close()
+		_ = server.Stop()
+		_ = st.Close()
+		_ = os.RemoveAll(root)
+	}
+	t.Cleanup(env.teardown)
+	return env
+}
+
+// TestRefreshLocalIdentity_SurfacesSessionResumedFlag — end-to-end:
+// real in-process daemon with the actual rpc.AgentHandler bound. An
+// agent is registered through the live socket so the daemon's own
+// agent_id derivation drives both sides; its session is then ended via
+// direct DB write (simulating the post-pxz.14 recovery scenario).
+// Calling RefreshLocalIdentity must traverse the full chain
+// RefreshLocalIdentity → AgentRegister → HandleRegister →
+// ensureActiveSession and surface SessionResumed plus the new
+// session_id on the RefreshResult (thrum-xir.18.4).
+func TestRefreshLocalIdentity_SurfacesSessionResumedFlag(t *testing.T) {
+	env := startResurrectTestDaemon(t)
+
+	t.Setenv("THRUM_HOME", env.repoPath)
+	t.Setenv("THRUM_NAME", "test_agent_resume")
+
+	// Step 1: register the agent through the real daemon so the
+	// daemon-derived agent_id is the one stored in the DB. The
+	// initial register also populates the agents row.
+	regOpts := AgentRegisterOptions{
+		Name:     "test_agent_resume",
+		Role:     "tester",
+		Module:   "unit",
+		Display:  "Resume Test",
+		AgentPID: os.Getpid(),
+	}
+	regResp, err := AgentRegister(env.client, regOpts)
+	if err != nil {
+		t.Fatalf("initial register: %v", err)
+	}
+	agentID := regResp.AgentID
+	if agentID == "" {
+		t.Fatalf("initial register returned empty agent_id")
+	}
+
+	// Step 2: write the matching identity file on disk so
+	// RefreshLocalIdentity will load it and re-register from there.
+	idFile := &config.IdentityFile{
+		Version: 5,
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "test_agent_resume", Role: "tester", Module: "unit",
+		},
+		AgentPID:         os.Getpid(),
+		Runtime:          "claude",
+		PreferredRuntime: "claude",
+	}
+	if err := config.SaveIdentityFile(env.thrumDir, idFile); err != nil {
+		t.Fatal(err)
+	}
+
+	// Step 3: end any active session via direct DB write. This is the
+	// recovery scenario the resurrect path is built for.
+	endedAt := time.Now().UTC().Add(-30 * time.Minute).Format(time.RFC3339Nano)
+	if _, err := env.state.RawDB().Exec(`
+		UPDATE sessions SET ended_at = ?, end_reason = 'test_seed_ended'
+		WHERE agent_id = ? AND ended_at IS NULL
+	`, endedAt, agentID); err != nil {
+		t.Fatalf("end session: %v", err)
+	}
+
+	// Step 4: stub the runtime detector so refresh.go does not perceive
+	// PID/runtime drift — we want the same-PID no-op branch in
+	// HandleRegister, which is exactly the path the resurrect logic
+	// must traverse.
+	orig := detectAncestor
+	detectAncestor = func(_ context.Context) (int, string) { return os.Getpid(), "claude" }
+	t.Cleanup(func() { detectAncestor = orig })
+
+	// Act: drive the full chain through the real daemon socket.
+	result, err := RefreshLocalIdentity(env.client, env.repoPath)
+	if err != nil {
+		t.Fatalf("RefreshLocalIdentity: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if !result.SessionResumed {
+		t.Errorf("SessionResumed = false, want true")
+	}
+	if result.ResumedSessionID == "" {
+		t.Errorf("ResumedSessionID = empty, want fresh session id")
+	}
+	if !strings.HasPrefix(result.ResumedSessionID, "ses_") {
+		t.Errorf("ResumedSessionID = %q, want ses_ prefix", result.ResumedSessionID)
+	}
+
+	// And verify the daemon-side state actually changed: the new
+	// session row exists with ended_at IS NULL.
+	var activeCount int
+	if err := env.state.RawDB().QueryRow(
+		`SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND ended_at IS NULL`,
+		agentID,
+	).Scan(&activeCount); err != nil {
+		t.Fatalf("query active sessions: %v", err)
+	}
+	if activeCount != 1 {
+		t.Errorf("active session rows = %d, want 1", activeCount)
+	}
+}
+
+// TestRefreshLocalIdentity_NoSessionResumedWhenAlreadyActive — end-to-end
+// negative case: the agent already has an active session, so the
+// resurrect path must no-op. RefreshResult must keep SessionResumed
+// false and ResumedSessionID empty (thrum-xir.18.4).
+func TestRefreshLocalIdentity_NoSessionResumedWhenAlreadyActive(t *testing.T) {
+	env := startResurrectTestDaemon(t)
+
+	t.Setenv("THRUM_HOME", env.repoPath)
+	t.Setenv("THRUM_NAME", "test_agent_active")
+
+	regOpts := AgentRegisterOptions{
+		Name:     "test_agent_active",
+		Role:     "tester",
+		Module:   "unit",
+		Display:  "Active Test",
+		AgentPID: os.Getpid(),
+	}
+	regResp, err := AgentRegister(env.client, regOpts)
+	if err != nil {
+		t.Fatalf("initial register: %v", err)
+	}
+	agentID := regResp.AgentID
+	if agentID == "" {
+		t.Fatalf("initial register returned empty agent_id")
+	}
+
+	// Seed an active session row directly (mirrors the
+	// already-running-agent case the resurrect path must skip).
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := env.state.RawDB().Exec(`
+		INSERT INTO sessions (session_id, agent_id, started_at, last_seen_at)
+		VALUES (?, ?, ?, ?)
+	`, "ses_already_active_e2e", agentID, now, now); err != nil {
+		t.Fatalf("seed active session: %v", err)
+	}
+
+	idFile := &config.IdentityFile{
+		Version: 5,
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "test_agent_active", Role: "tester", Module: "unit",
+		},
+		AgentPID:         os.Getpid(),
+		Runtime:          "claude",
+		PreferredRuntime: "claude",
+	}
+	if err := config.SaveIdentityFile(env.thrumDir, idFile); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := detectAncestor
+	detectAncestor = func(_ context.Context) (int, string) { return os.Getpid(), "claude" }
+	t.Cleanup(func() { detectAncestor = orig })
+
+	result, err := RefreshLocalIdentity(env.client, env.repoPath)
+	if err != nil {
+		t.Fatalf("RefreshLocalIdentity: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.SessionResumed {
+		t.Errorf("SessionResumed = true, want false (active session present)")
+	}
+	if result.ResumedSessionID != "" {
+		t.Errorf("ResumedSessionID = %q, want empty", result.ResumedSessionID)
+	}
 }

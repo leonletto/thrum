@@ -19,6 +19,7 @@ import (
 	"github.com/leonletto/thrum/internal/gitctx"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/jsonl"
+	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/types"
 )
 
@@ -35,9 +36,11 @@ type RegisterRequest struct {
 
 // RegisterResponse represents the response from agent.register RPC.
 type RegisterResponse struct {
-	AgentID  string        `json:"agent_id"`
-	Status   string        `json:"status"` // "registered", "conflict", "updated"
-	Conflict *ConflictInfo `json:"conflict,omitempty"`
+	AgentID        string        `json:"agent_id"`
+	Status         string        `json:"status"`                     // "registered", "conflict", "updated"
+	SessionID      string        `json:"session_id,omitempty"`       // populated when a session was resurrected
+	SessionResumed bool          `json:"session_resumed,omitempty"`  // true when ensureActiveSession emitted a fresh session.start (thrum-xir.18)
+	Conflict       *ConflictInfo `json:"conflict,omitempty"`
 }
 
 // ConflictInfo represents information about a registration conflict.
@@ -267,18 +270,41 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 			// command after a daemon rebuild would fire false-positive
 			// dead-agent self-heals on every pre-existing agent whose
 			// DB PID predates the refresh feature (thrum-pxz.14 Fix A).
-			if req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID {
-				return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
-			}
-			if req.ReRegister {
+			var resp *RegisterResponse
+			var regErr error
+			switch {
+			case req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID:
+				resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+			case req.ReRegister:
 				// Update registration
-				return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+				resp, regErr = h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+			default:
+				// Same agent, same PID (or no PID provided) — no-op return
+				resp = &RegisterResponse{
+					AgentID: agentID,
+					Status:  "registered",
+				}
 			}
-			// Same agent, same PID (or no PID provided) — no-op return
-			return &RegisterResponse{
-				AgentID: agentID,
-				Status:  "registered",
-			}, nil
+			if regErr != nil {
+				return nil, regErr
+			}
+
+			// Auto-resurrect (thrum-xir.18): if the agent has no active
+			// session and the caller's PID is alive, emit a fresh
+			// agent.session.start inline. Best-effort — log and continue
+			// on error so the register RPC stays resilient. Failing
+			// register because resurrection failed would break every
+			// agent on every command, which is worse than the bug we are
+			// fixing. ensureActiveSession runs under the same write
+			// lock taken at the top of this method.
+			resumedID, resumeErr := h.ensureActiveSession(ctx, agentID, req.AgentPID)
+			if resumeErr != nil {
+				log.Printf("agent.register: session resurrect failed: agent=%s err=%v", agentID, resumeErr)
+			} else if resumedID != "" {
+				resp.SessionID = resumedID
+				resp.SessionResumed = true
+			}
+			return resp, nil
 		}
 
 		// Different agent, same role+module
@@ -535,6 +561,64 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 		AgentID: agentID,
 		Status:  status,
 	}, nil
+}
+
+// ensureActiveSession checks whether the agent has a row in sessions with
+// ended_at IS NULL. If not, and the provided PID is alive, emits a fresh
+// agent.session.start event and returns the new session ID.
+//
+// Returns "" if an active session already exists (idempotent no-op).
+// Returns "" if pid is zero or dead (the team.list self-heal path owns
+// dead-PID cleanup; resurrect must not race against it).
+//
+// Must be called under h.state.Lock() held by the caller. This method
+// writes a JSONL event via h.state.WriteEvent and does not acquire the
+// state lock itself — acquiring a second write lock would deadlock.
+//
+// Cross-verification discipline (thrum-xir.18, mirroring thrum-pxz.14
+// Fix B): both the DB's active-session state and process.IsRunning(pid)
+// must agree the agent is alive before any state change is written.
+// A single-source decision is the pxz.14 anti-pattern.
+func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, pid int) (string, error) {
+	// Source of truth #1: DB active-session state.
+	var existingID sql.NullString
+	err := h.state.DB().QueryRowContext(ctx,
+		`SELECT session_id FROM sessions
+		 WHERE agent_id = ? AND ended_at IS NULL
+		 ORDER BY started_at DESC LIMIT 1`,
+		agentID,
+	).Scan(&existingID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("check active session: %w", err)
+	}
+	if existingID.Valid && existingID.String != "" {
+		// Happy path: session already active. Write nothing.
+		return "", nil
+	}
+
+	// Source of truth #2: live process check. Skip resurrect if PID is
+	// missing or dead — the self-heal path owns that case.
+	if pid <= 0 || !process.IsRunning(pid) {
+		return "", nil
+	}
+
+	// Both sources agree: no active session and the caller's process is
+	// alive. Emit a minimal agent.session.start event. Deliberately omit
+	// scope/orphan-recovery handling that HandleStart performs — those
+	// belong to the explicit session.start RPC (used by quickstart), not
+	// the lightweight resurrect path.
+	sessionID := identity.GenerateSessionID()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	event := types.AgentSessionStartEvent{
+		Type:      "agent.session.start",
+		Timestamp: now,
+		SessionID: sessionID,
+		AgentID:   agentID,
+	}
+	if err := h.state.WriteEvent(ctx, event); err != nil {
+		return "", fmt.Errorf("write session.start event: %w", err)
+	}
+	return sessionID, nil
 }
 
 // getAgentByRoleModule queries for an existing agent with the given role and module.
