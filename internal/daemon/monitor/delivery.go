@@ -36,10 +36,10 @@ func NewDelivery(sender MessageSender) *Delivery {
 // Using a local struct avoids an import cycle and keeps the interface minimal.
 // The field names and JSON tags must exactly match rpc.SendRequest.
 type sendPayload struct {
-	Content       string         `json:"content"`
-	CallerAgentID string         `json:"caller_agent_id"`
-	Mentions      []string       `json:"mentions,omitempty"`
-	Scopes        []types.Scope  `json:"scopes,omitempty"`
+	Content       string        `json:"content"`
+	CallerAgentID string        `json:"caller_agent_id"`
+	Mentions      []string      `json:"mentions,omitempty"`
+	Scopes        []types.Scope `json:"scopes,omitempty"`
 }
 
 // Deliver builds a synthetic message with sender "monitor:<monitorName>" and

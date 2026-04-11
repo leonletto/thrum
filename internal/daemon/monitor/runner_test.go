@@ -26,12 +26,12 @@ type testJob struct {
 	debounceSeconds int
 }
 
-func (j *testJob) GetID() string              { return j.id }
-func (j *testJob) GetName() string            { return j.name }
-func (j *testJob) GetArgv() []string          { return j.argv }
-func (j *testJob) GetCwd() string             { return j.cwd }
-func (j *testJob) GetEnv() map[string]string  { return j.env }
-func (j *testJob) GetDebounceSeconds() int    { return j.debounceSeconds }
+func (j *testJob) GetID() string             { return j.id }
+func (j *testJob) GetName() string           { return j.name }
+func (j *testJob) GetArgv() []string         { return j.argv }
+func (j *testJob) GetCwd() string            { return j.cwd }
+func (j *testJob) GetEnv() map[string]string { return j.env }
+func (j *testJob) GetDebounceSeconds() int   { return j.debounceSeconds }
 
 func defaultJob(t *testing.T) *testJob {
 	t.Helper()
@@ -303,7 +303,7 @@ func TestRunner_EnvIsolation(t *testing.T) {
 }
 
 // TestRunner_SIGTERMThenSIGKILL: when ctx is canceled, the runner sends
-// SIGTERM to the child. If the child ignores SIGTERM (trap '' TERM), the
+// SIGTERM to the child. If the child ignores SIGTERM (trap ” TERM), the
 // runner must send SIGKILL after the 5-second grace period.
 //
 // To keep the test fast, we override shutdownGrace to 300ms.

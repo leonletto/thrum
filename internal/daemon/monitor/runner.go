@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	maxLineBytes        = 2048
-	lastStdoutBytes     = 500
+	maxLineBytes         = 2048
+	lastStdoutBytes      = 500
 	defaultShutdownGrace = 5 * time.Second
 )
 
@@ -36,7 +36,7 @@ type DeliverFn func(jobName, content string)
 
 // ExitNoticeFn is the callback invoked when the child process exits.
 // The supervisor uses it to send an exit-notice message and mark the
-// monitor dead in the store. pid is the OS process id captured after
+// monitor dead in the store. Pid is the OS process id captured after
 // cmd.Start() (may be 0 if the child never started).
 type ExitNoticeFn func(jobName string, exitCode, pid int, duration time.Duration, lastStdoutTail string)
 
@@ -51,8 +51,8 @@ type Runner struct {
 }
 
 // NewRunner constructs a Runner for the given job spec and compiled regex.
-// exitNotice may be nil in unit tests that do not exercise exit handling.
-// deliver must not be nil.
+// ExitNotice may be nil in unit tests that do not exercise exit handling.
+// Deliver must not be nil.
 func NewRunner(job RunnerJob, re *regexp.Regexp, exitNotice ExitNoticeFn, deliver DeliverFn) (*Runner, error) {
 	if len(job.GetArgv()) == 0 {
 		return nil, fmt.Errorf("runner: empty argv")
@@ -132,7 +132,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	tee := io.TeeReader(pipeR, tail)
 	lr := NewLineReader(tee, maxLineBytes)
 
-	// processDone is closed by Run() after cmd.Wait() returns, signalling
+	// processDone is closed by Run() after cmd.Wait() returns, signaling
 	// the shutdown watcher goroutine that the process has fully exited so
 	// it can stop waiting on the SIGTERM grace window.
 	processDone := make(chan struct{})
@@ -241,17 +241,19 @@ func buildEnv(job RunnerJob) []string {
 var osGetenv = os.Getenv
 
 // ringBuffer keeps the last N bytes written to it, discarding older bytes.
+// The field is named `capacity` (not `max`) to avoid shadowing Go's
+// predeclared `max` builtin, which the `predeclared` linter flags.
 type ringBuffer struct {
-	buf []byte
-	max int
+	buf      []byte
+	capacity int
 }
 
-func newRingBuffer(max int) *ringBuffer { return &ringBuffer{max: max} }
+func newRingBuffer(capacity int) *ringBuffer { return &ringBuffer{capacity: capacity} }
 
 func (b *ringBuffer) Write(p []byte) (int, error) {
 	b.buf = append(b.buf, p...)
-	if len(b.buf) > b.max {
-		b.buf = b.buf[len(b.buf)-b.max:]
+	if len(b.buf) > b.capacity {
+		b.buf = b.buf[len(b.buf)-b.capacity:]
 	}
 	return len(p), nil
 }

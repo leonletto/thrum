@@ -46,7 +46,7 @@ type MonitorJobView struct {
 // ----- CLI helpers -----
 
 // MonitorStart sends monitor.start over the local daemon socket.
-// req.Argv MUST come from cobra's post-'--' args — never from a shell-string-split.
+// Req.Argv MUST come from cobra's post-'--' args — never from a shell-string-split.
 func MonitorStart(client *Client, req MonitorStartRequest) (*MonitorStartResult, error) {
 	var result MonitorStartResult
 	if err := client.Call("monitor.start", req, &result); err != nil {
@@ -63,13 +63,13 @@ func MonitorList(client *Client, out io.Writer) error {
 	}
 
 	if len(jobs) == 0 {
-		fmt.Fprintln(out, "No monitors running.")
+		_, _ = fmt.Fprintln(out, "No monitors running.")
 		return nil
 	}
 
-	fmt.Fprintf(out, "%-28s %-20s %-10s %s\n", "ID", "NAME", "STATUS", "TARGET")
+	_, _ = fmt.Fprintf(out, "%-28s %-20s %-10s %s\n", "ID", "NAME", "STATUS", "TARGET")
 	for _, j := range jobs {
-		fmt.Fprintf(out, "%-28s %-20s %-10s %s\n", j.ID, j.Name, j.Status, j.Target)
+		_, _ = fmt.Fprintf(out, "%-28s %-20s %-10s %s\n", j.ID, j.Name, j.Status, j.Target)
 	}
 	return nil
 }
@@ -87,19 +87,19 @@ func MonitorShow(client *Client, id string, out io.Writer) error {
 		return fmt.Errorf("monitor show: %w", err)
 	}
 
-	fmt.Fprintf(out, "ID:       %s\n", job.ID)
-	fmt.Fprintf(out, "Name:     %s\n", job.Name)
-	fmt.Fprintf(out, "Status:   %s\n", job.Status)
-	fmt.Fprintf(out, "Match:    %s\n", job.Match)
-	fmt.Fprintf(out, "Target:   %s\n", job.Target)
-	fmt.Fprintf(out, "Cwd:      %s\n", job.Cwd)
-	fmt.Fprintf(out, "Debounce: %s\n", time.Duration(job.DebounceSeconds)*time.Second)
-	fmt.Fprintf(out, "Argv:     %s\n", strings.Join(job.Argv, " "))
-	fmt.Fprintf(out, "Created:  %s\n", job.CreatedAt)
-	fmt.Fprintf(out, "Updated:  %s\n", job.UpdatedAt)
+	_, _ = fmt.Fprintf(out, "ID:       %s\n", job.ID)
+	_, _ = fmt.Fprintf(out, "Name:     %s\n", job.Name)
+	_, _ = fmt.Fprintf(out, "Status:   %s\n", job.Status)
+	_, _ = fmt.Fprintf(out, "Match:    %s\n", job.Match)
+	_, _ = fmt.Fprintf(out, "Target:   %s\n", job.Target)
+	_, _ = fmt.Fprintf(out, "Cwd:      %s\n", job.Cwd)
+	_, _ = fmt.Fprintf(out, "Debounce: %s\n", time.Duration(job.DebounceSeconds)*time.Second)
+	_, _ = fmt.Fprintf(out, "Argv:     %s\n", strings.Join(job.Argv, " "))
+	_, _ = fmt.Fprintf(out, "Created:  %s\n", job.CreatedAt)
+	_, _ = fmt.Fprintf(out, "Updated:  %s\n", job.UpdatedAt)
 
 	// Render env as KEY=<redacted> — values are already redacted by the daemon.
-	// This explicit rendering loop is a defence-in-depth: even if the daemon
+	// This explicit rendering loop is a defense-in-depth: even if the daemon
 	// returned a raw value, we only print the key side of each entry together with
 	// the literal marker "<redacted>", never the value from the wire.
 	if len(job.Env) > 0 {
@@ -108,9 +108,9 @@ func MonitorShow(client *Client, id string, out io.Writer) error {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		fmt.Fprintln(out, "Env:")
+		_, _ = fmt.Fprintln(out, "Env:")
 		for _, k := range keys {
-			fmt.Fprintf(out, "  %s=<redacted>\n", k)
+			_, _ = fmt.Fprintf(out, "  %s=<redacted>\n", k)
 		}
 	}
 
@@ -155,6 +155,6 @@ func MonitorLogs(client *Client, id string, out io.Writer) error {
 	if err := client.Call("monitor.logs", req, &result); err != nil {
 		return fmt.Errorf("monitor logs: %w", err)
 	}
-	fmt.Fprintln(out, result)
+	_, _ = fmt.Fprintln(out, result)
 	return nil
 }

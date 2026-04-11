@@ -65,7 +65,7 @@ func TestDebounce_TrailingSummaryAfterWindow(t *testing.T) {
 		emits = append(emits, recordedEmit{content: content})
 	})
 
-	d.OnMatch("ERROR: first")       // leading edge
+	d.OnMatch("ERROR: first") // leading edge
 	clk.Advance(10 * time.Second)
 	d.OnMatch("ERROR: suppressed1") // first suppressed → pendingFirst
 	clk.Advance(5 * time.Second)
@@ -153,9 +153,9 @@ func TestDebounce_BackToBackWindows(t *testing.T) {
 	})
 
 	// --- Cycle 1 ---
-	d.OnMatch("A-leading")        // t=0: leading edge emit, lastEmitAt=0
+	d.OnMatch("A-leading") // t=0: leading edge emit, lastEmitAt=0
 	clk.Advance(5 * time.Second)
-	d.OnMatch("A-suppressed1")    // t=5: within window, pendingFirst
+	d.OnMatch("A-suppressed1") // t=5: within window, pendingFirst
 	clk.Advance(5 * time.Second)
 	d.OnMatch("A-suppressed2")    // t=10: still within window
 	clk.Advance(60 * time.Second) // t=70: past the t=0 window
@@ -169,7 +169,7 @@ func TestDebounce_BackToBackWindows(t *testing.T) {
 	clk.Advance(65 * time.Second) // t=135: lastEmitAt is 65s ago
 
 	// --- Cycle 2 ---
-	d.OnMatch("B-leading")        // t=135: leading edge, lastEmitAt=135
+	d.OnMatch("B-leading") // t=135: leading edge, lastEmitAt=135
 	clk.Advance(10 * time.Second)
 	d.OnMatch("B-suppressed1")    // t=145: within cycle 2 window
 	clk.Advance(60 * time.Second) // t=205: past cycle 2 window
@@ -186,4 +186,3 @@ func TestDebounce_BackToBackWindows(t *testing.T) {
 	assert.Contains(t, emits[3].content, "B-suppressed1",
 		"cycle 2 trailing summary must reference its own pendingFirst")
 }
-
