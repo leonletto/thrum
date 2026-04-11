@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -668,5 +670,38 @@ func TestFormatPrimeContext_NoRestartSnapshot(t *testing.T) {
 	output := FormatPrimeContext(ctx)
 	if strings.Contains(output, "Previous Session Context") {
 		t.Error("should not include restart section when no snapshot")
+	}
+}
+
+// TestContextPrime_RuntimePrefersProcessTree asserts that when the injected
+// detector returns a non-empty runtime, ContextPrime uses it over the
+// repo-based detection.
+func TestContextPrime_RuntimePrefersProcessTree(t *testing.T) {
+	// Swap detector to return "codex".
+	orig := detectAncestor
+	detectAncestor = func(_ context.Context) (int, string) { return 12345, "codex" }
+	t.Cleanup(func() { detectAncestor = orig })
+
+	tmpDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".thrum"), 0750); err != nil {
+		t.Fatal(err)
+	}
+
+	// ContextPrime uses os.Getwd internally; chdir to the tmp dir for
+	// isolation. Pin THRUM_HOME so paths.EffectiveRepoPath doesn't redirect.
+	t.Setenv("THRUM_HOME", tmpDir)
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	ctx := ContextPrime(nil)
+	if ctx.Runtime != "codex" {
+		t.Errorf("ctx.Runtime = %q, want codex", ctx.Runtime)
 	}
 }
