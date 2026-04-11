@@ -353,3 +353,34 @@ func TestFormatTeam_NoPIDNoIndicator(t *testing.T) {
 		t.Errorf("expected no PID indicator for zero PID, got: %s", output)
 	}
 }
+
+func TestFormatTeam_ShowsRuntime(t *testing.T) {
+	resp := &TeamListResponse{
+		Members: []TeamMember{{
+			AgentID: "test_agent",
+			Role:    "tester",
+			Module:  "unit",
+			Status:  "active",
+			Runtime: "codex",
+		}},
+	}
+	out := FormatTeam(resp)
+	if !strings.Contains(out, "Runtime:  codex") {
+		t.Errorf("FormatTeam output missing 'Runtime:  codex' line, got:\n%s", out)
+	}
+}
+
+func TestFormatTeam_OmitsRuntimeWhenEmpty(t *testing.T) {
+	resp := &TeamListResponse{
+		Members: []TeamMember{{
+			AgentID: "test_agent",
+			Role:    "tester",
+			Module:  "unit",
+			Status:  "active",
+		}},
+	}
+	out := FormatTeam(resp)
+	if strings.Contains(out, "Runtime:") {
+		t.Errorf("FormatTeam output should not contain 'Runtime:' when field is empty:\n%s", out)
+	}
+}

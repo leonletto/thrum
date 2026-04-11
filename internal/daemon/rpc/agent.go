@@ -259,11 +259,22 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 	if existingAgent != nil {
 		// Same agent returning (ID matches)
 		if existingAgent.AgentID == agentID {
+			// PID self-heal: if the caller provides a PID that differs
+			// from the stored one, update the registration even without
+			// an explicit ReRegister flag. This lets quickstart and
+			// RefreshLocalIdentity correct stale DB state without
+			// requiring --force. Without this branch, the first thrum
+			// command after a daemon rebuild would fire false-positive
+			// dead-agent self-heals on every pre-existing agent whose
+			// DB PID predates the refresh feature (thrum-pxz.14 Fix A).
+			if req.AgentPID > 0 && existingAgent.AgentPID != req.AgentPID {
+				return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
+			}
 			if req.ReRegister {
 				// Update registration
 				return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "updated", req.AgentPID)
 			}
-			// Return existing agent info without conflict
+			// Same agent, same PID (or no PID provided) — no-op return
 			return &RegisterResponse{
 				AgentID: agentID,
 				Status:  "registered",

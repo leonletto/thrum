@@ -248,6 +248,136 @@ func TestAgentRegister(t *testing.T) {
 	}
 }
 
+// TestAgentRegister_SameAgentPIDChange covers Fix A from thrum-pxz.14:
+// when a same-agent-returning register call reports a different PID than
+// the stored one, the handler must update the PID even without
+// ReRegister=true. This unblocks the self-heal bootstrap path.
+func TestAgentRegister_SameAgentPIDChange(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	// Step 1: register initial agent with PID 1000.
+	firstReq := RegisterRequest{
+		Role:     "implementer",
+		Module:   "auth",
+		Display:  "Auth Implementer",
+		AgentPID: 1000,
+	}
+	firstJSON, _ := json.Marshal(firstReq)
+	firstResp, err := handler.HandleRegister(context.Background(), firstJSON)
+	if err != nil {
+		t.Fatalf("initial register: %v", err)
+	}
+	firstReg := firstResp.(*RegisterResponse)
+	if firstReg.Status != "registered" {
+		t.Fatalf("initial status = %s, want registered", firstReg.Status)
+	}
+
+	var storedPID int
+	if err := s.RawDB().QueryRow("SELECT agent_pid FROM agents WHERE agent_id = ?", firstReg.AgentID).Scan(&storedPID); err != nil {
+		t.Fatalf("query stored pid: %v", err)
+	}
+	if storedPID != 1000 {
+		t.Fatalf("stored pid after first register = %d, want 1000", storedPID)
+	}
+
+	// Step 2: same agent re-registers with a DIFFERENT PID, no ReRegister flag.
+	// Fix A must detect the PID change and persist the update.
+	secondReq := RegisterRequest{
+		Role:       "implementer",
+		Module:     "auth",
+		Display:    "Auth Implementer",
+		AgentPID:   2000,
+		ReRegister: false,
+	}
+	secondJSON, _ := json.Marshal(secondReq)
+	secondResp, err := handler.HandleRegister(context.Background(), secondJSON)
+	if err != nil {
+		t.Fatalf("pid-change register: %v", err)
+	}
+	secondReg := secondResp.(*RegisterResponse)
+	if secondReg.Status != "updated" {
+		t.Errorf("pid-change status = %s, want updated", secondReg.Status)
+	}
+
+	if err := s.RawDB().QueryRow("SELECT agent_pid FROM agents WHERE agent_id = ?", firstReg.AgentID).Scan(&storedPID); err != nil {
+		t.Fatalf("query updated pid: %v", err)
+	}
+	if storedPID != 2000 {
+		t.Errorf("stored pid after pid-change register = %d, want 2000", storedPID)
+	}
+}
+
+// TestAgentRegister_SameAgentSamePID covers the idempotent no-op path
+// from thrum-pxz.14 Fix A: when the caller's PID matches the stored
+// PID and ReRegister is false, the handler must NOT emit a new event.
+func TestAgentRegister_SameAgentSamePID(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	// Step 1: register initial agent with PID 1000.
+	req := RegisterRequest{
+		Role:     "implementer",
+		Module:   "auth",
+		Display:  "Auth Implementer",
+		AgentPID: 1000,
+	}
+	reqJSON, _ := json.Marshal(req)
+	firstResp, err := handler.HandleRegister(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("initial register: %v", err)
+	}
+	firstReg := firstResp.(*RegisterResponse)
+
+	// Snapshot the event count so we can assert no new event was written.
+	var eventsBefore int
+	if err := s.RawDB().QueryRow("SELECT COUNT(*) FROM events WHERE type = 'agent.register'").Scan(&eventsBefore); err != nil {
+		t.Fatalf("query events before: %v", err)
+	}
+
+	// Step 2: same agent re-registers with the SAME PID and no ReRegister flag.
+	// This must be an idempotent no-op — status "registered" with no event.
+	secondResp, err := handler.HandleRegister(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("idempotent register: %v", err)
+	}
+	secondReg := secondResp.(*RegisterResponse)
+	if secondReg.Status != "registered" {
+		t.Errorf("idempotent status = %s, want registered", secondReg.Status)
+	}
+
+	var eventsAfter int
+	if err := s.RawDB().QueryRow("SELECT COUNT(*) FROM events WHERE type = 'agent.register'").Scan(&eventsAfter); err != nil {
+		t.Fatalf("query events after: %v", err)
+	}
+	if eventsAfter != eventsBefore {
+		t.Errorf("agent.register event count grew: before=%d after=%d (expected no new event)", eventsBefore, eventsAfter)
+	}
+
+	// Verify the stored PID is unchanged.
+	var storedPID int
+	if err := s.RawDB().QueryRow("SELECT agent_pid FROM agents WHERE agent_id = ?", firstReg.AgentID).Scan(&storedPID); err != nil {
+		t.Fatalf("query stored pid: %v", err)
+	}
+	if storedPID != 1000 {
+		t.Errorf("stored pid after idempotent register = %d, want 1000", storedPID)
+	}
+}
+
 func TestAgentList(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")

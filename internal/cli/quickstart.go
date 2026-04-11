@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
@@ -96,8 +98,10 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 		return result, nil
 	}
 
-	// Capture agent PID and detected runtime for identity resolution
-	agentPID, detectedRuntime := process.FindClaudeAncestor()
+	// Capture agent PID for identity resolution and conflict detection.
+	// Runtime/PreferredRuntime/branch/tmux fields are handled by
+	// RefreshLocalIdentity in Step 2.6 below.
+	agentPID, _ := process.FindClaudeAncestor(context.Background())
 
 	// Step 1: Register agent
 	regOpts := AgentRegisterOptions{
@@ -118,7 +122,7 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	if regResult.Status == "conflict" {
 		if regResult.Conflict != nil {
 			conflictPID := regResult.Conflict.ConflictPID
-			if conflictPID > 0 && conflictPID != agentPID && process.IsRunning(conflictPID) && process.IsRuntimeProcess(conflictPID, "") {
+			if conflictPID > 0 && conflictPID != agentPID && process.IsRunning(conflictPID) && process.IsRuntimeProcess(context.Background(), conflictPID, "") {
 				return nil, fmt.Errorf("cannot register as %q: name is held by a running agent session (PID %d)", opts.Name, conflictPID)
 			}
 		}
@@ -152,7 +156,10 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 	}
 	result.Session = sessResult
 
-	// Step 2.5: Enrich identity file with v4 fields
+	// Step 2.5: Populate quickstart-specific identity file fields.
+	// Fields that drift between sessions (agent_pid, runtime,
+	// preferred_runtime, tmux_session, branch) are handled separately by
+	// RefreshLocalIdentity in Step 2.6 below.
 	repoPath := opts.RepoPath
 	if repoPath == "" {
 		repoPath = "."
@@ -165,10 +172,6 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 			idFile.Version = 4
 			changed = true
 		}
-		if idFile.Branch == "" {
-			idFile.Branch = GetCurrentBranch(repoPath)
-			changed = true
-		}
 		if idFile.RepoID == "" {
 			if repoID := GetRepoID(repoPath); repoID != "" {
 				idFile.RepoID = repoID
@@ -179,7 +182,7 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 			idFile.Agent.Display = AutoDisplay(idFile.Agent.Role, idFile.Agent.Module)
 			changed = true
 		}
-		if sessResult != nil && sessResult.SessionID != "" {
+		if sessResult != nil && sessResult.SessionID != "" && idFile.SessionID != sessResult.SessionID {
 			idFile.SessionID = sessResult.SessionID
 			changed = true
 		}
@@ -192,35 +195,23 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 			changed = true
 		}
 
-		// Write AgentPID to identity file for restart save
-		if agentPID > 0 && idFile.AgentPID != agentPID {
-			idFile.AgentPID = agentPID
-			changed = true
-		}
-
-		// Write detected runtime to identity file
-		if detectedRuntime != "" && idFile.Runtime != detectedRuntime {
-			idFile.Runtime = detectedRuntime
-			changed = true
-		}
-
-		// Write PreferredRuntime from --runtime flag
+		// Preserve the --runtime flag override (PreferredRuntime) path —
+		// this is user intent, not process detection.
 		if opts.Runtime != "" && idFile.PreferredRuntime != opts.Runtime {
 			idFile.PreferredRuntime = opts.Runtime
 			changed = true
 		}
 
-		// Detect tmux session and write to identity file
-		if tmuxTarget, err := detectTmuxSession(); err == nil && tmuxTarget != "" {
-			if idFile.TmuxSession != tmuxTarget {
-				idFile.TmuxSession = tmuxTarget
-				changed = true
-			}
-		}
-
 		if changed {
+			idFile.UpdatedAt = time.Now().UTC()
 			_ = config.SaveIdentityFile(thrumDir, idFile)
 		}
+	}
+
+	// Step 2.6: Refresh drift-prone fields from live process/tmux/git state.
+	// This replaces the legacy inline pid/runtime/tmux/branch enrichment.
+	if _, refreshErr := RefreshLocalIdentity(client, repoPath); refreshErr != nil {
+		fmt.Fprintf(os.Stderr, "thrum: quickstart refresh failed: %v\n", refreshErr)
 	}
 
 	// Ensure preamble exists for this agent

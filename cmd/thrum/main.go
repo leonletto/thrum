@@ -539,7 +539,7 @@ Examples:
 			// Resolve preferred runtime: --runtime flag → auto-detect → config runtime.primary → empty
 			preferredRuntime := runtimeFlag
 			if preferredRuntime == "" || preferredRuntime == "all" {
-				if _, detectedRT := process.FindClaudeAncestor(); detectedRT != "" {
+				if _, detectedRT := process.FindClaudeAncestor(context.Background()); detectedRT != "" {
 					preferredRuntime = detectedRT
 				} else if cfg, err := config.LoadThrumConfig(thrumDir); err == nil && cfg.Runtime.Primary != "" {
 					preferredRuntime = cfg.Runtime.Primary
@@ -4349,45 +4349,9 @@ Examples:
 					}
 				}
 
-				// Refresh identity file with current runtime state.
-				// Fields like runtime, branch, and tmux target can change between
-				// sessions (e.g. agent relaunched under OpenCode instead of Claude).
-				if idFile, _, err := config.LoadIdentityWithPath(result.RepoPath); err == nil {
-					dirty := false
-
-					// Update runtime if it changed (e.g. claude → opencode)
-					if result.Runtime != "" && idFile.PreferredRuntime != result.Runtime {
-						idFile.PreferredRuntime = result.Runtime
-						dirty = true
-					}
-
-					// Update branch if it changed
-					if result.WorkContext != nil && result.WorkContext.Branch != "" && idFile.Branch != result.WorkContext.Branch {
-						idFile.Branch = result.WorkContext.Branch
-						dirty = true
-					}
-
-					// Update tmux target if inside tmux
-					if ttmux.InTmux() {
-						if currentTarget, err := ttmux.PaneTarget(); err == nil && currentTarget != "" {
-							if idFile.TmuxSession != currentTarget {
-								idFile.TmuxSession = currentTarget
-								dirty = true
-							}
-							result.TmuxMode = true
-						}
-					} else if idFile.TmuxSession != "" {
-						sessionName, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
-						if ttmux.HasSession(sessionName) {
-							result.TmuxMode = true
-						}
-					}
-
-					if dirty {
-						idFile.UpdatedAt = time.Now().UTC()
-						_ = config.SaveIdentityFile(thrumDir, idFile)
-					}
-				}
+				// Identity refresh and TmuxMode detection are now handled
+				// inside getClient() → RefreshLocalIdentity and ContextPrime
+				// respectively. See thrum-pxz.5 and thrum-pxz.7.
 			}
 
 			if flagJSON {
@@ -4779,7 +4743,12 @@ Examples:
 			var client *cli.Client
 			if !dryRun {
 				var err error
-				client, err = getClient()
+				// Use non-refreshing client: quickstart runs its own explicit
+				// RefreshLocalIdentity call after SessionStart succeeds (or
+				// as part of the identity enrichment block). Running an
+				// auto-refresh here would race against the registration
+				// the quickstart itself is performing.
+				client, err = getClientNoRefresh()
 				if err != nil {
 					return fmt.Errorf("failed to connect to daemon: %w", err)
 				}
@@ -5177,7 +5146,36 @@ func sessionHeartbeatRunE(cmd *cobra.Command, args []string) error {
 
 // getClient returns a configured RPC client.
 // Respects THRUM_SOCKET env var if set, otherwise uses DefaultSocketPath.
+// getClient opens a daemon connection and refreshes the local identity
+// file + daemon's agent record from live process/tmux/git state. Use for
+// every command except daemon lifecycle, init, and quickstart — those
+// should call getClientNoRefresh().
+//
+// Refresh failures are non-fatal: they log to stderr and the underlying
+// command proceeds normally. See RefreshLocalIdentity doc for details.
 func getClient() (*cli.Client, error) {
+	client, err := getClientNoRefresh()
+	if err != nil {
+		return nil, err
+	}
+
+	repoPath := flagRepo
+	if repoPath == "" {
+		repoPath = "."
+	}
+	if _, refreshErr := cli.RefreshLocalIdentity(client, repoPath); refreshErr != nil {
+		fmt.Fprintf(os.Stderr, "thrum: identity refresh failed: %v\n", refreshErr)
+	}
+
+	return client, nil
+}
+
+// getClientNoRefresh opens a daemon connection without running the identity
+// refresh. Use for:
+//   - daemon lifecycle commands (start/stop/restart/status/logs)
+//   - init and quickstart (before/during initial registration)
+//   - any test or diagnostic tool that must not side-effect the identity
+func getClientNoRefresh() (*cli.Client, error) {
 	socketPath := os.Getenv("THRUM_SOCKET")
 	if socketPath == "" {
 		socketPath = cli.DefaultSocketPath(flagRepo)

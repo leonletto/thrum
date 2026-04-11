@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leonletto/thrum/internal/config"
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/runtime"
+	ttmux "github.com/leonletto/thrum/internal/tmux"
 )
 
 // PrimeContext contains all context sections gathered by `thrum prime`.
@@ -74,15 +76,24 @@ type WorkContextInfo struct {
 func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 	ctx := &PrimeContext{}
 
-	// Resolve repo path and detect runtime
+	// Resolve repo path and detect runtime.
+	//
+	// Prefer process-tree detection over repo-based detection. The process
+	// ancestor walk gives us the actual runtime the agent is running under;
+	// runtime.DetectRuntime only tells us what the repo is *configured* for.
 	if cwd, err := os.Getwd(); err == nil {
 		ctx.RepoPath = paths.EffectiveRepoPath(cwd)
-		ctx.Runtime = runtime.DetectRuntime(ctx.RepoPath)
+		if _, rt := detectAncestor(context.Background()); rt != "" {
+			ctx.Runtime = rt
+		} else {
+			ctx.Runtime = runtime.DetectRuntime(ctx.RepoPath)
+		}
 	}
 
-	// 1. Agent identity (pass caller ID for correct worktree resolution)
+	// 1. Agent identity (pass caller ID for correct worktree resolution).
+	// All daemon-backed sections below require a non-nil client.
 	var whoami *WhoamiResult
-	if len(callerAgentID) > 0 && callerAgentID[0] != "" {
+	if client != nil && len(callerAgentID) > 0 && callerAgentID[0] != "" {
 		w, err := AgentWhoami(client, callerAgentID...)
 		if err == nil {
 			whoami = w
@@ -99,8 +110,12 @@ func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 	}
 
 	// 3. Agent list
-	agents, err := AgentList(client, AgentListOptions{})
-	if err == nil {
+	var agents *ListAgentsResponse
+	var err error
+	if client != nil {
+		agents, err = AgentList(client, AgentListOptions{})
+	}
+	if err == nil && agents != nil {
 		info := &AgentsInfo{
 			Total: len(agents.Agents),
 			List:  agents.Agents,
@@ -120,7 +135,7 @@ func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 	}
 
 	// 4. Unread messages (pass caller ID for correct inbox filtering)
-	if len(callerAgentID) > 0 && callerAgentID[0] != "" {
+	if client != nil && len(callerAgentID) > 0 && callerAgentID[0] != "" {
 		inboxOpts := InboxOptions{
 			PageSize:      10,
 			CallerAgentID: callerAgentID[0],
@@ -150,13 +165,30 @@ func ContextPrime(client *Client, callerAgentID ...string) *PrimeContext {
 	ctx.WorkContext = getGitWorkContext()
 
 	// 6. Sync/daemon health
-	var health HealthResult
-	if err := client.Call("health", map[string]any{}, &health); err == nil {
-		ctx.SyncState = &PrimeSyncInfo{
-			DaemonStatus: health.Status,
-			UptimeMs:     health.UptimeMs,
-			SyncState:    health.SyncState,
-			Version:      health.Version,
+	if client != nil {
+		var health HealthResult
+		if err := client.Call("health", map[string]any{}, &health); err == nil {
+			ctx.SyncState = &PrimeSyncInfo{
+				DaemonStatus: health.Status,
+				UptimeMs:     health.UptimeMs,
+				SyncState:    health.SyncState,
+				Version:      health.Version,
+			}
+		}
+	}
+
+	// 7. TmuxMode detection. We're in a tmux-managed session if either the
+	// current process is running inside tmux (TMUX env var set) or the
+	// agent's identity file points at a still-live tmux session we can
+	// reach. The identity-file lookup is best-effort — errors are silent.
+	if ttmux.InTmux() {
+		ctx.TmuxMode = true
+	} else if whoami != nil && ctx.RepoPath != "" {
+		if idFile, _, err := config.LoadIdentityWithPath(ctx.RepoPath); err == nil && idFile != nil && idFile.TmuxSession != "" {
+			sessionName, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+			if ttmux.HasSession(sessionName) {
+				ctx.TmuxMode = true
+			}
 		}
 	}
 

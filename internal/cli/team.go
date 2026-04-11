@@ -40,6 +40,7 @@ type TeamMember struct {
 	Display         string       `json:"display,omitempty"`
 	Hostname        string       `json:"hostname,omitempty"`
 	AgentPID        int          `json:"agent_pid,omitempty"`
+	Runtime         string       `json:"runtime,omitempty"`
 	WorktreePath    string       `json:"worktree,omitempty"`
 	SessionID       string       `json:"session_id,omitempty"`
 	SessionStart    string       `json:"session_start,omitempty"`
@@ -100,6 +101,11 @@ func FormatTeam(resp *TeamListResponse) string {
 		// Tmux state
 		if m.TmuxSession != "" {
 			fmt.Fprintf(&out, "Tmux:     %s [%s]\n", m.TmuxSession, m.TmuxState)
+		}
+
+		// Runtime
+		if m.Runtime != "" {
+			fmt.Fprintf(&out, "Runtime:  %s\n", m.Runtime)
 		}
 
 		// Worktree and hostname as separate fields

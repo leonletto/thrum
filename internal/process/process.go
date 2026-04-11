@@ -3,12 +3,15 @@
 package process
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // IsRunning checks if a process with the given PID is alive.
@@ -31,24 +34,55 @@ func IsRunning(pid int) bool {
 	return false // ESRCH or other error = not running
 }
 
+// runPS runs /bin/ps with the given args and a 2-second timeout. All ps
+// invocations in this package must go through here so a stuck ps cannot
+// hang a CLI command indefinitely.
+//
+// This wrapper intentionally does NOT import internal/daemon/safecmd:
+// internal/process is a low-level utility imported by internal/cli,
+// internal/config, and cmd/thrum — none of which depend on
+// internal/daemon. Importing the daemon's safecmd would invert the
+// dependency direction.
+func runPS(ctx context.Context, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, "ps", args...).Output() // #nosec G204
+}
+
+// matchRuntimeName compares a ps "comm" string against a known runtime
+// binary name after stripping any leading directory components.
+//
+// On macOS, `ps -o comm=` returns the contents of the kernel's `p_comm`
+// field, which is set at exec time. Some binaries (e.g. claude via its
+// npm wrapper) record a plain basename; others (e.g. codex via a
+// node-spawned native binary) record the full executable path. The
+// literal string comparison only matches the first shape, so codex PIDs
+// were being classified as "not a runtime" across the codebase.
+//
+// filepath.Base is a no-op on already-basename inputs, so this helper
+// is safe for every known runtime without a per-runtime branch.
+func matchRuntimeName(psComm, runtime string) bool {
+	return filepath.Base(psComm) == runtime
+}
+
 // IsClaudeProcess checks if the given PID belongs to a Claude process.
-func IsClaudeProcess(pid int) bool {
-	return processName(pid) == "claude"
+func IsClaudeProcess(ctx context.Context, pid int) bool {
+	return matchRuntimeName(processName(ctx, pid), "claude")
 }
 
 // IsRuntimeProcess checks if the given PID belongs to a process matching
 // the specified runtime binary name. If runtime is empty, checks all known runtimes.
-func IsRuntimeProcess(pid int, runtime string) bool {
+func IsRuntimeProcess(ctx context.Context, pid int, runtime string) bool {
 	if pid <= 0 {
 		return false
 	}
-	name := processName(pid)
+	name := processName(ctx, pid)
 	if name == "" {
 		return false
 	}
 	if runtime == "" {
 		for _, rt := range knownRuntimes {
-			if name == rt {
+			if matchRuntimeName(name, rt) {
 				return true
 			}
 		}
@@ -56,9 +90,9 @@ func IsRuntimeProcess(pid int, runtime string) bool {
 	}
 	// Check specific runtime — handle cursor's dual binary names
 	if runtime == "cursor" {
-		return name == "cursor-agent" || name == "agent"
+		return matchRuntimeName(name, "cursor-agent") || matchRuntimeName(name, "agent")
 	}
-	return name == runtime
+	return matchRuntimeName(name, runtime)
 }
 
 // knownRuntimes lists binary names of known AI coding runtimes.
@@ -77,12 +111,12 @@ var runtimeDisplayName = map[string]string{
 // FindClaudeAncestor walks the process tree from the current process
 // up to PID 1, looking for an ancestor matching a known AI coding runtime.
 // Returns the PID and runtime name, or (0, "") if not found.
-func FindClaudeAncestor() (int, string) {
+func FindClaudeAncestor(ctx context.Context) (int, string) {
 	pid := os.Getppid()
 	for pid > 1 {
-		name := processName(pid)
+		name := processName(ctx, pid)
 		for _, rt := range knownRuntimes {
-			if name == rt {
+			if matchRuntimeName(name, rt) {
 				displayName := rt
 				if mapped, ok := runtimeDisplayName[rt]; ok {
 					displayName = mapped
@@ -90,14 +124,14 @@ func FindClaudeAncestor() (int, string) {
 				return pid, displayName
 			}
 		}
-		pid = parentPID(pid)
+		pid = parentPID(ctx, pid)
 	}
 	return 0, ""
 }
 
 // processName returns the command name of a process via ps.
-func processName(pid int) string {
-	out, err := exec.Command("ps", "-p", fmt.Sprintf("%d", pid), "-o", "comm=").Output() // #nosec G204
+func processName(ctx context.Context, pid int) string {
+	out, err := runPS(ctx, "-p", fmt.Sprintf("%d", pid), "-o", "comm=")
 	if err != nil {
 		return ""
 	}
@@ -105,8 +139,8 @@ func processName(pid int) string {
 }
 
 // parentPID returns the parent PID of a process via ps.
-func parentPID(pid int) int {
-	out, err := exec.Command("ps", "-p", fmt.Sprintf("%d", pid), "-o", "ppid=").Output() // #nosec G204
+func parentPID(ctx context.Context, pid int) int {
+	out, err := runPS(ctx, "-p", fmt.Sprintf("%d", pid), "-o", "ppid=")
 	if err != nil {
 		return 0
 	}

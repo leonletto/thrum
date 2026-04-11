@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
+	"log"
 	"strings"
+	"time"
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -47,6 +47,7 @@ type TeamMember struct {
 	Display         string             `json:"display,omitempty"`
 	Hostname        string             `json:"hostname,omitempty"`
 	AgentPID        int                `json:"agent_pid,omitempty"`
+	Runtime         string             `json:"runtime,omitempty"`
 	WorktreePath    string             `json:"worktree,omitempty"`
 	SessionID       string             `json:"session_id,omitempty"`
 	SessionStart    string             `json:"session_start,omitempty"`
@@ -75,15 +76,115 @@ func NewTeamHandler(state *state.State, thrumDir string) *TeamHandler {
 }
 
 // HandleList handles the team.list RPC method.
+//
+// Three-phase lock discipline:
+//
+//  1. Phase 1 acquires RLock, runs buildTeamListLocked (queries + enrichment),
+//     and collects dead agents (active members whose agent_pid is no longer
+//     running) into a local slice, then releases RLock.
+//  2. Phase 2 runs with NO lock held and emits session.end events for each
+//     dead agent via emitSessionEndForDeadAgent. Anti-pattern 1 forbids
+//     holding a read lock across event emission because WriteEvent needs
+//     its own write lock and nested RLock→Lock would deadlock.
+//  3. Phase 3 rewrites the in-memory response to mark dead agents as
+//     offline so the caller sees the self-healed state immediately.
 func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (any, error) {
 	var req TeamListRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	h.state.RLock()
-	defer h.state.RUnlock()
+	type deadAgent struct {
+		SessionID string
+		AgentID   string
+		PID       int
+	}
 
+	// PHASE 1: build team list and collect dead-agent session IDs under RLock.
+	h.state.RLock()
+	members, shared, identityMap, err := h.buildTeamListLocked(ctx, req)
+	if err != nil {
+		h.state.RUnlock()
+		return nil, err
+	}
+
+	var deadAgents []deadAgent
+	for _, m := range members {
+		if m.Status != "active" ||
+			m.AgentPID <= 0 ||
+			process.IsRunning(m.AgentPID) ||
+			m.SessionID == "" {
+			continue
+		}
+
+		// Cross-check identity file: if the file reports a live PID that
+		// differs from the DB's stored PID, the DB is stale but the agent
+		// is actually alive. Skip the self-heal — the next
+		// RefreshLocalIdentity call from that agent will reconcile the DB
+		// via the always-on Fix C path into agent.register Fix A. Without
+		// this guard, a fresh daemon (rebuilt from events) would emit
+		// false-positive session.end events against every pre-existing
+		// agent whose DB PID predates the refresh feature (thrum-pxz.14
+		// Fix B).
+		if idFile, ok := identityMap[m.AgentID]; ok && idFile != nil {
+			if idFile.AgentPID > 0 && idFile.AgentPID != m.AgentPID && process.IsRunning(idFile.AgentPID) {
+				log.Printf("team.list: stale DB PID but identity file reports live PID — skipping self-heal: agent=%s db_pid=%d file_pid=%d",
+					m.AgentID, m.AgentPID, idFile.AgentPID)
+				continue
+			}
+		}
+
+		deadAgents = append(deadAgents, deadAgent{
+			SessionID: m.SessionID,
+			AgentID:   m.AgentID,
+			PID:       m.AgentPID,
+		})
+	}
+	h.state.RUnlock()
+
+	// PHASE 2: emit session.end events without holding any lock.
+	for _, d := range deadAgents {
+		if emitErr := h.emitSessionEndForDeadAgent(ctx, d.SessionID); emitErr != nil {
+			log.Printf("team.list: failed to emit session.end: agent=%s session=%s err=%v",
+				d.AgentID, d.SessionID, emitErr)
+			continue
+		}
+		log.Printf("team.list: marking dead agent offline: agent=%s pid=%d",
+			d.AgentID, d.PID)
+	}
+
+	// PHASE 3: rewrite in-memory response so the caller sees status=offline.
+	if len(deadAgents) > 0 {
+		deadMap := make(map[string]bool, len(deadAgents))
+		for _, d := range deadAgents {
+			deadMap[d.SessionID] = true
+		}
+		for i := range members {
+			if deadMap[members[i].SessionID] {
+				members[i].Status = "offline"
+			}
+		}
+	}
+
+	if members == nil {
+		members = []TeamMember{}
+	}
+
+	var sharedPtr *SharedMessages
+	if shared != nil && (shared.BroadcastTotal > 0 || len(shared.Groups) > 0) {
+		sharedPtr = shared
+	}
+	return &TeamListResponse{Members: members, SharedMessages: sharedPtr}, nil
+}
+
+// buildTeamListLocked runs the three SQL queries and identity-file enrichment
+// pass. The caller MUST hold h.state.RLock() (or Lock()) for the duration of
+// this call. It does not acquire, release, upgrade, or downgrade any lock.
+//
+// Returns the enriched member list, the shared-messages summary, and the
+// identity map used for enrichment so callers (HandleList) can cross-check
+// file-vs-DB state without re-walking worktrees.
+func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListRequest) ([]TeamMember, *SharedMessages, map[string]*config.IdentityFile, error) {
 	// Query 1: Agents + sessions + work contexts
 	query := `SELECT
 		a.agent_id, a.role, a.module, a.display, a.hostname, a.agent_pid,
@@ -103,7 +204,7 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 
 	rows, err := h.state.DB().QueryContext(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("query team members: %w", err)
+		return nil, nil, nil, fmt.Errorf("query team members: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -123,7 +224,7 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 			&branch, &worktreePath, &intent, &currentTask,
 			&unmergedCommitsJSON, &fileChangesJSON,
 		); err != nil {
-			return nil, fmt.Errorf("scan team member: %w", err)
+			return nil, nil, nil, fmt.Errorf("scan team member: %w", err)
 		}
 
 		if display.Valid {
@@ -177,32 +278,36 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate team members: %w", err)
+		return nil, nil, nil, fmt.Errorf("iterate team members: %w", err)
 	}
 
-	// Enrich with tmux state from identity files
+	// Enrich with identity file data from ALL worktrees. The identity file
+	// is authoritative for runtime, tmux_session, and tmux_state; the DB is
+	// authoritative for agent_pid. The identityMap is returned to the
+	// caller so Phase 1's dead-agent cross-check can reuse it without a
+	// second worktree scan.
+	var identityMap map[string]*config.IdentityFile
 	if h.thrumDir != "" {
-		for i, m := range members {
-			idPath := filepath.Join(h.thrumDir, "identities", m.AgentID+".json")
-			data, err := os.ReadFile(idPath) // #nosec G304 -- internal identity file path
-			if err != nil {
+		identityMap = ReadIdentitiesAcrossWorktrees(ctx, h.thrumDir)
+		for i := range members {
+			m := &members[i]
+			idFile := identityMap[m.AgentID]
+			if idFile == nil {
 				continue
 			}
-			var idFile config.IdentityFile
-			if err := json.Unmarshal(data, &idFile); err != nil {
-				continue
-			}
-			if idFile.TmuxSession == "" {
-				continue
-			}
-			members[i].TmuxSession = idFile.TmuxSession
-			session, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
-			if !ttmux.HasSession(session) {
-				members[i].TmuxState = "dead"
-			} else if m.AgentPID > 0 && !process.IsRunning(m.AgentPID) {
-				members[i].TmuxState = "stale"
-			} else {
-				members[i].TmuxState = "alive"
+
+			m.Runtime = idFile.Runtime
+			m.TmuxSession = idFile.TmuxSession
+
+			switch {
+			case idFile.TmuxSession == "":
+				m.TmuxState = ""
+			case !ttmux.HasSession(parseSessionName(idFile.TmuxSession)):
+				m.TmuxState = "dead"
+			case m.AgentPID > 0 && !process.IsRunning(m.AgentPID):
+				m.TmuxState = "stale"
+			default:
+				m.TmuxState = "alive"
 			}
 		}
 	}
@@ -265,11 +370,39 @@ func (h *TeamHandler) HandleList(ctx context.Context, params json.RawMessage) (a
 		members = []TeamMember{}
 	}
 
-	// Only include shared messages if there are any
-	var sharedPtr *SharedMessages
-	if shared.BroadcastTotal > 0 || len(shared.Groups) > 0 {
-		sharedPtr = shared
-	}
+	return members, shared, identityMap, nil
+}
 
-	return &TeamListResponse{Members: members, SharedMessages: sharedPtr}, nil
+// emitSessionEndForDeadAgent writes an agent.session.end event to the
+// daemon's event log and projector. The caller MUST NOT hold h.state's
+// RLock or Lock when calling — this function acquires the write lock
+// internally to coordinate with other event writers.
+//
+// Idempotence: applySessionEnd in the projector unconditionally updates
+// sessions.ended_at. Successive calls within the same team.list request
+// are prevented by Phase 1's collector check (Status == "active") — the
+// second team.list query sees the session as ended and does not re-queue
+// it. Duplicate emissions from concurrent callers are absorbed as a
+// no-op write (same session_id, same end_reason).
+func (h *TeamHandler) emitSessionEndForDeadAgent(ctx context.Context, sessionID string) error {
+	h.state.Lock()
+	defer h.state.Unlock()
+
+	event := types.AgentSessionEndEvent{
+		Type:      "agent.session.end",
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		SessionID: sessionID,
+		Reason:    "dead_pid",
+	}
+	if err := h.state.WriteEvent(ctx, event); err != nil {
+		return fmt.Errorf("write session.end event: %w", err)
+	}
+	return nil
+}
+
+// parseSessionName extracts the tmux session name portion from a
+// "session:window.pane" target string.
+func parseSessionName(target string) string {
+	name, _, _ := ttmux.ParseTarget(target)
+	return name
 }

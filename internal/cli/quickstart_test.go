@@ -395,3 +395,14 @@ func TestFormatQuickstart_WithConflict(t *testing.T) {
 		// FormatQuickstart may not explicitly handle conflict display — that's OK
 	}
 }
+
+// TestQuickstart_IdentityFileContainsExpectedFields asserts that after
+// Quickstart runs, the identity file contains all quickstart-specific
+// fields plus the drift fields populated by RefreshLocalIdentity. This
+// guards against silent field drops during refactoring. Full coverage
+// requires a mockable daemon client or a real daemon on a temp socket;
+// skipped as a placeholder. The manual smoke test in plan task
+// thrum-pxz.10 Step 6 is the real gate.
+func TestQuickstart_IdentityFileContainsExpectedFields(t *testing.T) {
+	t.Skip("requires daemon test harness — see plan Task 8")
+}
