@@ -28,6 +28,7 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
+	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -5443,6 +5444,24 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("message.deleteByAgent", messageHandler.HandleDeleteByAgent)
 	server.RegisterHandler("message.archive", messageHandler.HandleArchive)
 
+	// Monitor jobs — SECURITY: these handlers spawn child processes with the
+	// daemon's privileges, so they are registered on the unix-socket `server`
+	// ONLY and NEVER on the WebSocket / peer transport. The trust boundary
+	// test at internal/daemon/rpc/monitor_trust_boundary_test.go scans this
+	// file and will fail CI if a monitor.* method is ever registered on the
+	// WebSocket registry. See dev-docs/specs/2026-04-11-monitor-jobs-design.md
+	// §"Trust boundary".
+	monitorStore := monitor.NewMonitorStore(st.DB())
+	monitorDelivery := monitor.NewDelivery(messageHandler)
+	monitorSupervisor := monitor.NewMonitorSupervisor(monitorStore, monitorDelivery)
+	monitorHandler := rpc.NewMonitorHandler(monitorSupervisor, monitorStore)
+	server.RegisterHandler("monitor.start", monitorHandler.HandleStart)
+	server.RegisterHandler("monitor.stop", monitorHandler.HandleStop)
+	server.RegisterHandler("monitor.list", monitorHandler.HandleList)
+	server.RegisterHandler("monitor.show", monitorHandler.HandleShow)
+	server.RegisterHandler("monitor.restart", monitorHandler.HandleRestart)
+	server.RegisterHandler("monitor.logs", monitorHandler.HandleLogs)
+
 	// Subscription management
 	subscriptionHandler := rpc.NewSubscriptionHandler(st)
 	server.RegisterHandler("subscribe", subscriptionHandler.HandleSubscribe)
@@ -6001,6 +6020,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			fmt.Fprintf(os.Stderr, "  Backup:      every %s\n", backupInterval)
 		}
 	}
+
+	// Monitor jobs supervisor — launches runner goroutines for every monitor
+	// in the DB with status=running and blocks on ctx.Done(). Must start
+	// AFTER the backup scheduler and BEFORE lifecycle.Run(ctx).
+	go monitorSupervisor.Start(ctx)
 
 	// Telegram bridge RPC handlers + goroutine
 	telegramHandler := rpc.NewTelegramHandler(absPath)
