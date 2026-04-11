@@ -1,0 +1,263 @@
+package rpc
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/leonletto/thrum/internal/daemon/monitor"
+)
+
+// MonitorHandler handles all monitor.* RPC methods. It is registered only on
+// the local unix-socket server, never on the WebSocket (wsRegistry) transport.
+// This trust boundary is enforced by the test in monitor_trust_boundary_test.go.
+type MonitorHandler struct {
+	supervisor *monitor.MonitorSupervisor
+	store      *monitor.MonitorStore
+}
+
+// NewMonitorHandler constructs a MonitorHandler.
+func NewMonitorHandler(sup *monitor.MonitorSupervisor, store *monitor.MonitorStore) *MonitorHandler {
+	return &MonitorHandler{supervisor: sup, store: store}
+}
+
+// ----- request / response types -----
+
+// monitorStartParams is the JSON body for monitor.start.
+type monitorStartParams struct {
+	Name            string            `json:"name"`
+	Argv            []string          `json:"argv"`
+	Match           string            `json:"match"`
+	Target          string            `json:"target"`
+	Cwd             string            `json:"cwd"`
+	Env             map[string]string `json:"env"`
+	DebounceSeconds int               `json:"debounce_seconds"`
+}
+
+// monitorStartResponse is returned on success.
+type monitorStartResponse struct {
+	ID string `json:"id"`
+}
+
+// monitorIDParams is the JSON body for stop/show/restart/logs.
+type monitorIDParams struct {
+	ID string `json:"id"`
+}
+
+// monitorJobView is the JSON shape returned by HandleShow and (per element) HandleList.
+// Env values are ALWAYS redacted — the daemon never returns raw env values to callers.
+type monitorJobView struct {
+	ID              string            `json:"id"`
+	Name            string            `json:"name"`
+	Argv            []string          `json:"argv"`
+	Match           string            `json:"match"`
+	Target          string            `json:"target"`
+	Cwd             string            `json:"cwd"`
+	Env             map[string]string `json:"env"`
+	DebounceSeconds int               `json:"debounce_seconds"`
+	Status          string            `json:"status"`
+	CreatedAt       string            `json:"created_at"`
+	UpdatedAt       string            `json:"updated_at"`
+}
+
+// redactEnv returns a new map with the same keys as src but all values replaced
+// with the literal string "<redacted>".  Keys remain visible so the caller can
+// confirm which environment variables are configured; only the secret values are
+// hidden.  Redaction is unconditional — no heuristic: every env value is redacted.
+func redactEnv(src map[string]string) map[string]string {
+	redacted := make(map[string]string, len(src))
+	for k := range src {
+		redacted[k] = "<redacted>"
+	}
+	return redacted
+}
+
+// jobToView converts a MonitorJob into a safe wire representation.
+// ALL env values are replaced with "<redacted>" before serialisation.
+func jobToView(job *monitor.MonitorJob) monitorJobView {
+	return monitorJobView{
+		ID:              job.ID,
+		Name:            job.Name,
+		Argv:            job.Argv,
+		Match:           job.MatchPattern,
+		Target:          job.Target,
+		Cwd:             job.Cwd,
+		Env:             redactEnv(job.Env), // security-critical: redact before wire
+		DebounceSeconds: job.DebounceSeconds,
+		Status:          string(job.Status),
+		CreatedAt:       job.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:       job.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+}
+
+// translateMonitorError maps typed sentinel errors from the supervisor into
+// user-friendly RPC error strings.  Unknown errors are wrapped as "internal
+// error: <details>" so they surface to the caller without leaking internals.
+func translateMonitorError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, monitor.ErrCapExceeded):
+		return fmt.Errorf("maximum concurrent monitors reached (%d)", monitor.MaxConcurrentMonitors)
+	case errors.Is(err, monitor.ErrNameTaken):
+		return fmt.Errorf("monitor name already in use")
+	case errors.Is(err, monitor.ErrDebounceTooShort):
+		return fmt.Errorf("debounce must be at least %d seconds", monitor.MinDebounceSeconds)
+	case errors.Is(err, monitor.ErrInvalidRegex):
+		return fmt.Errorf("invalid match pattern: %v", unwrapMessage(err))
+	case errors.Is(err, monitor.ErrNotFound):
+		return fmt.Errorf("monitor not found")
+	default:
+		return fmt.Errorf("internal error: %v", err)
+	}
+}
+
+// unwrapMessage returns the error message of err's deepest Unwrap, or the
+// message of err itself when there is no cause.  Used to extract the
+// regexp compilation detail from a wrapped ErrInvalidRegex.
+func unwrapMessage(err error) string {
+	u := errors.Unwrap(err)
+	if u != nil {
+		return u.Error()
+	}
+	return err.Error()
+}
+
+// ----- handlers -----
+
+// HandleStart handles monitor.start — validates and launches a new monitor.
+func (h *MonitorHandler) HandleStart(ctx context.Context, params json.RawMessage) (any, error) {
+	var req monitorStartParams
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if req.Env == nil {
+		req.Env = make(map[string]string)
+	}
+
+	id, err := h.supervisor.Add(ctx, monitor.SubmitSpec{
+		Name:            req.Name,
+		Argv:            req.Argv,
+		MatchPattern:    req.Match,
+		Target:          req.Target,
+		Cwd:             req.Cwd,
+		Env:             req.Env,
+		DebounceSeconds: req.DebounceSeconds,
+	})
+	if err != nil {
+		return nil, translateMonitorError(err)
+	}
+	return monitorStartResponse{ID: id}, nil
+}
+
+// HandleStop handles monitor.stop — signals the child and removes the row.
+func (h *MonitorHandler) HandleStop(ctx context.Context, params json.RawMessage) (any, error) {
+	var req monitorIDParams
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if req.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+	if err := h.supervisor.Stop(ctx, req.ID); err != nil {
+		return nil, translateMonitorError(err)
+	}
+	return map[string]string{"status": "stopped"}, nil
+}
+
+// HandleList handles monitor.list — returns all monitors with env redacted.
+func (h *MonitorHandler) HandleList(ctx context.Context, params json.RawMessage) (any, error) {
+	jobs, err := h.supervisor.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("internal error: %v", err)
+	}
+	views := make([]monitorJobView, 0, len(jobs))
+	for _, job := range jobs {
+		views = append(views, jobToView(job)) // env redacted inside jobToView
+	}
+	return views, nil
+}
+
+// HandleShow handles monitor.show — returns a single monitor's spec with env redacted.
+func (h *MonitorHandler) HandleShow(ctx context.Context, params json.RawMessage) (any, error) {
+	var req monitorIDParams
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if req.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+	job, err := h.supervisor.GetByID(ctx, req.ID)
+	if err != nil {
+		return nil, translateMonitorError(err)
+	}
+	return jobToView(job), nil // env redacted inside jobToView
+}
+
+// HandleRestart handles monitor.restart — stops the existing child and launches
+// a new one using the persisted spec, preserving the original monitor ID.
+//
+// Implementation: Stop the running child without deleting the DB row, then
+// re-launch via the supervisor's internal Add path is not directly reusable
+// here because Add generates a new ID and inserts a new row.  Instead we stop,
+// read the spec from the store, and call Add with the same spec (which will
+// generate a new ID).  We update the response ID accordingly.
+//
+// Note: the supervisor does not expose a Restart method in Epic A. This handler
+// implements Restart as Stop-then-Add using the stored spec.  The new monitor
+// gets a fresh ID. If this behaviour needs to preserve the original ID, a
+// Restart method should be added to MonitorSupervisor in a follow-up task.
+func (h *MonitorHandler) HandleRestart(ctx context.Context, params json.RawMessage) (any, error) {
+	var req monitorIDParams
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	if req.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+
+	// Fetch the spec before stopping (Stop deletes the row).
+	job, err := h.store.GetByID(ctx, req.ID)
+	if err != nil {
+		return nil, translateMonitorError(err)
+	}
+
+	// Stop (and delete) the current runner.
+	if stopErr := h.supervisor.Stop(ctx, req.ID); stopErr != nil {
+		// If it's already gone (stopped/dead), we can still restart from the spec.
+		if !errors.Is(stopErr, monitor.ErrNotFound) {
+			return nil, translateMonitorError(stopErr)
+		}
+		// ErrNotFound from Stop means it wasn't running — delete the stale row
+		// so Add can insert a fresh one without a uniqueness conflict.
+		if delErr := h.store.Delete(ctx, req.ID); delErr != nil {
+			return nil, fmt.Errorf("internal error: %v", delErr)
+		}
+	}
+
+	// Re-launch with the same spec.
+	newID, err := h.supervisor.Add(ctx, monitor.SubmitSpec{
+		Name:            job.Name,
+		Argv:            job.Argv,
+		MatchPattern:    job.MatchPattern,
+		Target:          job.Target,
+		Cwd:             job.Cwd,
+		Env:             job.Env,
+		DebounceSeconds: job.DebounceSeconds,
+	})
+	if err != nil {
+		return nil, translateMonitorError(err)
+	}
+	return monitorStartResponse{ID: newID}, nil
+}
+
+// HandleLogs handles monitor.logs — v1 stub.
+//
+// Raw stdout streaming is deferred to thrum-86r.4.  In v1 we return a
+// not-implemented error so the CLI can surface a clear message rather than
+// hanging or returning an empty response.
+func (h *MonitorHandler) HandleLogs(ctx context.Context, params json.RawMessage) (any, error) {
+	return nil, fmt.Errorf("monitor logs streaming is not yet implemented (deferred to thrum-86r.4); use 'thrum monitor show <id>' to view status")
+}
