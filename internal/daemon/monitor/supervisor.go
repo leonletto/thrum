@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -212,6 +213,14 @@ func (s *MonitorSupervisor) Add(ctx context.Context, spec SubmitSpec) (string, e
 
 	if err := s.store.Insert(ctx, job); err != nil {
 		releasePending()
+		// Translate the raw sqlite UNIQUE-constraint-on-name failure into the
+		// typed ErrNameTaken sentinel so Epic B RPC handlers can return a
+		// user-friendly "monitor name already in use" instead of leaking the
+		// sqlite error text. modernc.org/sqlite wraps the message as:
+		//   "constraint failed: UNIQUE constraint failed: monitors.name (2067)".
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: monitors.name") {
+			return "", ErrNameTaken
+		}
 		return "", err
 	}
 	if err := s.launch(ctx, job); err != nil {

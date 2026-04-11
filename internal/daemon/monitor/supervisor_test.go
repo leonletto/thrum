@@ -433,6 +433,11 @@ func TestSupervisor_DuplicateNameRejected(t *testing.T) {
 
 	_, err = sup.Add(ctx, makeSpec("dup-name"))
 	require.Error(t, err, "second Add with same name must fail")
+	// Review finding 3: the sqlite UNIQUE constraint must be translated into
+	// the typed ErrNameTaken sentinel so Epic B RPC handlers can use
+	// errors.Is to return a user-friendly error.
+	assert.ErrorIs(t, err, ErrNameTaken,
+		"duplicate-name Add must return ErrNameTaken, not a raw sqlite error")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
