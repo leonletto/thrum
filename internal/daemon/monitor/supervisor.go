@@ -2,16 +2,33 @@ package monitor
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
 	"regexp"
 	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 )
+
+// supervisorULIDEntropy is a package-level monotonic ULID entropy source
+// backed by crypto/rand. Guarded by supervisorULIDMu because ulid.Monotonic
+// is not safe for concurrent use; the identity package uses the same
+// pattern (see internal/identity/identity.go:161).
+var (
+	supervisorULIDMu      sync.Mutex
+	supervisorULIDEntropy = ulid.Monotonic(rand.Reader, 0)
+)
+
+// newMonitorID returns a new "mon_<ULID>" identifier using the
+// mutex-guarded crypto/rand entropy source. Safe for concurrent callers.
+func newMonitorID(t time.Time) string {
+	supervisorULIDMu.Lock()
+	defer supervisorULIDMu.Unlock()
+	return "mon_" + ulid.MustNew(ulid.Timestamp(t), supervisorULIDEntropy).String()
+}
 
 // MaxConcurrentMonitors is the hard cap on simultaneously running monitors
 // per daemon instance. Exported so tests and future config code can reference
@@ -180,7 +197,7 @@ func (s *MonitorSupervisor) Add(ctx context.Context, spec SubmitSpec) (string, e
 
 	now := time.Now().UTC()
 	job := &MonitorJob{
-		ID:              "mon_" + ulid.MustNew(ulid.Timestamp(now), rand.New(rand.NewSource(now.UnixNano()))).String(),
+		ID:              newMonitorID(now),
 		Name:            spec.Name,
 		Argv:            spec.Argv,
 		MatchPattern:    spec.MatchPattern,

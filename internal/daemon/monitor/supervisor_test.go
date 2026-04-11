@@ -3,7 +3,9 @@ package monitor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -225,6 +227,70 @@ func TestSupervisor_ConcurrentAddsRespectCap(t *testing.T) {
 	// The next submission must be rejected.
 	_, err := sup.Add(ctx, makeSpec("cap-overflow"))
 	assert.ErrorIs(t, err, ErrCapExceeded)
+}
+
+// TestSupervisor_ConcurrentAddsRespectCapRace proves the fix for review
+// finding 2 (TOCTOU cap race) in combination with review finding 8
+// (crypto/rand ULID entropy). It spawns MaxConcurrentMonitors+1 concurrent
+// Add calls and asserts exactly ONE returns ErrCapExceeded.
+//
+// Before the pending-counter fix, two concurrent Adds could both pass the
+// cap check at 99 runners and end up launching 101. Before the crypto/rand
+// fix, concurrent Adds within the same nanosecond would collide on the
+// ULID-from-math/rand and all fail with "UNIQUE constraint failed" — a
+// different bug that masked the cap race.
+func TestSupervisor_ConcurrentAddsRespectCapRace(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping cap race test in short mode (spawns 101 children)")
+	}
+
+	sup, _ := newTestSupervisor(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		sup.Start(ctx)
+	}()
+	<-started
+	time.Sleep(20 * time.Millisecond)
+
+	const n = MaxConcurrentMonitors + 1
+	release := make(chan struct{}) // unblock all goroutines simultaneously
+	results := make(chan error, n)
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			<-release
+			_, err := sup.Add(ctx, makeSpec(fmt.Sprintf("race-%03d", i)))
+			results <- err
+		}()
+	}
+	close(release)
+	wg.Wait()
+	close(results)
+
+	var rejected, accepted int
+	for err := range results {
+		switch {
+		case err == nil:
+			accepted++
+		case errors.Is(err, ErrCapExceeded):
+			rejected++
+		default:
+			t.Fatalf("unexpected error from Add: %v", err)
+		}
+	}
+
+	assert.Equal(t, MaxConcurrentMonitors, accepted,
+		"exactly MaxConcurrentMonitors Adds should have succeeded")
+	assert.Equal(t, 1, rejected,
+		"exactly one Add should have been rejected with ErrCapExceeded")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
