@@ -2,7 +2,7 @@
 
 ## Message Lifecycle
 
-1. **Send** — `thrum send "msg" --to @name` (direct) or `--to @group` (group)
+1. **Send** — `thrum send "msg" --to @name` (direct)
 2. **Deliver** — Daemon writes to recipient's inbox (JSONL in
    `.git/thrum-sync/`)
 3. **Receive** — `thrum inbox` or `thrum wait` (blocking)
@@ -14,12 +14,11 @@
 
 ## Addressing
 
-| Target               | Routing                                                       | When to use                          |
-| -------------------- | ------------------------------------------------------------- | ------------------------------------ |
-| `--to @lead_agent`   | **Direct** — routes to the named agent                        | Default for all task messages        |
-| `--to @coordinator`  | **Role fanout** — ALL agents with that role (warning emitted) | Only when you want every coordinator |
-| `--to @backend-team` | **Group** — all members of the named group                    | Team-wide announcements              |
-| `--to @everyone`     | **Broadcast** — all registered agents                         | Critical alerts                      |
+| Target              | Routing                                                       | When to use                          |
+| ------------------- | ------------------------------------------------------------- | ------------------------------------ |
+| `--to @lead_agent`  | **Direct** — routes to the named agent                        | Default for all task messages        |
+| `--to @coordinator` | **Role fanout** — ALL agents with that role (warning emitted) | Only when you want every coordinator |
+| `--to @everyone`    | **Broadcast** — all registered agents                         | Critical alerts                      |
 
 **Critical:** `@coordinator` is a role, not an agent name. Sending
 `--to @coordinator` fans out to every agent registered with that role. Use

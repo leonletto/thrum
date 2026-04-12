@@ -1,8 +1,8 @@
 ---
 title: "Web UI"
 description:
-  "Browser-based dashboard for monitoring agents, reading messages, and managing
-  groups — served from the daemon on a single port"
+  "Browser-based dashboard for monitoring agents and reading messages — served
+  from the daemon on a single port"
 category: "integrations"
 order: 1
 tags: ["web-ui", "dashboard", "browser", "live-feed", "inbox"]
@@ -73,19 +73,6 @@ expands as you type and collapses after sending, keeping the reading area clean.
 
 ![Personal inbox with ComposeBar and reply threading](img/docs/ui-inbox.png)
 
-## Group Channels
-
-Groups work like channels. Click any group in the sidebar to see its messages
-and members. The header shows the group name, member count, and a **Members**
-button to view who belongs to the group.
-
-The `+` button next to the **Groups** heading lets you create new groups. Each
-group has its own ComposeBar for sending messages scoped to that channel.
-
-Unread badges on group names tell you where new activity is.
-
-![#test-team group channel with message history and members panel](img/docs/ui-group-channel.png)
-
 ## Agent View
 
 Click any agent name in the **Agents** sidebar section to open their view. The
@@ -132,9 +119,8 @@ The Settings page shows:
 | ------------------ | ---------------------------- |
 | `1`                | Live Feed                    |
 | `2`                | My Inbox                     |
-| `3`                | First Group (if available)   |
-| `4`                | Who Has?                     |
-| `5`                | Settings                     |
+| `3`                | Who Has?                     |
+| `4`                | Settings                     |
 | `Cmd+K` / `Ctrl+K` | Focus search / main content  |
 | `Esc`              | Dismiss / focus main content |
 

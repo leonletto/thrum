@@ -76,7 +76,7 @@ thrum send "message" --to @name # Direct message thrum send "message" --to
 sent --unread # Check sent items and receipts thrum reply <msg-id> "response" #
 Reply (creates a reply-to reference)
 
-## MCP Tools (11 total)
+## MCP Tools (5 total)
 
 **Core messaging (4):**
 
@@ -84,17 +84,10 @@ Reply (creates a reply-to reference)
 - check_messages — Poll inbox, auto-mark read
 - wait_for_message — Block until message arrives
 - list_agents — Show registered agents
-- broadcast_message — (Deprecated — use `send_message` with `to="@everyone"`
-  instead)
 
-**Group management (6):**
+**Deprecated (1):**
 
-- create_group — Create a named messaging group
-- delete_group — Delete a messaging group
-- add_group_member — Add agent or role to group
-- remove_group_member — Remove member from group
-- list_groups — List all groups
-- get_group — Get group details with optional expansion
+- broadcast_message — Use `send_message` with `to="@everyone"` instead
 
 ## Session Template
 
@@ -209,5 +202,5 @@ Or see the full agent definitions in the
   resource docs for Claude Code
 - [MCP Server](mcp-server.md) — optional native tool integration for MCP-capable
   environments
-- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and
-  coordination patterns
+- [Multi-Agent Support](multi-agent.md) — runtime presets and coordination
+  patterns

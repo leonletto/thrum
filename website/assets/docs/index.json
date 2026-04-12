@@ -87,12 +87,11 @@
   {
     "path": "multi-agent.html",
     "title": "Multi-Agent Support",
-    "description": "Agent groups, runtime presets, context prime, and coordination patterns for running multiple AI agents across worktrees and platforms",
+    "description": "Runtime presets, context prime, and coordination patterns for running multiple AI agents across worktrees and platforms",
     "category": "coordination",
     "order": 2,
     "tags": [
       "multi-agent",
-      "groups",
       "runtime",
       "coordination",
       "teams",
@@ -297,7 +296,7 @@
   {
     "path": "web-ui.html",
     "title": "Web UI",
-    "description": "Browser-based dashboard for monitoring agents, reading messages, and managing groups — served from the daemon on a single port",
+    "description": "Browser-based dashboard for monitoring agents and reading messages — served from the daemon on a single port",
     "category": "integrations",
     "order": 1,
     "tags": [

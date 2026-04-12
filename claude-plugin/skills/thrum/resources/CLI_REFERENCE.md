@@ -373,40 +373,6 @@ thrum overview --json
 
 ---
 
-## Groups
-
-```bash
-thrum group create <name>                      # Create a group
-thrum group create <name> --description "text"
-thrum group delete <name>                      # Delete a group
-thrum group list                               # List all groups
-thrum group list --json
-thrum group info <name>                        # Detailed group info
-thrum group info <name> --json
-thrum group members <name>                     # List group members
-thrum group members <name> --expand            # Resolve nested groups/roles to agents
-thrum group members <name> --json
-thrum group add <group> @agent                 # Add agent by name
-thrum group add <group> --role reviewer        # Add all agents with role
-thrum group remove <group> @agent              # Remove agent
-thrum group remove <group> --role reviewer     # Remove role-based member
-```
-
-Subcommand flags:
-
-```text
-# group create
---description string   Group description
-
-# group add / group remove
---role string   Add/remove a role-based member
-
-# group members
---expand   Resolve nested groups and roles to agent IDs
-```
-
----
-
 ## Context
 
 ```bash

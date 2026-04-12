@@ -39,10 +39,10 @@ a{color:#0366d6}
 <h2>Thrum Messaging System</h2>
 <blockquote>
 <p><strong>TL;DR:</strong> Send messages with <code>thrum send</code>, check them with <code>thrum inbox</code>,
-reply with <code>thrum reply</code>. Messages support scopes, mentions, and groups for
-targeting specific recipients. The Quick Reference tables below have every
-command. Implementation details (storage schemas, indexes) are at the bottom —
-you don&#39;t need them for normal use.</p>
+reply with <code>thrum reply</code>. Messages support scopes and mentions for targeting
+specific recipients. The Quick Reference tables below have every command.
+Implementation details (storage schemas, indexes) are at the bottom — you
+don&#39;t need them for normal use.</p>
 </blockquote>
 <h2>Overview</h2>
 <p>Thrum messaging connects agents with direct messages, read tracking, scopes,
@@ -57,7 +57,7 @@ managing messages.</p>
 <h2>Messaging across repos and machines</h2>
 <p>Same-repo messaging is the default. When you want agents in different repos, or
 on different machines, to talk to each other, you pair their daemons as peers.
-The messaging API is the same — <code>thrum send</code>, <code>thrum inbox</code>, groups, threads —
+The messaging API is the same — <code>thrum send</code>, <code>thrum inbox</code>, threads —
 but messages route through peers instead of staying local.</p>
 <p>For pairing, address handling, and the two transports (same-machine and
 Tailscale), see <a href="peers.html">Peers</a>.</p>
@@ -134,8 +134,8 @@ SQLite.</p>
 </thead>
 <tbody><tr>
 <td><code>--to</code></td>
-<td><code>@name</code> or <code>@group</code></td>
-<td>Recipient — agent name, group, or role (adds a mention ref)</td>
+<td><code>@name</code></td>
+<td>Recipient — agent name or role (adds a mention ref)</td>
 </tr>
 <tr>
 <td><code>--scope</code></td>
@@ -171,11 +171,8 @@ stored as a <code>mention</code> ref on the message.</p>
 thrum send &quot;Please review PR #42&quot; --to @reviewer
 thrum send &quot;Please review PR #42&quot; --mention @reviewer
 
-# Send to a group
-thrum send &quot;Deploy complete&quot; --to @everyone
-
-# Send to a custom group
-thrum send &quot;Backend review needed&quot; --to @backend</code></pre>
+# Broadcast to all agents
+thrum send &quot;Deploy complete&quot; --to @everyone</code></pre>
 <p>The <code>@</code> prefix is optional -- <code>--to reviewer</code> and <code>--to @reviewer</code> both work.</p>
 <h3>Mention Routing</h3>
 <p>When a message has mentions (via <code>--to</code>, <code>--mention</code>, or <code>@role</code> in the mentions
@@ -208,10 +205,6 @@ or a role:</p>
 <tr>
 <td><code>@everyone</code></td>
 <td>Broadcasts to all agents</td>
-</tr>
-<tr>
-<td><code>@mygroup</code></td>
-<td>Routes to the named custom group</td>
 </tr>
 <tr>
 <td><code>@sf:coordinator</code></td>
@@ -590,70 +583,7 @@ message reference?&quot;</p>
   --ref issue:beads-123 \
   --ref commit:abc123def \
   --ref url:https://docs.example.com/design</code></pre>
-<h2>Groups</h2>
-<p>Groups let you address a collection of agents and roles with a single
-<code>--to @groupname</code>.</p>
-<h3>Built-in Groups</h3>
-<p><strong><code>@everyone</code></strong> — Created automatically on daemon startup. All registered agents
-are implicit members. You can&#39;t delete it.</p>
-<pre><code># Send to all agents
-thrum send &quot;Deploy complete&quot; --to @everyone</code></pre>
-<h3>Creating Custom Groups</h3>
-<pre><code># Create a group
-thrum group create reviewers --description &quot;Code review team&quot;
-
-# Add members (agents or roles)
-thrum group add reviewers @alice
-thrum group add reviewers --role reviewer
-
-# Send to the group
-thrum send &quot;PR ready for review&quot; --to @reviewers</code></pre>
-<h3>Group Operations</h3>
-<table>
-<thead>
-<tr>
-<th>Command</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>thrum group create NAME</code></td>
-<td>Create a new group</td>
-</tr>
-<tr>
-<td><code>thrum group delete NAME</code></td>
-<td>Delete a group (cannot delete <code>@everyone</code>)</td>
-</tr>
-<tr>
-<td><code>thrum group add GROUP MEMBER</code></td>
-<td>Add agent or role to group</td>
-</tr>
-<tr>
-<td><code>thrum group remove GROUP MEMBER</code></td>
-<td>Remove a member</td>
-</tr>
-<tr>
-<td><code>thrum group list</code></td>
-<td>List all groups</td>
-</tr>
-<tr>
-<td><code>thrum group info NAME</code></td>
-<td>Show group details</td>
-</tr>
-<tr>
-<td><code>thrum group members NAME</code></td>
-<td>List members (<code>--expand</code> resolves to agent IDs)</td>
-</tr>
-</tbody></table>
-<h3>Message Resolution</h3>
-<p>The daemon resolves group membership at <strong>read time</strong>, not send time. That
-means:</p>
-<ul>
-<li>Agents you add to a group after a message was sent still see that message</li>
-<li><code>@everyone</code> dynamically includes all registered agents</li>
-<li>Role-based members resolve to all agents with that role at query time</li>
-</ul>
-<h3>Broadcast</h3>
+<h2>Broadcast</h2>
 <p>Both <code>--broadcast</code> and <code>--to @everyone</code> send to all agents:</p>
 <pre><code>thrum send &quot;Deploy complete&quot; --broadcast
 thrum send &quot;Deploy complete&quot; --to @everyone
@@ -783,11 +713,10 @@ read state persists across session restarts for the same agent.</p>
 </ul>
 <h2>MCP Server Integration</h2>
 <p>The MCP server (<code>thrum mcp serve</code>) gives AI agents running in Claude Code or
-similar environments native messaging tools. It exposes 10 MCP tools: 4 core
-messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
-<code>list_agents</code>) and 6 group management tools. MCP tools run the same underlying
-RPC methods but add <code>@role</code> addressing and real-time WebSocket push
-notifications.</p>
+similar environments native messaging tools. It exposes 4 MCP tools:
+<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, and <code>list_agents</code>. MCP
+tools run the same underlying RPC methods but add <code>@role</code> addressing and
+real-time WebSocket push notifications.</p>
 <p>See <a href="mcp-server.html">MCP Server</a> for the complete tools reference and
 configuration.</p>
 <h2>Agent Identity</h2>

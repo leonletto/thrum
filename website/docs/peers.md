@@ -425,7 +425,7 @@ Peers and sync are complementary. They serve different purposes.
 **Peers** are live message transport. When you send a message to a proxy agent,
 it's relayed in real time over the WebSocket connection to the remote daemon.
 Peers are for agent-to-agent coordination — directed messages, replies, and
-group broadcasts across repos.
+broadcast (`@everyone`) messaging across repos.
 
 **Sync** is Git-backed state replication. The `a-sync` branch replicates JSONL
 event logs between machines so each daemon has a full copy of the message

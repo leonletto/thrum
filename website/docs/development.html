@@ -89,7 +89,7 @@ thrum daemon status</code></pre>
 │   ├── gitctx/              # Git-derived work context (branch, uncommitted files)
 │   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, event)
 │   ├── jsonl/               # JSONL reader/writer with file locking
-│   ├── mcp/                 # MCP stdio server (11 tools, WebSocket waiter)
+│   ├── mcp/                 # MCP stdio server (4 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
 │   ├── schema/              # SQLite schema, DDL, and migrations (v19)
@@ -665,7 +665,7 @@ over stdin/stdout).</p>
 <li><code>internal/mcp/waiter.go</code>: WebSocket-based blocking message waiter</li>
 <li><code>cmd/thrum/mcp.go</code>: <code>thrum mcp serve</code> Cobra command</li>
 </ul>
-<p><strong>MCP Tools (11 total: 10 active + 1 deprecated):</strong></p>
+<p><strong>MCP Tools (5 total: 4 active + 1 deprecated):</strong></p>
 <table>
 <thead>
 <tr>
@@ -688,30 +688,6 @@ over stdin/stdout).</p>
 <tr>
 <td><code>list_agents</code></td>
 <td>List registered agents with active/offline status</td>
-</tr>
-<tr>
-<td><code>create_group</code></td>
-<td>Create a named messaging group</td>
-</tr>
-<tr>
-<td><code>delete_group</code></td>
-<td>Delete a messaging group</td>
-</tr>
-<tr>
-<td><code>add_group_member</code></td>
-<td>Add an agent or role as a member of a group</td>
-</tr>
-<tr>
-<td><code>remove_group_member</code></td>
-<td>Remove a member from a group</td>
-</tr>
-<tr>
-<td><code>list_groups</code></td>
-<td>List all messaging groups</td>
-</tr>
-<tr>
-<td><code>get_group</code></td>
-<td>Get group details including members (expand=true resolves roles)</td>
 </tr>
 <tr>
 <td><code>broadcast_message</code></td>

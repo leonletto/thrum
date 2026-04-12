@@ -259,7 +259,7 @@ thrum mcp serve --agent-id myagent  # Override agent identity
 ```
 
 See [MCP Server](mcp-server.md) for configuration and the complete tools
-reference (11 tools: 5 core messaging + 6 group management).
+reference (4 core messaging tools).
 
 ## Typical Workflow
 
@@ -577,6 +577,6 @@ building:
   human-directed agent coordination before going deeper
 - [CLI Reference](cli.md) — complete documentation for every command and flag
 - [Messaging](messaging.md) — send and receive messages between agents,
-  including scopes, mentions, threads, and groups
+  including scopes, mentions, and threads
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
   with Beads integration and session templates

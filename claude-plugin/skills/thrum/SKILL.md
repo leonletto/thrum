@@ -44,16 +44,6 @@ thrum ping @name                                      Check if agent online
 thrum who-has <file>                                  Who's editing a file
 ```
 
-### Groups
-
-```bash
-thrum group create <name>                Create group
-thrum group add <name> @agent            Add agent to group
-thrum group add <name> --role <role>     Add all agents with role
-thrum group list                         List groups
-thrum send "msg" --to @group-name        Message a group
-```
-
 ### Role Templates
 
 ```bash
@@ -127,7 +117,6 @@ thrum <cmd> --help                       Detailed command usage
 | Persistent messages (survive compaction) | Ephemeral task lists       | Temporary scratch notes       |
 | Background listener pattern              | Inline progress tracking   | Simple linear execution       |
 | Multi-machine sync via git               | Local to conversation      | No persistence needed         |
-| Group messaging                          | Direct teammate DMs        | No audience beyond self       |
 
 **Decision test:** "Do messages need to survive session restart or reach agents
 in other worktrees?" YES = Thrum.

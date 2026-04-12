@@ -1,12 +1,12 @@
 ---
 title: "Multi-Agent Support"
 description:
-  "Agent groups, runtime presets, context prime, and coordination patterns for
-  running multiple AI agents across worktrees and platforms"
+  "Runtime presets, context prime, and coordination patterns for running
+  multiple AI agents across worktrees and platforms"
 category: "coordination"
 order: 2
 tags:
-  ["multi-agent", "groups", "runtime", "coordination", "teams", "context-prime"]
+  ["multi-agent", "runtime", "coordination", "teams", "context-prime"]
 last_updated: "2026-04-09"
 ---
 
@@ -46,8 +46,6 @@ agents are in one repo or many.
   instant message delivery and zero background listeners
 - **Session Restart** (v0.7.1) -- Agents restart mid-task without losing
   conversation history
-- **Agent Groups** -- Named collections of agents and roles for targeted
-  messaging
 - **Runtime Presets** -- Auto-detect and configure Claude Code, Codex, Cursor,
   Gemini, and other AI platforms
 - **Context Prime** -- Single command to gather full agent state for session
@@ -55,31 +53,11 @@ agents are in one repo or many.
 - **Coordination Tools** -- File ownership tracking, agent presence, and
   efficient message waiting
 
-## Agent Groups
+## Broadcast
 
-Groups let you send messages to collections of agents without addressing each
-one individually. Groups can contain specific agents or all agents with a role.
-
-For the full group commands reference, see
-[Messaging — Groups](messaging.md#groups).
-
-### Auto-Created Groups
-
-Thrum automatically creates two types of system groups:
-
-- **`@everyone`** — Created on daemon startup. Includes all registered agents
-  via a `role:*` wildcard. New agents are automatically reachable through it.
-  Can't be deleted or modified.
-- **Role groups** — Created automatically when an agent registers with a new
-  role (e.g., registering with `--role reviewer` creates a `@reviewer` group
-  containing all agents with that role). Role groups have IDs like
-  `grp_role_reviewer` and are managed by the system.
-
-This means `@reviewer` always routes to all agents with the `reviewer` role,
-even without manually creating or managing a group.
+Use `--to @everyone` to reach all agents at once:
 
 ```bash
-# Send to all agents
 thrum send "Deploy complete, all clear" --to @everyone
 ```
 
@@ -91,85 +69,8 @@ thrum send "Deploy complete" --to @everyone
 thrum send "Deploy complete" --everyone
 ```
 
-### Creating and Managing Groups
-
-```bash
-# Create a group with a description
-thrum group create reviewers --description "Code review team"
-
-# Add individual agents
-thrum group add reviewers @alice
-thrum group add reviewers @bob
-
-# Add all agents with a specific role
-thrum group add reviewers --role reviewer
-
-# Remove a member
-thrum group remove reviewers @bob
-
-# List all groups
-thrum group list
-
-# Show group details
-thrum group info reviewers
-```
-
-### Member Types
-
-Groups support two member types:
-
-| Type  | Syntax            | Resolves To                          |
-| ----- | ----------------- | ------------------------------------ |
-| Agent | `@alice`          | A specific agent by name             |
-| Role  | `--role reviewer` | All agents registered with that role |
-
-### Sending to Groups
-
-Use `--to @groupname` just like sending to an individual agent:
-
-```bash
-# Send to the review team
-thrum send "PR #42 ready for review" --to @reviewers
-
-# Send to all developers
-thrum send "Code freeze starts now" --to @all-devs
-```
-
-The daemon resolves group membership at **read time** using a SQL query. This
-means agents added to a group after a message was sent still receive it.
-
-### Expanding Group Membership
-
-Use `--expand` to see which individual agents a group resolves to:
-
-```bash
-thrum group members reviewers --expand --json
-```
-
-Output:
-
-```json
-{
-  "members": [
-    { "type": "agent", "value": "alice" },
-    { "type": "role", "value": "reviewer" }
-  ],
-  "expanded": ["alice", "bob", "carol"]
-}
-```
-
-### MCP Group Tools
-
-When using the MCP server (`thrum mcp serve`), groups are managed via native MCP
-tools. See [MCP Server](mcp-server.md) for the complete tools reference.
-
-Example MCP usage:
-
-```text
-mcp__thrum__create_group(name="backend", description="Backend team")
-mcp__thrum__add_group_member(group="backend", member_type="role", member_value="implementer")
-mcp__thrum__send_message(to="@backend", content="API changes merged")
-```
+`@reviewer` always routes to all agents with the `reviewer` role — that happens
+automatically, no group setup needed.
 
 ---
 
@@ -510,25 +411,20 @@ thrum wait --mention @reviewer --timeout 5m
 
 ## Complete Workflows
 
-### Workflow 1: Setting Up a Review Team
+### Workflow 1: Notifying Reviewers
 
 ```bash
-# 1. Create a review team group
-thrum group create reviewers --description "Code review team"
-thrum group add reviewers --role reviewer
-thrum group add reviewers @alice
-
-# 2. Implementer finishes work and notifies the team
+# 1. Implementer finishes work and notifies all reviewers
 thrum send "PR #42 ready for review: JWT auth implementation" \
-  --to @reviewers --ref pr:42
+  --to @reviewer --ref pr:42
 
-# 3. Reviewers check their inbox
+# 2. Reviewers check their inbox
 thrum inbox --mentions
 
-# 3b. Implementer verifies the review request recipients
-thrum sent --to @reviewers
+# 2b. Implementer verifies the review request was sent
+thrum sent --to @reviewer
 
-# 4. Reviewer responds
+# 3. Reviewer responds
 thrum reply msg_01HXE... "Reviewed. LGTM with minor comments on error handling."
 ```
 
@@ -576,9 +472,6 @@ thrum agent set-intent "Resuming JWT implementation after compaction"
 ```bash
 # === Coordinator (main worktree) ===
 thrum quickstart --name coord_main --role coordinator --module main
-thrum group create backend --description "Backend team"
-thrum group add backend @furiosa
-thrum group add backend @nux
 
 # Preferred: create worktrees and register agents in one step
 thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
@@ -597,8 +490,8 @@ thrum agent list --context
 # furiosa      implementer   auth    feature/auth   src/auth.go
 # nux          implementer   sync    feature/sync   internal/sync/loop.go
 
-# Send update to the whole backend team
-thrum send "Both features shipping in v0.4" --to @backend
+# Broadcast update to all agents
+thrum send "Both features shipping in v0.4" --to @everyone
 
 # === Implementer (auth worktree) ===
 cd ~/.workspaces/repo/auth
@@ -611,13 +504,6 @@ thrum send "Auth complete, 15 tests passing" --to @coord_main
 ---
 
 ## Best Practices
-
-### Group Organization
-
-- **Start simple** -- create groups as coordination needs emerge, not upfront
-- **Use role-based membership** when possible (`--role reviewer`) so new agents
-  with that role are automatically included
-- **Use `@everyone` sparingly** -- prefer targeted groups to reduce noise
 
 ### Runtime Configuration
 
@@ -654,6 +540,6 @@ still merge. The orchestrator handles the middle.
 - [Identity System](identity.md) — agent naming, registration, and per-worktree
   identity files
 - [Messaging](messaging.md) — full send/receive/reply reference including
-  scopes, mentions, and groups
+  scopes and mentions
 - [Coordinate Two Agents](guides/coordinate-two-agents.md) — step-by-step
   walkthrough of the most common setup

@@ -106,9 +106,8 @@ messages and agent activity. Served from the same port as WebSocket (default
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
 directly through MCP protocol without CLI shell-outs. Connects to the daemon via
 Unix socket for RPC and WebSocket for real-time push notifications. Provides 4
-core messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
-<code>list_agents</code>) and 6 group management tools (<code>create_group</code>, <code>delete_group</code>,
-<code>add_group_member</code>, <code>remove_group_member</code>, <code>list_groups</code>, <code>get_group</code>).</p>
+core messaging tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
+and <code>list_agents</code>.</p>
 <h2>Key Features</h2>
 <h3>1. Persistent Messaging</h3>
 <p>Messages are stored in append-only JSONL logs on a dedicated <code>a-sync</code> orphan
@@ -380,8 +379,8 @@ works without network.</p>
 <h3>For MCP Integration</h3>
 <p><code>thrum mcp serve</code> runs an MCP server on stdio (JSON-RPC over stdin/stdout),
 enabling LLM agents to communicate via native MCP tools. It provides 4 core
-messaging tools (<code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
-<code>list_agents</code>) and 6 group management tools.</p>
+messaging tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, and
+<code>list_agents</code>.</p>
 <p>See <a href="mcp-server.html">MCP Server</a> for the complete tools reference, configuration,
 and setup instructions.</p>
 <hr>

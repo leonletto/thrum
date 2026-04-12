@@ -258,34 +258,6 @@ for AI agent coordination.</p>
 <td>Manage configuration (show, init)</td>
 </tr>
 <tr>
-<td><code>thrum group create</code></td>
-<td>Create a named group</td>
-</tr>
-<tr>
-<td><code>thrum group delete</code></td>
-<td>Delete a group</td>
-</tr>
-<tr>
-<td><code>thrum group add</code></td>
-<td>Add member to a group</td>
-</tr>
-<tr>
-<td><code>thrum group remove</code></td>
-<td>Remove member from a group</td>
-</tr>
-<tr>
-<td><code>thrum group list</code></td>
-<td>List all groups</td>
-</tr>
-<tr>
-<td><code>thrum group info</code></td>
-<td>Show group details</td>
-</tr>
-<tr>
-<td><code>thrum group members</code></td>
-<td>List group members</td>
-</tr>
-<tr>
 <td><code>thrum who-has</code></td>
 <td>Check which agents are editing a file</td>
 </tr>
@@ -667,7 +639,6 @@ thrum setup claude-md --apply --force  # Replace existing Thrum section</code></
 <li>Message protocols</li>
 <li>MCP server configuration</li>
 <li>Background listener setup</li>
-<li>Group management</li>
 </ul>
 <p>The instructions are automatically injected by <code>thrum prime</code> when agents start
 sessions, providing immediate context on how to use Thrum for coordination.</p>
@@ -877,22 +848,17 @@ have an active session.</p>
 </tr>
 </tbody></table>
 <p>The <code>--to</code> flag adds the recipient as a mention, making it a directed message.
-Recipients can be agents (<code>@alice</code>), roles (<code>@reviewer</code>), or groups
-(<code>@everyone</code>, <code>@backend</code>). The <code>--broadcast</code> and <code>--to</code> flags are mutually
-exclusive.</p>
+Recipients can be agents (<code>@alice</code>), roles (<code>@reviewer</code>), or <code>@everyone</code> for
+broadcast. The <code>--broadcast</code> and <code>--to</code> flags are mutually exclusive.</p>
 <p>The <code>--broadcast</code> flag is an alias for <code>--to @everyone</code>.</p>
 <p>Example:</p>
 <pre><code>$ thrum send &quot;PR ready for review&quot; --to @reviewer --scope module:auth --ref pr:42
 ✓ Message sent: msg_01HXE8Z7...
   Created: 2026-02-03T10:00:00Z
 
-# Send to all agents via @everyone group
+# Send to all agents
 $ thrum send &quot;Deploy complete&quot; --to @everyone
-✓ Message sent: msg_01HXE8Z8...
-
-# Send to a custom group
-$ thrum send &quot;Backend review needed&quot; --to @backend
-✓ Message sent: msg_01HXE8Z9...</code></pre>
+✓ Message sent: msg_01HXE8Z8...</code></pre>
 <h3>thrum reply</h3>
 <p>Reply to a message by ID. Creates a reply-to reference so replies are grouped
 with the original message in your inbox. The replied-to message is marked as
@@ -980,7 +946,6 @@ thrum sent show MSG_ID</code></pre>
 <pre><code>thrum sent
 thrum sent --unread
 thrum sent --to @implementer_api
-thrum sent --to @backend-team
 thrum sent show msg_01HXE8Z7</code></pre>
 <h3>thrum message get</h3>
 <p>Get a single message with full details. The message is automatically marked as
@@ -1542,108 +1507,6 @@ string to clear.</p>
 <p>Example:</p>
 <pre><code>$ thrum session set-task beads:thrum-42
 ✓ Task set: beads:thrum-42</code></pre>
-<h2>Groups</h2>
-<h3>thrum group create</h3>
-<p>Create a named group for targeted messaging. Groups contain agents and roles.</p>
-<pre><code>thrum group create NAME [flags]</code></pre>
-<table>
-<thead>
-<tr>
-<th>Flag</th>
-<th>Description</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>--description</code></td>
-<td>Human-readable group description</td>
-<td></td>
-</tr>
-</tbody></table>
-<p>The <code>@everyone</code> group is created automatically on daemon startup and includes
-all agents.</p>
-<p>Example:</p>
-<pre><code>$ thrum group create reviewers --description &quot;Code review team&quot;
-✓ Group created: reviewers
-
-$ thrum group create backend --description &quot;Backend developers&quot;
-✓ Group created: backend</code></pre>
-<h3>thrum group delete</h3>
-<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be
-deleted.</p>
-<pre><code>thrum group delete NAME</code></pre>
-<p>Example:</p>
-<pre><code>$ thrum group delete reviewers
-✓ Group deleted: reviewers
-
-$ thrum group delete @everyone
-✗ Cannot delete protected group: @everyone</code></pre>
-<h3>thrum group add</h3>
-<p>Add a member to a group. Members can be agents or roles.</p>
-<pre><code>thrum group add GROUP MEMBER</code></pre>
-<p><strong>Member types:</strong></p>
-<ul>
-<li><code>@alice</code> or <code>alice</code> — Specific agent by name</li>
-<li><code>--role planner</code> — All agents with role &quot;planner&quot;</li>
-</ul>
-<p>Example:</p>
-<pre><code># Add specific agent
-$ thrum group add reviewers @alice
-✓ Added agent alice to group reviewers
-
-# Add all agents with a role
-$ thrum group add reviewers --role reviewer
-✓ Added role reviewer to group reviewers</code></pre>
-<h3>thrum group remove</h3>
-<p>Remove a member from a group.</p>
-<pre><code>thrum group remove GROUP MEMBER</code></pre>
-<p>Uses the same member detection as <code>group add</code>.</p>
-<p>Example:</p>
-<pre><code>$ thrum group remove reviewers @alice
-✓ Removed agent alice from group reviewers</code></pre>
-<h3>thrum group list</h3>
-<p>List all groups in the system.</p>
-<pre><code>thrum group list</code></pre>
-<p>Example:</p>
-<pre><code>$ thrum group list
-Groups (3):
-
-@everyone
-  Description: All registered agents
-  Members:     (implicit - all agents)
-  Created:     2026-02-09 10:00:00
-
-reviewers
-  Description: Code review team
-  Members:     2
-  Created:     2026-02-09 10:15:00
-
-backend
-  Description: Backend developers
-  Members:     3
-  Created:     2026-02-09 10:20:00</code></pre>
-<h3>thrum group info</h3>
-<p>Show detailed information about a specific group.</p>
-<pre><code>thrum group info NAME</code></pre>
-<p>Example:</p>
-<pre><code>$ thrum group info reviewers
-Group: reviewers
-  Description: Code review team
-  Created:     2026-02-09 10:15:00
-  Created by:  alice
-  Members:     2
-
-  Members:
-    - @alice (agent)
-    - reviewer (role)</code></pre>
-<h3>thrum group members</h3>
-<p>List members of a group.</p>
-<pre><code>thrum group members NAME</code></pre>
-<p>Example:</p>
-<pre><code>$ thrum group members reviewers
-Members of reviewers (2):
-  - @alice (agent)
-  - reviewer (role)</code></pre>
 <h2>Coordination</h2>
 <h3>thrum who-has</h3>
 <p>Check which agents are currently editing a file. Shows agents with the file in
@@ -2694,8 +2557,8 @@ WORKTREE                            BRANCH              HEAD       AGENT        
 /home/user/.workspaces/thrum/web    website-dev         21908a3    impl_website_dev     -</code></pre>
 <h2>Monitor Jobs</h2>
 <p>Run a long-lived command, filter its output through a regex, and deliver
-matching lines as Thrum messages to an agent or group. Jobs persist across
-daemon restarts. Max 100 concurrent jobs.</p>
+matching lines as Thrum messages to an agent. Jobs persist across daemon
+restarts. Max 100 concurrent jobs.</p>
 <p>The command must come after <code>--</code>:</p>
 <pre><code>thrum monitor add --name &lt;name&gt; --match &lt;regex&gt; --to @&lt;agent&gt; [flags] -- &lt;command&gt; [args...]</code></pre>
 <h3>thrum monitor add</h3>
@@ -2894,8 +2757,7 @@ MCP tools instead of shelling out to the CLI.</p>
 </tbody></table>
 <p>Requires the Thrum daemon to be running. The <code>--agent-id</code> flag sets <code>THRUM_NAME</code>
 internally for identity resolution.</p>
-<p><strong>MCP Tools provided (10 total):</strong></p>
-<p><strong>Core messaging (4):</strong></p>
+<p><strong>MCP Tools provided (4 total):</strong></p>
 <table>
 <thead>
 <tr>
@@ -2918,39 +2780,6 @@ internally for identity resolution.</p>
 <tr>
 <td><code>list_agents</code></td>
 <td>List registered agents with active/offline status</td>
-</tr>
-</tbody></table>
-<p><strong>Group management (6):</strong></p>
-<table>
-<thead>
-<tr>
-<th>Tool</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>create_group</code></td>
-<td>Create a named messaging group</td>
-</tr>
-<tr>
-<td><code>delete_group</code></td>
-<td>Delete a messaging group</td>
-</tr>
-<tr>
-<td><code>add_group_member</code></td>
-<td>Add an agent or role as a member of a group</td>
-</tr>
-<tr>
-<td><code>remove_group_member</code></td>
-<td>Remove a member from a group</td>
-</tr>
-<tr>
-<td><code>list_groups</code></td>
-<td>List all messaging groups</td>
-</tr>
-<tr>
-<td><code>get_group</code></td>
-<td>Get group details including members (expand=true resolves roles)</td>
 </tr>
 </tbody></table>
 <p><strong>Configuration in Claude Code&#39;s <code>.claude/settings.json</code>:</strong></p>
@@ -3110,7 +2939,7 @@ name (e.g., <code>furiosa.json</code> or <code>implementer_35HV62T9B9.json</code
 </tbody></table>
 <h2>Next Steps</h2>
 <ul>
-<li><a href="messaging.html">Messaging</a> — how send, inbox, reply, and groups work together</li>
+<li><a href="messaging.html">Messaging</a> — how send, inbox, and reply work together</li>
 <li><a href="rpc-api.html">RPC API Reference</a> — the underlying JSON-RPC methods the CLI
 wraps</li>
 <li><a href="quickstart.html">Quickstart Guide</a> — get up and running in 5 minutes</li>

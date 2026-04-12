@@ -40,7 +40,7 @@ a{color:#0366d6}
 <blockquote>
 <p><strong>TL;DR:</strong> The MCP server lets AI agents use Thrum through native MCP tools
 instead of CLI shell-outs. Start with <code>thrum mcp serve</code>. It provides 4 core
-messaging tools plus 6 group management tools — no polling, no wasted tokens.</p>
+messaging tools — no polling, no wasted tokens.</p>
 <p><strong>See also:</strong> <a href="daemon.html">Daemon Architecture</a> for the underlying daemon the
 MCP server connects to, <a href="identity.html">Identity</a> for agent identity resolution.</p>
 </blockquote>
@@ -50,8 +50,8 @@ receive messages using native MCP tools instead of shelling out to CLI commands.
 It runs as a long-lived child process (<code>thrum mcp serve</code>) communicating over
 stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for
 message operations and via WebSocket for real-time push notifications.</p>
-<p>The server provides 11 MCP tools: 4 for core messaging operations, 6 for group
-management, and 1 deprecated broadcast tool.</p>
+<p>The server provides 5 MCP tools: 4 for core messaging operations and 1
+deprecated broadcast tool.</p>
 <p>The primary motivation is eliminating polling overhead. Without MCP, agents must
 periodically call <code>thrum inbox</code> (burning tokens and context). With MCP, a cheap
 background sub-agent blocks on <code>wait_for_message</code> and wakes the main agent
@@ -81,7 +81,7 @@ instantly when a message arrives.</p>
 <h3>Package Structure</h3>
 <pre><code>internal/mcp/
   server.go    -- NewServer(), tool registration, Run(), InitWaiter()
-  tools.go     -- send_message, check_messages, list_agents, group management handlers
+  tools.go     -- send_message, check_messages, list_agents handlers
   waiter.go    -- WebSocket client, notification routing, wait_for_message handler
   types.go     -- MCP-specific input/output structs
 
@@ -98,8 +98,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command</code></pre>
 <code>identity.GenerateAgentID(repoID, role, module, name)</code></li>
 <li>Create MCP server with the official Go SDK
 (<code>github.com/modelcontextprotocol/go-sdk/mcp</code>)</li>
-<li>Register all 11 tool handlers (4 core messaging + 6 group management + 1
-deprecated)</li>
+<li>Register all 5 tool handlers (4 core messaging + 1 deprecated)</li>
 <li>Initialize WebSocket waiter (best-effort -- reads port from
 <code>.thrum/var/ws.port</code>)<ul>
 <li>Connect to <code>ws://localhost:{port}/ws</code></li>
@@ -135,7 +134,7 @@ time per server instance. A second call returns an error. Enforced with a
 mutex.</li>
 <li><strong>Best-effort WebSocket</strong>: If the WebSocket connection fails at startup, the
 MCP server still operates -- only <code>wait_for_message</code> returns errors. The other
-10 tools work via Unix socket RPC.</li>
+tools work via Unix socket RPC.</li>
 </ul>
 <h2>Usage</h2>
 <h3>Command</h3>
@@ -481,359 +480,6 @@ connect, this tool returns an error.</p>
 <li>2+ minutes ago or missing: <code>offline</code></li>
 </ul>
 <p><strong>Daemon RPC:</strong> <code>agent.list</code></p>
-<h3>create_group</h3>
-<p>Create a named group for targeted messaging.</p>
-<p><strong>Input:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Type</th>
-<th>Required</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>name</code></td>
-<td>string</td>
-<td>yes</td>
-<td>Group name (e.g., <code>reviewers</code>)</td>
-</tr>
-<tr>
-<td><code>description</code></td>
-<td>string</td>
-<td>no</td>
-<td>Human-readable group description</td>
-</tr>
-</tbody></table>
-<p><strong>Output:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>status</code></td>
-<td>string</td>
-<td><code>created</code></td>
-</tr>
-<tr>
-<td><code>name</code></td>
-<td>string</td>
-<td>Name of the created group</td>
-</tr>
-</tbody></table>
-<p><strong>Daemon RPC:</strong> <code>group.create</code></p>
-<h3>delete_group</h3>
-<p>Delete a group by name. The <code>@everyone</code> group is protected and cannot be
-deleted.</p>
-<p><strong>Input:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Type</th>
-<th>Required</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>name</code></td>
-<td>string</td>
-<td>yes</td>
-<td>Group name to delete</td>
-</tr>
-</tbody></table>
-<p><strong>Output:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>status</code></td>
-<td>string</td>
-<td><code>deleted</code></td>
-</tr>
-<tr>
-<td><code>name</code></td>
-<td>string</td>
-<td>Name of the deleted group</td>
-</tr>
-</tbody></table>
-<p><strong>Daemon RPC:</strong> <code>group.delete</code></p>
-<h3>add_group_member</h3>
-<p>Add a member (agent or role) to a group.</p>
-<p><strong>Input:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Type</th>
-<th>Required</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>group</code></td>
-<td>string</td>
-<td>yes</td>
-<td>Group name to add member to</td>
-</tr>
-<tr>
-<td><code>member_type</code></td>
-<td>string</td>
-<td>yes</td>
-<td><code>agent</code> or <code>role</code></td>
-</tr>
-<tr>
-<td><code>member_value</code></td>
-<td>string</td>
-<td>yes</td>
-<td>Agent name or role name</td>
-</tr>
-</tbody></table>
-<p><strong>Output:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>status</code></td>
-<td>string</td>
-<td><code>added</code></td>
-</tr>
-<tr>
-<td><code>group</code></td>
-<td>string</td>
-<td>Group name</td>
-</tr>
-<tr>
-<td><code>member_type</code></td>
-<td>string</td>
-<td>Type of member added</td>
-</tr>
-<tr>
-<td><code>member_value</code></td>
-<td>string</td>
-<td>Value of member added</td>
-</tr>
-</tbody></table>
-<p><strong>Daemon RPC:</strong> <code>group.member.add</code></p>
-<h3>remove_group_member</h3>
-<p>Remove a member from a group.</p>
-<p><strong>Input:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Type</th>
-<th>Required</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>group</code></td>
-<td>string</td>
-<td>yes</td>
-<td>Group name to remove member from</td>
-</tr>
-<tr>
-<td><code>member_type</code></td>
-<td>string</td>
-<td>yes</td>
-<td><code>agent</code> or <code>role</code></td>
-</tr>
-<tr>
-<td><code>member_value</code></td>
-<td>string</td>
-<td>yes</td>
-<td>Agent name or role name</td>
-</tr>
-</tbody></table>
-<p><strong>Output:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>status</code></td>
-<td>string</td>
-<td><code>removed</code></td>
-</tr>
-<tr>
-<td><code>group</code></td>
-<td>string</td>
-<td>Group name</td>
-</tr>
-<tr>
-<td><code>member_type</code></td>
-<td>string</td>
-<td>Type of member removed</td>
-</tr>
-<tr>
-<td><code>member_value</code></td>
-<td>string</td>
-<td>Value of member removed</td>
-</tr>
-</tbody></table>
-<p><strong>Daemon RPC:</strong> <code>group.member.remove</code></p>
-<h3>list_groups</h3>
-<p>List all groups in the system.</p>
-<p><strong>Input:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Type</th>
-<th>Required</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><em>(none)</em></td>
-<td></td>
-<td></td>
-<td>Empty object or omit params</td>
-</tr>
-</tbody></table>
-<p><strong>Output:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>groups</code></td>
-<td>array</td>
-<td>List of <code>GroupInfo</code> objects</td>
-</tr>
-<tr>
-<td><code>groups[].name</code></td>
-<td>string</td>
-<td>Group name</td>
-</tr>
-<tr>
-<td><code>groups[].description</code></td>
-<td>string</td>
-<td>Group description (may be empty)</td>
-</tr>
-<tr>
-<td><code>groups[].created_at</code></td>
-<td>string</td>
-<td>ISO 8601 creation timestamp</td>
-</tr>
-<tr>
-<td><code>groups[].created_by</code></td>
-<td>string</td>
-<td>Agent ID of creator</td>
-</tr>
-<tr>
-<td><code>groups[].member_count</code></td>
-<td>integer</td>
-<td>Number of direct members</td>
-</tr>
-</tbody></table>
-<p><strong>Daemon RPC:</strong> <code>group.list</code></p>
-<h3>get_group</h3>
-<p>Get detailed information about a specific group. Supports expansion to resolve
-roles to individual agent IDs.</p>
-<p><strong>Input:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Type</th>
-<th>Required</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>name</code></td>
-<td>string</td>
-<td>yes</td>
-<td>Group name</td>
-</tr>
-<tr>
-<td><code>expand</code></td>
-<td>boolean</td>
-<td>no</td>
-<td>Resolve roles to agent IDs</td>
-</tr>
-</tbody></table>
-<p><strong>Output:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>name</code></td>
-<td>string</td>
-<td>Group name</td>
-</tr>
-<tr>
-<td><code>description</code></td>
-<td>string</td>
-<td>Group description (may be empty)</td>
-</tr>
-<tr>
-<td><code>created_at</code></td>
-<td>string</td>
-<td>ISO 8601 creation timestamp</td>
-</tr>
-<tr>
-<td><code>created_by</code></td>
-<td>string</td>
-<td>Agent ID of creator</td>
-</tr>
-<tr>
-<td><code>members</code></td>
-<td>array</td>
-<td>List of member objects</td>
-</tr>
-<tr>
-<td><code>members[].type</code></td>
-<td>string</td>
-<td><code>agent</code> or <code>role</code></td>
-</tr>
-<tr>
-<td><code>members[].id</code></td>
-<td>string</td>
-<td>Agent name or role name</td>
-</tr>
-<tr>
-<td><code>expanded_agents</code></td>
-<td>array</td>
-<td>(Only if <code>expand=true</code>) List of agent IDs</td>
-</tr>
-<tr>
-<td><code>expanded_agents_count</code></td>
-<td>integer</td>
-<td>(Only if <code>expand=true</code>) Count of agent IDs</td>
-</tr>
-</tbody></table>
-<p><strong>Daemon RPC:</strong> <code>group.info</code> (without expand) or <code>group.members</code> (with expand)</p>
 <h3>broadcast_message (Deprecated)</h3>
 <blockquote>
 <p><strong>Deprecated:</strong> Use <code>send_message(to=&quot;@everyone&quot;, content=&quot;...&quot;)</code> instead.
@@ -947,13 +593,6 @@ mcp__thrum__check_messages()
 mcp__thrum__list_agents()
 mcp__thrum__send_message(to=&quot;@everyone&quot;, content=&quot;...&quot;)  # broadcast to all agents
 mcp__thrum__wait_for_message(timeout=300)</code></pre>
-<p><strong>Group management:</strong></p>
-<pre><code>mcp__thrum__create_group(name=&quot;backend&quot;, description=&quot;Backend team&quot;)
-mcp__thrum__add_group_member(group=&quot;backend&quot;, member_type=&quot;role&quot;, member_value=&quot;implementer&quot;)
-mcp__thrum__list_groups()
-mcp__thrum__get_group(name=&quot;backend&quot;, expand=true)
-mcp__thrum__remove_group_member(group=&quot;backend&quot;, member_type=&quot;agent&quot;, member_value=&quot;alice&quot;)
-mcp__thrum__delete_group(name=&quot;backend&quot;)</code></pre>
 <h2>Development</h2>
 <h3>Source Files</h3>
 <table>
@@ -977,7 +616,7 @@ mcp__thrum__delete_group(name=&quot;backend&quot;)</code></pre>
 </tr>
 <tr>
 <td><code>internal/mcp/types.go</code></td>
-<td>Input/output structs for all 11 tools</td>
+<td>Input/output structs for all tools</td>
 </tr>
 <tr>
 <td><code>cmd/thrum/mcp.go</code></td>
@@ -1000,7 +639,7 @@ go test -v ./internal/mcp/...</code></pre>
 <li>Message queue push/pop semantics</li>
 <li>Waiter timeout and cancellation logic</li>
 <li>Identity resolution</li>
-<li>18 tests passing (unit + sequential integration)</li>
+<li>Tests passing (unit + sequential integration)</li>
 </ul>
 <p>WebSocket integration tests (requiring a running daemon WebSocket) are currently
 deferred.</p>

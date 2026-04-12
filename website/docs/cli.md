@@ -71,13 +71,6 @@ for AI agent coordination.
 | `thrum roles list`         | List role templates and matching agents                        |
 | `thrum roles deploy`       | Re-render agent preambles from role templates                  |
 | `thrum config`             | Manage configuration (show, init)                              |
-| `thrum group create`       | Create a named group                                           |
-| `thrum group delete`       | Delete a group                                                 |
-| `thrum group add`          | Add member to a group                                          |
-| `thrum group remove`       | Remove member from a group                                     |
-| `thrum group list`         | List all groups                                                |
-| `thrum group info`         | Show group details                                             |
-| `thrum group members`      | List group members                                             |
 | `thrum who-has`            | Check which agents are editing a file                          |
 | `thrum ping`               | Check if an agent is online                                    |
 | `thrum subscribe`          | Subscribe to push notifications                                |
@@ -275,7 +268,6 @@ This command generates comprehensive agent coordination instructions including:
 - Message protocols
 - MCP server configuration
 - Background listener setup
-- Group management
 
 The instructions are automatically injected by `thrum prime` when agents start
 sessions, providing immediate context on how to use Thrum for coordination.
@@ -451,9 +443,8 @@ thrum send MESSAGE [flags]
 | `--format`          | Message format (`markdown`, `plain`, `json`)                 | `markdown` |
 
 The `--to` flag adds the recipient as a mention, making it a directed message.
-Recipients can be agents (`@alice`), roles (`@reviewer`), or groups
-(`@everyone`, `@backend`). The `--broadcast` and `--to` flags are mutually
-exclusive.
+Recipients can be agents (`@alice`), roles (`@reviewer`), or `@everyone` for
+broadcast. The `--broadcast` and `--to` flags are mutually exclusive.
 
 The `--broadcast` flag is an alias for `--to @everyone`.
 
@@ -464,13 +455,9 @@ $ thrum send "PR ready for review" --to @reviewer --scope module:auth --ref pr:4
 ✓ Message sent: msg_01HXE8Z7...
   Created: 2026-02-03T10:00:00Z
 
-# Send to all agents via @everyone group
+# Send to all agents
 $ thrum send "Deploy complete" --to @everyone
 ✓ Message sent: msg_01HXE8Z8...
-
-# Send to a custom group
-$ thrum send "Backend review needed" --to @backend
-✓ Message sent: msg_01HXE8Z9...
 ```
 
 ### thrum reply
@@ -546,7 +533,6 @@ Common examples:
 thrum sent
 thrum sent --unread
 thrum sent --to @implementer_api
-thrum sent --to @backend-team
 thrum sent show msg_01HXE8Z7
 ```
 
@@ -1108,164 +1094,6 @@ Example:
 ```text
 $ thrum session set-task beads:thrum-42
 ✓ Task set: beads:thrum-42
-```
-
-## Groups
-
-### thrum group create
-
-Create a named group for targeted messaging. Groups contain agents and roles.
-
-```text
-thrum group create NAME [flags]
-```
-
-| Flag            | Description                      | Default |
-| --------------- | -------------------------------- | ------- |
-| `--description` | Human-readable group description |         |
-
-The `@everyone` group is created automatically on daemon startup and includes
-all agents.
-
-Example:
-
-```text
-$ thrum group create reviewers --description "Code review team"
-✓ Group created: reviewers
-
-$ thrum group create backend --description "Backend developers"
-✓ Group created: backend
-```
-
-### thrum group delete
-
-Delete a group by name. The `@everyone` group is protected and cannot be
-deleted.
-
-```text
-thrum group delete NAME
-```
-
-Example:
-
-```text
-$ thrum group delete reviewers
-✓ Group deleted: reviewers
-
-$ thrum group delete @everyone
-✗ Cannot delete protected group: @everyone
-```
-
-### thrum group add
-
-Add a member to a group. Members can be agents or roles.
-
-```text
-thrum group add GROUP MEMBER
-```
-
-**Member types:**
-
-- `@alice` or `alice` — Specific agent by name
-- `--role planner` — All agents with role "planner"
-
-Example:
-
-```text
-# Add specific agent
-$ thrum group add reviewers @alice
-✓ Added agent alice to group reviewers
-
-# Add all agents with a role
-$ thrum group add reviewers --role reviewer
-✓ Added role reviewer to group reviewers
-```
-
-### thrum group remove
-
-Remove a member from a group.
-
-```text
-thrum group remove GROUP MEMBER
-```
-
-Uses the same member detection as `group add`.
-
-Example:
-
-```text
-$ thrum group remove reviewers @alice
-✓ Removed agent alice from group reviewers
-```
-
-### thrum group list
-
-List all groups in the system.
-
-```text
-thrum group list
-```
-
-Example:
-
-```text
-$ thrum group list
-Groups (3):
-
-@everyone
-  Description: All registered agents
-  Members:     (implicit - all agents)
-  Created:     2026-02-09 10:00:00
-
-reviewers
-  Description: Code review team
-  Members:     2
-  Created:     2026-02-09 10:15:00
-
-backend
-  Description: Backend developers
-  Members:     3
-  Created:     2026-02-09 10:20:00
-```
-
-### thrum group info
-
-Show detailed information about a specific group.
-
-```text
-thrum group info NAME
-```
-
-Example:
-
-```text
-$ thrum group info reviewers
-Group: reviewers
-  Description: Code review team
-  Created:     2026-02-09 10:15:00
-  Created by:  alice
-  Members:     2
-
-  Members:
-    - @alice (agent)
-    - reviewer (role)
-```
-
-### thrum group members
-
-List members of a group.
-
-```text
-thrum group members NAME
-```
-
-Example:
-
-```text
-$ thrum group members reviewers
-Members of reviewers (2):
-  - @alice (agent)
-  - reviewer (role)
 ```
 
 ## Coordination
@@ -2403,8 +2231,8 @@ WORKTREE                            BRANCH              HEAD       AGENT        
 ## Monitor Jobs
 
 Run a long-lived command, filter its output through a regex, and deliver
-matching lines as Thrum messages to an agent or group. Jobs persist across
-daemon restarts. Max 100 concurrent jobs.
+matching lines as Thrum messages to an agent. Jobs persist across daemon
+restarts. Max 100 concurrent jobs.
 
 The command must come after `--`:
 
@@ -2618,9 +2446,7 @@ thrum mcp serve [flags]
 Requires the Thrum daemon to be running. The `--agent-id` flag sets `THRUM_NAME`
 internally for identity resolution.
 
-**MCP Tools provided (10 total):**
-
-**Core messaging (4):**
+**MCP Tools provided (4 total):**
 
 | Tool               | Description                                                      |
 | ------------------ | ---------------------------------------------------------------- |
@@ -2628,17 +2454,6 @@ internally for identity resolution.
 | `check_messages`   | Poll for unread messages mentioning this agent (auto-marks read) |
 | `wait_for_message` | Block until a message arrives (WebSocket push) or timeout        |
 | `list_agents`      | List registered agents with active/offline status                |
-
-**Group management (6):**
-
-| Tool                  | Description                                                      |
-| --------------------- | ---------------------------------------------------------------- |
-| `create_group`        | Create a named messaging group                                   |
-| `delete_group`        | Delete a messaging group                                         |
-| `add_group_member`    | Add an agent or role as a member of a group                      |
-| `remove_group_member` | Remove a member from a group                                     |
-| `list_groups`         | List all messaging groups                                        |
-| `get_group`           | Get group details including members (expand=true resolves roles) |
 
 **Configuration in Claude Code's `.claude/settings.json`:**
 
@@ -2749,7 +2564,7 @@ Messages and events are stored on the `a-sync` Git branch in a worktree at
 
 ## Next Steps
 
-- [Messaging](messaging.md) — how send, inbox, reply, and groups work together
+- [Messaging](messaging.md) — how send, inbox, and reply work together
 - [RPC API Reference](rpc-api.md) — the underlying JSON-RPC methods the CLI
   wraps
 - [Quickstart Guide](quickstart.md) — get up and running in 5 minutes

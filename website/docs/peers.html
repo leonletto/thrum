@@ -393,7 +393,7 @@ connection errors.</li>
 <p><strong>Peers</strong> are live message transport. When you send a message to a proxy agent,
 it&#39;s relayed in real time over the WebSocket connection to the remote daemon.
 Peers are for agent-to-agent coordination — directed messages, replies, and
-group broadcasts across repos.</p>
+broadcast (<code>@everyone</code>) messaging across repos.</p>
 <p><strong>Sync</strong> is Git-backed state replication. The <code>a-sync</code> branch replicates JSONL
 event logs between machines so each daemon has a full copy of the message
 history, agent registry, and session state. Sync is eventually consistent and
