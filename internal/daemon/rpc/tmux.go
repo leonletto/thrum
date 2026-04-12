@@ -97,8 +97,9 @@ type TmuxHandler struct {
 	state       *state.State
 	queues      map[string]*SessionQueue
 	queuesMu    sync.Mutex
-	sessionCwds map[string]string // session name → cwd, populated by HandleCreate
-	cwdSessions map[string]string // cwd → session name, for single-session-per-worktree
+	sessionMu   sync.RWMutex      // protects sessionCwds and cwdSessions
+	sessionCwds map[string]string  // session name → cwd, populated by HandleCreate
+	cwdSessions map[string]string  // cwd → session name, for single-session-per-worktree
 }
 
 // NewTmuxHandler creates a new TmuxHandler.
@@ -125,12 +126,14 @@ func (h *TmuxHandler) ensureSession(name string) (string, string, error) {
 	}
 
 	// Look up stored cwd from prior create
+	h.sessionMu.RLock()
 	cwd, ok := h.sessionCwds[sanitized]
+	h.sessionMu.RUnlock()
 	if !ok {
 		return "", "", fmt.Errorf("session %q not found and no stored cwd available", sanitized)
 	}
 
-	// Auto-create
+	// Auto-create from stored cwd
 	if err := ttmux.CreateSession(sanitized, cwd); err != nil {
 		return "", "", fmt.Errorf("auto-create session %q: %w", sanitized, err)
 	}
@@ -193,19 +196,21 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 		// daemon's thrumDir is <main-repo>/.thrum — strip to get repo root
 		mainRepoRoot := filepath.Dir(h.thrumDir)
 		if err := worktree.EnsureRedirects(req.Cwd, mainRepoRoot); err != nil {
-			return nil, fmt.Errorf("redirect setup: %s", err)
+			return nil, fmt.Errorf("redirect setup: %w", err)
 		}
 	}
 
 	name := ttmux.SanitizeSessionName(req.Name)
 
 	// Single-session-per-worktree: kill any existing session for this cwd
+	h.sessionMu.Lock()
 	if existingSession, ok := h.cwdSessions[req.Cwd]; ok && existingSession != name {
 		log.Printf("[tmux] single-session-per-worktree: killing %q (cwd %s reassigned to %q)", existingSession, req.Cwd, name)
 		_ = ttmux.KillSession(existingSession)
 		delete(h.sessionCwds, existingSession)
 		delete(h.cwdSessions, req.Cwd)
 	}
+	h.sessionMu.Unlock()
 
 	// Check for existing session by name
 	if ttmux.HasSession(name) {
@@ -220,8 +225,10 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 	}
 
 	// Track session→cwd mapping for auto-create and single-session enforcement
+	h.sessionMu.Lock()
 	h.sessionCwds[name] = req.Cwd
 	h.cwdSessions[req.Cwd] = name
+	h.sessionMu.Unlock()
 
 	// Set up monitor-silence hook (non-fatal if it fails)
 	thrumBin, _ := os.Executable()
@@ -231,15 +238,18 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 
 	// Run quickstart inside the pane for PID isolation
 	if !req.NoAgent {
-		worktree.EnforceOneIdentity(req.Cwd, req.AgentName)
 		quickstartCmd := worktree.BuildQuickstartCmd(req.AgentName, req.Role, req.Module, req.Intent, req.Runtime)
 		target := name + ":0.0"
 		if err := ttmux.SendKeys(target, quickstartCmd); err != nil {
-			return nil, fmt.Errorf("send quickstart: %s", err)
+			return nil, fmt.Errorf("send quickstart: %w", err)
 		}
 		if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
-			return nil, fmt.Errorf("send enter: %s", err)
+			return nil, fmt.Errorf("send enter: %w", err)
 		}
+		// Enforce single identity AFTER quickstart command is sent successfully.
+		// Quickstart runs asynchronously in the pane — this cleans pre-existing
+		// stale identities. The new identity will be written by quickstart.
+		worktree.EnforceOneIdentity(req.Cwd, req.AgentName)
 	} else {
 		// For bare sessions, still write tmux_session to any existing identity
 		target := name + ":0.0"
@@ -321,10 +331,12 @@ func (h *TmuxHandler) HandleKill(ctx context.Context, params json.RawMessage) (a
 	h.clearTmuxFromIdentities(name)
 
 	// Clean up session tracking maps
+	h.sessionMu.Lock()
 	if cwd, ok := h.sessionCwds[name]; ok {
 		delete(h.cwdSessions, cwd)
 	}
 	delete(h.sessionCwds, name)
+	h.sessionMu.Unlock()
 
 	return nil, ttmux.KillSession(name)
 }

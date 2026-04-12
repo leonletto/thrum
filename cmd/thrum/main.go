@@ -7995,7 +7995,7 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 			defer func() { _ = client.Close() }()
 
 			if _, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
-				Name: sessionName, Cwd: cwd,
+				Name: sessionName, Cwd: cwd, NoAgent: true,
 			}); err != nil {
 				return fmt.Errorf("create session: %w", err)
 			}
