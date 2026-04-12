@@ -796,8 +796,8 @@ func sentCmd() *cobra.Command {
 		Long: `List messages authored by the current agent, including recipient snapshots
 and durable read state.
 
-Like inbox, sent supports filtering and pagination. Use 'thrum sent show <id>'
-to inspect one sent message with full recipient state.`,
+Like inbox, sent supports filtering and pagination. Use 'thrum message get <id>'
+to inspect a message with full recipient state.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			to, _ := cmd.Flags().GetString("to")
 			unread, _ := cmd.Flags().GetBool("unread")
@@ -1038,8 +1038,7 @@ func whoamiCmd() *cobra.Command {
 		Short: "Show current agent identity",
 		Long: `Show current agent identity information.
 
-This is a lightweight alternative to 'thrum status' - it shows just the
-identity without needing a daemon connection. Reads directly from
+Shows the current agent identity. Reads directly from
 .thrum/identities/*.json files.
 
 Examples:
@@ -2867,7 +2866,7 @@ Examples:
 		Long: `Set the work intent for the current session.
 
 This is a free-text description of what the agent is currently working on.
-It appears in 'thrum agent list --context' and 'thrum agent context'.
+It appears in 'thrum agent list --context'.
 Pass an empty string to clear the intent.
 
 Examples:
@@ -2885,7 +2884,7 @@ Examples:
 		Long: `Set the current task identifier for the session.
 
 This links the session to a task tracker (e.g., beads issue).
-It appears in 'thrum agent list --context' and 'thrum agent context'.
+It appears in 'thrum agent list --context'.
 Pass an empty string to clear the task.
 
 Examples:
