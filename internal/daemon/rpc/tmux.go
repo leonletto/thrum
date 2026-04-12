@@ -93,19 +93,50 @@ type TmuxStatusResponse struct {
 
 // TmuxHandler handles tmux session lifecycle RPC methods.
 type TmuxHandler struct {
-	thrumDir string
-	state    *state.State
-	queues   map[string]*SessionQueue
-	queuesMu sync.Mutex
+	thrumDir    string
+	state       *state.State
+	queues      map[string]*SessionQueue
+	queuesMu    sync.Mutex
+	sessionCwds map[string]string // session name → cwd, populated by HandleCreate
+	cwdSessions map[string]string // cwd → session name, for single-session-per-worktree
 }
 
 // NewTmuxHandler creates a new TmuxHandler.
 func NewTmuxHandler(thrumDir string, st *state.State) *TmuxHandler {
 	return &TmuxHandler{
-		thrumDir: thrumDir,
-		state:    st,
-		queues:   make(map[string]*SessionQueue),
+		thrumDir:    thrumDir,
+		state:       st,
+		queues:      make(map[string]*SessionQueue),
+		sessionCwds: make(map[string]string),
+		cwdSessions: make(map[string]string),
 	}
+}
+
+// ensureSession checks whether a tmux session exists and auto-creates it
+// if the daemon has a stored cwd from a prior HandleCreate. Returns the
+// sanitized session name and target (name:0.0). Returns an error if the
+// session doesn't exist and no stored cwd is available.
+func (h *TmuxHandler) ensureSession(name string) (string, string, error) {
+	sanitized := ttmux.SanitizeSessionName(name)
+	target := sanitized + ":0.0"
+
+	if ttmux.HasSession(sanitized) {
+		return sanitized, target, nil
+	}
+
+	// Look up stored cwd from prior create
+	cwd, ok := h.sessionCwds[sanitized]
+	if !ok {
+		return "", "", fmt.Errorf("session %q not found and no stored cwd available", sanitized)
+	}
+
+	// Auto-create
+	if err := ttmux.CreateSession(sanitized, cwd); err != nil {
+		return "", "", fmt.Errorf("auto-create session %q: %w", sanitized, err)
+	}
+
+	log.Printf("[tmux] auto-created session %q from stored cwd %s", sanitized, cwd)
+	return sanitized, target, nil
 }
 
 // getOrCreateQueue returns the queue for a session, creating it if necessary.
@@ -168,7 +199,15 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 
 	name := ttmux.SanitizeSessionName(req.Name)
 
-	// Check for existing session
+	// Single-session-per-worktree: kill any existing session for this cwd
+	if existingSession, ok := h.cwdSessions[req.Cwd]; ok && existingSession != name {
+		log.Printf("[tmux] single-session-per-worktree: killing %q (cwd %s reassigned to %q)", existingSession, req.Cwd, name)
+		_ = ttmux.KillSession(existingSession)
+		delete(h.sessionCwds, existingSession)
+		delete(h.cwdSessions, req.Cwd)
+	}
+
+	// Check for existing session by name
 	if ttmux.HasSession(name) {
 		if !req.Force {
 			return nil, fmt.Errorf("session %q already exists; use --force to kill and recreate", name)
@@ -179,6 +218,10 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 	if err := ttmux.CreateSession(name, req.Cwd); err != nil {
 		return nil, err
 	}
+
+	// Track session→cwd mapping for auto-create and single-session enforcement
+	h.sessionCwds[name] = req.Cwd
+	h.cwdSessions[req.Cwd] = name
 
 	// Set up monitor-silence hook (non-fatal if it fails)
 	thrumBin, _ := os.Executable()
@@ -222,8 +265,9 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("name is required")
 	}
 
-	if !ttmux.HasSession(req.Name) {
-		return nil, fmt.Errorf("session %q does not exist", req.Name)
+	name, target, err := h.ensureSession(req.Name)
+	if err != nil {
+		return nil, err
 	}
 
 	runtime := req.Runtime
@@ -237,8 +281,6 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 	}
 
 	launchCmd := runtimeToLaunchCmd(runtime)
-
-	target := req.Name + ":0.0"
 	if launchCmd != "" {
 		if err := ttmux.SendKeys(target, launchCmd); err != nil {
 			return nil, fmt.Errorf("launch send-keys: %w", err)
@@ -262,9 +304,9 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 	}
 
 	// Write tmux_session and runtime to the agent's identity file
-	h.writeTmuxToIdentity(req.Name, target, runtime)
+	h.writeTmuxToIdentity(name, target, runtime)
 
-	return &TmuxLaunchResponse{Session: req.Name, Runtime: runtime}, nil
+	return &TmuxLaunchResponse{Session: name, Runtime: runtime}, nil
 }
 
 // HandleKill destroys a tmux session and clears tmux_session from identity files.
@@ -278,6 +320,12 @@ func (h *TmuxHandler) HandleKill(ctx context.Context, params json.RawMessage) (a
 	h.drainQueueOnKill(ctx, name)
 	h.clearTmuxFromIdentities(name)
 
+	// Clean up session tracking maps
+	if cwd, ok := h.sessionCwds[name]; ok {
+		delete(h.cwdSessions, cwd)
+	}
+	delete(h.sessionCwds, name)
+
 	return nil, ttmux.KillSession(name)
 }
 
@@ -287,8 +335,10 @@ func (h *TmuxHandler) HandleSend(ctx context.Context, params json.RawMessage) (a
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
-	name := ttmux.SanitizeSessionName(req.Name)
-	target := name + ":0.0"
+	_, target, err := h.ensureSession(req.Name)
+	if err != nil {
+		return nil, err
+	}
 	if err := ttmux.SendKeys(target, req.Text); err != nil {
 		return nil, err
 	}
@@ -305,8 +355,11 @@ func (h *TmuxHandler) HandleCapture(ctx context.Context, params json.RawMessage)
 	if lines <= 0 {
 		lines = 50
 	}
-	name := ttmux.SanitizeSessionName(req.Name)
-	content, err := ttmux.CapturePane(name+":0.0", lines)
+	_, target, err := h.ensureSession(req.Name)
+	if err != nil {
+		return nil, err
+	}
+	content, err := ttmux.CapturePane(target, lines)
 	if err != nil {
 		return nil, err
 	}
@@ -514,9 +567,9 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	name := ttmux.SanitizeSessionName(req.Name)
-	if !ttmux.HasSession(name) {
-		return nil, fmt.Errorf("session %s does not exist", name)
+	name, _, err := h.ensureSession(req.Name)
+	if err != nil {
+		return nil, err
 	}
 
 	// Find the agent's identity file to get PID and runtime
