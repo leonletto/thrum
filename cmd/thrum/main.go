@@ -1118,7 +1118,7 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().StringSlice("mention", nil, "Mention a role (repeatable, format: @role)")
 	cmd.Flags().String("structured", "", "Structured payload (JSON)")
 	cmd.Flags().String("format", "markdown", "Message format (markdown, plain, json)")
-	cmd.Flags().String("to", "", "Direct recipient (format: @role)")
+	cmd.Flags().String("to", "", "Recipient (@agent_name or @everyone)")
 	cmd.Flags().Bool("everyone", false, "Send to all agents (alias for --to @everyone)")
 	cmd.Flags().BoolP("broadcast", "b", false, "Send to all agents (alias for --to @everyone)")
 

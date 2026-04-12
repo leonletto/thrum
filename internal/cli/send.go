@@ -77,13 +77,15 @@ func Send(client *Client, opts SendOptions) (*SendResult, error) {
 		}
 	}
 
-	// Add --to recipient as a mention
+	// --to passes through the strict "to" RPC field (agent_id or @everyone only).
+	// Inline @mentions in message body use the permissive "mentions" field.
+	var toValue string
 	if opts.To != "" {
 		to := opts.To
 		if !strings.HasPrefix(to, "@") {
 			to = "@" + to
 		}
-		opts.Mentions = append(opts.Mentions, to)
+		toValue = to
 	}
 
 	// Build params
@@ -109,6 +111,10 @@ func Send(client *Client, opts SendOptions) (*SendResult, error) {
 
 	if len(refs) > 0 {
 		params["refs"] = refs
+	}
+
+	if toValue != "" {
+		params["to"] = toValue
 	}
 
 	if len(opts.Mentions) > 0 {

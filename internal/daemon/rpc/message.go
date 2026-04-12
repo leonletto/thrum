@@ -31,7 +31,8 @@ type SendRequest struct {
 	ReplyTo       string         `json:"reply_to,omitempty"`
 	Scopes        []types.Scope  `json:"scopes,omitempty"`
 	Refs          []types.Ref    `json:"refs,omitempty"`
-	Mentions      []string       `json:"mentions,omitempty"` // e.g., ["@reviewer"]
+	To            string         `json:"to,omitempty"`         // strict: agent_id or "everyone" only
+	Mentions      []string       `json:"mentions,omitempty"`   // permissive: agent_id, role, or group
 	Tags          []string       `json:"tags,omitempty"`
 	ActingAs      string         `json:"acting_as,omitempty"` // Impersonate this agent (users only)
 	Disclose      bool           `json:"disclose,omitempty"`  // Show [via user:X] in message
@@ -361,6 +362,60 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	var unknownRecipients []string
 	var audiences []MessageAudience
 	recipientSet := make(map[string]struct{})
+
+	// Strict --to resolution: agent_id or "everyone" only (no role/group fallback)
+	if req.To != "" {
+		toVal := req.To
+		if len(toVal) > 0 && toVal[0] == '@' {
+			toVal = toVal[1:]
+		}
+		if toVal == "everyone" {
+			// Broadcast to all local agents
+			isGroup, _ := h.groupResolver.IsGroup(ctx, toVal)
+			if isGroup {
+				scopes = append(scopes, types.Scope{Type: "group", Value: toVal})
+				refs = append(refs, types.Ref{Type: "group", Value: toVal})
+				audiences = append(audiences, MessageAudience{Type: "group", Value: toVal})
+				members, err := h.groupResolver.ExpandMembers(ctx, toVal)
+				if err != nil {
+					return nil, fmt.Errorf("expand @everyone: %w", err)
+				}
+				for _, recipientAgentID := range members {
+					if recipientAgentID == agentID {
+						continue
+					}
+					recipientSet[recipientAgentID] = struct{}{}
+				}
+			} else {
+				// @everyone group doesn't exist — fall back to all-agents query
+				audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
+				allAgents, err := h.queryAllOtherAgents(ctx, agentID)
+				if err != nil {
+					return nil, fmt.Errorf("query all agents: %w", err)
+				}
+				for _, a := range allAgents {
+					recipientSet[a] = struct{}{}
+				}
+			}
+			resolvedTo++
+		} else {
+			// Strict agent_id lookup — no role fallback
+			matched, err := h.queryAgentByID(ctx, toVal)
+			if err != nil {
+				return nil, fmt.Errorf("validate recipient %q: %w", toVal, err)
+			}
+			if !matched {
+				return nil, fmt.Errorf("unknown recipient: @%s — send to agents directly with --to @agent_name", toVal)
+			}
+			refs = append(refs, types.Ref{Type: "mention", Value: toVal})
+			audiences = append(audiences, MessageAudience{Type: "agent", Value: toVal})
+			if toVal != agentID {
+				recipientSet[toVal] = struct{}{}
+			}
+			resolvedTo++
+		}
+	}
+
 	for _, mention := range req.Mentions {
 		// Remove @ prefix if present
 		role := mention
@@ -1563,6 +1618,19 @@ func (h *MessageHandler) queryAgentsByRecipient(ctx context.Context, recipient s
 		agentIDs = append(agentIDs, agentID)
 	}
 	return agentIDs, rows.Err()
+}
+
+// queryAgentByID checks if an agent with the exact agent_id exists.
+// Unlike queryAgentsByRecipient, this does NOT fall back to role matching.
+func (h *MessageHandler) queryAgentByID(ctx context.Context, agentID string) (bool, error) {
+	var count int
+	err := h.state.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM agents WHERE agent_id = ?`, agentID,
+	).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (h *MessageHandler) queryAllOtherAgents(ctx context.Context, excludeAgentID string) ([]string, error) {
