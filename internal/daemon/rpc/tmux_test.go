@@ -146,6 +146,26 @@ func TestTmuxHandler_HandleCreate_NoAgentSkipsValidation(t *testing.T) {
 	}
 }
 
+func TestTmuxHandler_HandleCreate_NotAWorktree(t *testing.T) {
+	handler := NewTmuxHandler(t.TempDir(), nil)
+	// cwd is a regular dir (no .git file), not a worktree
+	cwd := t.TempDir()
+	params, _ := json.Marshal(map[string]any{
+		"name":       "test-session",
+		"cwd":        cwd,
+		"agent_name": "test_agent",
+		"role":       "implementer",
+		"module":     "test",
+	})
+	_, err := handler.HandleCreate(context.Background(), json.RawMessage(params))
+	if err == nil {
+		t.Fatal("expected error for non-worktree cwd")
+	}
+	if !strings.Contains(err.Error(), "is not a git worktree") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestTmuxHandler_HandleLaunch_MissingName(t *testing.T) {
 	handler := NewTmuxHandler(t.TempDir(), nil)
 

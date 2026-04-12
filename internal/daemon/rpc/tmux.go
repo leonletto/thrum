@@ -154,6 +154,11 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 
 	// Ensure worktree redirects (before creating session)
 	if !req.NoAgent {
+		// Validate cwd is a git worktree (has a .git file, not a .git directory)
+		gitPath := filepath.Join(req.Cwd, ".git")
+		if info, err := os.Stat(gitPath); err != nil || info.IsDir() {
+			return nil, fmt.Errorf("path at %s is not a git worktree", req.Cwd)
+		}
 		// daemon's thrumDir is <main-repo>/.thrum — strip to get repo root
 		mainRepoRoot := filepath.Dir(h.thrumDir)
 		if err := worktree.EnsureRedirects(req.Cwd, mainRepoRoot); err != nil {

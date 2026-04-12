@@ -112,15 +112,15 @@ func EnforceOneIdentity(worktreePath, newAgentName string) []string {
 func BuildQuickstartCmd(name, role, module, intent, runtime string) string {
 	var parts []string
 	parts = append(parts, "thrum", "quickstart")
-	parts = append(parts, "--name", ShellQuote(name))
-	parts = append(parts, "--role", ShellQuote(role))
-	parts = append(parts, "--module", ShellQuote(module))
+	parts = append(parts, "--name", shellQuote(name))
+	parts = append(parts, "--role", shellQuote(role))
+	parts = append(parts, "--module", shellQuote(module))
 
 	if intent != "" {
-		parts = append(parts, "--intent", ShellQuote(intent))
+		parts = append(parts, "--intent", shellQuote(intent))
 	}
 	if runtime != "" {
-		parts = append(parts, "--runtime", ShellQuote(runtime))
+		parts = append(parts, "--runtime", shellQuote(runtime))
 	}
 
 	parts = append(parts, "--force")
@@ -128,9 +128,9 @@ func BuildQuickstartCmd(name, role, module, intent, runtime string) string {
 	return strings.Join(parts, " ")
 }
 
-// ShellQuote wraps a value in single quotes, escaping any internal single
+// shellQuote wraps a value in single quotes, escaping any internal single
 // quotes with the '\'' idiom (end quote, literal quote, restart quote).
-func ShellQuote(s string) string {
+func shellQuote(s string) string {
 	escaped := strings.ReplaceAll(s, "'", `'\''`)
 	return "'" + escaped + "'"
 }

@@ -229,7 +229,7 @@ Examples:
 					// Set up redirect to main repo's .thrum/
 					if err := cli.EnsureWorktreeRedirects(flagRepo, mainRepoRoot); err != nil {
 						if strings.Contains(err.Error(), "does not exist") {
-							// Not actually a worktree from thrum's perspective, fall through
+							// Worktree path doesn't exist or .thrum missing — fall through to normal init
 						} else {
 							return fmt.Errorf("worktree setup: %w", err)
 						}
@@ -3123,7 +3123,7 @@ func worktreeCreateCmd() *cobra.Command {
 				}()
 
 				qsCmd := cli.BuildQuickstartCmd(agentName, role, module, intent, runtimeFlag)
-				if err := cli.TmuxSend(client, tempSession, qsCmd+"\n"); err != nil {
+				if err := cli.TmuxSend(client, tempSession, qsCmd); err != nil {
 					return fmt.Errorf("send quickstart: %w", err)
 				}
 
@@ -3153,7 +3153,6 @@ func worktreeCreateCmd() *cobra.Command {
 	cmd.Flags().String("module", "", "Agent module")
 	cmd.Flags().String("intent", "", "Agent intent")
 	cmd.Flags().String("runtime", "", "Preferred runtime")
-	cmd.Flags().Bool("force", false, "Force re-registration")
 	return cmd
 }
 
