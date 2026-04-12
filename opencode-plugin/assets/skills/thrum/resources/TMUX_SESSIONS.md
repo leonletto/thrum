@@ -32,27 +32,36 @@ thrum init                              # Sets up .thrum redirect to main repo
 # Beads: bd init doesn't auto-detect worktrees, so set up the redirect manually:
 mkdir -p .beads && echo /path/to/main/repo/.beads > .beads/redirect
 
-# 2. Create tmux session
-thrum tmux create <name> --cwd <path>
+# 2. Create tmux session + register agent identity in one step
+thrum tmux create <name> --cwd <path> \
+  --name <agent> --role <role> --module <mod> --intent '...'
+# alias: thrum tmux quickstart <name> --cwd <path> --name <agent> --role <role> --module <mod>
 
-# 3. Register agent identity (run inside the session)
-thrum tmux send <name> "thrum quickstart --name <agent> --role <role> --module <mod> --intent '...'"
-
-# 4. Launch the runtime (reads configured runtime from .thrum/config.json)
+# 3. Launch the runtime (reads configured runtime from .thrum/config.json)
 thrum tmux launch <name>
 
-# 5. Agent runs /thrum:prime on startup — loads identity + full context
-# 6. Communicate via: thrum send "message" --to @<agent>
+# 4. Agent runs /thrum:prime on startup — loads identity + full context
+# 5. Communicate via: thrum send "message" --to @<agent>
 ```
 
-**Important:** `thrum quickstart` must run before `thrum tmux launch`. It
-creates the identity file that `/thrum:prime` reads on startup. Without it, the
-agent doesn't know who it is.
+`thrum tmux create` requires either quickstart flags (`--name`, `--role`,
+`--module`) or `--no-agent`. Bare `thrum tmux create <name> --cwd <path>`
+errors out.
+
+**Single identity per worktree:** quickstart cleans up any old identity files
+in the worktree. Each worktree has exactly one identity.
+
+**`--no-agent`** skips identity registration — for bare sessions, debugging, or
+non-agent processes:
+
+```bash
+thrum tmux create debug-session --cwd /path --no-agent
+```
 
 ## Manual Setup (Quick Reference)
 
 ```bash
-thrum tmux create <name> --cwd <path>   # Create detached session
+thrum tmux create <name> --cwd <path> --name <agent> --role <role> --module <mod>
 thrum tmux launch <name>                # Start runtime in session
 thrum tmux connect <name>               # Attach to session
 ```

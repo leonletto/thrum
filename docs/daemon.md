@@ -175,8 +175,9 @@ defense-in-depth cleanup.
 4. Register defer safety net (catches panics, early returns)
 5. Start Unix socket server
 6. Start WebSocket server (if configured), write port file
-7. Start signal handler goroutine
-8. Wait for shutdown signal
+7. Start monitor supervisor (respawns persisted monitor jobs from DB)
+8. Start signal handler goroutine
+9. Wait for shutdown signal
 
 **Signal handling:**
 
@@ -208,15 +209,16 @@ on both the Unix socket and WebSocket servers unless noted.
 
 **Registered handlers:**
 
-| Category         | Methods                                                                                                     | Notes                                              |
-| ---------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| **Health**       | `health`                                                                                                    |                                                    |
-| **Agent**        | `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`, `agent.delete`, `agent.cleanup`        | `delete` and `cleanup` are Unix socket only        |
-| **Session**      | `session.start`, `session.end`, `session.list`, `session.heartbeat`, `session.setIntent`, `session.setTask` |                                                    |
-| **Message**      | `message.send`, `message.get`, `message.list`, `message.edit`, `message.delete`, `message.markRead`         |                                                    |
-| **Subscription** | `subscribe`, `unsubscribe`, `subscriptions.list`                                                            | Subscriptions auto-cleanup on session end (v0.4.3) |
-| **Sync**         | `sync.force`, `sync.status`                                                                                 | Both Unix socket and WebSocket                     |
-| **User**         | `user.register`, `user.identify`                                                                            | `user.register` restricted to WebSocket transport  |
+| Category         | Methods                                                                                                     | Notes                                                    |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **Health**       | `health`                                                                                                    |                                                          |
+| **Agent**        | `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`, `agent.delete`, `agent.cleanup`        | `delete` and `cleanup` are Unix socket only              |
+| **Session**      | `session.start`, `session.end`, `session.list`, `session.heartbeat`, `session.setIntent`, `session.setTask` |                                                          |
+| **Message**      | `message.send`, `message.get`, `message.list`, `message.edit`, `message.delete`, `message.markRead`         |                                                          |
+| **Subscription** | `subscribe`, `unsubscribe`, `subscriptions.list`                                                            | Subscriptions auto-cleanup on session end (v0.4.3)       |
+| **Sync**         | `sync.force`, `sync.status`                                                                                 | Both Unix socket and WebSocket                           |
+| **User**         | `user.register`, `user.identify`                                                                            | `user.register` restricted to WebSocket transport        |
+| **Monitor**      | `monitor.start`, `monitor.list`, `monitor.show`, `monitor.stop`, `monitor.logs`, `monitor.restart`          | Unix socket only — absent from peer/Telegram dispatchers |
 
 See [RPC API Reference](rpc-api.md) for full documentation.
 
@@ -452,7 +454,50 @@ enforcement.
 Lock scope has been reduced in v0.4.3 — no mutex is held during I/O, git, or
 WebSocket dispatch operations.
 
-### 11. Client Library
+### 11. Monitor Supervisor
+
+**Location:** `internal/daemon/monitor/`
+
+The monitor supervisor manages the full lifecycle of monitor jobs — spawning
+child processes, reading their output, filtering lines against a regex, and
+delivering matching lines as synthetic Thrum messages.
+
+**Key behaviors:**
+
+- Spawns child processes via `exec.Command` — no shell, ever. The argv is passed
+  directly.
+- Reads stdout and stderr line-by-line. Lines longer than 2KB are truncated with
+  a `[truncated]` marker.
+- Applies the configured Go RE2 regex to each line. Matching lines are forwarded
+  to the delivery layer.
+- Debounce (leading-edge): the first match in a window delivers immediately.
+  Subsequent matches are suppressed until the window closes. When it closes, a
+  trailing summary is sent if any matches were suppressed. Default window: 60s,
+  minimum: 30s.
+- Synthetic sender format: `monitor:<name>`. Appears as `@monitor:<name>` in
+  recipient inboxes.
+- On child exit: sends an exit notification with the last 500 bytes of output
+  and a `thrum monitor restart` hint. Does not auto-respawn.
+- On daemon restart: loads all monitor specs from the `monitors` table (schema
+  v20) and respawns each one from scratch.
+- Graceful shutdown: SIGTERM → 5s grace → SIGKILL.
+- Max 100 concurrent monitors. Child processes run with a minimal env whitelist
+  (`HOME`, `USER`, `LANG`, `TZ`) plus user-supplied `--env` vars.
+
+**Packages:**
+
+| File            | Purpose                                     |
+| --------------- | ------------------------------------------- |
+| `job.go`        | Monitor job struct, state machine           |
+| `runner.go`     | Child process spawn, env setup              |
+| `linereader.go` | Buffered line reader with 2KB limit         |
+| `debounce.go`   | Leading-edge debounce with trailing summary |
+| `delivery.go`   | Synthetic message delivery to recipient     |
+| `supervisor.go` | Lifecycle coordination, DB persistence      |
+
+See [Monitor Jobs](monitor-jobs.md) for user-facing documentation.
+
+### 12. Client Library
 
 **Location:** `internal/daemon/client.go`
 
@@ -662,6 +707,7 @@ rm .thrum/var/thrum.pid
 | Browser Auth    | Browser auto-registration via git config                    | Complete |
 | Local-Only Mode | Disable remote sync for public repos                        | Complete |
 | Backup/Restore  | JSONL export, SQLite snapshot, GFS rotation, plugin hooks   | Complete |
+| Monitor Jobs v1 | Process watcher, regex filter, debounce, synthetic delivery | Complete |
 
 ## Next Steps
 

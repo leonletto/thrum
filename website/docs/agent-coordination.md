@@ -259,10 +259,16 @@ thrum sync force
 
 Use this template for every agent session:
 
+> **Note:** If you were launched via `thrum tmux quickstart` (or
+> `thrum tmux create` with `--name`/`--role`/`--module` flags), you're already
+> registered — skip step 1. The coordinator's launch command handles
+> registration before your session boots.
+
 ```bash
 # === START OF SESSION ===
 
 # 1. Register and start session
+# Skip this if launched via thrum tmux quickstart — already registered
 thrum quickstart --name <name> --role <role> --module <module> \
   --intent "<description>"
 
@@ -322,7 +328,9 @@ thrum session end
 - **Don't spam messages** -- batch updates when possible
 - **Don't skip the cron watchdog** -- it auto-respawns the listener if it stops
 - **Don't ignore critical messages** -- stop work and respond
-- **Don't skip registration** -- the system won't route messages correctly
+- **Don't skip registration** -- the system won't route messages correctly (the
+  integrated `thrum tmux quickstart` path handles this automatically when the
+  coordinator launches you)
 - **Don't leave sessions open** -- end them when done to avoid stale status
 - **Don't use vague intents** -- be specific about current work
 

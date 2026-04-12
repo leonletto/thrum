@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -201,11 +201,16 @@ template with the agent&#39;s identity data and saves it as the agent&#39;s prea
 <td><code>monitor-autonomous.md</code></td>
 <td>Can restart services and open issues on alerts</td>
 </tr>
-<tr>
-<td><code>orchestrator.md</code></td>
-<td>Launches agents, manages worktrees, executes plans via review-gated epics</td>
-</tr>
 </tbody></table>
+<blockquote>
+<p><strong><code>monitor-*.md</code> vs <code>thrum monitor</code>:</strong> These role templates configure <em>agent
+behavior</em> for agents whose job is monitoring (e.g., watching logs, reporting
+alerts). They&#39;re unrelated to <code>thrum monitor add/list/show/stop/logs/restart</code>,
+which is a separate daemon feature for running long-lived process monitors that
+emit synthetic thrum messages. See <a href="monitor-jobs.html">Monitor Jobs</a> for the
+process monitor feature.
+| <code>orchestrator.md</code>           | Launches agents, manages worktrees, executes plans via review-gated epics |</p>
+</blockquote>
 <h2>CLI Commands</h2>
 <h3>thrum roles list</h3>
 <p>List configured templates and matching agents:</p>

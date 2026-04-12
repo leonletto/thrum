@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -299,6 +299,11 @@ gone or the PID is dead, preventing stale state.</p>
 back. This matters for agents relaunched under a different runtime (e.g. Claude
 → OpenCode) or moved between branches; the identity file stays accurate without
 manual re-registration.</p>
+<p>The pre-launch identity write path adds another canonical writer: when you run
+<code>thrum tmux create --name X --role Y --module Z</code> or <code>thrum worktree create</code>
+with quickstart flags, the identity file is written <em>before</em> the agent runtime
+launches. The agent starts with identity already in place — no chicken-and-egg
+between first <code>thrum prime</code> and identity file existence.</p>
 <p><strong>Auto-selection rules</strong> for identity files (in priority order):</p>
 <ol>
 <li>If <code>THRUM_NAME</code> is set, load <code>{THRUM_NAME}.json</code> directly (error if not
@@ -401,6 +406,25 @@ setting into one step:</p>
 <p>This chains: <code>agent.register</code> -&gt; <code>session.start</code> -&gt; <code>session.setIntent</code> (if
 intent provided). If a conflict occurs, it automatically retries with
 re-register.</p>
+<p>You can also trigger quickstart automatically through the tmux and worktree
+commands. <code>thrum tmux create</code> (alias: <code>thrum tmux quickstart</code>) requires
+<code>--name</code>, <code>--role</code>, and <code>--module</code> and runs quickstart inside the new pane.
+<code>thrum worktree create</code> (alias: <code>thrum worktree setup</code>) accepts the same
+optional quickstart flags and, when all three are provided, creates a temp
+tmux session for PID isolation, runs quickstart, then destroys the temp
+session.</p>
+<pre><code># Quickstart via tmux — runs inside the new pane
+thrum tmux create --name furiosa --role implementer --module auth
+thrum tmux quickstart --name furiosa --role implementer --module auth  # same thing
+
+# Quickstart via worktree create
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name furiosa --role implementer --module auth
+thrum worktree setup --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name furiosa --role implementer --module auth  # same thing</code></pre>
+<p><strong>Single identity per worktree:</strong> after quickstart runs, any stale identity
+files left from previous registrations are cleaned up. Each worktree ends up
+with exactly one current identity file.</p>
 <h2>Conflict Detection</h2>
 <p>A conflict occurs when:</p>
 <ul>
@@ -486,7 +510,16 @@ thrum agent cleanup --force</code></pre>
 <h2>Identity File Best Practices</h2>
 <h3>Worktree-Specific Identity</h3>
 <p>When using git worktrees for different features/modules, each worktree can have
-its own identity files:</p>
+its own identity files. The preferred approach is <code>thrum worktree create</code>
+(alias: <code>thrum worktree setup</code>) — it creates the worktree, wires the Thrum
+redirect, and registers the agent in one command:</p>
+<pre><code># Preferred: create worktree and register agent together
+thrum worktree create --branch feature/auth --path ~/.workspaces/myapp/auth \
+  --name furiosa --role implementer --module auth
+
+thrum worktree create --branch feature/sync --path ~/.workspaces/myapp/sync \
+  --name nux --role implementer --module sync</code></pre>
+<p>Or if you need to register manually in an existing worktree:</p>
 <pre><code># Main worktree - coordinator (name must differ from role)
 thrum quickstart --name coord_main --role coordinator --module all
 
@@ -499,6 +532,9 @@ cd ~/.workspaces/myapp/sync
 thrum quickstart --name nux --role implementer --module sync</code></pre>
 <p>Each worktree gets its own <code>.thrum/identities/</code> directory (or uses
 <code>.thrum/redirect</code> to share a common <code>.thrum/</code> directory).</p>
+<p><strong>Single-identity enforcement:</strong> quickstart cleans up old identity files after
+writing the new one. Each worktree ends up with exactly one active identity
+file, which prevents the &quot;multiple identity files found&quot; auto-select error.</p>
 <h3>Multi-Agent Worktrees</h3>
 <p>Multiple agents can operate in the same worktree. Each gets a separate identity
 file:</p>

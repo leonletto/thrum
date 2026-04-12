@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <strong>Daemon Architecture</strong> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -184,6 +184,7 @@ defense-in-depth cleanup.</p>
 <li>Register defer safety net (catches panics, early returns)</li>
 <li>Start Unix socket server</li>
 <li>Start WebSocket server (if configured), write port file</li>
+<li>Start monitor supervisor (respawns persisted monitor jobs from DB)</li>
 <li>Start signal handler goroutine</li>
 <li>Wait for shutdown signal</li>
 </ol>
@@ -255,6 +256,11 @@ on both the Unix socket and WebSocket servers unless noted.</p>
 <td><strong>User</strong></td>
 <td><code>user.register</code>, <code>user.identify</code></td>
 <td><code>user.register</code> restricted to WebSocket transport</td>
+</tr>
+<tr>
+<td><strong>Monitor</strong></td>
+<td><code>monitor.start</code>, <code>monitor.list</code>, <code>monitor.show</code>, <code>monitor.stop</code>, <code>monitor.logs</code>, <code>monitor.restart</code></td>
+<td>Unix socket only — absent from peer/Telegram dispatchers</td>
 </tr>
 </tbody></table>
 <p>See <a href="rpc-api.html">RPC API Reference</a> for full documentation.</p>
@@ -521,7 +527,68 @@ all command executions go through <code>safecmd</code> wrappers for context-awar
 enforcement.</p>
 <p>Lock scope has been reduced in v0.4.3 — no mutex is held during I/O, git, or
 WebSocket dispatch operations.</p>
-<h3>11. Client Library</h3>
+<h3>11. Monitor Supervisor</h3>
+<p><strong>Location:</strong> <code>internal/daemon/monitor/</code></p>
+<p>The monitor supervisor manages the full lifecycle of monitor jobs — spawning child
+processes, reading their output, filtering lines against a regex, and delivering
+matching lines as synthetic Thrum messages.</p>
+<p><strong>Key behaviors:</strong></p>
+<ul>
+<li>Spawns child processes via <code>exec.Command</code> — no shell, ever. The argv is passed
+directly.</li>
+<li>Reads stdout and stderr line-by-line. Lines longer than 2KB are truncated with
+a <code>[truncated]</code> marker.</li>
+<li>Applies the configured Go RE2 regex to each line. Matching lines are forwarded
+to the delivery layer.</li>
+<li>Debounce (leading-edge): the first match in a window delivers immediately.
+Subsequent matches are suppressed until the window closes. When it closes, a
+trailing summary is sent if any matches were suppressed. Default window: 60s,
+minimum: 30s.</li>
+<li>Synthetic sender format: <code>monitor:&lt;name&gt;</code>. Appears as <code>@monitor:&lt;name&gt;</code> in
+recipient inboxes.</li>
+<li>On child exit: sends an exit notification with the last 500 bytes of output and
+a <code>thrum monitor restart</code> hint. Does not auto-respawn.</li>
+<li>On daemon restart: loads all monitor specs from the <code>monitors</code> table (schema
+v20) and respawns each one from scratch.</li>
+<li>Graceful shutdown: SIGTERM → 5s grace → SIGKILL.</li>
+<li>Max 100 concurrent monitors. Child processes run with a minimal env whitelist
+(<code>HOME</code>, <code>USER</code>, <code>LANG</code>, <code>TZ</code>) plus user-supplied <code>--env</code> vars.</li>
+</ul>
+<p><strong>Packages:</strong></p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>job.go</code></td>
+<td>Monitor job struct, state machine</td>
+</tr>
+<tr>
+<td><code>runner.go</code></td>
+<td>Child process spawn, env setup</td>
+</tr>
+<tr>
+<td><code>linereader.go</code></td>
+<td>Buffered line reader with 2KB limit</td>
+</tr>
+<tr>
+<td><code>debounce.go</code></td>
+<td>Leading-edge debounce with trailing summary</td>
+</tr>
+<tr>
+<td><code>delivery.go</code></td>
+<td>Synthetic message delivery to recipient</td>
+</tr>
+<tr>
+<td><code>supervisor.go</code></td>
+<td>Lifecycle coordination, DB persistence</td>
+</tr>
+</tbody></table>
+<p>See <a href="monitor-jobs.html">Monitor Jobs</a> for user-facing documentation.</p>
+<h3>12. Client Library</h3>
 <p><strong>Location:</strong> <code>internal/daemon/client.go</code></p>
 <p>Client library for connecting to the daemon.</p>
 <p><strong>Key functions:</strong></p>
@@ -758,6 +825,11 @@ rm .thrum/var/thrum.pid</code></pre>
 <tr>
 <td>Backup/Restore</td>
 <td>JSONL export, SQLite snapshot, GFS rotation, plugin hooks</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td>Monitor Jobs v1</td>
+<td>Process watcher, regex filter, debounce, synthetic delivery</td>
 <td>Complete</td>
 </tr>
 </tbody></table>

@@ -162,20 +162,28 @@ for architectural violations beyond just "tests pass."
 
 ## Worktree setup
 
-The project-setup skill handles worktree selection and setup in Phase 3. The
-`setup-worktree-thrum.sh` script handles full worktree bootstrapping in a single
-command:
+The project-setup skill handles worktree selection and setup in Phase 3.
+
+The preferred single-command approach uses `thrum worktree create` (alias:
+`thrum worktree setup` — they're interchangeable):
 
 ```bash
-# Full worktree setup with identity
-./scripts/setup-worktree-thrum.sh ~/.workspaces/myproject/auth feature/auth \
+# Create worktree, set up redirects, and register the agent identity
+thrum worktree create ~/.workspaces/myproject/auth feature/auth \
+  --identity impl-auth \
+  --role implementer \
+  --base thrum-dev
+
+# Same thing — worktree setup is an alias for worktree create
+thrum worktree setup ~/.workspaces/myproject/auth feature/auth \
   --identity impl-auth \
   --role implementer \
   --base thrum-dev
 ```
 
 This creates the worktree, sets up thrum and beads redirects, and registers the
-agent identity.
+agent identity. The `setup-worktree-thrum.sh` script is also available for the
+same purpose if you prefer shell over the CLI.
 
 ## Next Steps
 

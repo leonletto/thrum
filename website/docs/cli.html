@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <strong>CLI Reference</strong> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -367,7 +367,11 @@ for AI agent coordination.</p>
 </tr>
 <tr>
 <td><code>thrum tmux create</code></td>
-<td>Create a tmux session for an agent</td>
+<td>Create a tmux session for an agent (quickstart flags required)</td>
+</tr>
+<tr>
+<td><code>thrum tmux quickstart</code></td>
+<td>Alias for <code>thrum tmux create</code></td>
 </tr>
 <tr>
 <td><code>thrum tmux launch</code></td>
@@ -426,12 +430,40 @@ for AI agent coordination.</p>
 <td>Create a new worktree with thrum/beads setup</td>
 </tr>
 <tr>
+<td><code>thrum worktree setup</code></td>
+<td>Alias for <code>thrum worktree create</code></td>
+</tr>
+<tr>
 <td><code>thrum worktree teardown</code></td>
 <td>Remove a worktree and clean up artifacts</td>
 </tr>
 <tr>
 <td><code>thrum worktree list</code></td>
 <td>List worktrees with thrum agent info</td>
+</tr>
+<tr>
+<td><code>thrum monitor add</code></td>
+<td>Start a new monitor job (regex filter + message delivery)</td>
+</tr>
+<tr>
+<td><code>thrum monitor list</code></td>
+<td>List running monitor jobs</td>
+</tr>
+<tr>
+<td><code>thrum monitor show</code></td>
+<td>Show full details for a monitor job</td>
+</tr>
+<tr>
+<td><code>thrum monitor stop</code></td>
+<td>Stop a monitor job</td>
+</tr>
+<tr>
+<td><code>thrum monitor logs</code></td>
+<td>Show recent matched output for a monitor job</td>
+</tr>
+<tr>
+<td><code>thrum monitor restart</code></td>
+<td>Restart a stopped or dead monitor job</td>
 </tr>
 <tr>
 <td><code>thrum mcp serve</code></td>
@@ -2326,25 +2358,75 @@ with instant message delivery via <code>send-keys</code>. See
 <a href="tmux-sessions.html">Tmux-Managed Sessions</a> for the full story.</p>
 <h3>thrum tmux create</h3>
 <p>Create a tmux session for an agent with a clean environment. Sets up
-<code>monitor-silence</code> hooks for permission detection.</p>
-<pre><code>thrum tmux create &lt;name&gt; --cwd &lt;path&gt;</code></pre>
+<code>monitor-silence</code> hooks for permission detection. Quickstart flags (<code>--name</code>,
+<code>--role</code>, <code>--module</code>) are required unless you pass <code>--no-agent</code>. After
+quickstart runs, any old identity files in the session&#39;s worktree are cleaned
+up — one identity per worktree is enforced.</p>
+<pre><code>thrum tmux create &lt;name&gt; --cwd &lt;path&gt; --name &lt;agent-name&gt; --role &lt;role&gt; --module &lt;module&gt; [flags]</code></pre>
 <table>
 <thead>
 <tr>
 <th>Flag</th>
 <th>Description</th>
-<th>Required</th>
+<th>Default</th>
 </tr>
 </thead>
 <tbody><tr>
 <td><code>--cwd</code></td>
 <td>Working directory for the session</td>
-<td>yes</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--name</code></td>
+<td>Agent name (required unless <code>--no-agent</code>)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>Agent role (required unless <code>--no-agent</code>)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--module</code></td>
+<td>Agent module (required unless <code>--no-agent</code>)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--intent</code></td>
+<td>Initial work intent description</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--runtime</code></td>
+<td>Runtime preset: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>auggie</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>--no-agent</code></td>
+<td>Skip agent registration (create session only)</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--force</code></td>
+<td>Overwrite existing runtime config files</td>
+<td><code>false</code></td>
 </tr>
 </tbody></table>
+<p>Without <code>--no-agent</code>, the command errors if <code>--name</code>, <code>--role</code>, and <code>--module</code>
+are all missing.</p>
 <p>Example:</p>
-<pre><code>$ thrum tmux create implementer-api --cwd ../worktrees/api-feature
-Session created: implementer-api</code></pre>
+<pre><code>$ thrum tmux create implementer-api --cwd ../worktrees/api-feature \
+    --name impl_api --role implementer --module api
+Session created: implementer-api
+Agent registered: impl_api
+
+$ thrum tmux create scratch --cwd /tmp/sandbox --no-agent
+Session created: scratch</code></pre>
+<h3>thrum tmux quickstart</h3>
+<p>Alias for <code>thrum tmux create</code>. Same flags, same behavior. Use whichever name
+reads better in your scripts.</p>
+<pre><code>thrum tmux quickstart &lt;name&gt; --cwd &lt;path&gt; --name &lt;agent-name&gt; --role &lt;role&gt; --module &lt;module&gt; [flags]</code></pre>
+<p>See <a href="#thrum-tmux-create">thrum tmux create</a> for the full flag table.</p>
 <h3>thrum tmux launch</h3>
 <p>Start an AI tool inside an existing tmux session.</p>
 <pre><code>thrum tmux launch &lt;name&gt; [flags]</code></pre>
@@ -2515,6 +2597,11 @@ Canceled cmd_01KNTF2A9 (state: cancelled)</code></pre>
 <p>Create a git worktree with Thrum and Beads setup. Sets up <code>.thrum/redirect</code> and
 <code>.thrum/identities/</code> so the new worktree shares the daemon with the main repo.
 Optionally sets up <code>.beads/redirect</code> if Beads is enabled.</p>
+<p>Quickstart flags (<code>--name</code>, <code>--role</code>, <code>--module</code>) are optional. When all three
+are provided, the command spins up a temporary tmux session, runs
+<code>thrum quickstart</code> inside it for PID isolation, then destroys the temp session.
+Old identity files in the worktree are cleaned up after quickstart runs — one
+identity per worktree is enforced.</p>
 <pre><code>thrum worktree create &lt;name&gt; [flags]</code></pre>
 <table>
 <thead>
@@ -2534,6 +2621,36 @@ Optionally sets up <code>.beads/redirect</code> if Beads is enabled.</p>
 <td>Create detached HEAD worktree</td>
 <td><code>false</code></td>
 </tr>
+<tr>
+<td><code>--name</code></td>
+<td>Agent name (triggers quickstart when combined with role+module)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--role</code></td>
+<td>Agent role</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--module</code></td>
+<td>Agent module</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--intent</code></td>
+<td>Initial work intent description</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--runtime</code></td>
+<td>Runtime preset: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>gemini</code>, <code>auggie</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>--force</code></td>
+<td>Overwrite existing runtime config files</td>
+<td><code>false</code></td>
+</tr>
 </tbody></table>
 <p>The worktree is created at <code>worktrees.base_path/&lt;name&gt;</code> (default:
 <code>~/.workspaces/&lt;project&gt;/&lt;name&gt;</code>). The name cannot contain <code>/</code>, <code>\</code>, or <code>..</code>.</p>
@@ -2546,7 +2663,18 @@ Worktree created: ~/.workspaces/thrum/api-feature
 
 $ thrum worktree create hotfix -b fix/urgent-bug
 Worktree created: ~/.workspaces/thrum/hotfix
-  Branch: fix/urgent-bug</code></pre>
+  Branch: fix/urgent-bug
+
+$ thrum worktree create auth-feature --name impl_auth --role implementer --module auth
+Worktree created: ~/.workspaces/thrum/auth-feature
+  Branch: feature/auth-feature
+  Thrum: .thrum/redirect → /path/to/main/.thrum
+  Beads: .beads/redirect → /path/to/main/.beads
+Agent registered: impl_auth</code></pre>
+<h3>thrum worktree setup</h3>
+<p>Alias for <code>thrum worktree create</code>. Same flags, same behavior.</p>
+<pre><code>thrum worktree setup &lt;name&gt; [flags]</code></pre>
+<p>See <a href="#thrum-worktree-create">thrum worktree create</a> for the full flag table.</p>
 <h3>thrum worktree teardown</h3>
 <p>Remove a worktree and clean up Thrum artifacts (identity files).</p>
 <pre><code>thrum worktree teardown &lt;name&gt;</code></pre>
@@ -2564,6 +2692,147 @@ WORKTREE                            BRANCH              HEAD       AGENT        
 /path/to/thrum                      thrum-dev           b3c6352    coordinator_main     working
 /home/user/.workspaces/thrum/api    feature/api         a1b2c3d    impl_api             idle
 /home/user/.workspaces/thrum/web    website-dev         21908a3    impl_website_dev     -</code></pre>
+<h2>Monitor Jobs</h2>
+<p>Run a long-lived command, filter its output through a regex, and deliver
+matching lines as Thrum messages to an agent or group. Jobs persist across
+daemon restarts. Max 100 concurrent jobs.</p>
+<p>The command must come after <code>--</code>:</p>
+<pre><code>thrum monitor add --name &lt;name&gt; --match &lt;regex&gt; --to @&lt;agent&gt; [flags] -- &lt;command&gt; [args...]</code></pre>
+<h3>thrum monitor add</h3>
+<p>Start a monitor job.</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+<th>Required</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--name</code></td>
+<td>Unique monitor name</td>
+<td></td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>--match</code></td>
+<td>Regex pattern — lines that match trigger a message</td>
+<td></td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>--to</code></td>
+<td>Target agent or group (e.g., <code>@coordinator</code>)</td>
+<td></td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>--debounce</code></td>
+<td>Leading-edge debounce window (minimum 30s)</td>
+<td><code>60s</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>--env</code></td>
+<td>Environment variable in <code>KEY=VALUE</code> form (repeatable)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>--cwd</code></td>
+<td>Working directory for the command</td>
+<td><code>.</code></td>
+<td></td>
+</tr>
+</tbody></table>
+<p>Debounce is leading-edge: the first matching line triggers a message
+immediately, then the monitor goes quiet for the debounce window before it can
+fire again. Lines longer than 2KB are truncated.</p>
+<p>Example:</p>
+<pre><code>$ thrum monitor add --name app-errors --match &quot;ERROR|FATAL&quot; --to @coordinator \
+    --debounce 120s -- tail -F /var/log/app.log
+Started monitor app-errors (mon_01KNTF2A9...) — target @coordinator
+
+$ thrum monitor add --name ci-failures --match &quot;FAIL&quot; --to @team \
+    --env CI_ENV=staging -- ./scripts/run-tests.sh
+Started monitor ci-failures (mon_01KNTG3B1...) — target @team</code></pre>
+<h3>thrum monitor list</h3>
+<p>List monitor jobs. Shows running jobs by default.</p>
+<pre><code>thrum monitor list [--all]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--all</code></td>
+<td>Include stopped/dead monitors (younger than one week)</td>
+<td><code>false</code></td>
+</tr>
+</tbody></table>
+<p>Output columns: <code>ID</code>, <code>NAME</code>, <code>STATUS</code>, <code>TARGET</code>, <code>UPTIME</code>, <code>PID</code>.</p>
+<p>Example:</p>
+<pre><code>$ thrum monitor list
+ID                           NAME         STATUS     TARGET         UPTIME     PID
+mon_01KNTF2A9...             app-errors   running    @coordinator   3h42m      18421
+mon_01KNTG3B1...             ci-failures  running    @team          15m30s     19033</code></pre>
+<h3>thrum monitor show</h3>
+<p>Show full details for a monitor job. Env var values are always redacted.</p>
+<pre><code>thrum monitor show &lt;id&gt;</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum monitor show mon_01KNTF2A9
+ID:       mon_01KNTF2A9...
+Name:     app-errors
+Status:   running
+Match:    ERROR|FATAL
+Target:   @coordinator
+Cwd:      /srv/app
+Debounce: 2m0s
+Argv:     tail -F /var/log/app.log
+Created:  2026-04-10T09:00:00Z
+Env:
+  CI_ENV=&lt;redacted&gt;</code></pre>
+<h3>thrum monitor stop</h3>
+<p>Stop a running monitor job. Sends SIGTERM, waits 5 seconds, then sends SIGKILL
+if still running.</p>
+<pre><code>thrum monitor stop &lt;id&gt;</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum monitor stop mon_01KNTF2A9
+Stopped monitor mon_01KNTF2A9...</code></pre>
+<h3>thrum monitor logs</h3>
+<p>Show the most recent matched output lines for a monitor job (historical lookup
+from the messages table, not live tail).</p>
+<pre><code>thrum monitor logs &lt;id&gt; [flags]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>-n</code>, <code>--limit</code></td>
+<td>Max number of matches to return</td>
+<td><code>20</code></td>
+</tr>
+</tbody></table>
+<p>Output is oldest-first (reads like a normal log tail).</p>
+<p>Example:</p>
+<pre><code>$ thrum monitor logs mon_01KNTF2A9 -n 5
+2026-04-10T09:03:12Z  ERROR: connection timeout on db-primary
+2026-04-10T09:15:44Z  ERROR: retry limit exceeded for job 98312
+2026-04-10T10:02:01Z  FATAL: out of memory, shutting down</code></pre>
+<h3>thrum monitor restart</h3>
+<p>Restart a stopped or dead monitor job. Returns a new monitor ID.</p>
+<pre><code>thrum monitor restart &lt;id&gt;</code></pre>
+<p>Example:</p>
+<pre><code>$ thrum monitor restart mon_01KNTF2A9
+Restarted — new ID: mon_01KNTH4C2...</code></pre>
 <h2>Session Restart</h2>
 <p>Save and restore conversation snapshots for session restart. See
 <a href="session-restart.html">Session Restart &amp; Context Recovery</a> for the full story.</p>

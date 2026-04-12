@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -403,6 +403,16 @@ directory</li>
 <li>Each agent has its own identity file and message shard</li>
 </ul>
 <h3>Setting Up Feature Worktrees</h3>
+<p>The preferred approach is <code>thrum worktree create</code> (alias: <code>thrum worktree setup</code>). It handles git worktree creation, Thrum redirect wiring, and optional agent registration in one command:</p>
+<pre><code># Create worktree with redirect wiring only
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth
+# or equivalently:
+thrum worktree setup --branch feature/auth --path ~/.workspaces/repo/auth
+
+# Create worktree and register agent in one step
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name furiosa --role implementer --module auth</code></pre>
+<p>If you need to wire up an existing worktree manually:</p>
 <pre><code># Create the worktree
 git worktree add ~/.workspaces/repo/auth -b feature/auth
 
@@ -412,7 +422,15 @@ thrum setup --main-repo /path/to/repo
 # Or use the setup script
 scripts/setup-worktree-thrum.sh ~/.workspaces/repo/auth</code></pre>
 <h3>Running Multiple Agents</h3>
-<p>Each agent in a worktree gets its own identity:</p>
+<p>Each agent in a worktree gets its own identity. The integrated path handles
+worktree creation and registration together:</p>
+<pre><code># Create worktrees and register agents in one step
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name furiosa --role implementer --module auth
+
+thrum worktree create --branch feature/sync --path ~/.workspaces/repo/sync \
+  --name nux --role implementer --module sync</code></pre>
+<p>Or register manually after creating worktrees:</p>
 <pre><code># Main worktree: coordinator (name must differ from role)
 cd /path/to/repo
 thrum quickstart --name coord_main --role coordinator --module main
@@ -541,7 +559,12 @@ thrum sent --to @reviewers
 # 4. Reviewer responds
 thrum reply msg_01HXE... &quot;Reviewed. LGTM with minor comments on error handling.&quot;</code></pre>
 <h3>Workflow 2: Cross-Platform Agent Setup</h3>
-<pre><code># Claude Code agent
+<pre><code># Claude Code agent in its own worktree (integrated path — preferred)
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name claude_agent --role implementer --module auth --runtime claude
+# Creates worktree, wires redirect, registers agent, all in one step
+
+# Or register manually in an existing worktree
 thrum init --runtime claude
 thrum quickstart --name claude_agent --role implementer --module auth \
   --runtime claude --intent &quot;Implementing auth&quot;
@@ -572,6 +595,12 @@ thrum quickstart --name coord_main --role coordinator --module main
 thrum group create backend --description &quot;Backend team&quot;
 thrum group add backend @furiosa
 thrum group add backend @nux
+
+# Preferred: create worktrees and register agents in one step
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name furiosa --role implementer --module auth
+thrum worktree create --branch feature/sync --path ~/.workspaces/repo/sync \
+  --name nux --role implementer --module sync
 
 # Assign work
 thrum send &quot;furiosa: implement auth (feature/auth worktree)&quot; --to @furiosa

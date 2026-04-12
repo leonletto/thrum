@@ -1,6 +1,6 @@
 ## Thrum Daemon RPC API
 
-> **TL;DR:** 45+ RPC methods over JSON-RPC 2.0, available on a Unix socket or
+> **TL;DR:** 50+ RPC methods over JSON-RPC 2.0, available on a Unix socket or
 > WebSocket. Most users never need this — the CLI wraps all of it. This
 > reference is for building custom integrations or understanding what's
 > happening under the hood.
@@ -1246,14 +1246,22 @@ Set an agent's operational status. The daemon locates the agent's identity file
 ### tmux.create
 
 Create a tmux session for an agent with a clean environment and
-`monitor-silence` hooks.
+`monitor-silence` hooks. Also accepts quickstart fields to register an agent
+identity in the same call (equivalent to running `thrum tmux quickstart`).
 
 **Request:**
 
-| Parameter | Type   | Required | Description                       |
-| --------- | ------ | -------- | --------------------------------- |
-| `name`    | string | yes      | Session name                      |
-| `cwd`     | string | yes      | Working directory for the session |
+| Parameter    | Type    | Required | Description                                                                                     |
+| ------------ | ------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `name`       | string  | yes      | Session name                                                                                    |
+| `cwd`        | string  | yes      | Working directory for the session                                                               |
+| `agent_name` | string  | no       | Register agent with this name (quickstart: sets `--name`)                                       |
+| `role`       | string  | no       | Agent role (quickstart: sets `--role`)                                                          |
+| `module`     | string  | no       | Agent module (quickstart: sets `--module`)                                                      |
+| `intent`     | string  | no       | Initial agent intent (quickstart: sets `--intent`)                                              |
+| `runtime`    | string  | no       | Runtime to launch after creation (`claude`, `opencode`, `shell`) — skips launch step if omitted |
+| `no_agent`   | boolean | no       | Create the session without registering an agent identity                                        |
+| `force`      | boolean | no       | Override an existing identity at this path                                                      |
 
 **Response:**
 
@@ -1497,6 +1505,180 @@ Cancel a queued or active command.
 | `command_id` | string | Cancelled command ID      |
 | `state`      | string | Final state (`cancelled`) |
 | `output`     | string | Partial captured output   |
+
+## Monitor Methods (v0.9.0)
+
+Monitor methods are **Unix socket only** — they're not available over WebSocket
+or via peer/Telegram dispatchers.
+
+### monitor.start
+
+Start a new monitor job. Spawns the child process immediately and persists the
+spec to the `monitors` table so it survives daemon restarts.
+
+**Request:**
+
+| Parameter  | Type   | Required | Description                                                                                   |
+| ---------- | ------ | -------- | --------------------------------------------------------------------------------------------- |
+| `name`     | string | yes      | Short identifier (used as the synthetic sender: `monitor:<name>`)                             |
+| `match`    | string | yes      | Go RE2 regex. Matching lines are delivered as messages.                                       |
+| `to`       | string | yes      | Recipient agent name (without `@` prefix)                                                     |
+| `argv`     | array  | yes      | Command and arguments as a string array (e.g., `["node", "server.js", "--watch"]`). No shell. |
+| `cwd`      | string | yes      | Working directory for the child process                                                       |
+| `debounce` | string | no       | Debounce window as a Go duration string (e.g., `"60s"`). Min `"30s"`. Default `"60s"`.        |
+| `env`      | object | no       | Extra environment variables for the child process (key/value map). Stored redacted in the DB. |
+
+**Response:**
+
+| Field  | Type    | Description                      |
+| ------ | ------- | -------------------------------- |
+| `id`   | string  | Monitor ID (`m_` prefix + ULID)  |
+| `name` | string  | Monitor name                     |
+| `pid`  | integer | PID of the spawned child process |
+
+**Errors:**
+
+- `name is required`: Missing `name` field
+- `match is required`: Missing `match` field
+- `to is required`: Missing `to` field
+- `argv is required and must not be empty`: Missing or empty `argv`
+- `cwd is required`: Missing `cwd` field
+- `invalid regex`: `match` is not a valid RE2 expression
+- `debounce below minimum (30s)`: Debounce window shorter than 30 seconds
+- `max monitors reached`: Already at the 100-monitor limit
+- `agent not found`: Recipient agent name is not registered
+
+---
+
+### monitor.list
+
+List monitor jobs.
+
+**Request:**
+
+| Parameter | Type    | Required | Description                                      |
+| --------- | ------- | -------- | ------------------------------------------------ |
+| `all`     | boolean | no       | Include stopped monitors (default: running only) |
+
+**Response:**
+
+| Field               | Type    | Description                              |
+| ------------------- | ------- | ---------------------------------------- |
+| `monitors`          | array   | List of monitor summary objects          |
+| `monitors[].id`     | string  | Monitor ID                               |
+| `monitors[].name`   | string  | Monitor name                             |
+| `monitors[].status` | string  | `"running"` or `"stopped"`               |
+| `monitors[].pid`    | integer | Child PID (0 if stopped)                 |
+| `monitors[].uptime` | string  | Human-readable uptime (empty if stopped) |
+| `monitors[].match`  | string  | Regex pattern                            |
+| `monitors[].to`     | string  | Recipient agent name                     |
+
+---
+
+### monitor.show
+
+Full detail on a single monitor job.
+
+**Request:**
+
+| Parameter | Type   | Required | Description |
+| --------- | ------ | -------- | ----------- |
+| `id`      | string | yes      | Monitor ID  |
+
+**Response:**
+
+| Field            | Type    | Description                                     |
+| ---------------- | ------- | ----------------------------------------------- |
+| `id`             | string  | Monitor ID                                      |
+| `name`           | string  | Monitor name                                    |
+| `status`         | string  | `"running"` or `"stopped"`                      |
+| `pid`            | integer | Child PID (0 if stopped)                        |
+| `uptime`         | string  | Human-readable uptime (empty if stopped)        |
+| `match`          | string  | Regex pattern                                   |
+| `to`             | string  | Recipient agent name                            |
+| `argv`           | array   | Full command argv                               |
+| `cwd`            | string  | Working directory                               |
+| `debounce`       | string  | Debounce window duration string                 |
+| `env`            | object  | Env vars with values redacted as `"[redacted]"` |
+| `match_count`    | integer | Total lines matched since last start            |
+| `recent_matches` | array   | Last N matched lines (strings)                  |
+| `created_at`     | string  | ISO 8601 creation timestamp                     |
+
+---
+
+### monitor.stop
+
+Stop a running monitor. Sends SIGTERM, waits 5 seconds, sends SIGKILL if still
+running. Removes the spec from persistence — the monitor won't respawn.
+
+**Request:**
+
+| Parameter | Type   | Required | Description |
+| --------- | ------ | -------- | ----------- |
+| `id`      | string | yes      | Monitor ID  |
+
+**Response:**
+
+| Field     | Type    | Description       |
+| --------- | ------- | ----------------- |
+| `id`      | string  | Monitor ID        |
+| `stopped` | boolean | `true` on success |
+
+**Errors:**
+
+- `monitor not found`: No monitor with given ID
+- `monitor already stopped`: Monitor is not running
+
+---
+
+### monitor.logs
+
+Return the last N bytes of captured stdout+stderr from the child process.
+
+**Request:**
+
+| Parameter | Type    | Required | Description                          |
+| --------- | ------- | -------- | ------------------------------------ |
+| `id`      | string  | yes      | Monitor ID                           |
+| `bytes`   | integer | no       | Max bytes to return (default: 10000) |
+
+**Response:**
+
+| Field  | Type   | Description                    |
+| ------ | ------ | ------------------------------ |
+| `id`   | string | Monitor ID                     |
+| `logs` | string | Captured output (last N bytes) |
+
+**Errors:**
+
+- `monitor not found`: No monitor with given ID
+
+---
+
+### monitor.restart
+
+Restart a stopped or dead monitor by respawning its child process from the saved
+spec.
+
+**Request:**
+
+| Parameter | Type   | Required | Description |
+| --------- | ------ | -------- | ----------- |
+| `id`      | string | yes      | Monitor ID  |
+
+**Response:**
+
+| Field | Type    | Description                    |
+| ----- | ------- | ------------------------------ |
+| `id`  | string  | Monitor ID                     |
+| `pid` | integer | PID of the newly spawned child |
+
+**Errors:**
+
+- `monitor not found`: No monitor with given ID
+- `monitor already running`: Monitor is currently active
+
+---
 
 ## Using the API
 

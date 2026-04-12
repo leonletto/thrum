@@ -333,6 +333,23 @@ message store.
 
 ### Setting Up Feature Worktrees
 
+The preferred approach is `thrum worktree create` (alias:
+`thrum worktree setup`). It handles git worktree creation, Thrum redirect
+wiring, and optional agent registration in one command:
+
+```bash
+# Create worktree with redirect wiring only
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth
+# or equivalently:
+thrum worktree setup --branch feature/auth --path ~/.workspaces/repo/auth
+
+# Create worktree and register agent in one step
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name furiosa --role implementer --module auth
+```
+
+If you need to wire up an existing worktree manually:
+
 ```bash
 # Create the worktree
 git worktree add ~/.workspaces/repo/auth -b feature/auth
@@ -346,7 +363,19 @@ scripts/setup-worktree-thrum.sh ~/.workspaces/repo/auth
 
 ### Running Multiple Agents
 
-Each agent in a worktree gets its own identity:
+Each agent in a worktree gets its own identity. The integrated path handles
+worktree creation and registration together:
+
+```bash
+# Create worktrees and register agents in one step
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name furiosa --role implementer --module auth
+
+thrum worktree create --branch feature/sync --path ~/.workspaces/repo/sync \
+  --name nux --role implementer --module sync
+```
+
+Or register manually after creating worktrees:
 
 ```bash
 # Main worktree: coordinator (name must differ from role)
@@ -494,7 +523,12 @@ thrum reply msg_01HXE... "Reviewed. LGTM with minor comments on error handling."
 ### Workflow 2: Cross-Platform Agent Setup
 
 ```bash
-# Claude Code agent
+# Claude Code agent in its own worktree (integrated path — preferred)
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name claude_agent --role implementer --module auth --runtime claude
+# Creates worktree, wires redirect, registers agent, all in one step
+
+# Or register manually in an existing worktree
 thrum init --runtime claude
 thrum quickstart --name claude_agent --role implementer --module auth \
   --runtime claude --intent "Implementing auth"
@@ -533,6 +567,12 @@ thrum quickstart --name coord_main --role coordinator --module main
 thrum group create backend --description "Backend team"
 thrum group add backend @furiosa
 thrum group add backend @nux
+
+# Preferred: create worktrees and register agents in one step
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name furiosa --role implementer --module auth
+thrum worktree create --branch feature/sync --path ~/.workspaces/repo/sync \
+  --name nux --role implementer --module sync
 
 # Assign work
 thrum send "furiosa: implement auth (feature/auth worktree)" --to @furiosa

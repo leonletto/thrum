@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="../daemon.html">Daemon Architecture</a> | <a href="../sync.html">Sync Protocol</a> | <a href="../event-streaming.html">Event Streaming</a> | <a href="../configuration.html">Configuration</a> | <a href="../guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="../tailscale-sync.html">Tailscale Sync</a> | <a href="../tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="../web-ui.html">Web UI</a> | <a href="../claude-code-plugin.html">Claude Code Plugin</a> | <a href="../beads-and-thrum.html">Beads and Thrum</a> | <a href="../codex-plugin.html">Codex Plugin</a> | <a href="../mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="../scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="../scenarios/team.html">Team on Your Machine</a> | <a href="../scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="../scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="../orchestrator-role.html">Orchestrator Role</a> | <a href="../tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="../multi-runtime.html">Multi-Runtime Support</a> | <a href="../single-agent-mode.html">Single-Agent Mode</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="../orchestrator-role.html">Orchestrator Role</a> | <a href="../tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="../monitor-jobs.html">Monitor Jobs</a> | <a href="../multi-runtime.html">Multi-Runtime Support</a> | <a href="../single-agent-mode.html">Single-Agent Mode</a> | <a href="../workflow-templates.html">Workflow Templates</a> | <a href="../session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="../development.html">Development Guide</a> | <a href="../security-cicd.html">Security & CI/CD</a> | <a href="../architecture.html">Architecture</a> | <a href="../cli.html">CLI Reference</a> | <a href="../rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -741,7 +741,8 @@ files now will break them</strong> — they depend on the old commands like <cod
 script (Step 1) to find every stale repo, migrate each one, then do the
 global memory audit last. Cleaner if you have ≤10 repos.</li>
 <li><strong>Update global files immediately, but annotate them</strong> with &quot;requires bd 1.0+
-embedded mode; see the <a href="https://leonletto.github.io/thrum/guides/beads-migration-to-embedded.html">migration guide</a>
+embedded mode; see the
+<a href="https://leonletto.github.io/thrum/guides/beads-migration-to-embedded.html">migration guide</a>
 (or its long-form version on the
 <a href="https://gist.github.com/leonletto/606e8afbb3603870d14b4123707416a2">public gist</a>)&quot;.
 Unmigrated repos will still break, but you won&#39;t accumulate drift across

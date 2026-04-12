@@ -337,13 +337,30 @@ thrum sent
 ## Working with Multiple Worktrees
 
 Feature worktrees share the main worktree's daemon and message store via a
-redirect file. Use `thrum setup` to configure a feature worktree:
+redirect file. Use `thrum worktree create` (alias: `thrum worktree setup`) to
+create and configure a feature worktree in one step:
 
 ```bash
-# Main worktree (already initialized — daemon running from thrum init)
-cd ~/project
+# Create a worktree with redirect setup and optional agent registration
+thrum worktree create --branch feature/auth --path ~/.workspaces/myproject/auth
+# or equivalently:
+thrum worktree setup --branch feature/auth --path ~/.workspaces/myproject/auth
 
-# Feature worktree -- set up redirect to main
+# With agent quickstart flags — creates the worktree and registers the agent
+# in one step (uses a temp tmux session for PID isolation):
+thrum worktree create --branch feature/auth --path ~/.workspaces/myproject/auth \
+  --name furiosa --role implementer --module auth
+```
+
+`thrum worktree create` handles the redirect file creation automatically — you
+don't need to run `thrum setup --main-repo` separately. If you pass `--name`,
+`--role`, and `--module`, it also runs quickstart inside a temporary tmux
+session for proper PID isolation.
+
+For an existing worktree that just needs redirect setup, you can still use the
+manual approach:
+
+```bash
 cd ~/project-features/auth
 thrum setup --main-repo ~/project
 thrum session start
@@ -499,6 +516,21 @@ brew install tmux  # macOS
 
 # Enable mouse scrolling (critical for a good experience)
 echo "set -g mouse on" >> ~/.tmux.conf
+```
+
+`thrum tmux create` requires `--name`, `--role`, and `--module` flags (or
+`--no-agent` to skip registration). It runs quickstart automatically inside the
+new pane. Calling it without these flags errors out.
+
+```bash
+# Correct: flags required
+thrum tmux create --name furiosa --role implementer --module auth
+
+# Alias that does the same thing
+thrum tmux quickstart --name furiosa --role implementer --module auth
+
+# No-agent mode (pane only, no registration)
+thrum tmux create --no-agent --session mywork
 ```
 
 See [Tmux-Managed Sessions](tmux-sessions.md) for the full story.

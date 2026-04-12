@@ -147,11 +147,24 @@ gets created.
 For each agent it needs:
 
 ```bash
-thrum worktree create <name>          # creates worktree + beads/thrum setup
-thrum tmux create <name> --cwd <path> # creates the tmux session
-thrum tmux launch <name>              # boots the runtime
-thrum agent set-status idle           # marks it ready
+# creates worktree + beads/thrum setup
+thrum worktree create <name>
+
+# creates the tmux session + registers agent identity in one step
+thrum tmux create <name> --cwd <path> \
+  --name <agent_name> --role implementer --module <mod>
+# alias: thrum tmux quickstart <name> --cwd <path> --name <agent_name> ...
+
+# boots the runtime
+thrum tmux launch <name>
+
+# marks it ready
+thrum agent set-status idle
 ```
+
+The old pattern — create the session, then separately run `thrum tmux send` to
+execute quickstart inside — is gone. Passing `--name`, `--role`, and `--module`
+to `thrum tmux create` handles registration automatically.
 
 After launch it verifies every session is alive via `thrum tmux status` and
 reports back. No surprises — you know all agents are running before work starts.

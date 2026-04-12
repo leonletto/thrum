@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <strong>Orchestrator Role</strong> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <strong>Orchestrator Role</strong> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -148,10 +148,22 @@ it needs to create, what their names will be. You see this before any session
 gets created.</p>
 <h3>Phase 3 — Launch Agents</h3>
 <p>For each agent it needs:</p>
-<pre><code>thrum worktree create &lt;name&gt;          # creates worktree + beads/thrum setup
-thrum tmux create &lt;name&gt; --cwd &lt;path&gt; # creates the tmux session
-thrum tmux launch &lt;name&gt;              # boots the runtime
-thrum agent set-status idle           # marks it ready</code></pre>
+<pre><code># creates worktree + beads/thrum setup
+thrum worktree create &lt;name&gt;
+
+# creates the tmux session + registers agent identity in one step
+thrum tmux create &lt;name&gt; --cwd &lt;path&gt; \
+  --name &lt;agent_name&gt; --role implementer --module &lt;mod&gt;
+# alias: thrum tmux quickstart &lt;name&gt; --cwd &lt;path&gt; --name &lt;agent_name&gt; ...
+
+# boots the runtime
+thrum tmux launch &lt;name&gt;
+
+# marks it ready
+thrum agent set-status idle</code></pre>
+<p>The old pattern — create the session, then separately run <code>thrum tmux send</code> to
+execute quickstart inside — is gone. Passing <code>--name</code>, <code>--role</code>, and <code>--module</code>
+to <code>thrum tmux create</code> handles registration automatically.</p>
 <p>After launch it verifies every session is alive via <code>thrum tmux status</code> and
 reports back. No surprises — you know all agents are running before work starts.</p>
 <h3>Phase 4 — Execute (Epic Loop)</h3>

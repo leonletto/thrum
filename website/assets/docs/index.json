@@ -539,6 +539,22 @@
     "lastUpdated": "2026-04-09"
   },
   {
+    "path": "monitor-jobs.html",
+    "title": "Monitor Jobs",
+    "description": "Watch any process output for pattern matches and deliver results as synthetic Thrum messages — no polling, no shell, no manual piping",
+    "category": "orchestration",
+    "order": 3,
+    "tags": [
+      "monitor",
+      "jobs",
+      "process",
+      "watch",
+      "regex",
+      "debounce"
+    ],
+    "lastUpdated": "2026-04-11"
+  },
+  {
     "path": "multi-runtime.html",
     "title": "Multi-Runtime Support",
     "description": "Run Claude, Codex, Aider, Gemini, and other agent runtimes in tmux-managed sessions",

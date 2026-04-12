@@ -135,6 +135,10 @@ The UI is a window into what's happening, not a control plane. It reflects the
 same data the CLI and MCP server use — messages stored as JSONL, agent state in
 SQLite, sync status from Git. Nothing is hidden, nothing is abstracted away.
 
+Monitor job match messages appear in the Live Feed like any other thrum message.
+They come from `@monitor:<name>` senders, so you can spot them at a glance or
+filter by sender name.
+
 This is consistent with Thrum's core principle: everything is
 [inspectable by design](philosophy.md).
 

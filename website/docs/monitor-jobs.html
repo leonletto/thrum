@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Monitor Jobs — Thrum</title>
+<meta name="description" content="Watch any process output for pattern matches and deliver results as synthetic Thrum messages — no polling, no shell, no manual piping">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#monitor-jobs.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; orchestration &rsaquo; Monitor Jobs
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <strong>Monitor Jobs</strong> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+</nav>
+<main>
+<h2>What This Is</h2>
+<p>Monitor jobs let you attach a regex filter to any subprocess and turn matching
+output lines into Thrum messages. The daemon runs the process, reads its stdout
+and stderr, and sends a message to the agent of your choice whenever a line
+matches.</p>
+<p>You&#39;d use this for things like:</p>
+<ul>
+<li>Watching a dev server for error lines while an agent is coding</li>
+<li>Alerting an agent when a build finishes or fails</li>
+<li>Routing test failure output to the responsible implementer</li>
+<li>Forwarding log patterns from a long-running background service</li>
+</ul>
+<p>The daemon owns the process lifecycle. You start a monitor, it runs until you
+stop it, and it survives daemon restarts from its saved spec.</p>
+<hr>
+<h2>Quick Start</h2>
+<p>Say you want to alert <code>@impl_api</code> whenever your dev server logs an error:</p>
+<pre><code>thrum monitor add \
+  --name dev-errors \
+  --match &quot;(?i)(error|exception|panic)&quot; \
+  --to @impl_api \
+  --debounce 60s \
+  -- node server.js --watch</code></pre>
+<p>The daemon spawns <code>node server.js --watch</code> directly (no shell). Every line from
+stdout or stderr is checked against the regex. When a line matches, the daemon
+sends a message to <code>@impl_api</code> from sender <code>@monitor:dev-errors</code>.</p>
+<p>Check it&#39;s running:</p>
+<pre><code>thrum monitor list</code></pre>
+<pre><code>ID    NAME         STATUS   UPTIME    PID     MATCH
+m_01  dev-errors   running  4m32s     91234   (?i)(error|exception|panic)</code></pre>
+<p>Stop it when you&#39;re done:</p>
+<pre><code>thrum monitor stop m_01</code></pre>
+<hr>
+<h2>Commands</h2>
+<h3><code>thrum monitor add</code></h3>
+<p>Start a new monitor job.</p>
+<pre><code>thrum monitor add --name &lt;name&gt; --match &lt;regex&gt; --to @&lt;agent&gt; [options] -- &lt;argv...&gt;</code></pre>
+<p>Everything after <code>--</code> is the command to run. The first token is the executable,
+the rest are its arguments. No shell expansion happens — what you write is what
+gets passed to <code>exec</code>.</p>
+<p><strong>Required flags:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--name &lt;name&gt;</code></td>
+<td>Short identifier for this monitor. Appears in <code>@monitor:&lt;name&gt;</code> sender address.</td>
+</tr>
+<tr>
+<td><code>--match &lt;regex&gt;</code></td>
+<td>Go RE2 regex. Lines matching this get delivered. Case-sensitive by default; use <code>(?i)</code> for insensitive.</td>
+</tr>
+<tr>
+<td><code>--to @&lt;agent&gt;</code></td>
+<td>Recipient agent name (without <code>@</code> is also accepted).</td>
+</tr>
+</tbody></table>
+<p><strong>Optional flags:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--debounce &lt;duration&gt;</code></td>
+<td><code>60s</code></td>
+<td>Debounce window. First match in a window delivers immediately. Subsequent matches in the same window are suppressed. When the window closes, a trailing summary is sent if any matches were suppressed. Minimum 30s.</td>
+</tr>
+<tr>
+<td><code>--env KEY=VALUE</code></td>
+<td>—</td>
+<td>Extra environment variable for the child process. Repeat for multiple.</td>
+</tr>
+</tbody></table>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>The daemon auto-populates <code>CWD</code> from your current directory at the time you
+run the command.</li>
+<li>The command runs with a minimal environment: <code>HOME</code>, <code>USER</code>, <code>LANG</code>, <code>TZ</code>,
+plus any <code>--env</code> vars you add. It does NOT inherit your full shell environment.</li>
+<li>Max 100 monitors can run concurrently.</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code>thrum monitor add \
+  --name build-watch \
+  --match &quot;^(FAIL|PASS|error)&quot; \
+  --to @coordinator_main \
+  --debounce 120s \
+  --env GOPATH=/home/leon/go \
+  -- go test ./... -v</code></pre>
+<hr>
+<h3><code>thrum monitor list</code></h3>
+<p>List monitor jobs.</p>
+<pre><code>thrum monitor list [--all]</code></pre>
+<p>Without <code>--all</code>, shows only running monitors. With <code>--all</code>, includes stopped
+ones too.</p>
+<pre><code>ID    NAME         STATUS   UPTIME    PID     MATCH
+m_01  dev-errors   running  4m32s     91234   (?i)(error|exception|panic)
+m_02  build-watch  stopped  —         —       ^(FAIL|PASS|error)</code></pre>
+<hr>
+<h3><code>thrum monitor show</code></h3>
+<p>Full detail on a single monitor.</p>
+<pre><code>thrum monitor show &lt;id&gt;</code></pre>
+<p>Shows the full command, env vars (redacted — values are <code>[redacted]</code>), match
+count, recent matches, debounce config, and PID.</p>
+<hr>
+<h3><code>thrum monitor stop</code></h3>
+<p>Stop a running monitor.</p>
+<pre><code>thrum monitor stop &lt;id&gt;</code></pre>
+<p>Sends SIGTERM. Waits 5 seconds for the process to exit. If it&#39;s still running,
+sends SIGKILL. Removes the monitor from persistence — it won&#39;t respawn on daemon
+restart.</p>
+<hr>
+<h3><code>thrum monitor logs</code></h3>
+<p>View captured output from a monitor&#39;s process.</p>
+<pre><code>thrum monitor logs &lt;id&gt;</code></pre>
+<p>Shows the last N bytes of combined stdout+stderr from the child process. Useful
+for diagnosing why a monitor isn&#39;t matching what you expect, or seeing what the
+process was doing before it exited.</p>
+<hr>
+<h3><code>thrum monitor restart</code></h3>
+<p>Restart a stopped or dead monitor.</p>
+<pre><code>thrum monitor restart &lt;id&gt;</code></pre>
+<p>Respawns the child process from the saved spec. The monitor must already exist
+(use <code>add</code> for new ones). The daemon resets match counts and uptime.</p>
+<hr>
+<h2>How Matches Are Delivered</h2>
+<p>When a line matches, the daemon sends a synthetic Thrum message to the specified
+agent. The message comes from sender <code>monitor:&lt;name&gt;</code> — it shows up in inbox as
+<code>@monitor:dev-errors</code> (or whatever name you chose).</p>
+<p>The message body contains the matched line.</p>
+<h3>Debounce Behavior</h3>
+<p>The debounce window prevents alert floods from noisy processes.</p>
+<ul>
+<li><strong>First match</strong> in a window: delivered immediately.</li>
+<li><strong>Subsequent matches</strong> in the same window: suppressed.</li>
+<li><strong>When the window closes</strong>: if any matches were suppressed, the daemon sends a
+trailing summary containing the first suppressed line and a count:
+<code>&quot;(+N more matches suppressed in the last 60s)&quot;</code>.</li>
+<li><strong>Default window</strong>: 60s. Minimum: 30s. Set with <code>--debounce</code>.</li>
+</ul>
+<p>So if your server logs 200 error lines in 10 seconds, you get one immediate
+alert and one summary at the end of the window. Not 200 messages.</p>
+<h3>Synthetic Messages</h3>
+<p>Monitor messages are synthetic — they don&#39;t originate from a real registered
+agent. The sender name follows the <code>monitor:&lt;name&gt;</code> format. You can&#39;t reply to
+them or use them in threads. They&#39;re delivery-only notifications.</p>
+<p>The recipient sees them in their inbox like any other message. The
+<code>@monitor:&lt;name&gt;</code> prefix makes them easy to identify.</p>
+<hr>
+<h2>Lifecycle</h2>
+<h3>Persistence</h3>
+<p>Monitor specs are saved to the daemon&#39;s state database (schema v20, <code>monitors</code>
+table) when you run <code>thrum monitor add</code>. If the daemon restarts, it respawns all
+saved monitors from scratch — same command, same regex, same recipient.</p>
+<p>Stop a monitor with <code>thrum monitor stop</code> to remove it from persistence. Stopped
+monitors don&#39;t respawn.</p>
+<h3>Child Exit Notification</h3>
+<p>When the child process exits (crash, normal termination, whatever), the daemon
+sends an exit notification to the recipient agent. The message includes:</p>
+<ul>
+<li>Exit code or signal</li>
+<li>Last 500 bytes of captured output</li>
+<li>A <code>thrum monitor restart &lt;id&gt;</code> hint</li>
+</ul>
+<p>The daemon does <strong>not</strong> auto-respawn. You decide whether to restart.</p>
+<h3>Daemon Restart Behavior</h3>
+<p>On daemon restart:</p>
+<ol>
+<li>The daemon loads all monitor specs from the <code>monitors</code> table.</li>
+<li>It respawns each monitor&#39;s child process.</li>
+<li>Match counts and uptime reset — the process is new.</li>
+</ol>
+<hr>
+<h2>Constraints</h2>
+<table>
+<thead>
+<tr>
+<th>Limit</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Max concurrent monitors</td>
+<td>100</td>
+</tr>
+<tr>
+<td>Max line length</td>
+<td>2KB — longer lines are truncated with <code>[truncated]</code></td>
+</tr>
+<tr>
+<td>Min debounce window</td>
+<td>30s</td>
+</tr>
+<tr>
+<td>Default debounce window</td>
+<td>60s</td>
+</tr>
+<tr>
+<td>Trailing exit output</td>
+<td>Last 500 bytes</td>
+</tr>
+<tr>
+<td>Regex engine</td>
+<td>Go stdlib regexp (RE2)</td>
+</tr>
+<tr>
+<td>Transport</td>
+<td>Unix socket only — <code>monitor.*</code> RPC methods are not available over WebSocket or peer/Telegram dispatchers</td>
+</tr>
+</tbody></table>
+<h3>Environment Variables</h3>
+<p>The child process runs with a minimal env whitelist: <code>HOME</code>, <code>USER</code>, <code>LANG</code>,
+<code>TZ</code>. Add your own with <code>--env KEY=VALUE</code>. Values are stored in the daemon&#39;s
+state DB and <strong>redacted</strong> (shown as <code>[redacted]</code>) in <code>show</code> and <code>list</code> output.</p>
+<h3>No Shell</h3>
+<p>The command runs via <code>exec</code> directly — no shell is ever involved. That means:</p>
+<ul>
+<li>No glob expansion (<code>*.go</code> stays <code>*.go</code>)</li>
+<li>No environment variable expansion (<code>$HOME</code> stays literal)</li>
+<li>No pipes (<code>|</code>) or redirects (<code>&gt;</code>) in the command itself</li>
+<li>No <code>&amp;&amp;</code> or <code>;</code> chaining</li>
+</ul>
+<p>If you need shell features, pass your command to <code>sh -c</code>:</p>
+<pre><code>-- sh -c &quot;make build 2&gt;&amp;1 | grep -E &#39;error|warning&#39;&quot;</code></pre>
+<hr>
+<h2>Cross-References</h2>
+<ul>
+<li><a href="messaging.html">Messaging</a> — how messages get routed and delivered to agents</li>
+<li><a href="cli.html">CLI Reference</a> — full flag documentation for <code>thrum monitor</code></li>
+<li><a href="daemon.html">Daemon Architecture</a> — monitor supervisor lifecycle, startup
+sequence, and persistence details</li>
+</ul>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#monitor-jobs.html')}</script>
+</body>
+</html>

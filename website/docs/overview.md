@@ -63,6 +63,23 @@ need it.
   </a>
 </div>
 
+## What's New (upcoming)
+
+- **`thrum tmux quickstart`** — alias for `thrum tmux create`. Same command,
+  clearer name. `thrum tmux create` now requires `--name`, `--role`, `--module`
+  (or `--no-agent`) and runs quickstart inside the new pane automatically.
+- **`thrum worktree setup`** — alias for `thrum worktree create`. Both commands
+  now accept optional quickstart flags (`--name`, `--role`, `--module`,
+  `--intent`, `--runtime`). Provide all three required flags and it registers
+  the agent via a temp tmux session — no manual `thrum quickstart` step.
+- **Single identity per worktree** — quickstart cleans up old identity files
+  after writing the new one. You can't end up with a stale identity causing
+  auto-select errors.
+- **Monitor Jobs v1** — `thrum monitor add/list/show/stop/logs/restart`. Attach
+  a monitor to any long-running process and it emits matches as synthetic Thrum
+  messages. Leading-edge debounce (default 60s, min 30s), auto-persist,
+  local-socket-only.
+
 ## What's New in v0.7.x
 
 - **Orchestrator role** — a dedicated coordinator agent that reads your plan,
@@ -83,8 +100,9 @@ need it.
   `thrum tmux queue`, with completion tracking, `@system` notifications, and
   restart recovery; see
   [Tmux Sessions — Queue Dispatch](tmux-sessions.md#command-queue-dispatch)
-- **Worktree management** — `thrum worktree create/teardown/list` handles git
-  worktree setup with automatic Thrum and Beads redirect wiring
+- **Worktree management** — `thrum worktree create/teardown/list` (alias:
+  `thrum worktree setup`) handles git worktree setup with automatic Thrum and
+  Beads redirect wiring
 - **Daemon logging** — structured slog output with lumberjack rotation; view
   with `thrum daemon logs`; configurable via `daemon.log_level`
 - **Orchestrator role** — a dedicated role for plan execution with review gates,

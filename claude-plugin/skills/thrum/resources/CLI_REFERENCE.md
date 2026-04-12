@@ -751,8 +751,12 @@ Configure in `.claude/settings.json`:
 
 ```bash
 thrum tmux start                               # One-command: create + launch + prime + attach
-thrum tmux create <name>                       # Create detached tmux session
-thrum tmux create <name> --cwd <path>          # Create with specific working directory
+thrum tmux create <name> --cwd <path> \
+  --name <agent> --role <role> --module <mod>  # Create session + register agent (flags required)
+thrum tmux create <name> --cwd <path> \
+  --no-agent                                   # Create session without agent registration
+thrum tmux quickstart <name> --cwd <path> \
+  --name <agent> --role <role> --module <mod>  # Alias for tmux create
 thrum tmux launch <name>                       # Start AI runtime in session
 thrum tmux launch <name> --runtime claude      # Override runtime for this launch
 thrum tmux status                              # Show managed sessions with state
@@ -761,12 +765,41 @@ thrum tmux connect <name>                      # Attach directly by name
 thrum tmux restart <name>                      # Restart session with context snapshot
 thrum tmux restart <name> --force              # Restart without confirmation
 thrum tmux kill <name>                         # Tear down a session
+thrum tmux queue <session> <command>           # Submit command to session queue
+thrum tmux queue <session> <command> --wait    # Queue + block until complete
+thrum tmux queue-status <session>              # Show active + queued commands
+thrum tmux cancel <command-id>                 # Cancel a queued or active command
 ```
+
+`tmux create` / `tmux quickstart` flags:
+
+```text
+--cwd string       Working directory for the session
+--name string      Agent name (required unless --no-agent)
+--role string      Agent role (required unless --no-agent)
+--module string    Agent module (required unless --no-agent)
+--intent string    Initial work intent description
+--runtime string   Runtime preset: claude, codex, cursor, gemini, auggie
+--no-agent         Skip agent registration (create session only)
+--force            Overwrite existing runtime config files
+```
+
+Without `--no-agent`, the command errors if `--name`, `--role`, and `--module`
+are all missing. Old identity files in the session worktree are cleaned up
+after quickstart runs (one identity per worktree enforced).
 
 `tmux launch` flags:
 
 ```text
 --runtime    AI tool to launch (default: from config or claude)
+```
+
+`tmux queue` flags:
+
+```text
+--timeout int   Command timeout in seconds (default 120)
+--wait          Block until command reaches terminal state
+--silence float Silence threshold in seconds (server default: 5.0)
 ```
 
 ---
@@ -788,6 +821,86 @@ thrum migrate                                  # Migrate from old layout to work
 
 Safe to run multiple times — detects what needs migration and skips completed
 steps.
+
+---
+
+## Worktree Management
+
+```bash
+thrum worktree create <name>                   # Create worktree with thrum/beads setup
+thrum worktree create <name> -b <branch>       # Specify branch name
+thrum worktree create <name> --detach          # Detached HEAD worktree
+thrum worktree create <name> \
+  --name <agent> --role <role> --module <mod>  # Create worktree + register agent
+thrum worktree setup <name>                    # Alias for worktree create
+thrum worktree teardown <name>                 # Remove worktree and clean up artifacts
+thrum worktree list                            # List worktrees with agent info
+```
+
+`worktree create` / `worktree setup` flags:
+
+```text
+--branch, -b string   Branch name (default: feature/<name>)
+--detach              Create detached HEAD worktree
+--name string         Agent name (triggers quickstart when combined with --role + --module)
+--role string         Agent role
+--module string       Agent module
+--intent string       Initial work intent description
+--runtime string      Runtime preset: claude, codex, cursor, gemini, auggie
+--force               Overwrite existing runtime config files
+```
+
+When `--name`, `--role`, and `--module` are all provided, a temporary tmux
+session is created to run quickstart (PID isolation), then destroyed. Old
+identity files in the worktree are cleaned up after quickstart runs.
+
+---
+
+## Monitor Jobs
+
+Run a long-lived command, filter output through a regex, and deliver matching
+lines as Thrum messages. Jobs persist across daemon restarts. Max 100
+concurrent. The command must follow `--`.
+
+```bash
+thrum monitor add --name <n> --match <re> --to @agent -- <cmd> [args...]
+thrum monitor add --name <n> --match <re> --to @agent \
+  --debounce 120s --env KEY=VALUE -- <cmd>
+thrum monitor list                             # Running jobs only
+thrum monitor list --all                       # Include stopped/dead (<1 week)
+thrum monitor show <id>                        # Full detail (env values redacted)
+thrum monitor stop <id>                        # SIGTERM → 5s → SIGKILL
+thrum monitor logs <id>                        # Last 20 matched lines
+thrum monitor logs <id> -n 50                  # Last 50 matched lines
+thrum monitor restart <id>                     # Restart dead/stopped monitor
+```
+
+`monitor add` flags:
+
+```text
+--name string         Unique monitor name (required)
+--match string        Regex pattern — matching lines trigger a message (required)
+--to string           Target agent or group, e.g. @coordinator (required)
+--debounce duration   Leading-edge debounce window, minimum 30s (default 60s)
+--env strings         Environment variable in KEY=VALUE form (repeatable)
+--cwd string          Working directory for the command (default: current dir)
+```
+
+`monitor list` flags:
+
+```text
+--all   Include stopped/dead monitors younger than one week
+```
+
+`monitor logs` flags:
+
+```text
+-n, --limit int   Max number of matches to return (default 20)
+```
+
+Key constraints: local Unix socket only, max line length 2KB (lines truncated),
+leading-edge debounce (min 30s), auto-persists across daemon restart, sends a
+notify-only message on child exit.
 
 ---
 

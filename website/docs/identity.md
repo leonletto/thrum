@@ -358,6 +358,12 @@ back. This matters for agents relaunched under a different runtime (e.g. Claude
 → OpenCode) or moved between branches; the identity file stays accurate without
 manual re-registration.
 
+The pre-launch identity write path adds another canonical writer: when you run
+`thrum tmux create --name X --role Y --module Z` or `thrum worktree create` with
+quickstart flags, the identity file is written _before_ the agent runtime
+launches. The agent starts with identity already in place — no chicken-and-egg
+between first `thrum prime` and identity file existence.
+
 **Auto-selection rules** for identity files (in priority order):
 
 1. If `THRUM_NAME` is set, load `{THRUM_NAME}.json` directly (error if not
@@ -459,6 +465,29 @@ thrum quickstart --name furiosa --role implementer --module auth --intent "Worki
 This chains: `agent.register` -> `session.start` -> `session.setIntent` (if
 intent provided). If a conflict occurs, it automatically retries with
 re-register.
+
+You can also trigger quickstart automatically through the tmux and worktree
+commands. `thrum tmux create` (alias: `thrum tmux quickstart`) requires
+`--name`, `--role`, and `--module` and runs quickstart inside the new pane.
+`thrum worktree create` (alias: `thrum worktree setup`) accepts the same
+optional quickstart flags and, when all three are provided, creates a temp tmux
+session for PID isolation, runs quickstart, then destroys the temp session.
+
+```bash
+# Quickstart via tmux — runs inside the new pane
+thrum tmux create --name furiosa --role implementer --module auth
+thrum tmux quickstart --name furiosa --role implementer --module auth  # same thing
+
+# Quickstart via worktree create
+thrum worktree create --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name furiosa --role implementer --module auth
+thrum worktree setup --branch feature/auth --path ~/.workspaces/repo/auth \
+  --name furiosa --role implementer --module auth  # same thing
+```
+
+**Single identity per worktree:** after quickstart runs, any stale identity
+files left from previous registrations are cleaned up. Each worktree ends up
+with exactly one current identity file.
 
 ## Conflict Detection
 
@@ -576,7 +605,20 @@ Orphaned agents are those with:
 ### Worktree-Specific Identity
 
 When using git worktrees for different features/modules, each worktree can have
-its own identity files:
+its own identity files. The preferred approach is `thrum worktree create`
+(alias: `thrum worktree setup`) — it creates the worktree, wires the Thrum
+redirect, and registers the agent in one command:
+
+```bash
+# Preferred: create worktree and register agent together
+thrum worktree create --branch feature/auth --path ~/.workspaces/myapp/auth \
+  --name furiosa --role implementer --module auth
+
+thrum worktree create --branch feature/sync --path ~/.workspaces/myapp/sync \
+  --name nux --role implementer --module sync
+```
+
+Or if you need to register manually in an existing worktree:
 
 ```bash
 # Main worktree - coordinator (name must differ from role)
@@ -593,6 +635,10 @@ thrum quickstart --name nux --role implementer --module sync
 
 Each worktree gets its own `.thrum/identities/` directory (or uses
 `.thrum/redirect` to share a common `.thrum/` directory).
+
+**Single-identity enforcement:** quickstart cleans up old identity files after
+writing the new one. Each worktree ends up with exactly one active identity
+file, which prevents the "multiple identity files found" auto-select error.
 
 ### Multi-Agent Worktrees
 

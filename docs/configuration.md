@@ -132,9 +132,10 @@ compression. View logs with `thrum daemon logs` (see
 
 ## Worktrees
 
-Settings for `thrum worktree create/teardown/list`. These are written
-automatically by `thrum init` and can be edited in `config.json`. See
-[Orchestrator Role](orchestrator-role.md) for how the orchestrator uses these.
+Settings for `thrum worktree create/teardown/list` (alias:
+`thrum worktree setup`). These are written automatically by `thrum init` and can
+be edited in `config.json`. See [Orchestrator Role](orchestrator-role.md) for
+how the orchestrator uses these.
 
 ### `worktrees.base_path`
 
@@ -446,6 +447,22 @@ These remain separate for good reasons:
 Note: `daemon`, `backup`, and `runtime` settings _are_ all stored in
 `config.json`. The items above are intentionally kept as separate files because
 they are per-agent or volatile state, not global repository settings.
+
+## Monitor Jobs
+
+Monitor jobs watch long-running processes and emit matches as synthetic Thrum
+messages. Configuration lives in the monitor state file managed by
+`thrum monitor add/list/show/stop/logs/restart` — not in `config.json`.
+
+Key behavior:
+
+- **Debounce:** leading-edge, default 60s, minimum 30s. First match fires
+  immediately; subsequent matches within the window are suppressed.
+- **Persistence:** monitors survive daemon restarts automatically.
+- **Scope:** local-socket-only. Monitors don't sync to remote peers.
+
+See [Monitor Jobs](monitor-jobs.md) for the full command reference and
+configuration options.
 
 ## Next Steps
 

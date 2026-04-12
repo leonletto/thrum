@@ -95,6 +95,12 @@ thrum quickstart \
   --runtime opencode
 ```
 
+> **Prefer `thrum tmux quickstart` when using tmux.** If you're launching into a
+> tmux session,
+> `thrum tmux quickstart <session> --name ... --role ... --module ...` creates
+> the session AND registers the agent in one step. The standalone
+> `thrum quickstart` is for agents that register themselves after booting.
+
 After either command, the identity file at `.thrum/identities/<name>.json` has:
 
 ```json
@@ -291,13 +297,16 @@ thrum init --runtime=opencode
 cd ../worktrees/tests-feature
 thrum init --runtime=codex
 
-# 3. Create tmux sessions
-thrum tmux create impl-api --cwd ../worktrees/api-feature
-thrum tmux create impl-tests --cwd ../worktrees/tests-feature
+# 3. Create tmux sessions and register agents in one step
+# thrum tmux quickstart is an alias for thrum tmux create with quickstart flags
+thrum tmux quickstart impl-api \
+  --name impl_api --role implementer --module api \
+  --cwd ../worktrees/api-feature
+thrum tmux quickstart impl-tests \
+  --name impl_tests --role implementer --module tests \
+  --cwd ../worktrees/tests-feature
 
-# 4. Register agents
-thrum tmux send impl-api "thrum quickstart --name impl_api --role implementer --module api"
-thrum tmux send impl-tests "thrum quickstart --name impl_tests --role implementer --module tests"
+# (Steps 3 and 4 are now one command — the agent is already registered when it boots.)
 
 # 5. Launch — each session reads its own preferred_runtime
 thrum tmux launch impl-api      # launches opencode (from identity file)

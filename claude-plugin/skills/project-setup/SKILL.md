@@ -432,15 +432,29 @@ thrum quickstart --name <agent-name> --role implementer \
 
 #### For new worktrees
 
+The preferred path is `thrum worktree create` (alias: `thrum worktree setup`).
+Both commands are interchangeable — use whichever you prefer. They create the
+worktree, set up thrum and beads redirects, register the agent identity, and
+enforce single-identity-per-worktree (registering a second identity in the same
+worktree is an error).
+
 ```bash
-# From the project root — MUST pass --base thrum-dev
+# Preferred: single command via thrum CLI
+thrum worktree create <worktree-path> <branch-name> \
+  --identity <agent-name> --role implementer --base thrum-dev
+
+# Alias — identical behavior
+thrum worktree setup <worktree-path> <branch-name> \
+  --identity <agent-name> --role implementer --base thrum-dev
+
+# Alternative: shell script (does the same thing)
 ./scripts/setup-worktree-thrum.sh \
   <worktree-path> <branch-name> \
   --identity <agent-name> --role implementer --base thrum-dev
 ```
 
-The setup script handles: branch creation, worktree creation, thrum redirect,
-beads redirect, and `thrum quickstart` registration.
+All three handle: branch creation, worktree creation, thrum redirect, beads
+redirect, and `thrum quickstart` registration.
 
 #### For current worktree (small fixes)
 

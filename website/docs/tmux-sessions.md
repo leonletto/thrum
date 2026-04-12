@@ -110,15 +110,47 @@ on the tmux nudge — which is fine, because the nudge is the reliable path.
 
 The `thrum tmux` commands give the coordinator full control over agent sessions.
 
+**Auto-create:** all `thrum tmux` subcommands auto-create a session if the
+daemon has a stored `cwd` from a prior `thrum tmux create` call. So after the
+first create, `thrum tmux launch <name>` works even if the session was killed —
+the daemon recreates it first.
+
 ### Create a Session
 
 ```bash
-thrum tmux create implementer-api --cwd /path/to/worktree
+thrum tmux create implementer-api --cwd /path/to/worktree \
+  --name impl_api --role implementer --module api
 ```
 
 This creates a detached tmux session with a clean environment (no inherited env
-vars). It sets up `monitor-silence` hooks for permission detection and returns
-the agent's identity if one exists at that path.
+vars), runs `thrum quickstart` inside the pane to register the agent identity,
+and sets up `monitor-silence` hooks for permission detection.
+
+You must pass `--name`, `--role`, and `--module` — or `--no-agent` for a bare
+session. Bare `thrum tmux create` without either errors out.
+
+**`thrum tmux quickstart` is an alias** for the same command:
+
+```bash
+thrum tmux quickstart implementer-api --cwd /path/to/worktree \
+  --name impl_api --role implementer --module api
+```
+
+Use whichever reads better to you. Same behavior.
+
+**`--no-agent`** creates a bare session with no identity registration — useful
+for debugging, tooling, or running non-agent processes in a managed tmux pane:
+
+```bash
+thrum tmux create debug-session --cwd /path/to/dir --no-agent
+```
+
+**`--force`** kills and recreates an existing session with the same name:
+
+```bash
+thrum tmux create implementer-api --cwd /path/to/worktree \
+  --name impl_api --role implementer --module api --force
+```
 
 ### Launch a Runtime
 
@@ -177,23 +209,25 @@ Here's what a coordinator does to spin up an agent from scratch:
 # 1. Create a worktree for the agent (sets up thrum + beads redirects automatically)
 thrum worktree create api-feature -b feature/api-refactor
 
-# 2. Create the tmux session
-thrum tmux create implementer-api --cwd ~/.workspaces/myproject/api-feature
+# 2. Create the tmux session + register agent identity in one step
+thrum tmux create implementer-api --cwd ~/.workspaces/myproject/api-feature \
+  --name impl_api --role implementer --module api --intent 'API refactor'
 
-# 3. Register the agent identity (must happen before launch)
-thrum tmux send implementer-api "thrum quickstart --name impl_api --role implementer --module api --intent 'API refactor'"
-
-# 4. Launch the runtime
+# 3. Launch the runtime
 thrum tmux launch implementer-api
 
-# 5. Agent boots → prime detects tmux → agent checks inbox → starts working
-# 6. Send it a task
+# 4. Agent boots → prime detects tmux → agent checks inbox → starts working
+# 5. Send it a task
 thrum send "Your epic is thrum-abc. Run bd show thrum-abc and start working." --to @impl_api
 ```
 
-**Important:** `thrum quickstart` must run before `thrum tmux launch`. It
-creates the identity file that `thrum prime` reads on startup. Without it, the
-agent doesn't know who it is.
+The old pattern (create first, then `thrum tmux send` to run quickstart) is
+gone. Passing `--name`, `--role`, and `--module` to `thrum tmux create` runs
+quickstart inside the pane automatically. You can also use the
+`thrum tmux quickstart` alias — same flags, same behavior.
+
+**Single identity per worktree:** after quickstart runs, any old identity files
+in the worktree are cleaned up. Each worktree has exactly one identity.
 
 The agent is now running, receiving messages instantly, and you can monitor it
 with `thrum team` or `thrum tmux status`.
@@ -426,7 +460,8 @@ For the full runtime resolution order, setup flags, and known limitations, see
 If you're already running agents with background listeners, switching is
 painless:
 
-1. Create a tmux session for your agent: `thrum tmux create <name> --cwd <path>`
+1. Create a tmux session and register the agent identity:
+   `thrum tmux create <name> --cwd <path> --name <agent> --role <role> --module <mod>`
 2. Launch Claude Code inside: `thrum tmux launch <name>`
 3. Agent's `thrum prime` detects `$TMUX`, writes `tmux_session`, switches to
    tmux-mode

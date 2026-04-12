@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <strong>Tmux-Managed Sessions</strong> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <strong>Tmux-Managed Sessions</strong> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -107,11 +107,28 @@ on the tmux nudge — which is fine, because the nudge is the reliable path.</p>
 <hr>
 <h2>Session Lifecycle</h2>
 <p>The <code>thrum tmux</code> commands give the coordinator full control over agent sessions.</p>
+<p><strong>Auto-create:</strong> all <code>thrum tmux</code> subcommands auto-create a session if the
+daemon has a stored <code>cwd</code> from a prior <code>thrum tmux create</code> call. So after the
+first create, <code>thrum tmux launch &lt;name&gt;</code> works even if the session was killed —
+the daemon recreates it first.</p>
 <h3>Create a Session</h3>
-<pre><code>thrum tmux create implementer-api --cwd /path/to/worktree</code></pre>
+<pre><code>thrum tmux create implementer-api --cwd /path/to/worktree \
+  --name impl_api --role implementer --module api</code></pre>
 <p>This creates a detached tmux session with a clean environment (no inherited env
-vars). It sets up <code>monitor-silence</code> hooks for permission detection and returns
-the agent&#39;s identity if one exists at that path.</p>
+vars), runs <code>thrum quickstart</code> inside the pane to register the agent identity,
+and sets up <code>monitor-silence</code> hooks for permission detection.</p>
+<p>You must pass <code>--name</code>, <code>--role</code>, and <code>--module</code> — or <code>--no-agent</code> for a bare
+session. Bare <code>thrum tmux create</code> without either errors out.</p>
+<p><strong><code>thrum tmux quickstart</code> is an alias</strong> for the same command:</p>
+<pre><code>thrum tmux quickstart implementer-api --cwd /path/to/worktree \
+  --name impl_api --role implementer --module api</code></pre>
+<p>Use whichever reads better to you. Same behavior.</p>
+<p><strong><code>--no-agent</code></strong> creates a bare session with no identity registration — useful
+for debugging, tooling, or running non-agent processes in a managed tmux pane:</p>
+<pre><code>thrum tmux create debug-session --cwd /path/to/dir --no-agent</code></pre>
+<p><strong><code>--force</code></strong> kills and recreates an existing session with the same name:</p>
+<pre><code>thrum tmux create implementer-api --cwd /path/to/worktree \
+  --name impl_api --role implementer --module api --force</code></pre>
 <h3>Launch a Runtime</h3>
 <pre><code>thrum tmux launch implementer-api</code></pre>
 <p>This starts Claude Code inside the session. The agent boots, startup hooks run,
@@ -139,21 +156,21 @@ and relaunches. The new session loads the snapshot via <code>thrum prime</code>.
 <pre><code># 1. Create a worktree for the agent (sets up thrum + beads redirects automatically)
 thrum worktree create api-feature -b feature/api-refactor
 
-# 2. Create the tmux session
-thrum tmux create implementer-api --cwd ~/.workspaces/myproject/api-feature
+# 2. Create the tmux session + register agent identity in one step
+thrum tmux create implementer-api --cwd ~/.workspaces/myproject/api-feature \
+  --name impl_api --role implementer --module api --intent &#39;API refactor&#39;
 
-# 3. Register the agent identity (must happen before launch)
-thrum tmux send implementer-api &quot;thrum quickstart --name impl_api --role implementer --module api --intent &#39;API refactor&#39;&quot;
-
-# 4. Launch the runtime
+# 3. Launch the runtime
 thrum tmux launch implementer-api
 
-# 5. Agent boots → prime detects tmux → agent checks inbox → starts working
-# 6. Send it a task
+# 4. Agent boots → prime detects tmux → agent checks inbox → starts working
+# 5. Send it a task
 thrum send &quot;Your epic is thrum-abc. Run bd show thrum-abc and start working.&quot; --to @impl_api</code></pre>
-<p><strong>Important:</strong> <code>thrum quickstart</code> must run before <code>thrum tmux launch</code>. It
-creates the identity file that <code>thrum prime</code> reads on startup. Without it, the
-agent doesn&#39;t know who it is.</p>
+<p>The old pattern (create first, then <code>thrum tmux send</code> to run quickstart) is
+gone. Passing <code>--name</code>, <code>--role</code>, and <code>--module</code> to <code>thrum tmux create</code> runs
+quickstart inside the pane automatically. You can also use the <code>thrum tmux quickstart</code> alias — same flags, same behavior.</p>
+<p><strong>Single identity per worktree:</strong> after quickstart runs, any old identity files
+in the worktree are cleaned up. Each worktree has exactly one identity.</p>
 <p>The agent is now running, receiving messages instantly, and you can monitor it
 with <code>thrum team</code> or <code>thrum tmux status</code>.</p>
 <hr>
@@ -391,7 +408,8 @@ file so every launch in that worktree uses the runtime you picked.</p>
 <p>If you&#39;re already running agents with background listeners, switching is
 painless:</p>
 <ol>
-<li>Create a tmux session for your agent: <code>thrum tmux create &lt;name&gt; --cwd &lt;path&gt;</code></li>
+<li>Create a tmux session and register the agent identity:
+<code>thrum tmux create &lt;name&gt; --cwd &lt;path&gt; --name &lt;agent&gt; --role &lt;role&gt; --module &lt;mod&gt;</code></li>
 <li>Launch Claude Code inside: <code>thrum tmux launch &lt;name&gt;</code></li>
 <li>Agent&#39;s <code>thrum prime</code> detects <code>$TMUX</code>, writes <code>tmux_session</code>, switches to
 tmux-mode</li>

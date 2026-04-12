@@ -125,7 +125,11 @@ thrum worktree create <name>
 ### Step 2: Create and launch tmux session
 
 ```bash
-thrum tmux create <name> --cwd <worktree-path>
+# create session + register agent identity in one step
+thrum tmux create <name> --cwd <worktree-path> \
+  --name <agent_name> --role implementer --module <module>
+# alias: thrum tmux quickstart <name> --cwd <worktree-path> --name <agent_name> ...
+
 thrum tmux launch <name> --runtime <runtime>
 ```
 

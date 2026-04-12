@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <strong>Configuration</strong> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -148,9 +148,7 @@ rotation: 10 MB max file size, 4 rotated backups, 28-day retention, gzip
 compression. View logs with <code>thrum daemon logs</code> (see
 <a href="cli.html#thrum-daemon-logs">CLI Reference</a>).</p>
 <h2>Worktrees</h2>
-<p>Settings for <code>thrum worktree create/teardown/list</code>. These are written
-automatically by <code>thrum init</code> and can be edited in <code>config.json</code>. See
-<a href="orchestrator-role.html">Orchestrator Role</a> for how the orchestrator uses these.</p>
+<p>Settings for <code>thrum worktree create/teardown/list</code> (alias: <code>thrum worktree setup</code>). These are written automatically by <code>thrum init</code> and can be edited in <code>config.json</code>. See <a href="orchestrator-role.html">Orchestrator Role</a> for how the orchestrator uses these.</p>
 <h3><code>worktrees.base_path</code></h3>
 <p>Directory where <code>thrum worktree create</code> puts new worktrees.</p>
 <ul>
@@ -482,6 +480,19 @@ per registered agent</li>
 <p>Note: <code>daemon</code>, <code>backup</code>, and <code>runtime</code> settings <em>are</em> all stored in
 <code>config.json</code>. The items above are intentionally kept as separate files because
 they are per-agent or volatile state, not global repository settings.</p>
+<h2>Monitor Jobs</h2>
+<p>Monitor jobs watch long-running processes and emit matches as synthetic Thrum
+messages. Configuration lives in the monitor state file managed by
+<code>thrum monitor add/list/show/stop/logs/restart</code> — not in <code>config.json</code>.</p>
+<p>Key behavior:</p>
+<ul>
+<li><strong>Debounce:</strong> leading-edge, default 60s, minimum 30s. First match fires
+immediately; subsequent matches within the window are suppressed.</li>
+<li><strong>Persistence:</strong> monitors survive daemon restarts automatically.</li>
+<li><strong>Scope:</strong> local-socket-only. Monitors don&#39;t sync to remote peers.</li>
+</ul>
+<p>See <a href="monitor-jobs.html">Monitor Jobs</a> for the full command reference and
+configuration options.</p>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="single-agent-mode.html">Single-Agent Mode</a> — how <code>single_agent_mode</code> changes

@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -248,12 +248,24 @@ thrum inbox
 thrum sent</code></pre>
 <h2>Working with Multiple Worktrees</h2>
 <p>Feature worktrees share the main worktree&#39;s daemon and message store via a
-redirect file. Use <code>thrum setup</code> to configure a feature worktree:</p>
-<pre><code># Main worktree (already initialized — daemon running from thrum init)
-cd ~/project
+redirect file. Use <code>thrum worktree create</code> (alias: <code>thrum worktree setup</code>) to
+create and configure a feature worktree in one step:</p>
+<pre><code># Create a worktree with redirect setup and optional agent registration
+thrum worktree create --branch feature/auth --path ~/.workspaces/myproject/auth
+# or equivalently:
+thrum worktree setup --branch feature/auth --path ~/.workspaces/myproject/auth
 
-# Feature worktree -- set up redirect to main
-cd ~/project-features/auth
+# With agent quickstart flags — creates the worktree and registers the agent
+# in one step (uses a temp tmux session for PID isolation):
+thrum worktree create --branch feature/auth --path ~/.workspaces/myproject/auth \
+  --name furiosa --role implementer --module auth</code></pre>
+<p><code>thrum worktree create</code> handles the redirect file creation automatically —
+you don&#39;t need to run <code>thrum setup --main-repo</code> separately. If you pass
+<code>--name</code>, <code>--role</code>, and <code>--module</code>, it also runs quickstart inside a temporary
+tmux session for proper PID isolation.</p>
+<p>For an existing worktree that just needs redirect setup, you can still use the
+manual approach:</p>
+<pre><code>cd ~/project-features/auth
 thrum setup --main-repo ~/project
 thrum session start
 thrum send &quot;Experimenting with auth approaches&quot;</code></pre>
@@ -357,6 +369,17 @@ brew install tmux  # macOS
 
 # Enable mouse scrolling (critical for a good experience)
 echo &quot;set -g mouse on&quot; &gt;&gt; ~/.tmux.conf</code></pre>
+<p><code>thrum tmux create</code> requires <code>--name</code>, <code>--role</code>, and <code>--module</code> flags (or
+<code>--no-agent</code> to skip registration). It runs quickstart automatically inside
+the new pane. Calling it without these flags errors out.</p>
+<pre><code># Correct: flags required
+thrum tmux create --name furiosa --role implementer --module auth
+
+# Alias that does the same thing
+thrum tmux quickstart --name furiosa --role implementer --module auth
+
+# No-agent mode (pane only, no registration)
+thrum tmux create --no-agent --session mywork</code></pre>
 <p>See <a href="tmux-sessions.html">Tmux-Managed Sessions</a> for the full story.</p>
 <p><strong>Beads in worktrees:</strong> If you use <a href="beads-and-thrum.html">Beads</a> for task
 tracking, note that <code>bd init</code> doesn&#39;t auto-detect worktrees like <code>thrum init</code>

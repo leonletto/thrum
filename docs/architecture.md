@@ -198,7 +198,7 @@ The daemon serves the WebSocket API and embedded Web UI SPA on the same port
 | **WebSocket**   | `ws://localhost:9999/ws` | Web UI, MCP waiter, real-time apps |
 | **HTTP**        | `http://localhost:9999/` | Embedded React SPA (Web UI)        |
 
-35+ registered RPC methods on Unix socket. Key methods:
+40+ registered RPC methods on Unix socket. Key methods:
 
 - `health` - Daemon status
 - `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`,
@@ -293,20 +293,21 @@ works without network.
 
 ### For the CLI
 
-| Command                               | Daemon Feature Used                                           |
-| ------------------------------------- | ------------------------------------------------------------- |
-| `thrum send "Hello"`                  | `message.send` RPC + auto-sync                                |
-| `thrum inbox`                         | `message.list` RPC with filtering                             |
-| `thrum subscribe --scope module:auth` | `subscribe` RPC + push notifications                          |
-| `thrum agent list --context`          | `agent.listContext` RPC (live git state)                      |
-| `thrum who-has FILE`                  | `agent.listContext` RPC filtered by file                      |
-| `thrum ping @role`                    | `agent.list` + `agent.listContext` RPCs                       |
-| `thrum quickstart --name NAME`        | `agent.register` + `session.start` + `session.setIntent` RPCs |
-| `thrum overview`                      | Multiple RPCs combined into one view                          |
-| `thrum sync force`                    | `sync.force` RPC                                              |
-| `thrum sync status`                   | `sync.status` RPC                                             |
-| `thrum agent delete NAME`             | `agent.delete` RPC                                            |
-| `thrum agent cleanup`                 | `agent.cleanup` RPC                                           |
+| Command                                         | Daemon Feature Used                                           |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| `thrum send "Hello"`                            | `message.send` RPC + auto-sync                                |
+| `thrum inbox`                                   | `message.list` RPC with filtering                             |
+| `thrum subscribe --scope module:auth`           | `subscribe` RPC + push notifications                          |
+| `thrum agent list --context`                    | `agent.listContext` RPC (live git state)                      |
+| `thrum who-has FILE`                            | `agent.listContext` RPC filtered by file                      |
+| `thrum ping @role`                              | `agent.list` + `agent.listContext` RPCs                       |
+| `thrum quickstart --name NAME`                  | `agent.register` + `session.start` + `session.setIntent` RPCs |
+| `thrum overview`                                | Multiple RPCs combined into one view                          |
+| `thrum sync force`                              | `sync.force` RPC                                              |
+| `thrum sync status`                             | `sync.status` RPC                                             |
+| `thrum agent delete NAME`                       | `agent.delete` RPC                                            |
+| `thrum agent cleanup`                           | `agent.cleanup` RPC                                           |
+| `thrum monitor add/list/show/stop/logs/restart` | `monitor.*` RPCs (Unix socket only)                           |
 
 ### For the Web UI
 
@@ -346,6 +347,10 @@ internal/
 │   └── peer/        # PeerTransport, PeerBridge, address validation
 ├── tmux/        # Tmux session operations, nudge delivery, per-session mutex (v0.7.1)
 ├── restart/     # JSONL conversation extraction, snapshot formatting (v0.7.1)
+├── daemon/
+│   └── monitor/ # Monitor job supervisor: spawn, line-read, debounce, delivery
+├── cli/
+│   └── worktree.go  # ensureWorktreeRedirects, enforceOneIdentity, buildQuickstartCmd
 ├── config/      # Configuration loading, identity files, agent naming
 ├── identity/    # ID generation (repo, agent, session, message, event)
 ├── jsonl/       # JSONL reader/writer with file locking
@@ -625,12 +630,14 @@ groups              # Named collections for targeted messaging
 group_members       # Group membership (agents and roles)
 events              # Sequence-ordered, deduplicated event log (for sync)
 sync_checkpoints    # Per-peer sync progress tracking
+command_queue       # Queue dispatch for tmux sessions
+monitors            # Persisted monitor job specs (v20)
 schema_version      # Migration tracking
 ```
 
 ### Schema Version
 
-Current version: **19**
+Current version: **20**
 
 Key migrations:
 
@@ -660,6 +667,7 @@ Key migrations:
 - v17 -> v18: `command_queue` table added (queue dispatch for tmux sessions)
 - v18 -> v19: `silence_ms` and `notify_on_complete` columns added to
   `command_queue`
+- v19 -> v20: `monitors` table added (monitor job specs for supervisor respawn)
 
 ### Initialization
 

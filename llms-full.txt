@@ -40,6 +40,20 @@ New in v0.8.0:
 
 New in v0.8.1: CI fix for npm publish packaging (no user-facing changes).
 
+New in v0.9.0 (upcoming):
+- Safe agent registration — `thrum tmux create` now requires `--name`, `--role`,
+  `--module` (or `--no-agent`); runs quickstart inside the pane automatically.
+  New alias: `thrum tmux quickstart`. `thrum worktree create` gains optional
+  quickstart flags; when all three are provided it creates a temp tmux session for
+  PID isolation. New alias: `thrum worktree setup`.
+  Single-identity-per-worktree enforcement. Auto-creates tmux sessions when stored
+  cwd is available.
+- Monitor Jobs — `thrum monitor add/list/show/stop/logs/restart`. Spawn a child
+  process (explicit argv, no shell), watch stdout+stderr with a Go regex, emit
+  matching lines as synthetic Thrum messages. Sender: `monitor:<name>`. Leading-edge
+  debounce (default 60s, min 30s). Auto-persist. Local Unix socket only.
+  Schema v20 adds `monitors` table. Package: `internal/daemon/monitor/`.
+
 ## Architecture
 
 Thrum uses event sourcing with CQRS:
@@ -636,18 +650,26 @@ All commands accept:
             worktree path on every call (~500ms for a handful of worktrees),
             replacing stale cached heartbeat data with live git state.
 
-### thrum worktree create | teardown | list (v0.8.0)
+### thrum worktree create | setup | teardown | list (v0.8.0)
 
-  thrum worktree create <name> [-b BRANCH] [--detach]
+  thrum worktree create <name> [-b BRANCH] [--detach] [--name <agent-name> --role ROLE --module MODULE] [--intent TEXT] [--runtime PRESET] [--force]
     Create a git worktree at `worktrees.base_path/<name>` with thrum/beads
     redirect wiring.
     Flags:
       -b / --branch STRING   Branch name (default: feature/<name>)
       --detach               Create detached HEAD worktree
+      --name, --role, --module (all optional, v0.9.0): if all three provided,
+        creates a temp tmux session to run quickstart inside the new worktree,
+        giving the agent a PID-based identity file. Session is torn down after
+        quickstart completes.
+      --intent, --runtime, --force: forwarded to quickstart (require --name/--role/--module)
     Behavior: validates name (no /, \, ..), creates worktree, sets up
     .thrum/redirect + .thrum/identities/ (if worktrees.thrum_enabled), sets up
     .beads/redirect (if worktrees.beads_enabled and .beads/ exists in main repo).
     Base path defaults to ~/.workspaces/<project_name> when not configured.
+
+  thrum worktree setup <name> [-b BRANCH] [--detach] [...]
+    Alias for `thrum worktree create` (v0.9.0).
 
   thrum worktree teardown <name>
     Remove a worktree and clean up thrum identity files.
@@ -741,12 +763,20 @@ All commands accept:
             environment variables, defaults, auto-detected values). Shows the source
             of each config value. Works whether the daemon is running or not.
 
-### thrum tmux create | launch | status | kill | send | capture | restart (v0.7.1+)
+### thrum tmux create | quickstart | launch | status | kill | send | capture | restart (v0.7.1+)
 
-  thrum tmux create <name> --cwd <path>
+  thrum tmux create <name> --cwd <path> --name <agent-name> --role ROLE --module MODULE [--intent TEXT] [--runtime PRESET] [--force] [--no-agent]
     Create tmux session for an agent with clean env and monitor-silence hooks.
     v0.8.0: writes `tmux_session` to the identity file at <path> so HandleLaunch
     can match by session name.
+    v0.9.0: --name, --role, --module are required (or --no-agent to skip).
+    Runs `thrum quickstart` inside the new pane automatically.
+    --intent, --runtime, --force are forwarded to quickstart.
+    Single-identity-per-worktree is enforced: fails if a different agent is already
+    registered in the worktree's identity directory.
+
+  thrum tmux quickstart <name> --cwd <path> --name <agent-name> --role ROLE --module MODULE [...]
+    Alias for `thrum tmux create` (v0.9.0).
 
   thrum tmux launch <name> [--runtime claude|codex|cursor|gemini|opencode|auggie|shell]
     Start AI tool inside tmux session. Default: reads from config.json/identity file.
@@ -809,6 +839,47 @@ All commands accept:
   from agent "system" to the requester on completion, timeout (with cancel hint),
   cancellation (with partial output), and interruption. Restart recovery always
   sends interruption notifications regardless of notify_on_complete.
+
+### thrum monitor add | list | show | stop | logs | restart (v0.9.0)
+
+  Monitor Jobs spawn a long-running child process and watch its output for regex
+  matches. Each match emits a synthetic Thrum message to a target agent.
+  Monitors are local-only (Unix socket), auto-persist across daemon restarts,
+  and are capped at 100 per daemon.
+
+  thrum monitor add --name <name> --match <regex> --to @<agent> [--debounce DURATION] [--env KEY=VALUE] -- <argv...>
+    Create and start a monitor.
+    Flags:
+      --name STRING          Unique monitor name (required)
+      --match STRING         Go regex applied to each stdout/stderr line (required)
+      --to STRING            Recipient agent, e.g. @reviewer (required)
+      --debounce DURATION    Leading-edge debounce window (default: 60s, min: 30s)
+      --env KEY=VALUE        Extra env var for the child process (repeatable)
+                             Env var names/values are redacted in log output.
+    <argv...>                Command + args after `--` (no shell; explicit argv array)
+    Behavior: daemon spawns the process. stdout+stderr are captured line-by-line
+    (max 2KB per line; longer lines are truncated). Matching lines trigger a message
+    send. Debounce is leading-edge: first match fires immediately, subsequent matches
+    within the window are suppressed.
+    Sender: `monitor:<name>`. Message body contains the matched line.
+    On process exit, daemon sends a notify-only message (no match required).
+
+  thrum monitor list [--all]
+    List monitors. Without --all, shows only running monitors.
+    Columns: ID | NAME | STATUS | MATCH | TO | PID | STARTED
+
+  thrum monitor show <id>
+    Show full monitor config: name, argv, match regex, target agent, debounce,
+    env vars (redacted), pid, status, start time, exit code (if stopped).
+
+  thrum monitor stop <id>
+    Send SIGTERM to the child process. Monitor moves to "stopped" state.
+
+  thrum monitor logs <id>
+    Show recent captured output lines from the monitor's ring buffer.
+
+  thrum monitor restart <id>
+    Restart a stopped or failed monitor using the same config.
 
 ### thrum restart save | restore | check (v0.7.1)
 
@@ -1142,8 +1213,19 @@ All methods use JSON-RPC 2.0 protocol.
 
 ### tmux.create
 
-  Request:   { name, cwd }
+  Request:   { name, cwd, agent_name?, role?, module?, intent?, runtime?, force?, no_agent? }
   Response:  { session, identity? }
+  Fields:    name        (string, required) — tmux session name
+             cwd         (string, required) — working directory for the session
+             agent_name  (string) — v0.9.0: agent name for quickstart (required unless no_agent=true)
+             role        (string) — v0.9.0: agent role (required unless no_agent=true)
+             module      (string) — v0.9.0: agent module (required unless no_agent=true)
+             intent      (string) — v0.9.0: forwarded to quickstart
+             runtime     (string) — v0.9.0: runtime preset, forwarded to quickstart
+             force       (bool)   — v0.9.0: overwrite existing runtime config
+             no_agent    (bool)   — v0.9.0: skip quickstart, create bare session only
+  Notes:     v0.9.0: after creating the session, daemon runs `thrum quickstart` inside
+             the pane with the provided flags. Single-identity-per-worktree enforced.
 
 ### tmux.launch
 
@@ -1239,6 +1321,51 @@ All methods use JSON-RPC 2.0 protocol.
   Response:  { command_id, state, output? }
   Notes:     Cancels a queued or active command. Partial captured output
              (last 500 lines) is included in the response.
+
+### Monitor RPC Methods (v0.9.0)
+
+### monitor.start
+
+  Request:   { name, argv, match, to, debounce_ms?, env? }
+  Response:  { id, name, status }
+  Fields:    name        (string, required) — unique monitor name
+             argv        ([]string, required) — command + args (no shell)
+             match       (string, required) — Go regex pattern
+             to          (string, required) — recipient agent name (e.g., "reviewer")
+             debounce_ms (int64, default 60000) — leading-edge debounce in ms (min 30000)
+             env         (map[string]string) — additional env vars for the child
+  Errors:    duplicate name, max 100 monitors exceeded, invalid regex, empty argv.
+
+### monitor.list
+
+  Request:   { all? }
+  Response:  { monitors: [{ id, name, status, match, to, pid?, started_at?, exit_code? }] }
+  Notes:     Without all=true, returns only monitors with status "running".
+
+### monitor.show
+
+  Request:   { id }
+  Response:  { id, name, argv, match, to, debounce_ms, env, status, pid?,
+               started_at?, stopped_at?, exit_code?, last_match_at? }
+  Notes:     env values are redacted in the response.
+
+### monitor.stop
+
+  Request:   { id }
+  Response:  { id, status }
+  Notes:     Sends SIGTERM to the child process. Status transitions to "stopped".
+
+### monitor.logs
+
+  Request:   { id, lines? }
+  Response:  { id, lines: [string] }
+  Notes:     Returns up to `lines` recent output lines from the ring buffer (default: 50).
+
+### monitor.restart
+
+  Request:   { id }
+  Response:  { id, name, status }
+  Notes:     Re-spawns the child using the same config. Only valid for stopped/failed monitors.
 
 ## Event Types (JSONL)
 
@@ -1558,6 +1685,15 @@ Unknown event types are silently ignored (forward compatibility).
   the current runtime PID gets written in. Skipped if agent_pid points to a
   different live process (genuine conflict).
 
+  Single-identity-per-worktree (v0.9.0): `thrum tmux create` enforces that only
+  one agent identity exists per worktree. If a different agent is already registered
+  in the worktree's .thrum/identities/ directory, the command fails with an error
+  rather than creating a second identity file.
+
+  ensureWorktreeRedirects: when `thrum tmux create` detects that the target cwd is
+  a git worktree without a .thrum/redirect file, it creates the redirect automatically
+  before running quickstart, so the new agent shares the main repo's daemon and DB.
+
 ### Identity File (.thrum/identities/{name}.json)
 
   {
@@ -1742,13 +1878,16 @@ Unknown event types are silently ignored (forward compatibility).
   purge_metadata      Latest purge cutoff for sync-aware filtering (v15)
   command_queue       v18: per-session command queue (FIFO dispatch to tmux panes)
                       v19: added `silence_ms` and `notify_on_complete` columns
+  monitors            v20: monitor job definitions (name, argv, match regex, target agent,
+                      debounce_ms, env, status, pid, started_at, stopped_at, exit_code)
   events              Sequence-ordered deduplicated event log for daemon-to-daemon sync
   sync_checkpoints    Per-peer sync progress tracking
   schema_version      Migration tracking
 
-  Current schema version: 19 (as of v0.8.0)
+  Current schema version: 20 (as of v0.9.0)
   Key migrations since v0.7.0:
     v15 -> v16  `claude_pid INTEGER NOT NULL DEFAULT 0` added to `agents`
     v16 -> v17  `claude_pid` renamed to `agent_pid` (multi-runtime support)
     v17 -> v18  `command_queue` table added
     v18 -> v19  `silence_ms` and `notify_on_complete` columns added to command_queue
+    v19 -> v20  `monitors` table added

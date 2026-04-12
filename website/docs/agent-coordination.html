@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -272,9 +272,15 @@ thrum sync force</code></pre>
 </tbody></table>
 <h2>Session Workflow Template</h2>
 <p>Use this template for every agent session:</p>
+<blockquote>
+<p><strong>Note:</strong> If you were launched via <code>thrum tmux quickstart</code> (or <code>thrum tmux create</code> with <code>--name</code>/<code>--role</code>/<code>--module</code> flags), you&#39;re already registered —
+skip step 1. The coordinator&#39;s launch command handles registration before your
+session boots.</p>
+</blockquote>
 <pre><code># === START OF SESSION ===
 
 # 1. Register and start session
+# Skip this if launched via thrum tmux quickstart — already registered
 thrum quickstart --name &lt;name&gt; --role &lt;role&gt; --module &lt;module&gt; \
   --intent &quot;&lt;description&gt;&quot;
 
@@ -331,7 +337,7 @@ thrum session end</code></pre>
 <li><strong>Don&#39;t spam messages</strong> -- batch updates when possible</li>
 <li><strong>Don&#39;t skip the cron watchdog</strong> -- it auto-respawns the listener if it stops</li>
 <li><strong>Don&#39;t ignore critical messages</strong> -- stop work and respond</li>
-<li><strong>Don&#39;t skip registration</strong> -- the system won&#39;t route messages correctly</li>
+<li><strong>Don&#39;t skip registration</strong> -- the system won&#39;t route messages correctly (the integrated <code>thrum tmux quickstart</code> path handles this automatically when the coordinator launches you)</li>
 <li><strong>Don&#39;t leave sessions open</strong> -- end them when done to avoid stale status</li>
 <li><strong>Don&#39;t use vague intents</strong> -- be specific about current work</li>
 </ul>

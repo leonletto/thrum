@@ -18,104 +18,112 @@ for AI agent coordination.
 
 ## Quick Reference
 
-| Command                    | Description                                          |
-| -------------------------- | ---------------------------------------------------- |
-| `thrum init`               | Initialize Thrum in the current repository           |
-| `thrum setup`              | Configure a feature worktree with `.thrum/redirect`  |
-| `thrum migrate`            | Migrate old-layout repos to worktree architecture    |
-| `thrum quickstart`         | Register, start session, and set intent in one step  |
-| `thrum overview`           | Show combined status, team, and inbox view           |
-| `thrum status`             | Show current agent status, session, and work context |
-| `thrum send`               | Send a message (direct or broadcast)                 |
-| `thrum reply`              | Reply to a message                                   |
-| `thrum inbox`              | List messages in your inbox                          |
-| `thrum sent`               | List messages you sent with receipt status           |
-| `thrum message get`        | Get a single message with full details               |
-| `thrum message edit`       | Edit a message (full replacement)                    |
-| `thrum message delete`     | Delete a message                                     |
-| `thrum message read`       | Mark messages as read                                |
-| `thrum purge`              | Remove old messages, sessions, and events            |
-| `thrum agent register`     | Register this agent with the daemon                  |
-| `thrum agent list`         | List registered agents                               |
-| `thrum agent whoami`       | Show current agent identity                          |
-| `thrum agent context`      | Show agent work context                              |
-| `thrum agent delete`       | Delete an agent and all associated data              |
-| `thrum agent cleanup`      | Detect and remove orphaned agents                    |
-| `thrum agent start`        | Start a new session (alias)                          |
-| `thrum agent end`          | End current session (alias)                          |
-| `thrum agent set-intent`   | Set work intent (alias)                              |
-| `thrum agent set-task`     | Set current task (alias)                             |
-| `thrum agent set-status`   | Set agent operational status                         |
-| `thrum agent heartbeat`    | Send heartbeat (alias)                               |
-| `thrum session start`      | Start a new work session                             |
-| `thrum session end`        | End the current session                              |
-| `thrum session list`       | List sessions (active and ended)                     |
-| `thrum session heartbeat`  | Send a session heartbeat                             |
-| `thrum session set-intent` | Set session work intent                              |
-| `thrum session set-task`   | Set current task identifier                          |
-| `thrum context save`       | Save agent context from file or stdin                |
-| `thrum context show`       | Show agent context                                   |
-| `thrum context clear`      | Clear agent context                                  |
-| `thrum context sync`       | Sync context to a-sync branch                        |
-| `thrum context prime`      | Collect all context for session initialization       |
-| `thrum runtime`            | Manage runtime presets (list, show, set-default)     |
-| `thrum peer add`           | Start a pairing session and display a peercode       |
-| `thrum peer join`          | Join a peer using a peercode                         |
-| `thrum peer list`          | List all paired peers                                |
-| `thrum peer status`        | Show detailed per-peer health                        |
-| `thrum peer remove`        | Remove a paired peer                                 |
-| `thrum peer configure`     | Add or remove proxy agents for a peer                |
-| `thrum single-agent-mode`  | Toggle or query single-agent mode                    |
-| `thrum telegram configure` | Configure the Telegram bridge (interactive or flags) |
-| `thrum telegram status`    | Show Telegram bridge connection status and config    |
-| `thrum roles list`         | List role templates and matching agents              |
-| `thrum roles deploy`       | Re-render agent preambles from role templates        |
-| `thrum config`             | Manage configuration (show, init)                    |
-| `thrum group create`       | Create a named group                                 |
-| `thrum group delete`       | Delete a group                                       |
-| `thrum group add`          | Add member to a group                                |
-| `thrum group remove`       | Remove member from a group                           |
-| `thrum group list`         | List all groups                                      |
-| `thrum group info`         | Show group details                                   |
-| `thrum group members`      | List group members                                   |
-| `thrum who-has`            | Check which agents are editing a file                |
-| `thrum ping`               | Check if an agent is online                          |
-| `thrum subscribe`          | Subscribe to push notifications                      |
-| `thrum unsubscribe`        | Remove a subscription                                |
-| `thrum subscriptions`      | List active subscriptions                            |
-| `thrum wait`               | Wait for notifications                               |
-| `thrum daemon start`       | Start the daemon in the background                   |
-| `thrum daemon stop`        | Stop the daemon gracefully                           |
-| `thrum daemon status`      | Show daemon status                                   |
-| `thrum daemon restart`     | Restart the daemon                                   |
-| `thrum daemon logs`        | View daemon log file                                 |
-| `thrum sync status`        | Show sync loop status                                |
-| `thrum sync force`         | Trigger an immediate sync                            |
-| `thrum backup`             | Snapshot all thrum data to a backup directory        |
-| `thrum backup status`      | Show last backup info                                |
-| `thrum backup config`      | Show effective backup config                         |
-| `thrum backup restore`     | Restore from latest backup or a specific archive     |
-| `thrum backup plugin list` | List configured backup plugins                       |
-| `thrum backup plugin add`  | Add a backup plugin (or use a built-in preset)       |
-| `thrum backup schedule`    | Configure automatic backup schedule                  |
-| `thrum tmux create`        | Create a tmux session for an agent                   |
-| `thrum tmux launch`        | Start an AI tool inside a tmux session               |
-| `thrum tmux status`        | Show tmux-managed sessions with state                |
-| `thrum tmux list`          | Alias for `thrum tmux status`                        |
-| `thrum tmux kill`          | Tear down a tmux session                             |
-| `thrum tmux send`          | Send text into a tmux session                        |
-| `thrum tmux capture`       | Capture pane content from a tmux session             |
-| `thrum tmux restart`       | Restart a tmux session with context snapshot         |
-| `thrum tmux queue`         | Submit a command to a session's queue                |
-| `thrum tmux queue-status`  | Show the command queue for a session                 |
-| `thrum tmux cancel`        | Cancel a queued or active command                    |
-| `thrum restart save`       | Save conversation snapshot for session restart       |
-| `thrum restart restore`    | Output a restart snapshot to stdout                  |
-| `thrum restart check`      | Check if a restart snapshot exists (exit code)       |
-| `thrum worktree create`    | Create a new worktree with thrum/beads setup         |
-| `thrum worktree teardown`  | Remove a worktree and clean up artifacts             |
-| `thrum worktree list`      | List worktrees with thrum agent info                 |
-| `thrum mcp serve`          | Start MCP stdio server for agent messaging           |
+| Command                    | Description                                                    |
+| -------------------------- | -------------------------------------------------------------- |
+| `thrum init`               | Initialize Thrum in the current repository                     |
+| `thrum setup`              | Configure a feature worktree with `.thrum/redirect`            |
+| `thrum migrate`            | Migrate old-layout repos to worktree architecture              |
+| `thrum quickstart`         | Register, start session, and set intent in one step            |
+| `thrum overview`           | Show combined status, team, and inbox view                     |
+| `thrum status`             | Show current agent status, session, and work context           |
+| `thrum send`               | Send a message (direct or broadcast)                           |
+| `thrum reply`              | Reply to a message                                             |
+| `thrum inbox`              | List messages in your inbox                                    |
+| `thrum sent`               | List messages you sent with receipt status                     |
+| `thrum message get`        | Get a single message with full details                         |
+| `thrum message edit`       | Edit a message (full replacement)                              |
+| `thrum message delete`     | Delete a message                                               |
+| `thrum message read`       | Mark messages as read                                          |
+| `thrum purge`              | Remove old messages, sessions, and events                      |
+| `thrum agent register`     | Register this agent with the daemon                            |
+| `thrum agent list`         | List registered agents                                         |
+| `thrum agent whoami`       | Show current agent identity                                    |
+| `thrum agent context`      | Show agent work context                                        |
+| `thrum agent delete`       | Delete an agent and all associated data                        |
+| `thrum agent cleanup`      | Detect and remove orphaned agents                              |
+| `thrum agent start`        | Start a new session (alias)                                    |
+| `thrum agent end`          | End current session (alias)                                    |
+| `thrum agent set-intent`   | Set work intent (alias)                                        |
+| `thrum agent set-task`     | Set current task (alias)                                       |
+| `thrum agent set-status`   | Set agent operational status                                   |
+| `thrum agent heartbeat`    | Send heartbeat (alias)                                         |
+| `thrum session start`      | Start a new work session                                       |
+| `thrum session end`        | End the current session                                        |
+| `thrum session list`       | List sessions (active and ended)                               |
+| `thrum session heartbeat`  | Send a session heartbeat                                       |
+| `thrum session set-intent` | Set session work intent                                        |
+| `thrum session set-task`   | Set current task identifier                                    |
+| `thrum context save`       | Save agent context from file or stdin                          |
+| `thrum context show`       | Show agent context                                             |
+| `thrum context clear`      | Clear agent context                                            |
+| `thrum context sync`       | Sync context to a-sync branch                                  |
+| `thrum context prime`      | Collect all context for session initialization                 |
+| `thrum runtime`            | Manage runtime presets (list, show, set-default)               |
+| `thrum peer add`           | Start a pairing session and display a peercode                 |
+| `thrum peer join`          | Join a peer using a peercode                                   |
+| `thrum peer list`          | List all paired peers                                          |
+| `thrum peer status`        | Show detailed per-peer health                                  |
+| `thrum peer remove`        | Remove a paired peer                                           |
+| `thrum peer configure`     | Add or remove proxy agents for a peer                          |
+| `thrum single-agent-mode`  | Toggle or query single-agent mode                              |
+| `thrum telegram configure` | Configure the Telegram bridge (interactive or flags)           |
+| `thrum telegram status`    | Show Telegram bridge connection status and config              |
+| `thrum roles list`         | List role templates and matching agents                        |
+| `thrum roles deploy`       | Re-render agent preambles from role templates                  |
+| `thrum config`             | Manage configuration (show, init)                              |
+| `thrum group create`       | Create a named group                                           |
+| `thrum group delete`       | Delete a group                                                 |
+| `thrum group add`          | Add member to a group                                          |
+| `thrum group remove`       | Remove member from a group                                     |
+| `thrum group list`         | List all groups                                                |
+| `thrum group info`         | Show group details                                             |
+| `thrum group members`      | List group members                                             |
+| `thrum who-has`            | Check which agents are editing a file                          |
+| `thrum ping`               | Check if an agent is online                                    |
+| `thrum subscribe`          | Subscribe to push notifications                                |
+| `thrum unsubscribe`        | Remove a subscription                                          |
+| `thrum subscriptions`      | List active subscriptions                                      |
+| `thrum wait`               | Wait for notifications                                         |
+| `thrum daemon start`       | Start the daemon in the background                             |
+| `thrum daemon stop`        | Stop the daemon gracefully                                     |
+| `thrum daemon status`      | Show daemon status                                             |
+| `thrum daemon restart`     | Restart the daemon                                             |
+| `thrum daemon logs`        | View daemon log file                                           |
+| `thrum sync status`        | Show sync loop status                                          |
+| `thrum sync force`         | Trigger an immediate sync                                      |
+| `thrum backup`             | Snapshot all thrum data to a backup directory                  |
+| `thrum backup status`      | Show last backup info                                          |
+| `thrum backup config`      | Show effective backup config                                   |
+| `thrum backup restore`     | Restore from latest backup or a specific archive               |
+| `thrum backup plugin list` | List configured backup plugins                                 |
+| `thrum backup plugin add`  | Add a backup plugin (or use a built-in preset)                 |
+| `thrum backup schedule`    | Configure automatic backup schedule                            |
+| `thrum tmux create`        | Create a tmux session for an agent (quickstart flags required) |
+| `thrum tmux quickstart`    | Alias for `thrum tmux create`                                  |
+| `thrum tmux launch`        | Start an AI tool inside a tmux session                         |
+| `thrum tmux status`        | Show tmux-managed sessions with state                          |
+| `thrum tmux list`          | Alias for `thrum tmux status`                                  |
+| `thrum tmux kill`          | Tear down a tmux session                                       |
+| `thrum tmux send`          | Send text into a tmux session                                  |
+| `thrum tmux capture`       | Capture pane content from a tmux session                       |
+| `thrum tmux restart`       | Restart a tmux session with context snapshot                   |
+| `thrum tmux queue`         | Submit a command to a session's queue                          |
+| `thrum tmux queue-status`  | Show the command queue for a session                           |
+| `thrum tmux cancel`        | Cancel a queued or active command                              |
+| `thrum restart save`       | Save conversation snapshot for session restart                 |
+| `thrum restart restore`    | Output a restart snapshot to stdout                            |
+| `thrum restart check`      | Check if a restart snapshot exists (exit code)                 |
+| `thrum worktree create`    | Create a new worktree with thrum/beads setup                   |
+| `thrum worktree setup`     | Alias for `thrum worktree create`                              |
+| `thrum worktree teardown`  | Remove a worktree and clean up artifacts                       |
+| `thrum worktree list`      | List worktrees with thrum agent info                           |
+| `thrum monitor add`        | Start a new monitor job (regex filter + message delivery)      |
+| `thrum monitor list`       | List running monitor jobs                                      |
+| `thrum monitor show`       | Show full details for a monitor job                            |
+| `thrum monitor stop`       | Stop a monitor job                                             |
+| `thrum monitor logs`       | Show recent matched output for a monitor job                   |
+| `thrum monitor restart`    | Restart a stopped or dead monitor job                          |
+| `thrum mcp serve`          | Start MCP stdio server for agent messaging                     |
 
 ## Global Flags
 
@@ -2056,22 +2064,51 @@ with instant message delivery via `send-keys`. See
 ### thrum tmux create
 
 Create a tmux session for an agent with a clean environment. Sets up
-`monitor-silence` hooks for permission detection.
+`monitor-silence` hooks for permission detection. Quickstart flags (`--name`,
+`--role`, `--module`) are required unless you pass `--no-agent`. After
+quickstart runs, any old identity files in the session's worktree are cleaned up
+— one identity per worktree is enforced.
 
 ```text
-thrum tmux create <name> --cwd <path>
+thrum tmux create <name> --cwd <path> --name <agent-name> --role <role> --module <module> [flags]
 ```
 
-| Flag    | Description                       | Required |
-| ------- | --------------------------------- | -------- |
-| `--cwd` | Working directory for the session | yes      |
+| Flag         | Description                                                     | Default |
+| ------------ | --------------------------------------------------------------- | ------- |
+| `--cwd`      | Working directory for the session                               |         |
+| `--name`     | Agent name (required unless `--no-agent`)                       |         |
+| `--role`     | Agent role (required unless `--no-agent`)                       |         |
+| `--module`   | Agent module (required unless `--no-agent`)                     |         |
+| `--intent`   | Initial work intent description                                 |         |
+| `--runtime`  | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `auggie` |         |
+| `--no-agent` | Skip agent registration (create session only)                   | `false` |
+| `--force`    | Overwrite existing runtime config files                         | `false` |
+
+Without `--no-agent`, the command errors if `--name`, `--role`, and `--module`
+are all missing.
 
 Example:
 
 ```text
-$ thrum tmux create implementer-api --cwd ../worktrees/api-feature
+$ thrum tmux create implementer-api --cwd ../worktrees/api-feature \
+    --name impl_api --role implementer --module api
 Session created: implementer-api
+Agent registered: impl_api
+
+$ thrum tmux create scratch --cwd /tmp/sandbox --no-agent
+Session created: scratch
 ```
+
+### thrum tmux quickstart
+
+Alias for `thrum tmux create`. Same flags, same behavior. Use whichever name
+reads better in your scripts.
+
+```text
+thrum tmux quickstart <name> --cwd <path> --name <agent-name> --role <role> --module <module> [flags]
+```
+
+See [thrum tmux create](#thrum-tmux-create) for the full flag table.
 
 ### thrum tmux launch
 
@@ -2273,14 +2310,26 @@ Create a git worktree with Thrum and Beads setup. Sets up `.thrum/redirect` and
 `.thrum/identities/` so the new worktree shares the daemon with the main repo.
 Optionally sets up `.beads/redirect` if Beads is enabled.
 
+Quickstart flags (`--name`, `--role`, `--module`) are optional. When all three
+are provided, the command spins up a temporary tmux session, runs
+`thrum quickstart` inside it for PID isolation, then destroys the temp session.
+Old identity files in the worktree are cleaned up after quickstart runs — one
+identity per worktree is enforced.
+
 ```text
 thrum worktree create <name> [flags]
 ```
 
-| Flag             | Description                   | Default          |
-| ---------------- | ----------------------------- | ---------------- |
-| `--branch`, `-b` | Branch name                   | `feature/<name>` |
-| `--detach`       | Create detached HEAD worktree | `false`          |
+| Flag             | Description                                                     | Default          |
+| ---------------- | --------------------------------------------------------------- | ---------------- |
+| `--branch`, `-b` | Branch name                                                     | `feature/<name>` |
+| `--detach`       | Create detached HEAD worktree                                   | `false`          |
+| `--name`         | Agent name (triggers quickstart when combined with role+module) |                  |
+| `--role`         | Agent role                                                      |                  |
+| `--module`       | Agent module                                                    |                  |
+| `--intent`       | Initial work intent description                                 |                  |
+| `--runtime`      | Runtime preset: `claude`, `codex`, `cursor`, `gemini`, `auggie` |                  |
+| `--force`        | Overwrite existing runtime config files                         | `false`          |
 
 The worktree is created at `worktrees.base_path/<name>` (default:
 `~/.workspaces/<project>/<name>`). The name cannot contain `/`, `\`, or `..`.
@@ -2297,7 +2346,24 @@ Worktree created: ~/.workspaces/thrum/api-feature
 $ thrum worktree create hotfix -b fix/urgent-bug
 Worktree created: ~/.workspaces/thrum/hotfix
   Branch: fix/urgent-bug
+
+$ thrum worktree create auth-feature --name impl_auth --role implementer --module auth
+Worktree created: ~/.workspaces/thrum/auth-feature
+  Branch: feature/auth-feature
+  Thrum: .thrum/redirect → /path/to/main/.thrum
+  Beads: .beads/redirect → /path/to/main/.beads
+Agent registered: impl_auth
 ```
+
+### thrum worktree setup
+
+Alias for `thrum worktree create`. Same flags, same behavior.
+
+```text
+thrum worktree setup <name> [flags]
+```
+
+See [thrum worktree create](#thrum-worktree-create) for the full flag table.
 
 ### thrum worktree teardown
 
@@ -2332,6 +2398,150 @@ WORKTREE                            BRANCH              HEAD       AGENT        
 /path/to/thrum                      thrum-dev           b3c6352    coordinator_main     working
 /home/user/.workspaces/thrum/api    feature/api         a1b2c3d    impl_api             idle
 /home/user/.workspaces/thrum/web    website-dev         21908a3    impl_website_dev     -
+```
+
+## Monitor Jobs
+
+Run a long-lived command, filter its output through a regex, and deliver
+matching lines as Thrum messages to an agent or group. Jobs persist across
+daemon restarts. Max 100 concurrent jobs.
+
+The command must come after `--`:
+
+```text
+thrum monitor add --name <name> --match <regex> --to @<agent> [flags] -- <command> [args...]
+```
+
+### thrum monitor add
+
+Start a monitor job.
+
+| Flag         | Description                                           | Default | Required |
+| ------------ | ----------------------------------------------------- | ------- | -------- |
+| `--name`     | Unique monitor name                                   |         | yes      |
+| `--match`    | Regex pattern — lines that match trigger a message    |         | yes      |
+| `--to`       | Target agent or group (e.g., `@coordinator`)          |         | yes      |
+| `--debounce` | Leading-edge debounce window (minimum 30s)            | `60s`   |          |
+| `--env`      | Environment variable in `KEY=VALUE` form (repeatable) |         |          |
+| `--cwd`      | Working directory for the command                     | `.`     |          |
+
+Debounce is leading-edge: the first matching line triggers a message
+immediately, then the monitor goes quiet for the debounce window before it can
+fire again. Lines longer than 2KB are truncated.
+
+Example:
+
+```text
+$ thrum monitor add --name app-errors --match "ERROR|FATAL" --to @coordinator \
+    --debounce 120s -- tail -F /var/log/app.log
+Started monitor app-errors (mon_01KNTF2A9...) — target @coordinator
+
+$ thrum monitor add --name ci-failures --match "FAIL" --to @team \
+    --env CI_ENV=staging -- ./scripts/run-tests.sh
+Started monitor ci-failures (mon_01KNTG3B1...) — target @team
+```
+
+### thrum monitor list
+
+List monitor jobs. Shows running jobs by default.
+
+```text
+thrum monitor list [--all]
+```
+
+| Flag    | Description                                           | Default |
+| ------- | ----------------------------------------------------- | ------- |
+| `--all` | Include stopped/dead monitors (younger than one week) | `false` |
+
+Output columns: `ID`, `NAME`, `STATUS`, `TARGET`, `UPTIME`, `PID`.
+
+Example:
+
+```text
+$ thrum monitor list
+ID                           NAME         STATUS     TARGET         UPTIME     PID
+mon_01KNTF2A9...             app-errors   running    @coordinator   3h42m      18421
+mon_01KNTG3B1...             ci-failures  running    @team          15m30s     19033
+```
+
+### thrum monitor show
+
+Show full details for a monitor job. Env var values are always redacted.
+
+```text
+thrum monitor show <id>
+```
+
+Example:
+
+```text
+$ thrum monitor show mon_01KNTF2A9
+ID:       mon_01KNTF2A9...
+Name:     app-errors
+Status:   running
+Match:    ERROR|FATAL
+Target:   @coordinator
+Cwd:      /srv/app
+Debounce: 2m0s
+Argv:     tail -F /var/log/app.log
+Created:  2026-04-10T09:00:00Z
+Env:
+  CI_ENV=<redacted>
+```
+
+### thrum monitor stop
+
+Stop a running monitor job. Sends SIGTERM, waits 5 seconds, then sends SIGKILL
+if still running.
+
+```text
+thrum monitor stop <id>
+```
+
+Example:
+
+```text
+$ thrum monitor stop mon_01KNTF2A9
+Stopped monitor mon_01KNTF2A9...
+```
+
+### thrum monitor logs
+
+Show the most recent matched output lines for a monitor job (historical lookup
+from the messages table, not live tail).
+
+```text
+thrum monitor logs <id> [flags]
+```
+
+| Flag            | Description                     | Default |
+| --------------- | ------------------------------- | ------- |
+| `-n`, `--limit` | Max number of matches to return | `20`    |
+
+Output is oldest-first (reads like a normal log tail).
+
+Example:
+
+```text
+$ thrum monitor logs mon_01KNTF2A9 -n 5
+2026-04-10T09:03:12Z  ERROR: connection timeout on db-primary
+2026-04-10T09:15:44Z  ERROR: retry limit exceeded for job 98312
+2026-04-10T10:02:01Z  FATAL: out of memory, shutting down
+```
+
+### thrum monitor restart
+
+Restart a stopped or dead monitor job. Returns a new monitor ID.
+
+```text
+thrum monitor restart <id>
+```
+
+Example:
+
+```text
+$ thrum monitor restart mon_01KNTF2A9
+Restarted — new ID: mon_01KNTH4C2...
 ```
 
 ## Session Restart

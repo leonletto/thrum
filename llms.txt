@@ -39,6 +39,18 @@ New in v0.8.0:
 
 New in v0.8.1: CI fix for npm publish packaging (no user-facing changes).
 
+New in v0.9.0 (upcoming):
+- Safe agent registration — `thrum tmux create` now requires quickstart flags
+  (`--name`, `--role`, `--module`) or `--no-agent`; runs quickstart inside the
+  pane automatically. New alias: `thrum tmux quickstart`.
+  `thrum worktree create` gains optional quickstart flags; when all three are
+  provided it spins up a temp tmux session for PID isolation.
+  New alias: `thrum worktree setup`. Single-identity-per-worktree enforcement.
+- Monitor Jobs — `thrum monitor add/list/show/stop/logs/restart`. Spawn a
+  child process, watch stdout+stderr with a regex, and emit matches as
+  synthetic Thrum messages to a target agent. Leading-edge debounce (default
+  60s). Local-only, max 100 monitors.
+
 ## Quick Start
 
   thrum init                                          # Set up .thrum/ in repo
@@ -327,8 +339,14 @@ All commands accept these flags:
 
 ### Tmux Session Management (v0.7.1)
 
-  thrum tmux create <name> --cwd <path>
+  thrum tmux create <name> --cwd <path> --name <agent-name> --role ROLE --module MODULE [--intent TEXT] [--runtime PRESET] [--force] [--no-agent]
     Create a tmux session for an agent with clean environment and monitor-silence hooks.
+    --name, --role, --module are required (or pass --no-agent to skip registration).
+    Runs `thrum quickstart` inside the pane automatically after creating the session.
+    --intent, --runtime, --force are passed through to quickstart.
+
+  thrum tmux quickstart <name> --cwd <path> --name <agent-name> --role ROLE --module MODULE [...]
+    Alias for `thrum tmux create`.
 
   thrum tmux launch <name> [--runtime claude|opencode|shell]
     Start an AI tool inside an existing tmux session. Default runtime: claude.
@@ -374,13 +392,18 @@ All commands accept these flags:
 
 ### Worktree Management (v0.8.0)
 
-  thrum worktree create <name> [-b BRANCH] [--detach]
+  thrum worktree create <name> [-b BRANCH] [--detach] [--name <agent-name> --role ROLE --module MODULE] [--intent TEXT] [--runtime PRESET] [--force]
     Create a git worktree with Thrum and Beads redirect wiring. Worktree path:
     `worktrees.base_path/<name>` (default: ~/.workspaces/<project>/<name>).
     - -b / --branch: branch name (default: feature/<name>)
     - --detach: create detached HEAD worktree
+    - --name, --role, --module (all optional): if all three provided, spins up a
+      temp tmux session to run quickstart, giving the agent a proper PID-based identity.
     Sets up .thrum/redirect and .thrum/identities/ (if worktrees.thrum_enabled).
     Sets up .beads/redirect (if worktrees.beads_enabled and .beads/ exists).
+
+  thrum worktree setup <name> [-b BRANCH] [--detach] [...]
+    Alias for `thrum worktree create`.
 
   thrum worktree teardown <name>
     Remove a worktree and clean up Thrum identity files.
@@ -389,6 +412,54 @@ All commands accept these flags:
   thrum worktree list
     List git worktrees with Thrum agent info (reads identity files to show
     which agent is active per worktree).
+
+### Monitor Jobs (v0.9.0)
+
+  thrum monitor add --name <name> --match <regex> --to @<agent> [--debounce 60s] [--env KEY=VALUE] -- <argv...>
+    Spawn a long-running child process. Watch its stdout+stderr for lines matching
+    the regex. Each match emits a synthetic Thrum message to the target agent.
+    - --name: unique monitor name
+    - --match: Go regex applied to each output line
+    - --to: recipient agent (@name)
+    - --debounce: leading-edge debounce window (default: 60s, min: 30s)
+    - --env KEY=VALUE: extra env vars for the child (repeatable; redacted in output)
+    - -- <argv...>: command + args (no shell expansion; use explicit argv)
+    Sender identity appears as `monitor:<name>` in the inbox.
+    Monitors auto-persist and survive daemon restart.
+
+  thrum monitor list [--all]
+    List running monitors. --all includes stopped ones.
+
+  thrum monitor show <id>
+    Show monitor config, status, and recent log lines.
+
+  thrum monitor stop <id>
+    Stop a monitor. Sends SIGTERM to the child process.
+
+  thrum monitor logs <id>
+    Tail recent output from a monitor's captured log buffer.
+
+  thrum monitor restart <id>
+    Restart a stopped or failed monitor.
+
+### Monitor Jobs workflow
+
+  # Watch a build log and ping the reviewer when tests fail
+  thrum monitor add \
+    --name build-watcher \
+    --match "FAIL|panic:" \
+    --to @reviewer \
+    --debounce 120s \
+    -- tail -F /var/log/ci/build.log
+
+  # Check what's running
+  thrum monitor list
+
+  # Inspect output
+  thrum monitor logs build-watcher
+
+  # Stop when done
+  thrum monitor stop build-watcher
 
 ### Session Restart (v0.7.1)
 
@@ -486,13 +557,16 @@ All commands accept these flags:
 
 ### Launch agents in tmux sessions (v0.7.1+)
 
-  # Create a worktree with thrum/beads redirects (v0.8.0)
-  thrum worktree create api-feature -b feature/api-refactor
+  # Create a worktree and register an agent in one step (v0.9.0)
+  thrum worktree create api-feature -b feature/api-refactor \
+    --name impl_api --role implementer --module api
 
-  # Create and launch an agent
-  thrum tmux create implementer-api --cwd ~/.workspaces/myproj/api-feature
-  thrum tmux send implementer-api "thrum quickstart --name impl_api --role implementer --module api --runtime claude"
-  thrum tmux launch implementer-api
+  # OR: create the session + run quickstart in one command (v0.9.0)
+  thrum tmux create implementer-api \
+    --cwd ~/.workspaces/myproj/api-feature \
+    --name impl_api --role implementer --module api --runtime claude
+  # quickstart runs automatically inside the pane; no separate send needed
+
   thrum send "Your epic is thrum-abc. Start working." --to @impl_api
 
   # Check session status
@@ -537,6 +611,8 @@ All commands accept these flags:
   Context     Saved session state for recovery after compaction or session boundaries.
   Peer        A Tailscale-connected remote daemon for direct machine-to-machine sync.
   Runtime     AI coding tool preset (Claude, Codex, Cursor, Gemini, etc.) with config defaults.
+  Monitor     A long-running child process whose stdout/stderr is watched by the daemon.
+              Regex matches emit synthetic Thrum messages to a target agent. Local-only.
 
 ## MCP Server
 

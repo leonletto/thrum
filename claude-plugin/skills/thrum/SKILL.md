@@ -35,6 +35,8 @@ thrum wait --timeout 120s                Custom timeout (duration)
 
 ```bash
 thrum quickstart --name <agent-name> --role R --module M --intent "..."   Register + start session
+thrum worktree create <path> <branch> --identity <n> --role <r>   Create worktree + register agent
+thrum worktree setup <path> <branch> --identity <n> --role <r>    Alias for worktree create
 thrum whoami                                          Show identity
 thrum status                                          Agent + daemon status
 thrum team                                            List active agents
@@ -83,6 +85,19 @@ thrum tmux status                    Show managed sessions with state
 thrum tmux connect                   Attach to running session (interactive picker)
 thrum tmux restart <name>            Restart session with context snapshot
 thrum tmux kill <name>               Tear down session
+thrum tmux create <session> --name <n> --role <r> --module <m> --cwd <path>   Create + register agent
+thrum tmux quickstart <session> --name <n> --role <r> --module <m> --cwd <path>   Alias for tmux create
+```
+
+### Monitor Jobs
+
+```bash
+thrum monitor add <name> --cmd "..." --on-match "msg"   Add a monitored process
+thrum monitor list                   List all monitor jobs
+thrum monitor show <name>            Show job details and recent matches
+thrum monitor stop <name>            Stop a monitor job
+thrum monitor logs <name>            Tail job output
+thrum monitor restart <name>         Restart a stopped job
 ```
 
 ### Daemon & Sync

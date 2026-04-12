@@ -32,13 +32,13 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <strong>RPC API</strong><br>
 </nav>
 <main>
 <h2>Thrum Daemon RPC API</h2>
 <blockquote>
-<p><strong>TL;DR:</strong> 45+ RPC methods over JSON-RPC 2.0, available on a Unix socket or
+<p><strong>TL;DR:</strong> 50+ RPC methods over JSON-RPC 2.0, available on a Unix socket or
 WebSocket. Most users never need this — the CLI wraps all of it. This
 reference is for building custom integrations or understanding what&#39;s
 happening under the hood.</p>
@@ -3035,7 +3035,8 @@ value</li>
 <h2>Tmux Methods (v0.7.1)</h2>
 <h3>tmux.create</h3>
 <p>Create a tmux session for an agent with a clean environment and
-<code>monitor-silence</code> hooks.</p>
+<code>monitor-silence</code> hooks. Also accepts quickstart fields to register an agent
+identity in the same call (equivalent to running <code>thrum tmux quickstart</code>).</p>
 <p><strong>Request:</strong></p>
 <table>
 <thead>
@@ -3057,6 +3058,48 @@ value</li>
 <td>string</td>
 <td>yes</td>
 <td>Working directory for the session</td>
+</tr>
+<tr>
+<td><code>agent_name</code></td>
+<td>string</td>
+<td>no</td>
+<td>Register agent with this name (quickstart: sets <code>--name</code>)</td>
+</tr>
+<tr>
+<td><code>role</code></td>
+<td>string</td>
+<td>no</td>
+<td>Agent role (quickstart: sets <code>--role</code>)</td>
+</tr>
+<tr>
+<td><code>module</code></td>
+<td>string</td>
+<td>no</td>
+<td>Agent module (quickstart: sets <code>--module</code>)</td>
+</tr>
+<tr>
+<td><code>intent</code></td>
+<td>string</td>
+<td>no</td>
+<td>Initial agent intent (quickstart: sets <code>--intent</code>)</td>
+</tr>
+<tr>
+<td><code>runtime</code></td>
+<td>string</td>
+<td>no</td>
+<td>Runtime to launch after creation (<code>claude</code>, <code>opencode</code>, <code>shell</code>) — skips launch step if omitted</td>
+</tr>
+<tr>
+<td><code>no_agent</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Create the session without registering an agent identity</td>
+</tr>
+<tr>
+<td><code>force</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Override an existing identity at this path</td>
 </tr>
 </tbody></table>
 <p><strong>Response:</strong></p>
@@ -3633,6 +3676,415 @@ notifications regardless of <code>notify_on_complete</code>.</p>
 <td>Partial captured output</td>
 </tr>
 </tbody></table>
+<h2>Monitor Methods (v0.9.0)</h2>
+<p>Monitor methods are <strong>Unix socket only</strong> — they&#39;re not available over WebSocket
+or via peer/Telegram dispatchers.</p>
+<h3>monitor.start</h3>
+<p>Start a new monitor job. Spawns the child process immediately and persists the
+spec to the <code>monitors</code> table so it survives daemon restarts.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Short identifier (used as the synthetic sender: <code>monitor:&lt;name&gt;</code>)</td>
+</tr>
+<tr>
+<td><code>match</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Go RE2 regex. Matching lines are delivered as messages.</td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Recipient agent name (without <code>@</code> prefix)</td>
+</tr>
+<tr>
+<td><code>argv</code></td>
+<td>array</td>
+<td>yes</td>
+<td>Command and arguments as a string array (e.g., <code>[&quot;node&quot;, &quot;server.js&quot;, &quot;--watch&quot;]</code>). No shell.</td>
+</tr>
+<tr>
+<td><code>cwd</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Working directory for the child process</td>
+</tr>
+<tr>
+<td><code>debounce</code></td>
+<td>string</td>
+<td>no</td>
+<td>Debounce window as a Go duration string (e.g., <code>&quot;60s&quot;</code>). Min <code>&quot;30s&quot;</code>. Default <code>&quot;60s&quot;</code>.</td>
+</tr>
+<tr>
+<td><code>env</code></td>
+<td>object</td>
+<td>no</td>
+<td>Extra environment variables for the child process (key/value map). Stored redacted in the DB.</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>Monitor ID (<code>m_</code> prefix + ULID)</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Monitor name</td>
+</tr>
+<tr>
+<td><code>pid</code></td>
+<td>integer</td>
+<td>PID of the spawned child process</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>name is required</code>: Missing <code>name</code> field</li>
+<li><code>match is required</code>: Missing <code>match</code> field</li>
+<li><code>to is required</code>: Missing <code>to</code> field</li>
+<li><code>argv is required and must not be empty</code>: Missing or empty <code>argv</code></li>
+<li><code>cwd is required</code>: Missing <code>cwd</code> field</li>
+<li><code>invalid regex</code>: <code>match</code> is not a valid RE2 expression</li>
+<li><code>debounce below minimum (30s)</code>: Debounce window shorter than 30 seconds</li>
+<li><code>max monitors reached</code>: Already at the 100-monitor limit</li>
+<li><code>agent not found</code>: Recipient agent name is not registered</li>
+</ul>
+<hr>
+<h3>monitor.list</h3>
+<p>List monitor jobs.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>all</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>Include stopped monitors (default: running only)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>monitors</code></td>
+<td>array</td>
+<td>List of monitor summary objects</td>
+</tr>
+<tr>
+<td><code>monitors[].id</code></td>
+<td>string</td>
+<td>Monitor ID</td>
+</tr>
+<tr>
+<td><code>monitors[].name</code></td>
+<td>string</td>
+<td>Monitor name</td>
+</tr>
+<tr>
+<td><code>monitors[].status</code></td>
+<td>string</td>
+<td><code>&quot;running&quot;</code> or <code>&quot;stopped&quot;</code></td>
+</tr>
+<tr>
+<td><code>monitors[].pid</code></td>
+<td>integer</td>
+<td>Child PID (0 if stopped)</td>
+</tr>
+<tr>
+<td><code>monitors[].uptime</code></td>
+<td>string</td>
+<td>Human-readable uptime (empty if stopped)</td>
+</tr>
+<tr>
+<td><code>monitors[].match</code></td>
+<td>string</td>
+<td>Regex pattern</td>
+</tr>
+<tr>
+<td><code>monitors[].to</code></td>
+<td>string</td>
+<td>Recipient agent name</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>monitor.show</h3>
+<p>Full detail on a single monitor job.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Monitor ID</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>Monitor ID</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Monitor name</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>&quot;running&quot;</code> or <code>&quot;stopped&quot;</code></td>
+</tr>
+<tr>
+<td><code>pid</code></td>
+<td>integer</td>
+<td>Child PID (0 if stopped)</td>
+</tr>
+<tr>
+<td><code>uptime</code></td>
+<td>string</td>
+<td>Human-readable uptime (empty if stopped)</td>
+</tr>
+<tr>
+<td><code>match</code></td>
+<td>string</td>
+<td>Regex pattern</td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td>string</td>
+<td>Recipient agent name</td>
+</tr>
+<tr>
+<td><code>argv</code></td>
+<td>array</td>
+<td>Full command argv</td>
+</tr>
+<tr>
+<td><code>cwd</code></td>
+<td>string</td>
+<td>Working directory</td>
+</tr>
+<tr>
+<td><code>debounce</code></td>
+<td>string</td>
+<td>Debounce window duration string</td>
+</tr>
+<tr>
+<td><code>env</code></td>
+<td>object</td>
+<td>Env vars with values redacted as <code>&quot;[redacted]&quot;</code></td>
+</tr>
+<tr>
+<td><code>match_count</code></td>
+<td>integer</td>
+<td>Total lines matched since last start</td>
+</tr>
+<tr>
+<td><code>recent_matches</code></td>
+<td>array</td>
+<td>Last N matched lines (strings)</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>string</td>
+<td>ISO 8601 creation timestamp</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>monitor.stop</h3>
+<p>Stop a running monitor. Sends SIGTERM, waits 5 seconds, sends SIGKILL if still
+running. Removes the spec from persistence — the monitor won&#39;t respawn.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Monitor ID</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>Monitor ID</td>
+</tr>
+<tr>
+<td><code>stopped</code></td>
+<td>boolean</td>
+<td><code>true</code> on success</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>monitor not found</code>: No monitor with given ID</li>
+<li><code>monitor already stopped</code>: Monitor is not running</li>
+</ul>
+<hr>
+<h3>monitor.logs</h3>
+<p>Return the last N bytes of captured stdout+stderr from the child process.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Monitor ID</td>
+</tr>
+<tr>
+<td><code>bytes</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Max bytes to return (default: 10000)</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>Monitor ID</td>
+</tr>
+<tr>
+<td><code>logs</code></td>
+<td>string</td>
+<td>Captured output (last N bytes)</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>monitor not found</code>: No monitor with given ID</li>
+</ul>
+<hr>
+<h3>monitor.restart</h3>
+<p>Restart a stopped or dead monitor by respawning its child process from the saved
+spec.</p>
+<p><strong>Request:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Monitor ID</td>
+</tr>
+</tbody></table>
+<p><strong>Response:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>string</td>
+<td>Monitor ID</td>
+</tr>
+<tr>
+<td><code>pid</code></td>
+<td>integer</td>
+<td>PID of the newly spawned child</td>
+</tr>
+</tbody></table>
+<p><strong>Errors:</strong></p>
+<ul>
+<li><code>monitor not found</code>: No monitor with given ID</li>
+<li><code>monitor already running</code>: Monitor is currently active</li>
+</ul>
+<hr>
 <h2>Using the API</h2>
 <h3>From Command Line</h3>
 <pre><code># Using netcat (nc)

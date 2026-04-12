@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <strong>Workflow Templates</strong> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <strong>Workflow Templates</strong> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -196,16 +196,23 @@ template if none exists.</p>
 <code>{{ANTI_PATTERNS}}</code> section, enabling the verifier sub-agent pattern to check
 for architectural violations beyond just &quot;tests pass.&quot;</p>
 <h2>Worktree setup</h2>
-<p>The project-setup skill handles worktree selection and setup in Phase 3. The
-<code>setup-worktree-thrum.sh</code> script handles full worktree bootstrapping in a single
-command:</p>
-<pre><code># Full worktree setup with identity
-./scripts/setup-worktree-thrum.sh ~/.workspaces/myproject/auth feature/auth \
+<p>The project-setup skill handles worktree selection and setup in Phase 3.</p>
+<p>The preferred single-command approach uses <code>thrum worktree create</code> (alias:
+<code>thrum worktree setup</code> — they&#39;re interchangeable):</p>
+<pre><code># Create worktree, set up redirects, and register the agent identity
+thrum worktree create ~/.workspaces/myproject/auth feature/auth \
+  --identity impl-auth \
+  --role implementer \
+  --base thrum-dev
+
+# Same thing — worktree setup is an alias for worktree create
+thrum worktree setup ~/.workspaces/myproject/auth feature/auth \
   --identity impl-auth \
   --role implementer \
   --base thrum-dev</code></pre>
 <p>This creates the worktree, sets up thrum and beads redirects, and registers the
-agent identity.</p>
+agent identity. The <code>setup-worktree-thrum.sh</code> script is also available for the
+same purpose if you prefer shell over the CLI.</p>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="agent-coordination.html">Agent Coordination</a> — practical multi-agent patterns

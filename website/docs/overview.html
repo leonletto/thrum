@@ -32,7 +32,7 @@ a{color:#0366d6}
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
 <strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
-<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
 </nav>
 <main>
@@ -87,6 +87,23 @@ need it.</p>
   </a>
 </div>
 
+<h2>What&#39;s New (upcoming)</h2>
+<ul>
+<li><strong><code>thrum tmux quickstart</code></strong> — alias for <code>thrum tmux create</code>. Same command,
+clearer name. <code>thrum tmux create</code> now requires <code>--name</code>, <code>--role</code>, <code>--module</code>
+(or <code>--no-agent</code>) and runs quickstart inside the new pane automatically.</li>
+<li><strong><code>thrum worktree setup</code></strong> — alias for <code>thrum worktree create</code>. Both commands
+now accept optional quickstart flags (<code>--name</code>, <code>--role</code>, <code>--module</code>,
+<code>--intent</code>, <code>--runtime</code>). Provide all three required flags and it registers
+the agent via a temp tmux session — no manual <code>thrum quickstart</code> step.</li>
+<li><strong>Single identity per worktree</strong> — quickstart cleans up old identity files
+after writing the new one. You can&#39;t end up with a stale identity causing
+auto-select errors.</li>
+<li><strong>Monitor Jobs v1</strong> — <code>thrum monitor add/list/show/stop/logs/restart</code>. Attach
+a monitor to any long-running process and it emits matches as synthetic Thrum
+messages. Leading-edge debounce (default 60s, min 30s), auto-persist,
+local-socket-only.</li>
+</ul>
 <h2>What&#39;s New in v0.7.x</h2>
 <ul>
 <li><strong>Orchestrator role</strong> — a dedicated coordinator agent that reads your plan,
@@ -107,8 +124,9 @@ in the agent process; see <a href="tmux-sessions.html">Tmux Sessions</a></li>
 <code>thrum tmux queue</code>, with completion tracking, <code>@system</code> notifications, and
 restart recovery; see
 <a href="tmux-sessions.html#command-queue-dispatch">Tmux Sessions — Queue Dispatch</a></li>
-<li><strong>Worktree management</strong> — <code>thrum worktree create/teardown/list</code> handles git
-worktree setup with automatic Thrum and Beads redirect wiring</li>
+<li><strong>Worktree management</strong> — <code>thrum worktree create/teardown/list</code> (alias:
+<code>thrum worktree setup</code>) handles git worktree setup with automatic Thrum and
+Beads redirect wiring</li>
 <li><strong>Daemon logging</strong> — structured slog output with lumberjack rotation; view
 with <code>thrum daemon logs</code>; configurable via <code>daemon.log_level</code></li>
 <li><strong>Orchestrator role</strong> — a dedicated role for plan execution with review gates,
