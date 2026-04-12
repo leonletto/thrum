@@ -613,50 +613,7 @@ func (h *GroupHandler) HandleMembers(ctx context.Context, params json.RawMessage
 	return &resp, nil
 }
 
-// EnsureEveryoneGroup creates the built-in @everyone group if it doesn't exist.
-// Called during daemon startup.
-func EnsureEveryoneGroup(ctx context.Context, st *state.State) error {
-	st.RLock()
-	var exists bool
-	err := st.DB().QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM groups WHERE name = 'everyone')").Scan(&exists)
-	st.RUnlock()
-	if err != nil {
-		return fmt.Errorf("check everyone group: %w", err)
-	}
-	if exists {
-		return nil
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-
-	createEvent := types.GroupCreateEvent{
-		Type:        "group.create",
-		Timestamp:   now,
-		GroupID:     "grp_everyone",
-		Name:        "everyone",
-		Description: "All agents",
-		CreatedBy:   "system",
-	}
-
-	st.Lock()
-	defer st.Unlock()
-
-	if err := st.WriteEvent(ctx, createEvent); err != nil {
-		return fmt.Errorf("write everyone group.create: %w", err)
-	}
-
-	memberEvent := types.GroupMemberAddEvent{
-		Type:        "group.member.add",
-		Timestamp:   now,
-		GroupID:     "grp_everyone",
-		MemberType:  "role",
-		MemberValue: "*",
-		AddedBy:     "system",
-	}
-
-	if err := st.WriteEvent(ctx, memberEvent); err != nil {
-		return fmt.Errorf("write everyone group.member.add: %w", err)
-	}
-
-	return nil
-}
+// EnsureEveryoneGroup removed — @everyone is now a direct broadcast
+// (scope_type='broadcast'). The @everyone group is no longer created
+// on daemon startup. Telegram bridge tg:* groups still use the group
+// infrastructure.

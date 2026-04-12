@@ -116,13 +116,8 @@ func TestGroupDelete(t *testing.T) {
 }
 
 func TestGroupDelete_ProtectedEveryone(t *testing.T) {
-	handler, st, cleanup := setupGroupTest(t)
+	handler, _, cleanup := setupGroupTest(t)
 	defer cleanup()
-
-	// Create @everyone
-	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
-		t.Fatalf("ensure everyone: %v", err)
-	}
 
 	deleteReq, _ := json.Marshal(GroupDeleteRequest{Name: "everyone"})
 	_, err := handler.HandleDelete(context.Background(), deleteReq)
@@ -193,12 +188,8 @@ func TestGroupMemberAdd_InvalidType(t *testing.T) {
 }
 
 func TestGroupMemberAdd_ProtectedEveryone(t *testing.T) {
-	handler, st, cleanup := setupGroupTest(t)
+	handler, _, cleanup := setupGroupTest(t)
 	defer cleanup()
-
-	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
-		t.Fatalf("ensure everyone: %v", err)
-	}
 
 	addReq, _ := json.Marshal(GroupMemberAddRequest{
 		Group:       "everyone",
@@ -387,50 +378,6 @@ func TestGroupMembers_WithExpand(t *testing.T) {
 	}
 	if len(membersResp.Expanded) != 1 || membersResp.Expanded[0] != "alice" {
 		t.Errorf("expected expanded=[alice], got %v", membersResp.Expanded)
-	}
-}
-
-func TestEnsureEveryoneGroup(t *testing.T) {
-	_, st, cleanup := setupGroupTest(t)
-	defer cleanup()
-
-	// First call creates the group
-	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
-		t.Fatalf("first EnsureEveryoneGroup: %v", err)
-	}
-
-	// Verify group exists
-	var name string
-	err := st.RawDB().QueryRow("SELECT name FROM groups WHERE name = 'everyone'").Scan(&name)
-	if err != nil {
-		t.Fatalf("everyone group not created: %v", err)
-	}
-
-	// Verify role:* member
-	var memberType, memberValue string
-	err = st.RawDB().QueryRow(
-		"SELECT member_type, member_value FROM group_members WHERE group_id = 'grp_everyone'",
-	).Scan(&memberType, &memberValue)
-	if err != nil {
-		t.Fatalf("everyone member not created: %v", err)
-	}
-	if memberType != "role" || memberValue != "*" {
-		t.Errorf("expected role:*, got %s:%s", memberType, memberValue)
-	}
-
-	// Second call is idempotent
-	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
-		t.Fatalf("second EnsureEveryoneGroup: %v", err)
-	}
-
-	// Should still be exactly 1 group named everyone
-	var count int
-	err = st.RawDB().QueryRow("SELECT COUNT(*) FROM groups WHERE name = 'everyone'").Scan(&count)
-	if err != nil {
-		t.Fatalf("count everyone: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("expected 1 everyone group, got %d", count)
 	}
 }
 

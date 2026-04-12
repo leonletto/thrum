@@ -52,9 +52,9 @@ func Send(client *Client, opts SendOptions) (*SendResult, error) {
 		return nil, fmt.Errorf("--broadcast and --to are mutually exclusive")
 	}
 
-	// Map --broadcast to --to @everyone
+	// Map --broadcast to --to @everyone (uses strict To path)
 	if opts.Broadcast {
-		opts.Mentions = append(opts.Mentions, "everyone")
+		opts.To = "@everyone"
 	}
 
 	// Parse scopes

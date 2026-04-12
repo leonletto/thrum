@@ -111,62 +111,7 @@ func TestFormatSyncStatus_EdgeCases(t *testing.T) {
 	}
 }
 
-func TestFormatSubscriptionsList_EdgeCases(t *testing.T) {
-	tests := []struct {
-		name     string
-		response ListSubscriptionsResponse
-		contains []string
-	}{
-		{
-			name: "all_subscription",
-			response: ListSubscriptionsResponse{
-				Subscriptions: []SubscriptionInfo{
-					{
-						ID:        1,
-						All:       true,
-						CreatedAt: "2026-02-03T10:00:00Z",
-					},
-				},
-			},
-			contains: []string{"All messages", "firehose"},
-		},
-		{
-			name: "multiple_types",
-			response: ListSubscriptionsResponse{
-				Subscriptions: []SubscriptionInfo{
-					{
-						ID:         1,
-						ScopeType:  "module",
-						ScopeValue: "auth",
-						CreatedAt:  "2026-02-03T10:00:00Z",
-					},
-					{
-						ID:          2,
-						MentionRole: "reviewer",
-						CreatedAt:   "2026-02-03T10:05:00Z",
-					},
-					{
-						ID:        3,
-						All:       true,
-						CreatedAt: "2026-02-03T10:10:00Z",
-					},
-				},
-			},
-			contains: []string{"module:auth", "@reviewer", "firehose"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			output := FormatSubscriptionsList(&tt.response)
-			for _, substr := range tt.contains {
-				if !contains(output, substr) {
-					t.Errorf("Output should contain '%s'", substr)
-				}
-			}
-		})
-	}
-}
+// TestFormatSubscriptionsList_EdgeCases removed — subscribe CLI deleted.
 
 func TestFormatSessionStart_InvalidTime(t *testing.T) {
 	result := SessionStartResponse{

@@ -481,7 +481,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	}
 
 	// Messages without an explicit audience remain broadcast/general messages.
-	if len(req.Mentions) == 0 {
+	if len(req.Mentions) == 0 && req.To == "" {
 		audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
 		allAgents, err := h.queryAllOtherAgents(ctx, agentID)
 		if err != nil {
@@ -1587,8 +1587,8 @@ func combineFilterClauses(left, right string) string {
 
 // buildForAgentValues returns the unique set of values to match against mention refs
 // for the for-agent inbox filter. Returns nil if no filtering should be applied.
-// Only the agent's own name/ID is used for direct mention matching; role-based
-// fan-out is handled via the group membership subquery in buildForAgentClause.
+// The agent's own name/ID and role are included so messages sent to @role appear
+// in the agent's inbox via the mention subquery in buildForAgentClause.
 //
 // For user identities, mention refs are stored with the "user:" prefix
 // (e.g., "user:leon-letto") but the UI sends the plain username (e.g.,

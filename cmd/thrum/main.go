@@ -5207,10 +5207,8 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("monitor.logs", monitorHandler.HandleLogs)
 
 	// Subscription management
-	subscriptionHandler := rpc.NewSubscriptionHandler(st)
-	server.RegisterHandler("subscribe", subscriptionHandler.HandleSubscribe)
-	server.RegisterHandler("unsubscribe", subscriptionHandler.HandleUnsubscribe)
-	server.RegisterHandler("subscriptions.list", subscriptionHandler.HandleList)
+	// Subscribe/unsubscribe RPC handlers removed — CLI subscribe commands deleted.
+	// Subscription dispatcher kept for push notification infrastructure.
 
 	// Sync management
 	var syncForceHandler *rpc.SyncForceHandler
@@ -5512,9 +5510,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsRegistry.Register("message.deleteByAgent", websocket.Handler(messageHandler.HandleDeleteByAgent))
 	wsRegistry.Register("message.deleteByScope", websocket.Handler(messageHandler.HandleDeleteByScope))
 	wsRegistry.Register("message.archive", websocket.Handler(messageHandler.HandleArchive))
-	wsRegistry.Register("subscribe", websocket.Handler(subscriptionHandler.HandleSubscribe))
-	wsRegistry.Register("unsubscribe", websocket.Handler(subscriptionHandler.HandleUnsubscribe))
-	wsRegistry.Register("subscriptions.list", websocket.Handler(subscriptionHandler.HandleList))
+	// Subscribe/unsubscribe WS handlers removed — CLI subscribe commands deleted.
 	wsRegistry.Register("user.register", websocket.Handler(userHandler.HandleRegister))
 	wsRegistry.Register("user.identify", websocket.Handler(userHandler.HandleIdentify))
 	if syncLoop != nil {

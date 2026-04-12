@@ -1971,12 +1971,8 @@ func TestHandleSend_GroupScope(t *testing.T) {
 		}
 	})
 
-	t.Run("send_to_everyone_stores_group_scope", func(t *testing.T) {
-		// Create @everyone
-		if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
-			t.Fatalf("ensure everyone: %v", err)
-		}
-
+	t.Run("send_to_everyone_stores_broadcast_scope", func(t *testing.T) {
+		// @everyone now uses broadcast scope — no EnsureEveryoneGroup needed
 		sendReq, _ := json.Marshal(SendRequest{
 			Content:       "Hello everyone",
 			Mentions:      []string{"@everyone"},
