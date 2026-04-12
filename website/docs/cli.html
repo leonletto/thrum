@@ -266,18 +266,6 @@ for AI agent coordination.</p>
 <td>Check if an agent is online</td>
 </tr>
 <tr>
-<td><code>thrum subscribe</code></td>
-<td>Subscribe to push notifications</td>
-</tr>
-<tr>
-<td><code>thrum unsubscribe</code></td>
-<td>Remove a subscription</td>
-</tr>
-<tr>
-<td><code>thrum subscriptions</code></td>
-<td>List active subscriptions</td>
-</tr>
-<tr>
 <td><code>thrum wait</code></td>
 <td>Wait for notifications</td>
 </tr>
@@ -1661,61 +1649,6 @@ daemon flag is set.</p>
 ✓ Context synced for furiosa
   Committed and pushed to a-sync branch</code></pre>
 <h2>Notifications</h2>
-<h3>thrum subscribe</h3>
-<p>Subscribe to push notifications. Subscription types are mutually exclusive:
-specify exactly one of <code>--scope</code>, <code>--mention</code>, or <code>--all</code>.</p>
-<pre><code>thrum subscribe [flags]</code></pre>
-<table>
-<thead>
-<tr>
-<th>Flag</th>
-<th>Description</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>--scope</code></td>
-<td>Subscribe to scope (format: <code>type:value</code>)</td>
-<td></td>
-</tr>
-<tr>
-<td><code>--mention</code></td>
-<td>Subscribe to mentions of role (format: <code>@role</code>)</td>
-<td></td>
-</tr>
-<tr>
-<td><code>--all</code></td>
-<td>Subscribe to all messages (firehose)</td>
-<td><code>false</code></td>
-</tr>
-</tbody></table>
-<p>Example:</p>
-<pre><code>$ thrum subscribe --scope module:auth
-✓ Subscription created: #42
-  Session:    ses_01HXF2A9...
-  Created:    2026-02-03 10:00:00</code></pre>
-<h3>thrum unsubscribe</h3>
-<p>Remove a subscription by ID.</p>
-<pre><code>thrum unsubscribe SUBSCRIPTION_ID</code></pre>
-<p>Example:</p>
-<pre><code>$ thrum unsubscribe 42
-✓ Subscription #42 removed</code></pre>
-<h3>thrum subscriptions</h3>
-<p>List all active subscriptions for the current session.</p>
-<pre><code>thrum subscriptions</code></pre>
-<p>Example:</p>
-<pre><code>$ thrum subscriptions
-Active subscriptions (2):
-
-┌─ Subscription #42
-│  Type:       Scope (module:auth)
-│  Created:    2026-02-03 10:00:00 (2h ago)
-└─
-
-┌─ Subscription #43
-│  Type:       Mention (@reviewer)
-│  Created:    2026-02-03 10:05:00 (1h55m ago)
-└─</code></pre>
 <h3>thrum wait</h3>
 <p>Block until a matching message arrives or timeout occurs. Useful for automation
 and hooks. Always filters by the calling agent&#39;s identity — only returns

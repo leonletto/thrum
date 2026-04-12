@@ -19,16 +19,19 @@ last_updated: "2026-02-10"
 
 ## Subscriptions & Notifications
 
+> **Note:** The `thrum subscribe`, `thrum unsubscribe`, and `thrum subscriptions`
+> CLI commands have been removed. Use `thrum wait` to block until a message
+> arrives. The underlying `subscribe`, `unsubscribe`, and `subscriptions.list`
+> RPC methods still exist for internal use — see [RPC API](rpc-api.md) if you're
+> building a custom client.
+
 ## Quick Reference
 
 ### CLI Commands
 
-| Command                | Description                                      |
-| ---------------------- | ------------------------------------------------ |
-| `thrum subscribe`      | Subscribe to notifications (scope, mention, all) |
-| `thrum unsubscribe ID` | Remove a subscription by ID                      |
-| `thrum subscriptions`  | List active subscriptions for current session    |
-| `thrum wait`           | Block until notification arrives or timeout      |
+| Command      | Description                                 |
+| ------------ | ------------------------------------------- |
+| `thrum wait` | Block until notification arrives or timeout |
 
 ## Overview
 
@@ -585,14 +588,14 @@ When a notification can't be sent (client disconnected):
 
 ## Next Steps
 
-- [Messaging](messaging.md) — the CLI commands that trigger subscriptions:
-  `thrum subscribe`, `thrum wait`, and `thrum subscriptions`
+- [Messaging](messaging.md) — send and receive messages via `thrum send`,
+  `thrum inbox`, and `thrum wait`
 - [Event Streaming](event-streaming.md) — the Broadcaster and Dispatcher
   internals that route matched events to subscribers
 - [WebSocket API](api/websocket.md) — connect over WebSocket to receive
   subscription notifications in real time
 - [RPC API Reference](rpc-api.md) — `subscribe`, `unsubscribe`, and
-  `subscriptions.list` method schemas
+  `subscriptions.list` internal RPC method schemas
 - Dispatcher: `internal/subscriptions/dispatcher.go`
 - Broadcaster: `internal/daemon/broadcaster.go`
 - Unix Socket Client Registry: `internal/daemon/notify.go`

@@ -140,15 +140,9 @@ shows what you&#39;ve sent, who it went to, and whether they&#39;ve read it.</p>
 <li>Sync status</li>
 <li>Daemon health</li>
 </ul>
-<h3>Subscribe to Notifications</h3>
-<pre><code># Subscribe to your module
-thrum subscribe --scope module:auth
-
-# Subscribe to mentions
-thrum subscribe --mention @implementer
-
-# List active subscriptions
-thrum subscriptions</code></pre>
+<h3>Wait for Notifications</h3>
+<p>Use <code>thrum wait</code> to block until a message arrives — useful in automation and
+hooks. See <a href="cli.html#thrum-wait">CLI Reference</a> for flags.</p>
 <h3>Sync Control</h3>
 <pre><code># Check sync status
 thrum sync status
@@ -199,8 +193,8 @@ thrum sent --unread
 # 2c. Mark all messages as read when done reviewing
 thrum message read --all
 
-# 3. Subscribe to your module
-thrum subscribe --scope module:auth</code></pre>
+# 3. Block until a message arrives (useful in automation/hooks)
+# thrum wait --timeout 5m</code></pre>
 <h3>During Work: Send Updates</h3>
 <pre><code># Progress updates
 thrum send &quot;Implemented password hashing&quot; \
@@ -336,7 +330,9 @@ send messages.</p>
 <p>Scopes tag messages by context — <code>module:auth</code>, <code>file:src/auth.go</code>, and so on.
 Use them to filter your inbox and target subscriptions.</p>
 <h3>Subscriptions</h3>
-<p>Subscribe to a scope or mention to get push notifications for matching messages.</p>
+<p>The daemon pushes real-time notifications to connected clients when messages
+match a subscription. Use <code>thrum wait</code> to block until a message arrives from the
+CLI.</p>
 <h3>Sync</h3>
 <p>The sync process runs in the background every 60 seconds and pushes/pulls
 messages via Git. Data lives on the <code>a-sync</code> orphan branch, accessed through a
@@ -351,7 +347,7 @@ integration. The CLI works everywhere — MCP is just an alternative transport.<
 <h2>Tips</h2>
 <ol>
 <li><strong>Always start a session</strong> before sending messages</li>
-<li><strong>Subscribe to your module</strong> to get relevant notifications</li>
+<li><strong>Use <code>thrum wait</code></strong> to block until a message arrives in automation</li>
 <li><strong>Use scopes</strong> to categorize messages</li>
 <li><strong>Mention other agents</strong> when you need their attention</li>
 <li><strong>Check sync status</strong> if messages aren&#39;t appearing</li>

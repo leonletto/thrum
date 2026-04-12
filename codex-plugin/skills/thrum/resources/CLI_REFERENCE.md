@@ -607,26 +607,6 @@ Flags:
 
 ---
 
-## Subscribe / Unsubscribe
-
-```bash
-thrum subscribe --scope module:auth            # Subscribe to scoped messages
-thrum subscribe --mention @reviewer            # Subscribe to role mentions
-thrum subscribe --all                          # Subscribe to all messages (firehose)
-thrum subscriptions                            # List active subscriptions
-thrum unsubscribe <subscription-id>            # Remove a subscription
-```
-
-`subscribe` flags:
-
-```text
---scope string     Subscribe to scope (format: type:value)
---mention string   Subscribe to mentions of role
---all              Subscribe to all messages
-```
-
----
-
 ## Runtime
 
 ```bash

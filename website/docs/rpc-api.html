@@ -2168,6 +2168,13 @@ resolves roles to individual agent IDs.</p>
 <li><code>group not found</code>: No group with given name</li>
 </ul>
 <h3>subscribe</h3>
+<blockquote>
+<p><strong>Internal RPC only.</strong> The <code>thrum subscribe</code>, <code>thrum unsubscribe</code>, and
+<code>thrum subscriptions</code> CLI commands have been removed. From the CLI, use
+<code>thrum wait</code> to block until a message arrives. These RPC methods remain
+available for custom clients (MCP server, WebSocket clients, scripts that talk
+directly to the daemon socket).</p>
+</blockquote>
 <p>Subscribe to push notifications for messages matching a scope, mention, or all
 messages.</p>
 <p><strong>Request:</strong></p>
@@ -4221,8 +4228,8 @@ real-time browser and agent connections</li>
 these RPC handlers</li>
 <li><a href="inbox-query-methods.html">Inbox Query Methods</a> — deeper coverage of
 <code>message.list</code> filtering, pagination, and read-state tracking</li>
-<li><a href="event-streaming.html">Event Streaming</a> — push notifications via the <code>subscribe</code>
-method and Broadcaster</li>
+<li><a href="event-streaming.html">Event Streaming</a> — push notifications via the internal
+<code>subscribe</code> RPC method and Broadcaster</li>
 </ul>
 <h2>References</h2>
 <ul>

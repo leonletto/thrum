@@ -849,6 +849,12 @@ resolves roles to individual agent IDs.
 
 ### subscribe
 
+> **Internal RPC only.** The `thrum subscribe`, `thrum unsubscribe`, and
+> `thrum subscriptions` CLI commands have been removed. From the CLI, use
+> `thrum wait` to block until a message arrives. These RPC methods remain
+> available for custom clients (MCP server, WebSocket clients, scripts that talk
+> directly to the daemon socket).
+
 Subscribe to push notifications for messages matching a scope, mention, or all
 messages.
 
@@ -1849,8 +1855,8 @@ Common causes:
   these RPC handlers
 - [Inbox Query Methods](inbox-query-methods.md) — deeper coverage of
   `message.list` filtering, pagination, and read-state tracking
-- [Event Streaming](event-streaming.md) — push notifications via the `subscribe`
-  method and Broadcaster
+- [Event Streaming](event-streaming.md) — push notifications via the internal
+  `subscribe` RPC method and Broadcaster
 
 ## References
 

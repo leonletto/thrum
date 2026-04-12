@@ -191,18 +191,10 @@ Shows:
 - Sync status
 - Daemon health
 
-### Subscribe to Notifications
+### Wait for Notifications
 
-```bash
-# Subscribe to your module
-thrum subscribe --scope module:auth
-
-# Subscribe to mentions
-thrum subscribe --mention @implementer
-
-# List active subscriptions
-thrum subscriptions
-```
+Use `thrum wait` to block until a message arrives — useful in automation and
+hooks. See [CLI Reference](cli.md#thrum-wait) for flags.
 
 ### Sync Control
 
@@ -279,8 +271,8 @@ thrum sent --unread
 # 2c. Mark all messages as read when done reviewing
 thrum message read --all
 
-# 3. Subscribe to your module
-thrum subscribe --scope module:auth
+# 3. Block until a message arrives (useful in automation/hooks)
+# thrum wait --timeout 5m
 ```
 
 ### During Work: Send Updates
@@ -484,7 +476,9 @@ Use them to filter your inbox and target subscriptions.
 
 ### Subscriptions
 
-Subscribe to a scope or mention to get push notifications for matching messages.
+The daemon pushes real-time notifications to connected clients when messages
+match a subscription. Use `thrum wait` to block until a message arrives from the
+CLI.
 
 ### Sync
 
@@ -506,7 +500,7 @@ integration. The CLI works everywhere — MCP is just an alternative transport.
 ## Tips
 
 1. **Always start a session** before sending messages
-2. **Subscribe to your module** to get relevant notifications
+2. **Use `thrum wait`** to block until a message arrives in automation
 3. **Use scopes** to categorize messages
 4. **Mention other agents** when you need their attention
 5. **Check sync status** if messages aren't appearing

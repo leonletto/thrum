@@ -37,6 +37,13 @@ a{color:#0366d6}
 </nav>
 <main>
 <h2>Subscriptions &amp; Notifications</h2>
+<blockquote>
+<p><strong>Note:</strong> The <code>thrum subscribe</code>, <code>thrum unsubscribe</code>, and <code>thrum subscriptions</code>
+CLI commands have been removed. Use <code>thrum wait</code> to block until a message
+arrives. The underlying <code>subscribe</code>, <code>unsubscribe</code>, and <code>subscriptions.list</code>
+RPC methods still exist for internal use — see <a href="rpc-api.html">RPC API</a> if you&#39;re
+building a custom client.</p>
+</blockquote>
 <h2>Quick Reference</h2>
 <h3>CLI Commands</h3>
 <table>
@@ -47,18 +54,6 @@ a{color:#0366d6}
 </tr>
 </thead>
 <tbody><tr>
-<td><code>thrum subscribe</code></td>
-<td>Subscribe to notifications (scope, mention, all)</td>
-</tr>
-<tr>
-<td><code>thrum unsubscribe ID</code></td>
-<td>Remove a subscription by ID</td>
-</tr>
-<tr>
-<td><code>thrum subscriptions</code></td>
-<td>List active subscriptions for current session</td>
-</tr>
-<tr>
 <td><code>thrum wait</code></td>
 <td>Block until notification arrives or timeout</td>
 </tr>
@@ -604,14 +599,14 @@ registry.Notify(&quot;ses_001&quot;, notification)</code></pre>
 </ul>
 <h2>Next Steps</h2>
 <ul>
-<li><a href="messaging.html">Messaging</a> — the CLI commands that trigger subscriptions:
-<code>thrum subscribe</code>, <code>thrum wait</code>, and <code>thrum subscriptions</code></li>
+<li><a href="messaging.html">Messaging</a> — send and receive messages via <code>thrum send</code>,
+<code>thrum inbox</code>, and <code>thrum wait</code></li>
 <li><a href="event-streaming.html">Event Streaming</a> — the Broadcaster and Dispatcher
 internals that route matched events to subscribers</li>
 <li><a href="api/websocket.html">WebSocket API</a> — connect over WebSocket to receive
 subscription notifications in real time</li>
 <li><a href="rpc-api.html">RPC API Reference</a> — <code>subscribe</code>, <code>unsubscribe</code>, and
-<code>subscriptions.list</code> method schemas</li>
+<code>subscriptions.list</code> internal RPC method schemas</li>
 <li>Dispatcher: <code>internal/subscriptions/dispatcher.go</code></li>
 <li>Broadcaster: <code>internal/daemon/broadcaster.go</code></li>
 <li>Unix Socket Client Registry: <code>internal/daemon/notify.go</code></li>

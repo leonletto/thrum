@@ -167,12 +167,16 @@ thrum session end     # Finish</code></pre>
 thrum agent cleanup --dry-run        # Preview orphaned agents
 thrum agent cleanup --force          # Delete all orphaned agents</code></pre>
 <h3>4. Subscription-Based Notifications</h3>
-<p>Agents subscribe to relevant events:</p>
-<pre><code># Subscribe to your module
-thrum subscribe --scope module:auth
+<p>The daemon pushes real-time notifications to connected clients when messages
+match an active subscription. From the CLI, use <code>thrum wait</code> to block until a
+message arrives:</p>
+<pre><code># Block until a message arrives (30s default timeout)
+thrum wait
 
-# Subscribe to @mentions
-thrum subscribe --mention @reviewer</code></pre>
+# Block up to 5 minutes, include messages from the last 30s
+thrum wait --timeout 5m --after -30s</code></pre>
+<p>The underlying <code>subscribe</code>, <code>unsubscribe</code>, and <code>subscriptions.list</code> RPC methods
+are internal — used by the MCP server and WebSocket clients, not the CLI.</p>
 <p>When matching messages arrive, subscribers receive real-time notifications:</p>
 <pre><code>{
   &quot;method&quot;: &quot;notification.message&quot;,
@@ -231,7 +235,7 @@ work, intelligent handoffs.</p>
 <code>session.setIntent</code>, <code>session.setTask</code></li>
 <li><code>message.send</code>, <code>message.get</code>, <code>message.list</code>, <code>message.edit</code>,
 <code>message.delete</code>, <code>message.markRead</code></li>
-<li><code>subscribe</code>, <code>unsubscribe</code>, <code>subscriptions.list</code></li>
+<li><code>subscribe</code>, <code>unsubscribe</code>, <code>subscriptions.list</code> (internal — used by MCP server and WebSocket clients)</li>
 <li><code>sync.force</code>, <code>sync.status</code></li>
 <li><code>peer.start_pairing</code>, <code>peer.wait_pairing</code>, <code>peer.join</code>, <code>peer.list</code>,
 <code>peer.status</code>, <code>peer.remove</code>, <code>peer.configure</code>, <code>peer.address_changed</code></li>
@@ -307,8 +311,8 @@ works without network.</p>
 <td><code>message.list</code> RPC with filtering</td>
 </tr>
 <tr>
-<td><code>thrum subscribe --scope module:auth</code></td>
-<td><code>subscribe</code> RPC + push notifications</td>
+<td><code>thrum wait</code></td>
+<td><code>subscribe</code> RPC + push notifications (internal RPC)</td>
 </tr>
 <tr>
 <td><code>thrum agent list --context</code></td>

@@ -153,15 +153,20 @@ thrum agent cleanup --force          # Delete all orphaned agents
 
 ### 4. Subscription-Based Notifications
 
-Agents subscribe to relevant events:
+The daemon pushes real-time notifications to connected clients when messages
+match an active subscription. From the CLI, use `thrum wait` to block until a
+message arrives:
 
 ```bash
-# Subscribe to your module
-thrum subscribe --scope module:auth
+# Block until a message arrives (30s default timeout)
+thrum wait
 
-# Subscribe to @mentions
-thrum subscribe --mention @reviewer
+# Block up to 5 minutes, include messages from the last 30s
+thrum wait --timeout 5m --after -30s
 ```
+
+The underlying `subscribe`, `unsubscribe`, and `subscriptions.list` RPC methods
+are internal — used by the MCP server and WebSocket clients, not the CLI.
 
 When matching messages arrive, subscribers receive real-time notifications:
 
@@ -215,7 +220,7 @@ The daemon serves the WebSocket API and embedded Web UI SPA on the same port
   `session.setIntent`, `session.setTask`
 - `message.send`, `message.get`, `message.list`, `message.edit`,
   `message.delete`, `message.markRead`
-- `subscribe`, `unsubscribe`, `subscriptions.list`
+- `subscribe`, `unsubscribe`, `subscriptions.list` (internal — used by MCP server and WebSocket clients)
 - `sync.force`, `sync.status`
 - `peer.start_pairing`, `peer.wait_pairing`, `peer.join`, `peer.list`,
   `peer.status`, `peer.remove`, `peer.configure`, `peer.address_changed`
@@ -305,7 +310,7 @@ works without network.
 | ----------------------------------------------- | ------------------------------------------------------------- |
 | `thrum send "Hello"`                            | `message.send` RPC + auto-sync                                |
 | `thrum inbox`                                   | `message.list` RPC with filtering                             |
-| `thrum subscribe --scope module:auth`           | `subscribe` RPC + push notifications                          |
+| `thrum wait`                                    | `subscribe` RPC + push notifications (internal RPC)           |
 | `thrum agent list --context`                    | `agent.listContext` RPC (live git state)                      |
 | `thrum who-has FILE`                            | `agent.listContext` RPC filtered by file                      |
 | `thrum ping @role`                              | `agent.list` + `agent.listContext` RPCs                       |

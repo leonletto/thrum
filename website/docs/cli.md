@@ -73,9 +73,6 @@ for AI agent coordination.
 | `thrum config`             | Manage configuration (show, init)                              |
 | `thrum who-has`            | Check which agents are editing a file                          |
 | `thrum ping`               | Check if an agent is online                                    |
-| `thrum subscribe`          | Subscribe to push notifications                                |
-| `thrum unsubscribe`        | Remove a subscription                                          |
-| `thrum subscriptions`      | List active subscriptions                                      |
 | `thrum wait`               | Wait for notifications                                         |
 | `thrum daemon start`       | Start the daemon in the background                             |
 | `thrum daemon stop`        | Stop the daemon gracefully                                     |
@@ -1257,70 +1254,6 @@ $ thrum context sync
 ```
 
 ## Notifications
-
-### thrum subscribe
-
-Subscribe to push notifications. Subscription types are mutually exclusive:
-specify exactly one of `--scope`, `--mention`, or `--all`.
-
-```text
-thrum subscribe [flags]
-```
-
-| Flag        | Description                                     | Default |
-| ----------- | ----------------------------------------------- | ------- |
-| `--scope`   | Subscribe to scope (format: `type:value`)       |         |
-| `--mention` | Subscribe to mentions of role (format: `@role`) |         |
-| `--all`     | Subscribe to all messages (firehose)            | `false` |
-
-Example:
-
-```text
-$ thrum subscribe --scope module:auth
-✓ Subscription created: #42
-  Session:    ses_01HXF2A9...
-  Created:    2026-02-03 10:00:00
-```
-
-### thrum unsubscribe
-
-Remove a subscription by ID.
-
-```text
-thrum unsubscribe SUBSCRIPTION_ID
-```
-
-Example:
-
-```text
-$ thrum unsubscribe 42
-✓ Subscription #42 removed
-```
-
-### thrum subscriptions
-
-List all active subscriptions for the current session.
-
-```text
-thrum subscriptions
-```
-
-Example:
-
-```text
-$ thrum subscriptions
-Active subscriptions (2):
-
-┌─ Subscription #42
-│  Type:       Scope (module:auth)
-│  Created:    2026-02-03 10:00:00 (2h ago)
-└─
-
-┌─ Subscription #43
-│  Type:       Mention (@reviewer)
-│  Created:    2026-02-03 10:05:00 (1h55m ago)
-└─
-```
 
 ### thrum wait
 

@@ -271,8 +271,7 @@ go test ./internal/websocket/...
 
 ### Notifications Not Received
 
-1. Check subscription exists: `thrum subscriptions` CLI or `subscriptions.list`
-   RPC
+1. Check subscription exists: `subscriptions.list` RPC (internal)
 2. Verify client is connected: Check WebSocket client registry via daemon logs
 3. Confirm event matches subscription: Check scope/mention filters match message
    scopes/refs
