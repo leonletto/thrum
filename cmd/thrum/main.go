@@ -7568,6 +7568,14 @@ func tmuxCmd() *cobra.Command {
 			if cwd == "" {
 				return fmt.Errorf("--cwd is required")
 			}
+			agentName, _ := cmd.Flags().GetString("name")
+			role, _ := cmd.Flags().GetString("role")
+			module, _ := cmd.Flags().GetString("module")
+			intent, _ := cmd.Flags().GetString("intent")
+			runtimeFlag, _ := cmd.Flags().GetString("runtime")
+			noAgent, _ := cmd.Flags().GetBool("no-agent")
+			force, _ := cmd.Flags().GetBool("force")
+
 			client, err := getClient()
 			if err != nil {
 				return fmt.Errorf("connect to daemon: %w", err)
@@ -7575,7 +7583,15 @@ func tmuxCmd() *cobra.Command {
 			defer func() { _ = client.Close() }()
 
 			result, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
-				Name: args[0], Cwd: cwd,
+				Name:      args[0],
+				Cwd:       cwd,
+				AgentName: agentName,
+				Role:      role,
+				Module:    module,
+				Intent:    intent,
+				Runtime:   runtimeFlag,
+				Force:     force,
+				NoAgent:   noAgent,
 			})
 			if err != nil {
 				return err
@@ -7590,7 +7606,24 @@ func tmuxCmd() *cobra.Command {
 		},
 	}
 	createCmd.Flags().String("cwd", "", "Working directory for the session")
+	createCmd.Flags().String("name", "", "Agent name for quickstart registration")
+	createCmd.Flags().String("role", "", "Agent role for quickstart registration")
+	createCmd.Flags().String("module", "", "Agent module for quickstart registration")
+	createCmd.Flags().String("intent", "", "Agent intent")
+	createCmd.Flags().String("runtime", "", "Preferred runtime")
+	createCmd.Flags().Bool("no-agent", false, "Skip agent registration (create bare session)")
+	createCmd.Flags().Bool("force", false, "Re-register even if agent exists; kill+recreate existing session")
 	cmd.AddCommand(createCmd)
+
+	// quickstart (alias for create)
+	quickstartCmd := &cobra.Command{
+		Use:   "quickstart <session-name>",
+		Short: "Create a tmux session and register an agent (alias for 'tmux create')",
+		Args:  cobra.ExactArgs(1),
+		RunE:  createCmd.RunE,
+	}
+	quickstartCmd.Flags().AddFlagSet(createCmd.Flags())
+	cmd.AddCommand(quickstartCmd)
 
 	// launch
 	launchCmd := &cobra.Command{
