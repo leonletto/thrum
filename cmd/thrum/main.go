@@ -2360,6 +2360,16 @@ func worktreeCreateCmd() *cobra.Command {
 				}
 			}
 
+			if flagJSON {
+				result := map[string]string{
+					"worktree_path": worktreePath,
+					"branch":        branch,
+				}
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(result)
+			}
+
 			return nil
 		},
 	}
@@ -2415,6 +2425,12 @@ func worktreeTeardownCmd() *cobra.Command {
 						}
 					}
 				}
+			}
+
+			// Kill associated tmux session if any (best-effort, ignore errors)
+			if client, err := getClient(); err == nil {
+				defer func() { _ = client.Close() }()
+				_ = cli.TmuxKill(client, name)
 			}
 
 			// Remove git worktree
@@ -6437,11 +6453,18 @@ func detectGitUser() string {
 }
 
 func restartCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "restart",
-		Short: "Session restart with context snapshot",
+		Short: "Moved to 'thrum tmux snapshot'",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return fmt.Errorf("restart commands moved to 'thrum tmux snapshot save/restore/check'")
+		},
 	}
+}
 
+// restartSnapshotSubcmds returns the save, restore, and check subcommands for
+// use under 'thrum tmux snapshot'.
+func restartSnapshotSubcmds() []*cobra.Command {
 	saveCmd := &cobra.Command{
 		Use:   "save",
 		Short: "Save conversation snapshot for session restart",
@@ -6518,7 +6541,6 @@ func restartCmd() *cobra.Command {
 		},
 	}
 	saveCmd.Flags().String("reason", "self-initiated", "Reason for restart")
-	cmd.AddCommand(saveCmd)
 
 	restoreCmd := &cobra.Command{
 		Use:   "restore",
@@ -6545,7 +6567,6 @@ func restartCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.AddCommand(restoreCmd)
 
 	checkCmd := &cobra.Command{
 		Use:   "check",
@@ -6569,9 +6590,8 @@ func restartCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.AddCommand(checkCmd)
 
-	return cmd
+	return []*cobra.Command{saveCmd, restoreCmd, checkCmd}
 }
 
 func tmuxCmd() *cobra.Command {
@@ -7143,6 +7163,16 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 		},
 	}
 	cmd.AddCommand(cancelCmd)
+
+	// snapshot — save/restore/check subcommands (moved from top-level 'restart')
+	snapshotCmd := &cobra.Command{
+		Use:   "snapshot",
+		Short: "Manage conversation snapshots for session restart",
+	}
+	for _, sub := range restartSnapshotSubcmds() {
+		snapshotCmd.AddCommand(sub)
+	}
+	cmd.AddCommand(snapshotCmd)
 
 	return cmd
 }

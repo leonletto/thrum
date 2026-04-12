@@ -341,20 +341,20 @@ func (h *TmuxHandler) HandleKill(ctx context.Context, params json.RawMessage) (a
 	return nil, ttmux.KillSession(name)
 }
 
-// HandleSend sends text to a tmux session pane.
+// HandleSend sends text to a tmux session pane by routing through the queue
+// for unified safe dispatch.
 func (h *TmuxHandler) HandleSend(ctx context.Context, params json.RawMessage) (any, error) {
 	var req TmuxSendRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
-	_, target, err := h.ensureSession(req.Name)
-	if err != nil {
-		return nil, err
-	}
-	if err := ttmux.SendKeys(target, req.Text); err != nil {
-		return nil, err
-	}
-	return nil, ttmux.SendSpecialKey(target, "Enter")
+	// Route through queue for unified safe dispatch
+	queueParams, _ := json.Marshal(map[string]any{
+		"session":   req.Name,
+		"text":      req.Text,
+		"requester": "tmux-send",
+	})
+	return h.HandleQueue(ctx, queueParams)
 }
 
 // HandleCapture captures the visible content of a tmux session pane.
