@@ -34,7 +34,6 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
-	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	"github.com/leonletto/thrum/internal/runtime"
 	"github.com/leonletto/thrum/internal/subscriptions"
@@ -197,10 +196,6 @@ Examples:
 			stealth, _ := cmd.Flags().GetBool("stealth")
 			runtimeFlag, _ := cmd.Flags().GetString("runtime")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
-			agentName, _ := cmd.Flags().GetString("agent-name")
-			agentRole, _ := cmd.Flags().GetString("agent-role")
-			agentModule, _ := cmd.Flags().GetString("agent-module")
-
 			skillsOnly, _ := cmd.Flags().GetBool("skills")
 
 			// Validate runtime flag if specified
@@ -382,13 +377,10 @@ Examples:
 			// Step 4: Runtime config generation (if not cli-only)
 			if selectedRuntime != "" && selectedRuntime != "cli-only" {
 				rtOpts := cli.RuntimeInitOptions{
-					RepoPath:  flagRepo,
-					Runtime:   selectedRuntime,
-					DryRun:    dryRun,
-					Force:     force || alreadyInitialized,
-					AgentName: agentName,
-					AgentRole: agentRole,
-					AgentMod:  agentModule,
+					RepoPath: flagRepo,
+					Runtime:  selectedRuntime,
+					DryRun:   dryRun,
+					Force:    force || alreadyInitialized,
 				}
 
 				result, err := cli.RuntimeInit(rtOpts)
@@ -409,253 +401,11 @@ Examples:
 				fmt.Println("Config saved to .thrum/config.json — edit anytime to change")
 			}
 
-			// Step 5: Agent setup (interactive or from flags)
 			if dryRun {
 				return nil
 			}
 
-			agentNameResolved := agentName
-			agentRoleResolved := agentRole
-			agentModuleResolved := agentModule
-
-			// Pre-populate from existing identity if no flags provided
-			if agentNameResolved == "" || agentRoleResolved == "" || agentModuleResolved == "" {
-				if existing, _, err := config.LoadIdentityWithPath(flagRepo); err == nil && existing != nil {
-					if agentNameResolved == "" {
-						agentNameResolved = existing.Agent.Name
-					}
-					if agentRoleResolved == "" {
-						agentRoleResolved = existing.Agent.Role
-					}
-					if agentModuleResolved == "" {
-						agentModuleResolved = existing.Agent.Module
-					}
-				}
-			}
-
-			if isInteractive() && !flagQuiet {
-				reader := bufio.NewReader(os.Stdin)
-
-				defaultRole := agentRoleResolved
-				if defaultRole == "" {
-					defaultRole = "implementer"
-				}
-				fmt.Printf("\nAgent setup:\n")
-				fmt.Printf("  Role [%s]: ", defaultRole)
-				input, _ := reader.ReadString('\n')
-				input = strings.TrimSpace(input)
-				if input != "" {
-					agentRoleResolved = input
-				} else {
-					agentRoleResolved = defaultRole
-				}
-
-				defaultName := agentNameResolved
-				if defaultName == "" {
-					// Name must differ from role — suggest role_module
-					mod := agentModuleResolved
-					if mod == "" {
-						mod = cli.GetCurrentBranch(flagRepo)
-					}
-					if mod == "" {
-						mod = "main"
-					}
-					defaultName = agentRoleResolved + "_" + identity.SanitizeAgentName(mod)
-				}
-				fmt.Printf("  Name [%s]: ", defaultName)
-				input, _ = reader.ReadString('\n')
-				input = strings.TrimSpace(input)
-				if input != "" {
-					agentNameResolved = input
-				} else {
-					agentNameResolved = defaultName
-				}
-
-				defaultModule := agentModuleResolved
-				if defaultModule == "" {
-					defaultModule = cli.GetCurrentBranch(flagRepo)
-					if defaultModule == "" {
-						defaultModule = "main"
-					}
-				}
-				fmt.Printf("  Module [%s]: ", defaultModule)
-				input, _ = reader.ReadString('\n')
-				input = strings.TrimSpace(input)
-				if input != "" {
-					agentModuleResolved = input
-				} else {
-					agentModuleResolved = defaultModule
-				}
-			} else {
-				if agentRoleResolved == "" {
-					agentRoleResolved = "implementer"
-				}
-				if agentNameResolved == "" {
-					// Name must differ from role — append module or branch
-					module := agentModuleResolved
-					if module == "" {
-						module = cli.GetCurrentBranch(flagRepo)
-					}
-					if module == "" {
-						module = "main"
-					}
-					agentNameResolved = agentRoleResolved + "_" + identity.SanitizeAgentName(module)
-				}
-				if agentModuleResolved == "" {
-					agentModuleResolved = "main"
-				}
-			}
-
-			// Step 6: Intent
-			intentFlag, _ := cmd.Flags().GetString("intent")
-			repoName := cli.GetRepoName(flagRepo)
-			intent := intentFlag
-			if intent == "" {
-				intent = cli.DefaultIntent(agentRoleResolved, repoName)
-			}
-
-			if intentFlag == "" && isInteractive() && !flagQuiet {
-				fmt.Printf("\nIntent: %s\n", intent)
-				fmt.Printf("  Edit? [Y/n]: ")
-				reader := bufio.NewReader(os.Stdin)
-				input, _ := reader.ReadString('\n')
-				input = strings.TrimSpace(input)
-				if strings.ToLower(input) == "n" || strings.ToLower(input) == "no" {
-					fmt.Printf("  Intent: ")
-					newIntent, _ := reader.ReadString('\n')
-					newIntent = strings.TrimSpace(newIntent)
-					if newIntent != "" {
-						intent = newIntent
-					}
-				}
-			}
-
-			// Step 7: Write identity file
-			thrumDir := filepath.Join(flagRepo, ".thrum")
-
-			// Resolve preferred runtime: --runtime flag → auto-detect → config runtime.primary → empty
-			preferredRuntime := runtimeFlag
-			if preferredRuntime == "" || preferredRuntime == "all" {
-				if _, detectedRT := process.FindClaudeAncestor(context.Background()); detectedRT != "" {
-					preferredRuntime = detectedRT
-				} else if cfg, err := config.LoadThrumConfig(thrumDir); err == nil && cfg.Runtime.Primary != "" {
-					preferredRuntime = cfg.Runtime.Primary
-				}
-			}
-
-			idFile := &config.IdentityFile{
-				Version: 5,
-				RepoID:  cli.GetRepoID(flagRepo),
-				Agent: config.AgentConfig{
-					Kind:    "agent",
-					Name:    agentNameResolved,
-					Role:    agentRoleResolved,
-					Module:  agentModuleResolved,
-					Display: cli.AutoDisplay(agentRoleResolved, agentModuleResolved),
-				},
-				Worktree:         cli.GetWorktreeName(flagRepo),
-				Branch:           cli.GetCurrentBranch(flagRepo),
-				Intent:           intent,
-				PreferredRuntime: preferredRuntime,
-			}
-			if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
-				return fmt.Errorf("save identity file: %w", err)
-			}
-
-			// Step 8: Start daemon if not running
-			if client, err := getClient(); err != nil {
-				if startErr := cli.DaemonStart(flagRepo, false); startErr != nil && !strings.Contains(startErr.Error(), "already running") {
-					return fmt.Errorf("start daemon: %w", startErr)
-				}
-				if !flagQuiet {
-					if wsPort := cli.ReadWebSocketPort(flagRepo); wsPort > 0 {
-						fmt.Printf("✓ Daemon started — http://localhost:%d\n", wsPort)
-					} else {
-						fmt.Println("✓ Daemon started")
-					}
-				}
-			} else {
-				_ = client.Close()
-				if !flagQuiet {
-					fmt.Println("✓ Daemon already running")
-				}
-			}
-
-			// Step 9: Register, session, intent via quickstart logic
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("connect to daemon after start: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			// If re-initializing with the same agent name, treat as re-registration
-			// to avoid name/role conflict errors from HandleRegister
-			reRegister := false
-			if existing, _, loadErr := config.LoadIdentityWithPath(flagRepo); loadErr == nil && existing != nil {
-				if existing.Agent.Name == agentNameResolved {
-					reRegister = true
-				}
-			}
-
-			qsOpts := cli.QuickstartOptions{
-				Name:       agentNameResolved,
-				Role:       agentRoleResolved,
-				Module:     agentModuleResolved,
-				Display:    cli.AutoDisplay(agentRoleResolved, agentModuleResolved),
-				Intent:     intent,
-				RepoPath:   flagRepo,
-				NoInit:     true,
-				Force:      true,
-				ReRegister: reRegister,
-			}
-			qsResult, err := cli.Quickstart(client, qsOpts)
-			if err != nil {
-				return fmt.Errorf("agent setup: %w", err)
-			}
-
-			if qsResult.Session != nil {
-				// Reload identity file to preserve fields set by
-				// cli.Quickstart enrichment (AgentPID, TmuxSession).
-				// Only use the reloaded identity if the name matches.
-				if enriched, _, loadErr := config.LoadIdentityWithPath(flagRepo); loadErr == nil && enriched.Agent.Name == agentNameResolved {
-					enriched.SessionID = qsResult.Session.SessionID
-					_ = config.SaveIdentityFile(thrumDir, enriched)
-				} else {
-					idFile.SessionID = qsResult.Session.SessionID
-					_ = config.SaveIdentityFile(thrumDir, idFile)
-				}
-			}
-
-			if !flagQuiet {
-				if qsResult.Register != nil {
-					fmt.Printf("✓ Agent registered: %s\n", qsResult.Register.AgentID)
-				}
-				if qsResult.Session != nil {
-					fmt.Printf("✓ Session started: %s\n", qsResult.Session.SessionID)
-				}
-				if qsResult.Intent != nil {
-					fmt.Println("✓ Intent set")
-				}
-			}
-
-			// Step 9b: Ensure preamble exists; --force overwrites with current version
-			if err := applyRolePreamble(thrumDir, agentNameResolved, agentRoleResolved, "", force); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to refresh preamble: %v\n", err)
-			}
-
-			// Step 10: Show whoami-style output
-			if !flagQuiet {
-				fmt.Println()
-				reloadedID, idPath, _ := config.LoadIdentityWithPath(flagRepo)
-				if reloadedID != nil {
-					var daemonInfo *cli.WhoamiResult
-					if result, err := cli.AgentWhoami(client, agentNameResolved); err == nil {
-						daemonInfo = result
-					}
-					summary := cli.BuildAgentSummary(reloadedID, idPath, daemonInfo)
-					fmt.Print(cli.FormatAgentSummary(summary))
-				}
-			}
+			fmt.Println("\nDone. Run 'thrum quickstart --name <name> --role <role> --module <module>' to register an agent.")
 
 			return nil
 		},
@@ -665,11 +415,7 @@ Examples:
 	cmd.Flags().Bool("stealth", false, "Use .git/info/exclude instead of .gitignore (zero footprint in tracked files)")
 	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files")
 	cmd.Flags().String("runtime", "", "Generate runtime-specific configs (claude|codex|cursor|gemini|opencode|cli-only|all)")
-	cmd.Flags().String("agent-name", "", "Agent name for templates (default: default_agent)")
-	cmd.Flags().String("agent-role", "", "Agent role for templates (default: implementer)")
-	cmd.Flags().String("agent-module", "", "Agent module for templates (default: main)")
 	cmd.Flags().Bool("skills", false, "Install thrum skill only (no MCP config, no startup script)")
-	cmd.Flags().String("intent", "", "Agent intent (what it's working on)")
 
 	return cmd
 }
@@ -942,32 +688,14 @@ func setupCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "setup",
 		Short: "Set up Thrum in a worktree",
-		Long: `Set up Thrum for your development environment.
-
-Sets up a redirect for a feature worktree so it shares the daemon,
-database, and sync state with the main repository.`,
+		Long:  `Set up Thrum for your development environment.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Default to worktree behavior for backwards compatibility
-			mainRepo, _ := cmd.Flags().GetString("main-repo")
-
-			opts := cli.SetupOptions{
-				RepoPath: flagRepo,
-				MainRepo: mainRepo,
-			}
-
-			if err := cli.Setup(opts); err != nil {
-				return err
-			}
-
-			if !flagQuiet {
-				fmt.Println("✓ Thrum worktree setup complete")
-			}
-
+			fmt.Println("Did you mean 'thrum worktree setup'?")
+			fmt.Println("  thrum worktree setup   — Set up a worktree with redirects and agent registration")
+			fmt.Println("  thrum worktree create  — Same as worktree setup")
 			return nil
 		},
 	}
-
-	cmd.Flags().String("main-repo", ".", "Path to the main repository (where daemon runs)")
 
 	return cmd
 }
