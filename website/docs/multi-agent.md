@@ -61,14 +61,6 @@ Use `--to @everyone` to reach all agents at once:
 thrum send "Deploy complete, all clear" --to @everyone
 ```
 
-All three forms are equivalent:
-
-```bash
-thrum send "Deploy complete" --broadcast
-thrum send "Deploy complete" --to @everyone
-thrum send "Deploy complete" --everyone
-```
-
 `@reviewer` always routes to all agents with the `reviewer` role — that happens
 automatically, no group setup needed.
 

@@ -77,7 +77,7 @@ SQLite.
 
 | Flag           | Format                  | Description                                                 |
 | -------------- | ----------------------- | ----------------------------------------------------------- |
-| `--to`         | `@name`                 | Recipient — agent name or role (adds a mention ref)         |
+| `--to`         | `@name`                 | Recipient — `@agent_name` or `@everyone` for broadcast      |
 | `--scope`      | `type:value`            | Attach scope context (repeatable)                           |
 | `--ref`        | `type:value`            | Attach reference (repeatable)                               |
 | `--mention`    | `@role`                 | Mention an agent role (repeatable)                          |
@@ -536,12 +536,10 @@ thrum send "Implemented feature from design doc, closes issue" \
 
 ## Broadcast
 
-Both `--broadcast` and `--to @everyone` send to all agents:
+Use `--to @everyone` to send to all agents:
 
 ```bash
-thrum send "Deploy complete" --broadcast
 thrum send "Deploy complete" --to @everyone
-thrum send "Deploy complete" --everyone
 ```
 
 ## Global Flags

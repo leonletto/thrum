@@ -25,8 +25,6 @@ These flags apply to every command:
 ```bash
 thrum send <message> --to @name
 thrum send <message> --to @everyone            # Broadcast to all agents
-thrum send <message> --everyone                # Alias for --to @everyone
-thrum send <message> --broadcast               # Alias for --to @everyone
 thrum send <message> --to @name --scope type:value --scope type:value2
 thrum send <message> --to @name --ref type:value
 thrum send <message> --to @name --mention @role
@@ -37,9 +35,7 @@ thrum send <message> --to @name --structured '{"key":"value"}'
 Flags:
 
 ```text
---to string           Direct recipient (format: @role or @name)
---everyone            Send to all agents (alias for --to @everyone)
--b, --broadcast       Send to all agents (alias for --to @everyone)
+--to string           Recipient — @agent_name or @everyone for broadcast
 --mention strings     Mention a role (repeatable, format: @role)
 --ref strings         Add reference (repeatable, format: type:value)
 --scope strings       Add scope (repeatable, format: type:value)

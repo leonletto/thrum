@@ -796,18 +796,8 @@ have an active session.</p>
 </thead>
 <tbody><tr>
 <td><code>--to</code></td>
-<td>Direct recipient (format: <code>@role</code>, <code>@name</code>, or <code>@groupname</code>)</td>
+<td>Recipient — <code>@agent_name</code> or <code>@everyone</code> for broadcast</td>
 <td></td>
-</tr>
-<tr>
-<td><code>--everyone</code></td>
-<td>Alias for <code>--to @everyone</code> (send to all agents)</td>
-<td></td>
-</tr>
-<tr>
-<td><code>--broadcast</code>, <code>-b</code></td>
-<td>Send to all agents (alias for <code>--to @everyone</code>)</td>
-<td><code>false</code></td>
 </tr>
 <tr>
 <td><code>--scope</code></td>
@@ -837,8 +827,7 @@ have an active session.</p>
 </tbody></table>
 <p>The <code>--to</code> flag adds the recipient as a mention, making it a directed message.
 Recipients can be agents (<code>@alice</code>), roles (<code>@reviewer</code>), or <code>@everyone</code> for
-broadcast. The <code>--broadcast</code> and <code>--to</code> flags are mutually exclusive.</p>
-<p>The <code>--broadcast</code> flag is an alias for <code>--to @everyone</code>.</p>
+broadcast.</p>
 <p>Example:</p>
 <pre><code>$ thrum send &quot;PR ready for review&quot; --to @reviewer --scope module:auth --ref pr:42
 ✓ Message sent: msg_01HXE8Z7...

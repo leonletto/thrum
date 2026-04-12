@@ -428,22 +428,18 @@ have an active session.
 thrum send MESSAGE [flags]
 ```
 
-| Flag                | Description                                                  | Default    |
-| ------------------- | ------------------------------------------------------------ | ---------- |
-| `--to`              | Direct recipient (format: `@role`, `@name`, or `@groupname`) |            |
-| `--everyone`        | Alias for `--to @everyone` (send to all agents)              |            |
-| `--broadcast`, `-b` | Send to all agents (alias for `--to @everyone`)              | `false`    |
-| `--scope`           | Add scope (repeatable, format: `type:value`)                 |            |
-| `--ref`             | Add reference (repeatable, format: `type:value`)             |            |
-| `--mention`         | Mention a role (repeatable, format: `@role`)                 |            |
-| `--structured`      | Structured payload (JSON string)                             |            |
-| `--format`          | Message format (`markdown`, `plain`, `json`)                 | `markdown` |
+| Flag           | Description                                                  | Default    |
+| -------------- | ------------------------------------------------------------ | ---------- |
+| `--to`         | Recipient — `@agent_name` or `@everyone` for broadcast       |            |
+| `--scope`      | Add scope (repeatable, format: `type:value`)                 |            |
+| `--ref`        | Add reference (repeatable, format: `type:value`)             |            |
+| `--mention`    | Mention a role (repeatable, format: `@role`)                 |            |
+| `--structured` | Structured payload (JSON string)                             |            |
+| `--format`     | Message format (`markdown`, `plain`, `json`)                 | `markdown` |
 
 The `--to` flag adds the recipient as a mention, making it a directed message.
 Recipients can be agents (`@alice`), roles (`@reviewer`), or `@everyone` for
-broadcast. The `--broadcast` and `--to` flags are mutually exclusive.
-
-The `--broadcast` flag is an alias for `--to @everyone`.
+broadcast.
 
 Example:
 

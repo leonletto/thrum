@@ -24,17 +24,20 @@ message-listener:
 Task(subagent_type="message-listener", run_in_background=true, prompt="...")
 ```
 
-## 4. Broadcasting Without the @everyone Group
+## 4. Using --broadcast or --everyone to Broadcast
 
-All three forms are equivalent — use whichever reads best in context:
+Those flags don't exist. The only broadcast form is `--to @everyone`:
 
 ```bash
+# Wrong — these flags don't exist
 thrum send "msg" --broadcast
-thrum send "msg" --to @everyone
 thrum send "msg" --everyone
+
+# Right
+thrum send "msg" --to @everyone
 ```
 
-The `@everyone` group is auto-created and handles membership dynamically.
+`@everyone` is auto-created and handles membership dynamically.
 
 ## 5. Skipping Registration
 

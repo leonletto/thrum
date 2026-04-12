@@ -135,7 +135,7 @@ SQLite.</p>
 <tbody><tr>
 <td><code>--to</code></td>
 <td><code>@name</code></td>
-<td>Recipient — agent name or role (adds a mention ref)</td>
+<td>Recipient — <code>@agent_name</code> or <code>@everyone</code> for broadcast</td>
 </tr>
 <tr>
 <td><code>--scope</code></td>
@@ -584,10 +584,8 @@ message reference?&quot;</p>
   --ref commit:abc123def \
   --ref url:https://docs.example.com/design</code></pre>
 <h2>Broadcast</h2>
-<p>Both <code>--broadcast</code> and <code>--to @everyone</code> send to all agents:</p>
-<pre><code>thrum send &quot;Deploy complete&quot; --broadcast
-thrum send &quot;Deploy complete&quot; --to @everyone
-thrum send &quot;Deploy complete&quot; --everyone</code></pre>
+<p>Use <code>--to @everyone</code> to send to all agents:</p>
+<pre><code>thrum send &quot;Deploy complete&quot; --to @everyone</code></pre>
 <h2>Global Flags</h2>
 <p>These flags are available on all commands:</p>
 <table>
