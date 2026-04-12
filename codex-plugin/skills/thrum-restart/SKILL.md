@@ -1,17 +1,16 @@
 ---
 name: thrum-restart
-description:
-  Save a conversation snapshot and prepare for session restart. Use when you
-  need a fresh session due to context exhaustion, rate limits, or stuck state.
+description: Save a conversation snapshot and prepare for session restart. Use when you need a fresh session due to context exhaustion, rate limits, or stuck state.
 # source: claude-plugin/commands/restart.md
 # generated-by: scripts/sync-skills.sh
 ---
 
 # Thrum Restart
 
-Use this skill when the user explicitly wants the `restart` Thrum workflow.
-Prefer the umbrella `thrum` skill when the request spans multiple commands or
-needs broader coordination judgment.
+Use this skill when the user explicitly wants the `restart` Thrum
+workflow. Prefer the umbrella `thrum` skill when the request spans multiple
+commands or needs broader coordination judgment.
+
 
 ## Session Restart
 
@@ -22,7 +21,7 @@ Save your conversation history and prepare for a session restart.
 1. Run the save command:
 
 ```bash
-thrum restart save
+thrum tmux snapshot save
 ```
 
 1. Check if you are in a tmux-managed session:
@@ -49,7 +48,7 @@ instructions below.
 > 2. Start a new session in the same directory
 > 3. The snapshot will be automatically loaded by `thrum prime`
 >
-> Or use `thrum restart restore` to manually output the snapshot.
+> Or use `thrum tmux snapshot restore` to manually output the snapshot.
 
 ### When to Use
 
