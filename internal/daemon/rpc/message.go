@@ -370,32 +370,16 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 			toVal = toVal[1:]
 		}
 		if toVal == "everyone" {
-			// Broadcast to all local agents
-			isGroup, _ := h.groupResolver.IsGroup(ctx, toVal)
-			if isGroup {
-				scopes = append(scopes, types.Scope{Type: "group", Value: toVal})
-				refs = append(refs, types.Ref{Type: "group", Value: toVal})
-				audiences = append(audiences, MessageAudience{Type: "group", Value: toVal})
-				members, err := h.groupResolver.ExpandMembers(ctx, toVal)
-				if err != nil {
-					return nil, fmt.Errorf("expand @everyone: %w", err)
-				}
-				for _, recipientAgentID := range members {
-					if recipientAgentID == agentID {
-						continue
-					}
-					recipientSet[recipientAgentID] = struct{}{}
-				}
-			} else {
-				// @everyone group doesn't exist — fall back to all-agents query
-				audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
-				allAgents, err := h.queryAllOtherAgents(ctx, agentID)
-				if err != nil {
-					return nil, fmt.Errorf("query all agents: %w", err)
-				}
-				for _, a := range allAgents {
-					recipientSet[a] = struct{}{}
-				}
+			// Direct broadcast — no group expansion. Scoped to this daemon only.
+			scopes = append(scopes, types.Scope{Type: "broadcast", Value: "everyone"})
+			refs = append(refs, types.Ref{Type: "broadcast", Value: "everyone"})
+			audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
+			allAgents, err := h.queryAllOtherAgents(ctx, agentID)
+			if err != nil {
+				return nil, fmt.Errorf("query all agents: %w", err)
+			}
+			for _, a := range allAgents {
+				recipientSet[a] = struct{}{}
 			}
 			resolvedTo++
 		} else {
@@ -423,23 +407,35 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 			role = role[1:]
 		}
 
-		// Check if this mention is a group
+		// @everyone → direct broadcast (not group-based, fixes cross-repo sync leak)
+		if role == "everyone" {
+			scopes = append(scopes, types.Scope{Type: "broadcast", Value: "everyone"})
+			refs = append(refs, types.Ref{Type: "broadcast", Value: "everyone"})
+			audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
+			allAgents, err := h.queryAllOtherAgents(ctx, agentID)
+			if err != nil {
+				return nil, fmt.Errorf("query all agents: %w", err)
+			}
+			for _, a := range allAgents {
+				recipientSet[a] = struct{}{}
+			}
+			resolvedTo++
+			continue
+		}
+
+		// Check if this mention is a tg:* bridge group (Telegram groups still work)
 		isGroup, err := h.groupResolver.IsGroup(ctx, role)
 		if err != nil {
 			return nil, fmt.Errorf("check group %q: %w", role, err)
 		}
 
 		if isGroup {
-			// Group mention — store as group scope (pull model, no expansion)
+			// Bridge group mention (tg:* groups) — store as group scope
 			scopes = append(scopes, types.Scope{Type: "group", Value: role})
-			// Also store audit ref for queryability
 			refs = append(refs, types.Ref{Type: "group", Value: role})
 			audiences = append(audiences, MessageAudience{Type: "group", Value: role})
 			resolvedTo++
-			// Warn sender that this resolved to a group, not an individual
-			if role != "everyone" {
-				warnings = append(warnings, fmt.Sprintf("@%s resolved to a group, not an individual agent", role))
-			}
+			warnings = append(warnings, fmt.Sprintf("@%s resolved to a group, not an individual agent", role))
 			members, err := h.groupResolver.ExpandMembers(ctx, role)
 			if err != nil {
 				return nil, fmt.Errorf("expand group %q: %w", role, err)
@@ -480,7 +476,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 
 	// Fail hard if any recipients could not be resolved
 	if len(unknownRecipients) > 0 {
-		return nil, fmt.Errorf("unknown recipients: %s — no matching agent, role, or group found",
+		return nil, fmt.Errorf("unknown recipient: %s — send to agents directly with --to @agent_name",
 			strings.Join(unknownRecipients, ", "))
 	}
 
@@ -1548,15 +1544,31 @@ func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string)
 	)`
 	args = append(args, agentVal, roleVal)
 
-	// Part 3: broadcast messages — no mention refs, no group refs, no group scopes.
-	// These are unaddressed messages (e.g., sent with --to @everyone) that have no
-	// targeting information and should be visible to every agent's inbox.
-	broadcastSubquery := `(
-		NOT EXISTS (SELECT 1 FROM message_refs mr_bc WHERE mr_bc.message_id = m.message_id AND mr_bc.ref_type IN ('mention', 'group'))
-		AND NOT EXISTS (SELECT 1 FROM message_scopes ms_bc WHERE ms_bc.message_id = m.message_id AND ms_bc.scope_type = 'group')
+	// Part 3: legacy broadcast messages — no mention refs, no group refs, no group scopes.
+	// These are unaddressed messages that have no targeting information.
+	legacyBroadcastSubquery := `(
+		NOT EXISTS (SELECT 1 FROM message_refs mr_bc WHERE mr_bc.message_id = m.message_id AND mr_bc.ref_type IN ('mention', 'group', 'broadcast'))
+		AND NOT EXISTS (SELECT 1 FROM message_scopes ms_bc WHERE ms_bc.message_id = m.message_id AND ms_bc.scope_type IN ('group', 'broadcast'))
 	)`
 
-	clause := " AND (" + mentionSubquery + " OR " + groupSubquery + " OR " + broadcastSubquery + ")"
+	// Part 4: new broadcast scope — matches via message_deliveries (local agents only).
+	// This prevents the cross-repo sync leak: message_deliveries contains only
+	// this daemon's local agent IDs, not agents from synced repos.
+	broadcastDeliverySubquery := `(
+		EXISTS (
+			SELECT 1 FROM message_deliveries md_bc
+			WHERE md_bc.message_id = m.message_id
+			AND md_bc.recipient_agent_id = ?
+		)
+		AND EXISTS (
+			SELECT 1 FROM message_scopes ms_bc
+			WHERE ms_bc.message_id = m.message_id
+			AND ms_bc.scope_type = 'broadcast'
+		)
+	)`
+	args = append(args, forAgent)
+
+	clause := " AND (" + mentionSubquery + " OR " + groupSubquery + " OR " + legacyBroadcastSubquery + " OR " + broadcastDeliverySubquery + ")"
 	return clause, args
 }
 

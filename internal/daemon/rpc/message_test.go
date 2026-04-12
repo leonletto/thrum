@@ -1997,8 +1997,8 @@ func TestHandleSend_GroupScope(t *testing.T) {
 		if err != nil {
 			t.Fatalf("query scope: %v", err)
 		}
-		if scopeType != "group" || scopeValue != "everyone" {
-			t.Errorf("expected scope group:everyone, got %s:%s", scopeType, scopeValue)
+		if scopeType != "broadcast" || scopeValue != "everyone" {
+			t.Errorf("expected scope broadcast:everyone, got %s:%s", scopeType, scopeValue)
 		}
 	})
 }
@@ -2048,11 +2048,7 @@ func TestInboxGroupMembership(t *testing.T) {
 		t.Fatalf("start reviewer session: %v", err)
 	}
 
-	// Create @everyone and @reviewers groups
-	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
-		t.Fatalf("ensure everyone: %v", err)
-	}
-
+	// Create @reviewers group (everyone group no longer needed — broadcast scope)
 	groupHandler := NewGroupHandler(st)
 	createReq, _ := json.Marshal(GroupCreateRequest{Name: "reviewers", Description: "Review team"})
 	if _, err := groupHandler.HandleCreate(context.Background(), createReq); err != nil {
@@ -2170,8 +2166,10 @@ func TestInboxGroupMembership(t *testing.T) {
 		if foundReview {
 			t.Error("coordinator should NOT see message to @reviewers (not a member)")
 		}
-		if !foundEveryone {
-			t.Error("coordinator should see message to @everyone (all agents are members)")
+		// Coordinator is the sender of the @everyone broadcast — excluded from
+		// message_deliveries. Sender does not see own broadcast in inbox.
+		if foundEveryone {
+			t.Error("coordinator (sender) should NOT see own @everyone broadcast in inbox")
 		}
 	})
 }

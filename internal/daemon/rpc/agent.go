@@ -531,31 +531,8 @@ func (h *AgentHandler) registerAgent(ctx context.Context, agentID, name, role, m
 		return nil, fmt.Errorf("write agent.register event: %w", err)
 	}
 
-	// Auto-create role group if role is non-empty and group doesn't exist yet.
-	// This makes role-based addressing work through the explicit group system.
-	if role != "" {
-		var groupExists bool
-		_ = h.state.DB().QueryRowContext(ctx,
-			`SELECT EXISTS(SELECT 1 FROM groups WHERE name = ?)`, role,
-		).Scan(&groupExists)
-		if !groupExists {
-			groupID := "grp_role_" + role
-			_, err := h.state.DB().ExecContext(ctx,
-				`INSERT OR IGNORE INTO groups (group_id, name, description, created_at, created_by)
-				 VALUES (?, ?, ?, ?, 'system')`,
-				groupID, role,
-				fmt.Sprintf("Auto-created group for role '%s'", role),
-				now,
-			)
-			if err == nil {
-				_, _ = h.state.DB().ExecContext(ctx,
-					`INSERT OR IGNORE INTO group_members (group_id, member_type, member_value, added_at)
-					 VALUES (?, 'role', ?, ?)`,
-					groupID, role, now,
-				)
-			}
-		}
-	}
+	// Auto role group creation removed — role-based filtering uses
+	// `agent list --role` (direct SQL WHERE role = ?) instead of groups.
 
 	return &RegisterResponse{
 		AgentID: agentID,

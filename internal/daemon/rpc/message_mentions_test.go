@@ -99,58 +99,56 @@ func TestMessageSend_WithMentions(t *testing.T) {
 		t.Fatalf("expected *SendResponse, got %T", resp)
 	}
 
-	// With auto role groups, @reviewer and implementer are now group-scoped (not mention refs).
-	// Verify that the message was resolved (resolvedTo >= 2).
+	// Without auto role groups, @reviewer and implementer resolve as role-based mentions.
 	if sendResp.ResolvedTo < 2 {
 		t.Errorf("expected at least 2 resolved mentions, got %d", sendResp.ResolvedTo)
 	}
 
-	// Verify group scopes were created for reviewer and implementer
-	query := `SELECT scope_type, scope_value FROM message_scopes WHERE message_id = ? ORDER BY scope_value`
+	// Verify mention refs were created (not group scopes — groups are no longer auto-created)
+	query := `SELECT ref_type, ref_value FROM message_refs WHERE message_id = ? AND ref_type = 'mention' ORDER BY ref_value`
 	rows, err := st.RawDB().Query(query, sendResp.MessageID)
 	if err != nil {
-		t.Fatalf("failed to query scopes: %v", err)
+		t.Fatalf("failed to query refs: %v", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var scopes []struct {
+	var mentionRefs []struct {
 		Type  string
 		Value string
 	}
 	for rows.Next() {
-		var scope struct {
+		var ref struct {
 			Type  string
 			Value string
 		}
-		if err := rows.Scan(&scope.Type, &scope.Value); err != nil {
-			t.Fatalf("failed to scan scope: %v", err)
+		if err := rows.Scan(&ref.Type, &ref.Value); err != nil {
+			t.Fatalf("failed to scan ref: %v", err)
 		}
-		scopes = append(scopes, scope)
+		mentionRefs = append(mentionRefs, ref)
 	}
 
-	// Should have 2 group scopes (reviewer and implementer)
-	if len(scopes) != 2 {
-		t.Errorf("expected 2 group scopes, got %d", len(scopes))
+	// Should have 2 mention refs (reviewer and implementer resolved as roles)
+	if len(mentionRefs) != 2 {
+		t.Errorf("expected 2 mention refs, got %d", len(mentionRefs))
 	}
 
-	// Check that @ was stripped and group scopes are correct
-	expectedScopes := []struct {
+	expectedRefs := []struct {
 		Type  string
 		Value string
 	}{
-		{"group", "implementer"},
-		{"group", "reviewer"},
+		{"mention", "implementer"},
+		{"mention", "reviewer"},
 	}
 
-	for i, expected := range expectedScopes {
-		if i >= len(scopes) {
+	for i, expected := range expectedRefs {
+		if i >= len(mentionRefs) {
 			break
 		}
-		if scopes[i].Type != expected.Type {
-			t.Errorf("scope[%d]: expected type=%s, got %s", i, expected.Type, scopes[i].Type)
+		if mentionRefs[i].Type != expected.Type {
+			t.Errorf("ref[%d]: expected type=%s, got %s", i, expected.Type, mentionRefs[i].Type)
 		}
-		if scopes[i].Value != expected.Value {
-			t.Errorf("scope[%d]: expected value=%s, got %s", i, expected.Value, scopes[i].Value)
+		if mentionRefs[i].Value != expected.Value {
+			t.Errorf("ref[%d]: expected value=%s, got %s", i, expected.Value, mentionRefs[i].Value)
 		}
 	}
 }
@@ -201,8 +199,8 @@ func TestHandleSend_UnknownRecipient(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for unknown recipient, got nil")
 		}
-		if !strings.Contains(err.Error(), "unknown recipients") {
-			t.Errorf("error should mention 'unknown recipients', got: %v", err)
+		if !strings.Contains(err.Error(), "unknown recipient") {
+			t.Errorf("error should mention 'unknown recipient', got: %v", err)
 		}
 		if !strings.Contains(err.Error(), "@nonexistent") {
 			t.Errorf("error should list '@nonexistent', got: %v", err)

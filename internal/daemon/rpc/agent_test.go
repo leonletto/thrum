@@ -1187,96 +1187,10 @@ func TestBuildForAgentValues_BothEmpty(t *testing.T) {
 	}
 }
 
-// TestRegisterCreatesRoleGroup verifies that registering an agent with a role
-// auto-creates a group for that role in the groups and group_members tables.
-func TestRegisterCreatesRoleGroup(t *testing.T) {
-	tmpDir := t.TempDir()
-	thrumDir := filepath.Join(tmpDir, ".thrum")
 
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_rolegroup", "")
-	if err != nil {
-		t.Fatalf("create state: %v", err)
-	}
-	defer func() { _ = s.Close() }()
+// TestRegisterCreatesRoleGroup and TestRegisterRoleGroupIdempotent removed —
+// auto role group creation no longer exists.
 
-	handler := NewAgentHandler(s)
-	ctx := context.Background()
-
-	req := RegisterRequest{
-		Role:   "implementer",
-		Module: "auth",
-	}
-	reqJSON, _ := json.Marshal(req)
-	_, err = handler.HandleRegister(ctx, reqJSON)
-	if err != nil {
-		t.Fatalf("HandleRegister() error = %v", err)
-	}
-
-	// Verify the group "implementer" was created
-	var groupCount int
-	err = s.RawDB().QueryRow(`SELECT COUNT(*) FROM groups WHERE name = ?`, "implementer").Scan(&groupCount)
-	if err != nil {
-		t.Fatalf("query groups: %v", err)
-	}
-	if groupCount != 1 {
-		t.Errorf("expected 1 group named 'implementer', got %d", groupCount)
-	}
-
-	// Verify a group_member of type 'role' with value 'implementer' exists
-	var memberCount int
-	err = s.RawDB().QueryRow(`
-		SELECT COUNT(*) FROM group_members gm
-		JOIN groups g ON g.group_id = gm.group_id
-		WHERE g.name = ? AND gm.member_type = 'role' AND gm.member_value = ?
-	`, "implementer", "implementer").Scan(&memberCount)
-	if err != nil {
-		t.Fatalf("query group_members: %v", err)
-	}
-	if memberCount != 1 {
-		t.Errorf("expected 1 group member of type 'role' for 'implementer', got %d", memberCount)
-	}
-}
-
-// TestRegisterRoleGroupIdempotent verifies that re-registering an agent does not
-// create duplicate groups.
-func TestRegisterRoleGroupIdempotent(t *testing.T) {
-	tmpDir := t.TempDir()
-	thrumDir := filepath.Join(tmpDir, ".thrum")
-
-	s, err := state.NewState(thrumDir, thrumDir, "test_repo_idempotent", "")
-	if err != nil {
-		t.Fatalf("create state: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	handler := NewAgentHandler(s)
-	ctx := context.Background()
-
-	// Register same role twice (re-register)
-	req := RegisterRequest{Role: "planner", Module: "arch"}
-	reqJSON, _ := json.Marshal(req)
-	_, err = handler.HandleRegister(ctx, reqJSON)
-	if err != nil {
-		t.Fatalf("first HandleRegister() error = %v", err)
-	}
-
-	req2 := RegisterRequest{Role: "planner", Module: "arch", ReRegister: true}
-	req2JSON, _ := json.Marshal(req2)
-	_, err = handler.HandleRegister(ctx, req2JSON)
-	if err != nil {
-		t.Fatalf("second HandleRegister() error = %v", err)
-	}
-
-	// Verify only 1 group named 'planner' exists
-	var groupCount int
-	err = s.RawDB().QueryRow(`SELECT COUNT(*) FROM groups WHERE name = ?`, "planner").Scan(&groupCount)
-	if err != nil {
-		t.Fatalf("query groups: %v", err)
-	}
-	if groupCount != 1 {
-		t.Errorf("expected 1 group named 'planner' after two registrations, got %d", groupCount)
-	}
-}
 
 // TestRegisterNameRoleValidation verifies the name≠role collision checks.
 func TestRegisterNameRoleValidation(t *testing.T) {
