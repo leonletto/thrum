@@ -15,8 +15,7 @@ type SendOptions struct {
 	ReplyTo       string   // Message ID to reply to
 	Structured    string   // JSON string
 	Format        string
-	To            string // Direct recipient (e.g., "@reviewer")
-	Broadcast     bool   // Send as broadcast (no specific recipient)
+	To            string // Direct recipient (e.g., "@reviewer" or "@everyone")
 	CallerAgentID string // Caller's resolved agent ID (for worktree identity)
 }
 
@@ -47,16 +46,6 @@ type RecipientState struct {
 
 // Send sends a message via the daemon.
 func Send(client *Client, opts SendOptions) (*SendResult, error) {
-	// Validate mutual exclusivity of --broadcast and --to
-	if opts.Broadcast && opts.To != "" {
-		return nil, fmt.Errorf("--broadcast and --to are mutually exclusive")
-	}
-
-	// Map --broadcast to --to @everyone (uses strict To path)
-	if opts.Broadcast {
-		opts.To = "@everyone"
-	}
-
 	// Parse scopes
 	scopes, err := parseScopes(opts.Scopes)
 	if err != nil {

@@ -118,7 +118,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(replyCmd())
 	rootCmd.AddCommand(inboxCmd())
 	rootCmd.AddCommand(sentCmd())
-	rootCmd.AddCommand(statusCmd())
+
 	rootCmd.AddCommand(whoamiCmd())
 	rootCmd.AddCommand(versionCmd())
 	rootCmd.AddCommand(waitCmd())
@@ -151,7 +151,7 @@ sessions, worktrees, and machines using Git as the sync layer.`,
 	rootCmd.AddCommand(backupCmd())
 	rootCmd.AddCommand(peerCmd())
 	rootCmd.AddCommand(monitorCmd())
-	rootCmd.AddCommand(migrateCmd())
+
 	rootCmd.AddCommand(setupCmd())
 	rootCmd.AddCommand(mcpCmd())
 	rootCmd.AddCommand(rolesCmd())
@@ -809,7 +809,7 @@ Examples:
 			if cfg.Daemon.SingleAgentMode {
 				fmt.Println("Single-agent mode enabled. Messaging infrastructure disabled.")
 			} else {
-				fmt.Println("Single-agent mode disabled. Full messaging active on next thrum prime.")
+				fmt.Println("Single-agent mode disabled. Full messaging active after daemon restart.")
 			}
 			return nil
 		},
@@ -860,21 +860,6 @@ Examples:
 	}
 }
 
-func migrateCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "migrate",
-		Short: "Migrate from old layout to worktree architecture",
-		Long: `Migrate an existing Thrum repository from the old layout
-(JSONL files tracked on main branch) to the new worktree architecture
-(JSONL files on a-sync branch via .git/thrum-sync/ worktree).
-
-This is safe to run multiple times — it detects what needs migration
-and skips steps that are already done.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.Migrate(flagRepo)
-		},
-	}
-}
 
 func purgeCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -959,48 +944,10 @@ func setupCmd() *cobra.Command {
 		Short: "Set up Thrum in a worktree",
 		Long: `Set up Thrum for your development environment.
 
-Subcommands:
-  worktree   Set up redirect for a feature worktree (default)
-
-When no subcommand is given, defaults to worktree setup for backwards compatibility.`,
+Sets up a redirect for a feature worktree so it shares the daemon,
+database, and sync state with the main repository.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Default to worktree behavior for backwards compatibility
-			mainRepo, _ := cmd.Flags().GetString("main-repo")
-
-			opts := cli.SetupOptions{
-				RepoPath: flagRepo,
-				MainRepo: mainRepo,
-			}
-
-			if err := cli.Setup(opts); err != nil {
-				return err
-			}
-
-			if !flagQuiet {
-				fmt.Println("✓ Thrum worktree setup complete")
-			}
-
-			return nil
-		},
-	}
-
-	cmd.Flags().String("main-repo", ".", "Path to the main repository (where daemon runs)")
-
-	cmd.AddCommand(setupWorktreeCmd())
-
-	return cmd
-}
-
-func setupWorktreeCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "worktree",
-		Short: "Set up Thrum redirect in a feature worktree",
-		Long: `Set up Thrum redirect in a feature worktree so it shares the
-daemon, database, and sync state with the main repository.
-
-Creates a .thrum/redirect file pointing to the main repo's .thrum/ directory
-and a local .thrum/identities/ directory for per-worktree agent identities.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
 			mainRepo, _ := cmd.Flags().GetString("main-repo")
 
 			opts := cli.SetupOptions{
@@ -1041,13 +988,6 @@ The daemon must be running and you must have an active session.`,
 			structured, _ := cmd.Flags().GetString("structured")
 			format, _ := cmd.Flags().GetString("format")
 			to, _ := cmd.Flags().GetString("to")
-			broadcast, _ := cmd.Flags().GetBool("broadcast")
-			everyone, _ := cmd.Flags().GetBool("everyone")
-
-			// --everyone is an alias for --to @everyone
-			if everyone {
-				to = "@everyone"
-			}
 
 			opts := cli.SendOptions{
 				Content:       args[0],
@@ -1057,7 +997,6 @@ The daemon must be running and you must have an active session.`,
 				Structured:    structured,
 				Format:        format,
 				To:            to,
-				Broadcast:     broadcast,
 				CallerAgentID: "", // set below
 			}
 
@@ -1118,8 +1057,6 @@ The daemon must be running and you must have an active session.`,
 	cmd.Flags().String("structured", "", "Structured payload (JSON)")
 	cmd.Flags().String("format", "markdown", "Message format (markdown, plain, json)")
 	cmd.Flags().String("to", "", "Recipient (@agent_name or @everyone)")
-	cmd.Flags().Bool("everyone", false, "Send to all agents (alias for --to @everyone)")
-	cmd.Flags().BoolP("broadcast", "b", false, "Send to all agents (alias for --to @everyone)")
 
 	return cmd
 }
@@ -1181,40 +1118,6 @@ to inspect one sent message with full recipient state.`,
 	cmd.Flags().String("to", "", "Only sent messages addressed to this audience or recipient (format: @agent, @role, @group, @everyone)")
 	cmd.Flags().Bool("unread", false, "Only sent messages with at least one unread recipient")
 
-	showCmd := &cobra.Command{
-		Use:   "show MSG_ID",
-		Short: "Show details for one sent message",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			agentID, err := resolveLocalAgentID()
-			if err != nil {
-				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
-			}
-
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			result, err := cli.MessageGet(client, args[0])
-			if err != nil {
-				return err
-			}
-			if result.Message.Author.AgentID != agentID {
-				return fmt.Errorf("message %s was not authored by the current agent", args[0])
-			}
-
-			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatMessageGet(result))
-			}
-			return nil
-		},
-	}
-	cmd.AddCommand(showCmd)
 	return cmd
 }
 
@@ -1359,46 +1262,46 @@ func versionCmd() *cobra.Command {
 	return cmd
 }
 
-func statusCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "status",
-		Short: "Show current agent status and session info",
-		Long: `Show current agent identity, session, inbox counts, and sync state.
 
-The daemon must be running to check status.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			agentID, err := resolveLocalAgentID()
-			if err != nil {
-				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
-			}
-			result, err := cli.Status(client, agentID)
-			if err != nil {
-				return err
-			}
-
-			// Read WebSocket port from port file
-			result.WebSocketPort = cli.ReadWebSocketPort(flagRepo)
-
-			if flagJSON {
-				// Output as JSON
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				// Human-readable formatted output
-				fmt.Print(cli.FormatStatus(result))
-			}
-
-			return nil
-		},
+// runWhoami is the shared implementation for both top-level `thrum whoami`
+// and `thrum agent whoami`. It loads identity, optionally enriches from the
+// daemon, then prints the result.
+func runWhoami(cmd *cobra.Command, args []string) error {
+	identityFile, identityPath, err := config.LoadIdentityWithPath(flagRepo)
+	if err != nil {
+		thrumDir := filepath.Join(flagRepo, ".thrum")
+		if _, statErr := os.Stat(thrumDir); os.IsNotExist(statErr) {
+			return fmt.Errorf("thrum not initialized in this repository\n  Run 'thrum init' first")
+		}
+		identitiesDir := filepath.Join(thrumDir, "identities")
+		if _, statErr := os.Stat(identitiesDir); os.IsNotExist(statErr) {
+			return fmt.Errorf("no agent identities registered\n  Run 'thrum quickstart --name <agent-name> --role <role> --module <module>' to register")
+		}
+		return err
 	}
 
-	return cmd
+	// Try daemon enrichment (non-fatal)
+	var daemonInfo *cli.WhoamiResult
+	if client, clientErr := getClient(); clientErr == nil {
+		defer func() { _ = client.Close() }()
+		if result, rpcErr := cli.AgentWhoami(client, identityFile.Agent.Name); rpcErr == nil {
+			daemonInfo = result
+		}
+	}
+
+	summary := cli.BuildAgentSummary(identityFile, identityPath, daemonInfo)
+
+	if flagJSON {
+		output, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal JSON output: %w", err)
+		}
+		fmt.Println(string(output))
+	} else {
+		fmt.Print(cli.FormatAgentSummary(summary))
+	}
+
+	return nil
 }
 
 func whoamiCmd() *cobra.Command {
@@ -1415,43 +1318,7 @@ Examples:
   thrum whoami
   thrum whoami --json
   THRUM_NAME=alice thrum whoami`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			identityFile, identityPath, err := config.LoadIdentityWithPath(flagRepo)
-			if err != nil {
-				thrumDir := filepath.Join(flagRepo, ".thrum")
-				if _, statErr := os.Stat(thrumDir); os.IsNotExist(statErr) {
-					return fmt.Errorf("thrum not initialized in this repository\n  Run 'thrum init' first")
-				}
-				identitiesDir := filepath.Join(thrumDir, "identities")
-				if _, statErr := os.Stat(identitiesDir); os.IsNotExist(statErr) {
-					return fmt.Errorf("no agent identities registered\n  Run 'thrum quickstart --name <agent-name> --role <role> --module <module>' to register")
-				}
-				return err
-			}
-
-			// Try daemon enrichment (non-fatal)
-			var daemonInfo *cli.WhoamiResult
-			if client, clientErr := getClient(); clientErr == nil {
-				defer func() { _ = client.Close() }()
-				if result, rpcErr := cli.AgentWhoami(client, identityFile.Agent.Name); rpcErr == nil {
-					daemonInfo = result
-				}
-			}
-
-			summary := cli.BuildAgentSummary(identityFile, identityPath, daemonInfo)
-
-			if flagJSON {
-				output, err := json.MarshalIndent(summary, "", "  ")
-				if err != nil {
-					return fmt.Errorf("marshal JSON output: %w", err)
-				}
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatAgentSummary(summary))
-			}
-
-			return nil
-		},
+		RunE: runWhoami,
 	}
 
 	return cmd
@@ -1813,6 +1680,8 @@ Blocks until a peer connects or the session times out (5 minutes).`,
 
 			if waitResult.Status == "paired" {
 				fmt.Printf("Paired with %q (%s). Syncing started.\n", waitResult.PeerName, waitResult.PeerAddress)
+				fmt.Println("\nTo enable message routing for an agent on this peer:")
+				fmt.Println("  thrum peer configure <peer-name> add-agent <agent-name>")
 			} else {
 				fmt.Println("Pairing timed out. Run 'thrum peer add' again.")
 			}
@@ -1890,6 +1759,8 @@ Five input methods:
 
 			if result.Status == "paired" {
 				fmt.Printf("Paired with %q. Syncing started.\n", name)
+				fmt.Println("\nTo enable message routing for an agent on this peer:")
+				fmt.Println("  thrum peer configure <peer-name> add-agent <agent-name>")
 			} else {
 				fmt.Printf("Pairing failed: %s\n", result.Message)
 			}
@@ -2027,8 +1898,9 @@ Examples:
 	var addEnv []string
 
 	addCmd := &cobra.Command{
-		Use:   "add -- COMMAND ARGS...",
-		Short: "Start a new monitor job",
+		Use:     "start -- COMMAND ARGS...",
+		Aliases: []string{"add"},
+		Short:   "Start a new monitor job",
 		Long: `Start a monitor job that runs COMMAND, filters output through a regex,
 and delivers matching lines as messages to the specified target.
 
@@ -2171,7 +2043,7 @@ The command and its arguments must be separated from monitor flags with '--':
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Restarted — new ID: %s\n", result.ID)
+			fmt.Printf("Restarted — ID: %s\n", result.ID)
 			return nil
 		},
 	})
@@ -2412,88 +2284,9 @@ Identity is resolved from:
 1. Command-line flags (--role, --module)
 2. Environment variables (THRUM_ROLE, THRUM_MODULE, THRUM_NAME)
 3. Identity files in .thrum/identities/ directory`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Load identity from file
-			identityFile, identityPath, err := config.LoadIdentityWithPath(flagRepo)
-			if err != nil {
-				return fmt.Errorf("failed to resolve agent identity: %w\n  Register with: thrum quickstart --name <name> --role <role> --module <module>", err)
-			}
-
-			// Try daemon enrichment
-			var daemonInfo *cli.WhoamiResult
-			if client, clientErr := getClient(); clientErr == nil {
-				defer func() { _ = client.Close() }()
-				if result, rpcErr := cli.AgentWhoami(client, identityFile.Agent.Name); rpcErr == nil {
-					daemonInfo = result
-				}
-			}
-
-			summary := cli.BuildAgentSummary(identityFile, identityPath, daemonInfo)
-
-			if flagJSON {
-				output, _ := json.MarshalIndent(summary, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				fmt.Print(cli.FormatAgentSummary(summary))
-			}
-
-			return nil
-		},
+		RunE: runWhoami,
 	})
 
-	// Context subcommand - detailed work context for agents
-	contextCmd := &cobra.Command{
-		Use:   "context [AGENT]",
-		Short: "Show agent work context",
-		Long: `Show detailed work context for agents.
-
-Without arguments, lists all active work contexts (same as 'agent list --context').
-With an agent argument (e.g., @planner), shows detailed context for that agent.
-
-Examples:
-  thrum agent context                    # List all contexts
-  thrum agent context @planner           # Detail for @planner
-  thrum agent context --branch feature/auth  # Filter by branch
-  thrum agent context --file auth.go     # Filter by file`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			filterAgent, _ := cmd.Flags().GetString("agent")
-			filterBranch, _ := cmd.Flags().GetString("branch")
-			filterFile, _ := cmd.Flags().GetString("file")
-
-			// If positional arg given, treat as agent filter
-			if len(args) > 0 {
-				filterAgent = strings.TrimPrefix(args[0], "@")
-			}
-
-			client, err := getClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to daemon: %w", err)
-			}
-			defer func() { _ = client.Close() }()
-
-			result, err := cli.AgentListContext(client, filterAgent, filterBranch, filterFile)
-			if err != nil {
-				return err
-			}
-
-			if flagJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-			} else if len(args) > 0 && len(result.Contexts) == 1 {
-				// Single agent detail view
-				fmt.Print(cli.FormatContextDetail(&result.Contexts[0]))
-			} else {
-				// Table view
-				fmt.Print(cli.FormatContextList(result))
-			}
-
-			return nil
-		},
-	}
-	contextCmd.Flags().String("agent", "", "Filter by agent role")
-	contextCmd.Flags().String("branch", "", "Filter by branch")
-	contextCmd.Flags().String("file", "", "Filter by changed file")
-	cmd.AddCommand(contextCmd)
 
 	deleteCmd := &cobra.Command{
 		Use:   "delete <name>",
@@ -2639,7 +2432,7 @@ Examples:
 		Long: `Start a new work session for the current agent.
 
 This is an alias for 'thrum session start'.
-The agent must be registered first (use 'thrum agent register').`,
+The agent must be registered first (use 'thrum quickstart').`,
 		RunE: sessionStartRunE,
 	}
 	cmd.AddCommand(agentStartCmd)
@@ -3062,7 +2855,7 @@ func sessionStartRunE(cmd *cobra.Command, args []string) error {
 	}
 	whoami, err := cli.AgentWhoami(client, agentID)
 	if err != nil {
-		return fmt.Errorf("failed to get agent identity: %w\n\nHint: Register first with 'thrum agent register'", err)
+		return fmt.Errorf("failed to get agent identity: %w\n\nHint: Register first with 'thrum quickstart --name <name> --role <role> --module <module>'", err)
 	}
 
 	// Parse scope flags (optional for now, will be used in Epic 4)
@@ -3237,7 +3030,7 @@ func sessionCmd() *cobra.Command {
 		Short: "Start a new session",
 		Long: `Start a new work session for the current agent.
 
-The agent must be registered first (use 'thrum agent register').
+The agent must be registered first (use 'thrum quickstart').
 Starting a new session will automatically recover any orphaned sessions.`,
 		RunE: sessionStartRunE,
 	}
@@ -3654,41 +3447,11 @@ func contextCmd() *cobra.Command {
 	cmd.AddCommand(contextShowCmd())
 	cmd.AddCommand(contextClearCmd())
 	cmd.AddCommand(contextSyncCmd())
-	cmd.AddCommand(contextUpdateCmd())
 	cmd.AddCommand(contextPreambleCmd())
-	cmd.AddCommand(contextPrimeCmd())
 
 	return cmd
 }
 
-func contextUpdateCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "update",
-		Short: "Update agent context (delegates to /thrum:update-project skill)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Check if the thrum plugin is installed (provides /thrum:update-project)
-			if homeDir, err := os.UserHomeDir(); err == nil {
-				pluginPath := filepath.Join(homeDir, ".claude", "plugins", "cache", "thrum-marketplace", "thrum")
-				if matches, _ := filepath.Glob(pluginPath + "/*/commands/update-project.md"); len(matches) > 0 {
-					fmt.Println("The thrum plugin provides /thrum:update-project.")
-					fmt.Println("Run /thrum:update-project in Claude Code to update your agent context.")
-					return nil
-				}
-			}
-
-			// Not found — print instructions
-			fmt.Println("The thrum Claude Code plugin is not installed.")
-			fmt.Println()
-			fmt.Println("Install the thrum plugin to get /thrum:update-project for guided context updates.")
-			fmt.Println()
-			fmt.Println("Alternatively, use thrum context save directly:")
-			fmt.Println()
-			fmt.Println("  echo '$CONTEXT' | thrum context save")
-			return nil
-		},
-	}
-	return cmd
-}
 
 func contextSaveCmd() *cobra.Command {
 	var flagFile string
@@ -4118,21 +3881,6 @@ Examples:
 	}
 }
 
-func contextPrimeCmd() *cobra.Command {
-	// Reuse primeCmd — `thrum context prime` is an alias for `thrum prime`
-	cmd := primeCmd()
-	cmd.Long = `Collect all context needed for agent session initialization or recovery.
-
-Gathers identity, session info, agent list, unread messages, git context,
-and daemon health into a single output. Gracefully handles missing sections.
-
-This is an alias for 'thrum prime'.
-
-Examples:
-  thrum context prime          # Human-readable summary
-  thrum context prime --json   # Structured JSON output`
-	return cmd
-}
 
 func runtimeGroupCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -7111,9 +6859,6 @@ func tmuxCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, _ := cmd.Flags().GetString("cwd")
-			if cwd == "" {
-				return fmt.Errorf("--cwd is required")
-			}
 			agentName, _ := cmd.Flags().GetString("name")
 			role, _ := cmd.Flags().GetString("role")
 			module, _ := cmd.Flags().GetString("module")
@@ -7152,6 +6897,7 @@ func tmuxCmd() *cobra.Command {
 		},
 	}
 	createCmd.Flags().String("cwd", "", "Working directory for the session")
+	_ = createCmd.MarkFlagRequired("cwd")
 	createCmd.Flags().String("name", "", "Agent name for quickstart registration")
 	createCmd.Flags().String("role", "", "Agent role for quickstart registration")
 	createCmd.Flags().String("module", "", "Agent module for quickstart registration")
