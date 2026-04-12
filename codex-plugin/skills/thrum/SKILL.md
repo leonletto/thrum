@@ -26,7 +26,6 @@ Codex registers the Claude plugin command surface as top-level skills:
 - `thrum-update-project`
 - `thrum-team`
 - `thrum-inbox`
-- `thrum-group`
 - `thrum-send`
 - `thrum-reply`
 - `thrum-wait`
@@ -85,6 +84,5 @@ thrum who-has <path>
 - `resources/ANTI_PATTERNS.md`
 - `resources/LISTENER_PATTERN.md`
 - `resources/CLI_REFERENCE.md`
-- `resources/GROUPS.md`
 - `resources/IDENTITY.md`
 - `resources/WORKTREES.md`

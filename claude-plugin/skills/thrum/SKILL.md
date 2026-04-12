@@ -167,7 +167,6 @@ processing. See [LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md).
 | [ANTI_PATTERNS.md](resources/ANTI_PATTERNS.md)       | Common mistakes and how to avoid them        |
 | [LISTENER_PATTERN.md](resources/LISTENER_PATTERN.md) | Background message listener template         |
 | [CLI_REFERENCE.md](resources/CLI_REFERENCE.md)       | Complete command syntax reference            |
-| [GROUPS.md](resources/GROUPS.md)                     | Group management patterns                    |
 | [IDENTITY.md](resources/IDENTITY.md)                 | Agent identity and multi-worktree patterns   |
 | [WORKTREES.md](resources/WORKTREES.md)               | Multi-worktree coordination                  |
 

@@ -259,10 +259,10 @@ thrum worktree setup --branch feature/auth --path ~/.workspaces/myproject/auth
 # in one step (uses a temp tmux session for PID isolation):
 thrum worktree create --branch feature/auth --path ~/.workspaces/myproject/auth \
   --name furiosa --role implementer --module auth</code></pre>
-<p><code>thrum worktree create</code> handles the redirect file creation automatically —
-you don&#39;t need to run <code>thrum setup --main-repo</code> separately. If you pass
-<code>--name</code>, <code>--role</code>, and <code>--module</code>, it also runs quickstart inside a temporary
-tmux session for proper PID isolation.</p>
+<p><code>thrum worktree create</code> handles the redirect file creation automatically — you
+don&#39;t need to run <code>thrum setup --main-repo</code> separately. If you pass <code>--name</code>,
+<code>--role</code>, and <code>--module</code>, it also runs quickstart inside a temporary tmux
+session for proper PID isolation.</p>
 <p>For an existing worktree that just needs redirect setup, you can still use the
 manual approach:</p>
 <pre><code>cd ~/project-features/auth
@@ -370,8 +370,8 @@ brew install tmux  # macOS
 # Enable mouse scrolling (critical for a good experience)
 echo &quot;set -g mouse on&quot; &gt;&gt; ~/.tmux.conf</code></pre>
 <p><code>thrum tmux create</code> requires <code>--name</code>, <code>--role</code>, and <code>--module</code> flags (or
-<code>--no-agent</code> to skip registration). It runs quickstart automatically inside
-the new pane. Calling it without these flags errors out.</p>
+<code>--no-agent</code> to skip registration). It runs quickstart automatically inside the
+new pane. Calling it without these flags errors out.</p>
 <pre><code># Correct: flags required
 thrum tmux create --name furiosa --role implementer --module auth
 

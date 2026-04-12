@@ -300,8 +300,8 @@ back. This matters for agents relaunched under a different runtime (e.g. Claude
 → OpenCode) or moved between branches; the identity file stays accurate without
 manual re-registration.</p>
 <p>The pre-launch identity write path adds another canonical writer: when you run
-<code>thrum tmux create --name X --role Y --module Z</code> or <code>thrum worktree create</code>
-with quickstart flags, the identity file is written <em>before</em> the agent runtime
+<code>thrum tmux create --name X --role Y --module Z</code> or <code>thrum worktree create</code> with
+quickstart flags, the identity file is written <em>before</em> the agent runtime
 launches. The agent starts with identity already in place — no chicken-and-egg
 between first <code>thrum prime</code> and identity file existence.</p>
 <p><strong>Auto-selection rules</strong> for identity files (in priority order):</p>
@@ -410,9 +410,8 @@ re-register.</p>
 commands. <code>thrum tmux create</code> (alias: <code>thrum tmux quickstart</code>) requires
 <code>--name</code>, <code>--role</code>, and <code>--module</code> and runs quickstart inside the new pane.
 <code>thrum worktree create</code> (alias: <code>thrum worktree setup</code>) accepts the same
-optional quickstart flags and, when all three are provided, creates a temp
-tmux session for PID isolation, runs quickstart, then destroys the temp
-session.</p>
+optional quickstart flags and, when all three are provided, creates a temp tmux
+session for PID isolation, runs quickstart, then destroys the temp session.</p>
 <pre><code># Quickstart via tmux — runs inside the new pane
 thrum tmux create --name furiosa --role implementer --module auth
 thrum tmux quickstart --name furiosa --role implementer --module auth  # same thing

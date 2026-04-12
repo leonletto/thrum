@@ -168,7 +168,8 @@ thrum tmux launch implementer-api
 thrum send &quot;Your epic is thrum-abc. Run bd show thrum-abc and start working.&quot; --to @impl_api</code></pre>
 <p>The old pattern (create first, then <code>thrum tmux send</code> to run quickstart) is
 gone. Passing <code>--name</code>, <code>--role</code>, and <code>--module</code> to <code>thrum tmux create</code> runs
-quickstart inside the pane automatically. You can also use the <code>thrum tmux quickstart</code> alias — same flags, same behavior.</p>
+quickstart inside the pane automatically. You can also use the
+<code>thrum tmux quickstart</code> alias — same flags, same behavior.</p>
 <p><strong>Single identity per worktree:</strong> after quickstart runs, any old identity files
 in the worktree are cleaned up. Each worktree has exactly one identity.</p>
 <p>The agent is now running, receiving messages instantly, and you can monitor it

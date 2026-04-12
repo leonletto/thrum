@@ -273,9 +273,10 @@ thrum sync force</code></pre>
 <h2>Session Workflow Template</h2>
 <p>Use this template for every agent session:</p>
 <blockquote>
-<p><strong>Note:</strong> If you were launched via <code>thrum tmux quickstart</code> (or <code>thrum tmux create</code> with <code>--name</code>/<code>--role</code>/<code>--module</code> flags), you&#39;re already registered —
-skip step 1. The coordinator&#39;s launch command handles registration before your
-session boots.</p>
+<p><strong>Note:</strong> If you were launched via <code>thrum tmux quickstart</code> (or
+<code>thrum tmux create</code> with <code>--name</code>/<code>--role</code>/<code>--module</code> flags), you&#39;re already
+registered — skip step 1. The coordinator&#39;s launch command handles
+registration before your session boots.</p>
 </blockquote>
 <pre><code># === START OF SESSION ===
 
@@ -337,7 +338,9 @@ thrum session end</code></pre>
 <li><strong>Don&#39;t spam messages</strong> -- batch updates when possible</li>
 <li><strong>Don&#39;t skip the cron watchdog</strong> -- it auto-respawns the listener if it stops</li>
 <li><strong>Don&#39;t ignore critical messages</strong> -- stop work and respond</li>
-<li><strong>Don&#39;t skip registration</strong> -- the system won&#39;t route messages correctly (the integrated <code>thrum tmux quickstart</code> path handles this automatically when the coordinator launches you)</li>
+<li><strong>Don&#39;t skip registration</strong> -- the system won&#39;t route messages correctly (the
+integrated <code>thrum tmux quickstart</code> path handles this automatically when the
+coordinator launches you)</li>
 <li><strong>Don&#39;t leave sessions open</strong> -- end them when done to avoid stale status</li>
 <li><strong>Don&#39;t use vague intents</strong> -- be specific about current work</li>
 </ul>
