@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/config"
@@ -109,6 +110,39 @@ func TestTmuxHandler_HandleCreate_MissingFields(t *testing.T) {
 	_, err = handler.HandleCreate(context.Background(), json.RawMessage(`{"name":"test"}`))
 	if err == nil {
 		t.Error("expected error for missing cwd")
+	}
+}
+
+func TestTmuxHandler_HandleCreate_MissingQuickstartFlags(t *testing.T) {
+	handler := NewTmuxHandler(t.TempDir(), nil)
+	// No agent_name, role, module, no no_agent flag
+	params := json.RawMessage(`{"name":"test-session","cwd":"` + t.TempDir() + `"}`)
+	_, err := handler.HandleCreate(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for missing quickstart flags")
+	}
+	if !strings.Contains(err.Error(), "quickstart flags required") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestTmuxHandler_HandleCreate_NoAgentSkipsValidation(t *testing.T) {
+	handler := NewTmuxHandler(t.TempDir(), nil)
+	cwd := t.TempDir()
+	params, _ := json.Marshal(map[string]any{
+		"name":     "test-session",
+		"cwd":      cwd,
+		"no_agent": true,
+	})
+	// This will fail at CreateSession (no real tmux) but should pass
+	// quickstart validation — error must NOT be about missing flags
+	_, err := handler.HandleCreate(context.Background(), json.RawMessage(params))
+	if err != nil && strings.Contains(err.Error(), "quickstart flags required") {
+		t.Error("should not require quickstart flags when no_agent=true")
+	}
+	// Verify no redirect was created (--no-agent skips redirect setup)
+	if _, statErr := os.Stat(filepath.Join(cwd, ".thrum", "redirect")); !os.IsNotExist(statErr) {
+		t.Error(".thrum/redirect should not be created with --no-agent")
 	}
 }
 

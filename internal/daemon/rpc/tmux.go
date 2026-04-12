@@ -13,6 +13,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"github.com/leonletto/thrum/internal/worktree"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
@@ -23,8 +24,15 @@ import (
 
 // TmuxCreateRequest is the request to create a new tmux session.
 type TmuxCreateRequest struct {
-	Name string `json:"name"`
-	Cwd  string `json:"cwd"`
+	Name      string `json:"name"`
+	Cwd       string `json:"cwd"`
+	AgentName string `json:"agent_name,omitempty"`
+	Role      string `json:"role,omitempty"`
+	Module    string `json:"module,omitempty"`
+	Intent    string `json:"intent,omitempty"`
+	Runtime   string `json:"runtime,omitempty"`
+	Force     bool   `json:"force,omitempty"`
+	NoAgent   bool   `json:"no_agent,omitempty"`
 }
 
 // TmuxCreateResponse is the response after creating a tmux session.
@@ -120,6 +128,8 @@ func (h *TmuxHandler) getQueue(session string) *SessionQueue {
 }
 
 // HandleCreate creates a new detached tmux session with monitor-silence hook.
+// If quickstart flags are provided (agent_name, role, module), it also sets up
+// worktree redirects and runs quickstart inside the pane for PID isolation.
 func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) (any, error) {
 	var req TmuxCreateRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -135,7 +145,32 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("cwd must be an absolute path, got: %q", req.Cwd)
 	}
 
+	// Validate quickstart flags unless --no-agent
+	if !req.NoAgent {
+		if req.AgentName == "" || req.Role == "" || req.Module == "" {
+			return nil, fmt.Errorf("quickstart flags required (agent_name, role, module); set no_agent=true to skip")
+		}
+	}
+
+	// Ensure worktree redirects (before creating session)
+	if !req.NoAgent {
+		// daemon's thrumDir is <main-repo>/.thrum — strip to get repo root
+		mainRepoRoot := filepath.Dir(h.thrumDir)
+		if err := worktree.EnsureRedirects(req.Cwd, mainRepoRoot); err != nil {
+			return nil, fmt.Errorf("redirect setup: %s", err)
+		}
+	}
+
 	name := ttmux.SanitizeSessionName(req.Name)
+
+	// Check for existing session
+	if ttmux.HasSession(name) {
+		if !req.Force {
+			return nil, fmt.Errorf("session %q already exists; use --force to kill and recreate", name)
+		}
+		_ = ttmux.KillSession(name)
+	}
+
 	if err := ttmux.CreateSession(name, req.Cwd); err != nil {
 		return nil, err
 	}
@@ -146,9 +181,22 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 		_ = ttmux.SetMonitorSilence(name, 60, thrumBin, h.thrumDir)
 	}
 
-	// Write tmux_session to identity so HandleLaunch can match by session name.
-	target := name + ":0.0"
-	h.writeTmuxToIdentity(name, target, "")
+	// Run quickstart inside the pane for PID isolation
+	if !req.NoAgent {
+		worktree.EnforceOneIdentity(req.Cwd, req.AgentName)
+		quickstartCmd := worktree.BuildQuickstartCmd(req.AgentName, req.Role, req.Module, req.Intent, req.Runtime)
+		target := name + ":0.0"
+		if err := ttmux.SendKeys(target, quickstartCmd); err != nil {
+			return nil, fmt.Errorf("send quickstart: %s", err)
+		}
+		if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
+			return nil, fmt.Errorf("send enter: %s", err)
+		}
+	} else {
+		// For bare sessions, still write tmux_session to any existing identity
+		target := name + ":0.0"
+		h.writeTmuxToIdentity(name, target, "")
+	}
 
 	// Try to read identity file from worktree
 	var identity *config.IdentityFile
