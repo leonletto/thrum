@@ -227,12 +227,8 @@ Examples:
 					}
 
 					// Set up redirect to main repo's .thrum/
-					setupOpts := cli.SetupOptions{
-						RepoPath: flagRepo,
-						MainRepo: mainRepoRoot,
-					}
-					if err := cli.Setup(setupOpts); err != nil {
-						if strings.Contains(err.Error(), "redirect to self") {
+					if err := cli.EnsureWorktreeRedirects(flagRepo, mainRepoRoot); err != nil {
+						if strings.Contains(err.Error(), "does not exist") {
 							// Not actually a worktree from thrum's perspective, fall through
 						} else {
 							return fmt.Errorf("worktree setup: %w", err)
@@ -3028,7 +3024,19 @@ func worktreeCmd() *cobra.Command {
 		Use:   "worktree",
 		Short: "Manage git worktrees with thrum/beads setup",
 	}
-	cmd.AddCommand(worktreeCreateCmd())
+	createCmd := worktreeCreateCmd()
+	cmd.AddCommand(createCmd)
+
+	// setup (alias for create)
+	setupCmd := &cobra.Command{
+		Use:   "setup <name>",
+		Short: "Set up a worktree with redirects and agent (alias for 'worktree create')",
+		Args:  cobra.ExactArgs(1),
+		RunE:  createCmd.RunE,
+	}
+	setupCmd.Flags().AddFlagSet(createCmd.Flags())
+	cmd.AddCommand(setupCmd)
+
 	cmd.AddCommand(worktreeTeardownCmd())
 	cmd.AddCommand(worktreeListCmd())
 	return cmd
@@ -3078,44 +3086,60 @@ func worktreeCreateCmd() *cobra.Command {
 			}
 			fmt.Printf("✓ Worktree created at %s\n", worktreePath)
 
-			// 2. Set up Thrum redirect if enabled
-			if cfg.Worktrees.ThrumEnabled {
-				wtThrumDir := filepath.Join(worktreePath, ".thrum")
-				if err := os.MkdirAll(wtThrumDir, 0750); err != nil {
-					return fmt.Errorf("create .thrum dir: %w", err)
-				}
-				mainThrumAbs, err := filepath.Abs(thrumDir)
-				if err != nil {
-					return fmt.Errorf("resolve thrum dir: %w", err)
-				}
-				redirectPath := filepath.Join(wtThrumDir, "redirect")
-				if err := os.WriteFile(redirectPath, []byte(mainThrumAbs+"\n"), 0600); err != nil {
-					return fmt.Errorf("write thrum redirect: %w", err)
-				}
-				// Create local identities dir for per-worktree identities
-				if err := os.MkdirAll(filepath.Join(wtThrumDir, "identities"), 0750); err != nil {
-					return fmt.Errorf("create identities dir: %w", err)
-				}
-				fmt.Println("✓ Thrum redirect configured")
+			// 2. Set up redirects (.thrum/ and optionally .beads/)
+			if err := cli.EnsureWorktreeRedirects(worktreePath, repoPath); err != nil {
+				return fmt.Errorf("redirect setup: %w", err)
 			}
+			fmt.Println("✓ Thrum redirect configured")
 
-			// 3. Set up Beads redirect if enabled
-			if cfg.Worktrees.BeadsEnabled {
-				mainBeadsDir := filepath.Join(repoPath, ".beads")
-				if _, err := os.Stat(mainBeadsDir); err == nil {
-					wtBeadsDir := filepath.Join(worktreePath, ".beads")
-					if err := os.MkdirAll(wtBeadsDir, 0750); err != nil {
-						return fmt.Errorf("create .beads dir: %w", err)
+			// 3. Optional: quickstart registration via temporary tmux session
+			agentName, _ := cmd.Flags().GetString("name")
+			role, _ := cmd.Flags().GetString("role")
+			module, _ := cmd.Flags().GetString("module")
+
+			if agentName != "" && role != "" && module != "" {
+				intent, _ := cmd.Flags().GetString("intent")
+				runtimeFlag, _ := cmd.Flags().GetString("runtime")
+
+				cli.EnforceOneIdentity(worktreePath, agentName)
+
+				// Create temporary tmux session for PID isolation
+				tempSession := fmt.Sprintf("wt-setup-%d", time.Now().UnixMilli())
+				client, err := getClient()
+				if err != nil {
+					return fmt.Errorf("connect to daemon: %w", err)
+				}
+				defer func() { _ = client.Close() }()
+
+				if _, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
+					Name:    tempSession,
+					Cwd:     worktreePath,
+					NoAgent: true,
+				}); err != nil {
+					return fmt.Errorf("create temp session: %w", err)
+				}
+				defer func() {
+					_ = cli.TmuxKill(client, tempSession)
+				}()
+
+				qsCmd := cli.BuildQuickstartCmd(agentName, role, module, intent, runtimeFlag)
+				if err := cli.TmuxSend(client, tempSession, qsCmd+"\n"); err != nil {
+					return fmt.Errorf("send quickstart: %w", err)
+				}
+
+				// Wait for identity file to appear (poll, 10s timeout)
+				idPath := filepath.Join(worktreePath, ".thrum", "identities", agentName+".json")
+				deadline := time.Now().Add(10 * time.Second)
+				for time.Now().Before(deadline) {
+					if _, err := os.Stat(idPath); err == nil {
+						break
 					}
-					mainBeadsAbs, err := filepath.Abs(mainBeadsDir)
-					if err != nil {
-						return fmt.Errorf("resolve beads dir: %w", err)
-					}
-					redirectPath := filepath.Join(wtBeadsDir, "redirect")
-					if err := os.WriteFile(redirectPath, []byte(mainBeadsAbs+"\n"), 0600); err != nil {
-						return fmt.Errorf("write beads redirect: %w", err)
-					}
-					fmt.Println("✓ Beads redirect configured")
+					time.Sleep(500 * time.Millisecond)
+				}
+				if _, err := os.Stat(idPath); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: identity file not found after 10s; quickstart may still be running\n")
+				} else {
+					fmt.Printf("✓ Registered @%s in worktree\n", agentName)
 				}
 			}
 
@@ -3124,6 +3148,12 @@ func worktreeCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().Bool("detach", false, "Create detached HEAD worktree")
 	cmd.Flags().StringP("branch", "b", "", "Branch name (default: feature/<name>)")
+	cmd.Flags().String("name", "", "Agent name (triggers quickstart in tmux)")
+	cmd.Flags().String("role", "", "Agent role")
+	cmd.Flags().String("module", "", "Agent module")
+	cmd.Flags().String("intent", "", "Agent intent")
+	cmd.Flags().String("runtime", "", "Preferred runtime")
+	cmd.Flags().Bool("force", false, "Force re-registration")
 	return cmd
 }
 
