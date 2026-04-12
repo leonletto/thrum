@@ -116,7 +116,7 @@ and ends with assistant text. No partial exchanges.</p>
 <p>The agent recognizes it needs a fresh session — context is getting full, it hit
 rate limits, or it&#39;s stuck. It runs the <code>/thrum:restart</code> skill, which:</p>
 <ol>
-<li>Saves the conversation snapshot via <code>thrum restart save</code></li>
+<li>Saves the conversation snapshot via <code>thrum tmux snapshot save</code></li>
 <li>If in a tmux session, notifies the coordinator to handle the relaunch</li>
 <li>If not in tmux, prints instructions for the operator</li>
 </ol>
@@ -161,21 +161,21 @@ the configured threshold, it triggers automatically:</p>
 <pre><code>thrum config set restart.auto_threshold 80</code></pre>
 <hr>
 <h2>CLI Commands</h2>
-<h3><code>thrum restart save</code></h3>
+<h3><code>thrum tmux snapshot save</code></h3>
 <p>Save a conversation snapshot for the current agent.</p>
-<pre><code>thrum restart save
-thrum restart save --reason context-threshold</code></pre>
+<pre><code>thrum tmux snapshot save
+thrum tmux snapshot save --reason context-threshold</code></pre>
 <p>The <code>--reason</code> flag sets the reason in the snapshot header. Values:
 <code>self-initiated</code> (default), <code>external</code>, <code>context-threshold</code>.</p>
-<h3><code>thrum restart restore</code></h3>
+<h3><code>thrum tmux snapshot restore</code></h3>
 <p>Manual escape hatch for non-tmux agents. Outputs the snapshot to stdout and
 deletes the file.</p>
-<pre><code>thrum restart restore</code></pre>
+<pre><code>thrum tmux snapshot restore</code></pre>
 <p>If no snapshot exists, exits with code 1.</p>
-<h3><code>thrum restart check</code></h3>
+<h3><code>thrum tmux snapshot check</code></h3>
 <p>Check if a restart snapshot exists. Exits 0 if yes, 1 if no. No output — for
 scripting.</p>
-<pre><code>if thrum restart check; then
+<pre><code>if thrum tmux snapshot check; then
   echo &quot;Snapshot ready&quot;
 fi</code></pre>
 <h3><code>thrum tmux restart</code></h3>

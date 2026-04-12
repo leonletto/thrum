@@ -22,7 +22,7 @@ Save your conversation history and prepare for a session restart.
 1. Run the save command:
 
 ```bash
-thrum restart save
+thrum tmux snapshot save
 ```
 
 1. Check if you are in a tmux-managed session:
@@ -49,7 +49,7 @@ instructions below.
 > 2. Start a new session in the same directory
 > 3. The snapshot will be automatically loaded by `thrum prime`
 >
-> Or use `thrum restart restore` to manually output the snapshot.
+> Or use `thrum tmux snapshot restore` to manually output the snapshot.
 
 ### When to Use
 

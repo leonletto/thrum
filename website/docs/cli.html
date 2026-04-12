@@ -374,15 +374,15 @@ for AI agent coordination.</p>
 <td>Cancel a queued or active command</td>
 </tr>
 <tr>
-<td><code>thrum restart save</code></td>
+<td><code>thrum tmux snapshot save</code></td>
 <td>Save conversation snapshot for session restart</td>
 </tr>
 <tr>
-<td><code>thrum restart restore</code></td>
+<td><code>thrum tmux snapshot restore</code></td>
 <td>Output a restart snapshot to stdout</td>
 </tr>
 <tr>
-<td><code>thrum restart check</code></td>
+<td><code>thrum tmux snapshot check</code></td>
 <td>Check if a restart snapshot exists (exit code)</td>
 </tr>
 <tr>
@@ -2632,11 +2632,11 @@ Restarted — new ID: mon_01KNTH4C2...</code></pre>
 <h2>Session Restart</h2>
 <p>Save and restore conversation snapshots for session restart. See
 <a href="session-restart.html">Session Restart &amp; Context Recovery</a> for the full story.</p>
-<h3>thrum restart save</h3>
+<h3>thrum tmux snapshot save</h3>
 <p>Save a conversation snapshot for the current agent. Extracts user + assistant
 text from the Claude Code JSONL transcript, truncates to the configured line
 limit, and writes to <code>.thrum/restart/&lt;agent&gt;.md</code>.</p>
-<pre><code>thrum restart save [flags]</code></pre>
+<pre><code>thrum tmux snapshot save [flags]</code></pre>
 <table>
 <thead>
 <tr>
@@ -2652,22 +2652,22 @@ limit, and writes to <code>.thrum/restart/&lt;agent&gt;.md</code>.</p>
 </tr>
 </tbody></table>
 <p>Example:</p>
-<pre><code>$ thrum restart save
+<pre><code>$ thrum tmux snapshot save
 Restart snapshot saved for impl_api (847 lines)
 
-$ thrum restart save --reason context-threshold
+$ thrum tmux snapshot save --reason context-threshold
 Restart snapshot saved for impl_api (847 lines)</code></pre>
-<h3>thrum restart restore</h3>
+<h3>thrum tmux snapshot restore</h3>
 <p>Output a restart snapshot to stdout and delete the file. Manual escape hatch for
 non-tmux agents or when <code>thrum prime</code> is not used.</p>
-<pre><code>thrum restart restore</code></pre>
+<pre><code>thrum tmux snapshot restore</code></pre>
 <p>Exits with code 1 if no snapshot exists.</p>
-<h3>thrum restart check</h3>
+<h3>thrum tmux snapshot check</h3>
 <p>Check if a restart snapshot exists for the current agent. Exits 0 if yes, 1 if
 no. No stdout — for scripting.</p>
-<pre><code>thrum restart check</code></pre>
+<pre><code>thrum tmux snapshot check</code></pre>
 <p>Example:</p>
-<pre><code>if thrum restart check; then echo &quot;Snapshot ready&quot;; fi</code></pre>
+<pre><code>if thrum tmux snapshot check; then echo &quot;Snapshot ready&quot;; fi</code></pre>
 <h2>MCP Server</h2>
 <h3>thrum mcp serve</h3>
 <p>Start an MCP (Model Context Protocol) server on stdin/stdout for native

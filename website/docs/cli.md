@@ -100,9 +100,9 @@ for AI agent coordination.
 | `thrum tmux queue`         | Submit a command to a session's queue                          |
 | `thrum tmux queue-status`  | Show the command queue for a session                           |
 | `thrum tmux cancel`        | Cancel a queued or active command                              |
-| `thrum restart save`       | Save conversation snapshot for session restart                 |
-| `thrum restart restore`    | Output a restart snapshot to stdout                            |
-| `thrum restart check`      | Check if a restart snapshot exists (exit code)                 |
+| `thrum tmux snapshot save`    | Save conversation snapshot for session restart              |
+| `thrum tmux snapshot restore` | Output a restart snapshot to stdout                         |
+| `thrum tmux snapshot check`   | Check if a restart snapshot exists (exit code)              |
 | `thrum worktree create`    | Create a new worktree with thrum/beads setup                   |
 | `thrum worktree setup`     | Alias for `thrum worktree create`                              |
 | `thrum worktree teardown`  | Remove a worktree and clean up artifacts                       |
@@ -2310,14 +2310,14 @@ Restarted — new ID: mon_01KNTH4C2...
 Save and restore conversation snapshots for session restart. See
 [Session Restart & Context Recovery](session-restart.md) for the full story.
 
-### thrum restart save
+### thrum tmux snapshot save
 
 Save a conversation snapshot for the current agent. Extracts user + assistant
 text from the Claude Code JSONL transcript, truncates to the configured line
 limit, and writes to `.thrum/restart/<agent>.md`.
 
 ```text
-thrum restart save [flags]
+thrum tmux snapshot save [flags]
 ```
 
 | Flag       | Description                                                            | Default          |
@@ -2327,37 +2327,37 @@ thrum restart save [flags]
 Example:
 
 ```text
-$ thrum restart save
+$ thrum tmux snapshot save
 Restart snapshot saved for impl_api (847 lines)
 
-$ thrum restart save --reason context-threshold
+$ thrum tmux snapshot save --reason context-threshold
 Restart snapshot saved for impl_api (847 lines)
 ```
 
-### thrum restart restore
+### thrum tmux snapshot restore
 
 Output a restart snapshot to stdout and delete the file. Manual escape hatch for
 non-tmux agents or when `thrum prime` is not used.
 
 ```text
-thrum restart restore
+thrum tmux snapshot restore
 ```
 
 Exits with code 1 if no snapshot exists.
 
-### thrum restart check
+### thrum tmux snapshot check
 
 Check if a restart snapshot exists for the current agent. Exits 0 if yes, 1 if
 no. No stdout — for scripting.
 
 ```text
-thrum restart check
+thrum tmux snapshot check
 ```
 
 Example:
 
 ```text
-if thrum restart check; then echo "Snapshot ready"; fi
+if thrum tmux snapshot check; then echo "Snapshot ready"; fi
 ```
 
 ## MCP Server
