@@ -5,29 +5,45 @@ feature, write tests, and commit working code faster than most developers type.
 Run several in parallel across worktrees and you can move through an entire
 backlog in an afternoon.
 
-Most multi-agent tools are trying to solve a different problem than Thrum. They
-want full autonomy — you give the agents a goal, they figure out the plan, they
-ship code, you review it later. That's fine for some work. It's not what I built
-Thrum for.
+Most multi-agent tools are solving a different problem. They want full autonomy
+— you give the agents a goal, they figure out the plan, they ship code, you
+review it later. That works for some people and some work.
 
 Thrum is for when you want the speed of multiple agents but you still want to
-understand what they built. You do the thinking. The agents do the typing.
+understand what they built. You do the thinking. The agents do the typing. And
+when you're ready, you can hand off the execution phase too — but the plan is
+always yours.
 
-## Two Approaches to Working with AI Agents
+## Three Approaches to Working with AI Agents
 
-There are two ways people work with AI agents.
+There are three ways people work with AI agents.
 
 **Autonomous orchestration.** You describe a goal, the system breaks it into
 tasks, assigns agents, and delivers results. You set objectives and review
-outcomes.
+outcomes. [Gastown](https://github.com/gastownhall/gastown) is excellent for
+this.
 
 **Human-directed work.** You do the research. You make the decisions. You write
 the instructions. Agents execute your plan on separate branches. You review the
 code, run the tests, and merge.
 
-Thrum is for the second approach. It doesn't assign tasks or plan work. It gives
-agents a way to message each other across worktrees and machines, so you can run
-several in parallel without being the message relay yourself.
+**Orchestrated execution.** You still do the research and write the plan — but
+you hand the execution to an orchestrator agent. You tell it how you want the
+work done: which worktrees, which runtimes, where the review gates are. It spins
+up implementers, runs the work epic by epic, stops where you told it to stop,
+and hands you a merge report. It never writes code. It never merges without your
+say-so. You did the thinking. The orchestrator does the babysitting.
+
+Thrum is for the second and third approaches. Thrum keeps you in control of the
+plan. The difference between the two is just how much of the execution you want
+to do yourself.
+
+Most people start with human-directed work. Once you've done it a few times and
+you trust the agents to follow your plans, the orchestrator saves you from
+sitting at the terminal relaying "okay, start epic 2" all afternoon. That's why
+Thrum has a separate orchestrator role — distinct from the coordinator you use
+to research and plan. The coordinator helps you think. The orchestrator runs
+what you've already decided.
 
 ## The Workflow
 
@@ -40,22 +56,25 @@ dependencies, understanding the current state of things — and comes back to yo
 with a proposed solution. You can chat about it, ask questions, and make changes
 until you like it.
 
-**2. Plan.** You ask the agent to investigate the codebase, docs, or whatever
-needs changing. It does the boring detailed slog of finding all the
-dependencies, figuring out what will break, and adding that to the plan.
-Rewriting the docs to fit the new code, etc. Then it gives you a spec that you
-can read and understand and approve or change as you see fit.
+**2. Brainstorm.** Before you write any code or even a spec, you brainstorm with
+your agent. You talk through the problem, explore approaches, ask questions,
+poke holes. The agent pushes back, suggests alternatives, flags things you
+haven't thought about. This is the [brainstorming skill](workflow-templates.md)
+in action — it's designed to make sure you've actually thought through the
+problem before committing to a solution.
 
-**3. Document.** Now you have an agreed-on plan so you tell the agent to break
-it down into idempotent steps, optimized for making it very organized and
-parallelizable where possible. Then it uses the Beads issue tracker to create
-Epics and Tasks which are the full record of what to do. Then the agent writes a
-prompt file which you give to a different agent to implement. It has all the
-details needed — the spec is referenced, the Epics and Tasks are talked about,
-it has directions on how you like it to execute (use sub-agents, make sure test
-coverage is 80%, run all tests, code review when you are done, etc.). Now you
-can read this if you like, or don't trust the agent yet, and you can see exactly
-what is going to happen.
+**3. Plan.** Now you have an agreed-on approach, so you tell the agent to turn
+it into a real plan. It investigates the codebase, finds all the dependencies,
+figures out what will break, and writes a spec. Then it breaks the spec down
+into idempotent steps — organized, parallelizable where possible. It uses the
+Beads issue tracker to create Epics and Tasks, which are the full record of what
+to do. Then the agent writes a prompt file you give to a different agent to
+implement. It has all the details needed — the spec is referenced, the tasks are
+laid out, it has directions on how you like it to execute (use sub-agents, make
+sure test coverage is 80%, run all tests, code review when you're done, etc.).
+This is the [writing-plans skill](workflow-templates.md). You can read the plan,
+change it, or reject it — you see exactly what's going to happen before any code
+gets written.
 
 **4. Implement.** You hand that prompt to an agent on a worktree. It claims
 tasks, writes code, runs tests, commits. Thrum lets you see what it's doing
@@ -70,8 +89,15 @@ code review against the spec and deal with any findings. It tells you what it
 found and usually asks if you want it to fix them. When you are satisfied, you
 tell it to merge and you are done.
 
-This cycle repeats. Research, plan, document, implement, review. You get the
+This cycle repeats. Research, brainstorm, plan, implement, review. You get the
 speed of parallel agents with the confidence of understanding every change.
+
+I've packaged all of these steps into a single
+[project-setup skill](workflow-templates.md) — an opinionated flow that walks
+you through brainstorming, spec writing, plan creation, task breakdown, and
+worktree setup in one cohesive pipeline. It's the same workflow I use every day.
+You don't have to use it, but if you want a structured starting point, it's
+there.
 
 The prompts you write are documentation. The issues you create are your audit
 trail. The git history shows exactly what happened. Nothing is hidden.
@@ -101,24 +127,12 @@ files.
 
 ## What Thrum Is Not
 
-Thrum doesn't plan your work - it makes planning your work easier and faster.
+Thrum doesn't plan your work — it makes planning your work easier and faster.
+You do that with the help of your agents, and you can see what's going to happen
+before it happens — not after the damage is done.
 
-It won't break everything down and make all the decisions for you unless you
-tell it to. You do that with the help of your agents and you can see what is
-going to happen before it happens - not after the damage is done.
-
-Thrum doesn't orchestrate your agents. It gives agents a way to message each
-other across worktrees and machines, so you can run several in parallel without
-being the message relay yourself.
-
-There's one exception, and it exists because I wanted it: you can hand a plan
-you already wrote to an orchestrator agent. It spins up implementers, runs your
-plan epic by epic, stops at the review gates you put in the prompts, and hands
-you a merge report. It never writes code. It never merges without your say-so.
-You still did the thinking — the orchestrator just handles the babysitting so
-you don't have to sit at the terminal relaying "okay, move to epic 2" all
-afternoon. If that's not what you want, don't use it. The rest of Thrum works
-exactly the same.
+The orchestrator is opt-in. The messaging layer is the core. If you'd rather
+stay hands-on and relay work yourself, Thrum works exactly the same without it.
 
 Thrum doesn't stop agents or interrupt their work. If you need to stop an agent,
 you stop the process. Thrum provides the communication layer — you provide the
@@ -140,9 +154,9 @@ understand the codebase they're working in. Not for AI researchers building
 novel agent architectures. Not for platform teams building orchestration
 systems.
 
-If you want agents to autonomously tackle your backlog while you do something
-else, there are good tools for that. If you want to direct the work yourself and
-have agents execute faster than you can type, that's what Thrum is for.
+If you want to direct the work yourself, understand what got built, and
+gradually let the agents handle more as you trust them — that's what Thrum is
+for.
 
 ## Next Steps
 
