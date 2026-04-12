@@ -13,6 +13,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"github.com/leonletto/thrum/internal/worktree"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
@@ -23,8 +24,15 @@ import (
 
 // TmuxCreateRequest is the request to create a new tmux session.
 type TmuxCreateRequest struct {
-	Name string `json:"name"`
-	Cwd  string `json:"cwd"`
+	Name      string `json:"name"`
+	Cwd       string `json:"cwd"`
+	AgentName string `json:"agent_name,omitempty"`
+	Role      string `json:"role,omitempty"`
+	Module    string `json:"module,omitempty"`
+	Intent    string `json:"intent,omitempty"`
+	Runtime   string `json:"runtime,omitempty"`
+	Force     bool   `json:"force,omitempty"`
+	NoAgent   bool   `json:"no_agent,omitempty"`
 }
 
 // TmuxCreateResponse is the response after creating a tmux session.
@@ -85,19 +93,53 @@ type TmuxStatusResponse struct {
 
 // TmuxHandler handles tmux session lifecycle RPC methods.
 type TmuxHandler struct {
-	thrumDir string
-	state    *state.State
-	queues   map[string]*SessionQueue
-	queuesMu sync.Mutex
+	thrumDir    string
+	state       *state.State
+	queues      map[string]*SessionQueue
+	queuesMu    sync.Mutex
+	sessionMu   sync.RWMutex      // protects sessionCwds and cwdSessions
+	sessionCwds map[string]string  // session name → cwd, populated by HandleCreate
+	cwdSessions map[string]string  // cwd → session name, for single-session-per-worktree
 }
 
 // NewTmuxHandler creates a new TmuxHandler.
 func NewTmuxHandler(thrumDir string, st *state.State) *TmuxHandler {
 	return &TmuxHandler{
-		thrumDir: thrumDir,
-		state:    st,
-		queues:   make(map[string]*SessionQueue),
+		thrumDir:    thrumDir,
+		state:       st,
+		queues:      make(map[string]*SessionQueue),
+		sessionCwds: make(map[string]string),
+		cwdSessions: make(map[string]string),
 	}
+}
+
+// ensureSession checks whether a tmux session exists and auto-creates it
+// if the daemon has a stored cwd from a prior HandleCreate. Returns the
+// sanitized session name and target (name:0.0). Returns an error if the
+// session doesn't exist and no stored cwd is available.
+func (h *TmuxHandler) ensureSession(name string) (string, string, error) {
+	sanitized := ttmux.SanitizeSessionName(name)
+	target := sanitized + ":0.0"
+
+	if ttmux.HasSession(sanitized) {
+		return sanitized, target, nil
+	}
+
+	// Look up stored cwd from prior create
+	h.sessionMu.RLock()
+	cwd, ok := h.sessionCwds[sanitized]
+	h.sessionMu.RUnlock()
+	if !ok {
+		return "", "", fmt.Errorf("session %q not found and no stored cwd available", sanitized)
+	}
+
+	// Auto-create from stored cwd
+	if err := ttmux.CreateSession(sanitized, cwd); err != nil {
+		return "", "", fmt.Errorf("auto-create session %q: %w", sanitized, err)
+	}
+
+	log.Printf("[tmux] auto-created session %q from stored cwd %s", sanitized, cwd)
+	return sanitized, target, nil
 }
 
 // getOrCreateQueue returns the queue for a session, creating it if necessary.
@@ -120,6 +162,8 @@ func (h *TmuxHandler) getQueue(session string) *SessionQueue {
 }
 
 // HandleCreate creates a new detached tmux session with monitor-silence hook.
+// If quickstart flags are provided (agent_name, role, module), it also sets up
+// worktree redirects and runs quickstart inside the pane for PID isolation.
 func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) (any, error) {
 	var req TmuxCreateRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -135,10 +179,56 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("cwd must be an absolute path, got: %q", req.Cwd)
 	}
 
+	// Validate quickstart flags unless --no-agent
+	if !req.NoAgent {
+		if req.AgentName == "" || req.Role == "" || req.Module == "" {
+			return nil, fmt.Errorf("quickstart flags required (agent_name, role, module); set no_agent=true to skip")
+		}
+	}
+
+	// Ensure worktree redirects (before creating session)
+	if !req.NoAgent {
+		// Validate cwd is a git worktree (has a .git file, not a .git directory)
+		gitPath := filepath.Join(req.Cwd, ".git")
+		if info, err := os.Stat(gitPath); err != nil || info.IsDir() {
+			return nil, fmt.Errorf("path at %s is not a git worktree", req.Cwd)
+		}
+		// daemon's thrumDir is <main-repo>/.thrum — strip to get repo root
+		mainRepoRoot := filepath.Dir(h.thrumDir)
+		if err := worktree.EnsureRedirects(req.Cwd, mainRepoRoot); err != nil {
+			return nil, fmt.Errorf("redirect setup: %w", err)
+		}
+	}
+
 	name := ttmux.SanitizeSessionName(req.Name)
+
+	// Single-session-per-worktree: kill any existing session for this cwd
+	h.sessionMu.Lock()
+	if existingSession, ok := h.cwdSessions[req.Cwd]; ok && existingSession != name {
+		log.Printf("[tmux] single-session-per-worktree: killing %q (cwd %s reassigned to %q)", existingSession, req.Cwd, name)
+		_ = ttmux.KillSession(existingSession)
+		delete(h.sessionCwds, existingSession)
+		delete(h.cwdSessions, req.Cwd)
+	}
+	h.sessionMu.Unlock()
+
+	// Check for existing session by name
+	if ttmux.HasSession(name) {
+		if !req.Force {
+			return nil, fmt.Errorf("session %q already exists; use --force to kill and recreate", name)
+		}
+		_ = ttmux.KillSession(name)
+	}
+
 	if err := ttmux.CreateSession(name, req.Cwd); err != nil {
 		return nil, err
 	}
+
+	// Track session→cwd mapping for auto-create and single-session enforcement
+	h.sessionMu.Lock()
+	h.sessionCwds[name] = req.Cwd
+	h.cwdSessions[req.Cwd] = name
+	h.sessionMu.Unlock()
 
 	// Set up monitor-silence hook (non-fatal if it fails)
 	thrumBin, _ := os.Executable()
@@ -146,9 +236,25 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 		_ = ttmux.SetMonitorSilence(name, 60, thrumBin, h.thrumDir)
 	}
 
-	// Write tmux_session to identity so HandleLaunch can match by session name.
-	target := name + ":0.0"
-	h.writeTmuxToIdentity(name, target, "")
+	// Run quickstart inside the pane for PID isolation
+	if !req.NoAgent {
+		quickstartCmd := worktree.BuildQuickstartCmd(req.AgentName, req.Role, req.Module, req.Intent, req.Runtime)
+		target := name + ":0.0"
+		if err := ttmux.SendKeys(target, quickstartCmd); err != nil {
+			return nil, fmt.Errorf("send quickstart: %w", err)
+		}
+		if err := ttmux.SendSpecialKey(target, "Enter"); err != nil {
+			return nil, fmt.Errorf("send enter: %w", err)
+		}
+		// Enforce single identity AFTER quickstart command is sent successfully.
+		// Quickstart runs asynchronously in the pane — this cleans pre-existing
+		// stale identities. The new identity will be written by quickstart.
+		worktree.EnforceOneIdentity(req.Cwd, req.AgentName)
+	} else {
+		// For bare sessions, still write tmux_session to any existing identity
+		target := name + ":0.0"
+		h.writeTmuxToIdentity(name, target, "")
+	}
 
 	// Try to read identity file from worktree
 	var identity *config.IdentityFile
@@ -169,8 +275,9 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("name is required")
 	}
 
-	if !ttmux.HasSession(req.Name) {
-		return nil, fmt.Errorf("session %q does not exist", req.Name)
+	name, target, err := h.ensureSession(req.Name)
+	if err != nil {
+		return nil, err
 	}
 
 	runtime := req.Runtime
@@ -184,8 +291,6 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 	}
 
 	launchCmd := runtimeToLaunchCmd(runtime)
-
-	target := req.Name + ":0.0"
 	if launchCmd != "" {
 		if err := ttmux.SendKeys(target, launchCmd); err != nil {
 			return nil, fmt.Errorf("launch send-keys: %w", err)
@@ -209,9 +314,9 @@ func (h *TmuxHandler) HandleLaunch(ctx context.Context, params json.RawMessage) 
 	}
 
 	// Write tmux_session and runtime to the agent's identity file
-	h.writeTmuxToIdentity(req.Name, target, runtime)
+	h.writeTmuxToIdentity(name, target, runtime)
 
-	return &TmuxLaunchResponse{Session: req.Name, Runtime: runtime}, nil
+	return &TmuxLaunchResponse{Session: name, Runtime: runtime}, nil
 }
 
 // HandleKill destroys a tmux session and clears tmux_session from identity files.
@@ -225,6 +330,14 @@ func (h *TmuxHandler) HandleKill(ctx context.Context, params json.RawMessage) (a
 	h.drainQueueOnKill(ctx, name)
 	h.clearTmuxFromIdentities(name)
 
+	// Clean up session tracking maps
+	h.sessionMu.Lock()
+	if cwd, ok := h.sessionCwds[name]; ok {
+		delete(h.cwdSessions, cwd)
+	}
+	delete(h.sessionCwds, name)
+	h.sessionMu.Unlock()
+
 	return nil, ttmux.KillSession(name)
 }
 
@@ -234,8 +347,10 @@ func (h *TmuxHandler) HandleSend(ctx context.Context, params json.RawMessage) (a
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
-	name := ttmux.SanitizeSessionName(req.Name)
-	target := name + ":0.0"
+	_, target, err := h.ensureSession(req.Name)
+	if err != nil {
+		return nil, err
+	}
 	if err := ttmux.SendKeys(target, req.Text); err != nil {
 		return nil, err
 	}
@@ -252,8 +367,11 @@ func (h *TmuxHandler) HandleCapture(ctx context.Context, params json.RawMessage)
 	if lines <= 0 {
 		lines = 50
 	}
-	name := ttmux.SanitizeSessionName(req.Name)
-	content, err := ttmux.CapturePane(name+":0.0", lines)
+	_, target, err := h.ensureSession(req.Name)
+	if err != nil {
+		return nil, err
+	}
+	content, err := ttmux.CapturePane(target, lines)
 	if err != nil {
 		return nil, err
 	}
@@ -461,9 +579,9 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	name := ttmux.SanitizeSessionName(req.Name)
-	if !ttmux.HasSession(name) {
-		return nil, fmt.Errorf("session %s does not exist", name)
+	name, _, err := h.ensureSession(req.Name)
+	if err != nil {
+		return nil, err
 	}
 
 	// Find the agent's identity file to get PID and runtime
