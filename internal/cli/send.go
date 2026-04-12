@@ -15,8 +15,7 @@ type SendOptions struct {
 	ReplyTo       string   // Message ID to reply to
 	Structured    string   // JSON string
 	Format        string
-	To            string // Direct recipient (e.g., "@reviewer")
-	Broadcast     bool   // Send as broadcast (no specific recipient)
+	To            string // Direct recipient (e.g., "@reviewer" or "@everyone")
 	CallerAgentID string // Caller's resolved agent ID (for worktree identity)
 }
 
@@ -47,16 +46,6 @@ type RecipientState struct {
 
 // Send sends a message via the daemon.
 func Send(client *Client, opts SendOptions) (*SendResult, error) {
-	// Validate mutual exclusivity of --broadcast and --to
-	if opts.Broadcast && opts.To != "" {
-		return nil, fmt.Errorf("--broadcast and --to are mutually exclusive")
-	}
-
-	// Map --broadcast to --to @everyone
-	if opts.Broadcast {
-		opts.Mentions = append(opts.Mentions, "everyone")
-	}
-
 	// Parse scopes
 	scopes, err := parseScopes(opts.Scopes)
 	if err != nil {
@@ -77,13 +66,15 @@ func Send(client *Client, opts SendOptions) (*SendResult, error) {
 		}
 	}
 
-	// Add --to recipient as a mention
+	// --to passes through the strict "to" RPC field (agent_id or @everyone only).
+	// Inline @mentions in message body use the permissive "mentions" field.
+	var toValue string
 	if opts.To != "" {
 		to := opts.To
 		if !strings.HasPrefix(to, "@") {
 			to = "@" + to
 		}
-		opts.Mentions = append(opts.Mentions, to)
+		toValue = to
 	}
 
 	// Build params
@@ -109,6 +100,10 @@ func Send(client *Client, opts SendOptions) (*SendResult, error) {
 
 	if len(refs) > 0 {
 		params["refs"] = refs
+	}
+
+	if toValue != "" {
+		params["to"] = toValue
 	}
 
 	if len(opts.Mentions) > 0 {

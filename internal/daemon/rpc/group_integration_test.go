@@ -61,11 +61,7 @@ func setupGroupIntegrationTest(t *testing.T) (
 		t.Fatalf("start bob session: %v", err)
 	}
 
-	// Ensure @everyone group
-	if err := EnsureEveryoneGroup(context.Background(), st); err != nil {
-		t.Fatalf("ensure everyone: %v", err)
-	}
-
+	// EnsureEveryoneGroup removed — @everyone is now a direct broadcast
 	groupH = NewGroupHandler(st)
 	msgH = NewMessageHandler(st)
 
@@ -155,18 +151,20 @@ func TestGroupIntegration_SendToEveryone_AllReceive(t *testing.T) {
 	_, msgH, _, aliceID, bobID, cleanup := setupGroupIntegrationTest(t)
 	defer cleanup()
 
-	// Send to @everyone
+	// Send to @everyone (now uses broadcast scope, not group expansion)
 	msgID := sendMessage(t, msgH, "Standup in 5 minutes", []string{"@everyone"}, aliceID)
 
-	// Both alice and bob should see it (everyone has role:* wildcard)
-	aliceInbox := listInbox(t, msgH, aliceID, "reviewer")
-	if !containsID(aliceInbox, msgID) {
-		t.Errorf("alice should see @everyone message, inbox: %v", aliceInbox)
-	}
-
+	// Bob should see it (recipient of broadcast)
 	bobInbox := listInbox(t, msgH, bobID, "deployer")
 	if !containsID(bobInbox, msgID) {
 		t.Errorf("bob should see @everyone message, inbox: %v", bobInbox)
+	}
+
+	// Alice (sender) does NOT see her own broadcast in her inbox —
+	// sender is excluded from recipients in the delivery table.
+	aliceInbox := listInbox(t, msgH, aliceID, "reviewer")
+	if containsID(aliceInbox, msgID) {
+		t.Errorf("alice (sender) should not see own @everyone message in inbox")
 	}
 }
 

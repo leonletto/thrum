@@ -77,9 +77,9 @@ func TestMessageListMentionRoleFilter(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Send 3 messages: 2 addressed to @reviewer (auto-created role group), 1 to @ops (auto-created role group).
-	// With auto role groups, @reviewer and @ops are now group scopes — not mention refs.
-	// Agents receive these via the group membership inbox path (ForAgent/ForAgentRole).
+	// Send 3 messages: 2 addressed to @reviewer, 1 to @ops.
+	// Without auto role groups, these resolve as role-based mention refs.
+	// Agents receive these via the mention subquery in buildForAgentClause.
 	for _, mention := range []string{"@reviewer", "@reviewer", "@ops"} {
 		req := SendRequest{
 			Content:  "Message mentioning " + mention,
@@ -92,7 +92,7 @@ func TestMessageListMentionRoleFilter(t *testing.T) {
 	}
 
 	t.Run("reviewer inbox via ForAgent sees 2 reviewer messages", func(t *testing.T) {
-		// The reviewer agent receives messages via group membership since @reviewer is a group.
+		// The reviewer agent receives messages via role-based mention matching.
 		req := ListMessagesRequest{
 			ForAgent:     agentID,
 			ForAgentRole: "reviewer",

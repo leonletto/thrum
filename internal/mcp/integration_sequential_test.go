@@ -83,10 +83,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	server.RegisterHandler("group.list", groupHandler.HandleList)
 	server.RegisterHandler("group.info", groupHandler.HandleInfo)
 
-	// Ensure @everyone group exists (as daemon startup would)
-	if err := rpc.EnsureEveryoneGroup(context.Background(), st); err != nil {
-		t.Fatalf("ensure everyone group: %v", err)
-	}
+	// EnsureEveryoneGroup removed — @everyone uses broadcast scope
 
 	healthHandler := rpc.NewHealthHandler(time.Now(), "test-1.0.0", repoID)
 	server.RegisterHandler("health", healthHandler.Handle)

@@ -10,8 +10,16 @@ import (
 
 // TmuxCreateOptions contains options for the tmux create command.
 type TmuxCreateOptions struct {
-	Name string
-	Cwd  string
+	Name string `json:"name"`
+	Cwd  string `json:"cwd"`
+	// Quickstart fields (optional — skip if NoAgent is true)
+	AgentName string `json:"agent_name,omitempty"`
+	Role      string `json:"role,omitempty"`
+	Module    string `json:"module,omitempty"`
+	Intent    string `json:"intent,omitempty"`
+	Runtime   string `json:"runtime,omitempty"`
+	Force     bool   `json:"force,omitempty"`
+	NoAgent   bool   `json:"no_agent,omitempty"`
 }
 
 // TmuxCreateResponse is the response from the tmux.create RPC.
@@ -57,9 +65,8 @@ type TmuxCaptureResponse struct {
 
 // TmuxCreate calls the tmux.create RPC to create a new managed session.
 func TmuxCreate(client *Client, opts TmuxCreateOptions) (*TmuxCreateResponse, error) {
-	req := map[string]string{"name": opts.Name, "cwd": opts.Cwd}
 	var result TmuxCreateResponse
-	if err := client.Call("tmux.create", req, &result); err != nil {
+	if err := client.Call("tmux.create", opts, &result); err != nil {
 		return nil, fmt.Errorf("tmux.create: %w", err)
 	}
 	return &result, nil

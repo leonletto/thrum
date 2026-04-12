@@ -93,10 +93,7 @@ func newRoutingTestEnv(t *testing.T) *routingTestEnv {
 
 	waitForSocketReady(t, socketPath)
 
-	// Create the built-in @everyone group so broadcasts work.
-	if err := rpc.EnsureEveryoneGroup(ctx, st); err != nil {
-		t.Fatalf("ensure everyone group: %v", err)
-	}
+	// EnsureEveryoneGroup removed — @everyone uses broadcast scope
 
 	return &routingTestEnv{
 		t:          t,

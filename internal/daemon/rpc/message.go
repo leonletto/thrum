@@ -31,7 +31,8 @@ type SendRequest struct {
 	ReplyTo       string         `json:"reply_to,omitempty"`
 	Scopes        []types.Scope  `json:"scopes,omitempty"`
 	Refs          []types.Ref    `json:"refs,omitempty"`
-	Mentions      []string       `json:"mentions,omitempty"` // e.g., ["@reviewer"]
+	To            string         `json:"to,omitempty"`         // strict: agent_id or "everyone" only
+	Mentions      []string       `json:"mentions,omitempty"`   // permissive: agent_id, role, or group
 	Tags          []string       `json:"tags,omitempty"`
 	ActingAs      string         `json:"acting_as,omitempty"` // Impersonate this agent (users only)
 	Disclose      bool           `json:"disclose,omitempty"`  // Show [via user:X] in message
@@ -361,6 +362,44 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	var unknownRecipients []string
 	var audiences []MessageAudience
 	recipientSet := make(map[string]struct{})
+
+	// Strict --to resolution: agent_id or "everyone" only (no role/group fallback)
+	if req.To != "" {
+		toVal := req.To
+		if len(toVal) > 0 && toVal[0] == '@' {
+			toVal = toVal[1:]
+		}
+		if toVal == "everyone" {
+			// Direct broadcast — no group expansion. Scoped to this daemon only.
+			scopes = append(scopes, types.Scope{Type: "broadcast", Value: "everyone"})
+			refs = append(refs, types.Ref{Type: "broadcast", Value: "everyone"})
+			audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
+			allAgents, err := h.queryAllOtherAgents(ctx, agentID)
+			if err != nil {
+				return nil, fmt.Errorf("query all agents: %w", err)
+			}
+			for _, a := range allAgents {
+				recipientSet[a] = struct{}{}
+			}
+			resolvedTo++
+		} else {
+			// Strict agent_id lookup — no role fallback
+			matched, err := h.queryAgentByID(ctx, toVal)
+			if err != nil {
+				return nil, fmt.Errorf("validate recipient %q: %w", toVal, err)
+			}
+			if !matched {
+				return nil, fmt.Errorf("unknown recipient: @%s — send to agents directly with --to @agent_name", toVal)
+			}
+			refs = append(refs, types.Ref{Type: "mention", Value: toVal})
+			audiences = append(audiences, MessageAudience{Type: "agent", Value: toVal})
+			if toVal != agentID {
+				recipientSet[toVal] = struct{}{}
+			}
+			resolvedTo++
+		}
+	}
+
 	for _, mention := range req.Mentions {
 		// Remove @ prefix if present
 		role := mention
@@ -368,23 +407,35 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 			role = role[1:]
 		}
 
-		// Check if this mention is a group
+		// @everyone → direct broadcast (not group-based, fixes cross-repo sync leak)
+		if role == "everyone" {
+			scopes = append(scopes, types.Scope{Type: "broadcast", Value: "everyone"})
+			refs = append(refs, types.Ref{Type: "broadcast", Value: "everyone"})
+			audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
+			allAgents, err := h.queryAllOtherAgents(ctx, agentID)
+			if err != nil {
+				return nil, fmt.Errorf("query all agents: %w", err)
+			}
+			for _, a := range allAgents {
+				recipientSet[a] = struct{}{}
+			}
+			resolvedTo++
+			continue
+		}
+
+		// Check if this mention is a tg:* bridge group (Telegram groups still work)
 		isGroup, err := h.groupResolver.IsGroup(ctx, role)
 		if err != nil {
 			return nil, fmt.Errorf("check group %q: %w", role, err)
 		}
 
 		if isGroup {
-			// Group mention — store as group scope (pull model, no expansion)
+			// Bridge group mention (tg:* groups) — store as group scope
 			scopes = append(scopes, types.Scope{Type: "group", Value: role})
-			// Also store audit ref for queryability
 			refs = append(refs, types.Ref{Type: "group", Value: role})
 			audiences = append(audiences, MessageAudience{Type: "group", Value: role})
 			resolvedTo++
-			// Warn sender that this resolved to a group, not an individual
-			if role != "everyone" {
-				warnings = append(warnings, fmt.Sprintf("@%s resolved to a group, not an individual agent", role))
-			}
+			warnings = append(warnings, fmt.Sprintf("@%s resolved to a group, not an individual agent", role))
 			members, err := h.groupResolver.ExpandMembers(ctx, role)
 			if err != nil {
 				return nil, fmt.Errorf("expand group %q: %w", role, err)
@@ -425,12 +476,12 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 
 	// Fail hard if any recipients could not be resolved
 	if len(unknownRecipients) > 0 {
-		return nil, fmt.Errorf("unknown recipients: %s — no matching agent, role, or group found",
+		return nil, fmt.Errorf("unknown recipient: %s — send to agents directly with --to @agent_name",
 			strings.Join(unknownRecipients, ", "))
 	}
 
 	// Messages without an explicit audience remain broadcast/general messages.
-	if len(req.Mentions) == 0 {
+	if len(req.Mentions) == 0 && req.To == "" {
 		audiences = append(audiences, MessageAudience{Type: "broadcast", Value: "everyone"})
 		allAgents, err := h.queryAllOtherAgents(ctx, agentID)
 		if err != nil {
@@ -1493,15 +1544,31 @@ func buildForAgentClause(forAgentValues []string, forAgent, forAgentRole string)
 	)`
 	args = append(args, agentVal, roleVal)
 
-	// Part 3: broadcast messages — no mention refs, no group refs, no group scopes.
-	// These are unaddressed messages (e.g., sent with --to @everyone) that have no
-	// targeting information and should be visible to every agent's inbox.
-	broadcastSubquery := `(
-		NOT EXISTS (SELECT 1 FROM message_refs mr_bc WHERE mr_bc.message_id = m.message_id AND mr_bc.ref_type IN ('mention', 'group'))
-		AND NOT EXISTS (SELECT 1 FROM message_scopes ms_bc WHERE ms_bc.message_id = m.message_id AND ms_bc.scope_type = 'group')
+	// Part 3: legacy broadcast messages — no mention refs, no group refs, no group scopes.
+	// These are unaddressed messages that have no targeting information.
+	legacyBroadcastSubquery := `(
+		NOT EXISTS (SELECT 1 FROM message_refs mr_bc WHERE mr_bc.message_id = m.message_id AND mr_bc.ref_type IN ('mention', 'group', 'broadcast'))
+		AND NOT EXISTS (SELECT 1 FROM message_scopes ms_bc WHERE ms_bc.message_id = m.message_id AND ms_bc.scope_type IN ('group', 'broadcast'))
 	)`
 
-	clause := " AND (" + mentionSubquery + " OR " + groupSubquery + " OR " + broadcastSubquery + ")"
+	// Part 4: new broadcast scope — matches via message_deliveries (local agents only).
+	// This prevents the cross-repo sync leak: message_deliveries contains only
+	// this daemon's local agent IDs, not agents from synced repos.
+	broadcastDeliverySubquery := `(
+		EXISTS (
+			SELECT 1 FROM message_deliveries md_bc
+			WHERE md_bc.message_id = m.message_id
+			AND md_bc.recipient_agent_id = ?
+		)
+		AND EXISTS (
+			SELECT 1 FROM message_scopes ms_bc
+			WHERE ms_bc.message_id = m.message_id
+			AND ms_bc.scope_type = 'broadcast'
+		)
+	)`
+	args = append(args, forAgent)
+
+	clause := " AND (" + mentionSubquery + " OR " + groupSubquery + " OR " + legacyBroadcastSubquery + " OR " + broadcastDeliverySubquery + ")"
 	return clause, args
 }
 
@@ -1520,8 +1587,8 @@ func combineFilterClauses(left, right string) string {
 
 // buildForAgentValues returns the unique set of values to match against mention refs
 // for the for-agent inbox filter. Returns nil if no filtering should be applied.
-// Only the agent's own name/ID is used for direct mention matching; role-based
-// fan-out is handled via the group membership subquery in buildForAgentClause.
+// The agent's own name/ID and role are included so messages sent to @role appear
+// in the agent's inbox via the mention subquery in buildForAgentClause.
 //
 // For user identities, mention refs are stored with the "user:" prefix
 // (e.g., "user:leon-letto") but the UI sends the plain username (e.g.,
@@ -1563,6 +1630,19 @@ func (h *MessageHandler) queryAgentsByRecipient(ctx context.Context, recipient s
 		agentIDs = append(agentIDs, agentID)
 	}
 	return agentIDs, rows.Err()
+}
+
+// queryAgentByID checks if an agent with the exact agent_id exists.
+// Unlike queryAgentsByRecipient, this does NOT fall back to role matching.
+func (h *MessageHandler) queryAgentByID(ctx context.Context, agentID string) (bool, error) {
+	var count int
+	err := h.state.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM agents WHERE agent_id = ?`, agentID,
+	).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (h *MessageHandler) queryAllOtherAgents(ctx context.Context, excludeAgentID string) ([]string, error) {
