@@ -42,9 +42,9 @@ import (
 //     misses it.
 //
 // IF THIS TEST FAILS
-// Someone added a wsRegistry.Register("monitor.*", ...) line to
+// Someone added a wsRegistry.Register("monitor.*", ...) Line to
 // cmd/thrum/main.go. DO NOT fix the test — fix the registration.
-// Move the offending line to the server.RegisterHandler(...) block that
+// Move the offending line to the server.RegisterHandler(...) Block that
 // follows the unix-socket server construction.
 func TestMonitorTrustBoundary_NotOnWebSocket(t *testing.T) {
 	t.Run("runtime_registry_check", func(t *testing.T) {

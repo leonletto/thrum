@@ -56,7 +56,7 @@ var detectAncestor = process.FindClaudeAncestor
 // RefreshLocalIdentity inspects live process, tmux, and git state and
 // reconciles the local identity file + daemon's agent record with reality.
 //
-// repoPath is the worktree root (use "." for cwd). If client is nil the
+// RepoPath is the worktree root (use "." for cwd). If client is nil the
 // refresh is file-only and never round-trips to the daemon; otherwise the
 // daemon record is re-registered on drift.
 //

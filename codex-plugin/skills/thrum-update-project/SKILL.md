@@ -11,7 +11,6 @@ Use this skill when the user explicitly wants the `update-project` Thrum
 workflow. Prefer the umbrella `thrum` skill when the request spans multiple
 commands or needs broader coordination judgment.
 
-
 Update `.thrum/context/project_state.md` with fresh project state so a new
 session can pick up exactly where this one left off.
 

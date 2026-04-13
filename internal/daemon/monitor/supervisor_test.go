@@ -454,7 +454,7 @@ func TestSupervisor_DuplicateNameRejected(t *testing.T) {
 
 // TestSupervisor_AddRunnerSurvivesCallerCtxCancel proves that a monitor
 // submitted via Add() keeps running even after the caller's context is
-// cancelled — the runner's lifetime is tied to the supervisor's base
+// canceled — the runner's lifetime is tied to the supervisor's base
 // context (captured by Start), not to the short-lived RPC request context.
 //
 // Regression test for the bug caught by dd1.6 Smoke 1: RPC-submitted
@@ -479,7 +479,7 @@ func TestSupervisor_AddRunnerSurvivesCallerCtxCancel(t *testing.T) {
 	callerCtx, callerCancel := context.WithCancel(context.Background())
 	spec := makeSpec("rpc-sim")
 	// Use a long-running child so we can observe whether the runner
-	// survives after the caller ctx is cancelled.
+	// survives after the caller ctx is canceled.
 	spec.Argv = []string{"sh", "-c", "while true; do echo hi; sleep 0.05; done"}
 
 	id, err := sup.Add(callerCtx, spec)

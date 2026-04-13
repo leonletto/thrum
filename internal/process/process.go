@@ -59,7 +59,7 @@ func runPS(ctx context.Context, args ...string) ([]byte, error) {
 // literal string comparison only matches the first shape, so codex PIDs
 // were being classified as "not a runtime" across the codebase.
 //
-// filepath.Base is a no-op on already-basename inputs, so this helper
+// Filepath.Base is a no-op on already-basename inputs, so this helper
 // is safe for every known runtime without a per-runtime branch.
 func matchRuntimeName(psComm, runtime string) bool {
 	return filepath.Base(psComm) == runtime

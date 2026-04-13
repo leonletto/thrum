@@ -701,8 +701,8 @@ thrum tmux cancel <command-id>                 # Cancel a queued or active comma
 ```
 
 Without `--no-agent`, the command errors if `--name`, `--role`, and `--module`
-are all missing. Old identity files in the session worktree are cleaned up
-after quickstart runs (one identity per worktree enforced).
+are all missing. Old identity files in the session worktree are cleaned up after
+quickstart runs (one identity per worktree enforced).
 
 `tmux launch` flags:
 

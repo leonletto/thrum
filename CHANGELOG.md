@@ -20,8 +20,8 @@ and this project adheres to
   `tmux rename-window` and `set-titles` on session creation
 - **`safecmd.TmuxExec`** — Process replacement for tmux attach, enabling proper
   terminal title propagation
-- **Pre-commit guard** — `scripts/hooks/pre-commit` blocks accidental commits
-  of `dev-docs/` files; hooks moved to repo-tracked `scripts/hooks/`
+- **Pre-commit guard** — `scripts/hooks/pre-commit` blocks accidental commits of
+  `dev-docs/` files; hooks moved to repo-tracked `scripts/hooks/`
 - **`sync_cursor()` in sync-skills.sh** — Cursor plugin added as sync target
   alongside codex and opencode
 
@@ -51,8 +51,8 @@ and this project adheres to
 - **CLI audit** — Removed groups as user-facing concept, restricted `--to` to
   agent IDs + `@everyone`, removed subscribe commands, -2400 lines across 24
   files
-- **Git history cleanup** — Purged `dev-docs/` from git history via
-  filter-repo (~9.5 MB removed)
+- **Git history cleanup** — Purged `dev-docs/` from git history via filter-repo
+  (~9.5 MB removed)
 - **Branch cleanup** — Deleted 21 stale remote branches, pruned local branches
 
 ## [0.8.1] - 2026-04-10

@@ -45,11 +45,11 @@ thrum tmux launch <name>
 ```
 
 `thrum tmux create` requires either quickstart flags (`--name`, `--role`,
-`--module`) or `--no-agent`. Bare `thrum tmux create <name> --cwd <path>`
-errors out.
+`--module`) or `--no-agent`. Bare `thrum tmux create <name> --cwd <path>` errors
+out.
 
-**Single identity per worktree:** quickstart cleans up any old identity files
-in the worktree. Each worktree has exactly one identity.
+**Single identity per worktree:** quickstart cleans up any old identity files in
+the worktree. Each worktree has exactly one identity.
 
 **`--no-agent`** skips identity registration — for bare sessions, debugging, or
 non-agent processes:
