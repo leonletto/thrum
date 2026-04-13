@@ -46,10 +46,11 @@ New in v0.9.0 (upcoming):
   `thrum worktree create` gains optional quickstart flags; when all three are
   provided it spins up a temp tmux session for PID isolation.
   New alias: `thrum worktree setup`. Single-identity-per-worktree enforcement.
-- Monitor Jobs — `thrum monitor add/list/show/stop/logs/restart`. Spawn a
+- Monitor Jobs — `thrum monitor start/list/show/stop/logs/restart`. Spawn a
   child process, watch stdout+stderr with a regex, and emit matches as
-  synthetic Thrum messages to a target agent. Leading-edge debounce (default
-  60s). Local-only, max 100 monitors.
+  synthetic Thrum messages to a target agent. (`thrum monitor add` is an alias
+  for `thrum monitor start`.) Leading-edge debounce (default 60s).
+  Local-only, max 100 monitors.
 
 ## Quick Start
 
@@ -79,11 +80,8 @@ All commands accept these flags:
     Initialize Thrum in the current repository. Optionally generate runtime-specific configs.
     --skills installs just the thrum skill without full runtime configuration.
 
-  thrum setup WORKTREE_PATH
-    Configure a feature worktree with .thrum/redirect to share the main issue database.
-
-  thrum migrate [--repo PATH]
-    Migrate old-layout repos (JSONL on main branch) to worktree architecture.
+  thrum worktree setup WORKTREE_NAME
+    Configure a feature worktree with .thrum/redirect to share the main issue database. Alias for `thrum worktree create`.
 
   thrum quickstart --name <agent-name> --role ROLE --module MODULE [--display NAME] [--intent TEXT] [--runtime PRESET] [--dry-run] [--force] [--no-init] [--preamble-file PATH]
     Register agent, start session, generate runtime config, and set intent in one step.
@@ -92,9 +90,6 @@ All commands accept these flags:
 
   thrum overview [--json]
     Show combined status: identity, work context, team, inbox, sync.
-
-  thrum status [--json]
-    Show current agent status and session info.
 
   thrum whoami [--json]
     Show current agent identity (lightweight, no daemon required).
@@ -111,8 +106,8 @@ All commands accept these flags:
 
 ### Messaging
 
-  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @role|@everyone] [--everyone] [--format markdown|plain|json] [--structured JSON]
-    Send a message. Use --to @everyone to broadcast to all agents. Use --to @group to send to a group.
+  thrum send MESSAGE [--scope type:value] [--ref type:value] [--mention @role] [--thread ID] [--to @agent_name|@everyone] [--format markdown|plain|json] [--structured JSON]
+    Send a message. --to accepts @agent_name or @everyone.
 
   thrum reply MSG_ID TEXT [--format markdown|plain|json]
     Reply to a message, copying the parent's audience (mentions/scopes). Includes reply_to reference.
@@ -121,9 +116,9 @@ All commands accept these flags:
     List messages in your inbox. Auto-filters to messages addressed to you + broadcasts.
     Use --all to disable auto-filtering and show everything.
 
-  thrum sent [--to @agent|@role|@group|@everyone] [--unread] [--page-size N] [--limit N] [--page N]
+  thrum sent [--to @agent|@everyone] [--unread] [--page-size N] [--limit N] [--page N]
     List messages you sent, including resolved recipients and durable read state.
-    Use 'thrum sent show <message-id>' for full recipient details on one message.
+    Use 'thrum message get <message-id>' for full details on one message.
 
   thrum wait [--timeout DURATION] [--scope type:value] [--mention @role] [--after OFFSET]
     Block until a matching message arrives.
@@ -159,9 +154,6 @@ All commands accept these flags:
 
   thrum agent list [--role ROLE] [--module MODULE] [--context]
     List registered agents. --context shows branch/commits/intent.
-
-  thrum agent context [AGENT] [--agent ROLE] [--branch NAME] [--file PATH]
-    Show detailed work context for agents.
 
   thrum agent delete NAME
     Delete an agent (removes identity, messages, SQLite record).
@@ -203,42 +195,6 @@ All commands accept these flags:
   thrum session set-task TASK
     Set current task identifier. Pass "" to clear.
 
-### Subscriptions
-
-  thrum subscribe --scope type:value
-  thrum subscribe --mention @role
-  thrum subscribe --all
-    Subscribe to push notifications (mutually exclusive options).
-
-  thrum unsubscribe SUBSCRIPTION_ID
-    Remove a subscription.
-
-  thrum subscriptions
-    List active subscriptions for current session.
-
-### Groups
-
-  thrum group create NAME [--description TEXT]
-    Create a named group.
-
-  thrum group delete NAME
-    Delete a group (cannot delete @everyone).
-
-  thrum group add GROUP MEMBER [--role ROLE]
-    Add member to group. Default: agent name. Use --role for role-based membership.
-
-  thrum group remove GROUP MEMBER [--role ROLE]
-    Remove member from group.
-
-  thrum group list [--json]
-    List all groups.
-
-  thrum group info NAME [--json]
-    Show group details.
-
-  thrum group members NAME [--expand] [--json]
-    List group members (--expand resolves nested groups/roles to agent IDs).
-
 ### Team Overview
 
   thrum team [--all] [--json]
@@ -258,9 +214,6 @@ All commands accept these flags:
 
   thrum context preamble [--init] [--file PATH] [--agent NAME]
     Show or manage the preamble (stable header prepended to context).
-
-  thrum context prime [--json]
-    Gather comprehensive session context for agent initialization or recovery.
 
   thrum context sync [--agent NAME]
     Copy context to the a-sync branch for sharing across worktrees.
@@ -415,9 +368,10 @@ All commands accept these flags:
 
 ### Monitor Jobs (v0.9.0)
 
-  thrum monitor add --name <name> --match <regex> --to @<agent> [--debounce 60s] [--env KEY=VALUE] -- <argv...>
+  thrum monitor start --name <name> --match <regex> --to @<agent> [--debounce 60s] [--env KEY=VALUE] -- <argv...>
     Spawn a long-running child process. Watch its stdout+stderr for lines matching
     the regex. Each match emits a synthetic Thrum message to the target agent.
+    (`thrum monitor add` is an alias for `thrum monitor start`.)
     - --name: unique monitor name
     - --match: Go regex applied to each output line
     - --to: recipient agent (@name)
@@ -445,7 +399,7 @@ All commands accept these flags:
 ### Monitor Jobs workflow
 
   # Watch a build log and ping the reviewer when tests fail
-  thrum monitor add \
+  thrum monitor start \
     --name build-watcher \
     --match "FAIL|panic:" \
     --to @reviewer \
@@ -463,13 +417,13 @@ All commands accept these flags:
 
 ### Session Restart (v0.7.1)
 
-  thrum restart save [--reason self-initiated|external|context-threshold]
+  thrum tmux snapshot save [--reason self-initiated|external|context-threshold]
     Save conversation snapshot for session restart.
 
-  thrum restart restore
+  thrum tmux snapshot restore
     Output restart snapshot to stdout and delete file. Manual escape hatch.
 
-  thrum restart check
+  thrum tmux snapshot check
     Check if restart snapshot exists. Exit 0 = yes, exit 1 = no.
 
 ### Daemon
@@ -509,10 +463,6 @@ All commands accept these flags:
 
   thrum send "Stopping for lunch, back in 30" --to @everyone
 
-### Send to a group
-
-  thrum send "API changes incoming" --to @backend-team
-
 ### Check inbox and reply
 
   thrum inbox --unread
@@ -535,13 +485,6 @@ All commands accept these flags:
 ### Get a combined status overview
 
   thrum overview
-
-### Manage groups
-
-  thrum group create backend-team --description "Backend developers"
-  thrum group add backend-team @alice
-  thrum group add backend-team --role implementer
-  thrum send "Deploy in 5 minutes" --to @backend-team
 
 ### Cross-repo peer communication (Tailscale, v0.7.0)
 
@@ -594,7 +537,7 @@ All commands accept these flags:
 ### Save and recover context
 
   thrum context save --file session-notes.md
-  thrum context prime          # Gather all context for recovery
+  thrum prime                  # Gather all context for recovery
 
 ## Key Concepts
 
@@ -602,7 +545,6 @@ All commands accept these flags:
   Session     A work period for an agent. Tracks scopes, refs, heartbeats.
   Role        Agent's function (e.g., implementer, reviewer, planner).
   Module      Component the agent is responsible for (e.g., auth, db, ui).
-  Group       Named collection of agents, roles, or other groups for targeted messaging.
   Scope       Routing metadata on messages (format: type:value, e.g., module:auth).
   Ref         Reference metadata (format: type:value, e.g., pr:42, mention:reviewer).
   Mention     Tag another agent by role: @role. Stored as ref type "mention".
@@ -622,8 +564,8 @@ All commands accept these flags:
 
   MCP Tools:
     send_message(to, content, reply_to?, metadata?)
-      Send a message to another agent via @role or @group addressing.
-      - to: recipient @role or @group (required)
+      Send a message to another agent. --to accepts @agent_name or @everyone.
+      - to: recipient @agent_name or @everyone (required)
       - content: message text (required)
       - reply_to: message ID to reply to (optional)
       - metadata: optional key-value pairs (optional)
@@ -642,35 +584,6 @@ All commands accept these flags:
 
     broadcast_message(content)
       Send to all agents (convenience wrapper around send_message to @everyone).
-
-    create_group(name, description?)
-      Create a named group.
-      - name: group name (required)
-      - description: optional description (optional)
-
-    delete_group(name)
-      Delete a group.
-      - name: group name to delete (required)
-
-    add_group_member(group, member_type, member_value)
-      Add member to group (agent, role, or nested group).
-      - group: group name (required)
-      - member_type: agent|role|group (required)
-      - member_value: agent name, role name, or group name (required)
-
-    remove_group_member(group, member_type, member_value)
-      Remove member from group.
-      - group: group name (required)
-      - member_type: agent|role|group (required)
-      - member_value: agent name, role name, or group name (required)
-
-    list_groups()
-      List all groups (no parameters).
-
-    get_group(name, expand?)
-      Get group details (supports expand=true for nested resolution).
-      - name: group name (required)
-      - expand: resolve nested groups/roles to agent IDs (optional, default: false)
 
 ## Daemon
 

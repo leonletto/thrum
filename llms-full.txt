@@ -48,10 +48,11 @@ New in v0.9.0 (upcoming):
   PID isolation. New alias: `thrum worktree setup`.
   Single-identity-per-worktree enforcement. Auto-creates tmux sessions when stored
   cwd is available.
-- Monitor Jobs — `thrum monitor add/list/show/stop/logs/restart`. Spawn a child
+- Monitor Jobs — `thrum monitor start/list/show/stop/logs/restart`. Spawn a child
   process (explicit argv, no shell), watch stdout+stderr with a Go regex, emit
   matching lines as synthetic Thrum messages. Sender: `monitor:<name>`. Leading-edge
   debounce (default 60s, min 30s). Auto-persist. Local Unix socket only.
+  (`thrum monitor add` is an alias for `thrum monitor start`.)
   Schema v20 adds `monitors` table. Package: `internal/daemon/monitor/`.
 
 ## Architecture
@@ -240,8 +241,7 @@ All commands accept:
             default_autonomy: "end_only") config blocks. Optionally detects installed
             AI runtimes and generates runtime-specific config files.
   Errors:   Fails if .thrum/ exists (unless --force). Fails if not a git repo.
-  Related:  `thrum migrate` upgrades repos from the old tracked-on-main layout.
-            `thrum setup` configures .thrum/ in feature worktrees (creates redirect).
+  Related:  `thrum worktree setup` configures .thrum/ in feature worktrees (creates redirect).
 
 
 ### thrum quickstart
@@ -271,17 +271,10 @@ All commands accept:
             inbox counts, and sync state. Combines into single orientation view.
   Requires: Daemon running. Shows "Not registered" if no agent identity.
 
-### thrum status
-
-  Usage:    thrum status [--json]
-  Action:   Shows agent identity, session info, WebSocket port.
-  Requires: Daemon running.
-  Output:   Agent ID, role, module, session ID, session start time, WebSocket port.
-
 ### thrum whoami
 
   Usage:    thrum whoami [--json]
-  Action:   Shows current agent identity. Lightweight alternative to `thrum status` --
+  Action:   Shows current agent identity. Lightweight alternative to `thrum overview` --
             reads directly from .thrum/identities/*.json, no daemon required.
   Output:   Agent ID, name, role, module, display, source.
 
@@ -302,9 +295,7 @@ All commands accept:
             --ref type:value        Add reference (repeatable)
             --mention @role         Mention a role (repeatable, stored as ref type "mention")
             --thread ID             Reply to thread
-            --to @role              Direct recipient (also accepts @group names)
-            --everyone              Alias for --to @everyone (broadcast to all agents)
-            --broadcast, -b         Send to all agents (alias for --to @everyone)
+            --to @agent_name|@everyone  Recipient — @agent_name or @everyone
             --format markdown|plain|json  Message format (default: markdown)
             --structured JSON       Structured payload
   Requires: Daemon running, active session.
@@ -340,13 +331,12 @@ All commands accept:
 ### thrum sent
 
   Usage:    thrum sent [flags]
-            thrum sent show MSG_ID
-  Flags:    --to @agent|@role|@group|@everyone  Filter by recipient or audience
-            --unread                            Only messages with unread recipients
-            --page-size N, --limit N           Results per page
-            --page N                           Page number
+  Flags:    --to @agent|@everyone  Filter by recipient or audience
+            --unread               Only messages with unread recipients
+            --page-size N, --limit N  Results per page
+            --page N               Page number
   Action:   Lists messages you authored, including resolved recipients and
-            durable delivery/read state.
+            durable delivery/read state. Use 'thrum message get <message-id>' for full details.
   Requires: Daemon running, active session.
   Output:   Paginated sent message list with recipients and receipt status.
 
@@ -440,16 +430,6 @@ All commands accept:
   Action:   Lists all registered agents. With --context, shows work context table.
   Requires: Daemon running.
 
-### thrum agent context
-
-  Usage:    thrum agent context [AGENT] [--agent ROLE] [--branch NAME] [--file PATH]
-  Flags:    --agent ROLE     Filter by agent role
-            --branch NAME    Filter by branch name
-            --file PATH      Filter by file in changed/uncommitted files
-  Action:   Without args, lists all active work contexts (table view).
-            With agent arg (e.g., @planner), shows detailed context.
-  Requires: Daemon running.
-
 ### thrum agent delete
 
   Usage:    thrum agent delete <name>
@@ -527,67 +507,6 @@ All commands accept:
   Usage:    thrum session set-task TASK
   Action:   Sets current task identifier (e.g., beads:thrum-xyz). Pass "" to clear.
 
-### thrum subscribe
-
-  Usage:    thrum subscribe --scope type:value
-            thrum subscribe --mention @role
-            thrum subscribe --all
-  Action:   Subscribe to push notifications. Options are mutually exclusive.
-  Output:   Subscription ID, session ID, created timestamp.
-
-### thrum unsubscribe
-
-  Usage:    thrum unsubscribe SUBSCRIPTION_ID
-  Action:   Removes subscription (only if it belongs to current session).
-
-### thrum subscriptions
-
-  Usage:    thrum subscriptions
-  Action:   Lists all active subscriptions for the current session.
-
-### thrum group create
-
-  Usage:    thrum group create NAME [--description TEXT]
-  Action:   Creates a named messaging group. The @everyone group is auto-created.
-  Output:   Group name, description, created timestamp.
-
-### thrum group delete
-
-  Usage:    thrum group delete NAME
-  Action:   Deletes a group. Cannot delete the built-in @everyone group.
-
-### thrum group add
-
-  Usage:    thrum group add GROUP MEMBER [--role ROLE]
-  Flags:    --role STRING   Add a role-based member instead of agent
-  Action:   Adds a member to a group. By default treats MEMBER as agent name
-            (strips @ prefix). Use --role to add all agents matching a role.
-  Examples: thrum group add reviewers @alice
-            thrum group add reviewers --role reviewer
-
-### thrum group remove
-
-  Usage:    thrum group remove GROUP MEMBER [--role ROLE]
-  Flags:    --role STRING   Remove a role-based member
-  Action:   Removes a member from a group.
-
-### thrum group list
-
-  Usage:    thrum group list [--json]
-  Action:   Lists all groups with member counts.
-
-### thrum group info
-
-  Usage:    thrum group info NAME [--json]
-  Action:   Shows detailed group information.
-
-### thrum group members
-
-  Usage:    thrum group members NAME [--expand] [--json]
-  Flags:    --expand   Resolve nested groups and roles to individual agent IDs
-  Action:   Lists group members. Without --expand, shows raw membership entries.
-            With --expand, resolves role-based and nested group members to agent IDs.
-
 ### thrum team
 
   Usage:    thrum team [--all] [--json]
@@ -627,13 +546,6 @@ All commands accept:
   Action:   Shows current preamble (no flags), creates/resets preamble (--init),
             or sets preamble from file (--file). The preamble is a stable, user-editable
             header prepended when showing context.
-
-### thrum context prime
-
-  Usage:    thrum context prime [--json]
-  Action:   Collects all context needed for agent session initialization or recovery.
-            Gathers identity, session info, agent list, unread messages, and git
-            work context into a single output. Gracefully handles missing sections.
 
 ### thrum context sync
 
@@ -840,15 +752,15 @@ All commands accept:
   cancellation (with partial output), and interruption. Restart recovery always
   sends interruption notifications regardless of notify_on_complete.
 
-### thrum monitor add | list | show | stop | logs | restart (v0.9.0)
+### thrum monitor start | list | show | stop | logs | restart (v0.9.0)
 
   Monitor Jobs spawn a long-running child process and watch its output for regex
   matches. Each match emits a synthetic Thrum message to a target agent.
   Monitors are local-only (Unix socket), auto-persist across daemon restarts,
   and are capped at 100 per daemon.
 
-  thrum monitor add --name <name> --match <regex> --to @<agent> [--debounce DURATION] [--env KEY=VALUE] -- <argv...>
-    Create and start a monitor.
+  thrum monitor start --name <name> --match <regex> --to @<agent> [--debounce DURATION] [--env KEY=VALUE] -- <argv...>
+    Create and start a monitor. (`thrum monitor add` is an alias.)
     Flags:
       --name STRING          Unique monitor name (required)
       --match STRING         Go regex applied to each stdout/stderr line (required)
@@ -881,15 +793,15 @@ All commands accept:
   thrum monitor restart <id>
     Restart a stopped or failed monitor using the same config.
 
-### thrum restart save | restore | check (v0.7.1)
+### thrum tmux snapshot save | restore | check (v0.7.1)
 
-  thrum restart save [--reason self-initiated|external|context-threshold]
+  thrum tmux snapshot save [--reason self-initiated|external|context-threshold]
     Save conversation snapshot from JSONL transcript.
 
-  thrum restart restore
+  thrum tmux snapshot restore
     Output snapshot to stdout and delete file.
 
-  thrum restart check
+  thrum tmux snapshot check
     Exit 0 if snapshot exists, 1 if not. No stdout.
 
 ### thrum daemon start | stop | status | restart | logs
@@ -1032,44 +944,6 @@ All methods use JSON-RPC 2.0 protocol.
   Request:   { session_id, current_task }
   Response:  { session_id, current_task, task_updated_at }
 
-### group.create
-
-  Request:   { name, description? }
-  Response:  { name, created_at }
-
-### group.delete
-
-  Request:   { name }
-  Response:  { name, deleted }
-  Notes:     Cannot delete the @everyone built-in group.
-
-### group.member.add
-
-  Request:   { group, member, member_type? }
-  Response:  { group, member, member_type }
-  Notes:     member_type: "agent" (default) | "role" | "group"
-
-### group.member.remove
-
-  Request:   { group, member, member_type? }
-  Response:  { group, member, removed }
-
-### group.list
-
-  Request:   {} (no params)
-  Response:  { groups: [{ name, description, member_count, created_at }] }
-
-### group.info
-
-  Request:   { name }
-  Response:  { name, description, created_by, created_at, members }
-
-### group.members
-
-  Request:   { name, expand? }
-  Response:  { name, members: [{ member_type, member_value }] }
-  Notes:     expand=true resolves role-based and nested group members to agent IDs.
-
 ### message.send
 
   Request:   { content, format?, structured?, thread_id?, scopes?, refs?,
@@ -1115,23 +989,6 @@ All methods use JSON-RPC 2.0 protocol.
   Response:  { marked_count, also_read_by? }
   Notes:     Batch support. also_read_by maps message_id to list of other agent_ids
              that also read the message.
-
-### subscribe
-
-  Request:   { scope?, mention_role?, all? }
-  Response:  { subscription_id, session_id, created_at }
-  Notes:     At least one of scope, mention_role, or all must be specified.
-
-### unsubscribe
-
-  Request:   { subscription_id }
-  Response:  { removed: bool }
-  Notes:     Only removes if subscription belongs to current session.
-
-### subscriptions.list
-
-  Request:   {} (no params)
-  Response:  { subscriptions: [{ id, scope_type?, scope_value?, mention_role?, all?, created_at }] }
 
 ### sync.force
 
@@ -1401,8 +1258,6 @@ Unknown event types are silently ignored (forward compatibility).
 
   # Agent 2: Implementer
   thrum quickstart --name <agent-name> --role implementer --module auth --intent "Building auth flow"
-  thrum subscribe --scope module:auth
-  thrum subscribe --mention @implementer
   thrum inbox --mentions
   thrum sent --to @planner --unread
   thrum reply msg_01HXE... "Acknowledged, starting on auth module"
@@ -1410,7 +1265,6 @@ Unknown event types are silently ignored (forward compatibility).
 
   # Agent 3: Reviewer
   thrum quickstart --name <agent-name> --role reviewer --module auth
-  thrum subscribe --mention @reviewer
   thrum wait --mention @reviewer --timeout 10m
 
 ### Cross-machine messaging via Git sync
@@ -1467,28 +1321,13 @@ Unknown event types are silently ignored (forward compatibility).
   thrum session start
   # Previous orphaned session auto-closed as crash_recovered
 
-### Group messaging
-
-  # Create a team group
-  thrum group create backend-team --description "Backend developers"
-  thrum group add backend-team @alice
-  thrum group add backend-team @bob
-  thrum group add backend-team --role implementer
-
-  # Send to the group
-  thrum send "Deploying v2.0 in 10 minutes" --to @backend-team
-
-  # List groups and members
-  thrum group list
-  thrum group members backend-team --expand
-
 ### Context save and recovery
 
   # Save context before ending session
   thrum context save --file session-notes.md
 
   # In new session, recover context
-  thrum context prime          # Gather all context
+  thrum prime                  # Gather all context for recovery
   thrum context show           # Show saved context
 
   # Manage preamble (stable header)
@@ -1506,22 +1345,7 @@ Unknown event types are silently ignored (forward compatibility).
 
   # Check overall team activity
   thrum team
-  thrum agent context @implementer
-
-### Notification subscriptions
-
-  # Subscribe to relevant channels
-  thrum subscribe --scope module:auth
-  thrum subscribe --mention @reviewer
-
-  # List active subscriptions
-  thrum subscriptions
-
-  # Remove a subscription
-  thrum unsubscribe 3
-
-  # Subscribe to everything (firehose)
-  thrum subscribe --all
+  thrum agent list --context
 
 ### Runtime configuration
 
@@ -1749,8 +1573,7 @@ Unknown event types are silently ignored (forward compatibility).
     .thrum/
 
   Related commands:
-    thrum migrate             Upgrades repos from old tracked-on-main layout
-    thrum setup               Configures .thrum/ in feature worktrees (creates redirect)
+    thrum worktree setup      Configures .thrum/ in feature worktrees (creates redirect)
 
 ## MCP Server
 
@@ -1772,17 +1595,11 @@ Unknown event types are silently ignored (forward compatibility).
     }
 
   MCP Tools:
-    send_message        Send a message to another agent (to: "@role" or "@group")
+    send_message        Send a message to another agent (to: "@agent_name" or "@everyone")
     check_messages      Poll for unread messages mentioning this agent, auto-marks read
     wait_for_message    Block until a message arrives (WebSocket push) or timeout
     list_agents         List registered agents with active/offline status
     broadcast_message   Send to all agents (convenience wrapper around send_message to @everyone)
-    create_group        Create a named group
-    delete_group        Delete a group
-    add_group_member    Add member to group (agent, role, or nested group)
-    remove_group_member Remove member from group
-    list_groups         List all groups
-    get_group           Get group details (supports expand=true for nested resolution)
 
 ## Local-Only Mode
 
