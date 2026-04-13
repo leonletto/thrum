@@ -67,17 +67,15 @@ participate in.</p>
 ┌─────────────────────────────────┐
 │  Thrum Daemon                   │
 │                                 │
-│  tg:dev-team (mirrored group)   │
-│  ├── @coordinator_main          │
-│  ├── user:alice                 │
-│  └── user:bob                   │
+│  Bridge → @coordinator_main     │
+│           (or configured agent) │
 └─────────────────────────────────┘</code></pre>
 <ul>
 <li><strong>Inbound:</strong> Someone sends a message in the Telegram group. If it @mentions
-the bot (or has no @mention at all), the bridge relays it into a mirrored
-Thrum group (<code>tg:dev-team</code>). The target agent receives it.</li>
-<li><strong>Outbound:</strong> The agent sends a message to the mirrored Thrum group. The
-bridge posts it back to the Telegram group where everyone can see it.</li>
+the bot (or has no @mention at all), the bridge relays it to the configured
+target agent.</li>
+<li><strong>Outbound:</strong> The agent sends a reply and the bridge posts it back to the
+Telegram group where everyone can see it.</li>
 <li><strong>Threading:</strong> Telegram replies map to Thrum <code>reply_to</code>. If someone replies to
 the bot&#39;s message in the group, the agent sees it as a reply to the original
 thread.</li>
@@ -90,8 +88,8 @@ so the agent knows who&#39;s asking.</li>
 guide first. You&#39;ll have a bot token, a paired Telegram account, and a
 working DM relay. The group feature builds on top of this.</li>
 <li><strong>Bot privacy mode disabled.</strong> By default, Telegram bots in groups only see
-messages that @mention them or are commands. For broadcast messages (no
-@mention) to work, you need privacy mode turned off. In Telegram, message
+messages that @mention them or are commands. For messages with no @mention to
+come through, you need privacy mode turned off. In Telegram, message
 <a href="https://t.me/BotFather">@BotFather</a>, send <code>/setprivacy</code>, select your bot,
 and choose <strong>Disable</strong>.</li>
 </ol>
@@ -127,14 +125,12 @@ Telegram user ID in the global <code>allow_from</code> list. Same gate as DMs �
 isn&#39;t in the list, your messages are silently dropped.</p>
 <h4>3. Restart and Test</h4>
 <pre><code>thrum daemon restart</code></pre>
-<p>On startup, the bridge creates a mirrored Thrum group named <code>tg:dev-team</code> and
-adds your user and target agent as members.</p>
 <p>Test it — send a message in the Telegram group mentioning the bot:</p>
 <pre><code>@your_bot_name hello from the group</code></pre>
 <p>Check the agent&#39;s inbox:</p>
 <pre><code>thrum inbox --unread</code></pre>
-<p>You should see the message. Have the agent reply to the mirrored group and
-verify it appears in Telegram.</p>
+<p>You should see the message. Have the agent reply and verify it appears in
+Telegram.</p>
 <hr>
 <h3>@Mention Routing</h3>
 <p>Messages in the group are routed based on @mentions:</p>
@@ -151,7 +147,7 @@ verify it appears in Telegram.</p>
 </tr>
 <tr>
 <td><code>Schema changed in v2</code> (no @mention)</td>
-<td>Bot relays to agent (broadcast)</td>
+<td>Bot relays to agent</td>
 </tr>
 <tr>
 <td><code>Hey @alice what do you think?</code></td>
@@ -195,7 +191,7 @@ config:</p>
 <tr>
 <td><code>name</code></td>
 <td>string</td>
-<td>Human-readable name — also used as the mirrored Thrum group name (<code>tg:{name}</code>)</td>
+<td>Human-readable label for this group (used in logs and the web UI)</td>
 </tr>
 <tr>
 <td><code>trusted_bots</code></td>
@@ -306,19 +302,20 @@ exception to the default &quot;drop all bot messages&quot; rule:</p>
 }</code></pre>
 <p>Sending to a proxy agent posts a message to the Telegram group with the target
 bot&#39;s @mention:</p>
+<!-- TODO: verify proxy agent routing after groups removal -->
+
 <pre><code>thrum send &quot;check the /users endpoint&quot; --to @falcon:coordinator_main</code></pre>
 <p>The message appears in the group as:</p>
 <pre><code>@falconmode_backend_bot @coordinator_main: check the /users endpoint</code></pre>
 <p>Humans in the group can see it. The target bot cannot (Telegram limitation). The
 proxy agent shows in <code>thrum team</code> as:</p>
-<pre><code>● @falcon:coordinator_main [remote] (falcon-backend) — via tg:cross-repo-coord</code></pre>
+<pre><code>● @falcon:coordinator_main [remote] (falcon-backend)</code></pre>
 <hr>
 <h3>Troubleshooting</h3>
 <p><strong>Messages not arriving from the group:</strong></p>
 <ul>
 <li>Check bot privacy mode. If privacy mode is on, the bot only sees @mentions and
-commands — broadcast messages won&#39;t come through. Disable via BotFather:
-<code>/setprivacy</code> → your bot → Disable.</li>
+commands. Disable via BotFather: <code>/setprivacy</code> → your bot → Disable.</li>
 <li>Verify the bot is actually in the Telegram group.</li>
 <li>Check that the sender&#39;s Telegram user ID is in <code>allow_from</code>.</li>
 </ul>

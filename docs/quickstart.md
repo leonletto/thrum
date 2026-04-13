@@ -74,9 +74,6 @@ watchdog, no messaging protocol in preambles). If you need multi-agent
 coordination, run `thrum single-agent-mode false`. See
 [Single-Agent Mode](single-agent-mode.md) for details.
 
-If you are upgrading an existing repo that has JSONL files tracked on `main`,
-run `thrum migrate` instead.
-
 ### 2. Install the Thrum Skill
 
 Install the thrum skill so your agent knows how to use thrum for coordination.
@@ -169,7 +166,7 @@ shows what you've sent, who it went to, and whether they've read it.
 ### Check Status
 
 ```bash
-thrum status
+thrum overview
 ```
 
 Shows:
@@ -178,20 +175,12 @@ Shows:
 - Active session
 - Inbox counts
 - Sync status
-- Daemon health
+- Team overview
 
-### Subscribe to Notifications
+### Wait for Notifications
 
-```bash
-# Subscribe to your module
-thrum subscribe --scope module:auth
-
-# Subscribe to mentions
-thrum subscribe --mention @implementer
-
-# List active subscriptions
-thrum subscriptions
-```
+Use `thrum wait` to block until a message arrives — useful in automation and
+hooks. See [CLI Reference](cli.md#thrum-wait) for flags.
 
 ### Sync Control
 
@@ -248,7 +237,7 @@ thrum mcp serve --agent-id myagent  # Override agent identity
 ```
 
 See [MCP Server](mcp-server.md) for configuration and the complete tools
-reference (11 tools: 5 core messaging + 6 group management).
+reference (4 core messaging tools).
 
 ## Typical Workflow
 
@@ -268,8 +257,8 @@ thrum sent --unread
 # 2c. Mark all messages as read when done reviewing
 thrum message read --all
 
-# 3. Subscribe to your module
-thrum subscribe --scope module:auth
+# 3. Block until a message arrives (useful in automation/hooks)
+# thrum wait --timeout 5m
 ```
 
 ### During Work: Send Updates
@@ -293,7 +282,7 @@ thrum send "Auth module ready for review" \
 thrum session end
 
 # Check final status
-thrum status
+thrum overview
 ```
 
 ## Working Across Machines
@@ -473,7 +462,9 @@ Use them to filter your inbox and target subscriptions.
 
 ### Subscriptions
 
-Subscribe to a scope or mention to get push notifications for matching messages.
+The daemon pushes real-time notifications to connected clients when messages
+match a subscription. Use `thrum wait` to block until a message arrives from the
+CLI.
 
 ### Sync
 
@@ -495,7 +486,7 @@ integration. The CLI works everywhere — MCP is just an alternative transport.
 ## Tips
 
 1. **Always start a session** before sending messages
-2. **Subscribe to your module** to get relevant notifications
+2. **Use `thrum wait`** to block until a message arrives in automation
 3. **Use scopes** to categorize messages
 4. **Mention other agents** when you need their attention
 5. **Check sync status** if messages aren't appearing
@@ -566,6 +557,6 @@ building:
   human-directed agent coordination before going deeper
 - [CLI Reference](cli.md) — complete documentation for every command and flag
 - [Messaging](messaging.md) — send and receive messages between agents,
-  including scopes, mentions, threads, and groups
+  including scopes, mentions, and threads
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
   with Beads integration and session templates

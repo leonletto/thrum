@@ -95,10 +95,10 @@ read:** `thrum message read --all` **Send message:**
 `thrum send "message" --to @<agent_name>` — ALWAYS use the specific agent name
 (e.g., `@coordinator_main`), NEVER the role (e.g., `@coordinator`). Role names
 fan out to ALL agents with that role. Run `thrum team` to find exact names.
-**Reply:** `thrum reply <MSG_ID> "response"` **Status:** `thrum status` **Who's
-online:** `thrum team` **Save context:** Use `/thrum:update-project` skill.
-**NEVER run `thrum context save` manually** — it overwrites accumulated session
-state.
+**Reply:** `thrum reply <MSG_ID> "response"` **Status:** `thrum overview`
+**Who's online:** `thrum team` **Save context:** Use `/thrum:update-project`
+skill. **NEVER run `thrum context save` manually** — it overwrites accumulated
+session state.
 
 ## Background Message Listener
 
@@ -329,56 +329,6 @@ is found, the default thrum quick-reference preamble is used as a fallback. See
 
 ---
 
-### thrum context prime
-
-Collect all context needed for agent session initialization or recovery. This is
-a comprehensive context collection command that gathers identity, session info,
-agent list, unread messages, git context, and daemon health into a single
-output.
-
-```bash
-thrum context prime [flags]
-```
-
-| Flag     | Description                          | Default |
-| -------- | ------------------------------------ | ------- |
-| `--json` | Structured JSON output for scripting | `false` |
-
-**Examples:**
-
-```bash
-# Human-readable summary
-thrum context prime
-
-# Structured JSON output
-thrum context prime --json
-```
-
-**What it includes:**
-
-- Agent identity (name, role, module)
-- Active session information
-- List of registered agents and their status
-- Unread messages count
-- Git context (branch, commits, files)
-- Daemon health status
-
-**Use cases:**
-
-- Session initialization - quickly orient a new session
-- Session recovery - restore context after crash or compaction
-- Debugging - gather all relevant state in one command
-- Agent onboarding - provide comprehensive context to new agents
-
-**Note:** `thrum prime` is the canonical top-level command;
-`thrum context prime` is an alias for it. The PreCompact hook automatically
-saves context before compaction to `.thrum/context/{name}.md` and
-`/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md`, but the
-agent-initiated `/thrum:update-project` skill captures richer context including
-decisions and rationale.
-
----
-
 ## The /thrum:update-project Skill
 
 The `/thrum:update-project` skill is a Claude Code plugin slash command defined
@@ -454,18 +404,19 @@ echo "# Decision: Using JWT with refresh tokens
 - Rate limit: 100 req/min per IP" | thrum context save
 ```
 
-### Integration with thrum status
+### Integration with thrum overview
 
-The `thrum status` command shows context file size and age when context exists:
+The `thrum overview` command shows context file size and age when context
+exists:
 
 ```bash
-$ thrum status
-Agent:    furiosa (@implementer)
-Module:   auth
-Session:  ses_01HXF2A9... (active 2h15m)
-Intent:   Implementing JWT refresh
-Context:  1.2 KB (updated 5m ago)    # ← Context indicator
-Inbox:    3 unread (12 total)
+$ thrum overview
+You: @implementer (furiosa)
+Session: active for 2h15m
+Intent: Implementing JWT refresh
+Context: 1.2 KB (updated 5m ago)    # ← Context indicator
+Inbox: 3 unread (12 total)
+Sync: ✓ synced
 ```
 
 ---
@@ -735,5 +686,5 @@ machines. Local notes and WIP context can stay local.
   command and all other CLI commands
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
   including context handoff between agents
-- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and the
-  `thrum context prime` command for session recovery
+- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and session
+  recovery with `thrum prime`

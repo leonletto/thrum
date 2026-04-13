@@ -68,8 +68,8 @@ Telegram Group
    guide first. You'll have a bot token, a paired Telegram account, and a
    working DM relay. The group feature builds on top of this.
 2. **Bot privacy mode disabled.** By default, Telegram bots in groups only see
-   messages that @mention them or are commands. For messages with no @mention
-   to come through, you need privacy mode turned off. In Telegram, message
+   messages that @mention them or are commands. For messages with no @mention to
+   come through, you need privacy mode turned off. In Telegram, message
    [@BotFather](https://t.me/BotFather), send `/setprivacy`, select your bot,
    and choose **Disable**.
 
@@ -283,6 +283,7 @@ Sending to a proxy agent posts a message to the Telegram group with the target
 bot's @mention:
 
 <!-- TODO: verify proxy agent routing after groups removal -->
+
 ```bash
 thrum send "check the /users endpoint" --to @falcon:coordinator_main
 ```

@@ -22,7 +22,7 @@ stop it, and it survives daemon restarts from its saved spec.
 Say you want to alert `@impl_api` whenever your dev server logs an error:
 
 ```bash
-thrum monitor add \
+thrum monitor start \
   --name dev-errors \
   --match "(?i)(error|exception|panic)" \
   --to @impl_api \
@@ -55,12 +55,12 @@ thrum monitor stop m_01
 
 ## Commands
 
-### `thrum monitor add`
+### `thrum monitor start`
 
-Start a new monitor job.
+Start a new monitor job. (`add` is a retained alias.)
 
 ```bash
-thrum monitor add --name <name> --match <regex> --to @<agent> [options] -- <argv...>
+thrum monitor start --name <name> --match <regex> --to @<agent> [options] -- <argv...>
 ```
 
 Everything after `--` is the command to run. The first token is the executable,
@@ -94,7 +94,7 @@ gets passed to `exec`.
 **Example:**
 
 ```bash
-thrum monitor add \
+thrum monitor start \
   --name build-watch \
   --match "^(FAIL|PASS|error)" \
   --to @coordinator_main \
@@ -216,8 +216,8 @@ The recipient sees them in their inbox like any other message. The
 ### Persistence
 
 Monitor specs are saved to the daemon's state database (schema v20, `monitors`
-table) when you run `thrum monitor add`. If the daemon restarts, it respawns all
-saved monitors from scratch — same command, same regex, same recipient.
+table) when you run `thrum monitor start`. If the daemon restarts, it respawns
+all saved monitors from scratch — same command, same regex, same recipient.
 
 Stop a monitor with `thrum monitor stop` to remove it from persistence. Stopped
 monitors don't respawn.

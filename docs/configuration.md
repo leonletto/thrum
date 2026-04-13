@@ -383,8 +383,8 @@ the current working directory. This is set automatically by `thrum-startup.sh`
 to prevent identity drift when an agent `cd`s into a different worktree.
 
 `THRUM_AGENT_ID` pins the caller identity for daemon RPC calls, bypassing
-identity file lookup. When set, commands like `thrum status`, `thrum prime`, and
-`thrum overview` use this agent ID directly.
+identity file lookup. When set, commands like `thrum prime` and `thrum overview`
+use this agent ID directly.
 
 ## Runtime Templates
 
@@ -452,7 +452,7 @@ they are per-agent or volatile state, not global repository settings.
 
 Monitor jobs watch long-running processes and emit matches as synthetic Thrum
 messages. Configuration lives in the monitor state file managed by
-`thrum monitor add/list/show/stop/logs/restart` — not in `config.json`.
+`thrum monitor start/list/show/stop/logs/restart` — not in `config.json`.
 
 Key behavior:
 

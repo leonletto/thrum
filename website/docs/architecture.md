@@ -62,8 +62,8 @@ messages and agent activity. Served from the same port as WebSocket (default
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
 directly through MCP protocol without CLI shell-outs. Connects to the daemon via
 Unix socket for RPC and WebSocket for real-time push notifications. Provides 4
-core messaging tools: `send_message`, `check_messages`, `wait_for_message`,
-and `list_agents`.
+core messaging tools: `send_message`, `check_messages`, `wait_for_message`, and
+`list_agents`.
 
 ## Key Features
 
@@ -220,7 +220,8 @@ The daemon serves the WebSocket API and embedded Web UI SPA on the same port
   `session.setIntent`, `session.setTask`
 - `message.send`, `message.get`, `message.list`, `message.edit`,
   `message.delete`, `message.markRead`
-- `subscribe`, `unsubscribe`, `subscriptions.list` (internal — used by MCP server and WebSocket clients)
+- `subscribe`, `unsubscribe`, `subscriptions.list` (internal — used by MCP
+  server and WebSocket clients)
 - `sync.force`, `sync.status`
 - `peer.start_pairing`, `peer.wait_pairing`, `peer.join`, `peer.list`,
   `peer.status`, `peer.remove`, `peer.configure`, `peer.address_changed`
@@ -270,8 +271,8 @@ thrum context sync
 ```
 
 Context files live at `.thrum/context/{agent-name}.md` and appear in
-`thrum overview` output. Use the `/thrum:update-project` skill in Claude Code for
-guided context updates.
+`thrum overview` output. Use the `/thrum:update-project` skill in Claude Code
+for guided context updates.
 
 ## Storage Architecture
 
@@ -306,21 +307,21 @@ works without network.
 
 ### For the CLI
 
-| Command                                         | Daemon Feature Used                                           |
-| ----------------------------------------------- | ------------------------------------------------------------- |
-| `thrum send "Hello"`                            | `message.send` RPC + auto-sync                                |
-| `thrum inbox`                                   | `message.list` RPC with filtering                             |
-| `thrum wait`                                    | `subscribe` RPC + push notifications (internal RPC)           |
-| `thrum agent list --context`                    | `agent.listContext` RPC (live git state)                      |
-| `thrum who-has FILE`                            | `agent.listContext` RPC filtered by file                      |
-| `thrum ping @role`                              | `agent.list` + `agent.listContext` RPCs                       |
-| `thrum quickstart --name NAME`                  | `agent.register` + `session.start` + `session.setIntent` RPCs |
-| `thrum overview`                                | Multiple RPCs combined into one view                          |
-| `thrum sync force`                              | `sync.force` RPC                                              |
-| `thrum sync status`                             | `sync.status` RPC                                             |
-| `thrum agent delete NAME`                       | `agent.delete` RPC                                            |
-| `thrum agent cleanup`                           | `agent.cleanup` RPC                                           |
-| `thrum monitor start/list/show/stop/logs/restart` | `monitor.*` RPCs (Unix socket only)                         |
+| Command                                           | Daemon Feature Used                                           |
+| ------------------------------------------------- | ------------------------------------------------------------- |
+| `thrum send "Hello"`                              | `message.send` RPC + auto-sync                                |
+| `thrum inbox`                                     | `message.list` RPC with filtering                             |
+| `thrum wait`                                      | `subscribe` RPC + push notifications (internal RPC)           |
+| `thrum agent list --context`                      | `agent.listContext` RPC (live git state)                      |
+| `thrum who-has FILE`                              | `agent.listContext` RPC filtered by file                      |
+| `thrum ping @role`                                | `agent.list` + `agent.listContext` RPCs                       |
+| `thrum quickstart --name NAME`                    | `agent.register` + `session.start` + `session.setIntent` RPCs |
+| `thrum overview`                                  | Multiple RPCs combined into one view                          |
+| `thrum sync force`                                | `sync.force` RPC                                              |
+| `thrum sync status`                               | `sync.status` RPC                                             |
+| `thrum agent delete NAME`                         | `agent.delete` RPC                                            |
+| `thrum agent cleanup`                             | `agent.cleanup` RPC                                           |
+| `thrum monitor start/list/show/stop/logs/restart` | `monitor.*` RPCs (Unix socket only)                           |
 
 ### For the Web UI
 

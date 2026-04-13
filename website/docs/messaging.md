@@ -33,8 +33,8 @@ managing messages.
 
 Same-repo messaging is the default. When you want agents in different repos, or
 on different machines, to talk to each other, you pair their daemons as peers.
-The messaging API is the same — `thrum send`, `thrum inbox`, threads —
-but messages route through peers instead of staying local.
+The messaging API is the same — `thrum send`, `thrum inbox`, threads — but
+messages route through peers instead of staying local.
 
 For pairing, address handling, and the two transports (same-machine and
 Tailscale), see [Peers](peers.md).
@@ -75,14 +75,14 @@ SQLite.
 
 ### Flags
 
-| Flag           | Format                  | Description                                                 |
-| -------------- | ----------------------- | ----------------------------------------------------------- |
-| `--to`         | `@name`                 | Recipient — `@agent_name` or `@everyone` for broadcast      |
-| `--scope`      | `type:value`            | Attach scope context (repeatable)                           |
-| `--ref`        | `type:value`            | Attach reference (repeatable)                               |
-| `--mention`    | `@role`                 | Mention an agent role (repeatable)                          |
-| `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)                        |
-| `--structured` | JSON string             | Typed payload for machine-readable data                     |
+| Flag           | Format                  | Description                                            |
+| -------------- | ----------------------- | ------------------------------------------------------ |
+| `--to`         | `@name`                 | Recipient — `@agent_name` or `@everyone` for broadcast |
+| `--scope`      | `type:value`            | Attach scope context (repeatable)                      |
+| `--ref`        | `type:value`            | Attach reference (repeatable)                          |
+| `--mention`    | `@role`                 | Mention an agent role (repeatable)                     |
+| `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)                   |
+| `--structured` | JSON string             | Typed payload for machine-readable data                |
 
 ### Direct Messaging with --to
 

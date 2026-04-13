@@ -19,11 +19,11 @@ last_updated: "2026-02-10"
 
 ## Subscriptions & Notifications
 
-> **Note:** The `thrum subscribe`, `thrum unsubscribe`, and `thrum subscriptions`
-> CLI commands have been removed. Use `thrum wait` to block until a message
-> arrives. The underlying `subscribe`, `unsubscribe`, and `subscriptions.list`
-> RPC methods still exist for internal use — see [RPC API](rpc-api.md) if you're
-> building a custom client.
+> **Note:** The `thrum subscribe`, `thrum unsubscribe`, and
+> `thrum subscriptions` CLI commands have been removed. Use `thrum wait` to
+> block until a message arrives. The underlying `subscribe`, `unsubscribe`, and
+> `subscriptions.list` RPC methods still exist for internal use — see
+> [RPC API](rpc-api.md) if you're building a custom client.
 
 ## Quick Reference
 

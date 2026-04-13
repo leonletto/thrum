@@ -227,8 +227,8 @@ The recipient sees them in their inbox like any other message. The
 ### Persistence
 
 Monitor specs are saved to the daemon's state database (schema v20, `monitors`
-table) when you run `thrum monitor start`. If the daemon restarts, it respawns all
-saved monitors from scratch — same command, same regex, same recipient.
+table) when you run `thrum monitor start`. If the daemon restarts, it respawns
+all saved monitors from scratch — same command, same regex, same recipient.
 
 Stop a monitor with `thrum monitor stop` to remove it from persistence. Stopped
 monitors don't respawn.

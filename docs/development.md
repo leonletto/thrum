@@ -59,7 +59,7 @@ thrum/
 │   ├── gitctx/              # Git-derived work context (branch, uncommitted files)
 │   ├── identity/            # ID generation (ULID-based: repo, agent, session, message, event)
 │   ├── jsonl/               # JSONL reader/writer with file locking
-│   ├── mcp/                 # MCP stdio server (11 tools, WebSocket waiter)
+│   ├── mcp/                 # MCP stdio server (4 tools, WebSocket waiter)
 │   ├── paths/               # Path resolution, .thrum/redirect, sync worktree path
 │   ├── projection/          # JSONL to SQLite event replay (projector)
 │   ├── schema/              # SQLite schema, DDL, and migrations (v19)
@@ -657,21 +657,15 @@ over stdin/stdout).
 - `internal/mcp/waiter.go`: WebSocket-based blocking message waiter
 - `cmd/thrum/mcp.go`: `thrum mcp serve` Cobra command
 
-**MCP Tools (11 total: 10 active + 1 deprecated):**
+**MCP Tools (5 total: 4 active + 1 deprecated):**
 
-| Tool                  | Description                                                                         |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| `send_message`        | Send a message to another agent via @role addressing                                |
-| `check_messages`      | Poll for unread messages mentioning this agent                                      |
-| `wait_for_message`    | Block until a message arrives (WebSocket push) or timeout                           |
-| `list_agents`         | List registered agents with active/offline status                                   |
-| `create_group`        | Create a named messaging group                                                      |
-| `delete_group`        | Delete a messaging group                                                            |
-| `add_group_member`    | Add an agent or role as a member of a group                                         |
-| `remove_group_member` | Remove a member from a group                                                        |
-| `list_groups`         | List all messaging groups                                                           |
-| `get_group`           | Get group details including members (expand=true resolves roles)                    |
-| `broadcast_message`   | _(Deprecated)_ Broadcast to all agents — use `send_message(to="@everyone")` instead |
+| Tool                | Description                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| `send_message`      | Send a message to another agent via @role addressing                                |
+| `check_messages`    | Poll for unread messages mentioning this agent                                      |
+| `wait_for_message`  | Block until a message arrives (WebSocket push) or timeout                           |
+| `list_agents`       | List registered agents with active/offline status                                   |
+| `broadcast_message` | _(Deprecated)_ Broadcast to all agents — use `send_message(to="@everyone")` instead |
 
 **Architecture:**
 

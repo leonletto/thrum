@@ -197,8 +197,8 @@ them or use them in threads. They&#39;re delivery-only notifications.</p>
 <h2>Lifecycle</h2>
 <h3>Persistence</h3>
 <p>Monitor specs are saved to the daemon&#39;s state database (schema v20, <code>monitors</code>
-table) when you run <code>thrum monitor start</code>. If the daemon restarts, it respawns all
-saved monitors from scratch — same command, same regex, same recipient.</p>
+table) when you run <code>thrum monitor start</code>. If the daemon restarts, it respawns
+all saved monitors from scratch — same command, same regex, same recipient.</p>
 <p>Stop a monitor with <code>thrum monitor stop</code> to remove it from persistence. Stopped
 monitors don&#39;t respawn.</p>
 <h3>Child Exit Notification</h3>

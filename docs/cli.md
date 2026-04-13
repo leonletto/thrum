@@ -10,112 +10,98 @@ for AI agent coordination.
 
 ## Quick Reference
 
-| Command                    | Description                                                    |
-| -------------------------- | -------------------------------------------------------------- |
-| `thrum init`               | Initialize Thrum in the current repository                     |
-| `thrum setup`              | Configure a feature worktree with `.thrum/redirect`            |
-| `thrum migrate`            | Migrate old-layout repos to worktree architecture              |
-| `thrum quickstart`         | Register, start session, and set intent in one step            |
-| `thrum overview`           | Show combined status, team, and inbox view                     |
-| `thrum status`             | Show current agent status, session, and work context           |
-| `thrum send`               | Send a message (direct or broadcast)                           |
-| `thrum reply`              | Reply to a message                                             |
-| `thrum inbox`              | List messages in your inbox                                    |
-| `thrum sent`               | List messages you sent with receipt status                     |
-| `thrum message get`        | Get a single message with full details                         |
-| `thrum message edit`       | Edit a message (full replacement)                              |
-| `thrum message delete`     | Delete a message                                               |
-| `thrum message read`       | Mark messages as read                                          |
-| `thrum purge`              | Remove old messages, sessions, and events                      |
-| `thrum agent register`     | Register this agent with the daemon                            |
-| `thrum agent list`         | List registered agents                                         |
-| `thrum agent whoami`       | Show current agent identity                                    |
-| `thrum agent context`      | Show agent work context                                        |
-| `thrum agent delete`       | Delete an agent and all associated data                        |
-| `thrum agent cleanup`      | Detect and remove orphaned agents                              |
-| `thrum agent start`        | Start a new session (alias)                                    |
-| `thrum agent end`          | End current session (alias)                                    |
-| `thrum agent set-intent`   | Set work intent (alias)                                        |
-| `thrum agent set-task`     | Set current task (alias)                                       |
-| `thrum agent set-status`   | Set agent operational status                                   |
-| `thrum agent heartbeat`    | Send heartbeat (alias)                                         |
-| `thrum session start`      | Start a new work session                                       |
-| `thrum session end`        | End the current session                                        |
-| `thrum session list`       | List sessions (active and ended)                               |
-| `thrum session heartbeat`  | Send a session heartbeat                                       |
-| `thrum session set-intent` | Set session work intent                                        |
-| `thrum session set-task`   | Set current task identifier                                    |
-| `thrum context save`       | Save agent context from file or stdin                          |
-| `thrum context show`       | Show agent context                                             |
-| `thrum context clear`      | Clear agent context                                            |
-| `thrum context sync`       | Sync context to a-sync branch                                  |
-| `thrum context prime`      | Collect all context for session initialization                 |
-| `thrum runtime`            | Manage runtime presets (list, show, set-default)               |
-| `thrum peer add`           | Start a pairing session and display a peercode                 |
-| `thrum peer join`          | Join a peer using a peercode                                   |
-| `thrum peer list`          | List all paired peers                                          |
-| `thrum peer status`        | Show detailed per-peer health                                  |
-| `thrum peer remove`        | Remove a paired peer                                           |
-| `thrum peer configure`     | Add or remove proxy agents for a peer                          |
-| `thrum single-agent-mode`  | Toggle or query single-agent mode                              |
-| `thrum telegram configure` | Configure the Telegram bridge (interactive or flags)           |
-| `thrum telegram status`    | Show Telegram bridge connection status and config              |
-| `thrum roles list`         | List role templates and matching agents                        |
-| `thrum roles deploy`       | Re-render agent preambles from role templates                  |
-| `thrum config`             | Manage configuration (show, init)                              |
-| `thrum group create`       | Create a named group                                           |
-| `thrum group delete`       | Delete a group                                                 |
-| `thrum group add`          | Add member to a group                                          |
-| `thrum group remove`       | Remove member from a group                                     |
-| `thrum group list`         | List all groups                                                |
-| `thrum group info`         | Show group details                                             |
-| `thrum group members`      | List group members                                             |
-| `thrum who-has`            | Check which agents are editing a file                          |
-| `thrum ping`               | Check if an agent is online                                    |
-| `thrum subscribe`          | Subscribe to push notifications                                |
-| `thrum unsubscribe`        | Remove a subscription                                          |
-| `thrum subscriptions`      | List active subscriptions                                      |
-| `thrum wait`               | Wait for notifications                                         |
-| `thrum daemon start`       | Start the daemon in the background                             |
-| `thrum daemon stop`        | Stop the daemon gracefully                                     |
-| `thrum daemon status`      | Show daemon status                                             |
-| `thrum daemon restart`     | Restart the daemon                                             |
-| `thrum daemon logs`        | View daemon log file                                           |
-| `thrum sync status`        | Show sync loop status                                          |
-| `thrum sync force`         | Trigger an immediate sync                                      |
-| `thrum backup`             | Snapshot all thrum data to a backup directory                  |
-| `thrum backup status`      | Show last backup info                                          |
-| `thrum backup config`      | Show effective backup config                                   |
-| `thrum backup restore`     | Restore from latest backup or a specific archive               |
-| `thrum backup plugin list` | List configured backup plugins                                 |
-| `thrum backup plugin add`  | Add a backup plugin (or use a built-in preset)                 |
-| `thrum backup schedule`    | Configure automatic backup schedule                            |
-| `thrum tmux create`        | Create a tmux session for an agent (quickstart flags required) |
-| `thrum tmux quickstart`    | Alias for `thrum tmux create`                                  |
-| `thrum tmux launch`        | Start an AI tool inside a tmux session                         |
-| `thrum tmux status`        | Show tmux-managed sessions with state                          |
-| `thrum tmux list`          | Alias for `thrum tmux status`                                  |
-| `thrum tmux kill`          | Tear down a tmux session                                       |
-| `thrum tmux send`          | Send text into a tmux session                                  |
-| `thrum tmux capture`       | Capture pane content from a tmux session                       |
-| `thrum tmux restart`       | Restart a tmux session with context snapshot                   |
-| `thrum tmux queue`         | Submit a command to a session's queue                          |
-| `thrum tmux queue-status`  | Show the command queue for a session                           |
-| `thrum tmux cancel`        | Cancel a queued or active command                              |
-| `thrum restart save`       | Save conversation snapshot for session restart                 |
-| `thrum restart restore`    | Output a restart snapshot to stdout                            |
-| `thrum restart check`      | Check if a restart snapshot exists (exit code)                 |
-| `thrum worktree create`    | Create a new worktree with thrum/beads setup                   |
-| `thrum worktree setup`     | Alias for `thrum worktree create`                              |
-| `thrum worktree teardown`  | Remove a worktree and clean up artifacts                       |
-| `thrum worktree list`      | List worktrees with thrum agent info                           |
-| `thrum monitor add`        | Start a new monitor job (regex filter + message delivery)      |
-| `thrum monitor list`       | List running monitor jobs                                      |
-| `thrum monitor show`       | Show full details for a monitor job                            |
-| `thrum monitor stop`       | Stop a monitor job                                             |
-| `thrum monitor logs`       | Show recent matched output for a monitor job                   |
-| `thrum monitor restart`    | Restart a stopped or dead monitor job                          |
-| `thrum mcp serve`          | Start MCP stdio server for agent messaging                     |
+| Command                       | Description                                                    |
+| ----------------------------- | -------------------------------------------------------------- |
+| `thrum init`                  | Initialize Thrum in the current repository                     |
+| `thrum setup`                 | Configure a feature worktree with `.thrum/redirect`            |
+| `thrum quickstart`            | Register, start session, and set intent in one step            |
+| `thrum overview`              | Show combined status, team, and inbox view                     |
+| `thrum send`                  | Send a message (direct or broadcast)                           |
+| `thrum reply`                 | Reply to a message                                             |
+| `thrum inbox`                 | List messages in your inbox                                    |
+| `thrum sent`                  | List messages you sent with receipt status                     |
+| `thrum message get`           | Get a single message with full details                         |
+| `thrum message edit`          | Edit a message (full replacement)                              |
+| `thrum message delete`        | Delete a message                                               |
+| `thrum message read`          | Mark messages as read                                          |
+| `thrum purge`                 | Remove old messages, sessions, and events                      |
+| `thrum agent register`        | Register this agent with the daemon                            |
+| `thrum agent list`            | List registered agents                                         |
+| `thrum agent whoami`          | Show current agent identity                                    |
+| `thrum agent delete`          | Delete an agent and all associated data                        |
+| `thrum agent cleanup`         | Detect and remove orphaned agents                              |
+| `thrum agent start`           | Start a new session (alias)                                    |
+| `thrum agent end`             | End current session (alias)                                    |
+| `thrum agent set-intent`      | Set work intent (alias)                                        |
+| `thrum agent set-task`        | Set current task (alias)                                       |
+| `thrum agent set-status`      | Set agent operational status                                   |
+| `thrum agent heartbeat`       | Send heartbeat (alias)                                         |
+| `thrum session start`         | Start a new work session                                       |
+| `thrum session end`           | End the current session                                        |
+| `thrum session list`          | List sessions (active and ended)                               |
+| `thrum session heartbeat`     | Send a session heartbeat                                       |
+| `thrum session set-intent`    | Set session work intent                                        |
+| `thrum session set-task`      | Set current task identifier                                    |
+| `thrum context save`          | Save agent context from file or stdin                          |
+| `thrum context show`          | Show agent context                                             |
+| `thrum context clear`         | Clear agent context                                            |
+| `thrum context sync`          | Sync context to a-sync branch                                  |
+| `thrum runtime`               | Manage runtime presets (list, show, set-default)               |
+| `thrum peer add`              | Start a pairing session and display a peercode                 |
+| `thrum peer join`             | Join a peer using a peercode                                   |
+| `thrum peer list`             | List all paired peers                                          |
+| `thrum peer status`           | Show detailed per-peer health                                  |
+| `thrum peer remove`           | Remove a paired peer                                           |
+| `thrum peer configure`        | Add or remove proxy agents for a peer                          |
+| `thrum single-agent-mode`     | Toggle or query single-agent mode                              |
+| `thrum telegram configure`    | Configure the Telegram bridge (interactive or flags)           |
+| `thrum telegram status`       | Show Telegram bridge connection status and config              |
+| `thrum roles list`            | List role templates and matching agents                        |
+| `thrum roles deploy`          | Re-render agent preambles from role templates                  |
+| `thrum config`                | Manage configuration (show, init)                              |
+| `thrum who-has`               | Check which agents are editing a file                          |
+| `thrum ping`                  | Check if an agent is online                                    |
+| `thrum wait`                  | Wait for notifications                                         |
+| `thrum daemon start`          | Start the daemon in the background                             |
+| `thrum daemon stop`           | Stop the daemon gracefully                                     |
+| `thrum daemon status`         | Show daemon status                                             |
+| `thrum daemon restart`        | Restart the daemon                                             |
+| `thrum daemon logs`           | View daemon log file                                           |
+| `thrum sync status`           | Show sync loop status                                          |
+| `thrum sync force`            | Trigger an immediate sync                                      |
+| `thrum backup`                | Snapshot all thrum data to a backup directory                  |
+| `thrum backup status`         | Show last backup info                                          |
+| `thrum backup config`         | Show effective backup config                                   |
+| `thrum backup restore`        | Restore from latest backup or a specific archive               |
+| `thrum backup plugin list`    | List configured backup plugins                                 |
+| `thrum backup plugin add`     | Add a backup plugin (or use a built-in preset)                 |
+| `thrum backup schedule`       | Configure automatic backup schedule                            |
+| `thrum tmux create`           | Create a tmux session for an agent (quickstart flags required) |
+| `thrum tmux quickstart`       | Alias for `thrum tmux create`                                  |
+| `thrum tmux launch`           | Start an AI tool inside a tmux session                         |
+| `thrum tmux status`           | Show tmux-managed sessions with state                          |
+| `thrum tmux list`             | Alias for `thrum tmux status`                                  |
+| `thrum tmux kill`             | Tear down a tmux session                                       |
+| `thrum tmux send`             | Send text into a tmux session                                  |
+| `thrum tmux capture`          | Capture pane content from a tmux session                       |
+| `thrum tmux restart`          | Restart a tmux session with context snapshot                   |
+| `thrum tmux queue`            | Submit a command to a session's queue                          |
+| `thrum tmux queue-status`     | Show the command queue for a session                           |
+| `thrum tmux cancel`           | Cancel a queued or active command                              |
+| `thrum tmux snapshot save`    | Save conversation snapshot for session restart                 |
+| `thrum tmux snapshot restore` | Output a restart snapshot to stdout                            |
+| `thrum tmux snapshot check`   | Check if a restart snapshot exists (exit code)                 |
+| `thrum worktree create`       | Create a new worktree with thrum/beads setup                   |
+| `thrum worktree setup`        | Alias for `thrum worktree create`                              |
+| `thrum worktree teardown`     | Remove a worktree and clean up artifacts                       |
+| `thrum worktree list`         | List worktrees with thrum agent info                           |
+| `thrum monitor start`         | Start a new monitor job (regex filter + message delivery)      |
+| `thrum monitor list`          | List running monitor jobs                                      |
+| `thrum monitor show`          | Show full details for a monitor job                            |
+| `thrum monitor stop`          | Stop a monitor job                                             |
+| `thrum monitor logs`          | Show recent matched output for a monitor job                   |
+| `thrum monitor restart`       | Restart a stopped or dead monitor job                          |
+| `thrum mcp serve`             | Start MCP stdio server for agent messaging                     |
 
 ## Global Flags
 
@@ -267,21 +253,9 @@ This command generates comprehensive agent coordination instructions including:
 - Message protocols
 - MCP server configuration
 - Background listener setup
-- Group management
 
 The instructions are automatically injected by `thrum prime` when agents start
 sessions, providing immediate context on how to use Thrum for coordination.
-
-### thrum migrate
-
-Migrate an existing Thrum repository from the old layout (JSONL files tracked on
-main branch) to the new worktree architecture (JSONL files on `a-sync` branch
-via `.git/thrum-sync/a-sync/` worktree). Safe to run multiple times -- it
-detects what needs migration and skips steps that are already done.
-
-```text
-thrum migrate
-```
 
 ### thrum quickstart
 
@@ -351,32 +325,6 @@ Inbox: 3 unread (12 total)
 Sync: ✓ synced
 ```
 
-### thrum status
-
-Show current agent identity, session, work context, inbox counts, and daemon
-health.
-
-```text
-thrum status
-```
-
-Example:
-
-```text
-$ thrum status
-Agent:    implementer_35HV62T9B9 (@implementer)
-Module:   auth
-Display:  Auth Developer
-Session:  ses_01HXF2A9... (duration: 2h15m)
-Intent:   Fixing token refresh
-Branch:   feature/auth (3 commits ahead)
-Files:    5 changed, 2 uncommitted
-Inbox:    47 messages (12 unread)
-Sync:     ✓ synced
-Daemon:   running (2h15m uptime, v0.1.0)
-WebSocket: ws://localhost:9999
-```
-
 ### thrum team
 
 Show a rich, multi-line status report for every active agent. Displays session
@@ -431,23 +379,18 @@ have an active session.
 thrum send MESSAGE [flags]
 ```
 
-| Flag                | Description                                                  | Default    |
-| ------------------- | ------------------------------------------------------------ | ---------- |
-| `--to`              | Direct recipient (format: `@role`, `@name`, or `@groupname`) |            |
-| `--everyone`        | Alias for `--to @everyone` (send to all agents)              |            |
-| `--broadcast`, `-b` | Send to all agents (alias for `--to @everyone`)              | `false`    |
-| `--scope`           | Add scope (repeatable, format: `type:value`)                 |            |
-| `--ref`             | Add reference (repeatable, format: `type:value`)             |            |
-| `--mention`         | Mention a role (repeatable, format: `@role`)                 |            |
-| `--structured`      | Structured payload (JSON string)                             |            |
-| `--format`          | Message format (`markdown`, `plain`, `json`)                 | `markdown` |
+| Flag           | Description                                            | Default    |
+| -------------- | ------------------------------------------------------ | ---------- |
+| `--to`         | Recipient — `@agent_name` or `@everyone` for broadcast |            |
+| `--scope`      | Add scope (repeatable, format: `type:value`)           |            |
+| `--ref`        | Add reference (repeatable, format: `type:value`)       |            |
+| `--mention`    | Mention a role (repeatable, format: `@role`)           |            |
+| `--structured` | Structured payload (JSON string)                       |            |
+| `--format`     | Message format (`markdown`, `plain`, `json`)           | `markdown` |
 
 The `--to` flag adds the recipient as a mention, making it a directed message.
-Recipients can be agents (`@alice`), roles (`@reviewer`), or groups
-(`@everyone`, `@backend`). The `--broadcast` and `--to` flags are mutually
-exclusive.
-
-The `--broadcast` flag is an alias for `--to @everyone`.
+Recipients can be agents (`@alice`), roles (`@reviewer`), or `@everyone` for
+broadcast.
 
 Example:
 
@@ -456,13 +399,9 @@ $ thrum send "PR ready for review" --to @reviewer --scope module:auth --ref pr:4
 ✓ Message sent: msg_01HXE8Z7...
   Created: 2026-02-03T10:00:00Z
 
-# Send to all agents via @everyone group
+# Send to all agents
 $ thrum send "Deploy complete" --to @everyone
 ✓ Message sent: msg_01HXE8Z8...
-
-# Send to a custom group
-$ thrum send "Backend review needed" --to @backend
-✓ Message sent: msg_01HXE8Z9...
 ```
 
 ### thrum reply
@@ -529,7 +468,6 @@ delivery/read state.
 
 ```text
 thrum sent [flags]
-thrum sent show MSG_ID
 ```
 
 Common examples:
@@ -538,8 +476,7 @@ Common examples:
 thrum sent
 thrum sent --unread
 thrum sent --to @implementer_api
-thrum sent --to @backend-team
-thrum sent show msg_01HXE8Z7
+thrum message get msg_01HXE8Z7
 ```
 
 ### thrum message get
@@ -789,43 +726,6 @@ Source:    environment
 Session:   ses_01HXF2A9... (2h ago)
 ```
 
-### thrum agent context
-
-Show detailed work context for agents. Without arguments, lists all active work
-contexts. With an agent argument, shows detailed context for that agent.
-
-```text
-thrum agent context [AGENT] [flags]
-```
-
-| Flag       | Description            | Default |
-| ---------- | ---------------------- | ------- |
-| `--agent`  | Filter by agent role   |         |
-| `--branch` | Filter by branch       |         |
-| `--file`   | Filter by changed file |         |
-
-Example (single agent detail):
-
-```text
-$ thrum agent context @implementer
-Agent: @implementer (ses_01HXF...)
-Branch: feature/auth
-Intent: Fixing token refresh (set 5m ago)
-Task: beads:thrum-42 (set 1h ago)
-
-Unmerged Commits (2):
-  abc1234 Add token refresh logic [auth.go, token.go]
-  def5678 Fix expiry check [auth.go]
-
-Changed Files (vs main): 3
-  internal/auth/auth.go
-  internal/auth/token.go
-  internal/auth/token_test.go
-
-Uncommitted: 1
-  internal/auth/refresh.go
-```
-
 ### thrum agent delete
 
 Delete an agent and all its associated data. This removes the identity file
@@ -1071,8 +971,7 @@ $ thrum session heartbeat --add-scope module:auth
 ### thrum session set-intent
 
 Set a free-text description of what the agent is currently working on. Appears
-in `thrum agent list --context` and `thrum agent context`. Pass an empty string
-to clear.
+in `thrum agent list --context`. Pass an empty string to clear.
 
 ```text
 thrum session set-intent TEXT
@@ -1088,8 +987,7 @@ $ thrum session set-intent "Refactoring login flow"
 ### thrum session set-task
 
 Set the current task identifier for the session (e.g., a beads issue ID).
-Appears in `thrum agent list --context` and `thrum agent context`. Pass an empty
-string to clear.
+Appears in `thrum agent list --context`. Pass an empty string to clear.
 
 ```text
 thrum session set-task TASK
@@ -1100,164 +998,6 @@ Example:
 ```text
 $ thrum session set-task beads:thrum-42
 ✓ Task set: beads:thrum-42
-```
-
-## Groups
-
-### thrum group create
-
-Create a named group for targeted messaging. Groups contain agents and roles.
-
-```text
-thrum group create NAME [flags]
-```
-
-| Flag            | Description                      | Default |
-| --------------- | -------------------------------- | ------- |
-| `--description` | Human-readable group description |         |
-
-The `@everyone` group is created automatically on daemon startup and includes
-all agents.
-
-Example:
-
-```text
-$ thrum group create reviewers --description "Code review team"
-✓ Group created: reviewers
-
-$ thrum group create backend --description "Backend developers"
-✓ Group created: backend
-```
-
-### thrum group delete
-
-Delete a group by name. The `@everyone` group is protected and cannot be
-deleted.
-
-```text
-thrum group delete NAME
-```
-
-Example:
-
-```text
-$ thrum group delete reviewers
-✓ Group deleted: reviewers
-
-$ thrum group delete @everyone
-✗ Cannot delete protected group: @everyone
-```
-
-### thrum group add
-
-Add a member to a group. Members can be agents or roles.
-
-```text
-thrum group add GROUP MEMBER
-```
-
-**Member types:**
-
-- `@alice` or `alice` — Specific agent by name
-- `--role planner` — All agents with role "planner"
-
-Example:
-
-```text
-# Add specific agent
-$ thrum group add reviewers @alice
-✓ Added agent alice to group reviewers
-
-# Add all agents with a role
-$ thrum group add reviewers --role reviewer
-✓ Added role reviewer to group reviewers
-```
-
-### thrum group remove
-
-Remove a member from a group.
-
-```text
-thrum group remove GROUP MEMBER
-```
-
-Uses the same member detection as `group add`.
-
-Example:
-
-```text
-$ thrum group remove reviewers @alice
-✓ Removed agent alice from group reviewers
-```
-
-### thrum group list
-
-List all groups in the system.
-
-```text
-thrum group list
-```
-
-Example:
-
-```text
-$ thrum group list
-Groups (3):
-
-@everyone
-  Description: All registered agents
-  Members:     (implicit - all agents)
-  Created:     2026-02-09 10:00:00
-
-reviewers
-  Description: Code review team
-  Members:     2
-  Created:     2026-02-09 10:15:00
-
-backend
-  Description: Backend developers
-  Members:     3
-  Created:     2026-02-09 10:20:00
-```
-
-### thrum group info
-
-Show detailed information about a specific group.
-
-```text
-thrum group info NAME
-```
-
-Example:
-
-```text
-$ thrum group info reviewers
-Group: reviewers
-  Description: Code review team
-  Created:     2026-02-09 10:15:00
-  Created by:  alice
-  Members:     2
-
-  Members:
-    - @alice (agent)
-    - reviewer (role)
-```
-
-### thrum group members
-
-List members of a group.
-
-```text
-thrum group members NAME
-```
-
-Example:
-
-```text
-$ thrum group members reviewers
-Members of reviewers (2):
-  - @alice (agent)
-  - reviewer (role)
 ```
 
 ## Coordination
@@ -1421,70 +1161,6 @@ $ thrum context sync
 ```
 
 ## Notifications
-
-### thrum subscribe
-
-Subscribe to push notifications. Subscription types are mutually exclusive:
-specify exactly one of `--scope`, `--mention`, or `--all`.
-
-```text
-thrum subscribe [flags]
-```
-
-| Flag        | Description                                     | Default |
-| ----------- | ----------------------------------------------- | ------- |
-| `--scope`   | Subscribe to scope (format: `type:value`)       |         |
-| `--mention` | Subscribe to mentions of role (format: `@role`) |         |
-| `--all`     | Subscribe to all messages (firehose)            | `false` |
-
-Example:
-
-```text
-$ thrum subscribe --scope module:auth
-✓ Subscription created: #42
-  Session:    ses_01HXF2A9...
-  Created:    2026-02-03 10:00:00
-```
-
-### thrum unsubscribe
-
-Remove a subscription by ID.
-
-```text
-thrum unsubscribe SUBSCRIPTION_ID
-```
-
-Example:
-
-```text
-$ thrum unsubscribe 42
-✓ Subscription #42 removed
-```
-
-### thrum subscriptions
-
-List all active subscriptions for the current session.
-
-```text
-thrum subscriptions
-```
-
-Example:
-
-```text
-$ thrum subscriptions
-Active subscriptions (2):
-
-┌─ Subscription #42
-│  Type:       Scope (module:auth)
-│  Created:    2026-02-03 10:00:00 (2h ago)
-└─
-
-┌─ Subscription #43
-│  Type:       Mention (@reviewer)
-│  Created:    2026-02-03 10:05:00 (1h55m ago)
-└─
-```
 
 ### thrum wait
 
@@ -2395,24 +2071,24 @@ WORKTREE                            BRANCH              HEAD       AGENT        
 ## Monitor Jobs
 
 Run a long-lived command, filter its output through a regex, and deliver
-matching lines as Thrum messages to an agent or group. Jobs persist across
-daemon restarts. Max 100 concurrent jobs.
+matching lines as Thrum messages to an agent. Jobs persist across daemon
+restarts. Max 100 concurrent jobs.
 
 The command must come after `--`:
 
 ```text
-thrum monitor add --name <name> --match <regex> --to @<agent> [flags] -- <command> [args...]
+thrum monitor start --name <name> --match <regex> --to @<agent> [flags] -- <command> [args...]
 ```
 
-### thrum monitor add
+### thrum monitor start
 
-Start a monitor job.
+Start a monitor job. (`add` is a retained alias.)
 
 | Flag         | Description                                           | Default | Required |
 | ------------ | ----------------------------------------------------- | ------- | -------- |
 | `--name`     | Unique monitor name                                   |         | yes      |
 | `--match`    | Regex pattern — lines that match trigger a message    |         | yes      |
-| `--to`       | Target agent or group (e.g., `@coordinator`)          |         | yes      |
+| `--to`       | Target agent (`@agent_name` or `@everyone`)           |         | yes      |
 | `--debounce` | Leading-edge debounce window (minimum 30s)            | `60s`   |          |
 | `--env`      | Environment variable in `KEY=VALUE` form (repeatable) |         |          |
 | `--cwd`      | Working directory for the command                     | `.`     |          |
@@ -2424,13 +2100,13 @@ fire again. Lines longer than 2KB are truncated.
 Example:
 
 ```text
-$ thrum monitor add --name app-errors --match "ERROR|FATAL" --to @coordinator \
+$ thrum monitor start --name app-errors --match "ERROR|FATAL" --to @coordinator_main \
     --debounce 120s -- tail -F /var/log/app.log
-Started monitor app-errors (mon_01KNTF2A9...) — target @coordinator
+Started monitor app-errors (mon_01KNTF2A9...) — target @coordinator_main
 
-$ thrum monitor add --name ci-failures --match "FAIL" --to @team \
+$ thrum monitor start --name ci-failures --match "FAIL" --to @impl_ci \
     --env CI_ENV=staging -- ./scripts/run-tests.sh
-Started monitor ci-failures (mon_01KNTG3B1...) — target @team
+Started monitor ci-failures (mon_01KNTG3B1...) — target @impl_ci
 ```
 
 ### thrum monitor list
@@ -2541,14 +2217,14 @@ Restarted — new ID: mon_01KNTH4C2...
 Save and restore conversation snapshots for session restart. See
 [Session Restart & Context Recovery](session-restart.md) for the full story.
 
-### thrum restart save
+### thrum tmux snapshot save
 
 Save a conversation snapshot for the current agent. Extracts user + assistant
 text from the Claude Code JSONL transcript, truncates to the configured line
 limit, and writes to `.thrum/restart/<agent>.md`.
 
 ```text
-thrum restart save [flags]
+thrum tmux snapshot save [flags]
 ```
 
 | Flag       | Description                                                            | Default          |
@@ -2558,37 +2234,37 @@ thrum restart save [flags]
 Example:
 
 ```text
-$ thrum restart save
+$ thrum tmux snapshot save
 Restart snapshot saved for impl_api (847 lines)
 
-$ thrum restart save --reason context-threshold
+$ thrum tmux snapshot save --reason context-threshold
 Restart snapshot saved for impl_api (847 lines)
 ```
 
-### thrum restart restore
+### thrum tmux snapshot restore
 
 Output a restart snapshot to stdout and delete the file. Manual escape hatch for
 non-tmux agents or when `thrum prime` is not used.
 
 ```text
-thrum restart restore
+thrum tmux snapshot restore
 ```
 
 Exits with code 1 if no snapshot exists.
 
-### thrum restart check
+### thrum tmux snapshot check
 
 Check if a restart snapshot exists for the current agent. Exits 0 if yes, 1 if
 no. No stdout — for scripting.
 
 ```text
-thrum restart check
+thrum tmux snapshot check
 ```
 
 Example:
 
 ```text
-if thrum restart check; then echo "Snapshot ready"; fi
+if thrum tmux snapshot check; then echo "Snapshot ready"; fi
 ```
 
 ## MCP Server
@@ -2610,9 +2286,7 @@ thrum mcp serve [flags]
 Requires the Thrum daemon to be running. The `--agent-id` flag sets `THRUM_NAME`
 internally for identity resolution.
 
-**MCP Tools provided (10 total):**
-
-**Core messaging (4):**
+**MCP Tools provided (4 total):**
 
 | Tool               | Description                                                      |
 | ------------------ | ---------------------------------------------------------------- |
@@ -2620,17 +2294,6 @@ internally for identity resolution.
 | `check_messages`   | Poll for unread messages mentioning this agent (auto-marks read) |
 | `wait_for_message` | Block until a message arrives (WebSocket push) or timeout        |
 | `list_agents`      | List registered agents with active/offline status                |
-
-**Group management (6):**
-
-| Tool                  | Description                                                      |
-| --------------------- | ---------------------------------------------------------------- |
-| `create_group`        | Create a named messaging group                                   |
-| `delete_group`        | Delete a messaging group                                         |
-| `add_group_member`    | Add an agent or role as a member of a group                      |
-| `remove_group_member` | Remove a member from a group                                     |
-| `list_groups`         | List all messaging groups                                        |
-| `get_group`           | Get group details including members (expand=true resolves roles) |
 
 **Configuration in Claude Code's `.claude/settings.json`:**
 
@@ -2741,7 +2404,7 @@ Messages and events are stored on the `a-sync` Git branch in a worktree at
 
 ## Next Steps
 
-- [Messaging](messaging.md) — how send, inbox, reply, and groups work together
+- [Messaging](messaging.md) — how send, inbox, and reply work together
 - [RPC API Reference](rpc-api.md) — the underlying JSON-RPC methods the CLI
   wraps
 - [Quickstart Guide](quickstart.md) — get up and running in 5 minutes

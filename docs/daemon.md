@@ -209,16 +209,16 @@ on both the Unix socket and WebSocket servers unless noted.
 
 **Registered handlers:**
 
-| Category         | Methods                                                                                                     | Notes                                                    |
-| ---------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| **Health**       | `health`                                                                                                    |                                                          |
-| **Agent**        | `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`, `agent.delete`, `agent.cleanup`        | `delete` and `cleanup` are Unix socket only              |
-| **Session**      | `session.start`, `session.end`, `session.list`, `session.heartbeat`, `session.setIntent`, `session.setTask` |                                                          |
-| **Message**      | `message.send`, `message.get`, `message.list`, `message.edit`, `message.delete`, `message.markRead`         |                                                          |
-| **Subscription** | `subscribe`, `unsubscribe`, `subscriptions.list`                                                            | Subscriptions auto-cleanup on session end (v0.4.3)       |
-| **Sync**         | `sync.force`, `sync.status`                                                                                 | Both Unix socket and WebSocket                           |
-| **User**         | `user.register`, `user.identify`                                                                            | `user.register` restricted to WebSocket transport        |
-| **Monitor**      | `monitor.start`, `monitor.list`, `monitor.show`, `monitor.stop`, `monitor.logs`, `monitor.restart`          | Unix socket only — absent from peer/Telegram dispatchers |
+| Category         | Methods                                                                                                     | Notes                                                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Health**       | `health`                                                                                                    |                                                                                                                |
+| **Agent**        | `agent.register`, `agent.list`, `agent.whoami`, `agent.listContext`, `agent.delete`, `agent.cleanup`        | `delete` and `cleanup` are Unix socket only                                                                    |
+| **Session**      | `session.start`, `session.end`, `session.list`, `session.heartbeat`, `session.setIntent`, `session.setTask` |                                                                                                                |
+| **Message**      | `message.send`, `message.get`, `message.list`, `message.edit`, `message.delete`, `message.markRead`         |                                                                                                                |
+| **Subscription** | `subscribe`, `unsubscribe`, `subscriptions.list`                                                            | Internal/RPC-only — CLI commands removed; use `thrum wait` from the CLI. Auto-cleanup on session end (v0.4.3). |
+| **Sync**         | `sync.force`, `sync.status`                                                                                 | Both Unix socket and WebSocket                                                                                 |
+| **User**         | `user.register`, `user.identify`                                                                            | `user.register` restricted to WebSocket transport                                                              |
+| **Monitor**      | `monitor.start`, `monitor.list`, `monitor.show`, `monitor.stop`, `monitor.logs`, `monitor.restart`          | Unix socket only — absent from peer/Telegram dispatchers                                                       |
 
 See [RPC API Reference](rpc-api.md) for full documentation.
 

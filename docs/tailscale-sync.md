@@ -113,7 +113,7 @@ thrum peer list
 thrum peer status
 
 # Check health endpoint
-thrum status
+thrum overview
 ```
 
 ## Architecture
@@ -291,9 +291,9 @@ thrum peer remove <name>
 thrum peer status
 ```
 
-### `thrum status`
+### `thrum overview`
 
-When Tailscale sync is enabled, `thrum status` includes sync information:
+When Tailscale sync is enabled, `thrum overview` includes sync information:
 
 ```text
 Tailscale Sync: enabled

@@ -1,10 +1,10 @@
 ## Thrum Messaging System
 
 > **TL;DR:** Send messages with `thrum send`, check them with `thrum inbox`,
-> reply with `thrum reply`. Messages support scopes, mentions, and groups for
-> targeting specific recipients. The Quick Reference tables below have every
-> command. Implementation details (storage schemas, indexes) are at the bottom —
-> you don't need them for normal use.
+> reply with `thrum reply`. Messages support scopes and mentions for targeting
+> specific recipients. The Quick Reference tables below have every command.
+> Implementation details (storage schemas, indexes) are at the bottom — you
+> don't need them for normal use.
 
 ## Overview
 
@@ -24,8 +24,8 @@ managing messages.
 
 Same-repo messaging is the default. When you want agents in different repos, or
 on different machines, to talk to each other, you pair their daemons as peers.
-The messaging API is the same — `thrum send`, `thrum inbox`, groups, threads —
-but messages route through peers instead of staying local.
+The messaging API is the same — `thrum send`, `thrum inbox`, threads — but
+messages route through peers instead of staying local.
 
 For pairing, address handling, and the two transports (same-machine and
 Tailscale), see [Peers](peers.md).
@@ -66,14 +66,14 @@ SQLite.
 
 ### Flags
 
-| Flag           | Format                  | Description                                                 |
-| -------------- | ----------------------- | ----------------------------------------------------------- |
-| `--to`         | `@name` or `@group`     | Recipient — agent name, group, or role (adds a mention ref) |
-| `--scope`      | `type:value`            | Attach scope context (repeatable)                           |
-| `--ref`        | `type:value`            | Attach reference (repeatable)                               |
-| `--mention`    | `@role`                 | Mention an agent role (repeatable)                          |
-| `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)                        |
-| `--structured` | JSON string             | Typed payload for machine-readable data                     |
+| Flag           | Format                  | Description                                            |
+| -------------- | ----------------------- | ------------------------------------------------------ |
+| `--to`         | `@name`                 | Recipient — `@agent_name` or `@everyone` for broadcast |
+| `--scope`      | `type:value`            | Attach scope context (repeatable)                      |
+| `--ref`        | `type:value`            | Attach reference (repeatable)                          |
+| `--mention`    | `@role`                 | Mention an agent role (repeatable)                     |
+| `--format`     | `markdown\|plain\|json` | Content format (default: `markdown`)                   |
+| `--structured` | JSON string             | Typed payload for machine-readable data                |
 
 ### Direct Messaging with --to
 
@@ -86,11 +86,8 @@ stored as a `mention` ref on the message.
 thrum send "Please review PR #42" --to @reviewer
 thrum send "Please review PR #42" --mention @reviewer
 
-# Send to a group
+# Broadcast to all agents
 thrum send "Deploy complete" --to @everyone
-
-# Send to a custom group
-thrum send "Backend review needed" --to @backend
 ```
 
 The `@` prefix is optional -- `--to reviewer` and `--to @reviewer` both work.
@@ -125,7 +122,6 @@ or a role:
 | `@furiosa`        | Routes directly to agent named `furiosa`                                          |
 | `@reviewer`       | Routes via the auto-created `reviewer` role group (all agents with role reviewer) |
 | `@everyone`       | Broadcasts to all agents                                                          |
-| `@mygroup`        | Routes to the named custom group                                                  |
 | `@sf:coordinator` | Routes to proxy agent `sf:coordinator` (cross-repo via peer transport, v0.7.0)    |
 
 **Important:** Sending to an unknown name or group is a **hard error** — the
@@ -529,64 +525,12 @@ thrum send "Implemented feature from design doc, closes issue" \
   --ref url:https://docs.example.com/design
 ```
 
-## Groups
+## Broadcast
 
-Groups let you address a collection of agents and roles with a single
-`--to @groupname`.
-
-### Built-in Groups
-
-**`@everyone`** — Created automatically on daemon startup. All registered agents
-are implicit members. You can't delete it.
+Use `--to @everyone` to send to all agents:
 
 ```bash
-# Send to all agents
 thrum send "Deploy complete" --to @everyone
-```
-
-### Creating Custom Groups
-
-```bash
-# Create a group
-thrum group create reviewers --description "Code review team"
-
-# Add members (agents or roles)
-thrum group add reviewers @alice
-thrum group add reviewers --role reviewer
-
-# Send to the group
-thrum send "PR ready for review" --to @reviewers
-```
-
-### Group Operations
-
-| Command                           | Description                                     |
-| --------------------------------- | ----------------------------------------------- |
-| `thrum group create NAME`         | Create a new group                              |
-| `thrum group delete NAME`         | Delete a group (cannot delete `@everyone`)      |
-| `thrum group add GROUP MEMBER`    | Add agent or role to group                      |
-| `thrum group remove GROUP MEMBER` | Remove a member                                 |
-| `thrum group list`                | List all groups                                 |
-| `thrum group info NAME`           | Show group details                              |
-| `thrum group members NAME`        | List members (`--expand` resolves to agent IDs) |
-
-### Message Resolution
-
-The daemon resolves group membership at **read time**, not send time. That
-means:
-
-- Agents you add to a group after a message was sent still see that message
-- `@everyone` dynamically includes all registered agents
-- Role-based members resolve to all agents with that role at query time
-
-### Broadcast
-
-Both `--broadcast` and `--to @everyone` send to all agents:
-
-```bash
-thrum send "Deploy complete" --broadcast
-thrum send "Deploy complete" --to @everyone
-thrum send "Deploy complete" --everyone
 ```
 
 ## Global Flags
@@ -719,11 +663,10 @@ Optimized for common query patterns:
 ## MCP Server Integration
 
 The MCP server (`thrum mcp serve`) gives AI agents running in Claude Code or
-similar environments native messaging tools. It exposes 10 MCP tools: 4 core
-messaging tools (`send_message`, `check_messages`, `wait_for_message`,
-`list_agents`) and 6 group management tools. MCP tools run the same underlying
-RPC methods but add `@role` addressing and real-time WebSocket push
-notifications.
+similar environments native messaging tools. It exposes 4 MCP tools:
+`send_message`, `check_messages`, `wait_for_message`, and `list_agents`. MCP
+tools run the same underlying RPC methods but add `@role` addressing and
+real-time WebSocket push notifications.
 
 See [MCP Server](mcp-server.md) for the complete tools reference and
 configuration.

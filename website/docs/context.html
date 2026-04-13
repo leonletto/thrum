@@ -115,10 +115,10 @@ read:** `thrum message read --all` **Send message:**
 `thrum send &quot;message&quot; --to @&lt;agent_name&gt;` — ALWAYS use the specific agent name
 (e.g., `@coordinator_main`), NEVER the role (e.g., `@coordinator`). Role names
 fan out to ALL agents with that role. Run `thrum team` to find exact names.
-**Reply:** `thrum reply &lt;MSG_ID&gt; &quot;response&quot;` **Status:** `thrum overview` **Who&#39;s
-online:** `thrum team` **Save context:** Use `/thrum:update-project` skill.
-**NEVER run `thrum context save` manually** — it overwrites accumulated session
-state.
+**Reply:** `thrum reply &lt;MSG_ID&gt; &quot;response&quot;` **Status:** `thrum overview`
+**Who&#39;s online:** `thrum team` **Save context:** Use `/thrum:update-project`
+skill. **NEVER run `thrum context save` manually** — it overwrites accumulated
+session state.
 
 ## Background Message Listener
 
@@ -405,7 +405,8 @@ echo &quot;# Decision: Using JWT with refresh tokens
 - Storage: Redis for refresh tokens
 - Rate limit: 100 req/min per IP&quot; | thrum context save</code></pre>
 <h3>Integration with thrum overview</h3>
-<p>The <code>thrum overview</code> command shows context file size and age when context exists:</p>
+<p>The <code>thrum overview</code> command shows context file size and age when context
+exists:</p>
 <pre><code>$ thrum overview
 You: @implementer (furiosa)
 Session: active for 2h15m

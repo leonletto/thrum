@@ -2,7 +2,7 @@
 
 > **TL;DR:** The MCP server lets AI agents use Thrum through native MCP tools
 > instead of CLI shell-outs. Start with `thrum mcp serve`. It provides 4 core
-> messaging tools plus 6 group management tools — no polling, no wasted tokens.
+> messaging tools — no polling, no wasted tokens.
 >
 > **See also:** [Daemon Architecture](daemon.md) for the underlying daemon the
 > MCP server connects to, [Identity](identity.md) for agent identity resolution.
@@ -15,8 +15,8 @@ It runs as a long-lived child process (`thrum mcp serve`) communicating over
 stdio with JSON-RPC, and connects to the Thrum daemon via Unix socket for
 message operations and via WebSocket for real-time push notifications.
 
-The server provides 11 MCP tools: 4 for core messaging operations, 6 for group
-management, and 1 deprecated broadcast tool.
+The server provides 5 MCP tools: 4 for core messaging operations and 1
+deprecated broadcast tool.
 
 The primary motivation is eliminating polling overhead. Without MCP, agents must
 periodically call `thrum inbox` (burning tokens and context). With MCP, a cheap
@@ -54,7 +54,7 @@ Claude Code (Opus/Sonnet)
 ```text
 internal/mcp/
   server.go    -- NewServer(), tool registration, Run(), InitWaiter()
-  tools.go     -- send_message, check_messages, list_agents, group management handlers
+  tools.go     -- send_message, check_messages, list_agents handlers
   waiter.go    -- WebSocket client, notification routing, wait_for_message handler
   types.go     -- MCP-specific input/output structs
 
@@ -73,8 +73,7 @@ cmd/thrum/mcp.go  -- thrum mcp serve cobra command
    `identity.GenerateAgentID(repoID, role, module, name)`
 7. Create MCP server with the official Go SDK
    (`github.com/modelcontextprotocol/go-sdk/mcp`)
-8. Register all 11 tool handlers (4 core messaging + 6 group management + 1
-   deprecated)
+8. Register all 5 tool handlers (4 core messaging + 1 deprecated)
 9. Initialize WebSocket waiter (best-effort -- reads port from
    `.thrum/var/ws.port`)
    - Connect to `ws://localhost:{port}/ws`
@@ -109,7 +108,7 @@ When Claude Code terminates the process (closes stdin) or a signal is received
   mutex.
 - **Best-effort WebSocket**: If the WebSocket connection fails at startup, the
   MCP server still operates -- only `wait_for_message` returns errors. The other
-  10 tools work via Unix socket RPC.
+  tools work via Unix socket RPC.
 
 ## Usage
 
@@ -296,143 +295,6 @@ List all registered agents and their status.
 
 **Daemon RPC:** `agent.list`
 
-### create_group
-
-Create a named group for targeted messaging.
-
-**Input:**
-
-| Parameter     | Type   | Required | Description                      |
-| ------------- | ------ | -------- | -------------------------------- |
-| `name`        | string | yes      | Group name (e.g., `reviewers`)   |
-| `description` | string | no       | Human-readable group description |
-
-**Output:**
-
-| Field    | Type   | Description               |
-| -------- | ------ | ------------------------- |
-| `status` | string | `created`                 |
-| `name`   | string | Name of the created group |
-
-**Daemon RPC:** `group.create`
-
-### delete_group
-
-Delete a group by name. The `@everyone` group is protected and cannot be
-deleted.
-
-**Input:**
-
-| Parameter | Type   | Required | Description          |
-| --------- | ------ | -------- | -------------------- |
-| `name`    | string | yes      | Group name to delete |
-
-**Output:**
-
-| Field    | Type   | Description               |
-| -------- | ------ | ------------------------- |
-| `status` | string | `deleted`                 |
-| `name`   | string | Name of the deleted group |
-
-**Daemon RPC:** `group.delete`
-
-### add_group_member
-
-Add a member (agent or role) to a group.
-
-**Input:**
-
-| Parameter      | Type   | Required | Description                 |
-| -------------- | ------ | -------- | --------------------------- |
-| `group`        | string | yes      | Group name to add member to |
-| `member_type`  | string | yes      | `agent` or `role`           |
-| `member_value` | string | yes      | Agent name or role name     |
-
-**Output:**
-
-| Field          | Type   | Description           |
-| -------------- | ------ | --------------------- |
-| `status`       | string | `added`               |
-| `group`        | string | Group name            |
-| `member_type`  | string | Type of member added  |
-| `member_value` | string | Value of member added |
-
-**Daemon RPC:** `group.member.add`
-
-### remove_group_member
-
-Remove a member from a group.
-
-**Input:**
-
-| Parameter      | Type   | Required | Description                      |
-| -------------- | ------ | -------- | -------------------------------- |
-| `group`        | string | yes      | Group name to remove member from |
-| `member_type`  | string | yes      | `agent` or `role`                |
-| `member_value` | string | yes      | Agent name or role name          |
-
-**Output:**
-
-| Field          | Type   | Description             |
-| -------------- | ------ | ----------------------- |
-| `status`       | string | `removed`               |
-| `group`        | string | Group name              |
-| `member_type`  | string | Type of member removed  |
-| `member_value` | string | Value of member removed |
-
-**Daemon RPC:** `group.member.remove`
-
-### list_groups
-
-List all groups in the system.
-
-**Input:**
-
-| Parameter | Type | Required | Description                 |
-| --------- | ---- | -------- | --------------------------- |
-| _(none)_  |      |          | Empty object or omit params |
-
-**Output:**
-
-| Field                   | Type    | Description                      |
-| ----------------------- | ------- | -------------------------------- |
-| `groups`                | array   | List of `GroupInfo` objects      |
-| `groups[].name`         | string  | Group name                       |
-| `groups[].description`  | string  | Group description (may be empty) |
-| `groups[].created_at`   | string  | ISO 8601 creation timestamp      |
-| `groups[].created_by`   | string  | Agent ID of creator              |
-| `groups[].member_count` | integer | Number of direct members         |
-
-**Daemon RPC:** `group.list`
-
-### get_group
-
-Get detailed information about a specific group. Supports expansion to resolve
-roles to individual agent IDs.
-
-**Input:**
-
-| Parameter | Type    | Required | Description                |
-| --------- | ------- | -------- | -------------------------- |
-| `name`    | string  | yes      | Group name                 |
-| `expand`  | boolean | no       | Resolve roles to agent IDs |
-
-**Output:**
-
-| Field                   | Type    | Description                                |
-| ----------------------- | ------- | ------------------------------------------ |
-| `name`                  | string  | Group name                                 |
-| `description`           | string  | Group description (may be empty)           |
-| `created_at`            | string  | ISO 8601 creation timestamp                |
-| `created_by`            | string  | Agent ID of creator                        |
-| `members`               | array   | List of member objects                     |
-| `members[].type`        | string  | `agent` or `role`                          |
-| `members[].id`          | string  | Agent name or role name                    |
-| `expanded_agents`       | array   | (Only if `expand=true`) List of agent IDs  |
-| `expanded_agents_count` | integer | (Only if `expand=true`) Count of agent IDs |
-
-**Daemon RPC:** `group.info` (without expand) or `group.members` (with expand)
-
 ### broadcast_message (Deprecated)
 
 > **Deprecated:** Use `send_message(to="@everyone", content="...")` instead.
@@ -570,17 +432,6 @@ mcp__thrum__send_message(to="@everyone", content="...")  # broadcast to all agen
 mcp__thrum__wait_for_message(timeout=300)
 ```
 
-**Group management:**
-
-```text
-mcp__thrum__create_group(name="backend", description="Backend team")
-mcp__thrum__add_group_member(group="backend", member_type="role", member_value="implementer")
-mcp__thrum__list_groups()
-mcp__thrum__get_group(name="backend", expand=true)
-mcp__thrum__remove_group_member(group="backend", member_type="agent", member_value="alice")
-mcp__thrum__delete_group(name="backend")
-```
-
 ## Development
 
 ### Source Files
@@ -590,7 +441,7 @@ mcp__thrum__delete_group(name="backend")
 | `internal/mcp/server.go`             | Server struct, NewServer(), Run(), InitWaiter(), tool registration |
 | `internal/mcp/tools.go`              | Tool handlers, address parsing, status derivation                  |
 | `internal/mcp/waiter.go`             | WebSocket connection, readLoop, WaitForMessage, notification queue |
-| `internal/mcp/types.go`              | Input/output structs for all 11 tools                              |
+| `internal/mcp/types.go`              | Input/output structs for all tools                                 |
 | `cmd/thrum/mcp.go`                   | Cobra command, daemon health check, waiter init, signal handling   |
 | `.claude/agents/message-listener.md` | Haiku sub-agent definition                                         |
 
@@ -610,7 +461,7 @@ Test coverage includes:
 - Message queue push/pop semantics
 - Waiter timeout and cancellation logic
 - Identity resolution
-- 18 tests passing (unit + sequential integration)
+- Tests passing (unit + sequential integration)
 
 WebSocket integration tests (requiring a running daemon WebSocket) are currently
 deferred.

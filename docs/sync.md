@@ -117,7 +117,7 @@ any code branch. It contains only JSONL event log files. This ensures:
    the working tree or index
 2. **Local-only**: Works without a remote (offline mode)
 3. **Remote push**: Automatically pushed when remote is available
-4. **Migration**: Existing repos can upgrade via `thrum migrate`
+4. **Auto-setup**: Thrum creates the branch automatically during `thrum init`
 
 The orphan branch is created using the well-known empty tree SHA
 (`4b825dc642cb6eb9a060e54bf8d69288fbee4904`), ensuring the branch has no files
@@ -383,13 +383,11 @@ on `main`:
 └── var/                  # gitignored
 ```
 
-Use `thrum migrate` to upgrade to the worktree layout. This command:
+Running `thrum init` sets up the worktree layout automatically. It:
 
 1. Creates the `a-sync` orphan branch (if not already present)
-2. Copies existing JSONL data to the new branch
-3. Sets up the sync worktree
-4. Removes old tracked files from the main branch
-5. Updates `.gitignore` to ignore `.thrum/` entirely
+2. Sets up the sync worktree
+3. Updates `.gitignore` to ignore `.thrum/` entirely
 
 ## Monitoring & Status
 
@@ -577,15 +575,6 @@ rm .thrum/var/sync.lock
 ```
 
 Then restart the daemon.
-
-### Upgrading from Old Layout
-
-If your repo still has `.thrum/events.jsonl` or `.thrum/messages/` tracked on
-`main`:
-
-```bash
-thrum migrate
-```
 
 ## Next Steps
 

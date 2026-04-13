@@ -1,12 +1,11 @@
 ---
 title: "Multi-Agent Support"
 description:
-  "Runtime presets, thrum prime, and coordination patterns for running
-  multiple AI agents across worktrees and platforms"
+  "Runtime presets, thrum prime, and coordination patterns for running multiple
+  AI agents across worktrees and platforms"
 category: "coordination"
 order: 2
-tags:
-  ["multi-agent", "runtime", "coordination", "teams", "prime"]
+tags: ["multi-agent", "runtime", "coordination", "teams", "prime"]
 last_updated: "2026-04-09"
 ---
 
@@ -531,7 +530,7 @@ still merge. The orchestrator handles the middle.
   integration for multi-agent teams
 - [Identity System](identity.md) — agent naming, registration, and per-worktree
   identity files
-- [Messaging](messaging.md) — full send/receive/reply reference including
-  scopes and mentions
+- [Messaging](messaging.md) — full send/receive/reply reference including scopes
+  and mentions
 - [Coordinate Two Agents](guides/coordinate-two-agents.md) — step-by-step
   walkthrough of the most common setup

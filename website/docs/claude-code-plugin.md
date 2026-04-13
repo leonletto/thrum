@@ -217,8 +217,8 @@ in your project's `.claude/settings.json`:
 
 This provides 4 core messaging tools (`send_message`, `check_messages`,
 `wait_for_message`, `list_agents`) plus `broadcast_message` (deprecated — use
-`send_message(to="@everyone")` instead). See [MCP Server](mcp-server.md) for
-the full API.
+`send_message(to="@everyone")` instead). See [MCP Server](mcp-server.md) for the
+full API.
 
 **Plugin vs MCP:** The plugin's slash commands use the CLI (`Bash(thrum:*)`).
 The MCP server provides native tool calls. Both work — the plugin is simpler to

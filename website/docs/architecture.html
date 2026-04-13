@@ -106,8 +106,8 @@ messages and agent activity. Served from the same port as WebSocket (default
 tools over stdio, enabling LLM agents (e.g., Claude Code) to communicate
 directly through MCP protocol without CLI shell-outs. Connects to the daemon via
 Unix socket for RPC and WebSocket for real-time push notifications. Provides 4
-core messaging tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>,
-and <code>list_agents</code>.</p>
+core messaging tools: <code>send_message</code>, <code>check_messages</code>, <code>wait_for_message</code>, and
+<code>list_agents</code>.</p>
 <h2>Key Features</h2>
 <h3>1. Persistent Messaging</h3>
 <p>Messages are stored in append-only JSONL logs on a dedicated <code>a-sync</code> orphan
@@ -235,7 +235,8 @@ work, intelligent handoffs.</p>
 <code>session.setIntent</code>, <code>session.setTask</code></li>
 <li><code>message.send</code>, <code>message.get</code>, <code>message.list</code>, <code>message.edit</code>,
 <code>message.delete</code>, <code>message.markRead</code></li>
-<li><code>subscribe</code>, <code>unsubscribe</code>, <code>subscriptions.list</code> (internal — used by MCP server and WebSocket clients)</li>
+<li><code>subscribe</code>, <code>unsubscribe</code>, <code>subscriptions.list</code> (internal — used by MCP
+server and WebSocket clients)</li>
 <li><code>sync.force</code>, <code>sync.status</code></li>
 <li><code>peer.start_pairing</code>, <code>peer.wait_pairing</code>, <code>peer.join</code>, <code>peer.list</code>,
 <code>peer.status</code>, <code>peer.remove</code>, <code>peer.configure</code>, <code>peer.address_changed</code></li>
@@ -268,8 +269,8 @@ thrum context show
 # Share context across worktrees (manual sync)
 thrum context sync</code></pre>
 <p>Context files live at <code>.thrum/context/{agent-name}.md</code> and appear in
-<code>thrum overview</code> output. Use the <code>/thrum:update-project</code> skill in Claude Code for
-guided context updates.</p>
+<code>thrum overview</code> output. Use the <code>/thrum:update-project</code> skill in Claude Code
+for guided context updates.</p>
 <h2>Storage Architecture</h2>
 <p>Thrum uses event sourcing with CQRS:</p>
 <pre><code>┌─────────────────────────────────────────────────────────────┐

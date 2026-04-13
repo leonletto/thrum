@@ -137,7 +137,7 @@ cp -R codex-plugin/skills/thrum-* "${CODEX_HOME:-$HOME/.codex}/skills/"
 
 - Check daemon status: `thrum daemon status`
 - Verify identity/session: `thrum whoami && thrum session start`
-- Confirm repo initialization: `thrum status`
+- Confirm repo initialization: `thrum overview`
 
 ## Codex Bundle vs Claude Plugin
 
