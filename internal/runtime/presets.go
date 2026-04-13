@@ -95,6 +95,16 @@ var BuiltinPresets = map[string]RuntimePreset{
 		MCPConfigPath:    "",
 		SetupNotes:       "CLI-only integration (MCP support unknown)",
 	},
+	"shell": {
+		Name:             "shell",
+		DisplayName:      "Shell (bash)",
+		Command:          "bash",
+		MCPSupported:     false,
+		HooksSupported:   false,
+		InstructionsFile: "",
+		MCPConfigPath:    "",
+		SetupNotes:       "Plain bash shell — useful for testing and manual operations without an AI runtime",
+	},
 }
 
 // userPresetsConfig is the JSON schema for ~/.config/thrum/runtimes.json.
