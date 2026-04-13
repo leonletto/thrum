@@ -405,6 +405,22 @@ Examples:
 				return nil
 			}
 
+			// Start daemon if not already running
+			if _, err := getClient(); err != nil {
+				if startErr := cli.DaemonStart(flagRepo, false); startErr != nil && !strings.Contains(startErr.Error(), "already running") {
+					fmt.Fprintf(os.Stderr, "Warning: could not auto-start daemon: %v\n", startErr)
+					fmt.Println("Start manually: thrum daemon start")
+				} else if !flagQuiet {
+					if wsPort := cli.ReadWebSocketPort(flagRepo); wsPort > 0 {
+						fmt.Printf("✓ Daemon started — http://localhost:%d\n", wsPort)
+					} else {
+						fmt.Println("✓ Daemon started")
+					}
+				}
+			} else if !flagQuiet {
+				fmt.Println("✓ Daemon already running")
+			}
+
 			fmt.Println("\nDone. Run 'thrum quickstart --name <name> --role <role> --module <module>' to register an agent.")
 
 			return nil
