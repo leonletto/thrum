@@ -205,7 +205,9 @@ cmd_exec() {
 
   [[ $# -eq 0 ]] && die "exec: no command specified (use -- before command)"
 
-  local cmd="$*"
+  # Build the command string, preserving quoting for each argument.
+  local cmd
+  cmd=$(printf '%q ' "$@")
   local session="tmux-exec-$$-$(date +%s)"
 
   # Create ephemeral session
