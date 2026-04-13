@@ -320,7 +320,7 @@ works without network.
 | `thrum sync status`                             | `sync.status` RPC                                             |
 | `thrum agent delete NAME`                       | `agent.delete` RPC                                            |
 | `thrum agent cleanup`                           | `agent.cleanup` RPC                                           |
-| `thrum monitor add/list/show/stop/logs/restart` | `monitor.*` RPCs (Unix socket only)                           |
+| `thrum monitor start/list/show/stop/logs/restart` | `monitor.*` RPCs (Unix socket only)                         |
 
 ### For the Web UI
 

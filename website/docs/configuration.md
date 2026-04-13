@@ -464,7 +464,7 @@ they are per-agent or volatile state, not global repository settings.
 
 Monitor jobs watch long-running processes and emit matches as synthetic Thrum
 messages. Configuration lives in the monitor state file managed by
-`thrum monitor add/list/show/stop/logs/restart` — not in `config.json`.
+`thrum monitor start/list/show/stop/logs/restart` — not in `config.json`.
 
 Key behavior:
 

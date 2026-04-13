@@ -398,7 +398,7 @@ for AI agent coordination.</p>
 <td>List worktrees with thrum agent info</td>
 </tr>
 <tr>
-<td><code>thrum monitor add</code></td>
+<td><code>thrum monitor start</code></td>
 <td>Start a new monitor job (regex filter + message delivery)</td>
 </tr>
 <tr>
@@ -2461,9 +2461,9 @@ WORKTREE                            BRANCH              HEAD       AGENT        
 matching lines as Thrum messages to an agent. Jobs persist across daemon
 restarts. Max 100 concurrent jobs.</p>
 <p>The command must come after <code>--</code>:</p>
-<pre><code>thrum monitor add --name &lt;name&gt; --match &lt;regex&gt; --to @&lt;agent&gt; [flags] -- &lt;command&gt; [args...]</code></pre>
-<h3>thrum monitor add</h3>
-<p>Start a monitor job.</p>
+<pre><code>thrum monitor start --name &lt;name&gt; --match &lt;regex&gt; --to @&lt;agent&gt; [flags] -- &lt;command&gt; [args...]</code></pre>
+<h3>thrum monitor start</h3>
+<p>Start a monitor job. (<code>add</code> is a retained alias.)</p>
 <table>
 <thead>
 <tr>
@@ -2487,7 +2487,7 @@ restarts. Max 100 concurrent jobs.</p>
 </tr>
 <tr>
 <td><code>--to</code></td>
-<td>Target agent or group (e.g., <code>@coordinator</code>)</td>
+<td>Target agent (<code>@agent_name</code> or <code>@everyone</code>)</td>
 <td></td>
 <td>yes</td>
 </tr>
@@ -2514,13 +2514,13 @@ restarts. Max 100 concurrent jobs.</p>
 immediately, then the monitor goes quiet for the debounce window before it can
 fire again. Lines longer than 2KB are truncated.</p>
 <p>Example:</p>
-<pre><code>$ thrum monitor add --name app-errors --match &quot;ERROR|FATAL&quot; --to @coordinator \
+<pre><code>$ thrum monitor start --name app-errors --match &quot;ERROR|FATAL&quot; --to @coordinator_main \
     --debounce 120s -- tail -F /var/log/app.log
-Started monitor app-errors (mon_01KNTF2A9...) — target @coordinator
+Started monitor app-errors (mon_01KNTF2A9...) — target @coordinator_main
 
-$ thrum monitor add --name ci-failures --match &quot;FAIL&quot; --to @team \
+$ thrum monitor start --name ci-failures --match &quot;FAIL&quot; --to @impl_ci \
     --env CI_ENV=staging -- ./scripts/run-tests.sh
-Started monitor ci-failures (mon_01KNTG3B1...) — target @team</code></pre>
+Started monitor ci-failures (mon_01KNTG3B1...) — target @impl_ci</code></pre>
 <h3>thrum monitor list</h3>
 <p>List monitor jobs. Shows running jobs by default.</p>
 <pre><code>thrum monitor list [--all]</code></pre>

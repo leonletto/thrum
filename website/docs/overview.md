@@ -75,7 +75,7 @@ need it.
 - **Single identity per worktree** — quickstart cleans up old identity files
   after writing the new one. You can't end up with a stale identity causing
   auto-select errors.
-- **Monitor Jobs v1** — `thrum monitor add/list/show/stop/logs/restart`. Attach
+- **Monitor Jobs v1** — `thrum monitor start/list/show/stop/logs/restart`. Attach
   a monitor to any long-running process and it emits matches as synthetic Thrum
   messages. Leading-edge debounce (default 60s, min 30s), auto-persist,
   local-socket-only.

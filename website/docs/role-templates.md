@@ -106,7 +106,7 @@ Reference templates in `toolkit/templates/roles/`:
 
 > **`monitor-*.md` vs `thrum monitor`:** These role templates configure _agent
 > behavior_ for agents whose job is monitoring (e.g., watching logs, reporting
-> alerts). They're unrelated to `thrum monitor add/list/show/stop/logs/restart`,
+> alerts). They're unrelated to `thrum monitor start/list/show/stop/logs/restart`,
 > which is a separate daemon feature for running long-lived process monitors
 > that emit synthetic thrum messages. See [Monitor Jobs](monitor-jobs.md) for
 > the process monitor feature. | `orchestrator.md` | Launches agents, manages

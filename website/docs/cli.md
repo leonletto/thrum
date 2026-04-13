@@ -106,7 +106,7 @@ for AI agent coordination.
 | `thrum worktree setup`     | Alias for `thrum worktree create`                              |
 | `thrum worktree teardown`  | Remove a worktree and clean up artifacts                       |
 | `thrum worktree list`      | List worktrees with thrum agent info                           |
-| `thrum monitor add`        | Start a new monitor job (regex filter + message delivery)      |
+| `thrum monitor start`      | Start a new monitor job (regex filter + message delivery)      |
 | `thrum monitor list`       | List running monitor jobs                                      |
 | `thrum monitor show`       | Show full details for a monitor job                            |
 | `thrum monitor stop`       | Stop a monitor job                                             |
@@ -2139,18 +2139,18 @@ restarts. Max 100 concurrent jobs.
 The command must come after `--`:
 
 ```text
-thrum monitor add --name <name> --match <regex> --to @<agent> [flags] -- <command> [args...]
+thrum monitor start --name <name> --match <regex> --to @<agent> [flags] -- <command> [args...]
 ```
 
-### thrum monitor add
+### thrum monitor start
 
-Start a monitor job.
+Start a monitor job. (`add` is a retained alias.)
 
 | Flag         | Description                                           | Default | Required |
 | ------------ | ----------------------------------------------------- | ------- | -------- |
 | `--name`     | Unique monitor name                                   |         | yes      |
 | `--match`    | Regex pattern — lines that match trigger a message    |         | yes      |
-| `--to`       | Target agent or group (e.g., `@coordinator`)          |         | yes      |
+| `--to`       | Target agent (`@agent_name` or `@everyone`)           |         | yes      |
 | `--debounce` | Leading-edge debounce window (minimum 30s)            | `60s`   |          |
 | `--env`      | Environment variable in `KEY=VALUE` form (repeatable) |         |          |
 | `--cwd`      | Working directory for the command                     | `.`     |          |
@@ -2162,13 +2162,13 @@ fire again. Lines longer than 2KB are truncated.
 Example:
 
 ```text
-$ thrum monitor add --name app-errors --match "ERROR|FATAL" --to @coordinator \
+$ thrum monitor start --name app-errors --match "ERROR|FATAL" --to @coordinator_main \
     --debounce 120s -- tail -F /var/log/app.log
-Started monitor app-errors (mon_01KNTF2A9...) — target @coordinator
+Started monitor app-errors (mon_01KNTF2A9...) — target @coordinator_main
 
-$ thrum monitor add --name ci-failures --match "FAIL" --to @team \
+$ thrum monitor start --name ci-failures --match "FAIL" --to @impl_ci \
     --env CI_ENV=staging -- ./scripts/run-tests.sh
-Started monitor ci-failures (mon_01KNTG3B1...) — target @team
+Started monitor ci-failures (mon_01KNTG3B1...) — target @impl_ci
 ```
 
 ### thrum monitor list
