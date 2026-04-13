@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-04-13
+
+### Added
+
+- **Cursor Agent plugin** — Full plugin with 5 hooks, 2 rules, 4 skills, 11
+  commands, MCP config, and `local-install.sh` for deployment
+- **Reusable test infrastructure** — `scripts/test-setup.sh` and
+  `scripts/test-teardown.sh` for isolated plugin testing across all runtimes
+- **Unified agent test plan** — Runtime-parameterized test plan covering hooks,
+  skills, commands, MCP, registration, and messaging round-trip
+- **Tmux session titles** — Terminal tabs show `@agent_name` via
+  `tmux rename-window` and `set-titles` on session creation
+- **`safecmd.TmuxExec`** — Process replacement for tmux attach, enabling proper
+  terminal title propagation
+- **Pre-commit guard** — `scripts/hooks/pre-commit` blocks accidental commits
+  of `dev-docs/` files; hooks moved to repo-tracked `scripts/hooks/`
+- **`sync_cursor()` in sync-skills.sh** — Cursor plugin added as sync target
+  alongside codex and opencode
+
+### Fixed
+
+- **Monitor delivery (P0)** — `HandleStart` now registers synthetic
+  agent+session for `monitor:<name>` sender identity so matched lines actually
+  deliver messages
+- **Sync worktree (P2)** — `SyncLoop.Start()` now calls `CreateSyncWorktree`
+  before starting the loop, fixing "must be run in a work tree" errors in
+  local-only mode
+- **Daemon auto-start** — Restored in `thrum init` (accidentally removed during
+  CLI audit)
+- **Runtime set-default** — Now persists to `.thrum/config.json` in addition to
+  user-level `runtimes.json`
+- **Worktree base_path validation** — Auto-appends repo name to stale configs
+  missing it, preventing worktrees from colliding in a flat directory
+- **Tmux identity write** — `writeTmuxToIdentity` now scans all worktree
+  identity dirs, not just the main repo
+- **Resilience tests** — Removed reference to deleted
+  `rpc.NewSubscriptionHandler`
+- **tmux-exec quoting** — `cmd_exec` now uses `printf '%q'` for proper argument
+  quoting
+
+### Changed
+
+- **CLI audit** — Removed groups as user-facing concept, restricted `--to` to
+  agent IDs + `@everyone`, removed subscribe commands, -2400 lines across 24
+  files
+- **Git history cleanup** — Purged `dev-docs/` from git history via
+  filter-repo (~9.5 MB removed)
+- **Branch cleanup** — Deleted 21 stale remote branches, pruned local branches
+
 ## [0.8.1] - 2026-04-10
 
 ### Fixed

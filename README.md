@@ -13,20 +13,18 @@ and machines. You direct the work. The agents coordinate through Thrum. Messages
 persist through context compaction, session restarts, and machine changes —
 nothing gets lost.
 
-**v0.8.1 highlights:**
+**v0.8.2 highlights:**
 
-- **Tmux server isolation fix** — Daemon tmux commands now use the default tmux
-  server regardless of inherited environment, fixing `thrum tmux launch/restart`
-  failures when the daemon was started inside tmux-exec or other nested tmux
-  sessions.
-- **Identity reload guard** — `quickstart`/`init` handlers now load existing
-  identity files with name-match validation, preventing stale identity adoption
-  across worktrees.
-- **Plugin SessionStart hook fix** — Hook now echoes instruction to run
-  `/thrum:prime` in-conversation instead of consuming restart snapshots outside
-  agent context.
-- **JSONL path encoding fix** — Dot characters in CWD paths (e.g. `.workspaces`)
-  now resolve correctly for session lookup.
+- **Cursor Agent plugin** — Full plugin with hooks, skills, commands, MCP
+  config. Install via `cursor-plugin/local-install.sh`.
+- **Reusable test infrastructure** — `scripts/test-setup.sh` and
+  `scripts/test-teardown.sh` for isolated plugin testing across all runtimes.
+- **Monitor delivery fix** — Monitor jobs now register synthetic agent+session
+  so matched lines actually deliver messages.
+- **CLI audit cleanup** — Removed groups as user-facing concept, simplified
+  messaging to agent IDs + @everyone, -2400 lines across 24 files.
+- **Tmux session titles** — Terminal tabs show `@agent_name` instead of generic
+  "thrum" for all sessions (iTerm2, Terminal.app).
 
 ## Quick Start
 
