@@ -7,12 +7,13 @@ category: "integrations"
 order: 3
 tags:
   ["claude-code", "plugin", "installation", "slash-commands", "mcp", "hooks"]
-last_updated: "2026-04-06"
+last_updated: "2026-04-13"
 ---
 
 ## Claude Code Plugin
 
 > See also: [Quickstart Guide](quickstart.md) for basic Thrum setup,
+> [Cursor Plugin](cursor-plugin.md) for Cursor integration,
 > [Codex Plugin](codex-plugin.md) for Codex skill-based integration,
 > [Agent Configurations](agent-configs.md) for manual agent definitions,
 > [MCP Server](mcp-server.md) for the native MCP transport,
@@ -28,11 +29,11 @@ disclosure resource docs. It replaces the manual agent definition approach
 **What you get:**
 
 - **11 slash commands** — `/thrum:send`, `/thrum:inbox`, `/thrum:quickstart`,
-  `/thrum:restart`, and more
+  `/thrum:load-context`, `/thrum:restart`, and more
 - **Automatic context** — SessionStart, PreCompact, and PostCompact hooks keep
   your agent oriented across sessions and compaction
-- **9 resource docs** — Progressive disclosure for messaging patterns, groups,
-  identity, worktrees, tmux sessions, and anti-patterns
+- **8 resource docs** — Progressive disclosure for messaging patterns, identity,
+  worktrees, tmux sessions, and anti-patterns
 - **Background listener** — Sub-agent template for async message monitoring
 
 ## Prerequisites
@@ -105,15 +106,14 @@ All commands live under the `/thrum:` namespace.
 | Command                 | Purpose                                                      |
 | ----------------------- | ------------------------------------------------------------ |
 | `/thrum:quickstart`     | Register agent and start session (interactive or with flags) |
-| `/thrum:send`           | Send direct, group, or broadcast messages                    |
+| `/thrum:send`           | Send direct or broadcast messages                            |
 | `/thrum:inbox`          | Check message inbox (all or unread only)                     |
-| `thrum sent`            | Review sent messages with resolved recipients and receipts   |
 | `/thrum:reply`          | Reply to a message (inherits original audience)              |
 | `/thrum:wait`           | Block until a message arrives (background listener use)      |
 | `/thrum:team`           | Show active team members with roles and intents              |
-| `/thrum:group`          | Create, manage, and message agent groups                     |
 | `/thrum:overview`       | Combined status + team + inbox view                          |
 | `/thrum:prime`          | Load full session context (identity, team, inbox, git)       |
+| `/thrum:load-context`   | Restore saved agent work context after compaction            |
 | `/thrum:update-project` | Guided workflow to update durable project state              |
 | `/thrum:restart`        | Save conversation snapshot and prepare for session restart   |
 
@@ -190,13 +190,13 @@ guidance:
 | Resource              | When it's used                                            |
 | --------------------- | --------------------------------------------------------- |
 | `MESSAGING.md`        | Message lifecycle, addressing patterns                    |
-| `GROUPS.md`           | Creating groups, adding members, group messaging          |
 | `IDENTITY.md`         | Agent naming, registration, multi-worktree identity       |
 | `WORKTREES.md`        | Cross-worktree coordination, shared daemon, file tracking |
 | `LISTENER_PATTERN.md` | Background message listener sub-agent template            |
 | `BOUNDARIES.md`       | When to use Thrum vs TaskList/SendMessage                 |
-| `ANTI_PATTERNS.md`    | 12 common mistakes and how to avoid them                  |
+| `ANTI_PATTERNS.md`    | Common mistakes and how to avoid them                     |
 | `CLI_REFERENCE.md`    | Complete command syntax for all `thrum` commands          |
+| `TMUX_SESSIONS.md`    | Tmux-managed session patterns and lifecycle               |
 
 ## MCP Server Integration
 
@@ -263,10 +263,10 @@ See the `LISTENER_PATTERN.md` resource for the full template.
 | -------------- | ------------------------------------------- | ------------------------------------- |
 | Installation   | `claude plugin marketplace add` + `install` | Copy `.md` files to `.claude/agents/` |
 | Updates        | Re-install from source                      | Manual file replacement               |
-| Slash commands | 10 commands included                        | None                                  |
-| Hooks          | SessionStart + PreCompact                   | Manual hook configuration             |
+| Slash commands | 11 commands included                        | None                                  |
+| Hooks          | SessionStart + PreCompact + PostCompact     | Manual hook configuration             |
 | Resource docs  | 8 progressive disclosure docs               | Single monolithic agent file          |
-| Maintenance    | Versioned (v0.7.0)                          | Ad-hoc                                |
+| Maintenance    | Versioned (v0.8.1)                          | Ad-hoc                                |
 
 The manual agent definitions (`thrum-agent.md`, `message-listener.md`) still
 work and are available in `toolkit/agents/` for environments that don't support
@@ -296,9 +296,9 @@ See [Identity System](identity.md) for details.
 ## Next Steps
 
 - [MCP Server](mcp-server.md) — the MCP server the plugin configures, including
-  the full 11-tool reference
+  the full tool reference
+- [Cursor Plugin](cursor-plugin.md) — the equivalent plugin for Cursor users
 - [Codex Plugin](codex-plugin.md) — the equivalent skill bundle for Codex users
-  instead of Claude Code
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
   using the slash commands and hooks this plugin provides
 - [Identity System](identity.md) — agent naming, `THRUM_NAME`, and multi-agent
