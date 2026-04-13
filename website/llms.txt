@@ -1,4 +1,4 @@
-# Thrum v0.8.1
+# Thrum v0.8.2
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -38,6 +38,12 @@ New in v0.8.0:
   extraction on timeout.
 
 New in v0.8.1: CI fix for npm publish packaging (no user-facing changes).
+
+New in v0.8.2:
+- Cursor plugin — full Cursor integration with rules, hooks, skills, commands,
+  and MCP config. Deployed via `cursor-plugin/local-install.sh` into `.cursor/`.
+- Test infrastructure scripts (`scripts/test-setup.sh`, `scripts/test-teardown.sh`)
+  for automated agent test environments.
 
 New in v0.9.0 (upcoming):
 - Safe agent registration — `thrum tmux create` now requires quickstart flags

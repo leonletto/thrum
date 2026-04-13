@@ -1,4 +1,4 @@
-# Thrum v0.8.1 -- Complete Agent Reference
+# Thrum v0.8.2 -- Complete Agent Reference
 
 > Git-backed messaging for AI agent coordination. Real-time. Cross-machine. Cross-repo. Persistent.
 
@@ -39,6 +39,19 @@ New in v0.8.0:
   `branch` (in addition to `tmux_session`) when detected values differ.
 
 New in v0.8.1: CI fix for npm publish packaging (no user-facing changes).
+
+New in v0.8.2:
+- Cursor plugin — full Cursor integration with local-install.sh deploying rules,
+  hooks (5: sessionStart, beforeShellExecution, stop, preCompact, postCompact),
+  2 `.mdc` rules, 4 skills, 11 commands, MCP config, and message-listener agent
+  into `.cursor/`. Skills and commands synced from claude-plugin source via
+  `scripts/sync-skills.sh`.
+- Test infrastructure scripts (`scripts/test-setup.sh`, `scripts/test-teardown.sh`)
+  for automated agent test environments with daemon, agent registration, and
+  cleanup.
+- Claude Code plugin docs updates: removed stale GROUPS.md resource reference,
+  added TMUX_SESSIONS.md, added /thrum:load-context command, updated version
+  references.
 
 New in v0.9.0 (upcoming):
 - Safe agent registration — `thrum tmux create` now requires `--name`, `--role`,

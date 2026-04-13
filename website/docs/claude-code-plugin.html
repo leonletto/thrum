@@ -30,7 +30,7 @@ a{color:#0366d6}
 <strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
 <strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
 <strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
-<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <strong>Claude Code Plugin</strong> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <strong>Claude Code Plugin</strong> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <a href="cursor-plugin.html">Cursor Plugin</a> | <a href="mcp-server.html">MCP Server</a><br>
 <strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
 <strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
 <strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
@@ -39,6 +39,7 @@ a{color:#0366d6}
 <h2>Claude Code Plugin</h2>
 <blockquote>
 <p>See also: <a href="quickstart.html">Quickstart Guide</a> for basic Thrum setup,
+<a href="cursor-plugin.html">Cursor Plugin</a> for Cursor integration,
 <a href="codex-plugin.html">Codex Plugin</a> for Codex skill-based integration,
 <a href="agent-configs.html">Agent Configurations</a> for manual agent definitions,
 <a href="mcp-server.html">MCP Server</a> for the native MCP transport,
@@ -52,11 +53,11 @@ disclosure resource docs. It replaces the manual agent definition approach
 <p><strong>What you get:</strong></p>
 <ul>
 <li><strong>11 slash commands</strong> — <code>/thrum:send</code>, <code>/thrum:inbox</code>, <code>/thrum:quickstart</code>,
-<code>/thrum:restart</code>, and more</li>
+<code>/thrum:load-context</code>, <code>/thrum:restart</code>, and more</li>
 <li><strong>Automatic context</strong> — SessionStart, PreCompact, and PostCompact hooks keep
 your agent oriented across sessions and compaction</li>
-<li><strong>9 resource docs</strong> — Progressive disclosure for messaging patterns, groups,
-identity, worktrees, tmux sessions, and anti-patterns</li>
+<li><strong>8 resource docs</strong> — Progressive disclosure for messaging patterns, identity,
+worktrees, tmux sessions, and anti-patterns</li>
 <li><strong>Background listener</strong> — Sub-agent template for async message monitoring</li>
 </ul>
 <h2>Prerequisites</h2>
@@ -111,15 +112,11 @@ identity, team roster, unread messages, and daemon health.</p>
 </tr>
 <tr>
 <td><code>/thrum:send</code></td>
-<td>Send direct, group, or broadcast messages</td>
+<td>Send direct or broadcast messages</td>
 </tr>
 <tr>
 <td><code>/thrum:inbox</code></td>
 <td>Check message inbox (all or unread only)</td>
-</tr>
-<tr>
-<td><code>thrum sent</code></td>
-<td>Review sent messages with resolved recipients and receipts</td>
 </tr>
 <tr>
 <td><code>/thrum:reply</code></td>
@@ -134,16 +131,16 @@ identity, team roster, unread messages, and daemon health.</p>
 <td>Show active team members with roles and intents</td>
 </tr>
 <tr>
-<td><code>/thrum:group</code></td>
-<td>Create, manage, and message agent groups</td>
-</tr>
-<tr>
 <td><code>/thrum:overview</code></td>
 <td>Combined status + team + inbox view</td>
 </tr>
 <tr>
 <td><code>/thrum:prime</code></td>
 <td>Load full session context (identity, team, inbox, git)</td>
+</tr>
+<tr>
+<td><code>/thrum:load-context</code></td>
+<td>Restore saved agent work context after compaction</td>
 </tr>
 <tr>
 <td><code>/thrum:update-project</code></td>
@@ -205,10 +202,6 @@ guidance:</p>
 <td>Message lifecycle, addressing patterns</td>
 </tr>
 <tr>
-<td><code>GROUPS.md</code></td>
-<td>Creating groups, adding members, group messaging</td>
-</tr>
-<tr>
 <td><code>IDENTITY.md</code></td>
 <td>Agent naming, registration, multi-worktree identity</td>
 </tr>
@@ -226,11 +219,15 @@ guidance:</p>
 </tr>
 <tr>
 <td><code>ANTI_PATTERNS.md</code></td>
-<td>12 common mistakes and how to avoid them</td>
+<td>Common mistakes and how to avoid them</td>
 </tr>
 <tr>
 <td><code>CLI_REFERENCE.md</code></td>
 <td>Complete command syntax for all <code>thrum</code> commands</td>
+</tr>
+<tr>
+<td><code>TMUX_SESSIONS.md</code></td>
+<td>Tmux-managed session patterns and lifecycle</td>
 </tr>
 </tbody></table>
 <h2>MCP Server Integration</h2>
@@ -296,12 +293,12 @@ the listener every 30 min if it stops:</p>
 </tr>
 <tr>
 <td>Slash commands</td>
-<td>10 commands included</td>
+<td>11 commands included</td>
 <td>None</td>
 </tr>
 <tr>
 <td>Hooks</td>
-<td>SessionStart + PreCompact</td>
+<td>SessionStart + PreCompact + PostCompact</td>
 <td>Manual hook configuration</td>
 </tr>
 <tr>
@@ -311,7 +308,7 @@ the listener every 30 min if it stops:</p>
 </tr>
 <tr>
 <td>Maintenance</td>
-<td>Versioned (v0.7.0)</td>
+<td>Versioned (v0.8.1)</td>
 <td>Ad-hoc</td>
 </tr>
 </tbody></table>
@@ -333,9 +330,9 @@ See <a href="identity.html">Identity System</a> for details.</p>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="mcp-server.html">MCP Server</a> — the MCP server the plugin configures, including
-the full 11-tool reference</li>
-<li><a href="codex-plugin.html">Codex Plugin</a> — the equivalent skill bundle for Codex users
-instead of Claude Code</li>
+the full tool reference</li>
+<li><a href="cursor-plugin.html">Cursor Plugin</a> — the equivalent plugin for Cursor users</li>
+<li><a href="codex-plugin.html">Codex Plugin</a> — the equivalent skill bundle for Codex users</li>
 <li><a href="agent-coordination.html">Agent Coordination</a> — practical multi-agent workflows
 using the slash commands and hooks this plugin provides</li>
 <li><a href="identity.html">Identity System</a> — agent naming, <code>THRUM_NAME</code>, and multi-agent
