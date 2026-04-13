@@ -8,7 +8,7 @@ test.describe.serial('Sessions & Lifecycle Tests', () => {
     expect(startOutput.toLowerCase()).toContain('session');
 
     // Assert: status shows active session
-    const statusDuring = thrum(['status']);
+    const statusDuring = thrum(['overview']);
     expect(statusDuring.toLowerCase()).toContain('session');
 
     // Act: end the session
@@ -16,7 +16,7 @@ test.describe.serial('Sessions & Lifecycle Tests', () => {
     expect(endOutput.toLowerCase()).toContain('session');
 
     // Assert: status shows no active session
-    const statusAfter = thrum(['status']);
+    const statusAfter = thrum(['overview']);
     expect(statusAfter.toLowerCase()).toMatch(/no.*session|inactive|ended|stopped/);
   });
 
@@ -36,7 +36,7 @@ test.describe.serial('Sessions & Lifecycle Tests', () => {
     // Note: status may show work context from a different session due to
     // how agent.listContext resolves contexts across sessions. We verify
     // the commands succeeded via their output above.
-    const status = thrum(['status']);
+    const status = thrum(['overview']);
     expect(status.length).toBeGreaterThan(0);
 
     // Clean up

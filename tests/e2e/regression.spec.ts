@@ -206,29 +206,8 @@ test.describe('Bugfix Regressions', () => {
     expect(waitOutput).not.toContain('Self-exclude test');
   });
 
-  test('J10: Name-only routing and auto role group warning', async () => {
-    // Register a temp agent with a distinct name and role
-    const j10Env = { ...process.env, THRUM_NAME: 'j10_alpha', THRUM_ROLE: 'j10_worker', THRUM_MODULE: 'all' };
-    try {
-      thrumIn(getTestRoot(), ['quickstart', '--role', 'j10_worker', '--module', 'all',
-        '--name', 'j10_alpha', '--intent', 'Routing test'], 10_000, j10Env);
-    } catch { /* may exist */ }
-
-    // Sending to @j10_alpha by name → no "resolved to a group" warning
-    const byNameResult = spawnSync(BIN, ['send', 'Direct to alpha', '--to', '@j10_alpha'], {
-      cwd: getTestRoot(), encoding: 'utf-8', timeout: 10_000, env: regressionEnv(),
-    });
-    const byNameAll = `${byNameResult.stdout ?? ''}${byNameResult.stderr ?? ''}`;
-    expect(byNameAll).not.toContain('resolved to a group');
-
-    // Sending to @j10_worker by role → auto-group routing, expect "resolved to a group" warning
-    // Warning goes to stderr; spawnSync captures stdout and stderr separately
-    const byRoleResult = spawnSync(BIN, ['send', 'To worker role', '--to', '@j10_worker'], {
-      cwd: getTestRoot(), encoding: 'utf-8', timeout: 10_000, env: regressionEnv(),
-    });
-    const byRoleStderr = String(byRoleResult.stderr ?? '');
-    expect(byRoleStderr).toContain('resolved to a group');
-  });
+  // J10 removed: auto role groups were removed in CLI audit (v0.8.2).
+  // Routing now uses agent IDs + @everyone only.
 
   test('J13: Name cannot equal role', async () => {
     // Attempt: name equals own role → should error

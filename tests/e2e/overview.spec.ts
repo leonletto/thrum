@@ -31,17 +31,17 @@ test.describe.serial('Overview & Status Tests', () => {
   });
 
   test('SC-66: Agent status', async () => {
-    // Act: run status command
-    const status = thrum(['status']);
+    // Act: run overview command (thrum status was renamed to thrum overview)
+    const status = thrum(['overview']);
 
-    // Assert: status contains agent identity
+    // Assert: overview contains agent identity
     expect(status.toLowerCase()).toContain('agent');
-    // Status should show role, module, session info
+    // Overview should show role, module, session info
   });
 
   test('SC-67: JSON output mode', async () => {
     // Act: run commands with --json flag
-    const statusJson = thrumJson<any>(['status']);
+    const statusJson = thrumJson<any>(['overview']);
     const inboxJson = thrumJson<any>(['inbox']);
     const agentListJson = thrumJson<any>(['agent', 'list']);
 

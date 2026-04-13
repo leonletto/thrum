@@ -58,7 +58,7 @@ test.describe('Setup Verification', () => {
     expect(parsed.name || parsed.agent_id).toMatch(/e2e_coordinator/);
 
     // Status shows agent info
-    const status = thrumIn(testRoot, ['status'], 10_000, coordEnv());
+    const status = thrumIn(testRoot, ['overview'], 10_000, coordEnv());
     expect(status.toLowerCase()).toContain('coordinator');
   });
 
@@ -71,7 +71,7 @@ test.describe('Setup Verification', () => {
     expect(parsed.name || parsed.agent_id).toMatch(/e2e_implementer/);
 
     // Status shows agent info
-    const status = thrumIn(implRoot, ['status'], 10_000, implEnv());
+    const status = thrumIn(implRoot, ['overview'], 10_000, implEnv());
     expect(status.toLowerCase()).toContain('implementer');
   });
 

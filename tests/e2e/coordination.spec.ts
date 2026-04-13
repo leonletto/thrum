@@ -201,7 +201,7 @@ test.describe('Coordination', () => {
     const output = thrumIn(getTestRoot(), ['agent', 'set-intent', 'Working on authentication module'], 10_000, coordTestEnv());
     expect(output.toLowerCase()).toMatch(/updated|intent|set/);
 
-    const status = thrumIn(getTestRoot(), ['status'], 10_000, coordTestEnv());
+    const status = thrumIn(getTestRoot(), ['overview'], 10_000, coordTestEnv());
     expect(status.toLowerCase()).toContain('authentication');
   });
 
@@ -227,7 +227,7 @@ test.describe('Coordination', () => {
 
   test('F2-13: status standalone command', async () => {
     // Act: run status with human output
-    const output = thrumIn(getTestRoot(), ['status'], 10_000, coordTestEnv());
+    const output = thrumIn(getTestRoot(), ['overview'], 10_000, coordTestEnv());
 
     // Assert: status output contains key sections
     expect(output.toLowerCase()).toContain('agent');

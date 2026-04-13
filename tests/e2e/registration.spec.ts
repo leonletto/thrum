@@ -55,8 +55,8 @@ test.describe('Identity & Registration', () => {
     // Assert: quickstart successful (registers, starts session, sets intent)
     expect(result).toMatch(/registered|quickstart|session|coordinator/i);
 
-    // Verify: status command works without error
-    const status = thrum(['status']);
+    // Verify: overview command works without error
+    const status = thrum(['overview']);
     expect(status.length).toBeGreaterThan(0);
     // Agent list should include coordinator
     const agentList = getAgentList();

@@ -79,25 +79,6 @@ test.describe('Multi-Agent Scenarios', () => {
     expect(pageContent?.trim().length).toBeGreaterThan(0);
   });
 
-  test('SC-61: Broadcast delivery to all agents', async () => {
-    // Mark implementer inbox read
-    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
-
-    // Act: coordinator sends broadcast
-    const broadcastText = `Multi-agent broadcast ${Date.now()}`;
-    const sendResult = thrumIn(getTestRoot(), ['send', broadcastText, '--broadcast', '--json'], 10_000, coordEnv());
-    const parsed = JSON.parse(sendResult);
-    expect(parsed.message_id).toMatch(/^msg_/);
-
-    // Assert: implementer receives the broadcast in their inbox
-    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
-    const inbox = JSON.parse(implInbox);
-    const hasBroadcast = inbox.messages.some((msg: any) =>
-      msg.body?.content?.includes('Multi-agent broadcast')
-    );
-    expect(hasBroadcast).toBe(true);
-  });
-
   test('SC-62: File conflict detection via who-has', async () => {
     // Ensure coordinator has an active session with heartbeat
     thrumIn(getTestRoot(), ['agent', 'heartbeat'], 10_000, coordEnv());

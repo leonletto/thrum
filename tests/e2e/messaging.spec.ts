@@ -235,21 +235,4 @@ test.describe.serial('Messaging Tests', () => {
     expect(hasMixed).toBe(false);
   });
 
-  test('SC-25: CLI broadcast via --broadcast flag', async () => {
-    // Mark implementer inbox read
-    thrumIn(getImplementerRoot(), ['message', 'read', '--all'], 10_000, implEnv());
-
-    // Act: coordinator sends broadcast using --broadcast flag
-    const sendResult = thrumIn(getTestRoot(), ['send', `Broadcast flag test ${Date.now()}`, '--broadcast', '--json'], 10_000, coordEnv());
-    const parsed = JSON.parse(sendResult);
-    expect(parsed.message_id).toMatch(/^msg_/);
-
-    // Assert: implementer receives the broadcast
-    const implInbox = thrumIn(getImplementerRoot(), ['inbox', '--unread', '--json'], 10_000, implEnv());
-    const inbox = JSON.parse(implInbox);
-    const hasBroadcast = inbox.messages.some((msg: any) =>
-      msg.body?.content?.includes('Broadcast flag test')
-    );
-    expect(hasBroadcast).toBe(true);
-  });
 });
