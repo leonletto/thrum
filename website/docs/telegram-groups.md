@@ -46,18 +46,16 @@ Telegram Group
 ┌─────────────────────────────────┐
 │  Thrum Daemon                   │
 │                                 │
-│  tg:dev-team (mirrored group)   │
-│  ├── @coordinator_main          │
-│  ├── user:alice                 │
-│  └── user:bob                   │
+│  Bridge → @coordinator_main     │
+│           (or configured agent) │
 └─────────────────────────────────┘
 ```
 
 - **Inbound:** Someone sends a message in the Telegram group. If it @mentions
-  the bot (or has no @mention at all), the bridge relays it into a mirrored
-  Thrum group (`tg:dev-team`). The target agent receives it.
-- **Outbound:** The agent sends a message to the mirrored Thrum group. The
-  bridge posts it back to the Telegram group where everyone can see it.
+  the bot (or has no @mention at all), the bridge relays it to the configured
+  target agent.
+- **Outbound:** The agent sends a reply and the bridge posts it back to the
+  Telegram group where everyone can see it.
 - **Threading:** Telegram replies map to Thrum `reply_to`. If someone replies to
   the bot's message in the group, the agent sees it as a reply to the original
   thread.
@@ -70,8 +68,8 @@ Telegram Group
    guide first. You'll have a bot token, a paired Telegram account, and a
    working DM relay. The group feature builds on top of this.
 2. **Bot privacy mode disabled.** By default, Telegram bots in groups only see
-   messages that @mention them or are commands. For broadcast messages (no
-   @mention) to work, you need privacy mode turned off. In Telegram, message
+   messages that @mention them or are commands. For messages with no @mention
+   to come through, you need privacy mode turned off. In Telegram, message
    [@BotFather](https://t.me/BotFather), send `/setprivacy`, select your bot,
    and choose **Disable**.
 
@@ -122,9 +120,6 @@ isn't in the list, your messages are silently dropped.
 thrum daemon restart
 ```
 
-On startup, the bridge creates a mirrored Thrum group named `tg:dev-team` and
-adds your user and target agent as members.
-
 Test it — send a message in the Telegram group mentioning the bot:
 
 ```text
@@ -137,8 +132,8 @@ Check the agent's inbox:
 thrum inbox --unread
 ```
 
-You should see the message. Have the agent reply to the mirrored group and
-verify it appears in Telegram.
+You should see the message. Have the agent reply and verify it appears in
+Telegram.
 
 ---
 
@@ -149,7 +144,7 @@ Messages in the group are routed based on @mentions:
 | Message                              | What happens                                    |
 | ------------------------------------ | ----------------------------------------------- |
 | `@thrum_bot check the API`           | Bot relays to agent                             |
-| `Schema changed in v2` (no @mention) | Bot relays to agent (broadcast)                 |
+| `Schema changed in v2` (no @mention) | Bot relays to agent                             |
 | `Hey @alice what do you think?`      | Bot ignores — addressed to a human, not the bot |
 
 If privacy mode is disabled, the bot sees everything. It relays messages that
@@ -183,7 +178,7 @@ config:
 | Field           | Type   | Description                                                                                      |
 | --------------- | ------ | ------------------------------------------------------------------------------------------------ |
 | `chat_id`       | int    | Telegram group chat ID (negative number)                                                         |
-| `name`          | string | Human-readable name — also used as the mirrored Thrum group name (`tg:{name}`)                   |
+| `name`          | string | Human-readable label for this group (used in logs and the web UI)                                |
 | `trusted_bots`  | int[]  | Bot user IDs allowed to relay messages in this group (see [Multi-Bot Groups](#multi-bot-groups)) |
 | `remote_agents` | array  | Proxy agent definitions (see [Multi-Bot Groups](#multi-bot-groups))                              |
 
@@ -287,6 +282,7 @@ Proxy agents register a remote agent as a local stand-in. They show up in
 Sending to a proxy agent posts a message to the Telegram group with the target
 bot's @mention:
 
+<!-- TODO: verify proxy agent routing after groups removal -->
 ```bash
 thrum send "check the /users endpoint" --to @falcon:coordinator_main
 ```
@@ -301,7 +297,7 @@ Humans in the group can see it. The target bot cannot (Telegram limitation). The
 proxy agent shows in `thrum team` as:
 
 ```text
-● @falcon:coordinator_main [remote] (falcon-backend) — via tg:cross-repo-coord
+● @falcon:coordinator_main [remote] (falcon-backend)
 ```
 
 ---
@@ -311,8 +307,7 @@ proxy agent shows in `thrum team` as:
 **Messages not arriving from the group:**
 
 - Check bot privacy mode. If privacy mode is on, the bot only sees @mentions and
-  commands — broadcast messages won't come through. Disable via BotFather:
-  `/setprivacy` → your bot → Disable.
+  commands. Disable via BotFather: `/setprivacy` → your bot → Disable.
 - Verify the bot is actually in the Telegram group.
 - Check that the sender's Telegram user ID is in `allow_from`.
 
