@@ -177,11 +177,6 @@ func registerAllHandlers(server *daemon.Server, st *state.State) {
 	server.RegisterHandler("group.members", groupHandler.HandleMembers)
 	server.RegisterHandler("group.member.add", groupHandler.HandleMemberAdd)
 
-	subscriptionHandler := rpc.NewSubscriptionHandler(st)
-	server.RegisterHandler("subscribe", subscriptionHandler.HandleSubscribe)
-	server.RegisterHandler("unsubscribe", subscriptionHandler.HandleUnsubscribe)
-	server.RegisterHandler("subscriptions.list", subscriptionHandler.HandleList)
-
 	teamHandler := rpc.NewTeamHandler(st, "")
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
