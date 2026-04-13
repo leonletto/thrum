@@ -360,10 +360,10 @@ func TestRefreshLocalIdentity_SaveFailure(t *testing.T) {
 	// Make the identities directory read-only to force SaveIdentityFile
 	// to fail. On Unix, os.WriteFile into a dir with mode 0500 errors with
 	// EACCES. Restore in Cleanup so t.TempDir can clean up.
-	if err := os.Chmod(identitiesDir, 0500); err != nil {
+	if err := os.Chmod(identitiesDir, 0500); err != nil { //#nosec G302 -- intentionally read-only for error-path test
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(identitiesDir, 0750) })
+	t.Cleanup(func() { _ = os.Chmod(identitiesDir, 0750) }) //#nosec G302 -- restoring test dir for cleanup
 
 	orig := detectAncestor
 	detectAncestor = func(_ context.Context) (int, string) { return os.Getpid(), "claude" }

@@ -11,7 +11,7 @@ import (
 // in a worktree, pointing back to the main repo. Creates identities/ and
 // context/ directories in the worktree's local .thrum/.
 //
-// mainRepo is the absolute path to the main repository root (the one with
+// MainRepo is the absolute path to the main repository root (the one with
 // the real .git/ directory, not a .git file). Callers resolve mainRepo
 // via cli.IsGitWorktree or from daemon context — this function validates
 // both paths exist and sets up redirects.
@@ -36,11 +36,11 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 	// Write or fix redirect
 	redirectPath := filepath.Join(wtThrumDir, "redirect")
 	redirectContent := mainThrumDir + "\n"
-	if existing, err := os.ReadFile(redirectPath); err != nil || strings.TrimSpace(string(existing)) != mainThrumDir {
+	if existing, err := os.ReadFile(redirectPath); err != nil || strings.TrimSpace(string(existing)) != mainThrumDir { //#nosec G304 -- redirectPath is constructed from known worktree path
 		if err == nil && strings.TrimSpace(string(existing)) != mainThrumDir {
 			fmt.Fprintf(os.Stderr, "⚠ Fixed .thrum/redirect (was pointing to %s)\n", strings.TrimSpace(string(existing)))
 		}
-		if err := os.WriteFile(redirectPath, []byte(redirectContent), 0644); err != nil {
+		if err := os.WriteFile(redirectPath, []byte(redirectContent), 0600); err != nil {
 			return fmt.Errorf("write thrum redirect: %w", err)
 		}
 	}
@@ -61,8 +61,8 @@ func EnsureRedirects(worktreePath, mainRepo string) error {
 		}
 		beadsRedirect := filepath.Join(wtBeadsDir, "redirect")
 		beadsContent := mainBeadsDir + "\n"
-		if existing, err := os.ReadFile(beadsRedirect); err != nil || strings.TrimSpace(string(existing)) != mainBeadsDir {
-			if err := os.WriteFile(beadsRedirect, []byte(beadsContent), 0644); err != nil {
+		if existing, err := os.ReadFile(beadsRedirect); err != nil || strings.TrimSpace(string(existing)) != mainBeadsDir { //#nosec G304 -- beadsRedirect is constructed from known worktree path
+			if err := os.WriteFile(beadsRedirect, []byte(beadsContent), 0600); err != nil {
 				return fmt.Errorf("write beads redirect: %w", err)
 			}
 		}
@@ -107,7 +107,7 @@ func EnforceOneIdentity(worktreePath, newAgentName string) []string {
 
 // BuildQuickstartCmd constructs a shell-safe thrum quickstart command string
 // for injection into a tmux pane. All values are single-quote wrapped.
-// Single quotes within values are escaped as '\'' (end quote, escaped quote,
+// Single quotes within values are escaped as '\” (end quote, escaped quote,
 // start quote). --force is always included for idempotent re-registration.
 func BuildQuickstartCmd(name, role, module, intent, runtime string) string {
 	var parts []string
@@ -129,7 +129,7 @@ func BuildQuickstartCmd(name, role, module, intent, runtime string) string {
 }
 
 // shellQuote wraps a value in single quotes, escaping any internal single
-// quotes with the '\'' idiom (end quote, literal quote, restart quote).
+// quotes with the '\” idiom (end quote, literal quote, restart quote).
 func shellQuote(s string) string {
 	escaped := strings.ReplaceAll(s, "'", `'\''`)
 	return "'" + escaped + "'"

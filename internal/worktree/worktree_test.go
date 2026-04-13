@@ -18,7 +18,7 @@ func TestEnsureRedirects_CreatesThrum(t *testing.T) {
 
 	wt := t.TempDir()
 	if err := os.WriteFile(filepath.Join(wt, ".git"),
-		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0644); err != nil {
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -49,7 +49,7 @@ func TestEnsureRedirects_CreatesBeads(t *testing.T) {
 
 	wt := t.TempDir()
 	os.WriteFile(filepath.Join(wt, ".git"),
-		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0644)
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0600)
 
 	if err := EnsureRedirects(wt, mainRepo); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -71,7 +71,7 @@ func TestEnsureRedirects_SkipsBeadsWhenNotPresent(t *testing.T) {
 
 	wt := t.TempDir()
 	os.WriteFile(filepath.Join(wt, ".git"),
-		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0644)
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0600)
 
 	if err := EnsureRedirects(wt, mainRepo); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -88,10 +88,10 @@ func TestEnsureRedirects_FixesBrokenRedirect(t *testing.T) {
 
 	wt := t.TempDir()
 	os.WriteFile(filepath.Join(wt, ".git"),
-		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0644)
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0600)
 
 	os.MkdirAll(filepath.Join(wt, ".thrum"), 0750)
-	os.WriteFile(filepath.Join(wt, ".thrum", "redirect"), []byte("/nonexistent/path/.thrum\n"), 0644)
+	os.WriteFile(filepath.Join(wt, ".thrum", "redirect"), []byte("/nonexistent/path/.thrum\n"), 0600)
 
 	if err := EnsureRedirects(wt, mainRepo); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -108,7 +108,7 @@ func TestEnsureRedirects_ErrorNoMainThrum(t *testing.T) {
 	mainRepo := t.TempDir()
 	wt := t.TempDir()
 	os.WriteFile(filepath.Join(wt, ".git"),
-		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0644)
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0600)
 
 	err := EnsureRedirects(wt, mainRepo)
 	if err == nil {
@@ -132,7 +132,7 @@ func TestEnsureRedirects_Idempotent(t *testing.T) {
 
 	wt := t.TempDir()
 	os.WriteFile(filepath.Join(wt, ".git"),
-		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0644)
+		[]byte("gitdir: "+filepath.Join(mainRepo, ".git", "worktrees", "test")+"\n"), 0600)
 
 	if err := EnsureRedirects(wt, mainRepo); err != nil {
 		t.Fatalf("first call: %v", err)
@@ -149,8 +149,8 @@ func TestEnforceOneIdentity_DeletesOthers(t *testing.T) {
 	idDir := filepath.Join(dir, ".thrum", "identities")
 	os.MkdirAll(idDir, 0750)
 
-	os.WriteFile(filepath.Join(idDir, "old_agent.json"), []byte(`{"agent":{"name":"old_agent"}}`), 0644)
-	os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{"agent":{"name":"new_agent"}}`), 0644)
+	os.WriteFile(filepath.Join(idDir, "old_agent.json"), []byte(`{"agent":{"name":"old_agent"}}`), 0600)
+	os.WriteFile(filepath.Join(idDir, "new_agent.json"), []byte(`{"agent":{"name":"new_agent"}}`), 0600)
 
 	deleted := EnforceOneIdentity(dir, "new_agent")
 
@@ -172,8 +172,8 @@ func TestEnforceOneIdentity_PreservesContext(t *testing.T) {
 	os.MkdirAll(idDir, 0750)
 	os.MkdirAll(ctxDir, 0750)
 
-	os.WriteFile(filepath.Join(idDir, "old_agent.json"), []byte(`{}`), 0644)
-	os.WriteFile(filepath.Join(ctxDir, "old_agent.md"), []byte("# Notes"), 0644)
+	os.WriteFile(filepath.Join(idDir, "old_agent.json"), []byte(`{}`), 0600)
+	os.WriteFile(filepath.Join(ctxDir, "old_agent.md"), []byte("# Notes"), 0600)
 
 	EnforceOneIdentity(dir, "new_agent")
 
