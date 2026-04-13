@@ -42,7 +42,7 @@ func TestTmuxHandler_HandleStatus_WithIdentities(t *testing.T) {
 	// Create an identity with tmux_session set (session won't exist — should be "dead")
 	idFile := config.IdentityFile{
 		Version:     4,
-		TmuxSession: "test-session:0.0",
+		TmuxSession: "thrum-unit-test-nonexistent-session:0.0",
 		Runtime:     "claude",
 		Agent: config.AgentConfig{
 			Name:   "test_agent",
@@ -66,8 +66,8 @@ func TestTmuxHandler_HandleStatus_WithIdentities(t *testing.T) {
 	}
 
 	info := resp.Sessions[0]
-	if info.Name != "test-session" {
-		t.Errorf("Name = %q, want %q", info.Name, "test-session")
+	if info.Name != "thrum-unit-test-nonexistent-session" {
+		t.Errorf("Name = %q, want %q", info.Name, "thrum-unit-test-nonexistent-session")
 	}
 	if info.Agent != "test_agent" {
 		t.Errorf("Agent = %q, want %q", info.Agent, "test_agent")
