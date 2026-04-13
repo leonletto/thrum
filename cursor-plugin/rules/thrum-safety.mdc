@@ -1,0 +1,7 @@
+---
+description: Prevent writes to Thrum's internal sync worktree
+alwaysApply: true
+---
+Never write to or modify files inside `.git/thrum-sync/a-sync`.
+This is Thrum's internal sync worktree. Treat it as read-only
+unless the user explicitly asks for sync maintenance.

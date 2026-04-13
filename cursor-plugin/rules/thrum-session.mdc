@@ -1,0 +1,7 @@
+---
+description: Thrum session lifecycle protocol
+alwaysApply: true
+---
+At session start, run `thrum prime` to load identity and context.
+Before compaction or session handoff, run the update-project workflow.
+Check `thrum inbox --unread` for pending messages from other agents.

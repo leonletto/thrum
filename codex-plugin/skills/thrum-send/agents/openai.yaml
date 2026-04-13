@@ -1,4 +1,4 @@
 interface:
   display_name: "Thrum Send"
-  short_description: "Send a message to an agent or group"
+  short_description: "Send a message to an agent"
   default_prompt: "Run the thrum send workflow and summarize the result."
