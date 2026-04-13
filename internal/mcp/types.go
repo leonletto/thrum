@@ -89,5 +89,4 @@ type BroadcastOutput struct {
 	MessageIDs []string `json:"message_ids" jsonschema:"IDs of sent messages"`
 }
 
-
 // Group tool types removed — groups are no longer user-facing MCP tools.

@@ -1187,10 +1187,8 @@ func TestBuildForAgentValues_BothEmpty(t *testing.T) {
 	}
 }
 
-
 // TestRegisterCreatesRoleGroup and TestRegisterRoleGroupIdempotent removed —
 // auto role group creation no longer exists.
-
 
 // TestRegisterNameRoleValidation verifies the name≠role collision checks.
 func TestRegisterNameRoleValidation(t *testing.T) {

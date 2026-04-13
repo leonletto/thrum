@@ -606,7 +606,6 @@ Examples:
 	}
 }
 
-
 func purgeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "purge",
@@ -852,7 +851,6 @@ to inspect a message with full recipient state.`,
 // groupCmd and subcommands removed — groups are no longer user-facing.
 // Group RPC handlers (group.go) remain for Telegram bridge (tg:* groups).
 
-
 func inboxCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "inbox",
@@ -989,7 +987,6 @@ func versionCmd() *cobra.Command {
 	}
 	return cmd
 }
-
 
 // runWhoami is the shared implementation for both top-level `thrum whoami`
 // and `thrum agent whoami`. It loads identity, optionally enriches from the
@@ -2013,7 +2010,6 @@ Identity is resolved from:
 3. Identity files in .thrum/identities/ directory`,
 		RunE: runWhoami,
 	})
-
 
 	deleteCmd := &cobra.Command{
 		Use:   "delete <name>",
@@ -3175,10 +3171,8 @@ Examples:
 	return cmd
 }
 
-
 // subscribeCmd, unsubscribeCmd, subscriptionsCmd removed —
 // subscriptions are no longer a concept. Use thrum wait for CLI notifications.
-
 
 func contextCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -3194,7 +3188,6 @@ func contextCmd() *cobra.Command {
 
 	return cmd
 }
-
 
 func contextSaveCmd() *cobra.Command {
 	var flagFile string
@@ -3623,7 +3616,6 @@ Examples:
 		},
 	}
 }
-
 
 func runtimeGroupCmd() *cobra.Command {
 	cmd := &cobra.Command{

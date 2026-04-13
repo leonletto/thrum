@@ -187,7 +187,7 @@ func TestMonitorStore_EnvRoundTrip_NoRedaction(t *testing.T) {
 	// The store must NOT redact env — that is done in display/RPC paths only.
 	store, _ := newTestStore(t)
 	job := &MonitorJob{
-		ID:   "mon_ENV", Name: "env-test",
+		ID: "mon_ENV", Name: "env-test",
 		Argv: []string{"env"},
 		Env: map[string]string{
 			"SECRET_TOKEN": "my-super-secret-value",

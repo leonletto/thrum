@@ -215,4 +215,3 @@ func TestTmuxHandler_ClearTmuxFromIdentities(t *testing.T) {
 		t.Errorf("Runtime should be empty after clear, got %q", reloaded.Runtime)
 	}
 }
-
