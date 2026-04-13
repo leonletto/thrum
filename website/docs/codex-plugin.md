@@ -165,6 +165,7 @@ cp -R codex-plugin/skills/thrum-* "${CODEX_HOME:-$HOME/.codex}/skills/"
 
 - [Claude Code Plugin](claude-code-plugin.md) — the equivalent plugin for Claude
   Code users, with slash commands and automatic hooks
+- [Cursor Plugin](cursor-plugin.md) — the equivalent plugin for Cursor users
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
   that the Codex skills support
 - [Role Templates](role-templates.md) — role-based preamble templates that
