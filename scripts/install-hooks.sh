@@ -5,22 +5,12 @@ echo "=== Git Hook Setup ==="
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
-# Verify beads hooks are installed
-if [ ! -f "$REPO_ROOT/.git/hooks/pre-commit" ]; then
-    echo "Installing beads hooks..."
-    bd hooks install
-fi
+# Point git to repo-tracked hooks (survives re-clones)
+git config core.hooksPath scripts/hooks
+echo "Set core.hooksPath -> scripts/hooks"
 
-# Verify chain scripts exist and are executable
-for hook in pre-commit pre-push; do
-    CHAIN="$REPO_ROOT/.beads/hooks/${hook}.chain"
-    if [ -f "$CHAIN" ]; then
-        chmod +x "$CHAIN"
-        echo "Chain script ready: ${hook}.chain"
-    else
-        echo "WARNING: Missing chain script: $CHAIN"
-    fi
-done
+# Ensure hooks are executable
+chmod +x "$REPO_ROOT/scripts/hooks/"* 2>/dev/null || true
 
 # Verify beads config has chaining enabled
 if grep -q "chain_strategy" "$REPO_ROOT/.beads/config.yaml" 2>/dev/null; then
@@ -34,14 +24,10 @@ else
 fi
 
 echo ""
-echo "Hook chaining setup complete."
+echo "Hook setup complete."
 echo ""
-echo "What runs on commit:"
+echo "What runs on commit (scripts/hooks/pre-commit):"
 echo "  1. beads pre-commit (export JSONL)"
-echo "  2. pre-commit.chain (format check + go vet + git-secrets)"
-echo ""
-echo "What runs on push:"
-echo "  1. beads pre-push (staleness check)"
-echo "  2. pre-push.chain (full CI: lint + test + security + build)"
+echo "  2. dev-docs/ guard (block accidental commits)"
 echo ""
 echo "Optional: Run scripts/setup-git-secrets.sh to add secret scanning"
