@@ -52,6 +52,25 @@ func CreateSession(name, cwd string) error {
 	return nil
 }
 
+// RenameWindow sets the window name for the first window in a session.
+func RenameWindow(session, windowName string) error {
+	target := session + ":0"
+	return safecmd.TmuxRun(context.Background(), "rename-window", "-t", target, windowName)
+}
+
+// SetSessionTitle enables terminal title propagation for a session and sets
+// the title format. This makes terminal tabs/windows show session-specific
+// information instead of the generic "thrum" binary name.
+func SetSessionTitle(session, title string) error {
+	ctx := context.Background()
+	// Enable title propagation for this session
+	if err := safecmd.TmuxRun(ctx, "set-option", "-t", session, "set-titles", "on"); err != nil {
+		return err
+	}
+	// Set a static title string for this session
+	return safecmd.TmuxRun(ctx, "set-option", "-t", session, "set-titles-string", title)
+}
+
 // KillSession destroys a tmux session.
 func KillSession(name string) error {
 	_, err := safecmd.Tmux(context.Background(), "kill-session", "-t", name)

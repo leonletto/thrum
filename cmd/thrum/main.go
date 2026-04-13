@@ -7184,11 +7184,10 @@ The runtime is read from the repo's config (runtime.primary), defaulting to clau
 }
 
 func tmuxAttach(session string) error {
-	c := exec.Command("tmux", "attach-session", "-t", session) // #nosec G204 -- session name from CLI arg
-	c.Stdin = os.Stdin
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	return c.Run()
+	// Use safecmd.TmuxExec to replace the thrum process with tmux.
+	// This makes the terminal see "tmux" as the process, which then
+	// propagates session/window titles to the terminal tab correctly.
+	return safecmd.TmuxExec("attach-session", "-t", session)
 }
 
 // detectPaneState scans visible pane content for an explicit permission

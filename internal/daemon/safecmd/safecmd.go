@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -102,6 +103,19 @@ func cleanTmuxEnv() []string {
 		env = append(env, e)
 	}
 	return env
+}
+
+// TmuxExec replaces the current process with tmux (via syscall.Exec).
+// This is used for tmux attach — the thrum process becomes the tmux client,
+// which allows the terminal to see tmux's session/window titles instead of
+// "thrum" in tabs. This function never returns on success.
+func TmuxExec(args ...string) error {
+	tmuxBin, err := exec.LookPath("tmux")
+	if err != nil {
+		return fmt.Errorf("tmux not found: %w", err)
+	}
+	argv := append([]string{"tmux"}, args...)
+	return syscall.Exec(tmuxBin, argv, cleanTmuxEnv()) // #nosec G204 -- args are internal tmux subcommands
 }
 
 // TmuxLocal runs a tmux command that needs the current session's TMUX env

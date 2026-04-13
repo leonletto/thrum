@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -229,6 +230,20 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 	h.sessionCwds[name] = req.Cwd
 	h.cwdSessions[req.Cwd] = name
 	h.sessionMu.Unlock()
+
+	// Set window name and terminal title for tab identification.
+	// Uses agent name if provided, falls back to session name.
+	// Non-fatal — session is usable without titles.
+	windowTitle := name
+	if req.AgentName != "" {
+		windowTitle = "@" + req.AgentName
+	}
+	if err := ttmux.RenameWindow(name, windowTitle); err != nil {
+		slog.Warn("tmux rename-window failed", "session", name, "title", windowTitle, "error", err)
+	}
+	if err := ttmux.SetSessionTitle(name, windowTitle); err != nil {
+		slog.Warn("tmux set-titles failed", "session", name, "title", windowTitle, "error", err)
+	}
 
 	// Set up monitor-silence hook (non-fatal if it fails)
 	thrumBin, _ := os.Executable()
