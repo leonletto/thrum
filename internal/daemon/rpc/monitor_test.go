@@ -75,6 +75,91 @@ func TestMonitorStart_Success(t *testing.T) {
 	assert.NotEmpty(t, r.ID, "monitor ID must be non-empty")
 }
 
+// TestMonitorStart_RegistersSenderAgentAndSession verifies the P0 bug fix:
+// HandleStart must insert a synthetic agent row and an open session row for
+// "monitor:<name>" so that Delivery.Deliver → MessageHandler.HandleSend can
+// resolve the caller's session.  Without these rows every match delivery
+// silently fails because resolveAgentAndSession returns an error that the
+// deliver closure ignores.
+//
+// This test uses a real MessageHandler (not noopSender) and verifies that
+// after HandleStart the agent+session rows are present in the DB and that
+// a Delivery.Deliver call actually lands a message in the messages table.
+func TestMonitorStart_RegistersSenderAgentAndSession(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tmon_fix")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+	st, stErr := state.NewState(tmpDir, tmpDir, "test-repo-fix", "")
+	require.NoError(t, stErr)
+	t.Cleanup(func() { _ = st.Close() })
+
+	store := monitor.NewMonitorStore(st.DB())
+	msgHandler := NewMessageHandler(st)
+	delivery := monitor.NewDelivery(msgHandler)
+	sup := monitor.NewMonitorSupervisor(store, delivery)
+	h := NewMonitorHandler(sup, store, st)
+
+	const monName = "fix-test"
+
+	// Start the supervisor so Add() can use the base context.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		sup.Start(ctx)
+	}()
+	<-started
+	time.Sleep(20 * time.Millisecond)
+
+	// Call HandleStart — NO manual pre-seeding of agent/session rows.
+	p := monitorStartParams{
+		Name:            monName,
+		Argv:            []string{"true"},
+		Match:           ".*",
+		Target:          "@everyone",
+		Cwd:             tmpDir,
+		DebounceSeconds: 60,
+	}
+	b, _ := json.Marshal(p)
+	_, err = h.HandleStart(ctx, b)
+	require.NoError(t, err, "HandleStart must succeed")
+
+	callerID := "monitor:" + monName
+
+	// Verify the agent row was created.
+	var agentCount int
+	row := st.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM agents WHERE agent_id = ?`, callerID)
+	require.NoError(t, row.Scan(&agentCount))
+	assert.Equal(t, 1, agentCount,
+		"HandleStart must create a synthetic agent row for %q", callerID)
+
+	// Verify an open session row was created.
+	var sessionCount int
+	row = st.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND ended_at IS NULL`, callerID)
+	require.NoError(t, row.Scan(&sessionCount))
+	assert.Equal(t, 1, sessionCount,
+		"HandleStart must create an open session row for %q", callerID)
+
+	// Verify that Delivery.Deliver can now send a message (i.e. HandleSend
+	// does NOT fail with "no active session found").
+	deliverErr := delivery.Deliver(ctx, monName, "", "ALERT: test match")
+	require.NoError(t, deliverErr,
+		"Delivery.Deliver must succeed after HandleStart registers the sender; "+
+			"'no active session found' means the fix did not take effect")
+
+	// Verify the message landed in the messages table.
+	var msgCount int
+	row = st.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM messages WHERE agent_id = ?`, callerID)
+	require.NoError(t, row.Scan(&msgCount))
+	assert.GreaterOrEqual(t, msgCount, 1,
+		"match delivery must insert at least one row into the messages table")
+}
+
 func TestMonitorStart_RejectsDebounceBelow30s(t *testing.T) {
 	h, _, _ := newMonitorTestSetup(t)
 	p := monitorStartParams{

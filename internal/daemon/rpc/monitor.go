@@ -9,6 +9,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/identity"
 )
 
 // MonitorHandler handles all monitor.* RPC methods. It is registered only on
@@ -140,6 +141,76 @@ func unwrapMessage(err error) string {
 
 // ----- handlers -----
 
+// ensureMonitorSender inserts (or updates) a synthetic agent row and an open
+// session for "monitor:<name>" into the DB so that Delivery.Deliver can call
+// MessageHandler.HandleSend without getting "no active session found".
+//
+// HandleSend resolves the caller's session via resolveAgentAndSession, which
+// requires both an agents row AND an open sessions row (ended_at IS NULL) for
+// the CallerAgentID.  Without these rows every delivery silently fails because
+// the error is swallowed in the deliver closure inside supervisor.launch.
+//
+// The inserts use INSERT OR IGNORE / INSERT OR REPLACE semantics so this is
+// safe to call multiple times (e.g. monitor.restart) and safe on daemon
+// restart when the rows are already present from the initial HandleStart.
+func (h *MonitorHandler) ensureMonitorSender(ctx context.Context, monitorName string) error {
+	callerID := "monitor:" + monitorName
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	// Upsert the synthetic agent row.  On conflict (agent already registered
+	// from a previous run) just update last_seen_at so the row stays fresh.
+	_, err := h.state.DB().ExecContext(ctx, `
+		INSERT INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at, last_seen_at)
+		VALUES (?, 'monitor', 'monitor', 'monitor', ?, '', 0, ?, ?)
+		ON CONFLICT(agent_id) DO UPDATE SET last_seen_at = excluded.last_seen_at
+	`, callerID, monitorName, now, now)
+	if err != nil {
+		return fmt.Errorf("ensure monitor agent row: %w", err)
+	}
+
+	// Insert a fresh open session.  A new session ID is generated on each
+	// HandleStart call so a restarted monitor gets a clean session.  Any
+	// previous open sessions for this callerID are closed first to avoid
+	// accumulating stale rows.
+	_, err = h.state.DB().ExecContext(ctx, `
+		UPDATE sessions SET ended_at = ?, end_reason = 'superseded'
+		WHERE agent_id = ? AND ended_at IS NULL
+	`, now, callerID)
+	if err != nil {
+		return fmt.Errorf("close stale monitor sessions: %w", err)
+	}
+
+	sessionID := identity.GenerateSessionID()
+	_, err = h.state.DB().ExecContext(ctx, `
+		INSERT INTO sessions (session_id, agent_id, started_at, last_seen_at)
+		VALUES (?, ?, ?, ?)
+	`, sessionID, callerID, now, now)
+	if err != nil {
+		return fmt.Errorf("ensure monitor session row: %w", err)
+	}
+
+	return nil
+}
+
+// EnsureAllMonitorSenders registers (or refreshes) synthetic agent+session
+// rows for every monitor currently in StatusRunning in the store.  Call this
+// once after MonitorSupervisor.Start() returns (or just before it is called)
+// so that monitors persisted from a previous daemon run — which predate the
+// ensureMonitorSender fix — also get valid sender rows before their runners
+// emit their first match.
+func (h *MonitorHandler) EnsureAllMonitorSenders(ctx context.Context) {
+	jobs, err := h.store.ListByStatus(ctx, monitor.StatusRunning)
+	if err != nil {
+		fmt.Printf("monitor: warn: could not list running monitors for sender setup: %v\n", err)
+		return
+	}
+	for _, job := range jobs {
+		if err := h.ensureMonitorSender(ctx, job.Name); err != nil {
+			fmt.Printf("monitor: warn: could not ensure sender for %q: %v\n", job.Name, err)
+		}
+	}
+}
+
 // HandleStart handles monitor.start — validates and launches a new monitor.
 func (h *MonitorHandler) HandleStart(ctx context.Context, params json.RawMessage) (any, error) {
 	var req monitorStartParams
@@ -162,6 +233,20 @@ func (h *MonitorHandler) HandleStart(ctx context.Context, params json.RawMessage
 	if err != nil {
 		return nil, translateMonitorError(err)
 	}
+
+	// Register a synthetic agent + open session for "monitor:<name>" so that
+	// Delivery.Deliver → MessageHandler.HandleSend can resolve the caller's
+	// session.  Without these rows every match delivery silently fails because
+	// resolveAgentAndSession returns an error that the deliver closure ignores.
+	// This is the P0 bug: monitors run fine but no messages are ever delivered.
+	if err := h.ensureMonitorSender(ctx, req.Name); err != nil {
+		// Non-fatal: log and continue.  The monitor is running; delivery may
+		// still fail but the operator can retry via monitor.restart.
+		// We do NOT roll back the Add — the monitor spec is valid and the
+		// child is already running.
+		fmt.Printf("monitor: warn: could not register sender for %q: %v\n", req.Name, err)
+	}
+
 	// Include the child PID in the response so the CLI can echo
 	// "Started monitor <name> (<id>) — pid <N>, target <target>" per
 	// design doc §'thrum monitor add' (review finding R2.5). We re-fetch
@@ -263,6 +348,15 @@ func (h *MonitorHandler) HandleRestart(ctx context.Context, params json.RawMessa
 	if err := h.supervisor.Restart(ctx, req.ID); err != nil {
 		return nil, translateMonitorError(err)
 	}
+
+	// Refresh the synthetic sender registration so the restarted monitor's
+	// delivery calls see a valid open session.
+	if job, gerr := h.supervisor.GetByID(ctx, req.ID); gerr == nil {
+		if sErr := h.ensureMonitorSender(ctx, job.Name); sErr != nil {
+			fmt.Printf("monitor: warn: could not refresh sender for %q: %v\n", job.Name, sErr)
+		}
+	}
+
 	return monitorStartResponse{ID: req.ID}, nil
 }
 

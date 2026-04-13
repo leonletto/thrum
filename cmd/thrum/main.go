@@ -5255,6 +5255,13 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	// Monitor jobs supervisor — launches runner goroutines for every monitor
 	// in the DB with status=running and blocks on ctx.Done(). Must start
 	// AFTER the backup scheduler and BEFORE lifecycle.Run(ctx).
+	//
+	// EnsureAllMonitorSenders must be called BEFORE Start() reloads and
+	// launches runners so that any monitor persisted from a pre-fix daemon
+	// run has its synthetic agent+session row in place before its first
+	// match delivery fires.  New monitors (created via HandleStart after
+	// this fix) already have their rows inserted by ensureMonitorSender.
+	monitorHandler.EnsureAllMonitorSenders(ctx)
 	go monitorSupervisor.Start(ctx)
 
 	// Telegram bridge RPC handlers + goroutine
