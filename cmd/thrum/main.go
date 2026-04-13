@@ -2294,6 +2294,13 @@ func worktreeCreateCmd() *cobra.Command {
 			if basePath == "" {
 				basePath = inferWorktreeBasePath(repoPath)
 			}
+			// Ensure base_path includes the repo name to prevent worktrees
+			// from different repos colliding in a flat directory. Stale configs
+			// from older thrum versions may have base_path without the repo name.
+			repoName := filepath.Base(repoPath)
+			if filepath.Base(basePath) != repoName {
+				basePath = filepath.Join(basePath, repoName)
+			}
 			worktreePath := filepath.Join(basePath, name)
 
 			// 1. Create git worktree
@@ -2414,6 +2421,10 @@ func worktreeTeardownCmd() *cobra.Command {
 			basePath := cfg.Worktrees.BasePath
 			if basePath == "" {
 				basePath = inferWorktreeBasePath(repoPath)
+			}
+			repoName := filepath.Base(repoPath)
+			if filepath.Base(basePath) != repoName {
+				basePath = filepath.Join(basePath, repoName)
 			}
 			worktreePath := filepath.Join(basePath, name)
 
@@ -3690,6 +3701,13 @@ defaults. Use these commands to list, inspect, and configure runtimes.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := cli.RuntimeSetDefault(args[0]); err != nil {
 				return err
+			}
+			// Also update the repo-level config so 'config show' reflects the change.
+			thrumDir := filepath.Join(flagRepo, ".thrum")
+			cfg, err := config.LoadThrumConfig(thrumDir)
+			if err == nil {
+				cfg.Runtime.Primary = args[0]
+				_ = config.SaveThrumConfig(thrumDir, cfg)
 			}
 			fmt.Printf("✓ Default runtime set to: %s\n", args[0])
 			return nil

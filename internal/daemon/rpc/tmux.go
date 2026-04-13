@@ -520,49 +520,52 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 }
 
 // writeTmuxToIdentity writes tmux_session and runtime to the identity file
-// for the agent whose session matches the given name.
+// for the agent whose session matches the given name, scanning all worktrees.
 func (h *TmuxHandler) writeTmuxToIdentity(sessionName, target, runtime string) {
-	identitiesDir := filepath.Join(h.thrumDir, "identities")
-	entries, _ := os.ReadDir(identitiesDir)
-
-	// Two-pass: first match by existing tmux_session, then by agent name.
-	// On first launch, no identity has tmux_session set yet, so we fall back
-	// to matching the session name against the agent name.
+	// Two-pass across all identity dirs (main repo + worktrees):
+	// Pass 1: match by existing tmux_session association.
+	// Pass 2: match by agent name (first launch, no tmux_session yet).
 	var nameMatch *config.IdentityFile
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		path := filepath.Join(identitiesDir, entry.Name())
-		data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/identities/<name>.json
-		if err != nil {
-			continue
-		}
-		var idFile config.IdentityFile
-		if err := json.Unmarshal(data, &idFile); err != nil {
-			continue
-		}
-		// Pass 1: Match by existing tmux_session association
-		if idFile.TmuxSession != "" {
-			sess, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
-			if sess == sessionName {
-				idFile.TmuxSession = target
-				idFile.Runtime = runtime
-				_ = config.SaveIdentityFile(filepath.Dir(identitiesDir), &idFile)
-				return // write to first matching identity
+	var nameMatchDir string
+
+	for _, identitiesDir := range AllIdentityDirs(context.Background(), h.thrumDir) {
+		entries, _ := os.ReadDir(identitiesDir)
+		for _, entry := range entries {
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+				continue
 			}
-		}
-		// Pass 2 candidate: match by agent name
-		if nameMatch == nil && ttmux.SanitizeSessionName(idFile.Agent.Name) == sessionName {
-			copied := idFile
-			nameMatch = &copied
+			path := filepath.Join(identitiesDir, entry.Name())
+			data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/identities/<name>.json
+			if err != nil {
+				continue
+			}
+			var idFile config.IdentityFile
+			if err := json.Unmarshal(data, &idFile); err != nil {
+				continue
+			}
+			// Pass 1: Match by existing tmux_session association
+			if idFile.TmuxSession != "" {
+				sess, _, _ := ttmux.ParseTarget(idFile.TmuxSession)
+				if sess == sessionName {
+					idFile.TmuxSession = target
+					idFile.Runtime = runtime
+					_ = config.SaveIdentityFile(filepath.Dir(identitiesDir), &idFile)
+					return // write to first matching identity
+				}
+			}
+			// Pass 2 candidate: match by agent name
+			if nameMatch == nil && ttmux.SanitizeSessionName(idFile.Agent.Name) == sessionName {
+				copied := idFile
+				nameMatch = &copied
+				nameMatchDir = identitiesDir
+			}
 		}
 	}
 	// Fallback: match by agent name (first launch, no tmux_session yet)
 	if nameMatch != nil {
 		nameMatch.TmuxSession = target
 		nameMatch.Runtime = runtime
-		_ = config.SaveIdentityFile(filepath.Dir(identitiesDir), nameMatch)
+		_ = config.SaveIdentityFile(filepath.Dir(nameMatchDir), nameMatch)
 	}
 }
 
