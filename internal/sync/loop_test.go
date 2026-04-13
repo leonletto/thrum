@@ -441,6 +441,62 @@ func TestSyncLoop_LocalOnly_FullCycle(t *testing.T) {
 	}
 }
 
+// TestSyncLoop_LocalOnly_MissingWorktree reproduces the bug reported in thrum-ltj:
+// When the daemon starts in local-only mode and the a-sync worktree does not exist,
+// the sync loop used to fail every 30 s with
+// "fatal: this operation must be run in a work tree"
+// because hasChanges() ran `git status --porcelain` against syncDir before the
+// worktree was created. Start() now calls CreateSyncWorktree so the worktree is
+// always healthy before the first doSync cycle runs.
+func TestSyncLoop_LocalOnly_MissingWorktree(t *testing.T) {
+	// Build a repo that has the a-sync branch but NO worktree.
+	tmpDir := setupTestRepoWithCommit(t)
+	setupThrumFiles(t, tmpDir)
+
+	ctx := context.Background()
+	bm := NewBranchManager(tmpDir, true)
+	if err := bm.CreateSyncBranch(ctx); err != nil {
+		t.Fatalf("CreateSyncBranch failed: %v", err)
+	}
+
+	// Deliberately do NOT call CreateSyncWorktree — this is the bug scenario.
+	syncDir := filepath.Join(tmpDir, ".git", "thrum-sync", "a-sync")
+
+	syncer := NewSyncer(tmpDir, syncDir, true)
+	projector := setupTestProjector(t, tmpDir)
+	loop := NewSyncLoop(syncer, projector, tmpDir, syncDir, filepath.Join(tmpDir, ".thrum"), 10*time.Second, true)
+
+	// Start must succeed — it should create the missing worktree.
+	if err := loop.Start(ctx); err != nil {
+		t.Fatalf("Start failed with missing worktree: %v", err)
+	}
+	defer func() { _ = loop.Stop() }()
+
+	// Wait for the initial sync cycle.
+	deadline := time.After(5 * time.Second)
+	for {
+		status := loop.GetStatus()
+		if !status.LastSyncAt.IsZero() {
+			if status.LastError != "" {
+				t.Errorf("sync error (expected none): %s", status.LastError)
+			}
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("initial sync did not complete within 5 s")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	// Verify the worktree now exists and is healthy.
+	gitFile := filepath.Join(syncDir, ".git")
+	if _, err := os.Stat(gitFile); err != nil {
+		t.Errorf("expected %s to exist after Start, got: %v", gitFile, err)
+	}
+}
+
 func TestLoop_SetError(t *testing.T) {
 	tmpDir := setupTestRepoWithCommit(t)
 	setupThrumFiles(t, tmpDir)

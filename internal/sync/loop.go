@@ -75,6 +75,13 @@ func (l *SyncLoop) Start(ctx context.Context) error {
 		return fmt.Errorf("ensure sync branch: %w", err)
 	}
 
+	// Ensure the sync worktree exists (and is healthy) before starting the loop.
+	// Without this, git status --porcelain in hasChanges() fails with
+	// "fatal: this operation must be run in a work tree" every sync cycle.
+	if err := l.syncer.branchManager.CreateSyncWorktree(ctx, l.syncDir); err != nil {
+		return fmt.Errorf("ensure sync worktree: %w", err)
+	}
+
 	go l.run(ctx)
 	return nil
 }
