@@ -60,6 +60,15 @@ func (h *TmuxHandler) HandleQueue(ctx context.Context, params json.RawMessage) (
 	if req.Requester == "" {
 		return nil, fmt.Errorf("requester is required")
 	}
+
+	// Reject queue submissions to sessions without a registered agent.
+	// --no-agent sessions have no monitor-silence configured, so commands
+	// would stay in "queued" state forever.
+	agentName, _, _ := h.findIdentityForSession(ctx, req.Session)
+	if agentName == "" {
+		return nil, fmt.Errorf("session %q has no registered agent — queue requires an agent-managed session", req.Session)
+	}
+
 	if req.TimeoutMs == 0 {
 		req.TimeoutMs = 120000 // default 2 minutes
 	}

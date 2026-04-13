@@ -61,7 +61,7 @@ USED_INT=${USED%.*}
 
 if [ "$USED_INT" -ge "$THRESHOLD" ] 2>/dev/null; then
   # Save conversation snapshot
-  thrum restart save --reason context-threshold 2>/dev/null || exit 0
+  thrum tmux snapshot save --reason context-threshold 2>/dev/null || exit 0
 
   # For tmux-managed agents: trigger full restart
   # tmux_session field returns "name:window.pane" format — extract session name

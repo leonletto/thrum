@@ -26,6 +26,16 @@ func setupTmuxHandlerTest(t *testing.T) (*TmuxHandler, func()) {
 	if err != nil {
 		t.Fatalf("create state: %v", err)
 	}
+	// Create an identity file for "test-session" so queue validation passes.
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
+		t.Fatalf("create identities dir: %v", err)
+	}
+	idJSON := `{"version":4,"tmux_session":"test-session","agent":{"name":"test_agent","role":"tester","module":"testing"}}`
+	if err := os.WriteFile(filepath.Join(identitiesDir, "test_agent.json"), []byte(idJSON), 0o600); err != nil {
+		t.Fatalf("write identity: %v", err)
+	}
+
 	handler := NewTmuxHandler(thrumDir, st)
 	cleanup := func() { _ = st.Close() }
 	return handler, cleanup
