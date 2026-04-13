@@ -1713,7 +1713,7 @@ The command and its arguments must be separated from monitor flags with '--':
 	_ = addCmd.MarkFlagRequired("to")
 	cmd.AddCommand(addCmd)
 
-	// thrum monitor list [--all]
+	// thrum monitor list [--all] [--json]
 	{
 		var includeAll bool
 		listCmd := &cobra.Command{
@@ -1726,6 +1726,9 @@ The command and its arguments must be separated from monitor flags with '--':
 					return fmt.Errorf("connect to daemon: %w", err)
 				}
 				defer func() { _ = client.Close() }()
+				if flagJSON {
+					return cli.MonitorListJSON(client, includeAll, os.Stdout)
+				}
 				return cli.MonitorList(client, includeAll, os.Stdout)
 			},
 		}
@@ -1734,7 +1737,7 @@ The command and its arguments must be separated from monitor flags with '--':
 		cmd.AddCommand(listCmd)
 	}
 
-	// thrum monitor show <id>
+	// thrum monitor show <id> [--json]
 	cmd.AddCommand(&cobra.Command{
 		Use:   "show <id>",
 		Short: "Show details of a monitor job",
@@ -1745,6 +1748,9 @@ The command and its arguments must be separated from monitor flags with '--':
 				return fmt.Errorf("connect to daemon: %w", err)
 			}
 			defer func() { _ = client.Close() }()
+			if flagJSON {
+				return cli.MonitorShowJSON(client, args[0], os.Stdout)
+			}
 			return cli.MonitorShow(client, args[0], os.Stdout)
 		},
 	})
@@ -2474,6 +2480,11 @@ func worktreeListCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			repoPath := paths.EffectiveRepoPath(flagRepo)
 
+			// JSON output mode
+			if flagJSON {
+				return worktreeListJSON(repoPath)
+			}
+
 			// Get git worktree list
 			out, err := safecmd.Git(cmd.Context(), repoPath, "worktree", "list", "--porcelain")
 			if err != nil {
@@ -2541,6 +2552,66 @@ func worktreeListCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func worktreeListJSON(repoPath string) error {
+	out, err := safecmd.Git(context.Background(), repoPath, "worktree", "list", "--porcelain")
+	if err != nil {
+		return fmt.Errorf("git worktree list: %w", err)
+	}
+
+	type worktreeJSON struct {
+		Path   string `json:"path"`
+		Branch string `json:"branch"`
+		Head   string `json:"head"`
+		Agent  string `json:"agent,omitempty"`
+		Status string `json:"status,omitempty"`
+	}
+
+	var worktrees []worktreeJSON
+	var path, branch, head string
+
+	for _, line := range strings.Split(string(out), "\n") {
+		if p, ok := strings.CutPrefix(line, "worktree "); ok {
+			path = p
+		} else if h, ok := strings.CutPrefix(line, "HEAD "); ok {
+			head = h[:min(7, len(h))]
+		} else if b, ok := strings.CutPrefix(line, "branch "); ok {
+			branch = strings.TrimPrefix(b, "refs/heads/")
+		} else if line == "" && path != "" {
+			wt := worktreeJSON{Path: path, Branch: branch, Head: head}
+
+			// Check for agent identity
+			idDir := filepath.Join(path, ".thrum", "identities")
+			if entries, err := os.ReadDir(idDir); err == nil {
+				for _, entry := range entries {
+					if !entry.IsDir() && filepath.Ext(entry.Name()) == ".json" {
+						data, err := os.ReadFile(filepath.Join(idDir, entry.Name())) //#nosec G304
+						if err != nil {
+							continue
+						}
+						var idFile config.IdentityFile
+						if err := json.Unmarshal(data, &idFile); err != nil {
+							continue
+						}
+						wt.Agent = idFile.Agent.Name
+						wt.Status = idFile.AgentStatus
+						break
+					}
+				}
+			}
+
+			worktrees = append(worktrees, wt)
+			path, branch, head = "", "", ""
+		}
+	}
+
+	data, err := json.MarshalIndent(worktrees, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+	fmt.Println(string(data))
+	return nil
 }
 
 func agentSetStatusCmd() *cobra.Command {

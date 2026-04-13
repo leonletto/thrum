@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -159,6 +160,44 @@ func MonitorShow(client *Client, id string, out io.Writer) error {
 		}
 	}
 
+	return nil
+}
+
+// MonitorListJSON outputs monitor list as JSON.
+func MonitorListJSON(client *Client, includeAll bool, out io.Writer) error {
+	req := struct {
+		IncludeAll bool `json:"include_all,omitempty"`
+	}{IncludeAll: includeAll}
+
+	var jobs []MonitorJobView
+	if err := client.Call("monitor.list", req, &jobs); err != nil {
+		return fmt.Errorf("monitor list: %w", err)
+	}
+
+	data, err := json.MarshalIndent(jobs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+	_, _ = fmt.Fprintln(out, string(data))
+	return nil
+}
+
+// MonitorShowJSON outputs a single monitor's details as JSON.
+func MonitorShowJSON(client *Client, id string, out io.Writer) error {
+	req := struct {
+		ID string `json:"id"`
+	}{ID: id}
+
+	var job MonitorJobView
+	if err := client.Call("monitor.show", req, &job); err != nil {
+		return fmt.Errorf("monitor show: %w", err)
+	}
+
+	data, err := json.MarshalIndent(job, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+	_, _ = fmt.Fprintln(out, string(data))
 	return nil
 }
 
