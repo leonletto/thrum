@@ -5,6 +5,7 @@ package context
 
 import (
 	"bytes"
+	gocontext "context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 
 	"github.com/leonletto/thrum/internal/config"
 )
@@ -532,30 +535,45 @@ func findCoordinatorName(thrumDir string) string {
 
 // loadAllIdentities loads all identity files from .thrum/identities/.
 func loadAllIdentities(thrumDir string) ([]*config.IdentityFile, error) {
-	identitiesDir := filepath.Join(thrumDir, "identities")
-	entries, err := os.ReadDir(identitiesDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
+	// Collect identity directories: main repo + all worktrees.
+	repoDir := filepath.Dir(thrumDir)
+	dirs := []string{filepath.Join(thrumDir, "identities")}
+	for _, wtPath := range safecmd.WorktreePaths(gocontext.Background(), repoDir) {
+		wtIDDir := filepath.Join(wtPath, ".thrum", "identities")
+		if info, err := os.Stat(wtIDDir); err == nil && info.IsDir() {
+			dirs = append(dirs, wtIDDir)
 		}
-		return nil, fmt.Errorf("read identities directory: %w", err)
 	}
 
+	seen := map[string]bool{} // deduplicate by agent name
 	var identities []*config.IdentityFile
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		path := filepath.Join(identitiesDir, entry.Name())
-		data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/identities/<name>.json from directory listing
+	for _, identitiesDir := range dirs {
+		entries, err := os.ReadDir(identitiesDir)
 		if err != nil {
-			continue
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("read identities directory %s: %w", identitiesDir, err)
 		}
-		var id config.IdentityFile
-		if err := json.Unmarshal(data, &id); err != nil {
-			continue
+		for _, entry := range entries {
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+				continue
+			}
+			path := filepath.Join(identitiesDir, entry.Name())
+			data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/identities/<name>.json from directory listing
+			if err != nil {
+				continue
+			}
+			var id config.IdentityFile
+			if err := json.Unmarshal(data, &id); err != nil {
+				continue
+			}
+			if seen[id.Agent.Name] {
+				continue
+			}
+			seen[id.Agent.Name] = true
+			identities = append(identities, &id)
 		}
-		identities = append(identities, &id)
 	}
 
 	return identities, nil
