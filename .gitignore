@@ -63,6 +63,7 @@ internal/web/dist/*
 !internal/web/dist/.gitkeep
 
 .playwright-mcp/
+.cursor/
 
 # Node.js / Playwright
 node_modules/
