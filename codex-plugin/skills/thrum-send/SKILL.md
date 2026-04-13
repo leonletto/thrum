@@ -1,6 +1,6 @@
 ---
 name: thrum-send
-description: Send a message to an agent or group
+description: Send a message to an agent
 # source: claude-plugin/commands/send.md
 # generated-by: scripts/sync-skills.sh
 ---
@@ -11,17 +11,15 @@ Use this skill when the user explicitly wants the `send` Thrum workflow. Prefer
 the umbrella `thrum` skill when the request spans multiple commands or needs
 broader coordination judgment.
 
-Send a direct message, group message, or broadcast.
+Send a direct message or broadcast.
 
 If arguments are provided, use them. Otherwise ask for recipient and message
 content.
 
 ```bash
-thrum send "message" --to @name                  # Direct (routes to named agent)
-thrum send "message" --to @group-name            # Group
-thrum send "message" --to @everyone              # Broadcast
+thrum send "message" --to @agent_name             # Direct message
+thrum send "message" --to @everyone               # Broadcast to all agents
 ```
 
 Unknown recipients are a hard error. Use `thrum team` to verify agent names
-before sending. Sending `--to @role` fans out to all agents with that role (with
-a warning) — use `--to @name` for direct messages.
+before sending.
