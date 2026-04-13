@@ -1,12 +1,12 @@
 ---
 title: "Multi-Agent Support"
 description:
-  "Runtime presets, context prime, and coordination patterns for running
+  "Runtime presets, thrum prime, and coordination patterns for running
   multiple AI agents across worktrees and platforms"
 category: "coordination"
 order: 2
 tags:
-  ["multi-agent", "runtime", "coordination", "teams", "context-prime"]
+  ["multi-agent", "runtime", "coordination", "teams", "prime"]
 last_updated: "2026-04-09"
 ---
 
@@ -190,13 +190,13 @@ Custom runtimes appear alongside built-in presets in `thrum runtime list`.
 
 ## Context Prime
 
-`thrum context prime` gathers identity, session info, team status, unread
-messages, git context, and saved context into a single output. Run it at session
-startup or after compaction to quickly orient a new or recovering agent.
+`thrum prime` gathers identity, session info, team status, unread messages, git
+context, and saved context into a single output. Run it at session startup or
+after compaction to quickly orient a new or recovering agent.
 
 ```bash
-thrum context prime        # Human-readable summary
-thrum context prime --json # Structured JSON for LLM consumption
+thrum prime        # Human-readable summary
+thrum prime --json # Structured JSON for LLM consumption
 ```
 
 See [Context Management](context.md) for full documentation including output
@@ -447,7 +447,7 @@ thrum quickstart --name cursor_agent --role reviewer --module auth \
 
 ```bash
 # Agent's context window was compacted -- recover state
-thrum context prime
+thrum prime
 # Shows: identity, session, team, inbox, git state, saved context
 
 # Check for urgent messages
@@ -506,10 +506,10 @@ thrum send "Auth complete, 15 tests passing" --to @coord_main
 
 ### Context Recovery
 
-- **Run `thrum context prime`** at the start of every session
+- **Run `thrum prime`** at the start of every session
 - **Save context** at the end of every session:
   `echo "# Next steps\n- ..." | thrum context save`
-- **After compaction**, context prime has everything you need to resume work
+- **After compaction**, `thrum prime` has everything you need to resume work
 
 ### Coordination
 

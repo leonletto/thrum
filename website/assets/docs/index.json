@@ -87,7 +87,7 @@
   {
     "path": "multi-agent.html",
     "title": "Multi-Agent Support",
-    "description": "Runtime presets, context prime, and coordination patterns for running multiple AI agents across worktrees and platforms",
+    "description": "Runtime presets, thrum prime, and coordination patterns for running multiple AI agents across worktrees and platforms",
     "category": "coordination",
     "order": 2,
     "tags": [
@@ -95,7 +95,7 @@
       "runtime",
       "coordination",
       "teams",
-      "context-prime"
+      "prime"
     ],
     "lastUpdated": "2026-04-09"
   },

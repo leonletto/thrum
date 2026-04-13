@@ -85,9 +85,6 @@ watchdog, no messaging protocol in preambles). If you need multi-agent
 coordination, run `thrum single-agent-mode false`. See
 [Single-Agent Mode](single-agent-mode.md) for details.
 
-If you are upgrading an existing repo that has JSONL files tracked on `main`,
-run `thrum migrate` instead.
-
 ### 2. Install the Thrum Skill
 
 Install the thrum skill so your agent knows how to use thrum for coordination.

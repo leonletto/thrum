@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Multi-Agent Support — Thrum</title>
-<meta name="description" content="Runtime presets, context prime, and coordination patterns for running multiple AI agents across worktrees and platforms">
+<meta name="description" content="Runtime presets, thrum prime, and coordination patterns for running multiple AI agents across worktrees and platforms">
 <link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#multi-agent.html">
 <style>
 body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
@@ -279,11 +279,11 @@ daemon or writing files:</p>
 <p>Custom runtimes appear alongside built-in presets in <code>thrum runtime list</code>.</p>
 <hr>
 <h2>Context Prime</h2>
-<p><code>thrum context prime</code> gathers identity, session info, team status, unread
-messages, git context, and saved context into a single output. Run it at session
-startup or after compaction to quickly orient a new or recovering agent.</p>
-<pre><code>thrum context prime        # Human-readable summary
-thrum context prime --json # Structured JSON for LLM consumption</code></pre>
+<p><code>thrum prime</code> gathers identity, session info, team status, unread messages, git
+context, and saved context into a single output. Run it at session startup or
+after compaction to quickly orient a new or recovering agent.</p>
+<pre><code>thrum prime        # Human-readable summary
+thrum prime --json # Structured JSON for LLM consumption</code></pre>
 <p>See <a href="context.html">Context Management</a> for full documentation including output
 format, graceful degradation behavior, and use cases.</p>
 <hr>
@@ -488,7 +488,7 @@ thrum quickstart --name cursor_agent --role reviewer --module auth \
 # Both agents share the same daemon and can message each other</code></pre>
 <h3>Workflow 3: Session Recovery After Compaction</h3>
 <pre><code># Agent&#39;s context window was compacted -- recover state
-thrum context prime
+thrum prime
 # Shows: identity, session, team, inbox, git state, saved context
 
 # Check for urgent messages
@@ -539,10 +539,10 @@ thrum send &quot;Auth complete, 15 tests passing&quot; --to @coord_main</code></
 </ul>
 <h3>Context Recovery</h3>
 <ul>
-<li><strong>Run <code>thrum context prime</code></strong> at the start of every session</li>
+<li><strong>Run <code>thrum prime</code></strong> at the start of every session</li>
 <li><strong>Save context</strong> at the end of every session:
 <code>echo &quot;# Next steps\n- ...&quot; | thrum context save</code></li>
-<li><strong>After compaction</strong>, context prime has everything you need to resume work</li>
+<li><strong>After compaction</strong>, <code>thrum prime</code> has everything you need to resume work</li>
 </ul>
 <h3>Coordination</h3>
 <ul>

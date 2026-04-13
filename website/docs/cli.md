@@ -22,7 +22,6 @@ for AI agent coordination.
 | -------------------------- | -------------------------------------------------------------- |
 | `thrum init`               | Initialize Thrum in the current repository                     |
 | `thrum setup`              | Configure a feature worktree with `.thrum/redirect`            |
-| `thrum migrate`            | Migrate old-layout repos to worktree architecture              |
 | `thrum quickstart`         | Register, start session, and set intent in one step            |
 | `thrum overview`           | Show combined status, team, and inbox view                     |
 | `thrum send`               | Send a message (direct or broadcast)                           |
@@ -37,7 +36,6 @@ for AI agent coordination.
 | `thrum agent register`     | Register this agent with the daemon                            |
 | `thrum agent list`         | List registered agents                                         |
 | `thrum agent whoami`       | Show current agent identity                                    |
-| `thrum agent context`      | Show agent work context                                        |
 | `thrum agent delete`       | Delete an agent and all associated data                        |
 | `thrum agent cleanup`      | Detect and remove orphaned agents                              |
 | `thrum agent start`        | Start a new session (alias)                                    |
@@ -56,7 +54,6 @@ for AI agent coordination.
 | `thrum context show`       | Show agent context                                             |
 | `thrum context clear`      | Clear agent context                                            |
 | `thrum context sync`       | Sync context to a-sync branch                                  |
-| `thrum context prime`      | Collect all context for session initialization                 |
 | `thrum runtime`            | Manage runtime presets (list, show, set-default)               |
 | `thrum peer add`           | Start a pairing session and display a peercode                 |
 | `thrum peer join`          | Join a peer using a peercode                                   |
@@ -267,17 +264,6 @@ This command generates comprehensive agent coordination instructions including:
 
 The instructions are automatically injected by `thrum prime` when agents start
 sessions, providing immediate context on how to use Thrum for coordination.
-
-### thrum migrate
-
-Migrate an existing Thrum repository from the old layout (JSONL files tracked on
-main branch) to the new worktree architecture (JSONL files on `a-sync` branch
-via `.git/thrum-sync/a-sync/` worktree). Safe to run multiple times -- it
-detects what needs migration and skips steps that are already done.
-
-```text
-thrum migrate
-```
 
 ### thrum quickstart
 
@@ -490,7 +476,6 @@ delivery/read state.
 
 ```text
 thrum sent [flags]
-thrum sent show MSG_ID
 ```
 
 Common examples:
@@ -499,7 +484,7 @@ Common examples:
 thrum sent
 thrum sent --unread
 thrum sent --to @implementer_api
-thrum sent show msg_01HXE8Z7
+thrum message get msg_01HXE8Z7
 ```
 
 ### thrum message get
@@ -749,43 +734,6 @@ Source:    environment
 Session:   ses_01HXF2A9... (2h ago)
 ```
 
-### thrum agent context
-
-Show detailed work context for agents. Without arguments, lists all active work
-contexts. With an agent argument, shows detailed context for that agent.
-
-```text
-thrum agent context [AGENT] [flags]
-```
-
-| Flag       | Description            | Default |
-| ---------- | ---------------------- | ------- |
-| `--agent`  | Filter by agent role   |         |
-| `--branch` | Filter by branch       |         |
-| `--file`   | Filter by changed file |         |
-
-Example (single agent detail):
-
-```text
-$ thrum agent context @implementer
-Agent: @implementer (ses_01HXF...)
-Branch: feature/auth
-Intent: Fixing token refresh (set 5m ago)
-Task: beads:thrum-42 (set 1h ago)
-
-Unmerged Commits (2):
-  abc1234 Add token refresh logic [auth.go, token.go]
-  def5678 Fix expiry check [auth.go]
-
-Changed Files (vs main): 3
-  internal/auth/auth.go
-  internal/auth/token.go
-  internal/auth/token_test.go
-
-Uncommitted: 1
-  internal/auth/refresh.go
-```
-
 ### thrum agent delete
 
 Delete an agent and all its associated data. This removes the identity file
@@ -1031,8 +979,7 @@ $ thrum session heartbeat --add-scope module:auth
 ### thrum session set-intent
 
 Set a free-text description of what the agent is currently working on. Appears
-in `thrum agent list --context` and `thrum agent context`. Pass an empty string
-to clear.
+in `thrum agent list --context`. Pass an empty string to clear.
 
 ```text
 thrum session set-intent TEXT
@@ -1048,8 +995,7 @@ $ thrum session set-intent "Refactoring login flow"
 ### thrum session set-task
 
 Set the current task identifier for the session (e.g., a beads issue ID).
-Appears in `thrum agent list --context` and `thrum agent context`. Pass an empty
-string to clear.
+Appears in `thrum agent list --context`. Pass an empty string to clear.
 
 ```text
 thrum session set-task TASK

@@ -56,7 +56,6 @@ thrum roles deploy --dry-run             Preview without writing
 thrum session start                      Start session
 thrum session end                        End session
 thrum session set-intent "..."           Update work description
-thrum context prime                      Same as thrum prime
 thrum context show                       Show saved work context
 thrum context save --file <path>         Save context from file
 thrum overview                           Combined status + team + inbox

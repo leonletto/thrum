@@ -125,7 +125,7 @@ plumbing commands (<code>git commit-tree</code> + <code>git update-ref</code>), 
 the working tree or index</li>
 <li><strong>Local-only</strong>: Works without a remote (offline mode)</li>
 <li><strong>Remote push</strong>: Automatically pushed when remote is available</li>
-<li><strong>Migration</strong>: Existing repos can upgrade via <code>thrum migrate</code></li>
+<li><strong>Auto-setup</strong>: Thrum creates the branch automatically during <code>thrum init</code></li>
 </ol>
 <p>The orphan branch is created using the well-known empty tree SHA
 (<code>4b825dc642cb6eb9a060e54bf8d69288fbee4904</code>), ensuring the branch has no files
@@ -376,12 +376,10 @@ on <code>main</code>:</p>
 ├── messages/             # tracked on main
 ├── schema_version        # tracked on main
 └── var/                  # gitignored</code></pre>
-<p>Use <code>thrum migrate</code> to upgrade to the worktree layout. This command:</p>
+<p>Running <code>thrum init</code> sets up the worktree layout automatically. It:</p>
 <ol>
 <li>Creates the <code>a-sync</code> orphan branch (if not already present)</li>
-<li>Copies existing JSONL data to the new branch</li>
 <li>Sets up the sync worktree</li>
-<li>Removes old tracked files from the main branch</li>
 <li>Updates <code>.gitignore</code> to ignore <code>.thrum/</code> entirely</li>
 </ol>
 <h2>Monitoring &amp; Status</h2>
@@ -518,10 +516,6 @@ JSONL dedup. If you see a git conflict in the worktree:</p>
 <p>If sync is permanently stuck:</p>
 <pre><code>rm .thrum/var/sync.lock</code></pre>
 <p>Then restart the daemon.</p>
-<h3>Upgrading from Old Layout</h3>
-<p>If your repo still has <code>.thrum/events.jsonl</code> or <code>.thrum/messages/</code> tracked on
-<code>main</code>:</p>
-<pre><code>thrum migrate</code></pre>
 <h2>Next Steps</h2>
 <ul>
 <li><a href="daemon.html">Daemon Architecture</a> — how the daemon&#39;s sync loop and sync

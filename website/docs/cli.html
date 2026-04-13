@@ -62,10 +62,6 @@ for AI agent coordination.</p>
 <td>Configure a feature worktree with <code>.thrum/redirect</code></td>
 </tr>
 <tr>
-<td><code>thrum migrate</code></td>
-<td>Migrate old-layout repos to worktree architecture</td>
-</tr>
-<tr>
 <td><code>thrum quickstart</code></td>
 <td>Register, start session, and set intent in one step</td>
 </tr>
@@ -120,10 +116,6 @@ for AI agent coordination.</p>
 <tr>
 <td><code>thrum agent whoami</code></td>
 <td>Show current agent identity</td>
-</tr>
-<tr>
-<td><code>thrum agent context</code></td>
-<td>Show agent work context</td>
 </tr>
 <tr>
 <td><code>thrum agent delete</code></td>
@@ -196,10 +188,6 @@ for AI agent coordination.</p>
 <tr>
 <td><code>thrum context sync</code></td>
 <td>Sync context to a-sync branch</td>
-</tr>
-<tr>
-<td><code>thrum context prime</code></td>
-<td>Collect all context for session initialization</td>
 </tr>
 <tr>
 <td><code>thrum runtime</code></td>
@@ -626,12 +614,6 @@ thrum setup claude-md --apply --force  # Replace existing Thrum section</code></
 </ul>
 <p>The instructions are automatically injected by <code>thrum prime</code> when agents start
 sessions, providing immediate context on how to use Thrum for coordination.</p>
-<h3>thrum migrate</h3>
-<p>Migrate an existing Thrum repository from the old layout (JSONL files tracked on
-main branch) to the new worktree architecture (JSONL files on <code>a-sync</code> branch
-via <code>.git/thrum-sync/a-sync/</code> worktree). Safe to run multiple times -- it
-detects what needs migration and skips steps that are already done.</p>
-<pre><code>thrum migrate</code></pre>
 <h3>thrum quickstart</h3>
 <p>Register, start a session, and set an initial intent in one step. If the agent
 is already registered, it re-registers automatically. Supports agent naming via
@@ -896,13 +878,12 @@ Showing 1-2 of 12 messages (5 unread)</code></pre>
 <h3>thrum sent</h3>
 <p>List messages you authored, including resolved recipients and durable
 delivery/read state.</p>
-<pre><code>thrum sent [flags]
-thrum sent show MSG_ID</code></pre>
+<pre><code>thrum sent [flags]</code></pre>
 <p>Common examples:</p>
 <pre><code>thrum sent
 thrum sent --unread
 thrum sent --to @implementer_api
-thrum sent show msg_01HXE8Z7</code></pre>
+thrum message get msg_01HXE8Z7</code></pre>
 <h3>thrum message get</h3>
 <p>Get a single message with full details. The message is automatically marked as
 read.</p>
@@ -1144,52 +1125,6 @@ Module:    auth
 Display:   Auth Developer
 Source:    environment
 Session:   ses_01HXF2A9... (2h ago)</code></pre>
-<h3>thrum agent context</h3>
-<p>Show detailed work context for agents. Without arguments, lists all active work
-contexts. With an agent argument, shows detailed context for that agent.</p>
-<pre><code>thrum agent context [AGENT] [flags]</code></pre>
-<table>
-<thead>
-<tr>
-<th>Flag</th>
-<th>Description</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>--agent</code></td>
-<td>Filter by agent role</td>
-<td></td>
-</tr>
-<tr>
-<td><code>--branch</code></td>
-<td>Filter by branch</td>
-<td></td>
-</tr>
-<tr>
-<td><code>--file</code></td>
-<td>Filter by changed file</td>
-<td></td>
-</tr>
-</tbody></table>
-<p>Example (single agent detail):</p>
-<pre><code>$ thrum agent context @implementer
-Agent: @implementer (ses_01HXF...)
-Branch: feature/auth
-Intent: Fixing token refresh (set 5m ago)
-Task: beads:thrum-42 (set 1h ago)
-
-Unmerged Commits (2):
-  abc1234 Add token refresh logic [auth.go, token.go]
-  def5678 Fix expiry check [auth.go]
-
-Changed Files (vs main): 3
-  internal/auth/auth.go
-  internal/auth/token.go
-  internal/auth/token_test.go
-
-Uncommitted: 1
-  internal/auth/refresh.go</code></pre>
 <h3>thrum agent delete</h3>
 <p>Delete an agent and all its associated data. This removes the identity file
 (<code>identities/{name}.json</code>), message file (<code>messages/{name}.jsonl</code>), and the
@@ -1449,16 +1384,14 @@ updates the agent&#39;s last-seen time. Optionally add or remove scopes and refs
   Context: branch: feature/auth, 3 commits, 5 files</code></pre>
 <h3>thrum session set-intent</h3>
 <p>Set a free-text description of what the agent is currently working on. Appears
-in <code>thrum agent list --context</code> and <code>thrum agent context</code>. Pass an empty string
-to clear.</p>
+in <code>thrum agent list --context</code>. Pass an empty string to clear.</p>
 <pre><code>thrum session set-intent TEXT</code></pre>
 <p>Example:</p>
 <pre><code>$ thrum session set-intent &quot;Refactoring login flow&quot;
 ✓ Intent set: Refactoring login flow</code></pre>
 <h3>thrum session set-task</h3>
 <p>Set the current task identifier for the session (e.g., a beads issue ID).
-Appears in <code>thrum agent list --context</code> and <code>thrum agent context</code>. Pass an empty
-string to clear.</p>
+Appears in <code>thrum agent list --context</code>. Pass an empty string to clear.</p>
 <pre><code>thrum session set-task TASK</code></pre>
 <p>Example:</p>
 <pre><code>$ thrum session set-task beads:thrum-42

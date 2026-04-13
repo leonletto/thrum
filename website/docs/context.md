@@ -340,56 +340,6 @@ is found, the default thrum quick-reference preamble is used as a fallback. See
 
 ---
 
-### thrum context prime
-
-Collect all context needed for agent session initialization or recovery. This is
-a comprehensive context collection command that gathers identity, session info,
-agent list, unread messages, git context, and daemon health into a single
-output.
-
-```bash
-thrum context prime [flags]
-```
-
-| Flag     | Description                          | Default |
-| -------- | ------------------------------------ | ------- |
-| `--json` | Structured JSON output for scripting | `false` |
-
-**Examples:**
-
-```bash
-# Human-readable summary
-thrum context prime
-
-# Structured JSON output
-thrum context prime --json
-```
-
-**What it includes:**
-
-- Agent identity (name, role, module)
-- Active session information
-- List of registered agents and their status
-- Unread messages count
-- Git context (branch, commits, files)
-- Daemon health status
-
-**Use cases:**
-
-- Session initialization - quickly orient a new session
-- Session recovery - restore context after crash or compaction
-- Debugging - gather all relevant state in one command
-- Agent onboarding - provide comprehensive context to new agents
-
-**Note:** `thrum prime` is the canonical top-level command;
-`thrum context prime` is an alias for it. The PreCompact hook automatically
-saves context before compaction to `.thrum/context/{name}.md` and
-`/tmp/thrum-pre-compact-{name}-{role}-{module}-{epoch}.md`, but the
-agent-initiated `/thrum:update-project` skill captures richer context including
-decisions and rationale.
-
----
-
 ## The /thrum:update-project Skill
 
 The `/thrum:update-project` skill is a Claude Code plugin slash command defined
@@ -746,5 +696,5 @@ machines. Local notes and WIP context can stay local.
   command and all other CLI commands
 - [Agent Coordination](agent-coordination.md) — practical multi-agent workflows
   including context handoff between agents
-- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and the
-  `thrum context prime` command for session recovery
+- [Multi-Agent Support](multi-agent.md) — groups, runtime presets, and session
+  recovery with `thrum prime`

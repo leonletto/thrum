@@ -411,8 +411,8 @@ bd list --status=in_progress
 
 - [Workflow Templates](workflow-templates.md) — pre-built skill pipelines for
   the full research → plan → implement → review cycle
-- [Multi-Agent Support](multi-agent.md) — agent groups, runtime presets, and the
-  `context prime` command for session recovery
+- [Multi-Agent Support](multi-agent.md) — agent groups, runtime presets, and
+  session recovery with `thrum prime`
 - [Messaging](messaging.md) — full send/receive/reply reference including
   threads, scopes, mentions, and groups
 - [MCP Server](mcp-server.md) — optional native tool integration for MCP-capable

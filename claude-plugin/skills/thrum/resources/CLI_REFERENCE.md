@@ -69,7 +69,7 @@ thrum inbox --limit N                          # Alias for --page-size
 thrum sent                                     # Show sent items with receipts
 thrum sent --unread                            # Only messages with unread recipients
 thrum sent --to @agent                         # Filter by recipient or audience
-thrum sent show <message-id>                   # Full recipient detail for one message
+thrum message get <message-id>                 # Full recipient detail for one message
 ```
 
 Flags:
@@ -203,23 +203,6 @@ Flags:
 --context         Show work context (branch, commits, intent)
 --role string     Filter by role
 --module string   Filter by module
-```
-
-### agent context
-
-```bash
-thrum agent context                            # List all active work contexts
-thrum agent context @planner                   # Detail for specific agent
-thrum agent context --branch feature/auth      # Filter by branch
-thrum agent context --file auth.go             # Filter by changed file
-```
-
-Flags:
-
-```text
---agent string    Filter by agent role
---branch string   Filter by branch
---file string     Filter by changed file
 ```
 
 ### agent set-intent / session set-intent
@@ -367,7 +350,6 @@ thrum overview --json
 ```bash
 thrum prime                                    # Gather full session context (AI-optimized)
 thrum prime --json
-thrum context prime                            # Alias for thrum prime
 thrum context show                             # Show saved agent context
 thrum context show --agent coordinator         # Show another agent's context
 thrum context show --raw                       # Raw output with file boundary markers
@@ -384,7 +366,6 @@ thrum context preamble                         # Show current preamble
 thrum context preamble --init                  # Create/reset to default preamble
 thrum context preamble --file path.md          # Set preamble from file
 thrum context preamble --agent coordinator
-thrum context update                           # Delegates to /thrum:update-project skill
 ```
 
 `context show` flags:
@@ -472,11 +453,11 @@ Flags:
 ## Setup
 
 ```bash
-thrum setup worktree                           # Set up redirect in feature worktree (default)
-thrum setup worktree --main-repo /path/to/main
+thrum worktree setup                           # Set up redirect in feature worktree (default)
+thrum worktree setup --main-repo /path/to/main
 ```
 
-`setup worktree` flags:
+`worktree setup` flags:
 
 ```text
 --main-repo string   Path to the main repository (where daemon runs) (default ".")
@@ -745,17 +726,6 @@ after quickstart runs (one identity per worktree enforced).
 thrum config show                              # Show effective configuration
 thrum config show --json
 ```
-
----
-
-## Migrate
-
-```bash
-thrum migrate                                  # Migrate from old layout to worktree architecture
-```
-
-Safe to run multiple times — detects what needs migration and skips completed
-steps.
 
 ---
 
