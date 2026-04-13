@@ -342,7 +342,7 @@ thrum session end
 
 ```bash
 # Check registration
-thrum status
+thrum overview
 
 # Check daemon
 thrum daemon status

@@ -140,10 +140,9 @@ thrum agent list --role reviewer               # Filter by role
 thrum agent list --context                     # Show work context
 ```
 
-### status / team / whoami
+### team / whoami
 
 ```bash
-thrum status                                   # Current agent, session, inbox, sync state
 thrum team                                     # Active agents with intents
 thrum team --all                               # Include offline agents
 thrum whoami                                   # Show your identity

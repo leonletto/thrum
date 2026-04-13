@@ -334,13 +334,6 @@ Flags:
 --agent string   Filter by agent ID
 ```
 
-### status
-
-```bash
-thrum status                                   # Current agent, session, inbox counts, sync state
-thrum status --json
-```
-
 ### team
 
 ```bash

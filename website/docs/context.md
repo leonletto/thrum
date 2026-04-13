@@ -106,7 +106,7 @@ read:** `thrum message read --all` **Send message:**
 `thrum send "message" --to @<agent_name>` — ALWAYS use the specific agent name
 (e.g., `@coordinator_main`), NEVER the role (e.g., `@coordinator`). Role names
 fan out to ALL agents with that role. Run `thrum team` to find exact names.
-**Reply:** `thrum reply <MSG_ID> "response"` **Status:** `thrum status` **Who's
+**Reply:** `thrum reply <MSG_ID> "response"` **Status:** `thrum overview` **Who's
 online:** `thrum team` **Save context:** Use `/thrum:update-project` skill.
 **NEVER run `thrum context save` manually** — it overwrites accumulated session
 state.
@@ -465,18 +465,18 @@ echo "# Decision: Using JWT with refresh tokens
 - Rate limit: 100 req/min per IP" | thrum context save
 ```
 
-### Integration with thrum status
+### Integration with thrum overview
 
-The `thrum status` command shows context file size and age when context exists:
+The `thrum overview` command shows context file size and age when context exists:
 
 ```bash
-$ thrum status
-Agent:    furiosa (@implementer)
-Module:   auth
-Session:  ses_01HXF2A9... (active 2h15m)
-Intent:   Implementing JWT refresh
-Context:  1.2 KB (updated 5m ago)    # ← Context indicator
-Inbox:    3 unread (12 total)
+$ thrum overview
+You: @implementer (furiosa)
+Session: active for 2h15m
+Intent: Implementing JWT refresh
+Context: 1.2 KB (updated 5m ago)    # ← Context indicator
+Inbox: 3 unread (12 total)
+Sync: ✓ synced
 ```
 
 ---

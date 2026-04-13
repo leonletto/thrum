@@ -38,7 +38,6 @@ thrum quickstart --name <agent-name> --role R --module M --intent "..."   Regist
 thrum worktree create <path> <branch> --identity <n> --role <r>   Create worktree + register agent
 thrum worktree setup <path> <branch> --identity <n> --role <r>    Alias for worktree create
 thrum whoami                                          Show identity
-thrum status                                          Agent + daemon status
 thrum team                                            List active agents
 thrum ping @name                                      Check if agent online
 thrum who-has <file>                                  Who's editing a file

@@ -131,14 +131,14 @@ thrum message read --all     # Mark all messages as read</code></pre>
 shows what you&#39;ve sent, who it went to, and whether they&#39;ve read it.</p>
 <h2>Common Commands</h2>
 <h3>Check Status</h3>
-<pre><code>thrum status</code></pre>
+<pre><code>thrum overview</code></pre>
 <p>Shows:</p>
 <ul>
 <li>Your agent identity</li>
 <li>Active session</li>
 <li>Inbox counts</li>
 <li>Sync status</li>
-<li>Daemon health</li>
+<li>Team overview</li>
 </ul>
 <h3>Wait for Notifications</h3>
 <p>Use <code>thrum wait</code> to block until a message arrives — useful in automation and
@@ -210,7 +210,7 @@ thrum send &quot;Auth module ready for review&quot; \
 thrum session end
 
 # Check final status
-thrum status</code></pre>
+thrum overview</code></pre>
 <h2>Working Across Machines</h2>
 <blockquote>
 <p><strong>Note:</strong> <code>thrum init</code> sets <code>local_only: true</code> by default. To enable

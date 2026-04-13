@@ -31,7 +31,6 @@ thrum wait --timeout 120s                Custom timeout (duration)
 ```bash
 thrum quickstart --name <name> --role R --module M --intent "..."   Register + start session
 thrum whoami                                          Show identity
-thrum status                                          Agent + daemon status
 thrum team                                            List active agents
 thrum ping @name                                      Check if agent online
 thrum who-has <file>                                  Who's editing a file

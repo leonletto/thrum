@@ -180,7 +180,7 @@ shows what you've sent, who it went to, and whether they've read it.
 ### Check Status
 
 ```bash
-thrum status
+thrum overview
 ```
 
 Shows:
@@ -189,7 +189,7 @@ Shows:
 - Active session
 - Inbox counts
 - Sync status
-- Daemon health
+- Team overview
 
 ### Wait for Notifications
 
@@ -296,7 +296,7 @@ thrum send "Auth module ready for review" \
 thrum session end
 
 # Check final status
-thrum status
+thrum overview
 ```
 
 ## Working Across Machines

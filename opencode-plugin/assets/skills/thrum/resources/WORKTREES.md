@@ -58,7 +58,7 @@ the shared `.thrum/` directory at the git root.
 thrum daemon start
 
 # All worktrees connect to the same daemon
-thrum status    # Shows shared daemon health from any worktree
+thrum daemon status    # Shows shared daemon health from any worktree
 ```
 
 ## Cross-Worktree Messaging

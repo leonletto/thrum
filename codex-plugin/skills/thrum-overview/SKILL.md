@@ -19,5 +19,5 @@ thrum overview               # Human-readable
 thrum overview --json        # Machine-readable
 ```
 
-This is equivalent to running `thrum status`, `thrum team`, `thrum inbox`,
-`thrum sent`, and `thrum sync status` together.
+This is equivalent to running `thrum team`, `thrum inbox`, `thrum sent`, and
+`thrum sync status` together.

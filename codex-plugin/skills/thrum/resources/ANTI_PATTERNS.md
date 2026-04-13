@@ -64,7 +64,7 @@ Specific intents help other agents understand what you're doing via
 ## 8. Reading Files Instead of Using CLI
 
 **Wrong:** Reading `.git/thrum-sync/` files directly with the Read tool.
-**Right:** Use `thrum inbox`, `thrum status`, `thrum prime`. The SKILL.md
+**Right:** Use `thrum inbox`, `thrum overview`, `thrum prime`. The SKILL.md
 `allowed-tools` is `Bash(thrum:*)` — no Read permission needed.
 
 ## 9. Sending Messages to Yourself

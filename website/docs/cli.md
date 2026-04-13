@@ -25,7 +25,6 @@ for AI agent coordination.
 | `thrum migrate`            | Migrate old-layout repos to worktree architecture              |
 | `thrum quickstart`         | Register, start session, and set intent in one step            |
 | `thrum overview`           | Show combined status, team, and inbox view                     |
-| `thrum status`             | Show current agent status, session, and work context           |
 | `thrum send`               | Send a message (direct or broadcast)                           |
 | `thrum reply`              | Reply to a message                                             |
 | `thrum inbox`              | List messages in your inbox                                    |
@@ -346,32 +345,6 @@ Team:
 
 Inbox: 3 unread (12 total)
 Sync: ✓ synced
-```
-
-### thrum status
-
-Show current agent identity, session, work context, inbox counts, and daemon
-health.
-
-```text
-thrum status
-```
-
-Example:
-
-```text
-$ thrum status
-Agent:    implementer_35HV62T9B9 (@implementer)
-Module:   auth
-Display:  Auth Developer
-Session:  ses_01HXF2A9... (duration: 2h15m)
-Intent:   Fixing token refresh
-Branch:   feature/auth (3 commits ahead)
-Files:    5 changed, 2 uncommitted
-Inbox:    47 messages (12 unread)
-Sync:     ✓ synced
-Daemon:   running (2h15m uptime, v0.1.0)
-WebSocket: ws://localhost:9999
 ```
 
 ### thrum team

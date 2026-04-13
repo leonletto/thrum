@@ -205,9 +205,9 @@ the correct daemon socket and config. Set by `thrum-startup.sh` automatically to
 prevent identity drift.
 
 `THRUM_AGENT_ID` overrides identity resolution for daemon RPC calls, bypassing
-identity file lookup entirely. When set, commands like `thrum status`,
-`thrum prime`, and `thrum overview` use this pinned agent ID directly. Useful
-when scripting or when the identity file is unavailable.
+identity file lookup entirely. When set, commands like `thrum prime` and
+`thrum overview` use this pinned agent ID directly. Useful when scripting or
+when the identity file is unavailable.
 
 Use environment variables when:
 

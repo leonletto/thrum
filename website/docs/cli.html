@@ -74,10 +74,6 @@ for AI agent coordination.</p>
 <td>Show combined status, team, and inbox view</td>
 </tr>
 <tr>
-<td><code>thrum status</code></td>
-<td>Show current agent status, session, and work context</td>
-</tr>
-<tr>
 <td><code>thrum send</code></td>
 <td>Send a message (direct or broadcast)</td>
 </tr>
@@ -722,23 +718,6 @@ Team:
 
 Inbox: 3 unread (12 total)
 Sync: ✓ synced</code></pre>
-<h3>thrum status</h3>
-<p>Show current agent identity, session, work context, inbox counts, and daemon
-health.</p>
-<pre><code>thrum status</code></pre>
-<p>Example:</p>
-<pre><code>$ thrum status
-Agent:    implementer_35HV62T9B9 (@implementer)
-Module:   auth
-Display:  Auth Developer
-Session:  ses_01HXF2A9... (duration: 2h15m)
-Intent:   Fixing token refresh
-Branch:   feature/auth (3 commits ahead)
-Files:    5 changed, 2 uncommitted
-Inbox:    47 messages (12 unread)
-Sync:     ✓ synced
-Daemon:   running (2h15m uptime, v0.1.0)
-WebSocket: ws://localhost:9999</code></pre>
 <h3>thrum team</h3>
 <p>Show a rich, multi-line status report for every active agent. Displays session
 info, work context, inbox counts, branch status, and per-file change details.</p>

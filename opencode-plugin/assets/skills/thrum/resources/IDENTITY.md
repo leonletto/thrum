@@ -32,7 +32,7 @@ See [WORKTREES.md](WORKTREES.md) for multi-worktree identity setup.
 
 ```bash
 thrum whoami          # Current identity
-thrum status          # Identity + session + daemon health
+thrum overview        # Identity + session + team + inbox + sync
 thrum prime           # Full context including identity
 ```
 

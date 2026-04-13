@@ -395,8 +395,8 @@ the current working directory. This is set automatically by `thrum-startup.sh`
 to prevent identity drift when an agent `cd`s into a different worktree.
 
 `THRUM_AGENT_ID` pins the caller identity for daemon RPC calls, bypassing
-identity file lookup. When set, commands like `thrum status`, `thrum prime`, and
-`thrum overview` use this agent ID directly.
+identity file lookup. When set, commands like `thrum prime` and `thrum overview`
+use this agent ID directly.
 
 ## Runtime Templates
 
