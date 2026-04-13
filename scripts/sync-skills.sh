@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Unified skill and command sync script.
 # Source of truth: claude-plugin/
-# Targets: codex-plugin/, opencode-plugin/
+# Targets: codex-plugin/, opencode-plugin/, cursor-plugin/
 #
 # Run before release to keep all runtime plugins in sync.
 
@@ -286,6 +286,71 @@ sync_opencode() {
   echo "  opencode sync complete"
 }
 
+# ─── Cursor target ─────────────────────────────────────────────────────────
+
+sync_cursor() {
+  local CURSOR_PLUGIN="${REPO_ROOT}/cursor-plugin"
+  local CURSOR_SKILLS="${CURSOR_PLUGIN}/skills"
+  local CURSOR_COMMANDS="${CURSOR_PLUGIN}/commands"
+  local CURSOR_AGENTS="${CURSOR_PLUGIN}/agents"
+
+  if [[ ! -d "${CURSOR_PLUGIN}" ]]; then
+    echo "skip: cursor-plugin/ not found"
+    return
+  fi
+
+  echo "── cursor-plugin ──"
+
+  # Skills: copy each skill directory from claude-plugin
+  if [[ -d "${CLAUDE_SKILLS}" ]]; then
+    mkdir -p "${CURSOR_SKILLS}"
+    for skill_path in "${CLAUDE_SKILLS}"/*; do
+      [[ -d "${skill_path}" ]] || continue
+      skill_name="$(basename "${skill_path}")"
+      target="${CURSOR_SKILLS}/${skill_name}"
+      rm -rf "${target}"
+      cp -R "${skill_path}" "${target}"
+      rm -f "${target}/CLAUDE.md"
+      # Strip allowed-tools from SKILL.md (Cursor doesn't enforce it).
+      # Must handle multi-line values (e.g., key on one line, quoted value on next).
+      # Use awk instead of sed for portability (no sed -i '' macOS vs Linux issue).
+      if [[ -f "${target}/SKILL.md" ]]; then
+        awk '
+          /^allowed-tools:/ { skip = 1; next }
+          skip && /^[[:space:]]/ { next }
+          { skip = 0; print }
+        ' "${target}/SKILL.md" > "${target}/SKILL.md.tmp"
+        mv "${target}/SKILL.md.tmp" "${target}/SKILL.md"
+      fi
+      echo "  synced skill ${skill_name}"
+    done
+  fi
+
+  # Commands: copy directly (same format as claude-plugin)
+  if [[ -d "${CLAUDE_COMMANDS}" ]]; then
+    mkdir -p "${CURSOR_COMMANDS}"
+    rm -f "${CURSOR_COMMANDS}"/*.md
+    for cmd_file in "${CLAUDE_COMMANDS}"/*.md; do
+      cp "${cmd_file}" "${CURSOR_COMMANDS}/"
+      echo "  synced command $(basename "${cmd_file}")"
+    done
+  fi
+
+  # Agents: copy directly
+  local CLAUDE_AGENTS="${CLAUDE_PLUGIN}/agents"
+  if [[ -d "${CLAUDE_AGENTS}" ]]; then
+    mkdir -p "${CURSOR_AGENTS}"
+    rm -f "${CURSOR_AGENTS}"/*.md
+    for agent_file in "${CLAUDE_AGENTS}"/*.md; do
+      [[ -f "${agent_file}" ]] || continue
+      cp "${agent_file}" "${CURSOR_AGENTS}/"
+      echo "  synced agent $(basename "${agent_file}")"
+    done
+  fi
+
+  echo "  cursor sync complete"
+}
+
 # ─── Main ───────────────────────────────────────────────────────────────────
 
 if [[ ! -d "${CLAUDE_PLUGIN}" ]]; then
@@ -299,6 +364,8 @@ echo ""
 sync_codex
 echo ""
 sync_opencode
+echo ""
+sync_cursor
 
 echo ""
 echo "done"
