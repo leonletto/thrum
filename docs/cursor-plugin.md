@@ -211,7 +211,7 @@ multi-agent setups.
 | Packaging      | Local install script                    | Marketplace plugin                          |
 | Installation   | `local-install.sh`                      | `claude plugin marketplace add` + `install` |
 | Updates        | `sync-skills.sh` + re-install           | Re-install from source                      |
-| Hooks          | 5 (session, shell guard, stop, compact) | 3 (session, compact)                        |
+| Hooks          | 5 (session, shell guard, stop, compact) | 5 (tool guard, session, stop, compact)      |
 | Rules          | 2 `.mdc` files (always-on)              | N/A (uses hooks instead)                    |
 | Skills         | 4 skills + 8 resource docs              | Via plugin progressive disclosure           |
 | MCP            | Auto-configured `mcp.json`              | Manual `.claude/settings.json`              |
