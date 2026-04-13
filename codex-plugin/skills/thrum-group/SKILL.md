@@ -7,9 +7,10 @@ description: Manage messaging groups
 
 # Thrum Group
 
-Use this skill when the user explicitly wants the `group` Thrum workflow. Prefer
-the umbrella `thrum` skill when the request spans multiple commands or needs
-broader coordination judgment.
+Use this skill when the user explicitly wants the `group` Thrum
+workflow. Prefer the umbrella `thrum` skill when the request spans multiple
+commands or needs broader coordination judgment.
+
 
 Create and manage groups for team messaging.
 

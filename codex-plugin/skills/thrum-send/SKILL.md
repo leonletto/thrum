@@ -7,9 +7,10 @@ description: Send a message to an agent or group
 
 # Thrum Send
 
-Use this skill when the user explicitly wants the `send` Thrum workflow. Prefer
-the umbrella `thrum` skill when the request spans multiple commands or needs
-broader coordination judgment.
+Use this skill when the user explicitly wants the `send` Thrum
+workflow. Prefer the umbrella `thrum` skill when the request spans multiple
+commands or needs broader coordination judgment.
+
 
 Send a direct message, group message, or broadcast.
 

@@ -7,9 +7,10 @@ description: Combines identity, team, inbox, and sync status
 
 # Thrum Overview
 
-Use this skill when the user explicitly wants the `overview` Thrum workflow.
-Prefer the umbrella `thrum` skill when the request spans multiple commands or
-needs broader coordination judgment.
+Use this skill when the user explicitly wants the `overview` Thrum
+workflow. Prefer the umbrella `thrum` skill when the request spans multiple
+commands or needs broader coordination judgment.
+
 
 Show a combined view of agent identity, active team members, inbox messages, and
 sync status.
