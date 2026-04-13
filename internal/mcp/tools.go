@@ -275,5 +275,4 @@ func parseMention(to string) string {
 	return to
 }
 
-
 // Group tool handlers removed — groups are no longer user-facing MCP tools.

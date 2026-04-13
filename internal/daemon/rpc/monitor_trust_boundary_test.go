@@ -22,7 +22,8 @@ import (
 // host — a critical privilege escalation.
 //
 // This test guards the design decision in:
-//   dev-docs/specs/2026-04-11-monitor-jobs-design.md § "Trust boundary"
+//
+//	dev-docs/specs/2026-04-11-monitor-jobs-design.md § "Trust boundary"
 //
 // HOW IT WORKS
 // The test has two complementary layers:

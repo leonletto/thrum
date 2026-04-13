@@ -31,8 +31,8 @@ type SendRequest struct {
 	ReplyTo       string         `json:"reply_to,omitempty"`
 	Scopes        []types.Scope  `json:"scopes,omitempty"`
 	Refs          []types.Ref    `json:"refs,omitempty"`
-	To            string         `json:"to,omitempty"`         // strict: agent_id or "everyone" only
-	Mentions      []string       `json:"mentions,omitempty"`   // permissive: agent_id, role, or group
+	To            string         `json:"to,omitempty"`       // strict: agent_id or "everyone" only
+	Mentions      []string       `json:"mentions,omitempty"` // permissive: agent_id, role, or group
 	Tags          []string       `json:"tags,omitempty"`
 	ActingAs      string         `json:"acting_as,omitempty"` // Impersonate this agent (users only)
 	Disclose      bool           `json:"disclose,omitempty"`  // Show [via user:X] in message

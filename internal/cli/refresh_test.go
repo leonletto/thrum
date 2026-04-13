@@ -419,12 +419,12 @@ func readIdentityFile(t *testing.T, thrumDir, agentName string) *config.Identity
 // HandleRegister → ensureActiveSession chain through the real handler,
 // not via a mock that bypasses the daemon-side decision logic.
 type resurrectTestEnv struct {
-	client    *Client
-	state     *state.State
-	server    *daemon.Server
-	thrumDir  string
-	repoPath  string
-	teardown  func()
+	client   *Client
+	state    *state.State
+	server   *daemon.Server
+	thrumDir string
+	repoPath string
+	teardown func()
 }
 
 // startResurrectTestDaemon stands up a real daemon.Server with the

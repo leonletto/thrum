@@ -13,11 +13,11 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
-	"github.com/leonletto/thrum/internal/worktree"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
+	"github.com/leonletto/thrum/internal/worktree"
 )
 
 // Request/Response types for tmux RPC handlers.
@@ -98,8 +98,8 @@ type TmuxHandler struct {
 	queues      map[string]*SessionQueue
 	queuesMu    sync.Mutex
 	sessionMu   sync.RWMutex      // protects sessionCwds and cwdSessions
-	sessionCwds map[string]string  // session name → cwd, populated by HandleCreate
-	cwdSessions map[string]string  // cwd → session name, for single-session-per-worktree
+	sessionCwds map[string]string // session name → cwd, populated by HandleCreate
+	cwdSessions map[string]string // cwd → session name, for single-session-per-worktree
 }
 
 // NewTmuxHandler creates a new TmuxHandler.

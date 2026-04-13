@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	defaultChunkSize    = 512
-	interChunkDelay     = 10 * time.Millisecond
-	escToEnterDelay     = 600 * time.Millisecond
+	defaultChunkSize     = 512
+	interChunkDelay      = 10 * time.Millisecond
+	escToEnterDelay      = 600 * time.Millisecond
 	safeNudgeSettleDelay = 50 * time.Millisecond
 )
 
