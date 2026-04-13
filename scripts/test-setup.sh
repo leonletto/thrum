@@ -199,7 +199,7 @@ ENV_JSON=$(cat <<ENVEOF
   "root": "$ROOT",
   "coordinator": "$COORDINATOR_DIR",
   "implementer": "$IMPLEMENTER_DIR",
-  "bare_remote": "$BARE_REMOTE_DIR",
+  "remote": "$BARE_REMOTE_DIR",
   "coordinator_name": "$COORD_NAME",
   "implementer_name": "$IMPL_NAME",
   "runtime": "$RUNTIME",
