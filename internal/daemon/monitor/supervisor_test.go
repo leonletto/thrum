@@ -147,8 +147,8 @@ func TestSupervisor_ReloadFromDBOnStart(t *testing.T) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TestSupervisor_StopRemovesFromMapAndDB: stop a running monitor and verify
-// the runner is gone from the map and the DB row is deleted.
+// TestSupervisor_StopMarksStoppedAndRemovesRunner: stop a running monitor and
+// verify the runner is gone from the map and the DB row has status=stopped.
 // ─────────────────────────────────────────────────────────────────────────────
 
 func TestSupervisor_StopRemovesFromMapAndDB(t *testing.T) {
@@ -177,9 +177,16 @@ func TestSupervisor_StopRemovesFromMapAndDB(t *testing.T) {
 	sup.mu.Unlock()
 	assert.False(t, inMap, "runner must be removed from the map after Stop")
 
-	// Row is deleted from the DB.
-	_, err = store.GetByID(ctx, id)
-	assert.ErrorIs(t, err, ErrNotFound, "DB row must be deleted after Stop")
+	// Row exists with status=stopped (not deleted).
+	job, err := store.GetByID(ctx, id)
+	require.NoError(t, err, "DB row must be retained after Stop")
+	assert.Equal(t, StatusStopped, job.Status, "status must be stopped after Stop")
+
+	// Restart should succeed — the stopped row is still in the DB.
+	require.NoError(t, sup.Restart(ctx, id), "Restart after Stop must succeed")
+	job2, err := store.GetByID(ctx, id)
+	require.NoError(t, err)
+	assert.Equal(t, StatusRunning, job2.Status, "status must be running after Restart")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

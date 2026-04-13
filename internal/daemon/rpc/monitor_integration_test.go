@@ -249,13 +249,13 @@ func TestMonitorIntegration_SubmitMatchDebounceStop(t *testing.T) {
 	require.NoError(t, json.Unmarshal(buf[:n], &rpcResp))
 	require.Nil(t, rpcResp.Error, "monitor.stop should succeed, got error: %v", rpcResp.Error)
 
-	// Verify the monitor row is gone from the monitors table.
-	var monCount int
+	// Verify the monitor row is retained with status=stopped.
+	var monStatus string
 	monRow := st.DB().QueryRowContext(context.Background(),
-		`SELECT COUNT(*) FROM monitors WHERE id = ?`, jobID,
+		`SELECT status FROM monitors WHERE id = ?`, jobID,
 	)
-	require.NoError(t, monRow.Scan(&monCount))
-	assert.Equal(t, 0, monCount, "monitors row should be deleted after stop")
+	require.NoError(t, monRow.Scan(&monStatus))
+	assert.Equal(t, "stopped", monStatus, "monitor status should be stopped after stop")
 
 	// Review finding R2.7 — plan Task 12 Step 7 says 'assert the tempfile
 	// is released and the monitor row is deleted'. The row check above

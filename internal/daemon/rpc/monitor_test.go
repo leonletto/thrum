@@ -496,10 +496,11 @@ func TestMonitorStop_KillsAndDeletes(t *testing.T) {
 	require.True(t, ok, "expected map[string]string response, got %T", resp)
 	assert.Equal(t, "stopped", status["status"])
 
-	// Postconditions: row deleted from store, handle removed from map.
-	_, err = store.GetByID(context.Background(), id)
-	assert.ErrorIs(t, err, monitor.ErrNotFound,
-		"monitors row must be deleted by HandleStop")
+	// Postconditions: row retained with status=stopped, handle removed from map.
+	job, err := store.GetByID(context.Background(), id)
+	require.NoError(t, err, "monitors row must be retained after HandleStop")
+	assert.Equal(t, monitor.StatusStopped, job.Status,
+		"monitor status must be stopped after HandleStop")
 }
 
 func TestMonitorStop_ReturnsNotFoundForUnknownID(t *testing.T) {

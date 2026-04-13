@@ -283,9 +283,8 @@ func (s *MonitorSupervisor) Stop(ctx context.Context, id string) error {
 	}
 
 	// Signal the runner's exitNotice closure to skip store.MarkDead — Stop
-	// is about to call store.Delete on the same row, so MarkDead would just
-	// be wasted I/O overwritten by the immediate delete. Must be set BEFORE
-	// cancel so the flag is visible when exitNotice fires. Review finding 9.
+	// will write StatusStopped instead. Must be set BEFORE cancel so the
+	// flag is visible when exitNotice fires.
 	h.stoppedByUser.Store(true)
 
 	h.cancel()
@@ -295,7 +294,7 @@ func (s *MonitorSupervisor) Stop(ctx context.Context, id string) error {
 		return errors.New("runner did not exit in time")
 	}
 
-	return s.store.Delete(ctx, id)
+	return s.store.MarkStopped(ctx, id)
 }
 
 // HasRunner reports whether a live runner with the given ID is currently

@@ -153,6 +153,20 @@ func (s *MonitorStore) ListAll(ctx context.Context) ([]*MonitorJob, error) {
 	return s.scanMany(ctx, ``)
 }
 
+// MarkStopped updates a monitor to status=stopped, clearing the PID.
+// The row is retained so that monitor restart can find and relaunch it.
+func (s *MonitorStore) MarkStopped(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE monitors
+		SET status = ?, updated_at = ?, pid = NULL
+		WHERE id = ?
+	`, string(StatusStopped), time.Now().UTC().Format(time.RFC3339), id)
+	if err != nil {
+		return fmt.Errorf("mark stopped: %w", err)
+	}
+	return nil
+}
+
 // MarkDead updates a monitor to status=dead and records exit metadata.
 func (s *MonitorStore) MarkDead(ctx context.Context, id string, exitCode int, at time.Time) error {
 	_, err := s.db.ExecContext(ctx, `
