@@ -1,14 +1,3 @@
----
-title: "Cursor Plugin"
-description:
-  "Install and use Thrum's Cursor plugin — rules, hooks, skills, commands, and
-  MCP configuration for multi-agent coordination in Cursor"
-category: "integrations"
-order: 5
-tags: ["cursor", "plugin", "installation", "hooks", "rules", "mcp", "skills"]
-last_updated: "2026-04-13"
----
-
 ## Cursor Plugin
 
 > See also: [Quickstart Guide](quickstart.md) for basic Thrum setup,

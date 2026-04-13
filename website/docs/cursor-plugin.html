@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cursor Plugin — Thrum</title>
+<meta name="description" content="Install and use Thrum's Cursor plugin — rules, hooks, skills, commands, and MCP configuration for multi-agent coordination in Cursor">
+<link rel="canonical" href="https://leonletto.github.io/thrum/docs.html#cursor-plugin.html">
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1.5rem;line-height:1.6;color:#222}
+pre{background:#f5f5f5;padding:1rem;overflow-x:auto;border-radius:4px}
+code{font-family:ui-monospace,monospace;font-size:0.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:0.4rem 0.6rem;text-align:left}
+th{background:#f5f5f5}
+nav{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #ddd;line-height:1.8}
+h2{margin-top:2rem}
+a{color:#0366d6}
+</style>
+</head>
+<body>
+<nav>
+<strong><a href="../docs.html">Thrum Docs</a></strong> &rsaquo; integrations &rsaquo; Cursor Plugin
+<hr>
+<strong>Overview</strong>: <a href="philosophy.html">Philosophy</a> | <a href="overview.html">Overview</a><br>
+<strong>Getting Started</strong>: <a href="quickstart.html">Quickstart Guide</a><br>
+  <strong>Recommended Tools</strong>: <a href="guides/recommended-tools.html">Recommended Tools</a> | <a href="guides/beads-setup.html">Beads Setup Guide</a> | <a href="guides/beads-ui-setup.html">Beads UI Setup Guide</a> | <a href="guides/beads-migration-to-embedded.html">Beads Migration to Embedded Mode (bd 1.0+)</a> | <a href="guides/playwright-cli-setup.html">Playwright CLI Setup Guide</a><br>
+<strong>Messaging</strong>: <a href="peers.html">Peers</a> | <a href="subscriptions.html">Subscriptions & Notifications</a> | <a href="inbox-query-methods.html">Inbox Query Methods</a> | <a href="telegram-bridge.html">Telegram Bridge</a> | <a href="telegram-groups.html">Telegram Groups</a> | <a href="messaging.html">Messaging</a><br>
+<strong>Identity</strong>: <a href="identity.html">Agent Identity & Registration</a> | <a href="agent-configs.html">Agent Configurations</a> | <a href="claude-agent-integration.html">Claude Code Agent Integration</a> | <a href="role-templates.html">Role-Based Preamble Templates</a><br>
+<strong>API Reference</strong>: <a href="api/authentication.html">Authentication</a> | <a href="api/events.html">Event Reference</a> | <a href="api/websocket.html">WebSocket API</a><br>
+<strong>agent-protocols</strong>: <a href="strategies/sub-agent-strategy.html">Sub-Agent Strategy</a> | <a href="strategies/thrum-registration.html">Thrum Registration</a> | <a href="strategies/resume-after-context-loss.html">Resume After Context Loss</a><br>
+<strong>coordination</strong>: <a href="agent-coordination.html">Agent Coordination</a> | <a href="multi-agent.html">Multi-Agent Support</a> | <a href="context.html">Agent Context Management</a> | <a href="guides/coordinate-two-agents.html">Coordinate Two Agents</a> | <a href="guides/review-workflow.html">Code Review Workflow</a><br>
+<strong>infrastructure</strong>: <a href="daemon.html">Daemon Architecture</a> | <a href="sync.html">Sync Protocol</a> | <a href="event-streaming.html">Event Streaming</a> | <a href="configuration.html">Configuration</a> | <a href="guides/cross-machine-sync.html">Sync Across Machines</a> | <a href="tailscale-sync.html">Tailscale Sync</a> | <a href="tailscale-security.html">Tailscale Sync Security</a><br>
+<strong>integrations</strong>: <a href="web-ui.html">Web UI</a> | <a href="claude-code-plugin.html">Claude Code Plugin</a> | <a href="beads-and-thrum.html">Beads and Thrum</a> | <a href="codex-plugin.html">Codex Plugin</a> | <strong>Cursor Plugin</strong> | <a href="mcp-server.html">MCP Server</a><br>
+<strong>onboarding</strong>: <a href="scenarios/solo-dev.html">Solo Dev with One Agent</a> | <a href="scenarios/team.html">Team on Your Machine</a> | <a href="scenarios/across-boundaries.html">Agents Across Repos/Machines</a> | <a href="scenarios/orchestration.html">Automated Plan Execution</a><br>
+<strong>orchestration</strong>: <a href="orchestrator-role.html">Orchestrator Role</a> | <a href="tmux-sessions.html">Tmux-Managed Sessions</a> | <a href="monitor-jobs.html">Monitor Jobs</a> | <a href="multi-runtime.html">Multi-Runtime Support</a> | <a href="single-agent-mode.html">Single-Agent Mode</a> | <a href="workflow-templates.html">Workflow Templates</a> | <a href="session-restart.html">Session Restart & Context Recovery</a><br>
+<strong>Reference</strong>: <a href="development.html">Development Guide</a> | <a href="security-cicd.html">Security & CI/CD</a> | <a href="architecture.html">Architecture</a> | <a href="cli.html">CLI Reference</a> | <a href="rpc-api.html">RPC API</a><br>
+</nav>
+<main>
+<h2>Cursor Plugin</h2>
+<blockquote>
+<p>See also: <a href="quickstart.html">Quickstart Guide</a> for basic Thrum setup,
+<a href="claude-code-plugin.html">Claude Code Plugin</a> for the Claude Code integration,
+<a href="codex-plugin.html">Codex Plugin</a> for the Codex skill bundle,
+<a href="mcp-server.html">MCP Server</a> for the native MCP transport.</p>
+</blockquote>
+<h2>Overview</h2>
+<p>The Thrum plugin for Cursor deploys coordination infrastructure into your
+project&#39;s <code>.cursor/</code> directory. It gives Cursor agents native access to Thrum
+messaging through slash commands, lifecycle hooks, safety rules, and MCP
+configuration — without manual setup.</p>
+<p><strong>What you get:</strong></p>
+<ul>
+<li><strong>11 slash commands</strong> — <code>prime</code>, <code>send</code>, <code>inbox</code>, <code>quickstart</code>, <code>restart</code>, and
+more</li>
+<li><strong>5 hooks</strong> — SessionStart, beforeShellExecution, Stop, PreCompact, and
+PostCompact keep your agent oriented across sessions and compaction</li>
+<li><strong>2 rules</strong> — <code>.mdc</code> files for sync worktree safety and session lifecycle</li>
+<li><strong>4 skills</strong> — Thrum coordination, orchestration, project setup, and role
+configuration</li>
+<li><strong>1 agent</strong> — Background message listener sub-agent template</li>
+<li><strong>MCP config</strong> — Thrum MCP server wired up automatically</li>
+</ul>
+<h2>Prerequisites</h2>
+<p>Before installing the plugin, you need Thrum installed and initialized:</p>
+<pre><code># Install thrum
+curl -fsSL https://raw.githubusercontent.com/leonletto/thrum/main/scripts/install.sh | sh
+# Or: brew install leonletto/tap/thrum
+# Or: git clone https://github.com/leonletto/thrum.git &amp;&amp; cd thrum &amp;&amp; make install
+
+# Initialize in your repository
+cd /path/to/your/repo
+thrum init</code></pre>
+<p><code>thrum init</code> handles the full setup: prompts for runtime detection, generates
+coordination instructions, starts the daemon, registers your agent, and starts a
+session.</p>
+<p>Verify the daemon is running:</p>
+<pre><code>thrum daemon status</code></pre>
+<h2>Installation</h2>
+<p>The Cursor plugin is installed via a local install script. It deploys files
+directly into your project&#39;s <code>.cursor/</code> directory.</p>
+<h3>From local clone</h3>
+<pre><code># Clone the Thrum repository (if you haven&#39;t already)
+git clone https://github.com/leonletto/thrum.git
+cd thrum
+
+# Install into the current repo (or specify --target)
+cursor-plugin/local-install.sh
+cursor-plugin/local-install.sh --target /path/to/project</code></pre>
+<p>The installer:</p>
+<ol>
+<li>Creates <code>.cursor/rules/</code>, <code>.cursor/skills/</code>, <code>.cursor/commands/</code>,
+<code>.cursor/agents/</code></li>
+<li>Copies <code>.mdc</code> rule files</li>
+<li>Copies skills, commands, and agent definitions (if synced)</li>
+<li>Writes <code>hooks.json</code> with resolved absolute paths to hook scripts</li>
+<li>Writes <code>mcp.json</code> with the Thrum MCP server configuration</li>
+<li>Adds <code>.cursor/</code> to <code>.gitignore</code></li>
+</ol>
+<h3>Verify installation</h3>
+<p>Start a new Cursor session. The SessionStart hook will prompt you to run
+<code>thrum prime</code> to load your session context. Running it displays your agent
+identity, team roster, unread messages, and daemon health.</p>
+<h3>Updating</h3>
+<p>After upstream changes to the Thrum repository, re-sync and re-install:</p>
+<pre><code>scripts/sync-skills.sh        # Sync skills/commands from claude-plugin source
+cursor-plugin/local-install.sh # Re-deploy to .cursor/</code></pre>
+<h2>Slash Commands</h2>
+<p>All commands are available as <code>.md</code> files in <code>.cursor/commands/</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>quickstart</code></td>
+<td>Register agent and start session</td>
+</tr>
+<tr>
+<td><code>send</code></td>
+<td>Send direct or broadcast messages</td>
+</tr>
+<tr>
+<td><code>inbox</code></td>
+<td>Check message inbox (all or unread only)</td>
+</tr>
+<tr>
+<td><code>reply</code></td>
+<td>Reply to a message (inherits original audience)</td>
+</tr>
+<tr>
+<td><code>wait</code></td>
+<td>Block until a message arrives (background listener)</td>
+</tr>
+<tr>
+<td><code>team</code></td>
+<td>Show active team members with roles and intents</td>
+</tr>
+<tr>
+<td><code>overview</code></td>
+<td>Combined status + team + inbox view</td>
+</tr>
+<tr>
+<td><code>prime</code></td>
+<td>Load full session context (identity, team, inbox)</td>
+</tr>
+<tr>
+<td><code>update-project</code></td>
+<td>Guided workflow to update durable project state</td>
+</tr>
+<tr>
+<td><code>restart</code></td>
+<td>Save conversation snapshot and prepare for restart</td>
+</tr>
+<tr>
+<td><code>load-context</code></td>
+<td>Restore saved agent work context after compaction</td>
+</tr>
+</tbody></table>
+<h2>Hooks</h2>
+<p>The plugin configures five hooks in <code>.cursor/hooks.json</code>:</p>
+<h3>SessionStart</h3>
+<p>Prompts the agent to run <code>thrum prime</code> when a Cursor session begins. Running
+prime loads agent identity, team roster, unread messages, git branch, and daemon
+health.</p>
+<h3>beforeShellExecution</h3>
+<p>Runs <code>block-sync-worktree-cd.sh</code> before any shell command. Blocks commands that
+would <code>cd</code> into Thrum&#39;s internal <code>.git/thrum-sync/a-sync</code> worktree — this
+prevents accidental writes to the sync branch.</p>
+<h3>Stop</h3>
+<p>Runs <code>stop-check-messages.sh</code> when the agent stops. Checks for unread messages
+and reminds the agent to process them before ending. Has a 15-second timeout.</p>
+<h3>PreCompact</h3>
+<p>Runs <code>pre-compact-save-context.sh</code> before context compaction. Saves session
+state (decisions, next steps, work-in-progress) so it can be restored afterward.</p>
+<h3>PostCompact</h3>
+<p>Runs <code>post-compact-recover.sh</code> after context compaction. Tells the agent to run
+<code>thrum prime</code> to recover its bearings. In multi-agent mode, it also checks the
+listener heartbeat and respawns if stale.</p>
+<h2>Rules</h2>
+<p>Two <code>.mdc</code> rule files are deployed to <code>.cursor/rules/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thrum-safety.mdc</code></td>
+<td>Blocks writes to <code>.git/thrum-sync/a-sync</code> (read-only sync worktree)</td>
+</tr>
+<tr>
+<td><code>thrum-session.mdc</code></td>
+<td>Session lifecycle: run <code>thrum prime</code> on start, check inbox, save context before compaction</td>
+</tr>
+</tbody></table>
+<p>Both rules have <code>alwaysApply: true</code> — they&#39;re active in every conversation.</p>
+<h2>Skills</h2>
+<p>Four skills are deployed to <code>.cursor/skills/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Skill</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>thrum</code></td>
+<td>Core coordination skill with 8 resource docs for messaging patterns, identity, worktrees, anti-patterns, and CLI reference</td>
+</tr>
+<tr>
+<td><code>orchestrate</code></td>
+<td>Execute plans epic-by-epic with review gates, agent lifecycle, and merge reports</td>
+</tr>
+<tr>
+<td><code>project-setup</code></td>
+<td>Convert plans into beads epics, tasks, implementation prompts, and worktrees</td>
+</tr>
+<tr>
+<td><code>configure-roles</code></td>
+<td>Detect environment and generate role-based preamble templates</td>
+</tr>
+</tbody></table>
+<p>The <code>thrum</code> skill includes the same 8 resource documents as the Claude Code
+plugin:</p>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>When it&#39;s used</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>MESSAGING.md</code></td>
+<td>Message lifecycle, addressing patterns</td>
+</tr>
+<tr>
+<td><code>IDENTITY.md</code></td>
+<td>Agent naming, registration, multi-worktree identity</td>
+</tr>
+<tr>
+<td><code>WORKTREES.md</code></td>
+<td>Cross-worktree coordination, shared daemon, file tracking</td>
+</tr>
+<tr>
+<td><code>LISTENER_PATTERN.md</code></td>
+<td>Background message listener sub-agent template</td>
+</tr>
+<tr>
+<td><code>BOUNDARIES.md</code></td>
+<td>When to use Thrum vs built-in task tools</td>
+</tr>
+<tr>
+<td><code>ANTI_PATTERNS.md</code></td>
+<td>Common mistakes and how to avoid them</td>
+</tr>
+<tr>
+<td><code>CLI_REFERENCE.md</code></td>
+<td>Complete command syntax for all <code>thrum</code> commands</td>
+</tr>
+<tr>
+<td><code>TMUX_SESSIONS.md</code></td>
+<td>Tmux-managed session patterns and lifecycle</td>
+</tr>
+</tbody></table>
+<h2>MCP Server Integration</h2>
+<p>The installer writes <code>.cursor/mcp.json</code> with the Thrum MCP server configuration:</p>
+<pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;thrum&quot;: {
+      &quot;type&quot;: &quot;command&quot;,
+      &quot;command&quot;: &quot;thrum&quot;,
+      &quot;args&quot;: [&quot;mcp&quot;, &quot;serve&quot;]
+    }
+  }
+}</code></pre>
+<p>This provides 4 core messaging tools (<code>send_message</code>, <code>check_messages</code>,
+<code>wait_for_message</code>, <code>list_agents</code>) plus <code>broadcast_message</code>. See
+<a href="mcp-server.html">MCP Server</a> for the full API.</p>
+<h2>Background Listener</h2>
+<p>The plugin includes a <code>message-listener.md</code> agent definition in
+<code>.cursor/agents/</code>. This is a lightweight sub-agent template that blocks on
+<code>thrum wait</code> for incoming messages — useful for async coordination in
+multi-agent setups.</p>
+<h2>Cursor Plugin vs Claude Code Plugin</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Cursor Plugin</th>
+<th>Claude Code Plugin</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Packaging</td>
+<td>Local install script</td>
+<td>Marketplace plugin</td>
+</tr>
+<tr>
+<td>Installation</td>
+<td><code>local-install.sh</code></td>
+<td><code>claude plugin marketplace add</code> + <code>install</code></td>
+</tr>
+<tr>
+<td>Updates</td>
+<td><code>sync-skills.sh</code> + re-install</td>
+<td>Re-install from source</td>
+</tr>
+<tr>
+<td>Hooks</td>
+<td>5 (session, shell guard, stop, compact)</td>
+<td>3 (session, compact)</td>
+</tr>
+<tr>
+<td>Rules</td>
+<td>2 <code>.mdc</code> files (always-on)</td>
+<td>N/A (uses hooks instead)</td>
+</tr>
+<tr>
+<td>Skills</td>
+<td>4 skills + 8 resource docs</td>
+<td>Via plugin progressive disclosure</td>
+</tr>
+<tr>
+<td>MCP</td>
+<td>Auto-configured <code>mcp.json</code></td>
+<td>Manual <code>.claude/settings.json</code></td>
+</tr>
+<tr>
+<td>Slash commands</td>
+<td>11 command files</td>
+<td>11 slash commands</td>
+</tr>
+</tbody></table>
+<p>Both plugins share the same underlying skill content — <code>scripts/sync-skills.sh</code>
+keeps them in sync from the Claude plugin source.</p>
+<h2>Troubleshooting</h2>
+<h3>&quot;Thrum not initialized&quot; on session start</h3>
+<p>Run <code>thrum init</code> in your repository root (it starts the daemon automatically).</p>
+<h3>No context injected after install</h3>
+<p>Verify the hook is present: check that <code>.cursor/hooks.json</code> exists and contains
+the sessionStart entry. Re-run <code>local-install.sh</code> if missing.</p>
+<h3>Messages not arriving</h3>
+<p>Check daemon status with <code>thrum daemon status</code>. The daemon must be running for
+messaging to work. Start it with <code>thrum daemon start</code>.</p>
+<h3>Skills or commands missing</h3>
+<p>Run <code>scripts/sync-skills.sh</code> from the Thrum repository root to sync the latest
+skills and commands from the Claude plugin source, then re-run
+<code>local-install.sh</code>.</p>
+<h2>Next Steps</h2>
+<ul>
+<li><a href="mcp-server.html">MCP Server</a> — the MCP server the plugin configures</li>
+<li><a href="claude-code-plugin.html">Claude Code Plugin</a> — the equivalent plugin for Claude
+Code users</li>
+<li><a href="codex-plugin.html">Codex Plugin</a> — the equivalent skill bundle for Codex users</li>
+<li><a href="multi-agent.html">Multi-Agent Support</a> — coordination patterns across agents</li>
+<li><a href="identity.html">Identity System</a> — agent naming, <code>THRUM_NAME</code>, and multi-agent
+worktree setup</li>
+</ul>
+
+</main>
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:0.9em">
+<a href="../llms.txt">llms.txt</a> | <a href="../llms-full.txt">llms-full.txt</a> | <a href="../docs.html">Thrum Docs</a> | <a href="https://github.com/leonletto/thrum">GitHub</a>
+</footer>
+<script>if(location.search.indexOf('nospa')===-1){location.replace('../docs.html#cursor-plugin.html')}</script>
+</body>
+</html>
