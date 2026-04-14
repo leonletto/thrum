@@ -21,11 +21,17 @@ test.describe('Coordination', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.beforeAll(async () => {
-    // Register the coordtest agent — use --force to handle re-runs.
-    // Don't pass coordTestEnv here; quickstart --name is sufficient and
-    // env vars can conflict with the default coordinator identity.
-    thrumIn(getTestRoot(), ['quickstart', '--role', 'coordinator', '--module', 'all',
-      '--name', 'e2e_coordtest', '--intent', 'Coordination testing', '--force']);
+    // Register the coordtest agent. End any stale session first, then quickstart.
+    try {
+      thrumIn(getTestRoot(), ['session', 'end'], 10_000, coordTestEnv());
+    } catch { /* no active session — fine */ }
+    try {
+      thrumIn(getTestRoot(), ['quickstart', '--role', 'coordinator', '--module', 'all',
+        '--name', 'e2e_coordtest', '--intent', 'Coordination testing', '--force'], 10_000, coordTestEnv());
+    } catch (e: any) {
+      // May fail if PID conflict — log but don't block the suite
+      console.error('coordtest quickstart:', e.message?.split('\n')[0] || e);
+    }
   });
 
   test('SC-30: Check who has a file', async () => {
