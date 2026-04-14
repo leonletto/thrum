@@ -274,6 +274,29 @@ func detectCurrentWorktree(identitiesDir string) string {
 	return filepath.Base(strings.TrimSpace(string(out)))
 }
 
+// LoadIdentityFromWorktree reads the agent identity from a specific worktree
+// directory without applying THRUM_HOME/THRUM_NAME env var overrides and
+// without performing PID adoption. Use this when one agent needs to inspect
+// another agent's identity (e.g. tmux launch resolving the runtime for a
+// target worktree).
+//
+// EnforceOneIdentity guarantees a worktree has at most one identity file,
+// so this returns the first .json file found in <worktreePath>/.thrum/identities/.
+func LoadIdentityFromWorktree(worktreePath string) (*IdentityFile, error) {
+	identitiesDir := filepath.Join(worktreePath, ".thrum", "identities")
+	entries, err := os.ReadDir(identitiesDir)
+	if err != nil {
+		return nil, fmt.Errorf("read identities directory: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		return loadIdentityFile(filepath.Join(identitiesDir, entry.Name()))
+	}
+	return nil, fmt.Errorf("no identity files in %s", identitiesDir)
+}
+
 // LoadIdentityWithPath loads the identity file and returns both the parsed identity
 // and the relative file path. Useful for commands that need to display which file was loaded.
 func LoadIdentityWithPath(repoPath string) (*IdentityFile, string, error) {

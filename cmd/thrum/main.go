@@ -6811,7 +6811,10 @@ func tmuxCmd() *cobra.Command {
 						rt = cfg.Runtime.Primary
 					}
 				}
-				if idFile, _, loadErr := config.LoadIdentityWithPath(sessionCwd); loadErr == nil && idFile != nil {
+				// Use LoadIdentityFromWorktree (not LoadIdentityWithPath) to bypass
+				// THRUM_HOME/THRUM_NAME env vars from the calling shell. The launch
+				// command resolves the target worktree's identity, not the caller's.
+				if idFile, loadErr := config.LoadIdentityFromWorktree(sessionCwd); loadErr == nil && idFile != nil {
 					if idFile.PreferredRuntime != "" {
 						rt = idFile.PreferredRuntime
 					}
