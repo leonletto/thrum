@@ -225,16 +225,16 @@ test.describe('Coordination', () => {
     expect(typeof parsed).toBe('object');
   });
 
-  test('F2-13: status standalone command', async () => {
-    // Act: run status with human output
+  test('F2-13: overview standalone command', async () => {
+    // Act: run overview with human output (thrum status renamed to thrum overview)
     const output = thrumIn(getTestRoot(), ['overview'], 10_000, coordTestEnv());
 
-    // Assert: status output contains key sections
+    // Assert: overview output contains key sections
     expect(output.toLowerCase()).toContain('agent');
     expect(output.toLowerCase()).toContain('daemon');
 
-    // Act: run status with JSON output
-    const jsonOutput = thrumIn(getTestRoot(), ['status', '--json'], 10_000, coordTestEnv());
+    // Act: run overview with JSON output
+    const jsonOutput = thrumIn(getTestRoot(), ['overview', '--json'], 10_000, coordTestEnv());
     const parsed = JSON.parse(jsonOutput);
 
     // Assert: JSON has expected top-level fields
