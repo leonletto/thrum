@@ -6815,10 +6815,8 @@ func tmuxCmd() *cobra.Command {
 					if idFile.PreferredRuntime != "" {
 						rt = idFile.PreferredRuntime
 					}
-				} else if !flagQuiet {
-					fmt.Fprintf(os.Stderr, "⚠ No agent identity found in %s\n", sessionCwd)
-					fmt.Fprintf(os.Stderr, "  The agent won't be able to send/receive messages until registered.\n")
-					fmt.Fprintf(os.Stderr, "  Register with: thrum quickstart --name <agent> --role <role> --module <module>\n")
+				} else {
+					return fmt.Errorf("no agent identity found in %s\n  Register first: thrum quickstart --name <agent> --role <role> --module <module>", sessionCwd)
 				}
 			}
 			if rtOverride != "" {
