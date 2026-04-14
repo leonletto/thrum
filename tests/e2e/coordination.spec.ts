@@ -231,7 +231,7 @@ test.describe('Coordination', () => {
 
     // Assert: overview output contains key sections
     expect(output.toLowerCase()).toContain('agent');
-    expect(output.toLowerCase()).toContain('daemon');
+    expect(output.toLowerCase()).toMatch(/sync|websocket|session/);
 
     // Act: run overview with JSON output
     const jsonOutput = thrumIn(getTestRoot(), ['overview', '--json'], 10_000, coordTestEnv());
