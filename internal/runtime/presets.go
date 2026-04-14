@@ -58,7 +58,7 @@ var BuiltinPresets = map[string]RuntimePreset{
 	"cursor": {
 		Name:             "cursor",
 		DisplayName:      "Cursor",
-		Command:          "cursor-agent",
+		Command:          "agent",
 		MCPSupported:     true,
 		HooksSupported:   false,
 		InstructionsFile: ".cursorrules",

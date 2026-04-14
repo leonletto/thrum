@@ -17,7 +17,7 @@ func TestGetPreset_Builtin(t *testing.T) {
 	}{
 		{"claude", "Claude Code", "claude", true, true},
 		{"codex", "OpenAI Codex", "codex", true, false},
-		{"cursor", "Cursor", "cursor-agent", true, false},
+		{"cursor", "Cursor", "agent", true, false},
 		{"gemini", "Google Gemini Code Assist", "gemini", true, false},
 		{"auggie", "Augment (Auggie)", "auggie", false, false},
 		{"amp", "Sourcegraph Amp", "amp", false, false},

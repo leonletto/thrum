@@ -17,6 +17,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/process"
 	"github.com/leonletto/thrum/internal/restart"
+	trt "github.com/leonletto/thrum/internal/runtime"
 	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/worktree"
 )
@@ -759,19 +760,19 @@ func (h *TmuxHandler) HandleRestart(ctx context.Context, params json.RawMessage)
 }
 
 // runtimeToLaunchCmd converts a runtime name to the CLI command to launch it.
+// Presets in internal/runtime are the single source of truth for the binary
+// name — this function delegates to GetPreset so launch and detection stay in
+// sync. The "shell" runtime is a special case that launches no tool (returns
+// empty string so the caller skips send-keys).
 func runtimeToLaunchCmd(runtime string) string {
-	switch runtime {
-	case "claude":
-		return "claude"
-	case "opencode":
-		return "opencode"
-	case "aider":
-		return "aider"
-	case "shell":
+	if runtime == "shell" {
 		return ""
-	default:
-		return runtime // best-effort: use the runtime name as the command
 	}
+	if preset, err := trt.GetPreset(runtime); err == nil {
+		return preset.Command
+	}
+	// Unknown runtime: best-effort fallback to the runtime name.
+	return runtime
 }
 
 // isValidRuntimeName checks that a runtime name contains only safe characters.

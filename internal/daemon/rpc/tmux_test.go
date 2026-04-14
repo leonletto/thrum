@@ -215,3 +215,30 @@ func TestTmuxHandler_ClearTmuxFromIdentities(t *testing.T) {
 		t.Errorf("Runtime should be empty after clear, got %q", reloaded.Runtime)
 	}
 }
+
+// TestRuntimeToLaunchCmd verifies that launch commands come from runtime
+// presets, not hardcoded strings. Regression guard for thrum-xgww: the cursor
+// runtime previously fell through to return the runtime name "cursor",
+// producing "command not found" in the tmux pane.
+func TestRuntimeToLaunchCmd(t *testing.T) {
+	tests := []struct {
+		runtime string
+		want    string
+	}{
+		{"claude", "claude"},
+		{"codex", "codex"},
+		{"opencode", "opencode"},
+		{"cursor", "agent"},
+		{"gemini", "gemini"},
+		{"shell", ""},
+		{"unknown-runtime", "unknown-runtime"}, // fallback
+	}
+	for _, tt := range tests {
+		t.Run(tt.runtime, func(t *testing.T) {
+			got := runtimeToLaunchCmd(tt.runtime)
+			if got != tt.want {
+				t.Errorf("runtimeToLaunchCmd(%q) = %q, want %q", tt.runtime, got, tt.want)
+			}
+		})
+	}
+}
