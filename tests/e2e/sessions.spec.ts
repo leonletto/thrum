@@ -80,15 +80,15 @@ test.describe.serial('Sessions & Lifecycle Tests', () => {
     // Arrange: register and start session with a dedicated agent name
     thrum(['quickstart', '--role', 'tester', '--module', 'e2e', '--name', 'e2e_sc14_offline', '--intent', 'Testing offline', '--force'], 10_000, sc14Env);
 
-    // Assert: agent list shows the agent
+    // Assert: agent list shows the agent (displayed as @tester by role)
     const listDuring = thrum(['agent', 'list']);
-    expect(listDuring).toContain('e2e_sc14_offline');
+    expect(listDuring.toLowerCase()).toContain('tester');
 
     // Act: end session (as the SC-14 agent)
     thrum(['session', 'end'], 10_000, sc14Env);
 
     // Assert: agent list shows offline
     const listAfter = thrum(['agent', 'list']);
-    expect(listAfter.toLowerCase()).toContain('e2e_sc14_offline');
+    expect(listAfter.toLowerCase()).toContain('tester');
   });
 });
