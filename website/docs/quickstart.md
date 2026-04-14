@@ -341,21 +341,28 @@ redirect file. Use `thrum worktree create` (alias: `thrum worktree setup`) to
 create and configure a feature worktree in one step:
 
 ```bash
-# Create a worktree with redirect setup and optional agent registration
-thrum worktree create --branch feature/auth --path ~/.workspaces/myproject/auth
+# Create a worktree with redirect setup only
+thrum worktree create auth -b feature/auth
 # or equivalently:
-thrum worktree setup --branch feature/auth --path ~/.workspaces/myproject/auth
+thrum worktree setup auth -b feature/auth
 
-# With agent quickstart flags — creates the worktree and registers the agent
-# in one step (uses a temp tmux session for PID isolation):
-thrum worktree create --branch feature/auth --path ~/.workspaces/myproject/auth \
+# With agent quickstart flags — creates the worktree, registers the agent,
+# and creates the tmux session in one step. The agent is NOT running yet —
+# you launch it in the next step.
+thrum worktree create auth -b feature/auth \
   --name furiosa --role implementer --module auth
+
+# Start the runtime in the tmux session
+thrum tmux launch auth
 ```
 
-`thrum worktree create` handles the redirect file creation automatically — you
-don't need to run `thrum setup --main-repo` separately. If you pass `--name`,
-`--role`, and `--module`, it also runs quickstart inside a temporary tmux
-session for proper PID isolation.
+The worktree is created at `worktrees.base_path/<name>` (default
+`~/.workspaces/<repo>/<name>`). `thrum worktree create` handles the redirect
+file creation automatically — you don't need to run `thrum setup --main-repo`
+separately. If you pass `--name`, `--role`, and `--module`, it also creates a
+real tmux session and registers the agent inside it (PID-isolated, with retry if
+the shell init swallows the first attempt). The output tells you the agent is
+not running yet and shows the exact `thrum tmux launch` command to start it.
 
 For an existing worktree that just needs redirect setup, you can still use the
 manual approach:
