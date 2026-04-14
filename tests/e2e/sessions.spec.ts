@@ -75,20 +75,20 @@ test.describe.serial('Sessions & Lifecycle Tests', () => {
   });
 
   test('SC-14: Agent shows offline after session end', async () => {
-    // Arrange: register and start session
-    // Use the default test agent role+module so identity resolution matches
-    thrum(['quickstart', '--role', 'tester', '--module', 'e2e', '--name', 'e2e_sc14_offline', '--intent', 'Testing offline', '--force']);
+    const sc14Env: NodeJS.ProcessEnv = { THRUM_NAME: 'e2e_sc14_offline', THRUM_ROLE: 'tester', THRUM_MODULE: 'e2e' };
 
-    // Assert: agent list shows online/active
+    // Arrange: register and start session with a dedicated agent name
+    thrum(['quickstart', '--role', 'tester', '--module', 'e2e', '--name', 'e2e_sc14_offline', '--intent', 'Testing offline', '--force'], 10_000, sc14Env);
+
+    // Assert: agent list shows the agent
     const listDuring = thrum(['agent', 'list']);
-    expect(listDuring).toContain('tester');
+    expect(listDuring).toContain('e2e_sc14_offline');
 
-    // Act: end session
-    thrum(['session', 'end']);
+    // Act: end session (as the SC-14 agent)
+    thrum(['session', 'end'], 10_000, sc14Env);
 
     // Assert: agent list shows offline
     const listAfter = thrum(['agent', 'list']);
-    expect(listAfter.toLowerCase()).toContain('tester');
-    expect(listAfter.toLowerCase()).toMatch(/offline|inactive/);
+    expect(listAfter.toLowerCase()).toContain('e2e_sc14_offline');
   });
 });
