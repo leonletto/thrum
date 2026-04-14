@@ -77,7 +77,7 @@ test.describe.serial('Sessions & Lifecycle Tests', () => {
   test('SC-14: Agent shows offline after session end', async () => {
     // Arrange: register and start session
     // Use the default test agent role+module so identity resolution matches
-    thrum(['quickstart', '--role', 'tester', '--module', 'e2e', '--intent', 'Testing offline']);
+    thrum(['quickstart', '--role', 'tester', '--module', 'e2e', '--name', 'e2e_sc14_offline', '--intent', 'Testing offline', '--force']);
 
     // Assert: agent list shows online/active
     const listDuring = thrum(['agent', 'list']);
