@@ -21,12 +21,11 @@ test.describe('Coordination', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.beforeAll(async () => {
-    try {
-      thrumIn(getTestRoot(), ['quickstart', '--role', 'coordinator', '--module', 'all',
-        '--name', 'e2e_coordtest', '--intent', 'Coordination testing', '--force'], 10_000, coordTestEnv());
-    } catch (e: any) {
-      console.error('coordtest quickstart failed:', e.message || e);
-    }
+    // Register the coordtest agent — use --force to handle re-runs.
+    // Don't pass coordTestEnv here; quickstart --name is sufficient and
+    // env vars can conflict with the default coordinator identity.
+    thrumIn(getTestRoot(), ['quickstart', '--role', 'coordinator', '--module', 'all',
+      '--name', 'e2e_coordtest', '--intent', 'Coordination testing', '--force']);
   });
 
   test('SC-30: Check who has a file', async () => {
