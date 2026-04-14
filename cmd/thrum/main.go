@@ -2309,6 +2309,18 @@ func worktreeCreateCmd() *cobra.Command {
 			}
 			worktreePath := filepath.Join(basePath, name)
 
+			// Guard: worktree path must not resolve to the repo root
+			resolvedWT, _ := filepath.Abs(worktreePath)
+			resolvedRepo, _ := filepath.Abs(repoPath)
+			if resolvedWT == resolvedRepo {
+				return fmt.Errorf("worktree path %q resolves to the repo root — check worktrees.base_path in config", worktreePath)
+			}
+			// Guard: base_path itself must not be the repo root
+			resolvedBase, _ := filepath.Abs(basePath)
+			if resolvedBase == resolvedRepo {
+				return fmt.Errorf("worktrees.base_path %q resolves to the repo root — worktrees must be created outside the repo", basePath)
+			}
+
 			// 1. Create git worktree
 			gitArgs := []string{"worktree", "add"}
 			if detach {
@@ -2333,7 +2345,7 @@ func worktreeCreateCmd() *cobra.Command {
 			}
 			fmt.Println("✓ Thrum redirect configured")
 
-			// 3. Optional: quickstart registration via temporary tmux session
+			// 3. Optional: create tmux session with agent quickstart
 			agentName, _ := cmd.Flags().GetString("name")
 			role, _ := cmd.Flags().GetString("role")
 			module, _ := cmd.Flags().GetString("module")
@@ -2342,35 +2354,31 @@ func worktreeCreateCmd() *cobra.Command {
 				intent, _ := cmd.Flags().GetString("intent")
 				runtimeFlag, _ := cmd.Flags().GetString("runtime")
 
-				cli.EnforceOneIdentity(worktreePath, agentName)
-
-				// Create temporary tmux session for PID isolation
-				tempSession := fmt.Sprintf("wt-setup-%d", time.Now().UnixMilli())
 				client, err := getClient()
 				if err != nil {
 					return fmt.Errorf("connect to daemon: %w", err)
 				}
 				defer func() { _ = client.Close() }()
 
+				// Delegate to tmux create which handles quickstart via
+				// SendKeys (PID-isolated, monitor-silence, window title).
 				if _, err := cli.TmuxCreate(client, cli.TmuxCreateOptions{
-					Name:    tempSession,
-					Cwd:     worktreePath,
-					NoAgent: true,
+					Name:      name,
+					Cwd:       worktreePath,
+					AgentName: agentName,
+					Role:      role,
+					Module:    module,
+					Intent:    intent,
+					Runtime:   runtimeFlag,
 				}); err != nil {
-					return fmt.Errorf("create temp session: %w", err)
-				}
-				defer func() {
-					_ = cli.TmuxKill(client, tempSession)
-				}()
-
-				qsCmd := cli.BuildQuickstartCmd(agentName, role, module, intent, runtimeFlag)
-				if err := cli.TmuxSend(client, tempSession, qsCmd); err != nil {
-					return fmt.Errorf("send quickstart: %w", err)
+					return fmt.Errorf("create tmux session: %w", err)
 				}
 
-				// Wait for identity file to appear (poll, 10s timeout)
+				// Wait for identity file to appear. The daemon retries
+				// quickstart at 5s if shell init swallowed the first attempt,
+				// so we poll for 12s to cover both attempts.
 				idPath := filepath.Join(worktreePath, ".thrum", "identities", agentName+".json")
-				deadline := time.Now().Add(10 * time.Second)
+				deadline := time.Now().Add(12 * time.Second)
 				for time.Now().Before(deadline) {
 					if _, err := os.Stat(idPath); err == nil {
 						break
@@ -2378,7 +2386,12 @@ func worktreeCreateCmd() *cobra.Command {
 					time.Sleep(500 * time.Millisecond)
 				}
 				if _, err := os.Stat(idPath); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: identity file not found after 10s; quickstart may still be running\n")
+					// Capture pane so the caller sees what went wrong
+					msg := "Warning: agent identity not created after 12s — quickstart may have failed"
+					if capture, captureErr := cli.TmuxCapture(client, name, 30); captureErr == nil && capture.Content != "" {
+						msg += "\n\nTmux pane output:\n" + capture.Content
+					}
+					fmt.Fprintln(os.Stderr, msg)
 				} else {
 					fmt.Printf("✓ Registered @%s in worktree\n", agentName)
 				}

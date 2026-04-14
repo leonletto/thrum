@@ -265,6 +265,30 @@ func (h *TmuxHandler) HandleCreate(ctx context.Context, params json.RawMessage) 
 		// Quickstart runs asynchronously in the pane — this cleans pre-existing
 		// stale identities. The new identity will be written by quickstart.
 		worktree.EnforceOneIdentity(req.Cwd, req.AgentName)
+
+		// Shell init (oh-my-zsh, etc.) can swallow the first command.
+		// Poll for the identity file; if it doesn't appear, re-send quickstart.
+		go func() {
+			idDir := filepath.Join(req.Cwd, ".thrum", "identities")
+			idPath := filepath.Join(idDir, req.AgentName+".json")
+			// Follow redirect symlink if present
+			if resolved, err := filepath.EvalSymlinks(idDir); err == nil {
+				idPath = filepath.Join(resolved, req.AgentName+".json")
+			}
+
+			deadline := time.Now().Add(5 * time.Second)
+			for time.Now().Before(deadline) {
+				if _, err := os.Stat(idPath); err == nil {
+					return // quickstart succeeded
+				}
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			// Identity not found — shell likely swallowed the command. Retry.
+			slog.Info("quickstart identity not found after 5s, retrying", "agent", req.AgentName, "session", name)
+			_ = ttmux.SendKeys(target, quickstartCmd)
+			_ = ttmux.SendSpecialKey(target, "Enter")
+		}()
 	} else {
 		// For bare sessions, still write tmux_session to any existing identity
 		target := name + ":0.0"
