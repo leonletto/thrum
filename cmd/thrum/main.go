@@ -1246,6 +1246,8 @@ func daemonCmd() *cobra.Command {
 
 			if !flagQuiet {
 				fmt.Println("✓ Daemon stopped successfully")
+				fmt.Println("  All messaging commands will fail until the daemon is restarted:")
+				fmt.Println("    thrum daemon start")
 			}
 
 			return nil
@@ -1922,6 +1924,9 @@ The agent identity is determined from:
 			} else {
 				// Human-readable formatted output
 				fmt.Print(cli.FormatRegisterResponse(result))
+				if result.Status == "registered" || result.Status == "updated" {
+					fmt.Print(cli.Hint("agent.register", flagQuiet, flagJSON))
+				}
 			}
 
 			// Exit with error code if there was a conflict
@@ -2397,6 +2402,9 @@ func worktreeCreateCmd() *cobra.Command {
 					fmt.Printf("  Agent is NOT running yet. Start it with:\n")
 					fmt.Printf("    thrum tmux launch %s [--runtime <runtime>]\n", name)
 				}
+			} else if !flagJSON {
+				fmt.Printf("  No agent registered. To set up an agent:\n")
+				fmt.Printf("    thrum tmux create %s --cwd %s --name <agent> --role <role> --module <module>\n", name, worktreePath)
 			}
 
 			if flagJSON {
@@ -6807,6 +6815,10 @@ func tmuxCmd() *cobra.Command {
 					if idFile.PreferredRuntime != "" {
 						rt = idFile.PreferredRuntime
 					}
+				} else if !flagQuiet {
+					fmt.Fprintf(os.Stderr, "⚠ No agent identity found in %s\n", sessionCwd)
+					fmt.Fprintf(os.Stderr, "  The agent won't be able to send/receive messages until registered.\n")
+					fmt.Fprintf(os.Stderr, "  Register with: thrum quickstart --name <agent> --role <role> --module <module>\n")
 				}
 			}
 			if rtOverride != "" {
@@ -7061,6 +7073,9 @@ Without arguments, shows a numbered list of alive sessions to choose from.`,
 				fmt.Println(string(out))
 			} else {
 				fmt.Printf("Session %s restarted (%d snapshot lines)\n", result.Session, result.SnapshotLines)
+				if result.SnapshotLines == 0 {
+					fmt.Println("  ⚠ No conversation history captured — agent will start without prior context")
+				}
 			}
 			return nil
 		},
