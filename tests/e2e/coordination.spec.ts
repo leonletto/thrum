@@ -23,8 +23,10 @@ test.describe('Coordination', () => {
   test.beforeAll(async () => {
     try {
       thrumIn(getTestRoot(), ['quickstart', '--role', 'coordinator', '--module', 'all',
-        '--name', 'e2e_coordtest', '--intent', 'Coordination testing'], 10_000, coordTestEnv());
-    } catch { /* may already exist */ }
+        '--name', 'e2e_coordtest', '--intent', 'Coordination testing', '--force'], 10_000, coordTestEnv());
+    } catch (e: any) {
+      console.error('coordtest quickstart failed:', e.message || e);
+    }
   });
 
   test('SC-30: Check who has a file', async () => {
