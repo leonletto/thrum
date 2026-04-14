@@ -35,8 +35,9 @@ thrum wait --timeout 120s                Custom timeout (duration)
 
 ```bash
 thrum quickstart --name <agent-name> --role R --module M --intent "..."   Register + start session
-thrum worktree create <path> <branch> --identity <n> --role <r>   Create worktree + register agent
-thrum worktree setup <path> <branch> --identity <n> --role <r>    Alias for worktree create
+thrum worktree create <name> --name <agent> --role R --module M    Create worktree + register agent
+                                                                   (then run `thrum tmux launch <name>` to start runtime)
+thrum worktree setup <name> --name <agent> --role R --module M     Alias for worktree create
 thrum whoami                                          Show identity
 thrum team                                            List active agents
 thrum ping @name                                      Check if agent online
@@ -75,6 +76,7 @@ thrum tmux restart <name>            Restart session with context snapshot
 thrum tmux kill <name>               Tear down session
 thrum tmux create <session> --name <n> --role <r> --module <m> --cwd <path>   Create + register agent
 thrum tmux quickstart <session> --name <n> --role <r> --module <m> --cwd <path>   Alias for tmux create
+thrum tmux launch <session> [--runtime <r>]   Start runtime in session (REQUIRED after `tmux create`)
 ```
 
 ### Monitor Jobs
