@@ -88,16 +88,26 @@ func IsRuntimeProcess(ctx context.Context, pid int, runtime string) bool {
 		}
 		return false
 	}
-	// Check specific runtime — handle cursor's dual binary names
+	// Check specific runtime — handle dual binary names where the npm shim
+	// and the real binary differ (cursor, opencode).
 	if runtime == "cursor" {
 		return matchRuntimeName(name, "cursor-agent") || matchRuntimeName(name, "agent")
+	}
+	if runtime == "opencode" {
+		return matchRuntimeName(name, "opencode") || matchRuntimeName(name, ".opencode")
 	}
 	return matchRuntimeName(name, runtime)
 }
 
 // knownRuntimes lists binary names of known AI coding runtimes.
+//
+// Some runtimes install both a user-facing command and a dot-prefixed shim
+// binary that actually runs in the process tree (e.g. opencode's
+// `.../opencode-ai/bin/.opencode`, cursor's `cursor-agent`/`agent`). Both
+// names must appear here for ancestor detection to find them; see
+// runtimeDisplayName for alias-to-canonical mapping.
 var knownRuntimes = []string{
-	"claude", "opencode", "aider", "codex",
+	"claude", "opencode", ".opencode", "aider", "codex",
 	"cursor-agent", "agent", // agent = Cursor
 	"gemini", "auggie", "amp",
 }
@@ -106,6 +116,7 @@ var knownRuntimes = []string{
 var runtimeDisplayName = map[string]string{
 	"cursor-agent": "cursor",
 	"agent":        "cursor",
+	".opencode":    "opencode",
 }
 
 // FindClaudeAncestor walks the process tree from the current process
