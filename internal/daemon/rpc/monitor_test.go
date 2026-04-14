@@ -530,7 +530,7 @@ func TestMonitorRestart_PreservesID(t *testing.T) {
 	const stableID = "mon_restart_test"
 	job := &monitor.MonitorJob{
 		ID: stableID, Name: "restart-test",
-		Argv: []string{"true"}, MatchPattern: ".*", Target: "@t",
+		Argv: []string{"sh", "-c", "while true; do echo hi; sleep 0.1; done"}, MatchPattern: ".*", Target: "@t",
 		Cwd: os.TempDir(), Env: map[string]string{},
 		DebounceSeconds: 60, CreatedAt: now, UpdatedAt: now,
 		Status: monitor.StatusStopped,
