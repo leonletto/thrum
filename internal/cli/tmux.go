@@ -269,5 +269,8 @@ func FormatTmuxStatus(resp *TmuxStatusResponse) string {
 
 // FormatTmuxCreate formats a session creation success message.
 func FormatTmuxCreate(resp *TmuxCreateResponse) string {
-	return fmt.Sprintf("Session created: %s\n", resp.Session)
+	s := fmt.Sprintf("✓ Session created: %s\n", resp.Session)
+	s += "  Agent is NOT running yet. Start it with:\n"
+	s += fmt.Sprintf("    thrum tmux launch %s [--runtime <runtime>]\n", resp.Session)
+	return s
 }

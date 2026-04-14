@@ -2394,6 +2394,8 @@ func worktreeCreateCmd() *cobra.Command {
 					fmt.Fprintln(os.Stderr, msg)
 				} else {
 					fmt.Printf("✓ Registered @%s in worktree\n", agentName)
+					fmt.Printf("  Agent is NOT running yet. Start it with:\n")
+					fmt.Printf("    thrum tmux launch %s [--runtime <runtime>]\n", name)
 				}
 			}
 
