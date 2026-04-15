@@ -33,6 +33,12 @@ type Permission struct {
 	// cadence tests). Production code leaves it nil; (*Permission).now
 	// falls back to time.Now().UTC() in that case.
 	nowFunc func() time.Time
+
+	// keystrokeSender is injected by reply_test to capture approve/deny
+	// dispatches without touching real tmux. Production leaves it nil;
+	// sendKeystroke falls back to defaultKeystroke (tmux.SendKeys /
+	// tmux.SendSpecialKey) in that case.
+	keystrokeSender func(target, key string) error
 }
 
 // New builds a Permission. The state argument may be nil for unit tests

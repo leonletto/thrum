@@ -4710,6 +4710,10 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "  Mode:        local-only (remote sync disabled)\n")
 	}
 
+	// Resolve the project name once — used by both the supervisor
+	// registration and the Permission package constructor below.
+	projectName := permission.ResolveProjectName(thrumCfg, absPath)
+
 	// Register the reserved @supervisor_<project> pseudo-agent so permission
 	// nudges have a reply-capable sender. Idempotent at boot.
 	supervisorID, err := permission.RegisterSupervisor(context.Background(), thrumCfg, thrumDir, absPath)
@@ -4718,6 +4722,12 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	} else {
 		log.Printf("daemon: supervisor registered as @%s", supervisorID)
 	}
+
+	// Construct the permission package. The reply interceptor (Task
+	// 6.2) is wired into the event-write hook further below; full
+	// integration with the tmux check-pane handler is deferred to
+	// Phase 8 Task 8.1.
+	permPkg := permission.New(st, st.RawDB(), supervisorID, projectName, thrumDir)
 
 	// Resolve sync interval: env var > config.json > default
 	syncInterval := time.Duration(thrumCfg.Daemon.SyncInterval) * time.Second
@@ -4859,17 +4869,42 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		return tsLocalAddr
 	}
 
-	if syncManager != nil {
-		// Hook into event writes to broadcast sync.notify to peers.
-		// The hook fires once per event write, so eventCount is
-		// always 1 from this call site. The event payload is
-		// forwarded to any future permission-reply interceptor in a
-		// separate SetOnEventWrite registration; here we only need
-		// daemonID + sequence for the peer notification.
-		st.SetOnEventWrite(func(daemonID string, sequence int64, _ []byte) {
+	// Register the single event-write hook. *state.State has exactly
+	// one hook slot, so both the sync-notify broadcast and the
+	// permission reply interceptor share this closure.
+	//
+	//   - sync notify: fires on every local event write (fire-and-
+	//     forget via goroutine) when a syncManager is active.
+	//   - permission intercept: filters for message.create events,
+	//     unmarshals them, and dispatches to permPkg.AfterMessageCreate
+	//     so any reply_to ref can be resolved into an approve/deny
+	//     keystroke.
+	//
+	// This fires on LOCAL writes only. The cross-repo path (events
+	// arriving via sync ingest) is bridged through IngestSyncedEvent
+	// in Task 6.3.
+	st.SetOnEventWrite(func(daemonID string, sequence int64, event []byte) {
+		if syncManager != nil {
 			go syncManager.BroadcastNotify(daemonID, sequence, 1)
-		})
+		}
+		// Cheap type-only unmarshal to filter non-message events.
+		var head struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(event, &head); err != nil {
+			return
+		}
+		if head.Type != "message.create" {
+			return
+		}
+		var evt types.MessageCreateEvent
+		if err := json.Unmarshal(event, &evt); err != nil {
+			return
+		}
+		permPkg.AfterMessageCreate(ctx, evt)
+	})
 
+	if syncManager != nil {
 		// Create pairing manager (used by both Unix socket and Tailscale handlers)
 		pairingMgr = daemon.NewPairingManager(syncManager.PeerRegistry(), st.DaemonID(), hostname)
 
