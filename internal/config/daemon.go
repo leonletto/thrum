@@ -18,6 +18,22 @@ type ThrumConfig struct {
 	Restart       RestartConfig       `json:"restart"`
 	Worktrees     WorktreesConfig     `json:"worktrees,omitempty"`
 	Orchestration OrchestrationConfig `json:"orchestration,omitempty"`
+
+	// PermissionSupervisors lists recipients of permission-prompt nudges.
+	// Each entry is one of:
+	//   - a role name ("coordinator", "orchestrator") → broadcasts to
+	//     every active agent with that role
+	//   - a specific agent name ("@coordinator_main") → direct delivery
+	//   - a specific user ("@user:leon-letto") → direct delivery, auto-
+	//     forwarded to Telegram if the bridge is configured for that user
+	// Default when absent or empty: ["coordinator"] (applied at
+	// nudge-dispatch time, not at load).
+	PermissionSupervisors []string `json:"permission_supervisors,omitempty"`
+
+	// ProjectName is the short human-readable identifier used to form
+	// the supervisor sender identity (@supervisor_<ProjectName>). Falls
+	// back to filepath.Base(repo_root) at daemon boot if empty.
+	ProjectName string `json:"project_name,omitempty"`
 }
 
 // WorktreesConfig holds worktree management settings.

@@ -635,3 +635,63 @@ func TestSaveThrumConfig_OmitsDefaultRestart(t *testing.T) {
 		t.Error("restart section should not be written when all fields are zero")
 	}
 }
+
+func TestThrumConfig_PermissionSupervisors_Default(t *testing.T) {
+	var cfg config.ThrumConfig
+	raw := []byte(`{}`)
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg.PermissionSupervisors != nil {
+		t.Errorf("PermissionSupervisors should be nil when absent, got %v", cfg.PermissionSupervisors)
+	}
+	if cfg.ProjectName != "" {
+		t.Errorf("ProjectName should be empty when absent, got %q", cfg.ProjectName)
+	}
+}
+
+func TestThrumConfig_PermissionSupervisors_Roundtrip(t *testing.T) {
+	in := config.ThrumConfig{
+		PermissionSupervisors: []string{"coordinator", "@user:leon-letto"},
+		ProjectName:           "thrum",
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var out config.ThrumConfig
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(out.PermissionSupervisors) != 2 {
+		t.Errorf("expected 2 supervisors, got %d", len(out.PermissionSupervisors))
+	}
+	if out.PermissionSupervisors[0] != "coordinator" || out.PermissionSupervisors[1] != "@user:leon-letto" {
+		t.Errorf("unexpected supervisors: %v", out.PermissionSupervisors)
+	}
+	if out.ProjectName != "thrum" {
+		t.Errorf("ProjectName = %q, want %q", out.ProjectName, "thrum")
+	}
+}
+
+func TestSaveThrumConfig_OmitsEmptyPermissionFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.ThrumConfig{}
+	if err := config.SaveThrumConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(tmpDir, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := raw["permission_supervisors"]; exists {
+		t.Error("permission_supervisors should be omitted when nil")
+	}
+	if _, exists := raw["project_name"]; exists {
+		t.Error("project_name should be omitted when empty")
+	}
+}
