@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
@@ -2381,5 +2382,110 @@ func TestHandleSend_ReplyInterceptor(t *testing.T) {
 	gone, _ := p.Store().LookupPendingNudgeByMessageID(ctx, parentMsgID)
 	if gone != nil {
 		t.Errorf("nudge row should be deleted after approve, got %+v", gone)
+	}
+}
+
+// TestQueryAgentsByRecipient_ReservedIdentityFallback verifies the
+// reserved-identity fallback in queryAgentsByRecipient: a recipient
+// that has no row in the agents table BUT has a matching identity
+// file with Reserved=true must still resolve. This is the fix for a
+// real-live break where `thrum reply msg_XXX "y"` to a permission
+// supervisor was failing with "unknown recipient:
+// @supervisor_<project>" because the supervisor pseudo-agent never
+// registers a session and therefore never appears in agents.
+//
+// The test seeds a reserved identity file, builds a MessageHandler
+// with the thrumDir set (so the fallback has a directory to read
+// from), and asserts both the positive case (reserved → accepted)
+// and the negative cases (missing file → rejected; file present but
+// Reserved=false → rejected).
+func TestQueryAgentsByRecipient_ReservedIdentityFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	st, err := state.NewState(thrumDir, thrumDir, "r_QARRESERVED", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	// Seed a reserved supervisor identity.
+	reservedID := "supervisor_thrum"
+	reserved := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind:    "agent",
+			Name:    reservedID,
+			Role:    "supervisor",
+			Module:  "daemon",
+			Display: "Supervisor (thrum)",
+		},
+		Reserved: true,
+	}
+	if err := config.SaveIdentityFile(thrumDir, reserved); err != nil {
+		t.Fatalf("save reserved identity: %v", err)
+	}
+
+	// Seed a second identity that is NOT Reserved — ensures the
+	// fallback discriminates.
+	nonReservedID := "implementer_bogus"
+	nonReserved := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind: "agent",
+			Name: nonReservedID,
+			Role: "implementer",
+		},
+	}
+	if err := config.SaveIdentityFile(thrumDir, nonReserved); err != nil {
+		t.Fatalf("save non-reserved identity: %v", err)
+	}
+
+	// NewMessageHandlerWithDispatcher is the constructor that wires
+	// thrumDir. NewMessageHandler(st) leaves thrumDir empty which
+	// disables the fallback by design (localdev tests that don't
+	// exercise reserved recipients shouldn't pay the filesystem cost).
+	handler := NewMessageHandlerWithDispatcher(st, nil, thrumDir)
+	ctx := context.Background()
+
+	// Positive: reserved identity resolves via the fallback.
+	got, err := handler.queryAgentsByRecipient(ctx, reservedID)
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient(%q): %v", reservedID, err)
+	}
+	if len(got) != 1 || got[0] != reservedID {
+		t.Errorf("reserved lookup got %v, want [%q]", got, reservedID)
+	}
+
+	// Negative: identity file exists but Reserved=false → stays unknown.
+	got, err = handler.queryAgentsByRecipient(ctx, nonReservedID)
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient(%q): %v", nonReservedID, err)
+	}
+	if len(got) != 0 {
+		t.Errorf("non-reserved lookup got %v, want empty", got)
+	}
+
+	// Negative: name with no identity file at all.
+	got, err = handler.queryAgentsByRecipient(ctx, "no_such_agent")
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient(no_such_agent): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("missing-file lookup got %v, want empty", got)
+	}
+
+	// Negative: thrumDir unset on the handler → fallback path is not
+	// taken even for a reserved identity that exists on disk. Guards
+	// the test-friendly NewMessageHandler(st) constructor used by
+	// older unit tests.
+	noDirHandler := NewMessageHandler(st)
+	got, err = noDirHandler.queryAgentsByRecipient(ctx, reservedID)
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient with empty thrumDir: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("empty-thrumDir lookup got %v, want empty", got)
 	}
 }

@@ -3,6 +3,7 @@ package permission
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/leonletto/thrum/internal/identity"
@@ -32,6 +33,19 @@ func (p *Permission) SendSupervisorMessage(ctx context.Context, to, body string)
 		return "", fmt.Errorf("permission.SendSupervisorMessage: empty recipient")
 	}
 
+	// Normalise the recipient to the bare-name form (no leading "@").
+	// ResolveSupervisors deliberately returns @-prefixed strings as its
+	// external contract, but the message_deliveries / message_refs
+	// tables store bare agent IDs — the regular message.create path in
+	// internal/daemon/rpc/message.go TrimPrefix's "@" before populating
+	// Recipients/Refs, and the inbox query filters by bare agent_id.
+	// Sending an @-prefixed recipient here silently routes to a ghost
+	// agent that no inbox ever matches, so the nudge is invisible.
+	bareTo := strings.TrimPrefix(strings.TrimSpace(to), "@")
+	if bareTo == "" {
+		return "", fmt.Errorf("permission.SendSupervisorMessage: recipient %q reduced to empty after normalisation", to)
+	}
+
 	msgID := identity.GenerateMessageID()
 	event := types.MessageCreateEvent{
 		Type:      "message.create",
@@ -50,8 +64,8 @@ func (p *Permission) SendSupervisorMessage(ctx context.Context, to, body string)
 			Format:  "markdown",
 			Content: body,
 		},
-		Refs:       []types.Ref{{Type: "mention", Value: to}},
-		Recipients: []string{to},
+		Refs:       []types.Ref{{Type: "mention", Value: bareTo}},
+		Recipients: []string{bareTo},
 	}
 
 	p.state.Lock()

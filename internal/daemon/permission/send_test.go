@@ -67,13 +67,21 @@ func TestSendSupervisorMessage_RegistersRefAndRecipient(t *testing.T) {
 	p := newPermissionWithRealState(t)
 	ctx := context.Background()
 
-	recipient := "@coordinator_main"
-	msgID, err := p.SendSupervisorMessage(ctx, recipient, "hello")
+	// Input carries the `@` prefix — ResolveSupervisors returns
+	// @-prefixed strings as its external contract. SendSupervisorMessage
+	// must normalise to the bare-agent-id form before writing Recipients
+	// and Refs, matching the TrimPrefix convention used by the regular
+	// message.create path in internal/daemon/rpc/message.go. Without
+	// this, message_refs / message_deliveries store @-prefixed values
+	// that no inbox query ever matches, and the nudge is silently lost.
+	const recipientInput = "@coordinator_main"
+	const recipientBare = "coordinator_main"
+
+	msgID, err := p.SendSupervisorMessage(ctx, recipientInput, "hello")
 	if err != nil {
 		t.Fatalf("SendSupervisorMessage: %v", err)
 	}
 
-	// A mention Ref should have been projected for delivery.
 	var refValue string
 	err = p.state.RawDB().QueryRow(
 		"SELECT ref_value FROM message_refs WHERE message_id = ? AND ref_type = 'mention'",
@@ -82,8 +90,46 @@ func TestSendSupervisorMessage_RegistersRefAndRecipient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query message_refs: %v", err)
 	}
-	if refValue != recipient {
-		t.Errorf("ref_value = %q, want %q", refValue, recipient)
+	if refValue != recipientBare {
+		t.Errorf("ref_value = %q, want %q (bare agent id, not @-prefixed)", refValue, recipientBare)
+	}
+
+	// message_deliveries row must also use the bare id so inbox queries
+	// filtering `recipient_agent_id = 'coordinator_main'` actually hit.
+	var deliveryRecipient string
+	err = p.state.RawDB().QueryRow(
+		"SELECT recipient_agent_id FROM message_deliveries WHERE message_id = ?",
+		msgID,
+	).Scan(&deliveryRecipient)
+	if err != nil {
+		t.Fatalf("query message_deliveries: %v", err)
+	}
+	if deliveryRecipient != recipientBare {
+		t.Errorf("delivery recipient = %q, want %q", deliveryRecipient, recipientBare)
+	}
+}
+
+// TestSendSupervisorMessage_AcceptsBareAgentID verifies callers that
+// already pass a bare agent id (no `@` prefix) are not penalised —
+// the normalisation is idempotent.
+func TestSendSupervisorMessage_AcceptsBareAgentID(t *testing.T) {
+	p := newPermissionWithRealState(t)
+	ctx := context.Background()
+
+	msgID, err := p.SendSupervisorMessage(ctx, "coordinator_main", "hello")
+	if err != nil {
+		t.Fatalf("SendSupervisorMessage: %v", err)
+	}
+	var refValue string
+	err = p.state.RawDB().QueryRow(
+		"SELECT ref_value FROM message_refs WHERE message_id = ? AND ref_type = 'mention'",
+		msgID,
+	).Scan(&refValue)
+	if err != nil {
+		t.Fatalf("query message_refs: %v", err)
+	}
+	if refValue != "coordinator_main" {
+		t.Errorf("ref_value = %q, want coordinator_main", refValue)
 	}
 }
 

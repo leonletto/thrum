@@ -7068,18 +7068,15 @@ func tmuxCmd() *cobra.Command {
 				return err
 			}
 
-			// Resolve runtime from the local identity file. If no identity
-			// is present (pre-quickstart) or the file has no runtime set
-			// (legacy agent from before runtime tracking), runtime will be
-			// empty and DetectPaneState falls through to the idle path.
-			runtimeName := ""
-			if idFile, _, idErr := config.LoadIdentityWithPath("."); idErr == nil && idFile != nil {
-				runtimeName = idFile.Runtime
-			}
-
-			reason := permission.DetectPaneState(runtimeName, content)
-
-			// Always call daemon — queue dispatch needs idle notifications
+			// Runtime resolution and permission-prompt detection both
+			// live on the daemon side (HandleCheckPane). The CLI used to
+			// load .thrum/identities/*.json from cwd to resolve runtime,
+			// but tmux's alert-silence run-shell fires from the tmux
+			// server's cwd — not the agent's worktree — so identity
+			// lookup was unreliable. The daemon has authoritative
+			// session → identity mapping via findIdentityForSession, so
+			// we send only (session, content) and let the daemon handle
+			// detection as a single source of truth.
 			client, err := getClient()
 			if err != nil {
 				return nil // Daemon not running, silently skip
@@ -7088,7 +7085,6 @@ func tmuxCmd() *cobra.Command {
 
 			req := map[string]string{
 				"session": session,
-				"reason":  reason,
 				"content": content,
 			}
 			var result any
@@ -7096,7 +7092,10 @@ func tmuxCmd() *cobra.Command {
 			return nil
 		},
 	}
-	checkPaneCmd.Flags().String("repo", "", "Repository path (baked in by tmux hook)")
+	// --repo is kept as a flag for backward compatibility with baked-in
+	// tmux hooks from older thrum binaries. The new CLI ignores it —
+	// the daemon is the single source of truth for runtime resolution.
+	checkPaneCmd.Flags().String("repo", "", "Repository path (deprecated — unused; daemon resolves identity)")
 	cmd.AddCommand(checkPaneCmd)
 
 	// connect

@@ -483,3 +483,71 @@ func TestHandleCheckPane_NoPermissionWired_PermissionPathIsNoOp(t *testing.T) {
 	}
 }
 
+// TestHandleCheckPane_DetectionFromContent verifies that when the CLI
+// does not pre-compute a reason (the production path since the
+// CLI→server detection handoff), HandleCheckPane resolves the agent's
+// runtime from the identity file and runs DetectPaneState itself.
+// This is the single-source-of-truth path: the CLI ignores --repo
+// and only ever knows the session name, so the daemon is the only
+// layer that can authoritatively resolve (session → identity → runtime)
+// before pattern matching.
+func TestHandleCheckPane_DetectionFromContent(t *testing.T) {
+	handler, p := newPermissionTestHandler(t, "cursor-test")
+
+	// CLI sends content but no reason. The handler must compute
+	// reason="permission:cursor.not_in_allowlist" from the identity's
+	// runtime + the pane content and dispatch to OnDetection.
+	req := CheckPaneRequest{
+		Session: "cursor-test",
+		Reason:  "",
+		Content: "Run this command?\n  Not in allowlist: curl https://example.com\n → Run (once) (y)",
+	}
+	params, _ := json.Marshal(req)
+	resp, err := handler.HandleCheckPane(context.Background(), params)
+	if err != nil {
+		t.Fatalf("HandleCheckPane: %v", err)
+	}
+	checkResp := resp.(*CheckPaneResponse)
+	if checkResp.State != "permission" {
+		t.Errorf("State = %q, want permission (server-side detection should have fired)", checkResp.State)
+	}
+	if checkResp.Reason != "permission:cursor.not_in_allowlist" {
+		t.Errorf("Reason = %q, want permission:cursor.not_in_allowlist", checkResp.Reason)
+	}
+	row, err := p.Store().LookupPendingNudgeBySession(context.Background(), "cursor-test")
+	if err != nil {
+		t.Fatalf("LookupPendingNudgeBySession: %v", err)
+	}
+	if row == nil {
+		t.Fatal("expected a nudge row after server-side detection")
+	}
+	if row.PatternKey != "cursor.not_in_allowlist" {
+		t.Errorf("PatternKey = %q", row.PatternKey)
+	}
+}
+
+// TestHandleCheckPane_DetectionFromContent_NoMatch verifies that
+// server-side detection with pane content that does not match any
+// runtime pattern falls through to the idle path (OnRecovery).
+func TestHandleCheckPane_DetectionFromContent_NoMatch(t *testing.T) {
+	handler, p := newPermissionTestHandler(t, "cursor-test")
+
+	req := CheckPaneRequest{
+		Session: "cursor-test",
+		Reason:  "",
+		Content: "just some normal shell output, nothing permission-like\n$ ls\nfile.txt",
+	}
+	params, _ := json.Marshal(req)
+	resp, err := handler.HandleCheckPane(context.Background(), params)
+	if err != nil {
+		t.Fatalf("HandleCheckPane: %v", err)
+	}
+	checkResp := resp.(*CheckPaneResponse)
+	if checkResp.State != "idle" {
+		t.Errorf("State = %q, want idle", checkResp.State)
+	}
+	row, _ := p.Store().LookupPendingNudgeBySession(context.Background(), "cursor-test")
+	if row != nil {
+		t.Error("no-match content should not insert a nudge row")
+	}
+}

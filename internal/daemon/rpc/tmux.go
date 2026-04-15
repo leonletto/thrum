@@ -530,6 +530,25 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
+	// Resolve identity once at the top — the CLI does not (and cannot
+	// reliably) know the agent's runtime because the tmux hook fires
+	// from the tmux-server cwd, not the agent's worktree. The daemon
+	// is the only layer that can authoritatively map
+	// session → identity → runtime. Result is reused by the detection
+	// fallback below and by the permission + idle branches further
+	// down to avoid repeated identity file scans.
+	agentName, idFile, _ := h.findIdentityForSession(ctx, req.Session)
+
+	// Detection fallback: if the CLI did not pre-compute a reason
+	// (the production path — CLI just forwards session+content now),
+	// run DetectPaneState here using the runtime from the identity
+	// file. Empty runtime or empty content falls through to idle,
+	// matching DetectPaneState's contract for pre-quickstart or
+	// legacy agents.
+	if req.Reason == "" && idFile != nil && idFile.Runtime != "" && req.Content != "" {
+		req.Reason = permission.DetectPaneState(idFile.Runtime, req.Content)
+	}
+
 	// Named paneState rather than `state` so the local doesn't
 	// shadow the conceptual "h.state field" readability anchor —
 	// future code adding h.state.WriteEvent() inside this function
@@ -554,7 +573,6 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 		} else if matched := permission.LookupPattern(runtime, patternName); matched == nil {
 			log.Printf("[tmux] check-pane: unknown pattern %q", req.Reason)
 		} else {
-			agentName, idFile, _ := h.findIdentityForSession(ctx, req.Session)
 			tmuxTarget := req.Session + ":0.0"
 			if idFile != nil && idFile.TmuxSession != "" {
 				tmuxTarget = idFile.TmuxSession
@@ -581,9 +599,9 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 	}
 
 	// Check for status mismatch: agent says "working" but pane is idle.
-	// Runs only if no queue action was taken above.
+	// Runs only if no queue action was taken above. Reuses agentName
+	// and idFile resolved at the top of the function.
 	if paneState == "idle" {
-		agentName, idFile, _ := h.findIdentityForSession(ctx, req.Session)
 		if idFile != nil && idFile.AgentStatus == "working" {
 			paneState = "working_but_idle"
 			target := resolveNudgeTarget(h.thrumDir, agentName)
@@ -599,7 +617,6 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 	// prompt on its own — delete the row and clear stuck. Best-effort;
 	// errors are logged but don't fail the RPC.
 	if paneState == "idle" && h.permission != nil {
-		agentName, _, _ := h.findIdentityForSession(ctx, req.Session)
 		if err := h.permission.OnRecovery(ctx, req.Session, agentName); err != nil {
 			log.Printf("[tmux] check-pane: OnRecovery failed: %v", err)
 		}
