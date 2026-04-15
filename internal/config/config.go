@@ -48,7 +48,15 @@ type IdentityFile struct {
 	Runtime              string      `json:"runtime,omitempty"`
 	AgentStatus          string      `json:"agent_status,omitempty"`
 	AgentStatusUpdatedAt time.Time   `json:"agent_status_updated_at,omitempty"`
-	UpdatedAt            time.Time   `json:"updated_at"`
+
+	// Reserved marks a pseudo-agent that should be hidden from default
+	// `thrum team` output. Used by daemon-internal identities like
+	// @supervisor_<project> which exist only to send notifications and
+	// aren't real workers. Surfaced via `thrum team --system` for
+	// debugging.
+	Reserved bool `json:"reserved,omitempty"`
+
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Load loads configuration with the following priority:

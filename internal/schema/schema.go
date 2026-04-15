@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 20
+const CurrentVersion = 21
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -315,6 +315,25 @@ func createTables(tx *sql.Tx) error {
 			last_exit_at      TEXT,
 			pid               INTEGER
 		)`,
+
+		// Permission nudges table (for permission-prompt detection — v21).
+		// Daemon-local only: each row describes a pending nudge for a tmux
+		// session on THIS host. Not synced across repos; see
+		// dev-docs/specs/2026-04-14-permission-prompt-detection-design.md §3.
+		`CREATE TABLE IF NOT EXISTS permission_nudges (
+			message_id       TEXT PRIMARY KEY,
+			session          TEXT NOT NULL,
+			tmux_target      TEXT NOT NULL,
+			agent_name       TEXT NOT NULL,
+			pattern_key      TEXT NOT NULL,
+			approve_key      TEXT NOT NULL,
+			deny_key         TEXT,
+			first_detected   TIMESTAMP NOT NULL,
+			last_nudge_at    TIMESTAMP NOT NULL,
+			nudge_count      INTEGER NOT NULL,
+			last_pane_hash   BLOB NOT NULL,
+			expires_at       TIMESTAMP NOT NULL
+		)`,
 	}
 
 	for _, sql := range tables {
@@ -378,6 +397,10 @@ func createIndexes(tx *sql.Tx) error {
 
 		// Monitors indexes (v20)
 		"CREATE INDEX IF NOT EXISTS idx_monitors_status ON monitors(status)",
+
+		// Permission nudges indexes (v21)
+		"CREATE INDEX IF NOT EXISTS idx_permission_nudges_session ON permission_nudges(session)",
+		"CREATE INDEX IF NOT EXISTS idx_permission_nudges_expires ON permission_nudges(expires_at)",
 	}
 
 	for _, sql := range indexes {
@@ -839,6 +862,40 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_monitors_status ON monitors(status)`)
 		if err != nil {
 			return fmt.Errorf("migration 19→20: idx_monitors_status: %w", err)
+		}
+	}
+
+	// Migration from version 20 to 21: Add permission_nudges table for
+	// the permission-prompt detection feature. Daemon-local only (not
+	// synced across repos). Uses CREATE TABLE IF NOT EXISTS so the
+	// migration is safe to run after createTables().
+	if startVersion < 21 && endVersion >= 21 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS permission_nudges (
+				message_id       TEXT PRIMARY KEY,
+				session          TEXT NOT NULL,
+				tmux_target      TEXT NOT NULL,
+				agent_name       TEXT NOT NULL,
+				pattern_key      TEXT NOT NULL,
+				approve_key      TEXT NOT NULL,
+				deny_key         TEXT,
+				first_detected   TIMESTAMP NOT NULL,
+				last_nudge_at    TIMESTAMP NOT NULL,
+				nudge_count      INTEGER NOT NULL,
+				last_pane_hash   BLOB NOT NULL,
+				expires_at       TIMESTAMP NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 20→21: create permission_nudges: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_permission_nudges_session ON permission_nudges(session)`)
+		if err != nil {
+			return fmt.Errorf("migration 20→21: idx_permission_nudges_session: %w", err)
+		}
+		_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_permission_nudges_expires ON permission_nudges(expires_at)`)
+		if err != nil {
+			return fmt.Errorf("migration 20→21: idx_permission_nudges_expires: %w", err)
 		}
 	}
 

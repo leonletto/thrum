@@ -118,11 +118,20 @@ func FormatAgentSummary(s *AgentSummary) string {
 
 // FormatAgentSummaryCompact formats an AgentSummary as a single-line summary.
 // Used in team and agent list contexts.
-// Format: "● @name (module) — intent [branch]".
+//
+// Status glyphs:
+//   - ● active agent (has a live session)
+//   - ○ offline agent (no live session)
+//   - ⊙ reserved pseudo-agent (surfaced only by `thrum team --system`;
+//     used for daemon-internal identities like @supervisor_<project>
+//     that exist as notification senders rather than real workers).
 func FormatAgentSummaryCompact(s *AgentSummary) string {
 	icon := "○"
-	if s.Status == "active" {
+	switch s.Status {
+	case "active":
 		icon = "●"
+	case "reserved":
+		icon = "⊙"
 	}
 
 	parts := []string{fmt.Sprintf("%s @%s (%s)", icon, s.AgentID, s.Module)}

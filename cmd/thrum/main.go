@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -29,6 +30,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/monitor"
+	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -4290,6 +4292,7 @@ and per-file change details for all agents with active sessions.
 Examples:
   thrum team
   thrum team --all
+  thrum team --system
   thrum team --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
@@ -4299,8 +4302,10 @@ Examples:
 			defer func() { _ = client.Close() }()
 
 			includeAll, _ := cmd.Flags().GetBool("all")
+			includeSystem, _ := cmd.Flags().GetBool("system")
 			req := cli.TeamListRequest{
 				IncludeOffline: includeAll,
+				IncludeSystem:  includeSystem,
 			}
 
 			var result cli.TeamListResponse
@@ -4320,6 +4325,7 @@ Examples:
 	}
 
 	cmd.Flags().Bool("all", false, "Include offline agents")
+	cmd.Flags().Bool("system", false, "Include reserved pseudo-agents (@supervisor_*, etc.)")
 
 	return cmd
 }
@@ -4709,6 +4715,45 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "  Mode:        local-only (remote sync disabled)\n")
 	}
 
+	// Resolve the project name once — used by both the supervisor
+	// registration and the Permission package constructor below.
+	projectName := permission.ResolveProjectName(thrumCfg, absPath)
+
+	// Register the reserved @supervisor_<project> pseudo-agent so permission
+	// nudges have a reply-capable sender. Idempotent at boot.
+	supervisorID, err := permission.RegisterSupervisor(context.Background(), thrumCfg, thrumDir, absPath)
+	if err != nil {
+		// Identity file write failed (NFS hiccup, permission issue,
+		// disk full, etc.). Keep the daemon alive and fall back to
+		// the deterministic ID. Without this fallback, supervisorID
+		// is the empty string and every nudge authored by this
+		// daemon carries agent_id="" — which either breaks event
+		// validation at sync time (best case, sync breaks loudly)
+		// or produces untraceable events (worst case). The next
+		// daemon boot will either succeed or re-warn.
+		fmt.Fprintf(os.Stderr, "Warning: failed to register supervisor pseudo-agent: %v\n", err)
+		supervisorID = permission.SupervisorAgentID(projectName)
+	}
+	log.Printf("daemon: supervisor registered as @%s", supervisorID)
+
+	// Construct the permission package. The reply interceptor (Task
+	// 6.2) is wired into the event-write hook further below; the
+	// tmux check-pane dispatch (Task 7.1) is wired into the
+	// TmuxHandler via SetPermission further below.
+	permPkg := permission.New(st, st.RawDB(), supervisorID, projectName, thrumDir)
+
+	// Log the count of non-expired pending nudges for operator
+	// visibility. No in-memory rehydration is needed — OnDetection
+	// re-reads the permission_nudges table on every check-pane fire,
+	// so reminders resume at the correct cadence automatically after
+	// a daemon restart. This call just gives operators a
+	// "how many nudges were in flight when we bounced?" breadcrumb.
+	if rows, reloadErr := permPkg.ReloadOnBoot(context.Background()); reloadErr != nil {
+		log.Printf("daemon: permission reload on boot failed: %v", reloadErr)
+	} else if len(rows) > 0 {
+		log.Printf("daemon: permission found %d pending nudge(s) still in flight", len(rows))
+	}
+
 	// Resolve sync interval: env var > config.json > default
 	syncInterval := time.Duration(thrumCfg.Daemon.SyncInterval) * time.Second
 	if envInterval := os.Getenv("THRUM_SYNC_INTERVAL"); envInterval != "" {
@@ -4723,6 +4768,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	if _, err := os.Stat(syncDir); err == nil {
 		syncer := thrumSync.NewSyncer(absPath, syncDir, localOnly)
 		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, syncInterval, localOnly)
+		// Route synced events through State.IngestSyncedEvent so the
+		// event-write hook fires on cross-repo ingest, not just local
+		// writes. Without this, replies arriving via sync from a peer
+		// repo never reach the permission reply interceptor.
+		syncLoop.SetIngester(st)
 		if err := syncLoop.Start(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to start sync loop: %v\n", err)
 		} else {
@@ -4849,12 +4899,73 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		return tsLocalAddr
 	}
 
-	if syncManager != nil {
-		// Hook into event writes to broadcast sync.notify to peers
-		st.SetOnEventWrite(func(daemonID string, sequence int64, eventCount int) {
-			go syncManager.BroadcastNotify(daemonID, sequence, eventCount)
-		})
+	// Register the single event-write hook. *state.State exposes
+	// exactly one hook slot (by design — a multi-slot registry was
+	// considered and rejected as API-surface bloat for this feature),
+	// so both the sync-notify broadcast and the permission reply
+	// interceptor share this closure. If a third consumer ever needs
+	// to hang off the same hook, either extend State with a slice of
+	// callbacks or keep composing here.
+	//
+	//   - sync notify: fires on every local event write, dispatched
+	//     to a background goroutine (fire-and-forget) so the
+	//     BroadcastNotify RPC fanout does not block the writer.
+	//   - permission intercept: filters for message.create events,
+	//     unmarshals them, and dispatches to permPkg.AfterMessageCreate
+	//     to resolve reply_to refs into approve/deny keystrokes.
+	//
+	// IMPORTANT: the EventWriteHook contract is "called synchronously
+	// but should not block" (state.go:25). Both branches here must
+	// yield quickly — AfterMessageCreate does a DB lookup plus a
+	// tmux subprocess exec on the happy path, so it MUST run on its
+	// own goroutine with a fresh context and a panic recover. Without
+	// the recover, a bug in the reply dispatcher could take down the
+	// whole event pipeline via a writer-goroutine panic.
+	//
+	// This fires on LOCAL writes only. The cross-repo path (events
+	// arriving via sync ingest) is bridged through IngestSyncedEvent
+	// in Task 6.3, which fires the same hook.
+	st.SetOnEventWrite(func(daemonID string, sequence int64, event []byte) {
+		if syncManager != nil {
+			go syncManager.BroadcastNotify(daemonID, sequence, 1)
+		}
+		// Cheap type-only unmarshal to filter non-message events
+		// BEFORE the larger MessageCreateEvent decode. The double
+		// unmarshal is intentional: the head check short-circuits
+		// hot paths (agent.register, session.start, etc.) without
+		// building a full MessageCreateEvent that would be
+		// immediately discarded. Do NOT "optimize" these into a
+		// single decode without verifying the non-message traffic
+		// volume on a busy daemon.
+		var head struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(event, &head); err != nil {
+			return
+		}
+		if head.Type != "message.create" {
+			return
+		}
+		var evt types.MessageCreateEvent
+		if err := json.Unmarshal(event, &evt); err != nil {
+			return
+		}
+		// Dispatch off the writer goroutine with a fresh context
+		// (the caller's ctx may be canceled by the time this runs)
+		// and a panic recover so a reply-dispatcher bug can't crash
+		// the event pipeline. evt is already a value copy — safe
+		// to capture.
+		go func(evt types.MessageCreateEvent) {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("[permission] intercept panic", "panic", r)
+				}
+			}()
+			permPkg.AfterMessageCreate(context.Background(), evt)
+		}(evt)
+	})
 
+	if syncManager != nil {
 		// Create pairing manager (used by both Unix socket and Tailscale handlers)
 		pairingMgr = daemon.NewPairingManager(syncManager.PeerRegistry(), st.DaemonID(), hostname)
 
@@ -5404,6 +5515,10 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 	// Tmux session management handlers
 	tmuxHandler := rpc.NewTmuxHandler(thrumDir, st)
+	// Wire the permission scheduler so HandleCheckPane can dispatch
+	// to OnDetection / OnRecovery. Without this, the permission
+	// branch of HandleCheckPane is a no-op and nudges never fire.
+	tmuxHandler.SetPermission(permPkg)
 	server.RegisterHandler("tmux.create", tmuxHandler.HandleCreate)
 	server.RegisterHandler("tmux.launch", tmuxHandler.HandleLaunch)
 	server.RegisterHandler("tmux.status", tmuxHandler.HandleStatus)
@@ -6953,9 +7068,15 @@ func tmuxCmd() *cobra.Command {
 				return err
 			}
 
-			reason := detectPaneState(content)
-
-			// Always call daemon — queue dispatch needs idle notifications
+			// Runtime resolution and permission-prompt detection both
+			// live on the daemon side (HandleCheckPane). The CLI used to
+			// load .thrum/identities/*.json from cwd to resolve runtime,
+			// but tmux's alert-silence run-shell fires from the tmux
+			// server's cwd — not the agent's worktree — so identity
+			// lookup was unreliable. The daemon has authoritative
+			// session → identity mapping via findIdentityForSession, so
+			// we send only (session, content) and let the daemon handle
+			// detection as a single source of truth.
 			client, err := getClient()
 			if err != nil {
 				return nil // Daemon not running, silently skip
@@ -6964,7 +7085,6 @@ func tmuxCmd() *cobra.Command {
 
 			req := map[string]string{
 				"session": session,
-				"reason":  reason,
 				"content": content,
 			}
 			var result any
@@ -6972,7 +7092,10 @@ func tmuxCmd() *cobra.Command {
 			return nil
 		},
 	}
-	checkPaneCmd.Flags().String("repo", "", "Repository path (baked in by tmux hook)")
+	// --repo is kept as a flag for backward compatibility with baked-in
+	// tmux hooks from older thrum binaries. The new CLI ignores it —
+	// the daemon is the single source of truth for runtime resolution.
+	checkPaneCmd.Flags().String("repo", "", "Repository path (deprecated — unused; daemon resolves identity)")
 	cmd.AddCommand(checkPaneCmd)
 
 	// connect
@@ -7316,24 +7439,4 @@ func tmuxAttach(session string) error {
 	// This makes the terminal see "tmux" as the process, which then
 	// propagates session/window titles to the terminal tab correctly.
 	return safecmd.TmuxExec("attach-session", "-t", session)
-}
-
-// detectPaneState scans visible pane content for an explicit permission
-// prompt. Requires both "allow" and an explicit prompt indicator
-// ("y/n", "yes/no", or "allow/deny") on the same line to avoid matching
-// unrelated text that merely mentions "allow" and "yes".
-func detectPaneState(content string) string {
-	lines := strings.Split(strings.TrimSpace(content), "\n")
-	for _, line := range lines {
-		lower := strings.ToLower(line)
-		if !strings.Contains(lower, "allow") {
-			continue
-		}
-		if strings.Contains(lower, "y/n") ||
-			strings.Contains(lower, "yes/no") ||
-			strings.Contains(lower, "allow/deny") {
-			return "permission:" + strings.TrimSpace(line)
-		}
-	}
-	return ""
 }

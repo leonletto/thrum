@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/process"
@@ -102,6 +103,13 @@ type TmuxHandler struct {
 	sessionMu   sync.RWMutex      // protects sessionCwds and cwdSessions
 	sessionCwds map[string]string // session name → cwd, populated by HandleCreate
 	cwdSessions map[string]string // cwd → session name, for single-session-per-worktree
+
+	// permission is the optional permission-prompt scheduler. Wired
+	// in production via SetPermission right after construction so
+	// existing test call sites don't need to thread a real instance
+	// through NewTmuxHandler. HandleCheckPane guards every use with
+	// a nil-check so tests without permission wiring still pass.
+	permission *permission.Permission
 }
 
 // NewTmuxHandler creates a new TmuxHandler.
@@ -113,6 +121,15 @@ func NewTmuxHandler(thrumDir string, st *state.State) *TmuxHandler {
 		sessionCwds: make(map[string]string),
 		cwdSessions: make(map[string]string),
 	}
+}
+
+// SetPermission installs the permission scheduler. Production daemon
+// boot calls this right after NewTmuxHandler to connect the tmux
+// check-pane dispatch path to the nudge scheduler. Tests that don't
+// need permission semantics can skip this call and HandleCheckPane
+// will treat the permission path as a no-op.
+func (h *TmuxHandler) SetPermission(p *permission.Permission) {
+	h.permission = p
 }
 
 // ensureSession checks whether a tmux session exists and auto-creates it
@@ -495,41 +512,98 @@ type CheckPaneResponse struct {
 }
 
 // HandleCheckPane is the handler for the tmux check-pane silence hook.
-// Detects idle or permission-blocked agents and logs the event.
+// It distinguishes four outcomes per session fire:
+//
+//  1. permission — req.Reason is a "permission:<runtime>.<name>"
+//     pattern key. Dispatches to permission.OnDetection to schedule
+//     or advance a supervisor nudge.
+//  2. command_completed / command_sent — queue-aware dispatch for
+//     the silence-based command pipeline.
+//  3. working_but_idle — agent self-reported "working" but the pane
+//     is silent; sends a nudge to the agent to resync.
+//  4. idle — true idle. Triggers permission.OnRecovery to clear any
+//     pending nudge and stuck marker from a prior prompt the agent
+//     has since resolved on its own.
 func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessage) (any, error) {
 	var req CheckPaneRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	state := "idle"
-	if req.Reason != "" {
-		state = "permission"
+	// Resolve identity once at the top — the CLI does not (and cannot
+	// reliably) know the agent's runtime because the tmux hook fires
+	// from the tmux-server cwd, not the agent's worktree. The daemon
+	// is the only layer that can authoritatively map
+	// session → identity → runtime. Result is reused by the detection
+	// fallback below and by the permission + idle branches further
+	// down to avoid repeated identity file scans.
+	agentName, idFile, _ := h.findIdentityForSession(ctx, req.Session)
+
+	// Detection fallback: if the CLI did not pre-compute a reason
+	// (the production path — CLI just forwards session+content now),
+	// run DetectPaneState here using the runtime from the identity
+	// file. Empty runtime or empty content falls through to idle,
+	// matching DetectPaneState's contract for pre-quickstart or
+	// legacy agents.
+	if req.Reason == "" && idFile != nil && idFile.Runtime != "" && req.Content != "" {
+		req.Reason = permission.DetectPaneState(idFile.Runtime, req.Content)
 	}
 
-	log.Printf("[tmux] check-pane: session=%s state=%s reason=%s", req.Session, state, req.Reason)
+	// Named paneState rather than `state` so the local doesn't
+	// shadow the conceptual "h.state field" readability anchor —
+	// future code adding h.state.WriteEvent() inside this function
+	// used to hit a type error on the shadowed local string.
+	paneState := "idle"
+	if req.Reason != "" {
+		paneState = "permission"
+	}
 
-	// Queue-aware dispatch: check for active command or queued command waiting
-	if state == "idle" {
-		if queue := h.getQueue(req.Session); queue != nil {
-			// Case 1: active command → silence means it completed
-			if active := queue.Active(); active != nil {
-				h.completeCommand(ctx, req.Session, queue, active)
-				state = "command_completed"
-			} else if waiting := queue.Peek(); waiting != nil {
-				// Case 2: front-of-queue waiting for silence → safe to send it
-				h.sendQueuedCommand(ctx, req.Session, queue, waiting)
-				state = "command_sent"
+	log.Printf("[tmux] check-pane: session=%s state=%s reason=%s", req.Session, paneState, req.Reason)
+
+	// Permission branch: parse the reason string back into a runtime
+	// + pattern name, resolve the Pattern, and hand off to the
+	// scheduler. If anything in the parse/lookup path fails, log and
+	// fall through with state="permission" — the daemon has nothing
+	// actionable to do, but the CheckPaneResponse still reflects
+	// that a permission prompt was detected.
+	if paneState == "permission" && h.permission != nil {
+		runtime, patternName, ok := parsePermissionReason(req.Reason)
+		if !ok {
+			log.Printf("[tmux] check-pane: malformed permission reason %q", req.Reason)
+		} else if matched := permission.LookupPattern(runtime, patternName); matched == nil {
+			log.Printf("[tmux] check-pane: unknown pattern %q", req.Reason)
+		} else {
+			tmuxTarget := req.Session + ":0.0"
+			if idFile != nil && idFile.TmuxSession != "" {
+				tmuxTarget = idFile.TmuxSession
+			}
+			if err := h.permission.OnDetection(ctx, req.Session, runtime, tmuxTarget, agentName, matched, req.Content); err != nil {
+				log.Printf("[tmux] check-pane: OnDetection failed: %v", err)
 			}
 		}
 	}
 
-	// Check for status mismatch: agent says "working" but pane is idle
-	// Only runs if no queue action was taken above.
-	if state == "idle" {
-		agentName, idFile, _ := h.findIdentityForSession(ctx, req.Session)
+	// Queue-aware dispatch: check for active command or queued command waiting
+	if paneState == "idle" {
+		if queue := h.getQueue(req.Session); queue != nil {
+			// Case 1: active command → silence means it completed
+			if active := queue.Active(); active != nil {
+				h.completeCommand(ctx, req.Session, queue, active)
+				paneState = "command_completed"
+			} else if waiting := queue.Peek(); waiting != nil {
+				// Case 2: front-of-queue waiting for silence → safe to send it
+				h.sendQueuedCommand(ctx, req.Session, queue, waiting)
+				paneState = "command_sent"
+			}
+		}
+	}
+
+	// Check for status mismatch: agent says "working" but pane is idle.
+	// Runs only if no queue action was taken above. Reuses agentName
+	// and idFile resolved at the top of the function.
+	if paneState == "idle" {
 		if idFile != nil && idFile.AgentStatus == "working" {
-			state = "working_but_idle"
+			paneState = "working_but_idle"
 			target := resolveNudgeTarget(h.thrumDir, agentName)
 			if target != "" {
 				_ = ttmux.Nudge(target, "daemon")
@@ -537,11 +611,38 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 		}
 	}
 
+	// Recovery path: the pane is genuinely idle (not in a command
+	// or working_but_idle state). If the permission scheduler has a
+	// pending nudge for this session, the agent has resolved the
+	// prompt on its own — delete the row and clear stuck. Best-effort;
+	// errors are logged but don't fail the RPC.
+	if paneState == "idle" && h.permission != nil {
+		if err := h.permission.OnRecovery(ctx, req.Session, agentName); err != nil {
+			log.Printf("[tmux] check-pane: OnRecovery failed: %v", err)
+		}
+	}
+
 	return &CheckPaneResponse{
 		Session: req.Session,
-		State:   state,
+		State:   paneState,
 		Reason:  req.Reason,
 	}, nil
+}
+
+// parsePermissionReason splits a reason string of the form
+// "permission:<runtime>.<pattern_name>" into its two components.
+// Returns (runtime, name, true) on success and ("", "", false) on
+// any malformation (missing prefix, missing dot, empty halves).
+func parsePermissionReason(reason string) (runtime, name string, ok bool) {
+	rest, hasPrefix := strings.CutPrefix(reason, "permission:")
+	if !hasPrefix {
+		return "", "", false
+	}
+	runtime, name, found := strings.Cut(rest, ".")
+	if !found || runtime == "" || name == "" {
+		return "", "", false
+	}
+	return runtime, name, true
 }
 
 // writeTmuxToIdentity writes tmux_session and runtime to the identity file

@@ -6,6 +6,78 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Permission prompt detection and supervisor nudge** — when a tmux-managed
+  agent hits a permission prompt it cannot auto-approve, thrum detects the
+  stuck state and routes a rich actionable notification to configured
+  supervisors. Supervisors reply `y`/`n` from the CLI, web UI, or a Telegram
+  message, and the answer is replayed into the agent's pane as real
+  keystrokes. Works across a synced thrum network — a reply on any repo in
+  the network is dispatched to the daemon that owns the pane. Supports
+  Claude Code, Codex, Cursor, OpenCode, Kiro-CLI, and Auggie (tool-approval
+  pattern). See
+  `dev-docs/specs/2026-04-14-permission-prompt-detection-design.md`.
+- **`@supervisor_<project>` reserved pseudo-agent** — registered at daemon
+  boot as the canonical author of permission nudges. Visible in
+  `thrum team --system`; hidden from default `thrum team` listings with a
+  new `⊙` reserved glyph in compact output.
+- **`thrum team --system`** flag — surfaces reserved pseudo-agents in team
+  listings, including the permission supervisor and any future
+  daemon-internal agents.
+- **Permission nudge reminder cadence** — exponential backoff at 0 / 5m /
+  15m / 45m / 2h / 4h. After six nudges without a supervisor response, the
+  scheduler marks the agent as `stuck` in its identity file so the UI,
+  `thrum team`, and other consumers can reflect that the agent is blocked.
+- **Restart resilience** — pending nudges persist in a new
+  `permission_nudges` SQLite table and survive `thrum daemon restart`; the
+  daemon logs `permission found N pending nudge(s) still in flight` on
+  startup, and reminders resume at the correct cadence automatically.
+
+### Changed
+
+- **`HandleCheckPane` is the single source of truth for runtime resolution**
+  — the CLI `thrum tmux check-pane` no longer computes a reason string
+  locally. It forwards only `(session, content)` and the daemon resolves
+  identity via `findIdentityForSession`, reads runtime from the identity
+  file, and runs `DetectPaneState` itself. Eliminates a class of bugs where
+  the CLI and daemon disagreed on which identity owned a session (the CLI
+  was reading identity from tmux-server cwd, not the agent's worktree).
+- **`permission_supervisors` config key** — per-project list of supervisor
+  agents to nudge. Defaults to role `coordinator` when unset. See
+  `internal/config/daemon.go` `PermissionSupervisors`.
+- **`project_name` config key** — owner identifier for the local
+  `@supervisor_<project>` pseudo-agent. Falls back to `filepath.Base` of
+  the repo path.
+
+### Fixed
+
+- **`SendSupervisorMessage` @-prefix normalisation** — supervisor nudges no
+  longer ghost to recipients with a leading `@` that doesn't match the
+  `message_refs` / `message_deliveries` schema (which store bare agent
+  IDs). Normalises `@name` to `name` before writing, matching the
+  `internal/daemon/rpc/message.go` TrimPrefix convention used by the
+  regular send path.
+- **`queryAgentsByRecipient` reserved-identity fallback** — replies
+  addressed to `@supervisor_<project>` no longer fail with `unknown
+  recipient` at validation time. The validator falls through to a
+  single-file identity lookup when the agents-table query returns empty,
+  accepting names that have `Reserved=true` in their identity file.
+
+### Known issues
+
+- **Pre-existing agent worktrees need a re-register** — agents quickstarted
+  before the runtime-tracking field was added carry `runtime: null` in
+  their identity files, and the new server-side detection path requires a
+  non-empty runtime to pick the per-runtime pattern set. Operators
+  upgrading to this release with long-lived agent worktrees should
+  re-register with `thrum quickstart --name <agent> --role <role>
+  --runtime <runtime>` once per affected agent — this rewrites the
+  identity file with the runtime field populated. Fix tracked in
+  `thrum-yl3k` (backfill from `preferred_runtime` at daemon boot).
+
 ## [0.8.2] - 2026-04-13
 
 ### Added

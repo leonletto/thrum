@@ -2,14 +2,19 @@ package rpc
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/types"
@@ -2218,5 +2223,269 @@ func TestResolveNudgeTarget_NoFile(t *testing.T) {
 	target := resolveNudgeTarget(thrumDir, "nonexistent")
 	if target != "" {
 		t.Errorf("resolveNudgeTarget should return empty for missing identity, got %q", target)
+	}
+}
+
+// TestHandleSend_ReplyInterceptor is the RPC-level end-to-end cover
+// for the full reply path: HandleSend writes a reply message via
+// state.WriteEvent, which fires EventWriteHook, which routes
+// message.create events to the permission package's
+// AfterMessageCreate, which resolves the pending nudge and fires
+// the cached approve keystroke through the injected test sender.
+//
+// Pairs with the permission-package unit tests in
+// internal/daemon/permission/reply_test.go, which cover the body
+// parsing, regex anchoring, and race-safe atomic claim logic in
+// isolation. This test ties the RPC handler, the state event
+// writer, the event-write hook, and the permission dispatcher
+// together — the same chain production daemon boot wires up at
+// cmd/thrum/main.go.
+func TestHandleSend_ReplyInterceptor(t *testing.T) {
+	// t.Parallel() surfaces future data races earlier under -race.
+	// The hook we register is synchronous (matching production's
+	// pre-goroutine call graph at the RPC level), so any shared
+	// state the reply dispatcher might grow — e.g. a mutex-guarded
+	// keystroke cache — would flake under parallelism if the lock
+	// discipline were wrong.
+	t.Parallel()
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	repoID := "r_REPLYINT"
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	// Register a test agent + session so HandleSend can resolve
+	// caller_agent_id → (agent_id, session_id). The RegisterRequest
+	// carries Role/Module directly — no t.Setenv needed, which is
+	// what makes the t.Parallel() above legal (Setenv + Parallel
+	// panics under the 1.22+ checker).
+	callerID := identity.GenerateAgentID(repoID, "coordinator", "main", "")
+	agentHandler := NewAgentHandler(st)
+	registerParams, _ := json.Marshal(RegisterRequest{
+		Role:   "coordinator",
+		Module: "main",
+	})
+	if _, err := agentHandler.HandleRegister(context.Background(), registerParams); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+
+	sessionHandler := NewSessionHandler(st)
+	sessionParams, _ := json.Marshal(SessionStartRequest{AgentID: callerID})
+	if _, err := sessionHandler.HandleStart(context.Background(), sessionParams); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	// Build a Permission wired to this state + an injected keystroke
+	// sender that records invocations instead of touching tmux.
+	type sentKey struct{ target, key string }
+	var (
+		mu       sync.Mutex
+		sentKeys []sentKey
+	)
+	p := permission.New(st, st.RawDB(), "supervisor_test", "test", thrumDir)
+	p.SetKeystrokeSenderForTest(func(target, key string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		sentKeys = append(sentKeys, sentKey{target, key})
+		return nil
+	})
+
+	// Install the event-write hook in the same shape as production
+	// runDaemon. Sync variant here for simple test assertions — the
+	// production code goroutines this call, but the behavior being
+	// tested is the RPC routing + dispatch chain, not the concurrency
+	// wrapper (which is covered by unit tests in reply_test.go).
+	ctx := context.Background()
+	st.SetOnEventWrite(func(_ string, _ int64, event []byte) {
+		var head struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(event, &head); err != nil {
+			return
+		}
+		if head.Type != "message.create" {
+			return
+		}
+		var evt types.MessageCreateEvent
+		if err := json.Unmarshal(event, &evt); err != nil {
+			return
+		}
+		p.AfterMessageCreate(ctx, evt)
+	})
+
+	// Produce a real parent supervisor message so HandleSend can
+	// resolve reply_to against the messages table. SendSupervisorMessage
+	// writes through state.WriteEvent, returns the generated
+	// message_id, and makes the row lookup in HandleSend's reply_to
+	// validation path succeed.
+	parentMsgID, err := p.SendSupervisorMessage(ctx, "@coordinator_main", "⚠ Permission prompt — test")
+	if err != nil {
+		t.Fatalf("SendSupervisorMessage: %v", err)
+	}
+
+	// Seed a pending nudge keyed on that real message_id.
+	now := time.Now().UTC()
+	row := &permission.NudgeRow{
+		MessageID:     parentMsgID,
+		Session:       "cursor-test",
+		TmuxTarget:    "cursor-test:0.0",
+		AgentName:     "researcher_cursor",
+		PatternKey:    "cursor.not_in_allowlist",
+		ApproveKey:    "y",
+		DenyKey:       "Escape",
+		FirstDetected: now,
+		LastNudgeAt:   now,
+		NudgeCount:    1,
+		LastPaneHash:  sha256.Sum256([]byte("pane")),
+		ExpiresAt:     now.Add(8 * time.Hour),
+	}
+	if err := p.Store().InsertPendingNudge(ctx, row); err != nil {
+		t.Fatalf("seed nudge row: %v", err)
+	}
+
+	// Issue the reply via HandleSend.
+	handler := NewMessageHandler(st)
+	sendParams, _ := json.Marshal(SendRequest{
+		Content:       "y",
+		Format:        "plain",
+		ReplyTo:       parentMsgID,
+		CallerAgentID: callerID,
+	})
+	if _, err := handler.HandleSend(ctx, sendParams); err != nil {
+		t.Fatalf("HandleSend: %v", err)
+	}
+
+	// Assert the fake keystroke sender was invoked with the approve key.
+	mu.Lock()
+	captured := make([]sentKey, len(sentKeys))
+	copy(captured, sentKeys)
+	mu.Unlock()
+
+	if len(captured) != 1 {
+		t.Fatalf("expected exactly 1 keystroke dispatch, got %d: %+v", len(captured), captured)
+	}
+	if captured[0].target != "cursor-test:0.0" {
+		t.Errorf("target = %q, want cursor-test:0.0", captured[0].target)
+	}
+	if captured[0].key != "y" {
+		t.Errorf("key = %q, want y", captured[0].key)
+	}
+
+	// The pending nudge must be gone (atomic claim deleted it).
+	gone, _ := p.Store().LookupPendingNudgeByMessageID(ctx, parentMsgID)
+	if gone != nil {
+		t.Errorf("nudge row should be deleted after approve, got %+v", gone)
+	}
+}
+
+// TestQueryAgentsByRecipient_ReservedIdentityFallback verifies the
+// reserved-identity fallback in queryAgentsByRecipient: a recipient
+// that has no row in the agents table BUT has a matching identity
+// file with Reserved=true must still resolve. This is the fix for a
+// real-live break where `thrum reply msg_XXX "y"` to a permission
+// supervisor was failing with "unknown recipient:
+// @supervisor_<project>" because the supervisor pseudo-agent never
+// registers a session and therefore never appears in agents.
+//
+// The test seeds a reserved identity file, builds a MessageHandler
+// with the thrumDir set (so the fallback has a directory to read
+// from), and asserts both the positive case (reserved → accepted)
+// and the negative cases (missing file → rejected; file present but
+// Reserved=false → rejected).
+func TestQueryAgentsByRecipient_ReservedIdentityFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	st, err := state.NewState(thrumDir, thrumDir, "r_QARRESERVED", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	// Seed a reserved supervisor identity.
+	reservedID := "supervisor_thrum"
+	reserved := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind:    "agent",
+			Name:    reservedID,
+			Role:    "supervisor",
+			Module:  "daemon",
+			Display: "Supervisor (thrum)",
+		},
+		Reserved: true,
+	}
+	if err := config.SaveIdentityFile(thrumDir, reserved); err != nil {
+		t.Fatalf("save reserved identity: %v", err)
+	}
+
+	// Seed a second identity that is NOT Reserved — ensures the
+	// fallback discriminates.
+	nonReservedID := "implementer_bogus"
+	nonReserved := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind: "agent",
+			Name: nonReservedID,
+			Role: "implementer",
+		},
+	}
+	if err := config.SaveIdentityFile(thrumDir, nonReserved); err != nil {
+		t.Fatalf("save non-reserved identity: %v", err)
+	}
+
+	// NewMessageHandlerWithDispatcher is the constructor that wires
+	// thrumDir. NewMessageHandler(st) leaves thrumDir empty which
+	// disables the fallback by design (localdev tests that don't
+	// exercise reserved recipients shouldn't pay the filesystem cost).
+	handler := NewMessageHandlerWithDispatcher(st, nil, thrumDir)
+	ctx := context.Background()
+
+	// Positive: reserved identity resolves via the fallback.
+	got, err := handler.queryAgentsByRecipient(ctx, reservedID)
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient(%q): %v", reservedID, err)
+	}
+	if len(got) != 1 || got[0] != reservedID {
+		t.Errorf("reserved lookup got %v, want [%q]", got, reservedID)
+	}
+
+	// Negative: identity file exists but Reserved=false → stays unknown.
+	got, err = handler.queryAgentsByRecipient(ctx, nonReservedID)
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient(%q): %v", nonReservedID, err)
+	}
+	if len(got) != 0 {
+		t.Errorf("non-reserved lookup got %v, want empty", got)
+	}
+
+	// Negative: name with no identity file at all.
+	got, err = handler.queryAgentsByRecipient(ctx, "no_such_agent")
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient(no_such_agent): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("missing-file lookup got %v, want empty", got)
+	}
+
+	// Negative: thrumDir unset on the handler → fallback path is not
+	// taken even for a reserved identity that exists on disk. Guards
+	// the test-friendly NewMessageHandler(st) constructor used by
+	// older unit tests.
+	noDirHandler := NewMessageHandler(st)
+	got, err = noDirHandler.queryAgentsByRecipient(ctx, reservedID)
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient with empty thrumDir: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("empty-thrumDir lookup got %v, want empty", got)
 	}
 }

@@ -22,9 +22,16 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// EventWriteHook is called after a successful event write with the daemon ID and sequence number.
-// It is called synchronously but should not block — use goroutines for async work.
-type EventWriteHook func(daemonID string, sequence int64, eventCount int)
+// EventWriteHook is called after a successful event write with the
+// daemon ID, the assigned sequence number, and the enriched event
+// payload as raw JSON. It is called synchronously but should not
+// block — use goroutines for async work.
+//
+// The payload is the post-enrichment event (with event_id, version,
+// origin_daemon, and sequence fields added) so consumers can inspect
+// fields like refs[].reply_to without re-marshaling. Callers that
+// only care about sequence/daemon can simply ignore the event arg.
+type EventWriteHook func(daemonID string, sequence int64, event []byte)
 
 // State manages the daemon's persistent state (JSONL log and SQLite projection).
 type State struct {
@@ -136,8 +143,9 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 	return s, nil
 }
 
-// SetOnEventWrite sets a hook that is called after each successful event write.
-// The hook receives the daemon ID, the assigned sequence number, and event count (always 1).
+// SetOnEventWrite sets a hook that is called after each successful
+// event write. The hook receives the daemon ID, the assigned
+// sequence number, and the enriched event payload as raw JSON.
 func (s *State) SetOnEventWrite(hook EventWriteHook) {
 	s.onEventWrite = hook
 }
@@ -265,9 +273,12 @@ func (s *State) WriteEvent(ctx context.Context, event any) error {
 		return fmt.Errorf("apply to projector: %w", err)
 	}
 
-	// Notify sync hook (e.g., to broadcast sync.notify to peers)
+	// Notify sync hook (e.g., to broadcast sync.notify to peers).
+	// Passes the enriched event JSON so downstream consumers (e.g.
+	// the permission reply interceptor) can inspect refs/reply_to
+	// without re-marshaling.
 	if s.onEventWrite != nil {
-		s.onEventWrite(s.daemonID, seq, 1)
+		s.onEventWrite(s.daemonID, seq, eventJSON)
 	}
 
 	return nil
@@ -376,6 +387,40 @@ func (s *State) DaemonID() string {
 // Delegates to the eventlog package.
 func (s *State) GetEventsSince(ctx context.Context, afterSeq int64, limit int) ([]eventlog.Event, int64, bool, error) {
 	return eventlog.GetEventsSince(ctx, s.db, afterSeq, limit)
+}
+
+// IngestSyncedEvent applies an event that arrived via sync (already
+// in the peer's JSONL, already merged into our local JSONL) to the
+// SQLite projection AND fires the event-write hook. It does NOT
+// write to JSONL again (avoids double-writes) and does NOT increment
+// the local sequence counter — the event arrives pre-sequenced from
+// the peer.
+//
+// This is the cross-repo correctness bridge. Internal/sync/loop.go's
+// updateProjection step previously called projector.Apply directly,
+// bypassing the event-write hook entirely. That meant synced
+// message.create events (including replies to cross-repo nudges)
+// never reached the permission package's reply interceptor, silently
+// breaking cross-repo approve/deny delivery. Routing sync ingest
+// through this method fixes that: the projector still runs AND the
+// permission intercept fires.
+//
+// The hook sees sequence == 0 as a sentinel for "synced from peer,
+// not locally authored". The daemon_id argument is still our own so
+// downstream consumers can tell which process is handling the event.
+func (s *State) IngestSyncedEvent(ctx context.Context, event []byte) error {
+	// Apply to projector — same work the previous direct call did.
+	if err := s.projector.Apply(ctx, event); err != nil {
+		return fmt.Errorf("apply synced event: %w", err)
+	}
+
+	// Fire the hook so downstream consumers (the permission reply
+	// interceptor in particular) see the event even though it didn't
+	// originate here.
+	if s.onEventWrite != nil {
+		s.onEventWrite(s.daemonID, 0, event)
+	}
+	return nil
 }
 
 // RepoPath returns the path to the repository root.

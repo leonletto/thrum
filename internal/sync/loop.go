@@ -13,11 +13,22 @@ import (
 	"github.com/leonletto/thrum/internal/projection"
 )
 
+// EventIngester is the minimal interface the sync loop uses to apply
+// an event that arrived via git sync from a peer's JSONL. *state.State
+// satisfies this via IngestSyncedEvent, which runs the projector AND
+// fires the event-write hook. SyncLoop prefers this path when set so
+// cross-repo replies can reach the permission package's reply
+// interceptor (Task 6.3 / Phase 6 cross-repo correctness).
+type EventIngester interface {
+	IngestSyncedEvent(ctx context.Context, event []byte) error
+}
+
 // SyncLoop manages the periodic sync cycle.
 type SyncLoop struct {
 	interval     time.Duration
 	syncer       *Syncer
 	projector    *projection.Projector
+	ingester     EventIngester // optional; when set, updateProjection routes through it
 	repoPath     string
 	syncDir      string // Path to sync worktree (.git/thrum-sync/a-sync)
 	thrumDir     string // Path to .thrum/ directory (used for lock path)
@@ -30,6 +41,16 @@ type SyncLoop struct {
 	running      bool
 	lastSyncAt   time.Time
 	lastError    error
+}
+
+// SetIngester installs an EventIngester so synced events flow through
+// *state.State.IngestSyncedEvent (which fires the event-write hook)
+// instead of calling projector.Apply directly. Production daemon boot
+// calls this immediately after NewSyncLoop; tests that don't care
+// about the hook can leave it nil and the projector-only fallback
+// preserves prior behavior.
+func (l *SyncLoop) SetIngester(ing EventIngester) {
+	l.ingester = ing
 }
 
 // NewSyncLoop creates a new sync loop.
@@ -238,14 +259,25 @@ func (l *SyncLoop) doSync(ctx context.Context) {
 	l.mu.Unlock()
 }
 
-// updateProjection applies the parsed events directly to SQLite.
-// Phase 5 optimization: events are passed from merge step, eliminating redundant file I/O.
+// updateProjection applies the parsed events to SQLite. When an
+// EventIngester is set (production), it routes each event through
+// state.IngestSyncedEvent so the event-write hook fires — that is the
+// load-bearing bridge for cross-repo reply delivery. Without an
+// ingester (tests that only care about projection), it falls back to
+// calling projector.Apply directly.
+//
+// Phase 5 optimization: events are passed from the merge step,
+// eliminating redundant file I/O.
 func (l *SyncLoop) updateProjection(ctx context.Context, parsedEvents []json.RawMessage) error {
-	// Apply each parsed event to the projector
 	for _, event := range parsedEvents {
-		// Extract event ID for error reporting
 		id, _ := extractEventIDFromRaw(event)
 
+		if l.ingester != nil {
+			if err := l.ingester.IngestSyncedEvent(ctx, event); err != nil {
+				return fmt.Errorf("ingest synced event %s: %w", id, err)
+			}
+			continue
+		}
 		if err := l.projector.Apply(ctx, event); err != nil {
 			return fmt.Errorf("apply event %s: %w", id, err)
 		}

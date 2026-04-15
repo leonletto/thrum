@@ -1195,3 +1195,51 @@ func TestIdentityFile_AdoptionDoesNotBlock(t *testing.T) {
 		t.Errorf("AgentPID = %d, want 999999", loaded.AgentPID)
 	}
 }
+
+func TestIdentityFile_Reserved_Default(t *testing.T) {
+	var id config.IdentityFile
+	raw := []byte(`{"version":5,"agent":{"Name":"x","Role":"r","Module":"m"}}`)
+	if err := json.Unmarshal(raw, &id); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if id.Reserved {
+		t.Errorf("Reserved should default to false, got true")
+	}
+}
+
+func TestIdentityFile_Reserved_Roundtrip(t *testing.T) {
+	in := config.IdentityFile{
+		Version:  5,
+		Agent:    config.AgentConfig{Name: "supervisor_thrum", Role: "supervisor", Module: "daemon"},
+		Reserved: true,
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var out config.IdentityFile
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !out.Reserved {
+		t.Errorf("Reserved should be true after roundtrip")
+	}
+}
+
+func TestIdentityFile_Reserved_OmittedWhenFalse(t *testing.T) {
+	in := config.IdentityFile{
+		Version: 5,
+		Agent:   config.AgentConfig{Name: "worker", Role: "r", Module: "m"},
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatalf("unmarshal raw: %v", err)
+	}
+	if _, exists := raw["reserved"]; exists {
+		t.Error("reserved should be omitted when false")
+	}
+}
