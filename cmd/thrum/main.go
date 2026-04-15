@@ -202,7 +202,7 @@ Examples:
 
 			// Validate runtime flag if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
-				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, opencode, auggie, cli-only, all", runtimeFlag)
+				return fmt.Errorf("unknown runtime %q; supported: %s", runtimeFlag, strings.Join(runtime.SupportedRuntimes(), ", "))
 			}
 
 			// Skills-only mode: install thrum skill without full init
@@ -4026,7 +4026,7 @@ Examples:
 
 			// Validate runtime if specified
 			if runtimeFlag != "" && !runtime.IsValidRuntime(runtimeFlag) {
-				return fmt.Errorf("unknown runtime %q; supported: claude, codex, cursor, gemini, opencode, auggie, cli-only", runtimeFlag)
+				return fmt.Errorf("unknown runtime %q; supported: %s", runtimeFlag, strings.Join(runtime.SupportedRuntimes(), ", "))
 			}
 
 			// THRUM_NAME env var sets a default name; explicit --name flag takes precedence.
@@ -4225,7 +4225,7 @@ Examples:
 	cmd.Flags().String("name", "", "Human-readable agent name (optional, defaults to role_hash)")
 	cmd.Flags().String("display", "", "Display name for the agent")
 	cmd.Flags().String("intent", "", "Initial work intent")
-	cmd.Flags().String("runtime", "", "Runtime preset (claude, codex, cursor, gemini, auggie, cli-only)")
+	cmd.Flags().String("runtime", "", "Runtime preset (see 'thrum runtime list')")
 	cmd.Flags().Bool("dry-run", false, "Preview changes without writing files or registering")
 	cmd.Flags().Bool("no-init", false, "Skip runtime config generation, just register agent")
 	cmd.Flags().Bool("force", false, "Overwrite existing runtime config files")

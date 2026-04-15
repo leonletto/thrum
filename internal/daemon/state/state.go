@@ -300,21 +300,34 @@ func (s *State) resolveAgentForMessage(ctx context.Context, event map[string]any
 		return agentIDToName(agentID), nil
 
 	case "message.edit", "message.delete", "message.receipt":
-		// For edits/deletes, look up the original author from SQLite
+		// For edits/deletes/receipts, look up the original author from SQLite.
+		// If the original message hasn't been synced yet (out-of-order delivery
+		// across peers), fall back to agent_id from the event or a generic name.
+		// This prevents a missing message from becoming a poison pill that blocks
+		// the entire sync apply loop.
 		messageID, ok := event["message_id"].(string)
 		if !ok || messageID == "" {
 			return "", fmt.Errorf("%s event missing message_id", eventType)
 		}
 
-		// Query the messages table for the original author
 		var agentID string
 		query := `SELECT agent_id FROM messages WHERE message_id = ?`
 		err := s.db.QueryRowContext(ctx, query, messageID).Scan(&agentID)
-		if err != nil {
+		if err == nil {
+			return agentIDToName(agentID), nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
 			return "", fmt.Errorf("lookup original author for %s: %w", messageID, err)
 		}
 
-		return agentIDToName(agentID), nil
+		// Message not in local DB — graceful fallback.
+		// Use agent_id from the event if present (e.g. receipt events carry it),
+		// otherwise derive a name from the message_id so the event still gets
+		// routed to a per-agent JSONL file rather than being dropped.
+		if fallbackID, ok := event["agent_id"].(string); ok && fallbackID != "" {
+			return agentIDToName(fallbackID), nil
+		}
+		return "_unresolved", nil
 
 	default:
 		return "", fmt.Errorf("unexpected message event type: %s", eventType)

@@ -535,7 +535,10 @@ func TestProjector_MessageEditNonExistent(t *testing.T) {
 
 	p := projection.NewProjector(safedb.New(db))
 
-	// Try to edit a message that doesn't exist
+	// Editing a message that doesn't exist should succeed gracefully (no-op).
+	// This supports out-of-order event delivery during peer sync — an edit may
+	// arrive before the original message.create. The event is stored in JSONL;
+	// the projection just skips the edit history and update when no row matches.
 	editEvent := types.MessageEditEvent{
 		Type:      "message.edit",
 		Timestamp: "2026-01-01T01:00:00Z",
@@ -548,8 +551,8 @@ func TestProjector_MessageEditNonExistent(t *testing.T) {
 
 	data, _ := json.Marshal(editEvent)
 	err := p.Apply(context.Background(), data)
-	if err == nil {
-		t.Error("Expected error when editing non-existent message")
+	if err != nil {
+		t.Errorf("editing non-existent message should succeed gracefully, got: %v", err)
 	}
 }
 
@@ -683,5 +686,109 @@ func TestProjector_UnknownEventType(t *testing.T) {
 	data, _ := json.Marshal(unknownEvent)
 	if err := p.Apply(context.Background(), data); err != nil {
 		t.Errorf("Apply() should not error on unknown event type: %v", err)
+	}
+}
+
+// TestProjector_GroupMemberAddUnknownGroup verifies that a group.member.add
+// event referencing a group that doesn't exist locally succeeds gracefully
+// instead of raising a FK constraint violation that would poison sync.
+func TestProjector_GroupMemberAddUnknownGroup(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+	ctx := context.Background()
+
+	// Apply a member.add for a group that doesn't exist
+	addEvent := types.GroupMemberAddEvent{
+		Type:        "group.member.add",
+		Timestamp:   "2026-01-01T10:00:00Z",
+		GroupID:     "grp_UNKNOWN",
+		MemberType:  "agent",
+		MemberValue: "agent:test:ABC123",
+		AddedBy:     "agent:admin:XYZ",
+	}
+	data, _ := json.Marshal(addEvent)
+	if err := p.Apply(ctx, data); err != nil {
+		t.Errorf("group.member.add for unknown group should succeed gracefully, got: %v", err)
+	}
+
+	// Verify no rows were inserted into group_members
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM group_members WHERE group_id = ?`, "grp_UNKNOWN").Scan(&count)
+	if err != nil {
+		t.Fatalf("query group_members: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 rows for unknown group, got %d", count)
+	}
+}
+
+// TestProjector_AgentUpdateUnknownSession verifies that an agent.update event
+// with a work context referencing a session that doesn't exist locally
+// succeeds gracefully — contexts with unknown session_ids are skipped instead
+// of raising a FK constraint violation.
+func TestProjector_AgentUpdateUnknownSession(t *testing.T) {
+	db := setupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	p := projection.NewProjector(safedb.New(db))
+	ctx := context.Background()
+
+	// First insert a session so we can verify mixed-batch behavior (one known,
+	// one unknown session)
+	knownSessionID := "ses_KNOWN_001"
+	startEvent := types.AgentSessionStartEvent{
+		Type:      "agent.session.start",
+		Timestamp: "2026-01-01T09:00:00Z",
+		SessionID: knownSessionID,
+		AgentID:   "agent:test:ABC123",
+	}
+	startData, _ := json.Marshal(startEvent)
+	if err := p.Apply(ctx, startData); err != nil {
+		t.Fatalf("apply session.start: %v", err)
+	}
+
+	// Apply agent.update with contexts for both known and unknown sessions
+	updateEvent := types.AgentUpdateEvent{
+		Type:      "agent.update",
+		Timestamp: "2026-01-01T10:00:00Z",
+		AgentID:   "agent:test:ABC123",
+		WorkContexts: []types.SessionWorkContext{
+			{
+				SessionID:    knownSessionID,
+				Branch:       "main",
+				WorktreePath: "/tmp/known",
+			},
+			{
+				SessionID:    "ses_UNKNOWN_999",
+				Branch:       "feature",
+				WorktreePath: "/tmp/unknown",
+			},
+		},
+	}
+	data, _ := json.Marshal(updateEvent)
+	if err := p.Apply(ctx, data); err != nil {
+		t.Errorf("agent.update with unknown session should succeed gracefully, got: %v", err)
+	}
+
+	// Known session context should be inserted
+	var knownCount int
+	err := db.QueryRow(`SELECT COUNT(*) FROM agent_work_contexts WHERE session_id = ?`, knownSessionID).Scan(&knownCount)
+	if err != nil {
+		t.Fatalf("query known context: %v", err)
+	}
+	if knownCount != 1 {
+		t.Errorf("expected 1 row for known session, got %d", knownCount)
+	}
+
+	// Unknown session context should be skipped
+	var unknownCount int
+	err = db.QueryRow(`SELECT COUNT(*) FROM agent_work_contexts WHERE session_id = ?`, "ses_UNKNOWN_999").Scan(&unknownCount)
+	if err != nil {
+		t.Fatalf("query unknown context: %v", err)
+	}
+	if unknownCount != 0 {
+		t.Errorf("expected 0 rows for unknown session, got %d", unknownCount)
 	}
 }

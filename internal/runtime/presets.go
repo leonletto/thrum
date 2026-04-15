@@ -11,7 +11,7 @@ import (
 
 // RuntimePreset describes the configuration and capabilities of a supported
 // AI coding runtime. Built-in presets cover all known runtimes; users can
-// add custom presets via ~/.config/thrum/runtimes.json.
+// add custom presets via ~/.thrum/runtimes.json.
 type RuntimePreset struct {
 	Name             string `json:"name"`
 	DisplayName      string `json:"display_name"`
@@ -85,6 +85,16 @@ var BuiltinPresets = map[string]RuntimePreset{
 		MCPConfigPath:    "",
 		SetupNotes:       "CLI-only integration (MCP support unknown)",
 	},
+	"kiro-cli": {
+		Name:             "kiro-cli",
+		DisplayName:      "Amazon Kiro CLI",
+		Command:          "kiro-cli chat",
+		MCPSupported:     false,
+		HooksSupported:   false,
+		InstructionsFile: "AGENTS.md",
+		MCPConfigPath:    "",
+		SetupNotes:       "CLI-only; launched via 'kiro-cli chat' interactive mode",
+	},
 	"amp": {
 		Name:             "amp",
 		DisplayName:      "Sourcegraph Amp",
@@ -107,7 +117,7 @@ var BuiltinPresets = map[string]RuntimePreset{
 	},
 }
 
-// userPresetsConfig is the JSON schema for ~/.config/thrum/runtimes.json.
+// userPresetsConfig is the JSON schema for ~/.thrum/runtimes.json.
 type userPresetsConfig struct {
 	DefaultRuntime string                   `json:"default_runtime,omitempty"`
 	CustomRuntimes map[string]RuntimePreset `json:"custom_runtimes,omitempty"`
@@ -171,18 +181,17 @@ func SetDefaultRuntime(name string) error {
 	return saveUserConfig(cfg)
 }
 
-// userConfigPath returns the path to the user config file.
-// Checks XDG_CONFIG_HOME first (standard on Linux, testable on macOS),
-// then falls back to os.UserConfigDir().
+// userConfigPath returns the path to the user-level runtime preset config.
+// The location is $HOME/.thrum/runtimes.json, identical on macOS and Linux
+// so there are no platform-specific differences. On Unix-like systems
+// os.UserHomeDir() honors the $HOME env var, which tests set via t.Setenv
+// for sandboxing.
 func userConfigPath() (string, error) {
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "thrum", "runtimes.json"), nil
-	}
-	configDir, err := os.UserConfigDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("cannot determine config dir: %w", err)
+		return "", fmt.Errorf("cannot determine home dir: %w", err)
 	}
-	return filepath.Join(configDir, "thrum", "runtimes.json"), nil
+	return filepath.Join(home, ".thrum", "runtimes.json"), nil
 }
 
 // loadUserPresets loads custom runtime presets from user config.
