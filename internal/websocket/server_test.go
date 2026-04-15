@@ -15,6 +15,38 @@ import (
 	ws "github.com/leonletto/thrum/internal/websocket"
 )
 
+// checkOriginCases exercises the pure checkOrigin logic via the exported
+// test helper. Tests are run without a live server.
+func TestCheckOrigin(t *testing.T) {
+	allowedOrigins := ws.AllowedOriginsForPort(9999)
+
+	cases := []struct {
+		name    string
+		origin  string
+		want    bool
+	}{
+		{"empty origin allowed (loopback-friendly)", "", true},
+		{"http localhost allowed", "http://localhost:9999", true},
+		{"http 127.0.0.1 allowed", "http://127.0.0.1:9999", true},
+		{"ws localhost allowed", "ws://localhost:9999", true},
+		{"ws 127.0.0.1 allowed", "ws://127.0.0.1:9999", true},
+		{"https localhost rejected", "https://localhost:9999", false},
+		{"foreign origin rejected", "https://evil.example", false},
+		{"foreign http origin rejected", "http://evil.example:9999", false},
+		{"wrong port rejected", "http://localhost:8080", false},
+		{"non-loopback http rejected even if port matches", "http://192.168.1.1:9999", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ws.CheckOrigin(allowedOrigins, tc.origin)
+			if got != tc.want {
+				t.Errorf("CheckOrigin(%q) = %v, want %v", tc.origin, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestServerLifecycle(t *testing.T) {
 	registry := ws.NewSimpleRegistry()
 	server := ws.NewServer("localhost:9998", registry, nil)
@@ -984,4 +1016,123 @@ func TestSPAFallbackServesIndexHTML(t *testing.T) {
 	if resp.Header.Get("Cache-Control") != "max-age=31536000, immutable" {
 		t.Fatalf("expected immutable cache for assets, got %s", resp.Header.Get("Cache-Control"))
 	}
+}
+
+// TestCheckOriginAllowlist_ForeignOriginRejected verifies that a foreign
+// Origin header causes the WebSocket handshake to fail with HTTP 403.
+func TestCheckOriginAllowlist_ForeignOriginRejected(t *testing.T) {
+	registry := ws.NewSimpleRegistry()
+	server := ws.NewServer("localhost:9979", registry, nil)
+	ctx := context.Background()
+
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	time.Sleep(100 * time.Millisecond)
+
+	headers := http.Header{"Origin": []string{"https://evil.example"}}
+	_, resp, err := websocket.DefaultDialer.Dial("ws://localhost:9979/", headers)
+	if err == nil {
+		t.Fatal("expected connection with foreign origin to be rejected, but it succeeded")
+	}
+	if resp == nil || resp.StatusCode != http.StatusForbidden {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+		t.Fatalf("expected HTTP 403 for foreign origin, got %d (err: %v)", status, err)
+	}
+}
+
+// TestCheckOriginAllowlist_LocalhostHttpOriginAccepted verifies that a
+// browser-style http://localhost:{port} Origin is accepted.
+func TestCheckOriginAllowlist_LocalhostHttpOriginAccepted(t *testing.T) {
+	registry := ws.NewSimpleRegistry()
+	const port = "9978"
+	server := ws.NewServer("localhost:"+port, registry, nil)
+	ctx := context.Background()
+
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	time.Sleep(100 * time.Millisecond)
+
+	headers := http.Header{"Origin": []string{"http://localhost:" + port}}
+	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:"+port+"/", headers)
+	if err != nil {
+		t.Fatalf("expected http://localhost:%s origin to be accepted, got: %v", port, err)
+	}
+	_ = conn.Close()
+}
+
+// TestCheckOriginAllowlist_Loopback127HttpOriginAccepted verifies that a
+// browser-style http://127.0.0.1:{port} Origin is accepted.
+func TestCheckOriginAllowlist_Loopback127HttpOriginAccepted(t *testing.T) {
+	registry := ws.NewSimpleRegistry()
+	const port = "9977"
+	server := ws.NewServer("localhost:"+port, registry, nil)
+	ctx := context.Background()
+
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	time.Sleep(100 * time.Millisecond)
+
+	headers := http.Header{"Origin": []string{"http://127.0.0.1:" + port}}
+	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:"+port+"/", headers)
+	if err != nil {
+		t.Fatalf("expected http://127.0.0.1:%s origin to be accepted, got: %v", port, err)
+	}
+	_ = conn.Close()
+}
+
+// TestCheckOriginAllowlist_WsOriginAccepted verifies that a ws:// loopback
+// Origin header is accepted.
+func TestCheckOriginAllowlist_WsOriginAccepted(t *testing.T) {
+	registry := ws.NewSimpleRegistry()
+	const port = "9976"
+	server := ws.NewServer("localhost:"+port, registry, nil)
+	ctx := context.Background()
+
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	time.Sleep(100 * time.Millisecond)
+
+	headers := http.Header{"Origin": []string{"ws://localhost:" + port}}
+	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:"+port+"/", headers)
+	if err != nil {
+		t.Fatalf("expected ws://localhost:%s origin to be accepted, got: %v", port, err)
+	}
+	_ = conn.Close()
+}
+
+// TestCheckOriginAllowlist_EmptyOriginAccepted verifies that a missing Origin
+// header (loopback CLI tool) is not rejected.
+func TestCheckOriginAllowlist_EmptyOriginAccepted(t *testing.T) {
+	registry := ws.NewSimpleRegistry()
+	server := ws.NewServer("localhost:9975", registry, nil)
+	ctx := context.Background()
+
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// No Origin header — gorilla DefaultDialer doesn't set one.
+	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:9975/", nil)
+	if err != nil {
+		t.Fatalf("expected connection without Origin header to be accepted, got: %v", err)
+	}
+	_ = conn.Close()
 }
