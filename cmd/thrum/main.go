@@ -29,6 +29,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/monitor"
+	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
@@ -6953,7 +6954,16 @@ func tmuxCmd() *cobra.Command {
 				return err
 			}
 
-			reason := detectPaneState(content)
+			// Resolve runtime from the local identity file. If no identity
+			// is present (pre-quickstart) or the file has no runtime set
+			// (legacy agent from before runtime tracking), runtime will be
+			// empty and DetectPaneState falls through to the idle path.
+			runtimeName := ""
+			if idFile, _, idErr := config.LoadIdentityWithPath("."); idErr == nil && idFile != nil {
+				runtimeName = idFile.Runtime
+			}
+
+			reason := permission.DetectPaneState(runtimeName, content)
 
 			// Always call daemon — queue dispatch needs idle notifications
 			client, err := getClient()
@@ -7318,22 +7328,6 @@ func tmuxAttach(session string) error {
 	return safecmd.TmuxExec("attach-session", "-t", session)
 }
 
-// detectPaneState scans visible pane content for an explicit permission
-// prompt. Requires both "allow" and an explicit prompt indicator
-// ("y/n", "yes/no", or "allow/deny") on the same line to avoid matching
-// unrelated text that merely mentions "allow" and "yes".
-func detectPaneState(content string) string {
-	lines := strings.Split(strings.TrimSpace(content), "\n")
-	for _, line := range lines {
-		lower := strings.ToLower(line)
-		if !strings.Contains(lower, "allow") {
-			continue
-		}
-		if strings.Contains(lower, "y/n") ||
-			strings.Contains(lower, "yes/no") ||
-			strings.Contains(lower, "allow/deny") {
-			return "permission:" + strings.TrimSpace(line)
-		}
-	}
-	return ""
-}
+// detectPaneState was the legacy single-regex pane-state detector.
+// Replaced by permission.DetectPaneState which consults the per-runtime
+// pattern library. See internal/daemon/permission/detect.go.
