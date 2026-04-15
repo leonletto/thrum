@@ -66,6 +66,18 @@ and this project adheres to
   single-file identity lookup when the agents-table query returns empty,
   accepting names that have `Reserved=true` in their identity file.
 
+### Known issues
+
+- **Pre-existing agent worktrees need a re-register** — agents quickstarted
+  before the runtime-tracking field was added carry `runtime: null` in
+  their identity files, and the new server-side detection path requires a
+  non-empty runtime to pick the per-runtime pattern set. Operators
+  upgrading to this release with long-lived agent worktrees should
+  re-register with `thrum quickstart --name <agent> --role <role>
+  --runtime <runtime>` once per affected agent — this rewrites the
+  identity file with the runtime field populated. Fix tracked in
+  `thrum-yl3k` (backfill from `preferred_runtime` at daemon boot).
+
 ## [0.8.2] - 2026-04-13
 
 ### Added
