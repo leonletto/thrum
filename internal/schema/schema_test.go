@@ -1048,3 +1048,116 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 		t.Errorf("Expected 0 work contexts after cascade delete, got %d", count)
 	}
 }
+
+func TestSchema_V21_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 21 {
+		t.Errorf("CurrentVersion = %d, want 21", schema.CurrentVersion)
+	}
+}
+
+func TestSchema_FreshInstall_HasPermissionNudgesTable(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "perm_fresh.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() failed: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB() failed: %v", err)
+	}
+
+	var count int
+	err = db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='permission_nudges'`,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("query permission_nudges table: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("permission_nudges table should exist on fresh install, got count=%d", count)
+	}
+
+	// Expected columns
+	expected := []string{
+		"message_id", "session", "tmux_target", "agent_name",
+		"pattern_key", "approve_key", "deny_key",
+		"first_detected", "last_nudge_at", "nudge_count",
+		"last_pane_hash", "expires_at",
+	}
+	for _, col := range expected {
+		var n int
+		err := db.QueryRow(
+			`SELECT COUNT(*) FROM pragma_table_info('permission_nudges') WHERE name=?`, col,
+		).Scan(&n)
+		if err != nil {
+			t.Fatalf("query column %q: %v", col, err)
+		}
+		if n != 1 {
+			t.Errorf("column %q should exist in permission_nudges table", col)
+		}
+	}
+
+	// Expected indexes
+	for _, idx := range []string{"idx_permission_nudges_session", "idx_permission_nudges_expires"} {
+		var n int
+		err := db.QueryRow(
+			`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?`, idx,
+		).Scan(&n)
+		if err != nil {
+			t.Fatalf("query index %q: %v", idx, err)
+		}
+		if n != 1 {
+			t.Errorf("index %q should exist on permission_nudges", idx)
+		}
+	}
+}
+
+func TestSchema_Migration_v20_to_v21_CreatesPermissionNudges(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "perm_migrate.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() failed: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Bootstrap a v20 schema by hand (omit permission_nudges table).
+	_, err = db.Exec(`CREATE TABLE schema_version (
+		version INTEGER NOT NULL,
+		applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		t.Fatalf("Create schema_version failed: %v", err)
+	}
+	_, err = db.Exec("INSERT INTO schema_version (version) VALUES (20)")
+	if err != nil {
+		t.Fatalf("Insert version 20 failed: %v", err)
+	}
+
+	// Run migration up to current (v21)
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("Migrate() v20→v21 failed: %v", err)
+	}
+
+	var count int
+	err = db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='permission_nudges'`,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("query permission_nudges table: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("permission_nudges table should exist after v20→v21 migration, got count=%d", count)
+	}
+
+	// Version should now be 21
+	var version int
+	err = db.QueryRow("SELECT version FROM schema_version").Scan(&version)
+	if err != nil {
+		t.Fatalf("query schema version: %v", err)
+	}
+	if version != 21 {
+		t.Errorf("schema version = %d after migration, want 21", version)
+	}
+}
