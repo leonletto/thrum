@@ -4292,6 +4292,7 @@ and per-file change details for all agents with active sessions.
 Examples:
   thrum team
   thrum team --all
+  thrum team --system
   thrum team --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := getClient()
@@ -4301,8 +4302,10 @@ Examples:
 			defer func() { _ = client.Close() }()
 
 			includeAll, _ := cmd.Flags().GetBool("all")
+			includeSystem, _ := cmd.Flags().GetBool("system")
 			req := cli.TeamListRequest{
 				IncludeOffline: includeAll,
+				IncludeSystem:  includeSystem,
 			}
 
 			var result cli.TeamListResponse
@@ -4322,6 +4325,7 @@ Examples:
 	}
 
 	cmd.Flags().Bool("all", false, "Include offline agents")
+	cmd.Flags().Bool("system", false, "Include reserved pseudo-agents (@supervisor_*, etc.)")
 
 	return cmd
 }

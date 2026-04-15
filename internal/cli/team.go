@@ -12,6 +12,11 @@ import (
 // TeamListRequest represents the request for team.list RPC.
 type TeamListRequest struct {
 	IncludeOffline bool `json:"include_offline,omitempty"`
+
+	// IncludeSystem, when true, surfaces identities marked
+	// Reserved=true (e.g. @supervisor_<project>) that are hidden
+	// from the default listing. Set via `thrum team --system`.
+	IncludeSystem bool `json:"include_system,omitempty"`
 }
 
 // TeamListResponse represents the response from team.list RPC.
@@ -55,6 +60,12 @@ type TeamMember struct {
 	Status          string       `json:"status"`
 	TmuxSession     string       `json:"tmux_session,omitempty"`
 	TmuxState       string       `json:"tmux_state,omitempty"`
+
+	// Reserved marks a daemon-internal pseudo-agent (e.g.
+	// @supervisor_<project>) that is hidden from the default
+	// `thrum team` output. Only surfaced when IncludeSystem is
+	// set on the request.
+	Reserved bool `json:"reserved,omitempty"`
 }
 
 // FileChange represents a changed file for team display.

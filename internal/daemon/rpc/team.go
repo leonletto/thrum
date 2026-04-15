@@ -19,6 +19,11 @@ import (
 // TeamListRequest represents the request for team.list RPC.
 type TeamListRequest struct {
 	IncludeOffline bool `json:"include_offline,omitempty"`
+
+	// IncludeSystem, when true, surfaces identities marked
+	// Reserved=true (e.g. @supervisor_<project>) that are hidden
+	// from the default listing. Set via `thrum team --system`.
+	IncludeSystem bool `json:"include_system,omitempty"`
 }
 
 // TeamListResponse represents the response from team.list RPC.
@@ -59,9 +64,15 @@ type TeamMember struct {
 	FileChanges     []types.FileChange `json:"file_changes,omitempty"`
 	InboxTotal      int                `json:"inbox_total"`
 	InboxUnread     int                `json:"inbox_unread"`
-	Status          string             `json:"status"` // "active", "offline"
+	Status          string             `json:"status"` // "active", "offline", or "reserved"
 	TmuxSession     string             `json:"tmux_session,omitempty"`
 	TmuxState       string             `json:"tmux_state,omitempty"` // alive, stale, dead, or empty
+
+	// Reserved marks a daemon-internal pseudo-agent (e.g.
+	// @supervisor_<project>) that is hidden from the default
+	// `thrum team` output. Only surfaced when IncludeSystem is
+	// set on the request.
+	Reserved bool `json:"reserved,omitempty"`
 }
 
 // TeamHandler handles team-related RPC methods.
@@ -298,6 +309,7 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 
 			m.Runtime = idFile.Runtime
 			m.TmuxSession = idFile.TmuxSession
+			m.Reserved = idFile.Reserved
 
 			switch {
 			case idFile.TmuxSession == "":
@@ -310,7 +322,67 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 				m.TmuxState = "alive"
 			}
 		}
+
+		// When IncludeSystem is set, synthesize TeamMember entries for
+		// Reserved identities that are NOT in the agents table. The
+		// permission supervisor pseudo-agent is the canonical case: it
+		// exists only as a reply-capable sender for nudges, never
+		// registers an agent.register event, and therefore never has
+		// an agents row. Without this synthesis step, `thrum team
+		// --system` would return nothing for it.
+		//
+		// Synthesized members get Status="reserved" (distinct from
+		// "active" or "offline") to make them visually distinguishable
+		// in the output, and their AgentID is the identity file's
+		// Agent.Name so downstream listing code sees a stable ID.
+		if req.IncludeSystem {
+			for name, idFile := range identityMap {
+				if !idFile.Reserved {
+					continue
+				}
+				if _, exists := memberIndex[name]; exists {
+					// Already in the list from the agents-table query; the
+					// enrichment loop above already populated Reserved.
+					continue
+				}
+				synthetic := TeamMember{
+					AgentID:  name,
+					Role:     idFile.Agent.Role,
+					Module:   idFile.Agent.Module,
+					Display:  idFile.Agent.Display,
+					Runtime:  idFile.Runtime,
+					Status:   "reserved",
+					Reserved: true,
+				}
+				memberIndex[name] = len(members)
+				members = append(members, synthetic)
+			}
+		}
+
+		// Filter out Reserved entries when IncludeSystem is NOT set.
+		// This covers both (a) future agents registered via
+		// agent.register that happen to have Reserved=true in their
+		// identity file, and (b) paranoid defense-in-depth: if a
+		// reserved synthesis ever landed by mistake without the
+		// IncludeSystem flag, the filter still hides it.
+		if !req.IncludeSystem {
+			filtered := members[:0]
+			newIndex := make(map[string]int, len(members))
+			for _, m := range members {
+				if m.Reserved {
+					continue
+				}
+				newIndex[m.AgentID] = len(filtered)
+				filtered = append(filtered, m)
+			}
+			members = filtered
+			memberIndex = newIndex
+		}
 	}
+	// memberIndex is used by downstream logic below and by the caller's
+	// dead-agent self-heal in HandleList, which keys off agent_id
+	// (still valid after the optional filter above).
+	_ = memberIndex
 
 	// Query 2: Per-agent directed message counts (mentions only, not broadcasts/groups)
 	for i, m := range members {

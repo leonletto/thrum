@@ -344,3 +344,206 @@ func TestTeamList_SelfHealSkipsLiveFilePID(t *testing.T) {
 		t.Errorf("session.end event count changed: before=%d after=%d (expected no new event)", endBefore, endAfter)
 	}
 }
+
+// TestTeamList_HidesReservedByDefault verifies that the default
+// team.list call does NOT surface identities marked Reserved=true
+// in their identity file. This is the hiding half of Task 7.2:
+// @supervisor_<project> and similar daemon-internal pseudo-agents
+// are not workers and should not clutter the default listing.
+func TestTeamList_HidesReservedByDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("create identities dir: %v", err)
+	}
+	s, err := state.NewState(thrumDir, thrumDir, "r_HIDETEST", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	// Seed two identity files: one Reserved=true (pseudo-agent),
+	// one normal (real worker).
+	reserved := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind:   "agent",
+			Name:   "supervisor_test",
+			Role:   "supervisor",
+			Module: "daemon",
+		},
+		Reserved: true,
+	}
+	if err := config.SaveIdentityFile(thrumDir, reserved); err != nil {
+		t.Fatalf("save reserved identity: %v", err)
+	}
+	normal := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind:   "agent",
+			Name:   "researcher_alice",
+			Role:   "researcher",
+			Module: "exploration",
+		},
+	}
+	if err := config.SaveIdentityFile(thrumDir, normal); err != nil {
+		t.Fatalf("save normal identity: %v", err)
+	}
+
+	handler := NewTeamHandler(s, thrumDir)
+	ctx := context.Background()
+
+	reqJSON, _ := json.Marshal(TeamListRequest{IncludeOffline: true})
+	resp, err := handler.HandleList(ctx, reqJSON)
+	if err != nil {
+		t.Fatalf("HandleList: %v", err)
+	}
+	result := resp.(*TeamListResponse)
+
+	for _, m := range result.Members {
+		if m.AgentID == "supervisor_test" {
+			t.Errorf("default team list should hide reserved agent, but found %+v", m)
+		}
+	}
+}
+
+// TestTeamList_SystemFlagShowsReserved verifies that --system
+// surfaces Reserved=true identities synthesized from identity files
+// that don't have an agents-table row. This is the showing half of
+// Task 7.2.
+func TestTeamList_SystemFlagShowsReserved(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("create identities dir: %v", err)
+	}
+	s, err := state.NewState(thrumDir, thrumDir, "r_SYSTEST", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	reserved := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind:   "agent",
+			Name:   "supervisor_test",
+			Role:   "supervisor",
+			Module: "daemon",
+		},
+		Reserved: true,
+	}
+	if err := config.SaveIdentityFile(thrumDir, reserved); err != nil {
+		t.Fatalf("save reserved identity: %v", err)
+	}
+
+	handler := NewTeamHandler(s, thrumDir)
+	ctx := context.Background()
+
+	reqJSON, _ := json.Marshal(TeamListRequest{
+		IncludeOffline: true,
+		IncludeSystem:  true,
+	})
+	resp, err := handler.HandleList(ctx, reqJSON)
+	if err != nil {
+		t.Fatalf("HandleList: %v", err)
+	}
+	result := resp.(*TeamListResponse)
+
+	var found *TeamMember
+	for i := range result.Members {
+		if result.Members[i].AgentID == "supervisor_test" {
+			found = &result.Members[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("--system should surface reserved agent, got %d members without it", len(result.Members))
+	}
+	if !found.Reserved {
+		t.Error("synthesized member should carry Reserved=true")
+	}
+	if found.Role != "supervisor" {
+		t.Errorf("synthesized Role = %q, want supervisor", found.Role)
+	}
+	if found.Status != "reserved" {
+		t.Errorf("synthesized Status = %q, want reserved", found.Status)
+	}
+}
+
+// TestTeamList_SystemFlagMarksExistingReserved covers the defensive
+// path where an agent IS in the agents table but its identity file
+// has Reserved=true. Default call hides it; --system shows it with
+// the Reserved flag set.
+func TestTeamList_SystemFlagMarksExistingReserved(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("create identities dir: %v", err)
+	}
+	s, err := state.NewState(thrumDir, thrumDir, "r_MARKTEST", "")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	// Register a real agent with a matching identity file that
+	// carries Reserved=true. Ordinarily reserved agents aren't
+	// registered — this test covers the defensive path.
+	ctx := context.Background()
+	agentHandler := NewAgentHandler(s)
+	sessionHandler := NewSessionHandler(s)
+
+	reg := RegisterRequest{Role: "supervisor", Module: "daemon"}
+	regJSON, _ := json.Marshal(reg)
+	regResp, err := agentHandler.HandleRegister(ctx, regJSON)
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	agentID := regResp.(*RegisterResponse).AgentID
+
+	startJSON, _ := json.Marshal(SessionStartRequest{AgentID: agentID})
+	if _, err := sessionHandler.HandleStart(ctx, startJSON); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	// Seed an identity file with Reserved=true for this agent.
+	idFile := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind:   "agent",
+			Name:   agentID,
+			Role:   "supervisor",
+			Module: "daemon",
+		},
+		Reserved: true,
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatalf("save identity: %v", err)
+	}
+
+	handler := NewTeamHandler(s, thrumDir)
+
+	// Default: should NOT include the reserved agent even though
+	// it has a live agents-table row.
+	defaultJSON, _ := json.Marshal(TeamListRequest{})
+	defaultResp, _ := handler.HandleList(ctx, defaultJSON)
+	for _, m := range defaultResp.(*TeamListResponse).Members {
+		if m.AgentID == agentID {
+			t.Errorf("default list should filter reserved agent %s, got %+v", agentID, m)
+		}
+	}
+
+	// --system: should include it and Reserved must be true.
+	sysJSON, _ := json.Marshal(TeamListRequest{IncludeSystem: true})
+	sysResp, _ := handler.HandleList(ctx, sysJSON)
+	var found *TeamMember
+	for i := range sysResp.(*TeamListResponse).Members {
+		if sysResp.(*TeamListResponse).Members[i].AgentID == agentID {
+			found = &sysResp.(*TeamListResponse).Members[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("--system should include the reserved real-agent")
+	}
+	if !found.Reserved {
+		t.Error("member should carry Reserved=true after enrichment")
+	}
+}
