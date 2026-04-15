@@ -39,7 +39,7 @@ func (p *Permission) SendSupervisorMessage(ctx context.Context, to, body string)
 		EventID:   identity.GenerateEventID(),
 		Version:   1,
 		MessageID: msgID,
-		AgentID: p.supervisorID,
+		AgentID:   p.supervisorID,
 		// Sentinel session_id so the messages row stays queryable. The
 		// supervisor pseudo-agent has no real session; see
 		// supervisorSessionID (permission.go) for the rationale and

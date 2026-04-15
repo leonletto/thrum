@@ -9,8 +9,8 @@ package permission
 //
 //   - ""                               → no prompt detected (idle path)
 //   - "permission:<runtime>.<name>"    → pattern matched; daemon can
-//                                        look up the pattern via
-//                                        Match() for nudge formatting.
+//     look up the pattern via
+//     Match() for nudge formatting.
 //
 // Unknown runtime (empty or not in the library) also returns empty,
 // preserving the current "idle" behavior for agents that haven't had
