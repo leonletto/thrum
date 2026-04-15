@@ -4860,9 +4860,14 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	}
 
 	if syncManager != nil {
-		// Hook into event writes to broadcast sync.notify to peers
-		st.SetOnEventWrite(func(daemonID string, sequence int64, eventCount int) {
-			go syncManager.BroadcastNotify(daemonID, sequence, eventCount)
+		// Hook into event writes to broadcast sync.notify to peers.
+		// The hook fires once per event write, so eventCount is
+		// always 1 from this call site. The event payload is
+		// forwarded to any future permission-reply interceptor in a
+		// separate SetOnEventWrite registration; here we only need
+		// daemonID + sequence for the peer notification.
+		st.SetOnEventWrite(func(daemonID string, sequence int64, _ []byte) {
+			go syncManager.BroadcastNotify(daemonID, sequence, 1)
 		})
 
 		// Create pairing manager (used by both Unix socket and Tailscale handlers)

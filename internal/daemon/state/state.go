@@ -22,9 +22,16 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// EventWriteHook is called after a successful event write with the daemon ID and sequence number.
-// It is called synchronously but should not block — use goroutines for async work.
-type EventWriteHook func(daemonID string, sequence int64, eventCount int)
+// EventWriteHook is called after a successful event write with the
+// daemon ID, the assigned sequence number, and the enriched event
+// payload as raw JSON. It is called synchronously but should not
+// block — use goroutines for async work.
+//
+// The payload is the post-enrichment event (with event_id, version,
+// origin_daemon, and sequence fields added) so consumers can inspect
+// fields like refs[].reply_to without re-marshaling. Callers that
+// only care about sequence/daemon can simply ignore the event arg.
+type EventWriteHook func(daemonID string, sequence int64, event []byte)
 
 // State manages the daemon's persistent state (JSONL log and SQLite projection).
 type State struct {
@@ -136,8 +143,9 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 	return s, nil
 }
 
-// SetOnEventWrite sets a hook that is called after each successful event write.
-// The hook receives the daemon ID, the assigned sequence number, and event count (always 1).
+// SetOnEventWrite sets a hook that is called after each successful
+// event write. The hook receives the daemon ID, the assigned
+// sequence number, and the enriched event payload as raw JSON.
 func (s *State) SetOnEventWrite(hook EventWriteHook) {
 	s.onEventWrite = hook
 }
@@ -265,9 +273,12 @@ func (s *State) WriteEvent(ctx context.Context, event any) error {
 		return fmt.Errorf("apply to projector: %w", err)
 	}
 
-	// Notify sync hook (e.g., to broadcast sync.notify to peers)
+	// Notify sync hook (e.g., to broadcast sync.notify to peers).
+	// Passes the enriched event JSON so downstream consumers (e.g.
+	// the permission reply interceptor) can inspect refs/reply_to
+	// without re-marshaling.
 	if s.onEventWrite != nil {
-		s.onEventWrite(s.daemonID, seq, 1)
+		s.onEventWrite(s.daemonID, seq, eventJSON)
 	}
 
 	return nil
