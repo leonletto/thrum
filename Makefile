@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go sync-embed-reference install deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks sync-skills
+.PHONY: help test test-unit test-integration test-coverage test-verbose build build-ui build-go sync-embed-reference install dev deploy-remote clean clean-e2e test-e2e fmt fmt-md fmt-all lint lint-check lint-fix lint-md lint-md-fix lint-all vet tidy install-tools ci quick-check pre-commit pre-push security gosec-check vulncheck setup-hooks sync-skills
 
 # Tool versions - pinned for supply chain security
 GOLANGCI_LINT_VERSION := v1.64.5
@@ -20,7 +20,8 @@ help:
 	@echo "  make build             - Build UI and Go binary (full build)"
 	@echo "  make build-ui          - Build UI and copy to embed location"
 	@echo "  make build-go          - Build Go binary only (skip UI rebuild)"
-	@echo "  make install           - Full build and install thrum to ~/.local/bin"
+	@echo "  make install           - Full build and install thrum to ~/.local/bin (SHARED — affects all agents)"
+	@echo "  make dev               - Full build + restart LOCAL worktree daemon (isolated — safe for multi-agent machines)"
 	@echo "  make deploy-remote REMOTE=host - Install + scp + sign on remote macOS"
 	@echo "  make fmt               - Format Go code"
 	@echo "  make fmt-md            - Format Markdown files with prettier"
@@ -124,6 +125,21 @@ install: build
 	@# Remove stale go install binary so PATH resolves to INSTALL_DIR
 	@rm -f $(shell go env GOPATH)/bin/$(BINARY_NAME)
 	@echo "Installed $(BINARY_NAME) to $(INSTALL_DIR)/$(BINARY_NAME)"
+
+# Build, sign, and restart the LOCAL worktree daemon.
+#
+# Use this when testing changes in a worktree on a multi-agent machine.
+# Produces a signed binary at ./$(BUILD_DIR)/$(BINARY_NAME) and restarts
+# the repo-scoped daemon via os.Executable() re-exec — the new daemon
+# runs from the local bin path, NOT from $(INSTALL_DIR). Other agents
+# on the same machine using ~/.local/bin/$(BINARY_NAME) are unaffected.
+#
+# Safe to run repeatedly during development. First-time use (no daemon
+# running yet in this repo) falls through from restart to start.
+dev: build
+	@echo "Restarting worktree-local daemon using ./$(BUILD_DIR)/$(BINARY_NAME)..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) daemon restart 2>/dev/null || ./$(BUILD_DIR)/$(BINARY_NAME) daemon start
+	@./$(BUILD_DIR)/$(BINARY_NAME) daemon status
 
 # Deploy binary to a remote macOS machine via scp
 # Usage: make deploy-remote REMOTE=leontest
