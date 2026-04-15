@@ -8,15 +8,15 @@ import (
 )
 
 const (
-	// maxPaneTailLines caps how many lines of pane content we include in a
+	// MaxPaneTailLines caps how many lines of pane content we include in a
 	// nudge. Balances context-richness against Telegram's ~4KB DM limit.
 	maxPaneTailLines = 15
 
-	// maxPaneTailBytes is a hard byte cap to keep the final body under
+	// MaxPaneTailBytes is a hard byte cap to keep the final body under
 	// ~3KB of text with room for headers.
 	maxPaneTailBytes = 2_000
 
-	// maxReminderCount is the total number of nudges (first-detect + 5
+	// MaxReminderCount is the total number of nudges (first-detect + 5
 	// reminders) before the scheduler gives up and marks the agent stuck.
 	// Surfaced here so the rendered "Reminder #N of 6" header stays in
 	// sync with the scheduler cadence.

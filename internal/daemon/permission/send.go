@@ -24,7 +24,7 @@ import (
 // provides.
 //
 // IMPORTANT: the state.WriteEvent call MUST run under state.Lock().
-// sendSystemMessage establishes this pattern and we copy it.
+// SendSystemMessage establishes this pattern and we copy it.
 func (p *Permission) SendSupervisorMessage(ctx context.Context, to, body string) (string, error) {
 	if p.state == nil {
 		return "", fmt.Errorf("permission.SendSupervisorMessage: nil state")

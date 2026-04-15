@@ -74,7 +74,7 @@ func TestApproveKeyNeverForeverAllow(t *testing.T) {
 			// choice prompts where 1 = Yes) — only reject it for the
 			// auggie indexing pattern where 1 is the forever-allow trap.
 			for _, bad := range forbidden {
-				if bad == "1" && !(runtime == "auggie" && p.Name == "indexing_consent") {
+				if bad == "1" && (runtime != "auggie" || p.Name != "indexing_consent") {
 					continue
 				}
 				if strings.EqualFold(p.ApproveKey, bad) {

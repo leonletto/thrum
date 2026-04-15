@@ -30,12 +30,12 @@ var reminderSchedule = []time.Duration{
 }
 
 const (
-	// maxNudgeCount is the total number of nudges (first-detect + 5
+	// MaxNudgeCount is the total number of nudges (first-detect + 5
 	// reminders) before the scheduler gives up. Kept in sync with
 	// FormatNudge's "Reminder #N of 6" header via maxReminderCount.
 	maxNudgeCount = 6
 
-	// nudgeTTL is how long a pending row lives before SweepExpired
+	// NudgeTTL is how long a pending row lives before SweepExpired
 	// removes it. Generous to cover an overnight human response.
 	nudgeTTL = 8 * time.Hour
 )
@@ -256,12 +256,12 @@ func (p *Permission) clearAgentStuck(ctx context.Context, agentName string) erro
 
 // setAgentStatus loads the agent's identity file from disk, optionally
 // checks the current status against onlyIf, writes newStatus, and
-// saves. onlyIf == "" means unconditional. Uses os.ReadFile +
+// saves. OnlyIf == "" means unconditional. Uses os.ReadFile +
 // json.Unmarshal directly rather than config.LoadIdentityWithPath so
 // the agent session's ambient THRUM_HOME does not redirect us to the
 // wrong identities directory.
 //
-// ctx is threaded from the public mark/clear callers and is honored
+// Ctx is threaded from the public mark/clear callers and is honored
 // by a single preflight Err() check before the synchronous file I/O.
 // Today that makes the check almost cosmetic — the read + write are
 // microsecond-scale — but when the helper grows an async or

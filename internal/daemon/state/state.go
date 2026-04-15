@@ -396,7 +396,7 @@ func (s *State) GetEventsSince(ctx context.Context, afterSeq int64, limit int) (
 // the local sequence counter — the event arrives pre-sequenced from
 // the peer.
 //
-// This is the cross-repo correctness bridge. internal/sync/loop.go's
+// This is the cross-repo correctness bridge. Internal/sync/loop.go's
 // updateProjection step previously called projector.Apply directly,
 // bypassing the event-write hook entirely. That meant synced
 // message.create events (including replies to cross-repo nudges)

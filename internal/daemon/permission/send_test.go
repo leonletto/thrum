@@ -110,7 +110,7 @@ func TestSendSupervisorMessage_RegistersRefAndRecipient(t *testing.T) {
 }
 
 // TestSendSupervisorMessage_AcceptsBareAgentID verifies callers that
-// already pass a bare agent id (no `@` prefix) are not penalised —
+// already pass a bare agent id (no `@` prefix) are not penalized —
 // the normalisation is idempotent.
 func TestSendSupervisorMessage_AcceptsBareAgentID(t *testing.T) {
 	p := newPermissionWithRealState(t)
