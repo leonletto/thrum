@@ -8,12 +8,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/types"
 )
 
+// readIdentityFile parses the given identity file directly, bypassing
+// config.LoadIdentityWithPath which honors THRUM_HOME and would
+// redirect the test away from tmp.
+func readIdentityFile(t *testing.T, thrumDir, agentName string) *config.IdentityFile {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(thrumDir, "identities", agentName+".json"))
+	if err != nil {
+		t.Fatalf("read identity %s: %v", agentName, err)
+	}
+	var idFile config.IdentityFile
+	if err := json.Unmarshal(data, &idFile); err != nil {
+		t.Fatalf("parse identity %s: %v", agentName, err)
+	}
+	return &idFile
+}
+
 // newSchedulerFixture constructs a Permission wired to a real State
-// with a single live @coordinator_main supervisor agent. Exposes a
+// with a single live @coordinator_main supervisor agent. It also
+// seeds an identity file for researcher_cursor (the nudged agent)
+// so mark/clearAgentStuck have a real file to mutate. Exposes a
 // mutable *time.Time so individual tests can advance the clock.
 func newSchedulerFixture(t *testing.T) (*Permission, *time.Time) {
 	t.Helper()
@@ -48,6 +67,21 @@ func newSchedulerFixture(t *testing.T) (*Permission, *time.Time) {
 		AgentID:   "coordinator_main",
 	}); err != nil {
 		t.Fatalf("agent.session.start: %v", err)
+	}
+
+	// Seed an identity file for the agent that will be nudged, so
+	// setAgentStatus has a real file to read/write in the give-up and
+	// recovery paths.
+	researcherID := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind:   "agent",
+			Name:   "researcher_cursor",
+			Role:   "researcher",
+			Module: "cursor-test",
+		},
+	}
+	if err := config.SaveIdentityFile(thrumDir, researcherID); err != nil {
+		t.Fatalf("save researcher identity: %v", err)
 	}
 
 	p := New(st, st.RawDB(), "supervisor_thrum", "thrum", thrumDir)
@@ -356,5 +390,81 @@ func TestLoadSupervisorEntries_EmptyField(t *testing.T) {
 	p := &Permission{thrumDir: thrumDir}
 	if got := p.loadSupervisorEntries(); got != nil {
 		t.Errorf("expected nil when field absent, got %v", got)
+	}
+}
+
+// seedAgentIdentity drops a minimal identity file into the given
+// thrumDir/identities directory and returns the Permission pointing
+// at it. Shared by the stuck / clear tests below.
+func seedAgentIdentity(t *testing.T, agentName, initialStatus string) (*Permission, string) {
+	t.Helper()
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	idFile := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind:   "agent",
+			Name:   agentName,
+			Role:   "researcher",
+			Module: "test",
+		},
+		AgentStatus: initialStatus,
+	}
+	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
+		t.Fatalf("save identity: %v", err)
+	}
+	return &Permission{thrumDir: thrumDir}, thrumDir
+}
+
+func TestMarkAgentStuck_WritesStatusField(t *testing.T) {
+	p, thrumDir := seedAgentIdentity(t, "researcher_cursor", "")
+
+	if err := p.markAgentStuck(context.Background(), "researcher_cursor"); err != nil {
+		t.Fatalf("markAgentStuck: %v", err)
+	}
+
+	reloaded := readIdentityFile(t, thrumDir, "researcher_cursor")
+	if reloaded.AgentStatus != "stuck" {
+		t.Errorf("AgentStatus = %q, want stuck", reloaded.AgentStatus)
+	}
+	if reloaded.AgentStatusUpdatedAt.IsZero() {
+		t.Error("AgentStatusUpdatedAt should be set")
+	}
+}
+
+func TestMarkAgentStuck_MissingIdentityErrors(t *testing.T) {
+	p, _ := seedAgentIdentity(t, "researcher_cursor", "")
+	err := p.markAgentStuck(context.Background(), "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for missing identity")
+	}
+}
+
+func TestClearAgentStuck_ClearsStatusField(t *testing.T) {
+	p, thrumDir := seedAgentIdentity(t, "researcher_cursor", "stuck")
+
+	if err := p.clearAgentStuck(context.Background(), "researcher_cursor"); err != nil {
+		t.Fatalf("clearAgentStuck: %v", err)
+	}
+	reloaded := readIdentityFile(t, thrumDir, "researcher_cursor")
+	if reloaded.AgentStatus == "stuck" {
+		t.Error("AgentStatus should be cleared")
+	}
+	if reloaded.AgentStatusUpdatedAt.IsZero() {
+		t.Error("AgentStatusUpdatedAt should be touched even on clear")
+	}
+}
+
+func TestClearAgentStuck_NonStuckNoop(t *testing.T) {
+	p, thrumDir := seedAgentIdentity(t, "researcher_cursor", "working")
+
+	if err := p.clearAgentStuck(context.Background(), "researcher_cursor"); err != nil {
+		t.Fatalf("clearAgentStuck: %v", err)
+	}
+	reloaded := readIdentityFile(t, thrumDir, "researcher_cursor")
+	if reloaded.AgentStatus != "working" {
+		t.Errorf("clearAgentStuck should only touch stuck status; got %q", reloaded.AgentStatus)
 	}
 }

@@ -3,7 +3,11 @@ package permission
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
@@ -225,18 +229,50 @@ func (p *Permission) loadSupervisorEntries() []string {
 	return cfg.PermissionSupervisors
 }
 
-// markAgentStuck writes agent_status="stuck" into the identity file
-// for the named agent so the UI and team listings can reflect that
-// the agent is blocked on a permission prompt.
-//
-// Stub for Task 5.4 — filled in by Task 5.6.
-func (p *Permission) markAgentStuck(ctx context.Context, agentName string) error {
-	return nil
+// markAgentStuck writes agent_status="stuck" into the agent's identity
+// file so the UI, `thrum team`, and other consumers can reflect that
+// the agent is blocked on a permission prompt. Unconditional — always
+// writes, even if the agent was already marked stuck (touching
+// AgentStatusUpdatedAt is still useful).
+func (p *Permission) markAgentStuck(_ context.Context, agentName string) error {
+	return p.setAgentStatus(agentName, "stuck", "")
 }
 
-// clearAgentStuck clears the stuck marker when the agent resumes.
-//
-// Stub for Task 5.4 — filled in by Task 5.6.
-func (p *Permission) clearAgentStuck(ctx context.Context, agentName string) error {
+// clearAgentStuck resets the stuck marker when the agent resumes. It
+// is a no-op unless the current status is "stuck" — this matters so
+// we don't clobber other statuses (e.g. "working", "offline") that
+// might have been set by another code path while the nudge was
+// pending.
+func (p *Permission) clearAgentStuck(_ context.Context, agentName string) error {
+	return p.setAgentStatus(agentName, "", "stuck")
+}
+
+// setAgentStatus loads the agent's identity file from disk, optionally
+// checks the current status against onlyIf, writes newStatus, and
+// saves. onlyIf == "" means unconditional. Uses os.ReadFile +
+// json.Unmarshal directly rather than config.LoadIdentityWithPath so
+// the agent session's ambient THRUM_HOME does not redirect us to the
+// wrong identities directory.
+func (p *Permission) setAgentStatus(agentName, newStatus, onlyIf string) error {
+	// #nosec G304 — agentName comes from event-driven code paths; the
+	// path is constrained to .thrum/identities and the identity file
+	// is an internal artifact.
+	idPath := filepath.Join(p.thrumDir, "identities", agentName+".json")
+	data, err := os.ReadFile(idPath) // #nosec G304
+	if err != nil {
+		return fmt.Errorf("read identity %s: %w", agentName, err)
+	}
+	var idFile config.IdentityFile
+	if err := json.Unmarshal(data, &idFile); err != nil {
+		return fmt.Errorf("parse identity %s: %w", agentName, err)
+	}
+	if onlyIf != "" && idFile.AgentStatus != onlyIf {
+		return nil // no-op — we don't own the current status
+	}
+	idFile.AgentStatus = newStatus
+	idFile.AgentStatusUpdatedAt = time.Now().UTC()
+	if err := config.SaveIdentityFile(p.thrumDir, &idFile); err != nil {
+		return fmt.Errorf("save identity %s: %w", agentName, err)
+	}
 	return nil
 }
