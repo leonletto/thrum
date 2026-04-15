@@ -81,7 +81,76 @@ var patterns = map[string][]Pattern{
 			Comment:    "Claude Code tool-use confirmation (two variants — dispatch disambiguates)",
 		},
 	},
-	// Populated in Task 2.3 (opencode, codex), 2.3b (kiro-cli), 2.3c/d (auggie).
+	"codex": {
+		{
+			Name:       "tool_confirmation",
+			Regex:      regexp.MustCompile(`(?m)^\s*Would you like to run the following command\?`),
+			ApproveKey: "1", // Yes, proceed — NEVER "2" (forever-allow for prefix)
+			DenyKey:    "3", // No, and tell Codex what to do differently
+			Comment:    "OpenAI Codex CLI tool-use confirmation",
+		},
+	},
+	"opencode": {
+		{
+			// OpenCode does NOT gate shell commands; it gates reads/writes
+			// to paths outside the worktree. Default selection on a fresh
+			// prompt is "Allow once" (leftmost), so Option A (bare Enter)
+			// approves-once. If default drift is ever observed, extend
+			// sendKeystroke to support comma-separated sequences and
+			// switch to Option B ("Home,Enter").
+			Name:       "permission_required",
+			Regex:      regexp.MustCompile(`(?m)^\s*△\s*Permission required`),
+			ApproveKey: "Enter",     // Default selection "Allow once"
+			DenyKey:    "End,Enter", // Navigate to rightmost "Reject" then confirm
+			Comment:    "OpenCode external directory access prompt (default-selection approve-once)",
+		},
+	},
+	"kiro-cli": {
+		{
+			// Default-selection on a fresh prompt is "Yes, single permission"
+			// (verified live 2026-04-14). The risky option "Trust, always
+			// allow in this session" is reachable only via Down+Enter,
+			// which is why we forbid that sequence in the invariant test.
+			Name:       "shell_approval",
+			Regex:      regexp.MustCompile(`(?m)^\s*shell requires approval`),
+			ApproveKey: "Enter",  // Default "Yes, single permission"
+			DenyKey:    "Escape", // Closes the prompt
+			Comment:    "Kiro CLI shell-command approval (default-selection is single-permission)",
+		},
+	},
+	"auggie": {
+		{
+			// CRITICAL: the default-highlighted option on this prompt is
+			// [1] "Always index this workspace" — a forever-allow trap
+			// that persists to ~/.augment/settings.json. A bare Enter
+			// silently activates it. approve_key MUST be "3" (session-
+			// only) and TestApproveKeyNeverForeverAllow forbids both "1"
+			// and "Enter" for this pattern.
+			Name:       "indexing_consent",
+			Regex:      regexp.MustCompile(`(?m)Always index this workspace`),
+			ApproveKey: "3",      // Index this workspace for this session — NEVER "1" or "Enter"
+			DenyKey:    "Escape", // Documented "Esc to skip"
+			Comment:    "Auggie workspace indexing consent (approve session-only; default-highlighted is forever-allow)",
+		},
+		{
+			// auggie's per-tool approval (save-file, launch-process, etc.)
+			// is the cleanest surface in the set: two options, single-
+			// letter hotkeys, no forever-allow in the prompt itself
+			// (forever-allow lives in ~/.augment/settings.json only).
+			//
+			// The phrase "Tool Approval Required" appears inside a boxed
+			// header (`│  Tool Approval Required   │`). The samples doc
+			// proposed `^\s*Tool...$` as an anchor but that won't match
+			// the box chrome. We use a phrase anchor instead, which is
+			// unique enough to auggie's approval UI that false-matches
+			// are implausible.
+			Name:       "tool_approval",
+			Regex:      regexp.MustCompile(`Tool Approval Required`),
+			ApproveKey: "A", // [A]llow — verified live
+			DenyKey:    "D", // [D]eny
+			Comment:    "Auggie per-tool approval (save-file, launch-process, etc.)",
+		},
+	},
 }
 
 // Match finds the first pattern for the given runtime that matches the

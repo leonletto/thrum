@@ -170,3 +170,200 @@ func TestMatch_Claude_VariantB_ReadPrompt_Positive(t *testing.T) {
 		t.Errorf("ApproveKey = %q, want %q", m.ApproveKey, "1")
 	}
 }
+
+// ----- Task 2.3: opencode + codex -----
+
+func TestMatch_Opencode_PermissionRequired_Positive(t *testing.T) {
+	// Raw capture from dev-docs/plans/2026-04-14-permission-prompt-samples.md
+	// OpenCode 1.4.3, external directory access gate.
+	pane := `△ Permission required
+  ← Access external directory /opt/homebrew/lib/node_modules/opencode-ai
+
+Patterns
+
+- /opt/homebrew/lib/node_modules/opencode-ai/*
+
+ Allow once   Allow always   Reject                        ctrl+f fullscreen  ⇆ select  enter confirm`
+	m := Match("opencode", pane)
+	if m == nil {
+		t.Fatal("expected match for opencode permission prompt, got nil")
+	}
+	if m.Name != "permission_required" {
+		t.Errorf("Name = %q", m.Name)
+	}
+	// Option A: default selection is "Allow once"; plain Enter approves.
+	if m.ApproveKey != "Enter" {
+		t.Errorf("ApproveKey = %q, want %q", m.ApproveKey, "Enter")
+	}
+}
+
+func TestMatch_Opencode_Negative(t *testing.T) {
+	if m := Match("opencode", "opencode> waiting for input"); m != nil {
+		t.Errorf("expected nil on idle pane, got %+v", m)
+	}
+}
+
+func TestMatch_Codex_ToolConfirmation_Positive(t *testing.T) {
+	// Raw capture from samples doc — OpenAI Codex CLI.
+	pane := `• Starting the urgent curl experiment exactly as requested.
+
+• Running curl https://example.com/thrum-test
+
+
+  Would you like to run the following command?
+
+  Reason: capture any permission prompt behavior
+
+  $ curl https://example.com/thrum-test
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with ` + "`" + `curl https://example.com/thrum-test` + "`" + ` (p)
+  3. No, and tell Codex what to do differently (esc)
+
+  Press enter to confirm or esc to cancel`
+	m := Match("codex", pane)
+	if m == nil {
+		t.Fatal("expected match for codex prompt, got nil")
+	}
+	if m.Name != "tool_confirmation" {
+		t.Errorf("Name = %q", m.Name)
+	}
+	if m.ApproveKey != "1" {
+		t.Errorf("ApproveKey = %q, want %q", m.ApproveKey, "1")
+	}
+	if m.DenyKey != "3" {
+		t.Errorf("DenyKey = %q, want %q", m.DenyKey, "3")
+	}
+}
+
+// ----- Task 2.3b: kiro-cli -----
+
+func TestMatch_KiroCli_ShellApproval_Positive(t *testing.T) {
+	pane := `  Please run the following shell command: sudo ls /etc/sudoers.d
+
+↓ Shell sudo ls /etc/sudoers.d
+
+────────────────────────────────────────────────────────────────────────────────
+ shell requires approval
+ ❯ Yes, single permission
+   Trust, always allow in this session
+   No (Tab to edit)
+────────────────────────────────────────────────────────────────────────────────
+ ESC to close | Tab to edit`
+	m := Match("kiro-cli", pane)
+	if m == nil {
+		t.Fatal("expected match for kiro-cli prompt, got nil")
+	}
+	if m.Name != "shell_approval" {
+		t.Errorf("Name = %q", m.Name)
+	}
+	// kiro-cli: default selection is the safe "Yes, single permission",
+	// so a bare Enter approves-once.
+	if m.ApproveKey != "Enter" {
+		t.Errorf("ApproveKey = %q, want %q", m.ApproveKey, "Enter")
+	}
+	if m.DenyKey != "Escape" {
+		t.Errorf("DenyKey = %q, want %q", m.DenyKey, "Escape")
+	}
+}
+
+// ----- Task 2.3c: auggie indexing consent -----
+
+func TestMatch_Auggie_IndexingConsent_Positive(t *testing.T) {
+	pane := ` Learn More:
+ https://docs.augmentcode.com/setup-augment/workspace-indexing
+
+   Workspace: ~/.workspaces/thrum/auggie-test
+
+ Choose an option:
+
+   → [1] Always index this workspace - Unlock full workspace understanding
+
+     [2] Never index this workspace - Use basic assistance only
+
+     [3] Index this workspace for this session
+
+     [4] Skip indexing for this session
+
+
+ [↑↓] Navigate • [Enter] Confirm
+
+ Press 1/2/3/4 to select directly • Esc to skip`
+	m := Match("auggie", pane)
+	if m == nil {
+		t.Fatal("expected match for auggie indexing prompt, got nil")
+	}
+	if m.Name != "indexing_consent" {
+		t.Errorf("Name = %q", m.Name)
+	}
+	// CRITICAL: approve_key MUST be "3" (session-scoped), NEVER "1"
+	// (forever-allow) or "Enter" (default-highlighted forever-allow).
+	if m.ApproveKey != "3" {
+		t.Errorf("ApproveKey = %q, want %q — auggie indexing default-highlighted is forever-allow trap", m.ApproveKey, "3")
+	}
+}
+
+// ----- Task 2.3d: auggie tool approval -----
+
+func TestMatch_Auggie_ToolApproval_SaveFile_Positive(t *testing.T) {
+	pane := `● Save File - test-permissions.txt
+╭─────────────────────────────────────────────────────────────────────╮
+│                                                                     │
+│  Tool Approval Required                                             │
+│                                                                     │
+│  Save File: test-permissions.txt                                    │
+│                                                                     │
+╰─────────────────────────────────────────────────────────────────────╯
+ [A]llow [D]eny`
+	m := Match("auggie", pane)
+	if m == nil {
+		t.Fatal("expected match for auggie tool approval, got nil")
+	}
+	if m.Name != "tool_approval" {
+		t.Errorf("Name = %q, want %q", m.Name, "tool_approval")
+	}
+	if m.ApproveKey != "A" {
+		t.Errorf("ApproveKey = %q, want %q", m.ApproveKey, "A")
+	}
+	if m.DenyKey != "D" {
+		t.Errorf("DenyKey = %q, want %q", m.DenyKey, "D")
+	}
+}
+
+func TestMatch_Auggie_ToolApproval_LaunchProcess_Positive(t *testing.T) {
+	pane := `● Terminal - touch /tmp/auggie-shell-test && echo done
+╭─────────────────────────────────────────────────────────────────────╮
+│                                                                     │
+│  Tool Approval Required                                             │
+│                                                                     │
+│  Terminal: touch /tmp/auggie-shell-test && echo done                │
+│                                                                     │
+╰─────────────────────────────────────────────────────────────────────╯
+ [A]llow [D]eny`
+	m := Match("auggie", pane)
+	if m == nil {
+		t.Fatal("expected match for auggie launch-process approval, got nil")
+	}
+	if m.Name != "tool_approval" {
+		t.Errorf("Name = %q", m.Name)
+	}
+}
+
+func TestMatch_Auggie_IndexingPrecedesToolApproval(t *testing.T) {
+	// Pattern order matters: indexing_consent must come first for it
+	// to match when both could theoretically appear. The indexing anchor
+	// is stricter (includes "Always index this workspace") so cannot
+	// false-match a tool approval pane.
+	toolPane := `● Save File - x.txt
+╭─╮
+│ Tool Approval Required │
+╰─╯
+ [A]llow [D]eny`
+	m := Match("auggie", toolPane)
+	if m == nil {
+		t.Fatal("expected match for tool approval, got nil")
+	}
+	if m.Name != "tool_approval" {
+		t.Errorf("matched %q, want tool_approval", m.Name)
+	}
+}
