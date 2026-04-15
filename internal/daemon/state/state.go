@@ -376,6 +376,40 @@ func (s *State) GetEventsSince(ctx context.Context, afterSeq int64, limit int) (
 	return eventlog.GetEventsSince(ctx, s.db, afterSeq, limit)
 }
 
+// IngestSyncedEvent applies an event that arrived via sync (already
+// in the peer's JSONL, already merged into our local JSONL) to the
+// SQLite projection AND fires the event-write hook. It does NOT
+// write to JSONL again (avoids double-writes) and does NOT increment
+// the local sequence counter — the event arrives pre-sequenced from
+// the peer.
+//
+// This is the cross-repo correctness bridge. internal/sync/loop.go's
+// updateProjection step previously called projector.Apply directly,
+// bypassing the event-write hook entirely. That meant synced
+// message.create events (including replies to cross-repo nudges)
+// never reached the permission package's reply interceptor, silently
+// breaking cross-repo approve/deny delivery. Routing sync ingest
+// through this method fixes that: the projector still runs AND the
+// permission intercept fires.
+//
+// The hook sees sequence == 0 as a sentinel for "synced from peer,
+// not locally authored". The daemon_id argument is still our own so
+// downstream consumers can tell which process is handling the event.
+func (s *State) IngestSyncedEvent(ctx context.Context, event []byte) error {
+	// Apply to projector — same work the previous direct call did.
+	if err := s.projector.Apply(ctx, event); err != nil {
+		return fmt.Errorf("apply synced event: %w", err)
+	}
+
+	// Fire the hook so downstream consumers (the permission reply
+	// interceptor in particular) see the event even though it didn't
+	// originate here.
+	if s.onEventWrite != nil {
+		s.onEventWrite(s.daemonID, 0, event)
+	}
+	return nil
+}
+
 // RepoPath returns the path to the repository root.
 func (s *State) RepoPath() string {
 	return s.repoPath

@@ -4743,6 +4743,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	if _, err := os.Stat(syncDir); err == nil {
 		syncer := thrumSync.NewSyncer(absPath, syncDir, localOnly)
 		syncLoop = thrumSync.NewSyncLoop(syncer, st.Projector(), absPath, syncDir, thrumDir, syncInterval, localOnly)
+		// Route synced events through State.IngestSyncedEvent so the
+		// event-write hook fires on cross-repo ingest, not just local
+		// writes. Without this, replies arriving via sync from a peer
+		// repo never reach the permission reply interceptor.
+		syncLoop.SetIngester(st)
 		if err := syncLoop.Start(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to start sync loop: %v\n", err)
 		} else {

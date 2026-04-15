@@ -126,3 +126,107 @@ func TestEventWriteHook_NilHookIsANoOp(t *testing.T) {
 		t.Fatalf("WriteEvent with nil hook: %v", err)
 	}
 }
+
+func TestIngestSyncedEvent_FiresHook(t *testing.T) {
+	st := newHookTestState(t)
+
+	var (
+		mu       sync.Mutex
+		captured []byte
+		gotSeq   int64 = -1
+	)
+	st.SetOnEventWrite(func(_ string, sequence int64, event []byte) {
+		mu.Lock()
+		defer mu.Unlock()
+		captured = append([]byte{}, event...)
+		gotSeq = sequence
+	})
+
+	// Simulate an event that arrived via sync merge from a peer. The
+	// event already has its own sequence number (42) from the peer's
+	// daemon; our IngestSyncedEvent must NOT advance the local
+	// sequence counter for it.
+	syncedEvent := []byte(`{
+		"type": "message.create",
+		"timestamp": "2026-04-14T00:00:00Z",
+		"event_id": "evt_synced_01",
+		"v": 1,
+		"sequence": 42,
+		"message_id": "msg_from_peer",
+		"agent_id": "supervisor_falcon",
+		"session_id": "supervisor",
+		"body": {"format": "markdown", "content": "test"},
+		"origin_daemon": "peer-daemon"
+	}`)
+
+	if err := st.IngestSyncedEvent(context.Background(), syncedEvent); err != nil {
+		t.Fatalf("IngestSyncedEvent: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(captured) == 0 {
+		t.Fatal("hook did not receive synced event payload")
+	}
+	if !strings.Contains(string(captured), "msg_from_peer") {
+		t.Errorf("captured event doesn't contain expected message_id: %s", captured)
+	}
+	// Sequence of 0 is the sentinel for "not locally written" — the
+	// daemon-local counter is not incremented for synced events.
+	if gotSeq != 0 {
+		t.Errorf("gotSeq = %d, want 0 (sentinel for synced)", gotSeq)
+	}
+}
+
+func TestIngestSyncedEvent_AppliesProjection(t *testing.T) {
+	// Synced events must still land in the SQLite projection so
+	// downstream queries (thrum team, ListActiveAgentsByRole) see
+	// them — the hook is a layered concern, not a replacement for
+	// the projector.
+	st := newHookTestState(t)
+
+	syncedEvent := []byte(`{
+		"type": "agent.register",
+		"timestamp": "2026-04-14T00:00:00Z",
+		"event_id": "evt_agent_01",
+		"v": 1,
+		"agent_id": "synced_agent",
+		"kind": "agent",
+		"role": "researcher",
+		"module": "test"
+	}`)
+
+	if err := st.IngestSyncedEvent(context.Background(), syncedEvent); err != nil {
+		t.Fatalf("IngestSyncedEvent: %v", err)
+	}
+
+	var count int
+	err := st.RawDB().QueryRow(
+		`SELECT COUNT(*) FROM agents WHERE agent_id = ?`, "synced_agent",
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("query agents: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("synced agent not in projection (count=%d)", count)
+	}
+}
+
+func TestIngestSyncedEvent_NilHookIsANoOp(t *testing.T) {
+	// With no hook registered, IngestSyncedEvent should still apply
+	// to the projection without panicking.
+	st := newHookTestState(t)
+	syncedEvent := []byte(`{
+		"type": "agent.register",
+		"timestamp": "2026-04-14T00:00:00Z",
+		"event_id": "evt_agent_02",
+		"v": 1,
+		"agent_id": "synced_nohook",
+		"kind": "agent",
+		"role": "researcher",
+		"module": "test"
+	}`)
+	if err := st.IngestSyncedEvent(context.Background(), syncedEvent); err != nil {
+		t.Fatalf("IngestSyncedEvent with nil hook: %v", err)
+	}
+}
