@@ -4710,6 +4710,15 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "  Mode:        local-only (remote sync disabled)\n")
 	}
 
+	// Register the reserved @supervisor_<project> pseudo-agent so permission
+	// nudges have a reply-capable sender. Idempotent at boot.
+	supervisorID, err := permission.RegisterSupervisor(context.Background(), thrumCfg, thrumDir, absPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to register supervisor pseudo-agent: %v\n", err)
+	} else {
+		log.Printf("daemon: supervisor registered as @%s", supervisorID)
+	}
+
 	// Resolve sync interval: env var > config.json > default
 	syncInterval := time.Duration(thrumCfg.Daemon.SyncInterval) * time.Second
 	if envInterval := os.Getenv("THRUM_SYNC_INTERVAL"); envInterval != "" {
