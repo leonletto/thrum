@@ -268,7 +268,20 @@ func (p *Permission) clearAgentStuck(ctx context.Context, agentName string) erro
 // network path (e.g. pushing an agent.update event), the ctx already
 // flows through. Removing the parameter now would just have to be
 // re-added later.
+//
+// Empty agentName is a silent no-op. This happens on the recovery
+// edge case where an agent's identity file has been deleted between
+// firstDetect and recovery (e.g. `thrum agent delete` ran while a
+// nudge was pending): HandleCheckPane's findIdentityForSession then
+// returns "" and OnRecovery forwards that down to the stuck-clear
+// call, which would otherwise try to read the malformed path
+// `.thrum/identities/.json` and pollute operator logs with a
+// spurious ENOENT. The stuck flag is best-effort; dropping it
+// silently when there's no identity to update is the right call.
 func (p *Permission) setAgentStatus(ctx context.Context, agentName, newStatus, onlyIf string) error {
+	if agentName == "" {
+		return nil
+	}
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("setAgentStatus: %w", err)
 	}

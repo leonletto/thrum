@@ -2240,6 +2240,13 @@ func TestResolveNudgeTarget_NoFile(t *testing.T) {
 // together — the same chain production daemon boot wires up at
 // cmd/thrum/main.go.
 func TestHandleSend_ReplyInterceptor(t *testing.T) {
+	// t.Parallel() surfaces future data races earlier under -race.
+	// The hook we register is synchronous (matching production's
+	// pre-goroutine call graph at the RPC level), so any shared
+	// state the reply dispatcher might grow — e.g. a mutex-guarded
+	// keystroke cache — would flake under parallelism if the lock
+	// discipline were wrong.
+	t.Parallel()
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
@@ -2254,11 +2261,10 @@ func TestHandleSend_ReplyInterceptor(t *testing.T) {
 	defer func() { _ = st.Close() }()
 
 	// Register a test agent + session so HandleSend can resolve
-	// caller_agent_id → (agent_id, session_id).
-	t.Setenv("THRUM_ROLE", "coordinator")
-	t.Setenv("THRUM_MODULE", "main")
-	t.Setenv("THRUM_DISPLAY", "Coordinator")
-
+	// caller_agent_id → (agent_id, session_id). The RegisterRequest
+	// carries Role/Module directly — no t.Setenv needed, which is
+	// what makes the t.Parallel() above legal (Setenv + Parallel
+	// panics under the 1.22+ checker).
 	callerID := identity.GenerateAgentID(repoID, "coordinator", "main", "")
 	agentHandler := NewAgentHandler(st)
 	registerParams, _ := json.Marshal(RegisterRequest{

@@ -127,6 +127,40 @@ func TestFormatAgentSummaryCompact(t *testing.T) {
 	}
 }
 
+// TestFormatAgentSummaryCompact_StatusGlyphs exercises the three
+// distinct status states (active, offline, reserved) so a future
+// formatter rewrite doesn't silently collapse reserved into offline.
+// The reserved glyph (⊙) is what makes `thrum team --system`
+// visually readable: without it, @supervisor_<project> renders
+// identically to any dormant agent.
+func TestFormatAgentSummaryCompact_StatusGlyphs(t *testing.T) {
+	cases := []struct {
+		status  string
+		glyph   string
+		purpose string
+	}{
+		{"active", "●", "live agent with a session"},
+		{"offline", "○", "agent without a session"},
+		{"reserved", "⊙", "daemon-internal pseudo-agent (team --system)"},
+		// Unknown status defaults to offline glyph.
+		{"", "○", "empty status is treated as offline"},
+		{"unexpected_new_state", "○", "unknown status falls back to offline"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.status, func(t *testing.T) {
+			summary := &AgentSummary{
+				AgentID: "test_agent",
+				Module:  "m",
+				Status:  tc.status,
+			}
+			output := FormatAgentSummaryCompact(summary)
+			if !strings.HasPrefix(output, tc.glyph+" ") {
+				t.Errorf("%s: expected prefix %q, got %q", tc.purpose, tc.glyph, output)
+			}
+		})
+	}
+}
+
 func TestAgentSummary_JSONParity(t *testing.T) {
 	summary := &AgentSummary{
 		AgentID:      "coordinator",

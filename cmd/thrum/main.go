@@ -4742,14 +4742,16 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	// TmuxHandler via SetPermission further below.
 	permPkg := permission.New(st, st.RawDB(), supervisorID, projectName, thrumDir)
 
-	// Restart resilience: reload any pending nudge rows from the
-	// permission_nudges table so reminders resume at the correct
-	// count after a daemon restart. The store handles expiry
-	// filtering; we just log the count for operator visibility.
-	if rows, reloadErr := permPkg.Store().ReloadOnBoot(context.Background()); reloadErr != nil {
+	// Log the count of non-expired pending nudges for operator
+	// visibility. No in-memory rehydration is needed — OnDetection
+	// re-reads the permission_nudges table on every check-pane fire,
+	// so reminders resume at the correct cadence automatically after
+	// a daemon restart. This call just gives operators a
+	// "how many nudges were in flight when we bounced?" breadcrumb.
+	if rows, reloadErr := permPkg.ReloadOnBoot(context.Background()); reloadErr != nil {
 		log.Printf("daemon: permission reload on boot failed: %v", reloadErr)
 	} else if len(rows) > 0 {
-		log.Printf("daemon: permission reloaded %d pending nudge(s) from disk", len(rows))
+		log.Printf("daemon: permission found %d pending nudge(s) still in flight", len(rows))
 	}
 
 	// Resolve sync interval: env var > config.json > default

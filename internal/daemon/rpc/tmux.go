@@ -530,12 +530,16 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	state := "idle"
+	// Named paneState rather than `state` so the local doesn't
+	// shadow the conceptual "h.state field" readability anchor —
+	// future code adding h.state.WriteEvent() inside this function
+	// used to hit a type error on the shadowed local string.
+	paneState := "idle"
 	if req.Reason != "" {
-		state = "permission"
+		paneState = "permission"
 	}
 
-	log.Printf("[tmux] check-pane: session=%s state=%s reason=%s", req.Session, state, req.Reason)
+	log.Printf("[tmux] check-pane: session=%s state=%s reason=%s", req.Session, paneState, req.Reason)
 
 	// Permission branch: parse the reason string back into a runtime
 	// + pattern name, resolve the Pattern, and hand off to the
@@ -543,7 +547,7 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 	// fall through with state="permission" — the daemon has nothing
 	// actionable to do, but the CheckPaneResponse still reflects
 	// that a permission prompt was detected.
-	if state == "permission" && h.permission != nil {
+	if paneState == "permission" && h.permission != nil {
 		runtime, patternName, ok := parsePermissionReason(req.Reason)
 		if !ok {
 			log.Printf("[tmux] check-pane: malformed permission reason %q", req.Reason)
@@ -562,26 +566,26 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 	}
 
 	// Queue-aware dispatch: check for active command or queued command waiting
-	if state == "idle" {
+	if paneState == "idle" {
 		if queue := h.getQueue(req.Session); queue != nil {
 			// Case 1: active command → silence means it completed
 			if active := queue.Active(); active != nil {
 				h.completeCommand(ctx, req.Session, queue, active)
-				state = "command_completed"
+				paneState = "command_completed"
 			} else if waiting := queue.Peek(); waiting != nil {
 				// Case 2: front-of-queue waiting for silence → safe to send it
 				h.sendQueuedCommand(ctx, req.Session, queue, waiting)
-				state = "command_sent"
+				paneState = "command_sent"
 			}
 		}
 	}
 
 	// Check for status mismatch: agent says "working" but pane is idle.
 	// Runs only if no queue action was taken above.
-	if state == "idle" {
+	if paneState == "idle" {
 		agentName, idFile, _ := h.findIdentityForSession(ctx, req.Session)
 		if idFile != nil && idFile.AgentStatus == "working" {
-			state = "working_but_idle"
+			paneState = "working_but_idle"
 			target := resolveNudgeTarget(h.thrumDir, agentName)
 			if target != "" {
 				_ = ttmux.Nudge(target, "daemon")
@@ -594,7 +598,7 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 	// pending nudge for this session, the agent has resolved the
 	// prompt on its own — delete the row and clear stuck. Best-effort;
 	// errors are logged but don't fail the RPC.
-	if state == "idle" && h.permission != nil {
+	if paneState == "idle" && h.permission != nil {
 		agentName, _, _ := h.findIdentityForSession(ctx, req.Session)
 		if err := h.permission.OnRecovery(ctx, req.Session, agentName); err != nil {
 			log.Printf("[tmux] check-pane: OnRecovery failed: %v", err)
@@ -603,7 +607,7 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 
 	return &CheckPaneResponse{
 		Session: req.Session,
-		State:   state,
+		State:   paneState,
 		Reason:  req.Reason,
 	}, nil
 }

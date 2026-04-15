@@ -500,3 +500,58 @@ func TestClearAgentStuck_NonStuckNoop(t *testing.T) {
 		t.Errorf("clearAgentStuck should only touch stuck status; got %q", reloaded.AgentStatus)
 	}
 }
+
+func TestSetAgentStatus_EmptyNameIsNoOp(t *testing.T) {
+	// Edge case: OnRecovery can call clearAgentStuck("") when
+	// findIdentityForSession returns "" because the agent's
+	// identity file was deleted between firstDetect and recovery
+	// (e.g. `thrum agent delete` ran while a nudge was pending).
+	// Without the empty-name guard in setAgentStatus, we'd try to
+	// read .thrum/identities/.json and return a spurious ENOENT.
+	p, _ := seedAgentIdentity(t, "placeholder", "")
+	for _, fn := range []func(string) error{
+		func(name string) error { return p.markAgentStuck(context.Background(), name) },
+		func(name string) error { return p.clearAgentStuck(context.Background(), name) },
+	} {
+		if err := fn(""); err != nil {
+			t.Errorf("empty name should be a silent no-op, got %v", err)
+		}
+	}
+}
+
+func TestOnRecovery_ClearsRowEvenWhenIdentityDeleted(t *testing.T) {
+	// Full integration regression for Medium 1: seed a pending
+	// nudge, delete the identity file, call OnRecovery with the
+	// empty agent name that findIdentityForSession returns in
+	// production — the row must still be deleted and no error
+	// should propagate.
+	p, clock := newSchedulerFixture(t)
+	ctx := context.Background()
+
+	// Seed a pending row via the normal first-detect path.
+	if err := p.OnDetection(ctx, "cursor-test", "cursor", "cursor-test:0.0",
+		"researcher_cursor", testPattern(), "pane A"); err != nil {
+		t.Fatalf("first detect: %v", err)
+	}
+
+	// Delete the identity file out from under the scheduler.
+	idPath := filepath.Join(p.thrumDir, "identities", "researcher_cursor.json")
+	if err := os.Remove(idPath); err != nil {
+		t.Fatalf("remove identity: %v", err)
+	}
+
+	// Simulate HandleCheckPane's idle path: findIdentityForSession
+	// returns empty name because the file is gone.
+	*clock = clock.Add(5 * time.Second)
+	p.SetClock(func() time.Time { return *clock })
+
+	if err := p.OnRecovery(ctx, "cursor-test", ""); err != nil {
+		t.Errorf("OnRecovery with empty agent name should succeed, got %v", err)
+	}
+
+	// Row must still be deleted from the store.
+	row, _ := p.store.LookupPendingNudgeBySession(ctx, "cursor-test")
+	if row != nil {
+		t.Errorf("expected row to be deleted by OnRecovery, got %+v", row)
+	}
+}

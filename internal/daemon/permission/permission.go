@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"context"
 	"database/sql"
 	"time"
 
@@ -54,23 +55,35 @@ func New(st *state.State, db *sql.DB, supervisorID, projectName, thrumDir string
 	}
 }
 
-// SetClock installs a test-only clock. Production code must not call
-// this — daemon boot leaves nowFunc nil so the scheduler uses the wall
-// clock. Exported so scheduler_test.go can inject a fake clock from
-// outside the package if future refactors move tests to an _test file.
+// SetClock installs a test-only clock. PRODUCTION CODE MUST NOT CALL
+// THIS. Daemon boot leaves nowFunc nil so the scheduler uses the
+// wall clock. Exported (rather than via an export_test.go pattern)
+// only because cross-package tests in internal/daemon/rpc need to
+// reach it — there is no compile-time barrier to misuse, so this
+// contract is enforced by naming + documentation alone.
+//
+// NOT SAFE for concurrent use. Not safe to call after goroutines
+// have started reading p.nowFunc. Tests must install the clock
+// before exercising any scheduler entry point.
 func (p *Permission) SetClock(now func() time.Time) {
 	p.nowFunc = now
 }
 
-// SetKeystrokeSenderForTest installs a test-only keystroke sender so
-// cross-package integration tests (e.g. internal/daemon/rpc) can
+// SetKeystrokeSenderForTest installs a test-only keystroke dispatcher
+// so cross-package integration tests (e.g. internal/daemon/rpc) can
 // exercise the full reply-dispatch chain without touching real tmux.
-// The function must be safe to call from multiple goroutines since
-// the hook runs off the writer goroutine.
 //
-// Production code must NOT call this. Daemon boot leaves
-// keystrokeSender nil so sendKeystroke falls through to
-// defaultKeystroke (tmux.SendKeys / tmux.SendSpecialKey).
+// PRODUCTION CODE MUST NOT CALL THIS. Production always uses the
+// default (defaultKeystroke → tmux.SendSpecialKey / tmux.SendKeys
+// -l). Exported only because cross-package tests cannot reach an
+// export_test.go helper; the test-only intent is enforced by naming
+// and documentation, not by compile-time guards.
+//
+// NOT SAFE for concurrent use. NOT SAFE to call after goroutines
+// have started reading p.keystrokeSender — install the fake before
+// the hook is wired, not after. A future concurrent-mutation race
+// would NOT be caught by the current tests because the scheduler
+// reads keystrokeSender under no lock.
 func (p *Permission) SetKeystrokeSenderForTest(fn func(target, key string) error) {
 	p.keystrokeSender = fn
 }
@@ -78,7 +91,23 @@ func (p *Permission) SetKeystrokeSenderForTest(fn func(target, key string) error
 // Store returns the backing *Store so tests and cross-package
 // integration fixtures can seed rows directly. Not intended for
 // production code — production accessors (OnDetection, OnRecovery,
-// AfterMessageCreate) handle store interactions internally.
+// AfterMessageCreate, ReloadOnBoot) handle store interactions
+// internally.
 func (p *Permission) Store() *Store {
 	return p.store
+}
+
+// ReloadOnBoot sweeps the permission_nudges table once at daemon
+// boot, returning the non-expired rows so runDaemon can log the
+// pending count for operator visibility. Called once before
+// HandleCheckPane starts accepting traffic; safe on an empty store.
+//
+// No in-memory rehydration is needed — OnDetection re-reads the
+// store on every check-pane fire, so reminders resume at the
+// correct cadence automatically once the daemon is back up. This
+// helper exists so runDaemon can stay off the test-only Store()
+// accessor: production code paths should never touch *Store
+// directly.
+func (p *Permission) ReloadOnBoot(ctx context.Context) ([]*NudgeRow, error) {
+	return p.store.ReloadOnBoot(ctx)
 }
