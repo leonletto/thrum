@@ -84,46 +84,79 @@ Make one Edit call per section that needs updating.
 
 2. **Current State Summary** — Update version, branch, beads counts.
 
-3. **Architecture Health table** — Add/update rows for work done this session.
-   Only add rows for genuinely new capabilities.
+3. **Architecture Health table** (STRICT 10-row rolling window):
+   - The table has a **Session / Date** column — format: `S<N> · YYYY-MM-DD`
+     (e.g. `S32 · 2026-04-14`)
+   - Add new rows for work done this session at the TOP of the table
+   - Then TRIM: keep only the 10 most recent rows PLUS any row currently in a
+     broken/regressed state (statuses like BROKEN, REGRESSED, BLOCKED, or a
+     note explicitly describing ongoing breakage). Drop all other historical
+     COMPLETE/FIXED/MOVED/UPDATED rows — they live in git history + Recent
+     Sessions below
+   - This is a rolling window, not an append log. If the table is at 10 and
+     you add 2 new rows, remove 2 of the oldest non-broken rows
+   - Do NOT add rows for routine work already covered in Recent Sessions —
+     only genuinely new capabilities, architectural shifts, or broken state
 
-4. **Recent Sessions** — The file should have AT MOST 3 detailed session
-   sections. The new session goes at the top.
-   - **If there are already 3 detailed sessions**: Consolidate the oldest into
-     a summary paragraph under a "Previous Sessions" section.
-   - **If there are more than 3**: Consolidate ALL sessions older than the 3
-     most recent into grouped summaries.
+4. **Recent Sessions** — Fixed structure: last 3 detailed + blocks of 5 from
+   the beginning. No graduated/ambiguous boundaries.
+   - **Top of section**: the 3 most recent sessions, each with a full
+     `### Session N (YYYY-MM-DD) — Title` heading and 10-25 lines of detail
+   - **Below that**: a `### Session Blocks (consolidated)` heading with one
+     paragraph per fixed block: `Sessions 1–5`, `Sessions 6–10`, `Sessions
+     11–15`, `Sessions 16–20`, `Sessions 21–25`, etc.
 
-5. **Session History Management** (IMPORTANT):
-   - **Last 3 sessions**: Keep full detail (10-20 lines each)
-   - **Sessions N-10 to N-3**: Consolidate into 2-3 themed paragraphs
-   - **Sessions before N-10**: One-paragraph summary
-   - Target: session history section ~80-100 lines total
+5. **Session History Update Rule** (CRITICAL — keeps this cheap):
+   When you add a new session, work **only** at the edges:
+   - Append the new session at the top of the detailed list (now 4 detailed)
+   - Take the OLDEST detailed session (position 4) and move it out
+   - Find the LATEST block in "Session Blocks". Count how many sessions it
+     covers:
+     - If the block covers FEWER than 5 sessions, append the evicted session
+       to that block's summary (extend the range in the heading, add 1-2
+       lines about what it contributed)
+     - If the block already covers 5 sessions, create a NEW block starting
+       with the evicted session: `**Sessions M–M (date):** <one-line>`
+   - NEVER re-consolidate older blocks. Blocks 1–5, 6–10, etc. are frozen
+     once complete — you only touch the most recent block
+   - This keeps the update fast: you read the latest block's header, decide
+     append-or-new-block, and write one edit
 
-6. **Open Epics / Active Work** — Replace with current epic list from beads.
+6. **Worktree Layout** — Run `git worktree list` and rebuild the table with
+   current branches. Cross-reference with `thrum team` output (if available in
+   your session summary) to annotate which agent is in each worktree.
 
-7. **What's Queued / Next Steps** — Update priorities based on current state.
+7. **Open Epics / Active Work** — Replace with current epic list from beads.
+
+8. **What's Queued / Next Steps** — Update priorities based on current state.
 
 ### Edit Rules
 
 - Use the Edit tool's old_string / new_string to target specific sections
 - Each Edit should replace a clearly bounded section (between headings)
 - Do NOT touch sections that haven't changed
+- Do NOT touch frozen session blocks (blocks of 5 that are already full)
 - Preserve all markdown formatting and heading hierarchy
 
 ## Task 4: Return Summary
 
 Return ONLY a brief summary. Include:
 - Which sections were edited
-- What changed in each
+- Architecture Health: N rows dropped, N rows added, final count
+- Session history: which block absorbed the evicted session (or "new block
+  created for Sessions M–M")
 - Final file line count
 - Any issues encountered
 
 ## CRITICAL Rules
 
 - Use EDIT tool, not Write tool — targeted changes only
-- Do NOT touch stable sections (Key Architecture Files, etc.) unless they changed
-- Do NOT let session history grow unbounded — consolidate per the rules above
+- Architecture Health table is a **strict 10-row rolling window** + broken
+  rows. Never let it grow beyond that
+- Session history uses **fixed blocks of 5** from the beginning — only touch
+  the latest (incomplete-or-just-filled) block
+- Do NOT touch stable sections (Key Architecture Files, etc.) unless they
+  changed
 - Target total file size: 150-300 lines
 - Use ABSOLUTE paths for all file operations
 """)
