@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestFormatNudge_FirstDetect(t *testing.T) {
@@ -86,6 +87,34 @@ func TestFormatNudge_PaneTailTruncated(t *testing.T) {
 	body := FormatNudge(row, hugeTail, "cursor", "thrum", time.Now())
 	if len(body) > 4_000 {
 		t.Errorf("nudge body exceeds 4KB Telegram cap: %d bytes", len(body))
+	}
+}
+
+func TestFormatNudge_PaneTailTruncatedMidRune(t *testing.T) {
+	// Regression for M1 (Epic B review): a single >2KB line containing
+	// multi-byte runes must not emit invalid UTF-8 when the byte cap
+	// lands mid-rune. The rescue walks past any UTF-8 continuation
+	// bytes before returning.
+	//
+	// "→" is 3 bytes (0xE2 0x86 0x92). We build a ~3KB line of arrows
+	// so no newline exists in the captured segment (newline rescue
+	// cannot fire), then assert the emitted body is still valid UTF-8.
+	hugeArrowLine := strings.Repeat("→", 1_000) // ~3KB, no newlines
+	row := &NudgeRow{
+		Session:    "x",
+		AgentName:  "x",
+		PatternKey: "x.x",
+		ApproveKey: "y",
+		NudgeCount: 1,
+	}
+	body := FormatNudge(row, hugeArrowLine, "cursor", "thrum", time.Now())
+	if !utf8.ValidString(body) {
+		t.Error("nudge body contains invalid UTF-8 after mid-rune truncation")
+	}
+	// The rendered body also must contain at least one arrow — i.e.
+	// we actually kept some pane content after the walk-past.
+	if !strings.Contains(body, "→") {
+		t.Error("expected at least one arrow in truncated body")
 	}
 }
 

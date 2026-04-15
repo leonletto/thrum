@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -74,6 +75,12 @@ func FormatNudge(row *NudgeRow, paneTail, runtime, projectName string, now time.
 
 // truncatePaneTail caps the pane content at maxPaneTailLines lines AND
 // maxPaneTailBytes bytes, preferring the tail (most recent output).
+//
+// The byte-cap branch walks past any UTF-8 continuation bytes left
+// over from a mid-rune split before applying the newline rescue, so
+// a single >2KB line containing multi-byte runes (e.g. a long URL
+// with arrows, a base64 blob with Unicode punctuation) cannot emit
+// invalid UTF-8 into the nudge body.
 func truncatePaneTail(pane string) string {
 	lines := strings.Split(strings.TrimRight(pane, "\n"), "\n")
 	if len(lines) > maxPaneTailLines {
@@ -82,6 +89,10 @@ func truncatePaneTail(pane string) string {
 	out := strings.Join(lines, "\n")
 	if len(out) > maxPaneTailBytes {
 		out = out[len(out)-maxPaneTailBytes:]
+		// Walk past any UTF-8 continuation bytes from a mid-rune split.
+		for len(out) > 0 && !utf8.RuneStart(out[0]) {
+			out = out[1:]
+		}
 		// Trim to the next newline so we don't start mid-line.
 		if nl := strings.IndexByte(out, '\n'); nl > -1 {
 			out = out[nl+1:]

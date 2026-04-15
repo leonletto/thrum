@@ -7,6 +7,15 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/state"
 )
 
+// supervisorSessionID is the sentinel session_id assigned to every
+// message authored by the @supervisor_<project> pseudo-agent. The
+// supervisor has no real session, but the messages table requires a
+// non-empty value — a well-known literal keeps "find all
+// supervisor-authored messages" queryable by either agent_id or
+// session_id. Defined as a constant so the future reply-parser (Epic
+// C) and inbox filters can reference it without string-literal drift.
+const supervisorSessionID = "supervisor"
+
 // Permission is the top-level struct wiring the feature together.
 // Constructed once at daemon boot and passed into the message-create
 // hook and the tmux.check-pane handler.

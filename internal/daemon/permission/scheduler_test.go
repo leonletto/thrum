@@ -36,6 +36,14 @@ func readIdentityFile(t *testing.T, thrumDir, agentName string) *config.Identity
 // mutable *time.Time so individual tests can advance the clock.
 func newSchedulerFixture(t *testing.T) (*Permission, *time.Time) {
 	t.Helper()
+	// Defensive: block the ambient agent-session THRUM_HOME from
+	// redirecting any future config.LoadIdentityWithPath reads away
+	// from t.TempDir(). SaveIdentityFile takes an explicit thrumDir
+	// and is safe today, but a future test extension that adds a
+	// load-by-name call would silently pick up the wrong identities
+	// dir without this guard. Cheap insurance.
+	t.Setenv("THRUM_HOME", "")
+
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
@@ -421,6 +429,7 @@ func TestLoadSupervisorEntries_EmptyField(t *testing.T) {
 // at it. Shared by the stuck / clear tests below.
 func seedAgentIdentity(t *testing.T, agentName, initialStatus string) (*Permission, string) {
 	t.Helper()
+	t.Setenv("THRUM_HOME", "") // see newSchedulerFixture for rationale
 	tmp := t.TempDir()
 	thrumDir := filepath.Join(tmp, ".thrum")
 	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {

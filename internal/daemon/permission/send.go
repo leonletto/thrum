@@ -39,12 +39,13 @@ func (p *Permission) SendSupervisorMessage(ctx context.Context, to, body string)
 		EventID:   identity.GenerateEventID(),
 		Version:   1,
 		MessageID: msgID,
-		AgentID:   p.supervisorID,
+		AgentID: p.supervisorID,
 		// Sentinel session_id so the messages row stays queryable. The
-		// supervisor pseudo-agent has no real session; a well-known
-		// literal makes "find all supervisor-authored messages" trivial
-		// via either agent_id OR session_id.
-		SessionID: "supervisor",
+		// supervisor pseudo-agent has no real session; see
+		// supervisorSessionID (permission.go) for the rationale and
+		// for the compile-time anchor that any future reply-parser or
+		// inbox filter should reference.
+		SessionID: supervisorSessionID,
 		Body: types.MessageBody{
 			Format:  "markdown",
 			Content: body,

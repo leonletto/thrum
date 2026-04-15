@@ -172,7 +172,14 @@ func (p *Permission) fireReminder(
 		return err
 	}
 
-	supers, _ := p.ResolveSupervisors(ctx, p.loadSupervisorEntries())
+	// Match firstDetect's error handling exactly: log the error but
+	// still advance the reminder with whatever recipients we got back
+	// (typically none in the error case). A transient state DB hiccup
+	// should not silently stall the cadence.
+	supers, err := p.ResolveSupervisors(ctx, p.loadSupervisorEntries())
+	if err != nil {
+		slog.Error("[permission] resolve supervisors failed", "err", err)
+	}
 	body := FormatNudge(row, paneTail, runtime, p.projectName, now)
 	for _, to := range supers {
 		if _, err := p.SendSupervisorMessage(ctx, to, body); err != nil {
@@ -234,8 +241,8 @@ func (p *Permission) loadSupervisorEntries() []string {
 // the agent is blocked on a permission prompt. Unconditional — always
 // writes, even if the agent was already marked stuck (touching
 // AgentStatusUpdatedAt is still useful).
-func (p *Permission) markAgentStuck(_ context.Context, agentName string) error {
-	return p.setAgentStatus(agentName, "stuck", "")
+func (p *Permission) markAgentStuck(ctx context.Context, agentName string) error {
+	return p.setAgentStatus(ctx, agentName, "stuck", "")
 }
 
 // clearAgentStuck resets the stuck marker when the agent resumes. It
@@ -243,8 +250,8 @@ func (p *Permission) markAgentStuck(_ context.Context, agentName string) error {
 // we don't clobber other statuses (e.g. "working", "offline") that
 // might have been set by another code path while the nudge was
 // pending.
-func (p *Permission) clearAgentStuck(_ context.Context, agentName string) error {
-	return p.setAgentStatus(agentName, "", "stuck")
+func (p *Permission) clearAgentStuck(ctx context.Context, agentName string) error {
+	return p.setAgentStatus(ctx, agentName, "", "stuck")
 }
 
 // setAgentStatus loads the agent's identity file from disk, optionally
@@ -253,7 +260,18 @@ func (p *Permission) clearAgentStuck(_ context.Context, agentName string) error 
 // json.Unmarshal directly rather than config.LoadIdentityWithPath so
 // the agent session's ambient THRUM_HOME does not redirect us to the
 // wrong identities directory.
-func (p *Permission) setAgentStatus(agentName, newStatus, onlyIf string) error {
+//
+// ctx is threaded from the public mark/clear callers and is honored
+// by a single preflight Err() check before the synchronous file I/O.
+// Today that makes the check almost cosmetic — the read + write are
+// microsecond-scale — but when the helper grows an async or
+// network path (e.g. pushing an agent.update event), the ctx already
+// flows through. Removing the parameter now would just have to be
+// re-added later.
+func (p *Permission) setAgentStatus(ctx context.Context, agentName, newStatus, onlyIf string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("setAgentStatus: %w", err)
+	}
 	// #nosec G304 — agentName comes from event-driven code paths; the
 	// path is constrained to .thrum/identities and the identity file
 	// is an internal artifact.
