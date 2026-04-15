@@ -7327,7 +7327,3 @@ func tmuxAttach(session string) error {
 	// propagates session/window titles to the terminal tab correctly.
 	return safecmd.TmuxExec("attach-session", "-t", session)
 }
-
-// detectPaneState was the legacy single-regex pane-state detector.
-// Replaced by permission.DetectPaneState which consults the per-runtime
-// pattern library. See internal/daemon/permission/detect.go.

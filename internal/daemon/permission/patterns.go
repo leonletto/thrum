@@ -74,8 +74,12 @@ var patterns = map[string][]Pattern{
 			// the raw captures and full disambiguation rationale.
 			//
 			// approve_key='1' and forbidden={'2','Tab'} apply uniformly.
-			Name:       "tool_confirmation",
-			Regex:      regexp.MustCompile(`(?m)Do you want to proceed\?`),
+			Name: "tool_confirmation",
+			// Anchor at start-of-line (with optional leading whitespace
+			// and prompt chrome like '⎿ ') so arbitrary stdout echoing
+			// the phrase cannot trigger a spurious keystroke dispatch
+			// into the user's pane. `(?m)` alone is a no-op without `^`.
+			Regex:      regexp.MustCompile(`(?m)^\s*(?:⎿\s+)?Do you want to proceed\?`),
 			ApproveKey: "1", // Yes (once) — NEVER "2" (don't ask again)
 			DenyKey:    "3", // Variant A default; dispatch overrides to Escape for Variant B
 			Comment:    "Claude Code tool-use confirmation (two variants — dispatch disambiguates)",
@@ -126,8 +130,12 @@ var patterns = map[string][]Pattern{
 			// silently activates it. approve_key MUST be "3" (session-
 			// only) and TestApproveKeyNeverForeverAllow forbids both "1"
 			// and "Enter" for this pattern.
-			Name:       "indexing_consent",
-			Regex:      regexp.MustCompile(`(?m)Always index this workspace`),
+			Name: "indexing_consent",
+			// Anchor at start-of-line (with optional leading chrome like
+			// '→ ' and bracketed option numbers) so a shell command or
+			// doc string containing the phrase in its output cannot
+			// trigger a spurious match.
+			Regex:      regexp.MustCompile(`(?m)^\s*(?:[→>]\s+)?(?:\[\d+\]\s+)?Always index this workspace`),
 			ApproveKey: "3",      // Index this workspace for this session — NEVER "1" or "Enter"
 			DenyKey:    "Escape", // Documented "Esc to skip"
 			Comment:    "Auggie workspace indexing consent (approve session-only; default-highlighted is forever-allow)",
@@ -139,13 +147,12 @@ var patterns = map[string][]Pattern{
 			// (forever-allow lives in ~/.augment/settings.json only).
 			//
 			// The phrase "Tool Approval Required" appears inside a boxed
-			// header (`│  Tool Approval Required   │`). The samples doc
-			// proposed `^\s*Tool...$` as an anchor but that won't match
-			// the box chrome. We use a phrase anchor instead, which is
-			// unique enough to auggie's approval UI that false-matches
-			// are implausible.
+			// header: `│  Tool Approval Required   │`. Anchoring to the
+			// box chrome eliminates false-positives from status-bar /
+			// log output containing the bare phrase. The regex tolerates
+			// variable interior spacing produced by auggie's box layout.
 			Name:       "tool_approval",
-			Regex:      regexp.MustCompile(`Tool Approval Required`),
+			Regex:      regexp.MustCompile(`(?m)^\s*│\s+Tool Approval Required\s+│`),
 			ApproveKey: "A", // [A]llow — verified live
 			DenyKey:    "D", // [D]eny
 			Comment:    "Auggie per-tool approval (save-file, launch-process, etc.)",

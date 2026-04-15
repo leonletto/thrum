@@ -3,6 +3,7 @@ package permission
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -174,6 +175,43 @@ func TestStore_Update(t *testing.T) {
 	}
 	if got.LastPaneHash != row.LastPaneHash {
 		t.Errorf("LastPaneHash not updated")
+	}
+}
+
+// TestStore_Update_MissingRow covers the race between the scheduler's
+// read-modify-write cycle and a concurrent SweepExpired / manual delete.
+// UpdatePendingNudge must return ErrNudgeNotFound so the caller can
+// distinguish "nothing written" from "0 rows affected — caller should
+// treat this as a new detection". Silent success here would cause the
+// scheduler's in-memory state to diverge from the DB and double-send
+// nudges on the next check-pane fire.
+func TestStore_Update_MissingRow(t *testing.T) {
+	db := openTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	// Insert then delete, then attempt to update the stale row.
+	row := fixtureRow()
+	if err := s.InsertPendingNudge(ctx, row); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	if err := s.DeletePendingNudge(ctx, row.MessageID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	row.NudgeCount = 99
+	err := s.UpdatePendingNudge(ctx, row)
+	if !errors.Is(err, ErrNudgeNotFound) {
+		t.Errorf("Update of missing row = %v, want ErrNudgeNotFound", err)
+	}
+}
+
+func TestStore_Update_NeverInserted(t *testing.T) {
+	db := openTestDB(t)
+	s := NewStore(db)
+	err := s.UpdatePendingNudge(context.Background(), fixtureRow())
+	if !errors.Is(err, ErrNudgeNotFound) {
+		t.Errorf("Update of never-inserted row = %v, want ErrNudgeNotFound", err)
 	}
 }
 

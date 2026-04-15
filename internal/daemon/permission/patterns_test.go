@@ -367,3 +367,45 @@ func TestMatch_Auggie_IndexingPrecedesToolApproval(t *testing.T) {
 		t.Errorf("matched %q, want tool_approval", m.Name)
 	}
 }
+
+// ----- Anchoring false-positive regression tests -----
+//
+// Post-review hardening (2026-04-15): the three regexes that previously
+// matched anywhere in a line ("Do you want to proceed?", "Always index
+// this workspace", "Tool Approval Required") now require start-of-line
+// anchoring + for auggie tool_approval, the box chrome "│". These
+// tests encode the intent so a future regex relaxation fails CI.
+
+func TestMatch_Claude_NoFalsePositiveFromStdout(t *testing.T) {
+	// A shell command's stdout (captured by something like `echo`) that
+	// happens to include the phrase mid-line must NOT match.
+	pane := `$ echo "Next step - Do you want to proceed? Then run make test"
+Next step - Do you want to proceed? Then run make test
+$ `
+	if m := Match("claude", pane); m != nil {
+		t.Errorf("claude regex matched stdout echo: %+v", m)
+	}
+}
+
+func TestMatch_Auggie_ToolApproval_NoFalsePositiveFromBarePhrase(t *testing.T) {
+	// A log line or status bar that merely contains "Tool Approval
+	// Required" (no box chrome) must NOT match. The old unanchored
+	// regex would have fired here.
+	pane := `[2026-04-15 03:10] INFO  Tool Approval Required for save-file, deferring
+[2026-04-15 03:11] INFO  pending user action
+auggie>`
+	if m := Match("auggie", pane); m != nil {
+		t.Errorf("auggie tool_approval matched bare phrase: %+v", m)
+	}
+}
+
+func TestMatch_Auggie_Indexing_NoFalsePositiveFromMidline(t *testing.T) {
+	// A shell command whose stdout contains the phrase mid-line must
+	// NOT match. Only a chrome-prefixed line (menu option) should match.
+	pane := `$ grep -r "Always index this workspace" docs/
+docs/faq.md: When prompted, choose "Always index this workspace" for persistent indexing.
+$ `
+	if m := Match("auggie", pane); m != nil {
+		t.Errorf("auggie indexing_consent matched doc grep output: %+v", m)
+	}
+}

@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+// ErrNudgeNotFound is returned by UpdatePendingNudge when zero rows
+// match the target MessageID. Callers (the scheduler, the reply
+// interceptor) should treat this as a lost-race with SweepExpired or
+// a concurrent DeletePendingNudge and resynchronize their in-memory
+// state with the DB — NOT silently succeed, which would diverge the
+// scheduler's view from reality and cause double-sent nudges on the
+// next check-pane fire.
+var ErrNudgeNotFound = errors.New("permission: pending nudge not found")
+
 // Store is a thin wrapper over the daemon's SQLite handle, providing
 // typed CRUD helpers for the permission_nudges table (schema v21).
 //
@@ -73,8 +82,11 @@ func (s *Store) LookupPendingNudgeBySession(ctx context.Context, session string)
 
 // UpdatePendingNudge writes changed fields back. All fields are
 // updated — callers should read-modify-write the whole struct.
+// Returns ErrNudgeNotFound if no row matches the MessageID (lost race
+// with SweepExpired / concurrent Delete). See ErrNudgeNotFound for
+// why silent success is unsafe here.
 func (s *Store) UpdatePendingNudge(ctx context.Context, row *NudgeRow) error {
-	_, err := s.db.ExecContext(ctx, `
+	res, err := s.db.ExecContext(ctx, `
 		UPDATE permission_nudges
 		   SET session = ?, tmux_target = ?, agent_name = ?,
 		       pattern_key = ?, approve_key = ?, deny_key = ?,
@@ -89,6 +101,13 @@ func (s *Store) UpdatePendingNudge(ctx context.Context, row *NudgeRow) error {
 	)
 	if err != nil {
 		return fmt.Errorf("update permission_nudges: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update permission_nudges rows affected: %w", err)
+	}
+	if n == 0 {
+		return ErrNudgeNotFound
 	}
 	return nil
 }
