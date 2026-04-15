@@ -203,6 +203,38 @@ func TestMatch_Opencode_Negative(t *testing.T) {
 	}
 }
 
+// TestMatch_Opencode_PermissionRequired_WithBorderChars verifies the
+// regex tolerates OpenCode's box-drawing border characters at the
+// start of each line. The original pattern anchored to `^\s*` which
+// works for the unbordered samples.md capture but fails live because
+// tmux capture-pane preserves the pane's UI chrome (the `┃` U+2503
+// heavy vertical). Found during Epic E live verification.
+func TestMatch_Opencode_PermissionRequired_WithBorderChars(t *testing.T) {
+	// Exact shape of a live tmux capture-pane output when OpenCode
+	// is parked on a /etc read-gate prompt. Each content line has a
+	// leading `┃ ` (U+2503 + space).
+	pane := "┃\n" +
+		"┃  △ Permission required\n" +
+		"┃    ← Access external directory /etc\n" +
+		"┃\n" +
+		"┃  Patterns\n" +
+		"┃\n" +
+		"┃  - /etc/*\n" +
+		"┃\n" +
+		"┃   Allow once   Allow always   Reject  ctrl+f fullscreen  ⇆ select  enter confirm\n" +
+		"┃"
+	m := Match("opencode", pane)
+	if m == nil {
+		t.Fatal("expected match on bordered opencode capture, got nil")
+	}
+	if m.Name != "permission_required" {
+		t.Errorf("Name = %q, want permission_required", m.Name)
+	}
+	if m.ApproveKey != "Enter" {
+		t.Errorf("ApproveKey = %q, want Enter", m.ApproveKey)
+	}
+}
+
 func TestMatch_Codex_ToolConfirmation_Positive(t *testing.T) {
 	// Raw capture from samples doc — OpenAI Codex CLI.
 	pane := `• Starting the urgent curl experiment exactly as requested.

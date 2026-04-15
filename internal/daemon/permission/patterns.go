@@ -102,8 +102,16 @@ var patterns = map[string][]Pattern{
 			// approves-once. If default drift is ever observed, extend
 			// sendKeystroke to support comma-separated sequences and
 			// switch to Option B ("Home,Enter").
+			//
+			// The leading character class allows either plain whitespace
+			// or OpenCode's left-border box-drawing characters (U+2503
+			// "┃" heavy vertical, U+2502 "│" light vertical). Without
+			// this, live tmux captures of OpenCode's bordered UI never
+			// match — the raw samples doc had unbordered text so the
+			// original anchor passed its unit test but failed in
+			// production. Verified live during Epic E smoke tests.
 			Name:       "permission_required",
-			Regex:      regexp.MustCompile(`(?m)^\s*△\s*Permission required`),
+			Regex:      regexp.MustCompile(`(?m)^[\s│┃]*△\s*Permission required`),
 			ApproveKey: "Enter",     // Default selection "Allow once"
 			DenyKey:    "End,Enter", // Navigate to rightmost "Reject" then confirm
 			Comment:    "OpenCode external directory access prompt (default-selection approve-once)",
