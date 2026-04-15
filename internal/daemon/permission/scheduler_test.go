@@ -274,10 +274,9 @@ func TestScheduler_FirstDetectWithoutSupervisors_InsertsOrphanRow(t *testing.T) 
 }
 
 func TestScheduler_GiveUp(t *testing.T) {
-	// markAgentStuck is stubbed until Task 5.6 lands; this test verifies
-	// the scheduler at count==6 takes the giveUp branch without crashing
-	// and stops sending further nudges. Un-skip deeper assertions in
-	// Task 5.7.
+	// At count==6, the scheduler must (a) stop sending further nudges
+	// and (b) mark the agent stuck via markAgentStuck — which Task 5.6
+	// implemented as a real identity-file mutation.
 	p, clock := newSchedulerFixture(t)
 	ctx := context.Background()
 
@@ -312,18 +311,37 @@ func TestScheduler_GiveUp(t *testing.T) {
 	if after != before {
 		t.Errorf("give-up path sent %d extra nudges; want 0", after-before)
 	}
+
+	// The researcher's identity must now be flagged stuck.
+	reloaded := readIdentityFile(t, p.thrumDir, "researcher_cursor")
+	if reloaded.AgentStatus != "stuck" {
+		t.Errorf("AgentStatus = %q, want stuck", reloaded.AgentStatus)
+	}
+	if reloaded.AgentStatusUpdatedAt.IsZero() {
+		t.Error("AgentStatusUpdatedAt should be set when give-up fires")
+	}
 }
 
 func TestScheduler_Recovery(t *testing.T) {
-	// clearAgentStuck is stubbed until Task 5.6; this test verifies
-	// OnRecovery deletes the pending row and returns cleanly. Un-skip
-	// deeper assertions in Task 5.7.
+	// OnRecovery must (a) delete the pending row and (b) clear the
+	// stuck flag via clearAgentStuck — which Task 5.6 implemented as
+	// a real identity-file mutation. We seed the stuck status
+	// beforehand so the clear path has something to reset.
 	p, _ := newSchedulerFixture(t)
 	ctx := context.Background()
 
 	if err := p.OnDetection(ctx, "cursor-test", "cursor", "cursor-test:0.0",
 		"researcher_cursor", testPattern(), "pane A"); err != nil {
 		t.Fatalf("first detect: %v", err)
+	}
+
+	// Simulate the prior give-up having marked the agent stuck.
+	if err := p.markAgentStuck(ctx, "researcher_cursor"); err != nil {
+		t.Fatalf("seed stuck: %v", err)
+	}
+	seed := readIdentityFile(t, p.thrumDir, "researcher_cursor")
+	if seed.AgentStatus != "stuck" {
+		t.Fatalf("seed assertion: AgentStatus = %q, want stuck", seed.AgentStatus)
 	}
 
 	if err := p.OnRecovery(ctx, "cursor-test", "researcher_cursor"); err != nil {
@@ -333,6 +351,11 @@ func TestScheduler_Recovery(t *testing.T) {
 	row, _ := p.store.LookupPendingNudgeBySession(ctx, "cursor-test")
 	if row != nil {
 		t.Errorf("expected row to be deleted after recovery, got %+v", row)
+	}
+
+	reloaded := readIdentityFile(t, p.thrumDir, "researcher_cursor")
+	if reloaded.AgentStatus == "stuck" {
+		t.Error("AgentStatus should be cleared after recovery")
 	}
 }
 
