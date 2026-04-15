@@ -45,8 +45,43 @@ type Pattern struct {
 // canonical runtime names matching `identity.Runtime` (claude, codex,
 // cursor, opencode, kiro-cli, auggie). Populated at package-init time;
 // edits require a thrum rebuild.
+//
+// Safety invariant: every ApproveKey must pass
+// TestApproveKeyNeverForeverAllow. A supervisor's approval must NEVER
+// land on a "don't ask again" / "add to allowlist" / "auto-run
+// everything" option.
 var patterns = map[string][]Pattern{
-	// Populated in Task 2.2 and Task 2.3.
+	"cursor": {
+		{
+			Name:       "not_in_allowlist",
+			Regex:      regexp.MustCompile(`(?m)^\s*Not in allowlist:`),
+			ApproveKey: "y",      // Run (once)
+			DenyKey:    "Escape", // Skip (esc or n)
+			Comment:    "Cursor allowlist approval prompt",
+		},
+	},
+	"claude": {
+		{
+			// NOTE: claude ships TWO prompt variants sharing this anchor.
+			// Variant A (3-option Write/Exec): 1=Yes, 2=forever-allow, 3=No
+			// Variant B (2-option Read): 1=Yes, 2=path-scoped forever-allow
+			//
+			// The pattern library holds ONE row; the dispatch/nudge layer
+			// inspects paneTail before sending the deny key — if the pane
+			// contains regex `(?m)^\s*3\.\s+No,\s+and tell Claude` it's
+			// Variant A (deny=3); otherwise Variant B (deny=Escape). See
+			// dev-docs/plans/2026-04-14-permission-prompt-samples.md for
+			// the raw captures and full disambiguation rationale.
+			//
+			// approve_key='1' and forbidden={'2','Tab'} apply uniformly.
+			Name:       "tool_confirmation",
+			Regex:      regexp.MustCompile(`(?m)Do you want to proceed\?`),
+			ApproveKey: "1", // Yes (once) — NEVER "2" (don't ask again)
+			DenyKey:    "3", // Variant A default; dispatch overrides to Escape for Variant B
+			Comment:    "Claude Code tool-use confirmation (two variants — dispatch disambiguates)",
+		},
+	},
+	// Populated in Task 2.3 (opencode, codex), 2.3b (kiro-cli), 2.3c/d (auggie).
 }
 
 // Match finds the first pattern for the given runtime that matches the
