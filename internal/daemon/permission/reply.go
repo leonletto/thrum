@@ -40,56 +40,95 @@ func (p *Permission) AfterMessageCreate(ctx context.Context, evt types.MessageCr
 	p.TryResolve(ctx, evt, replyTo)
 }
 
-// TryResolve looks up the pending nudge matching replyTo; if found,
-// parses the reply body and dispatches approve/deny. Unknown nudge
-// (wrong daemon or already answered) is a silent no-op. Unknown
-// reply body (neither approve nor deny) leaves the row in place so
-// reminders continue firing — treating the message as a normal
-// thread comment.
+// TryResolve looks up the pending nudge matching replyTo and — for
+// approve/deny bodies — atomically claims and dispatches it. Unknown
+// nudge (wrong daemon, already answered, or won the race with a
+// concurrent reply) is a silent no-op. Unknown reply body (neither
+// approve nor deny) leaves the row in place so reminders continue
+// firing, treating the message as a normal thread comment.
 //
-// Keystroke send failures do NOT delete the row: the next reminder
-// fire will retry the dispatch.
+// Race safety: since the hook now runs off the writer goroutine, two
+// concurrent replies (e.g. a local reply and a cross-repo synced
+// reply arriving in the same sync batch) can both enter TryResolve
+// for the same row. The race-safe path is an atomic
+// DELETE ... RETURNING via Store.DeleteAndReturnPendingNudge: the
+// first caller gets the row and fires the keystroke; the second
+// caller sees (nil, nil) and exits silently. A naive
+// lookup-then-delete would let both pass the nil check and
+// double-fire the keystroke, which corrupts numeric-selection
+// prompts (claude "1/2/3") where the second keystroke lands on the
+// next prompt.
+//
+// Trade-off: if the keystroke subprocess fails AFTER the delete
+// succeeded, the row is gone — there is no retry. Accepted per the
+// Epic C review: losing one retry is strictly safer than
+// double-firing. Reminders won't resurrect the row (SweepExpired
+// only deletes).
+//
+// Body classification happens BEFORE the atomic delete so unknown
+// bodies (and deny-without-key) do not remove the row. Only an
+// actionable approve/deny attempts the claim.
 func (p *Permission) TryResolve(ctx context.Context, evt types.MessageCreateEvent, replyTo string) {
-	row, err := p.store.LookupPendingNudgeByMessageID(ctx, replyTo)
-	if err != nil {
-		slog.Error("[permission] lookup nudge by reply_to failed", "reply_to", replyTo, "err", err)
-		return
-	}
-	if row == nil {
-		return // not one of ours
-	}
-
 	body := strings.ToLower(strings.TrimSpace(evt.Body.Content))
 
 	switch {
 	case approveReplyRe.MatchString(body):
-		if err := p.sendKeystroke(row.TmuxTarget, row.ApproveKey); err != nil {
-			slog.Error("[permission] approve keystroke failed",
-				"target", row.TmuxTarget, "key", row.ApproveKey, "err", err)
+		// Atomically claim the row. If someone else got there first,
+		// exit silently.
+		row, err := p.store.DeleteAndReturnPendingNudge(ctx, replyTo)
+		if err != nil {
+			slog.Error("[permission] atomic claim for approve failed",
+				"reply_to", replyTo, "err", err)
 			return
 		}
-		if err := p.store.DeletePendingNudge(ctx, row.MessageID); err != nil {
-			slog.Error("[permission] delete nudge after approve failed",
+		if row == nil {
+			return // not ours, or already claimed by a concurrent reply
+		}
+		if err := p.sendKeystroke(row.TmuxTarget, row.ApproveKey); err != nil {
+			// Row is already gone. No retry possible by design; log
+			// loudly so the operator can intervene by hand.
+			slog.Error("[permission] approve keystroke failed AFTER atomic claim",
+				"target", row.TmuxTarget, "key", row.ApproveKey,
 				"message_id", row.MessageID, "err", err)
 		}
 
 	case denyReplyRe.MatchString(body):
-		if row.DenyKey == "" {
-			// No in-prompt deny keystroke for this runtime (e.g.
-			// auggie's Tool Approval Required prompt). Leave the row
-			// so reminders continue; the operator must Ctrl+C in
-			// the pane.
-			slog.Info("[permission] deny requested but no deny key for pattern",
-				"pattern", row.PatternKey)
+		// Peek the row to check whether this pattern even has a deny
+		// key before we claim it. Without this pre-check we'd claim
+		// and delete rows for patterns that can't actually be denied
+		// from the reply path (e.g. auggie Tool Approval Required),
+		// leaving the reminder schedule unable to recover.
+		peek, err := p.store.LookupPendingNudgeByMessageID(ctx, replyTo)
+		if err != nil {
+			slog.Error("[permission] lookup nudge for deny peek failed",
+				"reply_to", replyTo, "err", err)
 			return
+		}
+		if peek == nil {
+			return // not ours
+		}
+		if peek.DenyKey == "" {
+			slog.Info("[permission] deny requested but no deny key for pattern",
+				"pattern", peek.PatternKey)
+			return
+		}
+		// Now claim atomically. The small window between the peek
+		// and this delete is tolerable: if another concurrent reply
+		// claimed it first (approve path, or a second deny from a
+		// different repo), our delete returns (nil, nil) and we
+		// silently no-op.
+		row, err := p.store.DeleteAndReturnPendingNudge(ctx, replyTo)
+		if err != nil {
+			slog.Error("[permission] atomic claim for deny failed",
+				"reply_to", replyTo, "err", err)
+			return
+		}
+		if row == nil {
+			return // lost the race — peer already dispatched
 		}
 		if err := p.sendKeystroke(row.TmuxTarget, row.DenyKey); err != nil {
-			slog.Error("[permission] deny keystroke failed",
-				"target", row.TmuxTarget, "key", row.DenyKey, "err", err)
-			return
-		}
-		if err := p.store.DeletePendingNudge(ctx, row.MessageID); err != nil {
-			slog.Error("[permission] delete nudge after deny failed",
+			slog.Error("[permission] deny keystroke failed AFTER atomic claim",
+				"target", row.TmuxTarget, "key", row.DenyKey,
 				"message_id", row.MessageID, "err", err)
 		}
 
@@ -133,6 +172,13 @@ func (p *Permission) sendKeystroke(target, key string) error {
 			continue
 		}
 		if err := sender(target, seg); err != nil {
+			// Include both the failed segment AND the full original
+			// key so post-mortem diagnosis can reconstruct which
+			// part of a multi-step sequence broke (e.g. End
+			// succeeded but Enter failed in an opencode
+			// "End,Enter" deny).
+			slog.Error("[permission] segment send failed",
+				"target", target, "segment", seg, "full_key", key, "err", err)
 			return err
 		}
 	}
@@ -150,15 +196,23 @@ func defaultKeystroke(target, key string) error {
 }
 
 // isSpecialKeyName returns true if key is a tmux-named special key.
-// The list mirrors the set referenced by pattern ApproveKey/DenyKey
-// values across the permission library (plus a few close neighbors
-// that tmux accepts, for forward-compat when patterns evolve).
+// The list covers all keys currently referenced by the permission
+// pattern library (Enter, Escape, End, Down, Home, etc.) plus the
+// remainder of tmux's named-key vocabulary so a future runtime
+// pattern can use any of them without falling through to SendKeys
+// with -l and being sent as literal text.
+//
+// Reference: tmux-send-keys(1) documents the full list; the set
+// below reflects its current named-key namespace as of tmux 3.4.
 func isSpecialKeyName(key string) bool {
 	switch key {
 	case "Enter", "Escape", "Tab", "BTab",
 		"Up", "Down", "Left", "Right",
 		"Space", "BSpace", "Delete",
-		"Home", "End", "PgUp", "PgDn":
+		"Home", "End", "PgUp", "PgDn",
+		"NPage", "PPage", "IC", "DC",
+		"F1", "F2", "F3", "F4", "F5", "F6",
+		"F7", "F8", "F9", "F10", "F11", "F12":
 		return true
 	}
 	return false

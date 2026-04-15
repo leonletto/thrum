@@ -222,7 +222,14 @@ func TestTryResolve_UnknownBody_PassThrough(t *testing.T) {
 	}
 }
 
-func TestTryResolve_KeystrokeFailure_RowStays(t *testing.T) {
+func TestTryResolve_KeystrokeFailureAfterAtomicClaim_RowGone(t *testing.T) {
+	// Contract under the atomic-claim design (Epic C fix High 2):
+	// the row is DELETE ... RETURNING'd BEFORE the keystroke fires.
+	// If the keystroke subprocess fails, the row is already gone —
+	// there is no retry. The reviewer explicitly accepted this
+	// trade-off: losing one retry beats double-firing into a numeric
+	// selection prompt like claude's "1/2/3", where the second
+	// keystroke lands on whatever replaces the original prompt.
 	sender := &recordingSender{fail: errors.New("tmux unreachable")}
 	p := newReplyTestPermission(t, sender)
 	seedPendingNudge(t, p, "msg_nudge_1", "y", "Escape")
@@ -231,11 +238,15 @@ func TestTryResolve_KeystrokeFailure_RowStays(t *testing.T) {
 		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
 		"msg_nudge_1")
 
-	// The sender was called and failed — the row must NOT be deleted
-	// so the next reminder can retry the dispatch.
 	row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), "msg_nudge_1")
-	if row == nil {
-		t.Error("row should stay in place when keystroke send fails")
+	if row != nil {
+		t.Errorf("row should be deleted by atomic claim even when keystroke fails; got %+v", row)
+	}
+	// And the sender must still have been called — the claim
+	// wasn't a silent no-op.
+	calls := sender.snapshot()
+	if len(calls) != 1 {
+		t.Errorf("expected 1 keystroke attempt, got %d: %v", len(calls), calls)
 	}
 }
 
@@ -346,6 +357,80 @@ func TestSendKeystroke_CommaSplitShortCircuitsOnError(t *testing.T) {
 	}
 	if len(captured) != 1 {
 		t.Errorf("expected short-circuit after 1 segment, got %v", captured)
+	}
+}
+
+// TestStore_DeleteAndReturnPendingNudge_HappyPath covers the new
+// atomic claim primitive: first caller gets the full row back,
+// second caller sees (nil, nil).
+func TestStore_DeleteAndReturnPendingNudge_HappyPath(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_claim_1", "y", "Escape")
+
+	row, err := p.store.DeleteAndReturnPendingNudge(context.Background(), "msg_claim_1")
+	if err != nil {
+		t.Fatalf("DeleteAndReturnPendingNudge: %v", err)
+	}
+	if row == nil {
+		t.Fatal("expected a populated row on first claim")
+	}
+	if row.MessageID != "msg_claim_1" || row.ApproveKey != "y" || row.DenyKey != "Escape" {
+		t.Errorf("row fields not populated correctly: %+v", row)
+	}
+
+	// Second claim on the same msg_id must be a silent no-op (nil, nil).
+	row2, err := p.store.DeleteAndReturnPendingNudge(context.Background(), "msg_claim_1")
+	if err != nil {
+		t.Fatalf("second DeleteAndReturnPendingNudge: %v", err)
+	}
+	if row2 != nil {
+		t.Errorf("second claim should return nil; got %+v", row2)
+	}
+}
+
+// TestStore_DeleteAndReturnPendingNudge_UnknownID returns (nil, nil)
+// for an ID that was never inserted.
+func TestStore_DeleteAndReturnPendingNudge_UnknownID(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	row, err := p.store.DeleteAndReturnPendingNudge(context.Background(), "msg_nonexistent")
+	if err != nil {
+		t.Fatalf("DeleteAndReturnPendingNudge: %v", err)
+	}
+	if row != nil {
+		t.Errorf("expected nil row for unknown ID, got %+v", row)
+	}
+}
+
+// TestTryResolve_ConcurrentApproveDispatchesExactlyOnce is the
+// motivating race coverage for Critical 1 / High 2: two concurrent
+// replies hitting TryResolve for the same row must fire the
+// keystroke exactly once, not twice.
+func TestTryResolve_ConcurrentApproveDispatchesExactlyOnce(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+	seedPendingNudge(t, p, "msg_race_1", "y", "Escape")
+
+	// Launch N concurrent resolves. All should see the same replyTo,
+	// but only one DeleteAndReturnPendingNudge can win.
+	const workers = 8
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			p.TryResolve(context.Background(),
+				types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+				"msg_race_1")
+		}()
+	}
+	wg.Wait()
+
+	calls := sender.snapshot()
+	if len(calls) != 1 {
+		t.Errorf("expected exactly 1 keystroke (atomic claim), got %d: %v", len(calls), calls)
 	}
 }
 

@@ -114,6 +114,37 @@ func TestRegisterSupervisor_FallbackToBasename(t *testing.T) {
 	}
 }
 
+// TestSupervisorAgentID_DeterministicFallback exercises the fallback
+// path used in cmd/thrum/main.go runDaemon when RegisterSupervisor
+// fails (NFS hiccup, permission issue, etc.). The daemon must not
+// end up with supervisorID="" — every nudge authored by this
+// daemon would then carry agent_id="", which either breaks sync
+// validation or produces untraceable events. This test asserts the
+// deterministic fallback produces a non-empty, well-formed ID for
+// every project-name resolution.
+func TestSupervisorAgentID_DeterministicFallback(t *testing.T) {
+	cases := []struct {
+		cfg     *config.ThrumConfig
+		repo    string
+		wantNon string
+	}{
+		{&config.ThrumConfig{ProjectName: "thrum"}, "/whatever", "supervisor_thrum"},
+		{&config.ThrumConfig{}, "/Users/leon/dev/opensource/thrum", "supervisor_thrum"},
+		{nil, "", "supervisor_project"},
+		{nil, "/", "supervisor_project"},
+	}
+	for _, tc := range cases {
+		name := ResolveProjectName(tc.cfg, tc.repo)
+		got := SupervisorAgentID(name)
+		if got == "" {
+			t.Errorf("SupervisorAgentID returned empty for cfg=%v repo=%q", tc.cfg, tc.repo)
+		}
+		if got != tc.wantNon {
+			t.Errorf("cfg=%v repo=%q: got %q, want %q", tc.cfg, tc.repo, got, tc.wantNon)
+		}
+	}
+}
+
 func TestRegisterSupervisor_Idempotent(t *testing.T) {
 	tmp := t.TempDir()
 	thrumDir := filepath.Join(tmp, ".thrum")

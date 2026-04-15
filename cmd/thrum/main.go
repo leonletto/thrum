@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -4718,10 +4719,18 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	// nudges have a reply-capable sender. Idempotent at boot.
 	supervisorID, err := permission.RegisterSupervisor(context.Background(), thrumCfg, thrumDir, absPath)
 	if err != nil {
+		// Identity file write failed (NFS hiccup, permission issue,
+		// disk full, etc.). Keep the daemon alive and fall back to
+		// the deterministic ID. Without this fallback, supervisorID
+		// is the empty string and every nudge authored by this
+		// daemon carries agent_id="" — which either breaks event
+		// validation at sync time (best case, sync breaks loudly)
+		// or produces untraceable events (worst case). The next
+		// daemon boot will either succeed or re-warn.
 		fmt.Fprintf(os.Stderr, "Warning: failed to register supervisor pseudo-agent: %v\n", err)
-	} else {
-		log.Printf("daemon: supervisor registered as @%s", supervisorID)
+		supervisorID = permission.SupervisorAgentID(projectName)
 	}
+	log.Printf("daemon: supervisor registered as @%s", supervisorID)
 
 	// Construct the permission package. The reply interceptor (Task
 	// 6.2) is wired into the event-write hook further below; full
@@ -4874,25 +4883,44 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		return tsLocalAddr
 	}
 
-	// Register the single event-write hook. *state.State has exactly
-	// one hook slot, so both the sync-notify broadcast and the
-	// permission reply interceptor share this closure.
+	// Register the single event-write hook. *state.State exposes
+	// exactly one hook slot (by design — a multi-slot registry was
+	// considered and rejected as API-surface bloat for this feature),
+	// so both the sync-notify broadcast and the permission reply
+	// interceptor share this closure. If a third consumer ever needs
+	// to hang off the same hook, either extend State with a slice of
+	// callbacks or keep composing here.
 	//
-	//   - sync notify: fires on every local event write (fire-and-
-	//     forget via goroutine) when a syncManager is active.
+	//   - sync notify: fires on every local event write, dispatched
+	//     to a background goroutine (fire-and-forget) so the
+	//     BroadcastNotify RPC fanout does not block the writer.
 	//   - permission intercept: filters for message.create events,
 	//     unmarshals them, and dispatches to permPkg.AfterMessageCreate
-	//     so any reply_to ref can be resolved into an approve/deny
-	//     keystroke.
+	//     to resolve reply_to refs into approve/deny keystrokes.
+	//
+	// IMPORTANT: the EventWriteHook contract is "called synchronously
+	// but should not block" (state.go:25). Both branches here must
+	// yield quickly — AfterMessageCreate does a DB lookup plus a
+	// tmux subprocess exec on the happy path, so it MUST run on its
+	// own goroutine with a fresh context and a panic recover. Without
+	// the recover, a bug in the reply dispatcher could take down the
+	// whole event pipeline via a writer-goroutine panic.
 	//
 	// This fires on LOCAL writes only. The cross-repo path (events
 	// arriving via sync ingest) is bridged through IngestSyncedEvent
-	// in Task 6.3.
+	// in Task 6.3, which fires the same hook.
 	st.SetOnEventWrite(func(daemonID string, sequence int64, event []byte) {
 		if syncManager != nil {
 			go syncManager.BroadcastNotify(daemonID, sequence, 1)
 		}
-		// Cheap type-only unmarshal to filter non-message events.
+		// Cheap type-only unmarshal to filter non-message events
+		// BEFORE the larger MessageCreateEvent decode. The double
+		// unmarshal is intentional: the head check short-circuits
+		// hot paths (agent.register, session.start, etc.) without
+		// building a full MessageCreateEvent that would be
+		// immediately discarded. Do NOT "optimize" these into a
+		// single decode without verifying the non-message traffic
+		// volume on a busy daemon.
 		var head struct {
 			Type string `json:"type"`
 		}
@@ -4906,7 +4934,19 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		if err := json.Unmarshal(event, &evt); err != nil {
 			return
 		}
-		permPkg.AfterMessageCreate(ctx, evt)
+		// Dispatch off the writer goroutine with a fresh context
+		// (the caller's ctx may be canceled by the time this runs)
+		// and a panic recover so a reply-dispatcher bug can't crash
+		// the event pipeline. evt is already a value copy — safe
+		// to capture.
+		go func(evt types.MessageCreateEvent) {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("[permission] intercept panic", "panic", r)
+				}
+			}()
+			permPkg.AfterMessageCreate(context.Background(), evt)
+		}(evt)
 	})
 
 	if syncManager != nil {

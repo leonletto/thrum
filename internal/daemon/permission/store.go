@@ -123,6 +123,37 @@ func (s *Store) DeletePendingNudge(ctx context.Context, msgID string) error {
 	return nil
 }
 
+// DeleteAndReturnPendingNudge atomically deletes the row with the
+// given MessageID and returns its fields in one SQL statement via
+// DELETE ... RETURNING. Returns (nil, nil) if no row matches — the
+// idiomatic "not found, not an error" pattern for this package.
+//
+// This is the race-safe dispatch primitive used by the reply
+// interceptor: two concurrent replies (e.g. a local reply and a
+// cross-repo synced reply arriving in the same sync batch) can race
+// on the hook. A naive Lookup + Delete pair would let both pass the
+// nil-check and fire the keystroke twice, which corrupts numeric-
+// selection prompts (e.g. claude "1/2/3") where the second keystroke
+// lands on whatever prompt replaces the first. With this helper, the
+// first caller gets the populated row and fires the keystroke; the
+// second caller gets (nil, nil) and is a silent no-op.
+//
+// Trade-off: if the keystroke fails AFTER the delete succeeds, the
+// row is already gone — there is no retry. The reviewer's call on
+// Epic C: losing one retry beats double-firing keystrokes, and
+// reminders won't re-fire because the row is gone. SweepExpired will
+// not resurrect it (SweepExpired only deletes expired rows, never
+// inserts).
+func (s *Store) DeleteAndReturnPendingNudge(ctx context.Context, msgID string) (*NudgeRow, error) {
+	row := s.db.QueryRowContext(ctx, `
+		DELETE FROM permission_nudges
+		 WHERE message_id = ?
+		RETURNING message_id, session, tmux_target, agent_name, pattern_key,
+		          approve_key, deny_key, first_detected, last_nudge_at,
+		          nudge_count, last_pane_hash, expires_at`, msgID)
+	return scanSingleRow(row)
+}
+
 // ReloadOnBoot returns all non-expired rows, used by the scheduler to
 // rehydrate its view after a daemon restart.
 func (s *Store) ReloadOnBoot(ctx context.Context) ([]*NudgeRow, error) {
