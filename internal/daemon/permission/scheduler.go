@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"log/slog"
 	"time"
+
+	"github.com/leonletto/thrum/internal/config"
 )
 
 // reminderSchedule encodes the exponential backoff for reminders
@@ -208,13 +210,19 @@ func (p *Permission) now() time.Time {
 }
 
 // loadSupervisorEntries reads the current list of supervisor entries
-// from disk. Called fresh per nudge so config edits take effect
-// without a daemon restart.
+// from .thrum/config.json. Called fresh per nudge so operators can
+// change the supervisor list without a daemon restart.
 //
-// Stub for Task 5.4 — filled in by Task 5.5. Returning nil falls back
-// to the default ["coordinator"] role broadcast inside ResolveSupervisors.
+// Missing file, parse failure, or unset field all return nil — the
+// caller's fallback in ResolveSupervisors then broadcasts to the
+// default "coordinator" role.
 func (p *Permission) loadSupervisorEntries() []string {
-	return nil
+	cfg, err := config.LoadThrumConfig(p.thrumDir)
+	if err != nil {
+		slog.Warn("[permission] load thrum config failed", "err", err)
+		return nil
+	}
+	return cfg.PermissionSupervisors
 }
 
 // markAgentStuck writes agent_status="stuck" into the identity file

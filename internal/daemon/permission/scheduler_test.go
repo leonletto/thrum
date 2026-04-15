@@ -2,6 +2,7 @@ package permission
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -305,5 +306,55 @@ func TestScheduler_RecoveryWithoutPendingRow_NoOp(t *testing.T) {
 	p, _ := newSchedulerFixture(t)
 	if err := p.OnRecovery(context.Background(), "cursor-test", "researcher_cursor"); err != nil {
 		t.Fatalf("OnRecovery on empty session should be a no-op, got %v", err)
+	}
+}
+
+func TestLoadSupervisorEntries_UsesConfig(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	cfg := map[string]any{
+		"permission_supervisors": []string{"coordinator", "@user:leon-letto"},
+	}
+	b, _ := json.Marshal(cfg)
+	if err := os.WriteFile(filepath.Join(thrumDir, "config.json"), b, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	p := &Permission{thrumDir: thrumDir}
+	got := p.loadSupervisorEntries()
+	if len(got) != 2 {
+		t.Fatalf("got %d entries, want 2: %v", len(got), got)
+	}
+	if got[0] != "coordinator" || got[1] != "@user:leon-letto" {
+		t.Errorf("entries mismatch: %v", got)
+	}
+}
+
+func TestLoadSupervisorEntries_MissingFile(t *testing.T) {
+	// LoadThrumConfig treats ENOENT as "use defaults", so a thrumDir
+	// that exists but has no config.json must yield a nil
+	// PermissionSupervisors slice (the field is zero-valued).
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	_ = os.MkdirAll(thrumDir, 0o750)
+
+	p := &Permission{thrumDir: thrumDir}
+	if got := p.loadSupervisorEntries(); got != nil {
+		t.Errorf("expected nil for missing config, got %v", got)
+	}
+}
+
+func TestLoadSupervisorEntries_EmptyField(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	_ = os.MkdirAll(thrumDir, 0o750)
+	_ = os.WriteFile(filepath.Join(thrumDir, "config.json"), []byte(`{}`), 0o600)
+
+	p := &Permission{thrumDir: thrumDir}
+	if got := p.loadSupervisorEntries(); got != nil {
+		t.Errorf("expected nil when field absent, got %v", got)
 	}
 }
