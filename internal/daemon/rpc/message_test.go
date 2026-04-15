@@ -2,14 +2,18 @@ package rpc
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/types"
@@ -2218,5 +2222,158 @@ func TestResolveNudgeTarget_NoFile(t *testing.T) {
 	target := resolveNudgeTarget(thrumDir, "nonexistent")
 	if target != "" {
 		t.Errorf("resolveNudgeTarget should return empty for missing identity, got %q", target)
+	}
+}
+
+// TestHandleSend_ReplyInterceptor is the RPC-level end-to-end cover
+// for the full reply path: HandleSend writes a reply message via
+// state.WriteEvent, which fires EventWriteHook, which routes
+// message.create events to the permission package's
+// AfterMessageCreate, which resolves the pending nudge and fires
+// the cached approve keystroke through the injected test sender.
+//
+// Pairs with the permission-package unit tests in
+// internal/daemon/permission/reply_test.go, which cover the body
+// parsing, regex anchoring, and race-safe atomic claim logic in
+// isolation. This test ties the RPC handler, the state event
+// writer, the event-write hook, and the permission dispatcher
+// together — the same chain production daemon boot wires up at
+// cmd/thrum/main.go.
+func TestHandleSend_ReplyInterceptor(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	repoID := "r_REPLYINT"
+	st, err := state.NewState(thrumDir, thrumDir, repoID, "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	// Register a test agent + session so HandleSend can resolve
+	// caller_agent_id → (agent_id, session_id).
+	t.Setenv("THRUM_ROLE", "coordinator")
+	t.Setenv("THRUM_MODULE", "main")
+	t.Setenv("THRUM_DISPLAY", "Coordinator")
+
+	callerID := identity.GenerateAgentID(repoID, "coordinator", "main", "")
+	agentHandler := NewAgentHandler(st)
+	registerParams, _ := json.Marshal(RegisterRequest{
+		Role:   "coordinator",
+		Module: "main",
+	})
+	if _, err := agentHandler.HandleRegister(context.Background(), registerParams); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+
+	sessionHandler := NewSessionHandler(st)
+	sessionParams, _ := json.Marshal(SessionStartRequest{AgentID: callerID})
+	if _, err := sessionHandler.HandleStart(context.Background(), sessionParams); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	// Build a Permission wired to this state + an injected keystroke
+	// sender that records invocations instead of touching tmux.
+	type sentKey struct{ target, key string }
+	var (
+		mu       sync.Mutex
+		sentKeys []sentKey
+	)
+	p := permission.New(st, st.RawDB(), "supervisor_test", "test", thrumDir)
+	p.SetKeystrokeSenderForTest(func(target, key string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		sentKeys = append(sentKeys, sentKey{target, key})
+		return nil
+	})
+
+	// Install the event-write hook in the same shape as production
+	// runDaemon. Sync variant here for simple test assertions — the
+	// production code goroutines this call, but the behavior being
+	// tested is the RPC routing + dispatch chain, not the concurrency
+	// wrapper (which is covered by unit tests in reply_test.go).
+	ctx := context.Background()
+	st.SetOnEventWrite(func(_ string, _ int64, event []byte) {
+		var head struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(event, &head); err != nil {
+			return
+		}
+		if head.Type != "message.create" {
+			return
+		}
+		var evt types.MessageCreateEvent
+		if err := json.Unmarshal(event, &evt); err != nil {
+			return
+		}
+		p.AfterMessageCreate(ctx, evt)
+	})
+
+	// Produce a real parent supervisor message so HandleSend can
+	// resolve reply_to against the messages table. SendSupervisorMessage
+	// writes through state.WriteEvent, returns the generated
+	// message_id, and makes the row lookup in HandleSend's reply_to
+	// validation path succeed.
+	parentMsgID, err := p.SendSupervisorMessage(ctx, "@coordinator_main", "⚠ Permission prompt — test")
+	if err != nil {
+		t.Fatalf("SendSupervisorMessage: %v", err)
+	}
+
+	// Seed a pending nudge keyed on that real message_id.
+	now := time.Now().UTC()
+	row := &permission.NudgeRow{
+		MessageID:     parentMsgID,
+		Session:       "cursor-test",
+		TmuxTarget:    "cursor-test:0.0",
+		AgentName:     "researcher_cursor",
+		PatternKey:    "cursor.not_in_allowlist",
+		ApproveKey:    "y",
+		DenyKey:       "Escape",
+		FirstDetected: now,
+		LastNudgeAt:   now,
+		NudgeCount:    1,
+		LastPaneHash:  sha256.Sum256([]byte("pane")),
+		ExpiresAt:     now.Add(8 * time.Hour),
+	}
+	if err := p.Store().InsertPendingNudge(ctx, row); err != nil {
+		t.Fatalf("seed nudge row: %v", err)
+	}
+
+	// Issue the reply via HandleSend.
+	handler := NewMessageHandler(st)
+	sendParams, _ := json.Marshal(SendRequest{
+		Content:       "y",
+		Format:        "plain",
+		ReplyTo:       parentMsgID,
+		CallerAgentID: callerID,
+	})
+	if _, err := handler.HandleSend(ctx, sendParams); err != nil {
+		t.Fatalf("HandleSend: %v", err)
+	}
+
+	// Assert the fake keystroke sender was invoked with the approve key.
+	mu.Lock()
+	captured := make([]sentKey, len(sentKeys))
+	copy(captured, sentKeys)
+	mu.Unlock()
+
+	if len(captured) != 1 {
+		t.Fatalf("expected exactly 1 keystroke dispatch, got %d: %+v", len(captured), captured)
+	}
+	if captured[0].target != "cursor-test:0.0" {
+		t.Errorf("target = %q, want cursor-test:0.0", captured[0].target)
+	}
+	if captured[0].key != "y" {
+		t.Errorf("key = %q, want y", captured[0].key)
+	}
+
+	// The pending nudge must be gone (atomic claim deleted it).
+	gone, _ := p.Store().LookupPendingNudgeByMessageID(ctx, parentMsgID)
+	if gone != nil {
+		t.Errorf("nudge row should be deleted after approve, got %+v", gone)
 	}
 }

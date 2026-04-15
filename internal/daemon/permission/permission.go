@@ -61,3 +61,24 @@ func New(st *state.State, db *sql.DB, supervisorID, projectName, thrumDir string
 func (p *Permission) SetClock(now func() time.Time) {
 	p.nowFunc = now
 }
+
+// SetKeystrokeSenderForTest installs a test-only keystroke sender so
+// cross-package integration tests (e.g. internal/daemon/rpc) can
+// exercise the full reply-dispatch chain without touching real tmux.
+// The function must be safe to call from multiple goroutines since
+// the hook runs off the writer goroutine.
+//
+// Production code must NOT call this. Daemon boot leaves
+// keystrokeSender nil so sendKeystroke falls through to
+// defaultKeystroke (tmux.SendKeys / tmux.SendSpecialKey).
+func (p *Permission) SetKeystrokeSenderForTest(fn func(target, key string) error) {
+	p.keystrokeSender = fn
+}
+
+// Store returns the backing *Store so tests and cross-package
+// integration fixtures can seed rows directly. Not intended for
+// production code — production accessors (OnDetection, OnRecovery,
+// AfterMessageCreate) handle store interactions internally.
+func (p *Permission) Store() *Store {
+	return p.store
+}

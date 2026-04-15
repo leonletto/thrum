@@ -171,3 +171,20 @@ func Match(runtime, pane string) *Pattern {
 	}
 	return nil
 }
+
+// LookupPattern returns the Pattern with the given Name under the
+// given runtime, or nil if no such pattern exists. Used by
+// HandleCheckPane to reverse-resolve a reason string of the form
+// "permission:<runtime>.<name>" back into the Pattern struct — we
+// cannot round-trip through Match because the original pane
+// content is what drove the reason in the first place, and
+// re-running Match would both duplicate work and couple the RPC
+// handler to the full pattern library.
+func LookupPattern(runtime, name string) *Pattern {
+	for i := range patterns[runtime] {
+		if patterns[runtime][i].Name == name {
+			return &patterns[runtime][i]
+		}
+	}
+	return nil
+}
