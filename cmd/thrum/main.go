@@ -4737,10 +4737,20 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	log.Printf("daemon: supervisor registered as @%s", supervisorID)
 
 	// Construct the permission package. The reply interceptor (Task
-	// 6.2) is wired into the event-write hook further below; full
-	// integration with the tmux check-pane handler is deferred to
-	// Phase 8 Task 8.1.
+	// 6.2) is wired into the event-write hook further below; the
+	// tmux check-pane dispatch (Task 7.1) is wired into the
+	// TmuxHandler via SetPermission further below.
 	permPkg := permission.New(st, st.RawDB(), supervisorID, projectName, thrumDir)
+
+	// Restart resilience: reload any pending nudge rows from the
+	// permission_nudges table so reminders resume at the correct
+	// count after a daemon restart. The store handles expiry
+	// filtering; we just log the count for operator visibility.
+	if rows, reloadErr := permPkg.Store().ReloadOnBoot(context.Background()); reloadErr != nil {
+		log.Printf("daemon: permission reload on boot failed: %v", reloadErr)
+	} else if len(rows) > 0 {
+		log.Printf("daemon: permission reloaded %d pending nudge(s) from disk", len(rows))
+	}
 
 	// Resolve sync interval: env var > config.json > default
 	syncInterval := time.Duration(thrumCfg.Daemon.SyncInterval) * time.Second
@@ -5503,6 +5513,10 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 	// Tmux session management handlers
 	tmuxHandler := rpc.NewTmuxHandler(thrumDir, st)
+	// Wire the permission scheduler so HandleCheckPane can dispatch
+	// to OnDetection / OnRecovery. Without this, the permission
+	// branch of HandleCheckPane is a no-op and nudges never fire.
+	tmuxHandler.SetPermission(permPkg)
 	server.RegisterHandler("tmux.create", tmuxHandler.HandleCreate)
 	server.RegisterHandler("tmux.launch", tmuxHandler.HandleLaunch)
 	server.RegisterHandler("tmux.status", tmuxHandler.HandleStatus)
