@@ -19,15 +19,28 @@ func NewDaemonAgentLister(st *state.State) peercred.AgentLister {
 	return &daemonAgentLister{st: st}
 }
 
-// daemonAgentLister implements peercred.AgentLister by querying the
-// agent_work_contexts table, which holds the (agent_id, worktree_path) mapping
-// for every agent that has registered a session with the daemon.
+// daemonAgentLister implements peercred.AgentLister by joining session_refs
+// (where ref_type='worktree' is the canonical agent → worktree mapping) with
+// the sessions table to filter to active sessions.
+//
+// Note on table choice (thrum-2x0p): the original sec.3 implementation queried
+// agent_work_contexts.worktree_path. That table is sparsely populated — it's
+// a git-state tracker (branch, file changes, intent) maintained by the
+// heartbeat / setIntent paths, NOT a registration index. Most agents have
+// rows in session_refs (populated unconditionally by every session.start) but
+// not in agent_work_contexts. Session_refs is the right source.
+//
+// 03bc5d8 added a band-aid that seeds agent_work_contexts.worktree_path
+// inside HandleStart for new sessions; that seeding remains in place for
+// other consumers but the lister no longer depends on it.
 type daemonAgentLister struct {
 	st *state.State
 }
 
 // ListAgentWorktrees returns one entry per distinct (agent_id, worktree_path)
-// pair from agent_work_contexts, filtered to non-empty worktree paths.
+// pair from session_refs joined with sessions, scoped to active sessions
+// (ended_at IS NULL) so a recently-ended session's stale worktree path can't
+// shadow an active agent's resolution.
 //
 // A 2-second context timeout is applied because this query runs on every
 // inbound unix-socket RPC call, and a slow or wedged DB must not stall the
@@ -39,12 +52,16 @@ func (l *daemonAgentLister) ListAgentWorktrees() ([]peercred.AgentWorktree, erro
 	l.st.RLock()
 	defer l.st.RUnlock()
 
-	query := `SELECT DISTINCT agent_id, worktree_path
-	          FROM agent_work_contexts
-	          WHERE worktree_path IS NOT NULL AND worktree_path != ''`
+	query := `SELECT DISTINCT s.agent_id, sr.ref_value
+	          FROM session_refs sr
+	          JOIN sessions s ON sr.session_id = s.session_id
+	          WHERE sr.ref_type = 'worktree'
+	            AND sr.ref_value IS NOT NULL
+	            AND sr.ref_value != ''
+	            AND s.ended_at IS NULL`
 	rows, err := l.st.DB().QueryContext(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("peercred lister: query agent_work_contexts: %w", err)
+		return nil, fmt.Errorf("peercred lister: query session_refs: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
