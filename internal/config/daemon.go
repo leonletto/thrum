@@ -221,15 +221,18 @@ const DefaultLogLevel = "info"
 
 // RestartConfig controls session restart with context snapshot behavior.
 type RestartConfig struct {
-	MaxLines        int `json:"max_lines,omitempty"`        // Max lines in snapshot (default: 1000)
+	MaxLines        int `json:"max_lines,omitempty"`        // Max lines in snapshot (default: 200)
 	AutoThreshold   int `json:"auto_threshold,omitempty"`   // Context % trigger, 0 = disabled
 	GracefulTimeout int `json:"graceful_timeout,omitempty"` // Seconds to wait for graceful save
 }
 
-// RestartMaxLines returns the configured max lines, defaulting to 1000.
+// RestartMaxLines returns the configured max lines, defaulting to 200.
+// 200 lines ≈ 8 terminal screens of recent conversation, enough to recover
+// the current thread of work without burning ~20k tokens of context. For
+// older context, agents should use `git log` / `git status` / `git diff`.
 func (r RestartConfig) RestartMaxLines() int {
 	if r.MaxLines <= 0 {
-		return 1000
+		return 200
 	}
 	return r.MaxLines
 }

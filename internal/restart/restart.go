@@ -200,6 +200,18 @@ func FormatRestartSnapshot(agentName, sessionID, reason, conversation string) st
 	fmt.Fprintf(&out, "**Saved:** %s\n", time.Now().Format(time.RFC3339))
 	fmt.Fprintf(&out, "**Reason:** %s\n\n", reason)
 	out.WriteString(conversation)
+	out.WriteString("\n\n---\n\n")
+	out.WriteString("**For additional context on recent work, run:**\n\n")
+	out.WriteString("```bash\n")
+	out.WriteString("git log -20 --oneline      # recent commits\n")
+	out.WriteString("git status                  # uncommitted changes\n")
+	out.WriteString("git diff HEAD~3             # last 3 commits of changes\n")
+	out.WriteString("bd ready                    # tasks ready to work\n")
+	out.WriteString("thrum inbox --unread        # unread messages\n")
+	out.WriteString("```\n")
+	out.WriteString("\nThe snapshot above captures the most recent conversation exchanges. ")
+	out.WriteString("For older context, these commands reveal the state of code, tasks, and messages ")
+	out.WriteString("without using conversation tokens.\n")
 	return out.String()
 }
 

@@ -1152,8 +1152,8 @@ func TestRestartConfigJSON(t *testing.T) {
 }
 
 func TestRestartMaxLines(t *testing.T) {
-	if got := (config.RestartConfig{}).RestartMaxLines(); got != 1000 {
-		t.Errorf("RestartMaxLines() with zero = %d, want 1000", got)
+	if got := (config.RestartConfig{}).RestartMaxLines(); got != 200 {
+		t.Errorf("RestartMaxLines() with zero = %d, want 200", got)
 	}
 	if got := (config.RestartConfig{MaxLines: 500}).RestartMaxLines(); got != 500 {
 		t.Errorf("RestartMaxLines() with 500 = %d, want 500", got)
