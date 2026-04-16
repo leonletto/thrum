@@ -133,6 +133,16 @@ var anonymousAllowedMethods = map[string]bool{
 	"tmux.queue-wait":      true,
 	// Git-config identity read (no auth)
 	"user.identify":        true,
+	// Bootstrap: the quickstart flow calls register → session.start →
+	// session.setIntent on a single connection. Peercred identity is resolved
+	// once at connection accept time, so even after agent.register populates
+	// agent_work_contexts, the current connection stays tagged as anonymous.
+	// All three bootstrap RPCs must be anonymous-allowed or daemon restart
+	// creates a chicken-and-egg. Socket is 0600 so only the owning user can
+	// reach these endpoints.
+	"agent.register":       true,
+	"session.start":        true,
+	"session.setIntent":    true,
 }
 
 // Start starts the server and begins accepting connections.

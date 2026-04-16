@@ -183,6 +183,21 @@ func (h *SessionHandler) HandleStart(ctx context.Context, params json.RawMessage
 		}
 	}
 
+	// Seed agent_work_contexts with the worktree path from refs so the
+	// peercred resolver can match this agent's CWD immediately — without
+	// waiting for the first heartbeat to populate it.
+	for _, ref := range req.Refs {
+		if ref.Type == "worktree" && ref.Value != "" {
+			_, _ = h.state.DB().ExecContext(ctx, `
+				INSERT INTO agent_work_contexts (session_id, agent_id, worktree_path)
+				VALUES (?, ?, ?)
+				ON CONFLICT(session_id) DO UPDATE SET
+					worktree_path = excluded.worktree_path
+			`, sessionID, req.AgentID, ref.Value)
+			break
+		}
+	}
+
 	return &SessionStartResponse{
 		SessionID: sessionID,
 		AgentID:   req.AgentID,
