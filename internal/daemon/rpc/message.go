@@ -2465,7 +2465,26 @@ type DeleteByScopeResponse struct {
 
 // HandleDeleteByScope handles the message.deleteByScope RPC method.
 // Hard deletes all messages that have a matching scope (type+value).
+//
+// Sec.8: This is a destructive bulk operation (cascading hard-DELETE across
+// 5+ FK tables). It is restricted to daemon-internal callers only — when
+// the call arrives over a unix-socket connection (where peercred identity
+// resolution has been injected into ctx by sec.3's dispatcher), it is
+// rejected unconditionally. This means no external CLI user or agent can
+// invoke deleteByScope from outside the daemon process.
+//
+// The daemon itself calls HandleDeleteByScope via direct handler invocation
+// from internal cleanup jobs (e.g. purge, scope cleanup). Those paths
+// construct their own context without peercred injection, so the check
+// allows them through.
 func (h *MessageHandler) HandleDeleteByScope(ctx context.Context, params json.RawMessage) (any, error) {
+	// sec.8: restrict to daemon-internal callers. Any ctx that carries
+	// peercred identity (resolved or anonymous) came from the unix-socket
+	// accept loop — reject it.
+	if _, peercredRan := peercred.FromContext(ctx); peercredRan {
+		return nil, fmt.Errorf("message.deleteByScope is restricted to daemon-internal callers; external clients cannot invoke bulk hard-deletes")
+	}
+
 	var req DeleteByScopeRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -2532,7 +2551,8 @@ func (h *MessageHandler) HandleDeleteByScope(ctx context.Context, params json.Ra
 
 // DeleteByAgentRequest represents the request for message.deleteByAgent RPC.
 type DeleteByAgentRequest struct {
-	AgentID string `json:"agent_id"`
+	AgentID       string `json:"agent_id"`
+	CallerAgentID string `json:"caller_agent_id,omitempty"` // sec.8: resolved caller must match target
 }
 
 // DeleteByAgentResponse represents the response from message.deleteByAgent RPC.
@@ -2542,6 +2562,11 @@ type DeleteByAgentResponse struct {
 
 // HandleDeleteByAgent handles the message.deleteByAgent RPC method.
 // Hard deletes all messages where agent_id matches the given agent.
+//
+// Sec.8: Agents can only bulk-delete their OWN messages. The resolved
+// caller identity (via sec.3 peercred or legacy CallerAgentID) must match
+// the target agent_id. This prevents one agent from hard-deleting another
+// agent's entire message history.
 func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.RawMessage) (any, error) {
 	var req DeleteByAgentRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -2550,6 +2575,15 @@ func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.Ra
 
 	if req.AgentID == "" {
 		return nil, fmt.Errorf("agent_id is required")
+	}
+
+	// sec.8: resolve caller and enforce self-only deletion.
+	callerID := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	if callerID == "" {
+		return nil, fmt.Errorf("cannot resolve caller identity for deleteByAgent")
+	}
+	if callerID != req.AgentID {
+		return nil, fmt.Errorf("only the target agent can bulk-delete their own messages (caller: %s, target: %s)", callerID, req.AgentID)
 	}
 
 	h.state.Lock()
