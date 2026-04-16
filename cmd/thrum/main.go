@@ -5240,8 +5240,13 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsRegistry.Register("message.delete", websocket.Handler(messageHandler.HandleDelete))
 	wsRegistry.Register("message.edit", websocket.Handler(messageHandler.HandleEdit))
 	wsRegistry.Register("message.markRead", websocket.Handler(messageHandler.HandleMarkRead))
-	wsRegistry.Register("message.deleteByAgent", websocket.Handler(messageHandler.HandleDeleteByAgent))
-	wsRegistry.Register("message.deleteByScope", websocket.Handler(messageHandler.HandleDeleteByScope))
+	// SECURITY (sec.8): message.deleteByAgent and message.deleteByScope are
+	// NOT registered on the WS transport. They are admin/system operations
+	// restricted to daemon-internal callers (sec.8). The WS transport has no
+	// peercred injection, so the daemon-internal check would be bypassed —
+	// any localhost browser page could invoke bulk hard-deletes.
+	// See internal/daemon/rpc/monitor_trust_boundary_test.go for the
+	// structural guard pattern that enforces this on the monitor.* handlers.
 	wsRegistry.Register("message.archive", websocket.Handler(messageHandler.HandleArchive))
 	// Subscribe/unsubscribe WS handlers removed — CLI subscribe commands deleted.
 	wsRegistry.Register("user.register", websocket.Handler(userHandler.HandleRegister))
