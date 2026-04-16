@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/types"
 )
 
 func TestAgentRegister(t *testing.T) {
@@ -1987,3 +1988,161 @@ func TestRegisterResponse_SessionResumedJSON(t *testing.T) {
 		}
 	})
 }
+
+// TestAgentRegister_CrossDaemonCoexistence — thrum-mm3l regression.
+//
+// Two daemons on different machines may have agents with overlapping
+// (role, module) — that's the whole point of multi-machine coordination.
+// HandleRegister's conflict check must scope to the LOCAL daemon only;
+// seeing a synced-from-remote agent with the same role+module must not be
+// treated as a local conflict, and the force-override DELETE must never
+// touch a row with a non-local origin_daemon.
+//
+// Pre-fix behavior: registering a local agent with Force/ReRegister would
+// delete the synced cross-daemon agent silently from the local agents
+// table, leaving the remote agent invisible until the original daemon
+// re-registered it. The symptom was `thrum team --all` missing remote
+// agents and `message.send` failing with `unknown recipient` on replies.
+func TestAgentRegister_CrossDaemonCoexistence(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "local_daemon_id")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	// Seed a synced-from-remote agent with role=coordinator, module=main.
+	// Using a distinct origin_daemon simulates a peer-synced agent row.
+	remoteEvent := types.AgentRegisterEvent{
+		Type:         "agent.register",
+		Timestamp:    time.Now().UTC().Format(time.RFC3339Nano),
+		EventID:      "evt_remote_coord",
+		OriginDaemon: "remote_daemon_mac",
+		AgentID:      "coordinator_main",
+		Kind:         "agent",
+		Role:         "coordinator",
+		Module:       "main",
+		Hostname:     "leonsmacm1pro",
+		AgentPID:     55765,
+	}
+	if err := s.WriteEvent(context.Background(), remoteEvent); err != nil {
+		t.Fatalf("seed remote agent: %v", err)
+	}
+
+	handler := NewAgentHandler(s)
+
+	// Register a LOCAL agent with the same role+module but a different
+	// agent_id. Use ReRegister=true to exercise the force-override path.
+	req := RegisterRequest{
+		Name:       "coordinator_main_remote",
+		Role:       "coordinator",
+		Module:     "main",
+		ReRegister: true,
+		AgentPID:   99999,
+	}
+	reqJSON, _ := json.Marshal(req)
+	resp, err := handler.HandleRegister(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("HandleRegister: %v", err)
+	}
+	regResp, ok := resp.(*RegisterResponse)
+	if !ok {
+		t.Fatalf("response is not *RegisterResponse, got %T", resp)
+	}
+	if regResp.Status != "registered" {
+		t.Errorf("Status = %s, want registered (no cross-daemon conflict expected)", regResp.Status)
+	}
+
+	// BOTH agents must still be in the agents table after local registration.
+	var remoteCount int
+	err = s.RawDB().QueryRow(
+		`SELECT COUNT(*) FROM agents WHERE agent_id = ?`, "coordinator_main",
+	).Scan(&remoteCount)
+	if err != nil {
+		t.Fatalf("query remote agent: %v", err)
+	}
+	if remoteCount != 1 {
+		t.Errorf("remote agent coordinator_main count = %d after local register, want 1 (force-override wiped a cross-daemon row)", remoteCount)
+	}
+
+	var localCount int
+	err = s.RawDB().QueryRow(
+		`SELECT COUNT(*) FROM agents WHERE agent_id = ?`, "coordinator_main_remote",
+	).Scan(&localCount)
+	if err != nil {
+		t.Fatalf("query local agent: %v", err)
+	}
+	if localCount != 1 {
+		t.Errorf("local agent coordinator_main_remote count = %d, want 1", localCount)
+	}
+
+	// Verify origin_daemon is correctly populated for both rows.
+	var remoteOrigin, localOrigin string
+	_ = s.RawDB().QueryRow(
+		`SELECT origin_daemon FROM agents WHERE agent_id = ?`, "coordinator_main",
+	).Scan(&remoteOrigin)
+	_ = s.RawDB().QueryRow(
+		`SELECT origin_daemon FROM agents WHERE agent_id = ?`, "coordinator_main_remote",
+	).Scan(&localOrigin)
+	if remoteOrigin != "remote_daemon_mac" {
+		t.Errorf("remote agent origin_daemon = %q, want remote_daemon_mac", remoteOrigin)
+	}
+	if localOrigin != "local_daemon_id" {
+		t.Errorf("local agent origin_daemon = %q, want local_daemon_id", localOrigin)
+	}
+}
+
+// TestAgentRegister_LocalConflictStillDetected guards the inverse case —
+// two LOCAL agents with the same (role, module) but different agent_ids
+// should still produce a conflict response (not Force) or replace the
+// older row (with Force). The scoping fix must not weaken legitimate
+// same-daemon collision detection.
+func TestAgentRegister_LocalConflictStillDetected(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+
+	s, err := state.NewState(thrumDir, thrumDir, "test_repo_123", "local_daemon_id")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	handler := NewAgentHandler(s)
+
+	// Register the first local agent.
+	first := RegisterRequest{
+		Name:     "impl_alpha",
+		Role:     "implementer",
+		Module:   "payments",
+		AgentPID: 1001,
+	}
+	reqJSON, _ := json.Marshal(first)
+	_, err = handler.HandleRegister(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("first HandleRegister: %v", err)
+	}
+
+	// Attempt to register a SECOND local agent with the same role+module
+	// but a different name. Without Force, this must return a conflict.
+	second := RegisterRequest{
+		Name:     "impl_beta",
+		Role:     "implementer",
+		Module:   "payments",
+		AgentPID: 1002,
+	}
+	reqJSON, _ = json.Marshal(second)
+	resp, err := handler.HandleRegister(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("second HandleRegister: %v", err)
+	}
+	regResp := resp.(*RegisterResponse)
+	if regResp.Status != "conflict" {
+		t.Errorf("Status = %s, want conflict (same-daemon role+module collision)", regResp.Status)
+	}
+	if regResp.Conflict == nil || regResp.Conflict.ExistingAgentID != "impl_alpha" {
+		t.Errorf("Conflict.ExistingAgentID = %v, want impl_alpha", regResp.Conflict)
+	}
+}
+

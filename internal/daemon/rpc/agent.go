@@ -322,8 +322,15 @@ func (h *AgentHandler) HandleRegister(ctx context.Context, params json.RawMessag
 			}, nil
 		}
 
-		// Force override - remove old agent entry to prevent duplicates
-		_, _ = h.state.DB().ExecContext(ctx, "DELETE FROM agents WHERE agent_id = ?", existingAgent.AgentID)
+		// Force override - remove old agent entry to prevent duplicates.
+		// Defense-in-depth: scope the DELETE to local-origin rows only.
+		// getAgentByRoleModule already filters to local agents, but guarding
+		// here too keeps any future caller that reuses this DELETE from
+		// wiping a synced-from-remote agent silently (thrum-mm3l).
+		localDaemon := h.state.DaemonID()
+		_, _ = h.state.DB().ExecContext(ctx,
+			`DELETE FROM agents WHERE agent_id = ? AND (origin_daemon = ? OR origin_daemon = '')`,
+			existingAgent.AgentID, localDaemon)
 
 		// Force override - register new agent
 		return h.registerAgent(ctx, agentID, req.Name, req.Role, req.Module, req.Display, worktree, "registered", req.AgentPID)
@@ -598,17 +605,27 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 	return sessionID, nil
 }
 
-// getAgentByRoleModule queries for an existing agent with the given role and module.
+// getAgentByRoleModule queries for an existing LOCAL agent with the given
+// role and module. Cross-daemon agents with overlapping (role, module) are
+// deliberately excluded — they're not local conflicts, they're peers on
+// different machines doing the same thing (thrum-mm3l).
+//
+// The filter `origin_daemon IN (local, '')` also matches legacy rows that
+// predate the origin_daemon column (migration 21→22 backfills known rows
+// from the events table; rows with no events tail end with '') so the
+// conflict check stays conservative for those.
 func (h *AgentHandler) getAgentByRoleModule(ctx context.Context, role, module string) (*AgentInfo, error) {
+	localDaemon := h.state.DaemonID()
 	query := `SELECT agent_id, kind, role, module, display, registered_at, last_seen_at, agent_pid
 	          FROM agents
 	          WHERE role = ? AND module = ?
+	            AND (origin_daemon = ? OR origin_daemon = '')
 	          LIMIT 1`
 
 	var agent AgentInfo
 	var display, lastSeenAt sql.NullString
 
-	err := h.state.DB().QueryRowContext(ctx, query, role, module).Scan(
+	err := h.state.DB().QueryRowContext(ctx, query, role, module, localDaemon).Scan(
 		&agent.AgentID,
 		&agent.Kind,
 		&agent.Role,
