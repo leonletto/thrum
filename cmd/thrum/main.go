@@ -4622,6 +4622,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		return fmt.Errorf("failed to create identities directory: %w", err)
 	}
 
+	// Backfill runtime from preferred_runtime for any identity files that
+	// pre-date the runtime field. Idempotent and non-fatal: silently skips
+	// unreadable files, never aborts daemon startup.
+	config.BackfillIdentityRuntime(filepath.Join(absPath, ".thrum"))
+
 	// Self-heal embedded reference files (.thrum/strategies/*.md + .thrum/llms.txt).
 	// Re-running this is idempotent and covers:
 	//   - Repos initialized before this feature landed (backfill on first daemon restart)

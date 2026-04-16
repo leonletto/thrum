@@ -202,6 +202,15 @@ func Quickstart(client *Client, opts QuickstartOptions) (*QuickstartResult, erro
 			changed = true
 		}
 
+		// Backfill runtime from preferred_runtime when missing. Agents
+		// created before the runtime field existed store the user's
+		// intent in preferred_runtime only. The daemon's permission-prompt
+		// detection reads runtime, so we must populate it here.
+		if idFile.Runtime == "" && idFile.PreferredRuntime != "" {
+			idFile.Runtime = idFile.PreferredRuntime
+			changed = true
+		}
+
 		if changed {
 			idFile.UpdatedAt = time.Now().UTC()
 			_ = config.SaveIdentityFile(thrumDir, idFile)
