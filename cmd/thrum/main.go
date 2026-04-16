@@ -29,6 +29,7 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
+	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
@@ -4783,6 +4784,16 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	// Create Unix socket server
 	socketPath := filepath.Join(varDir, "thrum.sock")
 	server := daemon.NewServer(socketPath)
+
+	// Wire the peer-credential identity resolver into the server. The
+	// resolver consults agent_work_contexts to map connecting PIDs → CWD →
+	// registered-agent worktrees, giving the daemon a kernel-verified caller
+	// identity on every unix-socket request. This replaces the old
+	// client-asserted CallerAgentID trust model and is the core of the v0.9.0
+	// security hardening (thrum-u4xv.3).
+	identityLister := daemon.NewDaemonAgentLister(st)
+	identityResolver := peercred.NewResolver(identityLister)
+	server.SetIdentityResolver(identityResolver)
 
 	// Create subscription dispatcher
 	dispatcher := subscriptions.NewDispatcher(st.DB())
