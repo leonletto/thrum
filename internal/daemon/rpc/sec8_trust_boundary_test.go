@@ -20,8 +20,8 @@ import (
 // monitor_trust_boundary_test.go (source-scan layer).
 //
 // IF THIS TEST FAILS
-// Someone added a wsRegistry.Register("message.deleteByAgent", ...) or
-// wsRegistry.Register("message.deleteByScope", ...) line to cmd/thrum/main.go.
+// Someone added a wsRegistry.Register("message.deleteByAgent", ...) Or
+// wsRegistry.Register("message.deleteByScope", ...) Line to cmd/thrum/main.go.
 // DO NOT fix the test — remove the registration. These methods must only be
 // on the unix-socket server object.
 func TestSec8TrustBoundary_BulkDeleteNotOnWebSocket(t *testing.T) {

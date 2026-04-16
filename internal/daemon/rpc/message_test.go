@@ -2326,7 +2326,7 @@ func TestHandleSend_ReplyInterceptor(t *testing.T) {
 	// writes through state.WriteEvent, returns the generated
 	// message_id, and makes the row lookup in HandleSend's reply_to
 	// validation path succeed.
-	parentMsgID, err := p.SendSupervisorMessage(ctx, "@coordinator_main", "⚠ Permission prompt — test")
+	parentMsgID, err := p.SendSupervisorMessage(ctx, "@coordinator_main", "⚠ Permission prompt — test", "")
 	if err != nil {
 		t.Fatalf("SendSupervisorMessage: %v", err)
 	}

@@ -16,6 +16,14 @@ import (
 // primary key so incoming reply-to messages can be mapped back to the
 // originating nudge.
 //
+// ThreadID, when non-empty, is written into the message's thread_id column
+// so that all reminder messages share the same thread as the firstDetect
+// message. The firstDetect call passes "" (no thread yet); subsequent
+// fireReminder calls pass the nudge row's MessageID (which is the
+// firstDetect message_id and therefore the thread root). TryResolve's
+// thread_id fallback relies on this linkage to resolve replies that
+// target a reminder message_id rather than the firstDetect message_id.
+//
 // Mirrors internal/daemon/rpc/queue_rpc.go:474 sendSystemMessage but
 // uses p.supervisorID (e.g. "supervisor_thrum") as the author instead
 // of "system". @system messages cannot be replied to (rejectSystemReply
@@ -25,7 +33,7 @@ import (
 //
 // IMPORTANT: the state.WriteEvent call MUST run under state.Lock().
 // SendSystemMessage establishes this pattern and we copy it.
-func (p *Permission) SendSupervisorMessage(ctx context.Context, to, body string) (string, error) {
+func (p *Permission) SendSupervisorMessage(ctx context.Context, to, body, threadID string) (string, error) {
 	if p.state == nil {
 		return "", fmt.Errorf("permission.SendSupervisorMessage: nil state")
 	}
@@ -53,6 +61,7 @@ func (p *Permission) SendSupervisorMessage(ctx context.Context, to, body string)
 		EventID:   identity.GenerateEventID(),
 		Version:   1,
 		MessageID: msgID,
+		ThreadID:  threadID,
 		AgentID:   p.supervisorID,
 		// Sentinel session_id so the messages row stays queryable. The
 		// supervisor pseudo-agent has no real session; see

@@ -59,6 +59,18 @@ func (p *Permission) AfterMessageCreate(ctx context.Context, evt types.MessageCr
 // prompts (claude "1/2/3") where the second keystroke lands on the
 // next prompt.
 //
+// Thread-id fallback: reminder messages (#2-6) are sent with
+// thread_id = firstDetect message_id (the nudge row PK). When a
+// supervisor replies to reminder #N, replyTo is the reminder's
+// message_id — not the firstDetect message_id — so the direct
+// DeleteAndReturnPendingNudge returns (nil, nil). The fallback
+// queries messages.thread_id for replyTo; if the result equals the
+// nudge row PK, the delete succeeds on the second attempt. This is
+// a two-step read-then-delete, not a single atomic operation, but
+// the window between the thread_id read and the delete is safe: if
+// a concurrent approve or recover races in, DeleteAndReturnPendingNudge
+// returns (nil, nil) and the fallback no-ops silently.
+//
 // Trade-off: if the keystroke subprocess fails AFTER the delete
 // succeeded, the row is gone — there is no retry. Accepted per the
 // Epic C review: losing one retry is strictly safer than
@@ -82,7 +94,19 @@ func (p *Permission) TryResolve(ctx context.Context, evt types.MessageCreateEven
 			return
 		}
 		if row == nil {
-			return // not ours, or already claimed by a concurrent reply
+			// Direct lookup missed — fall back to the thread_id path.
+			// Reminder messages carry thread_id = firstDetect message_id
+			// (the nudge row PK), so walking messages.thread_id lets us
+			// resolve replies aimed at a reminder rather than the root.
+			row, err = p.claimNudgeViaThreadID(ctx, replyTo)
+			if err != nil {
+				slog.Error("[permission] thread-id fallback for approve failed",
+					"reply_to", replyTo, "err", err)
+				return
+			}
+			if row == nil {
+				return // not ours
+			}
 		}
 		if err := p.sendKeystroke(row.TmuxTarget, row.ApproveKey); err != nil {
 			// Row is already gone. No retry possible by design; log
@@ -98,10 +122,19 @@ func (p *Permission) TryResolve(ctx context.Context, evt types.MessageCreateEven
 		// and delete rows for patterns that can't actually be denied
 		// from the reply path (e.g. auggie Tool Approval Required),
 		// leaving the reminder schedule unable to recover.
-		peek, err := p.store.LookupPendingNudgeByMessageID(ctx, replyTo)
+		nudgeID, err := p.resolveNudgeID(ctx, replyTo)
 		if err != nil {
 			slog.Error("[permission] lookup nudge for deny peek failed",
 				"reply_to", replyTo, "err", err)
+			return
+		}
+		if nudgeID == "" {
+			return // not ours
+		}
+		peek, err := p.store.LookupPendingNudgeByMessageID(ctx, nudgeID)
+		if err != nil {
+			slog.Error("[permission] lookup nudge for deny peek failed",
+				"reply_to", replyTo, "nudge_id", nudgeID, "err", err)
 			return
 		}
 		if peek == nil {
@@ -117,7 +150,7 @@ func (p *Permission) TryResolve(ctx context.Context, evt types.MessageCreateEven
 		// claimed it first (approve path, or a second deny from a
 		// different repo), our delete returns (nil, nil) and we
 		// silently no-op.
-		row, err := p.store.DeleteAndReturnPendingNudge(ctx, replyTo)
+		row, err := p.store.DeleteAndReturnPendingNudge(ctx, nudgeID)
 		if err != nil {
 			slog.Error("[permission] atomic claim for deny failed",
 				"reply_to", replyTo, "err", err)
@@ -138,6 +171,57 @@ func (p *Permission) TryResolve(ctx context.Context, evt types.MessageCreateEven
 		// supervisor can send a real "y" or "n" afterwards to
 		// actually dispatch.
 	}
+}
+
+// resolveNudgeID returns the permission_nudges primary key that should
+// be used to look up / claim the nudge for the given replyTo message_id.
+//
+// If replyTo directly matches a nudge row PK, it is returned as-is.
+// Otherwise, the fallback queries messages.thread_id for replyTo — if a
+// nudge row exists with that thread_id as its PK (i.e. the replyTo is a
+// reminder in the firstDetect thread), the thread_id is returned.
+// Returns "" when no nudge can be found, nil error on a clean miss.
+func (p *Permission) resolveNudgeID(ctx context.Context, replyTo string) (string, error) {
+	// Fast path: direct match.
+	row, err := p.store.LookupPendingNudgeByMessageID(ctx, replyTo)
+	if err != nil {
+		return "", err
+	}
+	if row != nil {
+		return replyTo, nil
+	}
+	// Fallback: walk the thread.
+	threadID, err := p.store.LookupThreadIDForMessage(ctx, replyTo)
+	if err != nil {
+		return "", err
+	}
+	if threadID == "" {
+		return "", nil
+	}
+	// Verify a nudge row actually exists for this thread_id before
+	// returning it, so callers can treat "" == "not ours".
+	threadRow, err := p.store.LookupPendingNudgeByMessageID(ctx, threadID)
+	if err != nil {
+		return "", err
+	}
+	if threadRow == nil {
+		return "", nil
+	}
+	return threadID, nil
+}
+
+// claimNudgeViaThreadID is the thread_id fallback for the approve path.
+// It resolves the nudge PK from the thread_id of replyTo and then
+// atomically claims the row. Returns (nil, nil) when no nudge is found.
+func (p *Permission) claimNudgeViaThreadID(ctx context.Context, replyTo string) (*NudgeRow, error) {
+	threadID, err := p.store.LookupThreadIDForMessage(ctx, replyTo)
+	if err != nil {
+		return nil, err
+	}
+	if threadID == "" {
+		return nil, nil
+	}
+	return p.store.DeleteAndReturnPendingNudge(ctx, threadID)
 }
 
 // sendKeystroke dispatches a cached keystroke sequence to the tmux
