@@ -31,6 +31,7 @@ import (
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/monitor"
+	"github.com/leonletto/thrum/internal/daemon/nudge"
 	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
@@ -4979,6 +4980,14 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			}()
 			permPkg.AfterMessageCreate(context.Background(), evt)
 		}(evt)
+
+		// thrum-wvpv: nudge tmux-managed recipients. This branch fires for
+		// BOTH local writes (HandleSend) and synced writes (sync_apply →
+		// State.WriteEvent), giving cross-machine and cross-repo recipients
+		// the same tmux pane notification that local recipients used to
+		// get exclusively. nudge.DispatchTmux is fire-and-forget; failures
+		// are intentionally swallowed because nudges are advisory.
+		nudge.DispatchTmux(thrumDir, evt.Recipients, evt.AgentID)
 	})
 
 	if syncManager != nil {

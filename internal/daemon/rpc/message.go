@@ -15,12 +15,11 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
-	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"github.com/leonletto/thrum/internal/daemon/nudge"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/groups"
 	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/subscriptions"
-	ttmux "github.com/leonletto/thrum/internal/tmux"
 	"github.com/leonletto/thrum/internal/types"
 )
 
@@ -574,24 +573,12 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	// Find matching subscriptions and push notifications to connected clients
 	_, _ = h.dispatcher.DispatchForMessage(ctx, msgInfo)
 
-	// Nudge tmux-managed recipients asynchronously
-	if h.thrumDir != "" {
-		senderName := agentID
-
-		for _, recipientName := range recipients {
-			go func(name string) {
-				target := resolveNudgeTarget(h.thrumDir, name)
-				if target == "" {
-					return
-				}
-				session, _, _ := ttmux.ParseTarget(target)
-				if !ttmux.HasSession(session) {
-					return
-				}
-				_ = ttmux.Nudge(target, senderName)
-			}(recipientName)
-		}
-	}
+	// thrum-wvpv: tmux nudge dispatch moved into the SetOnEventWrite hook
+	// (cmd/thrum/main.go) so the same code path covers BOTH local writes
+	// (this handler) and synced writes (peer sync, cross-repo bridge).
+	// The hook receives the persisted event payload, including the
+	// recipients list, and calls nudge.DispatchTmux. Removing the inline
+	// block here prevents double-nudging on the local path.
 
 	// Broadcast to ALL connected WebSocket clients so the browser UI live feed
 	// receives events even though it never registers a subscription row in the DB.
@@ -2681,36 +2668,14 @@ func buildWSNotification(msg *subscriptions.MessageInfo) map[string]any {
 	}
 }
 
-// resolveNudgeTarget reads the identity file for an agent and returns the tmux target
-// if the agent is in a tmux session. Returns empty string otherwise.
+// resolveNudgeTarget reads the identity file for an agent and returns the
+// tmux target if the agent is in a tmux session. Returns empty string
+// otherwise.
+//
+// thrum-wvpv: this is now a thin wrapper around the nudge package, which
+// owns the canonical implementation. Kept here as a wrapper because tmux.go
+// (HandleCheckPane) and existing message_test.go tests still reference it
+// by this name. New callers should use nudge.ResolveTarget directly.
 func resolveNudgeTarget(thrumDir, agentName string) string {
-	// Check main repo identity dir first
-	if target := readTmuxFromIdentity(filepath.Join(thrumDir, "identities"), agentName); target != "" {
-		return target
-	}
-
-	// Check all worktree identity dirs
-	repoDir := filepath.Dir(thrumDir)
-	for _, wtPath := range safecmd.WorktreePaths(context.Background(), repoDir) {
-		if wtPath == repoDir {
-			continue // already checked
-		}
-		idDir := filepath.Join(wtPath, ".thrum", "identities")
-		if target := readTmuxFromIdentity(idDir, agentName); target != "" {
-			return target
-		}
-	}
-	return ""
-}
-
-func readTmuxFromIdentity(identitiesDir, agentName string) string {
-	data, err := os.ReadFile(filepath.Join(identitiesDir, agentName+".json")) // #nosec G304 -- path is .thrum/identities/<name>.json
-	if err != nil {
-		return ""
-	}
-	var idFile config.IdentityFile
-	if err := json.Unmarshal(data, &idFile); err != nil {
-		return ""
-	}
-	return idFile.TmuxSession
+	return nudge.ResolveTarget(thrumDir, agentName)
 }
