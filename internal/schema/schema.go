@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 21
+const CurrentVersion = 22
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -131,17 +131,26 @@ func createTables(tx *sql.Tx) error {
 			created_by TEXT NOT NULL
 		)`,
 
-		// Agents table
+		// Agents table.
+		//
+		// origin_daemon tracks which daemon emitted the agent.register event
+		// for this row — local registrations get the local daemon_id, synced
+		// registrations carry the remote origin's daemon_id. HandleRegister's
+		// role+module conflict check filters by origin_daemon so cross-daemon
+		// agents with overlapping (role, module) aren't treated as local
+		// conflicts (thrum-mm3l). See migration 21→22 for the backfill path
+		// on pre-existing databases.
 		`CREATE TABLE IF NOT EXISTS agents (
-			agent_id   TEXT PRIMARY KEY,
-			kind       TEXT NOT NULL,
-			role       TEXT NOT NULL,
-			module     TEXT NOT NULL,
-			display    TEXT NOT NULL DEFAULT '',
-			hostname   TEXT NOT NULL DEFAULT '',
-			agent_pid INTEGER NOT NULL DEFAULT 0,
-			registered_at TEXT NOT NULL,
-			last_seen_at TEXT NOT NULL DEFAULT ''
+			agent_id       TEXT PRIMARY KEY,
+			kind           TEXT NOT NULL,
+			role           TEXT NOT NULL,
+			module         TEXT NOT NULL,
+			display        TEXT NOT NULL DEFAULT '',
+			hostname       TEXT NOT NULL DEFAULT '',
+			agent_pid      INTEGER NOT NULL DEFAULT 0,
+			registered_at  TEXT NOT NULL,
+			last_seen_at   TEXT NOT NULL DEFAULT '',
+			origin_daemon  TEXT NOT NULL DEFAULT ''
 		)`,
 
 		// Sessions table
@@ -899,6 +908,70 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 		}
 	}
 
+	// Migration from version 21 to 22: add origin_daemon column to agents
+	// table and backfill from the events table. Fixes thrum-mm3l: without
+	// origin tracking, HandleRegister's role+module conflict check treats
+	// cross-daemon agents as local duplicates and silently deletes them on
+	// force-override. The backfill reads each agent's most-recent
+	// agent.register event from the events table (the authoritative source
+	// of origin_daemon) and copies the value onto the agents row.
+	//
+	// Rows with no matching agent.register event keep the default empty
+	// string — those are legacy rows from before the events table was
+	// durable. HandleRegister's filter treats empty origin_daemon as
+	// "unknown / assume local" to avoid false negatives on those rows.
+	//
+	// Idempotent: skipped entirely if the agents table doesn't exist (the
+	// v5→V_partial migration tests bring up a minimal schema); skipped if
+	// the column is already present (safe to re-run against a fresh
+	// createTables() schema which already has it).
+	if startVersion < 22 && endVersion >= 22 {
+		hasAgents, err := tableExists(tx, "agents")
+		if err != nil {
+			return fmt.Errorf("migration 21→22: check agents table: %w", err)
+		}
+		if hasAgents {
+			agentCols, err := columnSet(tx, "agents")
+			if err != nil {
+				return fmt.Errorf("migration 21→22: inspect agents: %w", err)
+			}
+			if !agentCols["origin_daemon"] {
+				_, err = tx.Exec(`ALTER TABLE agents ADD COLUMN origin_daemon TEXT NOT NULL DEFAULT ''`)
+				if err != nil {
+					return fmt.Errorf("migration 21→22: add origin_daemon column: %w", err)
+				}
+			}
+			// Backfill: for each agent, find the most-recent agent.register
+			// event and copy its origin_daemon. Uses the events table (not
+			// JSONL) — the table is populated by the same WriteEvent path
+			// that feeds the projector, so every projected agent should have
+			// at least one event. Skipped when the events table is absent
+			// (minimal test schema) — the column default of '' is correct
+			// in that case.
+			hasEvents, err := tableExists(tx, "events")
+			if err != nil {
+				return fmt.Errorf("migration 21→22: check events table: %w", err)
+			}
+			if hasEvents {
+				_, err = tx.Exec(`
+					UPDATE agents
+					SET origin_daemon = COALESCE((
+						SELECT e.origin_daemon
+						FROM events e
+						WHERE e.type = 'agent.register'
+						  AND json_extract(e.event_json, '$.agent_id') = agents.agent_id
+						ORDER BY e.sequence DESC
+						LIMIT 1
+					), '')
+					WHERE origin_daemon = ''
+				`)
+				if err != nil {
+					return fmt.Errorf("migration 21→22: backfill origin_daemon: %w", err)
+				}
+			}
+		}
+	}
+
 	// Update schema version
 	_, err = tx.Exec("UPDATE schema_version SET version = ?", endVersion)
 	if err != nil {
@@ -913,6 +986,55 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 }
 
 // queueColumnSet returns the set of column names currently present on the
+// tableExists reports whether a table of the given name exists. Used by
+// migrations that ALTER or UPDATE a specific table so they stay idempotent
+// when the partial test schemas don't create that table.
+func tableExists(tx *sql.Tx, name string) (bool, error) {
+	var dummy string
+	err := tx.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`,
+		name,
+	).Scan(&dummy)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// columnSet returns the set of column names on a table via PRAGMA table_info.
+// Used by migrations for idempotent ALTER TABLE ADD COLUMN since SQLite does
+// not support IF NOT EXISTS on ADD COLUMN.
+func columnSet(tx *sql.Tx, table string) (map[string]bool, error) {
+	// PRAGMA doesn't support bind parameters; callers pass a trusted
+	// table name (hardcoded at call sites), not user input.
+	//nolint:gosec // trusted table name
+	rows, err := tx.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	cols := map[string]bool{}
+	for rows.Next() {
+		var (
+			cid     int
+			name    string
+			ctype   string
+			notnull int
+			dflt    sql.NullString
+			pk      int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return nil, err
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
+}
+
 // command_queue table. Used by the v18→v19 migration for idempotent ALTER TABLE
 // ADD COLUMN (SQLite does not support IF NOT EXISTS on ADD COLUMN).
 func queueColumnSet(tx *sql.Tx) (map[string]bool, error) {

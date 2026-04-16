@@ -1049,9 +1049,9 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V21_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 21 {
-		t.Errorf("CurrentVersion = %d, want 21", schema.CurrentVersion)
+func TestSchema_V22_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 22 {
+		t.Errorf("CurrentVersion = %d, want 22", schema.CurrentVersion)
 	}
 }
 
@@ -1151,13 +1151,14 @@ func TestSchema_Migration_v20_to_v21_CreatesPermissionNudges(t *testing.T) {
 		t.Errorf("permission_nudges table should exist after v20→v21 migration, got count=%d", count)
 	}
 
-	// Version should now be 21
+	// Version should be at least 21 (migration ran); newer schemas run all
+	// remaining migrations up to CurrentVersion too.
 	var version int
 	err = db.QueryRow("SELECT version FROM schema_version").Scan(&version)
 	if err != nil {
 		t.Fatalf("query schema version: %v", err)
 	}
-	if version != 21 {
-		t.Errorf("schema version = %d after migration, want 21", version)
+	if version < 21 {
+		t.Errorf("schema version = %d after migration, want >= 21", version)
 	}
 }

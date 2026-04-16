@@ -402,9 +402,14 @@ func (p *Projector) applyAgentRegister(ctx context.Context, data json.RawMessage
 		pid = event.ClaudePID
 	}
 
+	// origin_daemon is carried through from the event so HandleRegister's
+	// role+module conflict check can distinguish local agents from synced
+	// ones (thrum-mm3l). The event's origin_daemon is set by State.WriteEvent
+	// on the emitting daemon (to its own daemon ID) and preserved verbatim
+	// when events propagate across daemons.
 	_, err := p.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT OR REPLACE INTO agents (agent_id, kind, role, module, display, hostname, agent_pid, registered_at, origin_daemon)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		event.AgentID,
 		event.Kind,
@@ -414,6 +419,7 @@ func (p *Projector) applyAgentRegister(ctx context.Context, data json.RawMessage
 		sqlNullString(event.Hostname),
 		pid,
 		event.Timestamp,
+		event.OriginDaemon,
 	)
 	if err != nil {
 		return fmt.Errorf("insert agent: %w", err)
