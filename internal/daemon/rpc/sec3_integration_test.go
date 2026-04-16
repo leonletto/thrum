@@ -43,7 +43,24 @@ type sec3TestHarness struct {
 	state      *state.State
 	agentID    string
 	sessionID  string
+	server     *daemon.Server
+	msgHandler *MessageHandler
 	stopFn     func()
+}
+
+// registerDelete registers the message.delete handler on the harness server.
+// Separated from the constructor so sec.3 tests (which only need send/list)
+// don't have to care about delete wiring.
+func (h *sec3TestHarness) registerDelete(t *testing.T) {
+	t.Helper()
+	h.server.RegisterHandler("message.delete", h.msgHandler.HandleDelete)
+}
+
+// setResolver rotates the server's identity resolver. Used by tests that
+// need to simulate two different callers against the same state DB (e.g.
+// "agent B attempts to delete agent A's message").
+func (h *sec3TestHarness) setResolver(r peercred.Resolver) {
+	h.server.SetIdentityResolver(r)
 }
 
 func newSec3Harness(t *testing.T, resolver peercred.Resolver, registerAgent bool) *sec3TestHarness {
@@ -102,6 +119,8 @@ func newSec3Harness(t *testing.T, resolver peercred.Resolver, registerAgent bool
 		state:      st,
 		agentID:    agentID,
 		sessionID:  sessionID,
+		server:     server,
+		msgHandler: msgHandler,
 		stopFn:     stopFn,
 	}
 }

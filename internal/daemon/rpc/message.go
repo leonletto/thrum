@@ -184,8 +184,9 @@ type OutboxResponse struct {
 
 // DeleteMessageRequest represents the request for message.delete RPC.
 type DeleteMessageRequest struct {
-	MessageID string `json:"message_id"`
-	Reason    string `json:"reason,omitempty"`
+	MessageID     string `json:"message_id"`
+	Reason        string `json:"reason,omitempty"`
+	CallerAgentID string `json:"caller_agent_id,omitempty"` // CLI-resolved agent identity; verified against peercred in sec.3
 }
 
 // DeleteMessageResponse represents the response from message.delete RPC.
@@ -1257,6 +1258,18 @@ func (h *MessageHandler) HandleOutbox(ctx context.Context, params json.RawMessag
 }
 
 // HandleDelete handles the message.delete RPC method.
+//
+// Author enforcement (sec.4): the caller's peercred-resolved identity MUST
+// match the message author. The check mirrors HandleEdit and is the last
+// layer in the trust stack:
+//   - sec.3 dispatcher rejects anonymous callers before we get here
+//   - sec.3 resolveAgentAndSession rejects forged caller_agent_id claims
+//   - sec.4 (this function) verifies the resolved caller actually authored
+//     the message being deleted
+//
+// Before sec.4 this function performed NO identity check at all — any
+// caller could soft-delete any message by ID. See the 2026-04-14 codex
+// review item #2.
 func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessage) (any, error) {
 	var req DeleteMessageRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -1268,11 +1281,21 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 		return nil, fmt.Errorf("message_id is required")
 	}
 
-	// Verify message exists and is not already deleted
+	// Resolve caller identity (this is where sec.3's peercred verification
+	// takes effect — forged caller_agent_id is rejected in the resolver).
+	agentID, _, err := h.resolveAgentAndSession(ctx, req.CallerAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent and session: %w", err)
+	}
+
+	// Verify message exists, is not already deleted, and author matches.
+	// The query mirrors HandleEdit's pattern at line ~1342 — one read that
+	// pulls everything the guard needs.
 	h.state.RLock()
+	var authorAgentID string
 	var deleted int
-	query := `SELECT deleted FROM messages WHERE message_id = ?`
-	err := h.state.DB().QueryRowContext(ctx, query, req.MessageID).Scan(&deleted)
+	query := `SELECT agent_id, deleted FROM messages WHERE message_id = ?`
+	err = h.state.DB().QueryRowContext(ctx, query, req.MessageID).Scan(&authorAgentID, &deleted)
 	h.state.RUnlock()
 
 	if err == sql.ErrNoRows {
@@ -1284,6 +1307,12 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 
 	if deleted == 1 {
 		return nil, fmt.Errorf("message already deleted: %s", req.MessageID)
+	}
+
+	// Author guard — mirrors HandleEdit's phrasing so error messages are
+	// consistent across the two write paths.
+	if authorAgentID != agentID {
+		return nil, fmt.Errorf("only message author can delete (author: %s, current: %s)", authorAgentID, agentID)
 	}
 
 	// Prepare timestamp

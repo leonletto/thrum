@@ -997,8 +997,9 @@ func TestMessageDelete(t *testing.T) {
 
 	t.Run("delete existing message", func(t *testing.T) {
 		req := DeleteMessageRequest{
-			MessageID: messageID,
-			Reason:    "test delete",
+			MessageID:     messageID,
+			Reason:        "test delete",
+			CallerAgentID: agentID, // sec.4: author required
 		}
 		params, _ := json.Marshal(req)
 
@@ -1040,7 +1041,7 @@ func TestMessageDelete(t *testing.T) {
 	})
 
 	t.Run("delete already deleted message", func(t *testing.T) {
-		req := DeleteMessageRequest{MessageID: messageID}
+		req := DeleteMessageRequest{MessageID: messageID, CallerAgentID: agentID}
 		params, _ := json.Marshal(req)
 
 		_, err := handler.HandleDelete(context.Background(), params)
@@ -1053,7 +1054,7 @@ func TestMessageDelete(t *testing.T) {
 	})
 
 	t.Run("delete non-existent message", func(t *testing.T) {
-		req := DeleteMessageRequest{MessageID: "msg_NONEXISTENT"}
+		req := DeleteMessageRequest{MessageID: "msg_NONEXISTENT", CallerAgentID: agentID}
 		params, _ := json.Marshal(req)
 
 		_, err := handler.HandleDelete(context.Background(), params)
@@ -1079,7 +1080,7 @@ func TestMessageDelete(t *testing.T) {
 		}
 		msgID := sendResponse.MessageID
 
-		req := DeleteMessageRequest{MessageID: msgID}
+		req := DeleteMessageRequest{MessageID: msgID, CallerAgentID: agentID}
 		params, _ := json.Marshal(req)
 
 		resp, err := handler.HandleDelete(context.Background(), params)
@@ -1325,7 +1326,7 @@ func TestMessageEdit(t *testing.T) {
 		}
 		msgID := sendResponse.MessageID
 
-		deleteReq := DeleteMessageRequest{MessageID: msgID}
+		deleteReq := DeleteMessageRequest{MessageID: msgID, CallerAgentID: agentID}
 		deleteParams, _ := json.Marshal(deleteReq)
 		_, err = handler.HandleDelete(context.Background(), deleteParams)
 		if err != nil {
