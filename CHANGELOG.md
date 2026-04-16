@@ -52,6 +52,40 @@ and this project adheres to
   `@supervisor_<project>` pseudo-agent. Falls back to `filepath.Base` of
   the repo path.
 
+### Security
+
+- **WebSocket origin allowlist (sec.1)** — `CheckOrigin` now restricts browser
+  WebSocket connections to `http://{localhost,127.0.0.1}:{daemon_port}` and
+  `ws://` equivalents. Foreign origins receive HTTP 403 at the handshake.
+  Previously returned `true` unconditionally, allowing any website to connect
+  to the local daemon.
+- **Kernel-verified caller identity (sec.2 + sec.3)** — unix-socket
+  connections are now identified via `SO_PEERCRED` (Linux) / `LOCAL_PEERPID`
+  (macOS) peer credentials, replacing the client-asserted `CallerAgentID`
+  trust model. The connecting process's PID → CWD → git root → registered
+  agent worktree match is resolved server-side. Forged `caller_agent_id`
+  claims are rejected with a clear "identity mismatch" error. Uses
+  `tailscale/peercred` (already an indirect dependency) and `gopsutil/v3`
+  for cross-platform PID → CWD resolution.
+- **Anonymous caller read-only allowlist (sec.3)** — callers without a
+  resolved identity (CLI invoked outside any registered worktree) may only
+  invoke read-only RPCs (30 methods: team.list, agent.list, message.list,
+  health, session.list, etc.). Mutating RPCs are rejected at the dispatcher
+  before the handler runs. Preserves the `cd ~ && thrum team` workflow.
+- **Author-only message deletion (sec.4)** — `message.delete` now resolves
+  caller identity and verifies the caller authored the target message,
+  mirroring the existing `message.edit` author check. Previously, any caller
+  could soft-delete any message by ID.
+- **Bulk hard-delete identity enforcement (sec.8)** — `message.deleteByAgent`
+  now requires caller == target agent (agents can only bulk-delete their own
+  messages). `message.deleteByScope` is restricted to daemon-internal callers
+  only. Both operations were previously callable by any local process without
+  identity verification, enabling cascading hard-deletes across 5+ FK tables.
+- **Bulk hard-delete removed from WebSocket transport (sec.8)** —
+  `message.deleteByAgent` and `message.deleteByScope` are no longer registered
+  on the WebSocket handler registry. A source-scan structural guard test
+  prevents re-registration.
+
 ### Fixed
 
 - **`SendSupervisorMessage` @-prefix normalisation** — supervisor nudges no
@@ -65,18 +99,30 @@ and this project adheres to
   recipient` at validation time. The validator falls through to a
   single-file identity lookup when the agents-table query returns empty,
   accepting names that have `Reserved=true` in their identity file.
+- **Quickstart runtime field backfill (thrum-yl3k)** — new quickstart runs
+  now populate the `runtime` field from `preferred_runtime` at identity-save
+  time. A one-shot self-heal at daemon boot scans all identity files and
+  backfills `runtime` from `preferred_runtime` where missing. Eliminates the
+  need for manual re-registration of pre-runtime-tracking agents.
+- **Permission reminder replies now resolve (thrum-zaxt)** — replying to
+  reminder #N's message_id (rather than the original firstDetect message_id)
+  now correctly resolves and deletes the pending nudge row via a thread_id
+  fallback lookup in `TryResolve`. Previously, only replies to the original
+  firstDetect message worked; replies to subsequent reminders were silently
+  ignored.
+- **Permission recovery after queued command (thrum-4ten)** — `HandleCheckPane`
+  now runs `OnRecovery` unconditionally when the pane is not in a permission
+  state, removing the `paneState == "idle"` guard that caused stale
+  `permission_nudges` rows to persist after a supervisor answered via
+  `thrum tmux send <session> Escape`. The guard excluded the
+  `command_completed` and `working_but_idle` branches from cleanup.
 
 ### Known issues
 
-- **Pre-existing agent worktrees need a re-register** — agents quickstarted
-  before the runtime-tracking field was added carry `runtime: null` in
-  their identity files, and the new server-side detection path requires a
-  non-empty runtime to pick the per-runtime pattern set. Operators
-  upgrading to this release with long-lived agent worktrees should
-  re-register with `thrum quickstart --name <agent> --role <role>
-  --runtime <runtime>` once per affected agent — this rewrites the
-  identity file with the runtime field populated. Fix tracked in
-  `thrum-yl3k` (backfill from `preferred_runtime` at daemon boot).
+- **Pre-existing agent worktrees** — agents quickstarted before the
+  runtime-tracking field was added previously required manual re-registration.
+  This is now auto-healed at daemon boot (see "Quickstart runtime field
+  backfill" above).
 
 ## [0.8.2] - 2026-04-13
 
