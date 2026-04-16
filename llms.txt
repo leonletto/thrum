@@ -446,6 +446,12 @@ All commands accept these flags:
   thrum daemon restart
     Stop and restart daemon.
 
+  Daemon not responding / hanging?
+    Run `thrum daemon restart`. This resolves most stale-daemon issues
+    including unresponsive Unix socket, stuck sync loop, or stale binary
+    from a recent reinstall. Check `thrum daemon logs` afterward if the
+    restart itself fails.
+
   thrum daemon logs [--follow|-f] [--lines|-n N] [--since DURATION|DATE]  # v0.8.0
     View the daemon log file (.thrum/var/daemon.log). Default: last 50 lines.
     --follow streams new lines; --lines N shows N lines (0 = all);

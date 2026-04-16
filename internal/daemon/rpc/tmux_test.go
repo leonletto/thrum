@@ -483,6 +483,79 @@ func TestHandleCheckPane_NoPermissionWired_PermissionPathIsNoOp(t *testing.T) {
 	}
 }
 
+// TestHandleCheckPane_CommandCompletedAlsoRunsOnRecovery verifies that
+// when an active queue command causes paneState to flip to
+// "command_completed", OnRecovery still fires and cleans up any
+// pending nudge row for the session (thrum-4ten regression guard).
+func TestHandleCheckPane_CommandCompletedAlsoRunsOnRecovery(t *testing.T) {
+	handler, p := newPermissionTestHandler(t, "cursor-test")
+	ctx := context.Background()
+
+	// Seed a pending nudge row (simulates a prior permission prompt that
+	// the agent has already dismissed on its own).
+	now := time.Now().UTC()
+	row := &permission.NudgeRow{
+		MessageID:     "msg_recovery_test",
+		Session:       "cursor-test",
+		TmuxTarget:    "cursor-test:0.0",
+		AgentName:     "researcher_cursor-test",
+		PatternKey:    "cursor.not_in_allowlist",
+		ApproveKey:    "y",
+		DenyKey:       "Escape",
+		FirstDetected: now,
+		LastNudgeAt:   now,
+		NudgeCount:    1,
+		LastPaneHash:  sha256.Sum256([]byte("stale")),
+		ExpiresAt:     now.Add(8 * time.Hour),
+	}
+	if err := p.Store().InsertPendingNudge(ctx, row); err != nil {
+		t.Fatalf("seed nudge row: %v", err)
+	}
+
+	// Seed an active queue command for this session (simulates the
+	// Escape keystroke sent via "thrum tmux send cursor-test Escape").
+	// SetActive places the command in the active slot so Active()
+	// returns it and HandleCheckPane's queue branch fires.
+	queue := handler.getOrCreateQueue("cursor-test")
+	activeCmd := &QueuedCommand{
+		ID:          "cmd_test_escape",
+		Text:        "Escape",
+		State:       StateSent,
+		SubmittedAt: now,
+		SentAt:      now,
+	}
+	queue.SetActive(activeCmd)
+
+	// Fire a check-pane with an idle reason — the queue branch will
+	// flip paneState to "command_completed". OnRecovery must STILL
+	// fire and delete the nudge row.
+	req := CheckPaneRequest{
+		Session: "cursor-test",
+		Reason:  "",
+		Content: "",
+	}
+	params, _ := json.Marshal(req)
+	resp, err := handler.HandleCheckPane(ctx, params)
+	if err != nil {
+		t.Fatalf("HandleCheckPane: %v", err)
+	}
+	checkResp := resp.(*CheckPaneResponse)
+
+	// Queue branch must have fired (paneState should be command_completed).
+	if checkResp.State != "command_completed" {
+		t.Errorf("State = %q, want command_completed", checkResp.State)
+	}
+
+	// Nudge row must be gone (OnRecovery fired despite non-idle paneState).
+	gone, err := p.Store().LookupPendingNudgeBySession(ctx, "cursor-test")
+	if err != nil {
+		t.Fatalf("LookupPendingNudgeBySession: %v", err)
+	}
+	if gone != nil {
+		t.Errorf("expected nudge row to be deleted by OnRecovery after command_completed, but row still exists: %+v", gone)
+	}
+}
+
 // TestHandleCheckPane_DetectionFromContent verifies that when the CLI
 // does not pre-compute a reason (the production path since the
 // CLI→server detection handoff), HandleCheckPane resolves the agent's

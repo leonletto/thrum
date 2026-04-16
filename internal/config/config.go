@@ -346,6 +346,13 @@ func SaveIdentityFile(thrumDir string, identity *IdentityFile) error {
 	if identity.Version < 5 {
 		identity.Version = 5
 	}
+	// Backfill: if runtime is empty but preferred_runtime is set, copy it over.
+	// Agents created before the runtime field existed store the user's intent
+	// in preferred_runtime only; the daemon's permission-prompt detection reads
+	// runtime, so it must be populated for detection to work.
+	if identity.Runtime == "" && identity.PreferredRuntime != "" {
+		identity.Runtime = identity.PreferredRuntime
+	}
 	identity.UpdatedAt = time.Now().UTC()
 	data, err := json.MarshalIndent(identity, "", "  ")
 	if err != nil {
@@ -357,4 +364,36 @@ func SaveIdentityFile(thrumDir string, identity *IdentityFile) error {
 	}
 
 	return nil
+}
+
+// BackfillIdentityRuntime scans every identity file in thrumDir and copies
+// preferred_runtime → runtime for any file where runtime is empty.
+// Call this at daemon boot so legacy identity files (written before the
+// runtime field was added) receive the field before the first check-pane
+// fires. Errors are logged but never fatal; missing or unreadable files
+// are silently skipped.
+func BackfillIdentityRuntime(thrumDir string) {
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	entries, err := os.ReadDir(identitiesDir)
+	if err != nil {
+		return // directory doesn't exist yet — nothing to backfill
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(identitiesDir, entry.Name())
+		data, err := os.ReadFile(path) // #nosec G304 -- path is .thrum/identities/<name>.json, an internal identity file
+		if err != nil {
+			continue
+		}
+		var idFile IdentityFile
+		if err := json.Unmarshal(data, &idFile); err != nil {
+			continue
+		}
+		if idFile.Runtime == "" && idFile.PreferredRuntime != "" {
+			// SaveIdentityFile will apply the backfill and persist.
+			_ = SaveIdentityFile(thrumDir, &idFile)
+		}
+	}
 }

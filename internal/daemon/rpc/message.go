@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/groups"
@@ -183,8 +184,9 @@ type OutboxResponse struct {
 
 // DeleteMessageRequest represents the request for message.delete RPC.
 type DeleteMessageRequest struct {
-	MessageID string `json:"message_id"`
-	Reason    string `json:"reason,omitempty"`
+	MessageID     string `json:"message_id"`
+	Reason        string `json:"reason,omitempty"`
+	CallerAgentID string `json:"caller_agent_id,omitempty"` // CLI-resolved agent identity; verified against peercred in sec.3
 }
 
 // DeleteMessageResponse represents the response from message.delete RPC.
@@ -319,7 +321,7 @@ func (h *MessageHandler) HandleSend(ctx context.Context, params json.RawMessage)
 	messageID := identity.GenerateMessageID()
 
 	// Resolve current agent and session
-	callerID, sessionID, err := h.resolveAgentAndSession(req.CallerAgentID)
+	callerID, sessionID, err := h.resolveAgentAndSession(ctx, req.CallerAgentID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent and session: %w", err)
 	}
@@ -776,7 +778,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	// even when the caller has no active session (e.g., thrum prime on startup).
 	var currentAgentID string
 	if req.ExcludeSelf || req.Unread || req.UnreadForAgent != "" {
-		currentAgentID = h.resolveAgentOnly(req.CallerAgentID)
+		currentAgentID = h.resolveAgentOnly(ctx, req.CallerAgentID)
 	}
 
 	// Determine which identity to use for the is_read correlated subquery.
@@ -871,7 +873,7 @@ func (h *MessageHandler) HandleList(ctx context.Context, params json.RawMessage)
 	// Unread filter: explicit UnreadForAgent takes priority, falls back to config when Unread=true
 	unreadAgentID := req.UnreadForAgent
 	if unreadAgentID == "" && req.Unread {
-		agentID, _, resolveErr := h.resolveAgentAndSession(req.CallerAgentID)
+		agentID, _, resolveErr := h.resolveAgentAndSession(ctx, req.CallerAgentID)
 		if resolveErr == nil {
 			unreadAgentID = agentID
 		}
@@ -1104,7 +1106,7 @@ func (h *MessageHandler) HandleOutbox(ctx context.Context, params json.RawMessag
 		page = 1
 	}
 
-	authorID := h.resolveAgentOnly(req.CallerAgentID)
+	authorID := h.resolveAgentOnly(ctx, req.CallerAgentID)
 	if authorID == "" {
 		return nil, fmt.Errorf("caller_agent_id is required")
 	}
@@ -1256,6 +1258,18 @@ func (h *MessageHandler) HandleOutbox(ctx context.Context, params json.RawMessag
 }
 
 // HandleDelete handles the message.delete RPC method.
+//
+// Author enforcement (sec.4): the caller's peercred-resolved identity MUST
+// match the message author. The check mirrors HandleEdit and is the last
+// layer in the trust stack:
+//   - sec.3 dispatcher rejects anonymous callers before we get here
+//   - sec.3 resolveAgentAndSession rejects forged caller_agent_id claims
+//   - sec.4 (this function) verifies the resolved caller actually authored
+//     the message being deleted
+//
+// Before sec.4 this function performed NO identity check at all — any
+// caller could soft-delete any message by ID. See the 2026-04-14 codex
+// review item #2.
 func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessage) (any, error) {
 	var req DeleteMessageRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -1267,11 +1281,21 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 		return nil, fmt.Errorf("message_id is required")
 	}
 
-	// Verify message exists and is not already deleted
+	// Resolve caller identity (this is where sec.3's peercred verification
+	// takes effect — forged caller_agent_id is rejected in the resolver).
+	agentID, _, err := h.resolveAgentAndSession(ctx, req.CallerAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent and session: %w", err)
+	}
+
+	// Verify message exists, is not already deleted, and author matches.
+	// The query mirrors HandleEdit's pattern at line ~1342 — one read that
+	// pulls everything the guard needs.
 	h.state.RLock()
+	var authorAgentID string
 	var deleted int
-	query := `SELECT deleted FROM messages WHERE message_id = ?`
-	err := h.state.DB().QueryRowContext(ctx, query, req.MessageID).Scan(&deleted)
+	query := `SELECT agent_id, deleted FROM messages WHERE message_id = ?`
+	err = h.state.DB().QueryRowContext(ctx, query, req.MessageID).Scan(&authorAgentID, &deleted)
 	h.state.RUnlock()
 
 	if err == sql.ErrNoRows {
@@ -1283,6 +1307,12 @@ func (h *MessageHandler) HandleDelete(ctx context.Context, params json.RawMessag
 
 	if deleted == 1 {
 		return nil, fmt.Errorf("message already deleted: %s", req.MessageID)
+	}
+
+	// Author guard — mirrors HandleEdit's phrasing so error messages are
+	// consistent across the two write paths.
+	if authorAgentID != agentID {
+		return nil, fmt.Errorf("only message author can delete (author: %s, current: %s)", authorAgentID, agentID)
 	}
 
 	// Prepare timestamp
@@ -1328,7 +1358,7 @@ func (h *MessageHandler) HandleEdit(ctx context.Context, params json.RawMessage)
 	}
 
 	// Get current agent and session
-	agentID, sessionID, err := h.resolveAgentAndSession(req.CallerAgentID)
+	agentID, sessionID, err := h.resolveAgentAndSession(ctx, req.CallerAgentID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent and session: %w", err)
 	}
@@ -1853,10 +1883,44 @@ func (h *MessageHandler) loadRecipientsForMessages(ctx context.Context, messageI
 }
 
 // resolveAgentAndSession returns the current agent ID and session ID.
-func (h *MessageHandler) resolveAgentAndSession(callerAgentID string) (agentID string, sessionID string, err error) {
-	if callerAgentID != "" {
+// ResolveAgentAndSession resolves the caller's agent and active session.
+//
+// Identity sources, in priority order:
+//  1. peercred.FromContext(ctx) — kernel-verified identity injected by the
+//     unix-socket accept loop. This is the trusted source of truth.
+//  2. callerAgentID (legacy client-asserted path) — used only when peercred
+//     never ran (tests, early boot) or on non-unix transports.
+//
+// Forgery rule: when peercred HAS resolved a trusted identity AND the caller
+// also asserts a mismatched callerAgentID, return an error. Silent acceptance
+// would defeat the entire purpose of kernel-verified identity.
+//
+// Anonymous rule: when peercred ran and returned anonymous, AND this function
+// is called (i.e. a mutating handler), return an error. Mutating handlers
+// must never be called by anonymous callers because the dispatcher would
+// have rejected them via the read-only allowlist first — if we reach this
+// point with an anonymous ctx, something is wrong.
+func (h *MessageHandler) resolveAgentAndSession(ctx context.Context, callerAgentID string) (agentID string, sessionID string, err error) {
+	resolved, peercredRan := peercred.FromContext(ctx)
+	switch {
+	case peercredRan && resolved != nil:
+		// Trusted identity from kernel peercred. Reject mismatched claim.
+		if callerAgentID != "" && callerAgentID != resolved.AgentID {
+			return "", "", fmt.Errorf("caller identity mismatch: claimed %q but unix-socket peer credentials resolve to %q", callerAgentID, resolved.AgentID)
+		}
+		agentID = resolved.AgentID
+	case peercredRan && resolved == nil:
+		// Anonymous caller reached a mutating handler. The dispatcher should
+		// have rejected this request at the read-only allowlist; reaching
+		// here is a policy bug worth surfacing clearly.
+		return "", "", fmt.Errorf("anonymous caller cannot perform mutating RPC: cd into a registered agent worktree and retry")
+	case callerAgentID != "":
+		// Legacy path: peercred never ran (tests, non-unix transport). Trust
+		// the claim. This preserves existing test harness behavior and does
+		// NOT weaken security because the only way ctx lacks peercred is
+		// via a non-unix-socket code path or a test that explicitly opted out.
 		agentID = callerAgentID
-	} else {
+	default:
 		// Fallback: load identity from daemon's config (single-worktree backward compat)
 		log.Printf("WARNING: CallerAgentID not provided in message RPC, falling back to daemon repo path: %s (CLI should resolve identity)", h.state.RepoPath())
 		cfg, loadErr := config.LoadWithPath(h.state.RepoPath(), "", "")
@@ -1875,9 +1939,7 @@ func (h *MessageHandler) resolveAgentAndSession(callerAgentID string) (agentID s
 	          ORDER BY started_at DESC
 	          LIMIT 1`
 
-	// Use context.Background() since this is called from methods that already have ctx
-	// but this function doesn't have ctx parameter. We'll need to add ctx parameter.
-	err = h.state.DB().QueryRowContext(context.Background(), query, agentID).Scan(&sessionID)
+	err = h.state.DB().QueryRowContext(ctx, query, agentID).Scan(&sessionID)
 	if err == sql.ErrNoRows {
 		return "", "", fmt.Errorf("no active session found for agent %s (you must start a session first)", agentID)
 	}
@@ -1888,19 +1950,38 @@ func (h *MessageHandler) resolveAgentAndSession(callerAgentID string) (agentID s
 	return agentID, sessionID, nil
 }
 
-// resolveAgentOnly resolves the caller's agent ID without requiring an active session.
-// Used by HandleList for unread count and is_read computation where only the agent
-// identity matters, not the session.
-func (h *MessageHandler) resolveAgentOnly(callerAgentID string) string {
-	if callerAgentID != "" {
-		return callerAgentID
-	}
-	// Fallback: load identity from daemon's config
-	cfg, err := config.LoadWithPath(h.state.RepoPath(), "", "")
-	if err != nil {
+// resolveAgentOnly resolves the caller's agent ID without requiring an active
+// session.  Used by HandleList for unread count and is_read computation where
+// only the agent identity matters, not the session.
+//
+// Unlike resolveAgentAndSession this helper is called from read-only handlers
+// and returns an empty string on anonymous/unknown identity (caller treats
+// empty as "no filter" and returns unfiltered results).
+func (h *MessageHandler) resolveAgentOnly(ctx context.Context, callerAgentID string) string {
+	resolved, peercredRan := peercred.FromContext(ctx)
+	switch {
+	case peercredRan && resolved != nil:
+		// Trusted identity from peercred. Reject mismatched claim even on
+		// read-only paths — the alternative is allowing a forged claim to
+		// distort the filter and silently return someone else's data.
+		if callerAgentID != "" && callerAgentID != resolved.AgentID {
+			return ""
+		}
+		return resolved.AgentID
+	case peercredRan && resolved == nil:
+		// Anonymous caller on a read-only handler: no identity, no filter.
 		return ""
+	case callerAgentID != "":
+		// Legacy path: trust the claim.
+		return callerAgentID
+	default:
+		// Fallback: load identity from daemon's config
+		cfg, err := config.LoadWithPath(h.state.RepoPath(), "", "")
+		if err != nil {
+			return ""
+		}
+		return identity.GenerateAgentID(h.state.RepoID(), cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name)
 	}
-	return identity.GenerateAgentID(h.state.RepoID(), cfg.Agent.Role, cfg.Agent.Module, cfg.Agent.Name)
 }
 
 // validateImpersonation validates that the caller is authorized to impersonate the target identity.
@@ -1948,7 +2029,7 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 	}
 
 	// Get current agent and session
-	agentID, sessionID, err := h.resolveAgentAndSession(req.CallerAgentID)
+	agentID, sessionID, err := h.resolveAgentAndSession(ctx, req.CallerAgentID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent and session: %w", err)
 	}
@@ -2068,9 +2149,15 @@ func (h *MessageHandler) HandleMarkRead(ctx context.Context, params json.RawMess
 }
 
 // emitThreadUpdated emits a thread.updated event for real-time WebSocket notifications.
-func (h *MessageHandler) emitThreadUpdated(_ context.Context, threadID string) error {
+//
+// The ctx passed in MUST carry peercred.FromContext (when running over unix
+// socket) so that the helper resolves to the calling agent's identity for
+// unread-count accounting. When called outside a request context (e.g. from
+// background reconcile jobs), ctx will lack peercred info and resolveAgentAndSession
+// falls back to the config-based path — same as pre-sec.3 behavior.
+func (h *MessageHandler) emitThreadUpdated(ctx context.Context, threadID string) error {
 	// Get current agent and session for unread count
-	agentID, _, err := h.resolveAgentAndSession("")
+	agentID, _, err := h.resolveAgentAndSession(ctx, "")
 	if err != nil {
 		// If we can't resolve agent/session, just skip emitting (best-effort)
 		return nil
@@ -2378,7 +2465,26 @@ type DeleteByScopeResponse struct {
 
 // HandleDeleteByScope handles the message.deleteByScope RPC method.
 // Hard deletes all messages that have a matching scope (type+value).
+//
+// Sec.8: This is a destructive bulk operation (cascading hard-DELETE across
+// 5+ FK tables). It is restricted to daemon-internal callers only — when
+// the call arrives over a unix-socket connection (where peercred identity
+// resolution has been injected into ctx by sec.3's dispatcher), it is
+// rejected unconditionally. This means no external CLI user or agent can
+// invoke deleteByScope from outside the daemon process.
+//
+// The daemon itself calls HandleDeleteByScope via direct handler invocation
+// from internal cleanup jobs (e.g. purge, scope cleanup). Those paths
+// construct their own context without peercred injection, so the check
+// allows them through.
 func (h *MessageHandler) HandleDeleteByScope(ctx context.Context, params json.RawMessage) (any, error) {
+	// sec.8: restrict to daemon-internal callers. Any ctx that carries
+	// peercred identity (resolved or anonymous) came from the unix-socket
+	// accept loop — reject it.
+	if _, peercredRan := peercred.FromContext(ctx); peercredRan {
+		return nil, fmt.Errorf("message.deleteByScope is restricted to daemon-internal callers; external clients cannot invoke bulk hard-deletes")
+	}
+
 	var req DeleteByScopeRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -2445,7 +2551,8 @@ func (h *MessageHandler) HandleDeleteByScope(ctx context.Context, params json.Ra
 
 // DeleteByAgentRequest represents the request for message.deleteByAgent RPC.
 type DeleteByAgentRequest struct {
-	AgentID string `json:"agent_id"`
+	AgentID       string `json:"agent_id"`
+	CallerAgentID string `json:"caller_agent_id,omitempty"` // sec.8: resolved caller must match target
 }
 
 // DeleteByAgentResponse represents the response from message.deleteByAgent RPC.
@@ -2455,6 +2562,11 @@ type DeleteByAgentResponse struct {
 
 // HandleDeleteByAgent handles the message.deleteByAgent RPC method.
 // Hard deletes all messages where agent_id matches the given agent.
+//
+// Sec.8: Agents can only bulk-delete their OWN messages. The resolved
+// caller identity (via sec.3 peercred or legacy CallerAgentID) must match
+// the target agent_id. This prevents one agent from hard-deleting another
+// agent's entire message history.
 func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.RawMessage) (any, error) {
 	var req DeleteByAgentRequest
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -2463,6 +2575,15 @@ func (h *MessageHandler) HandleDeleteByAgent(ctx context.Context, params json.Ra
 
 	if req.AgentID == "" {
 		return nil, fmt.Errorf("agent_id is required")
+	}
+
+	// sec.8: resolve caller and enforce self-only deletion.
+	callerID := h.resolveAgentOnly(ctx, req.CallerAgentID)
+	if callerID == "" {
+		return nil, fmt.Errorf("cannot resolve caller identity for deleteByAgent")
+	}
+	if callerID != req.AgentID {
+		return nil, fmt.Errorf("only the target agent can bulk-delete their own messages (caller: %s, target: %s)", callerID, req.AgentID)
 	}
 
 	h.state.Lock()

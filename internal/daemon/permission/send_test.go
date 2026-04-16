@@ -34,7 +34,7 @@ func TestSendSupervisorMessage_WritesToMessagesTable(t *testing.T) {
 	p := newPermissionWithRealState(t)
 	ctx := context.Background()
 
-	msgID, err := p.SendSupervisorMessage(ctx, "@coordinator_main", "# Test nudge\n\nRun: `y`")
+	msgID, err := p.SendSupervisorMessage(ctx, "@coordinator_main", "# Test nudge\n\nRun: `y`", "")
 	if err != nil {
 		t.Fatalf("SendSupervisorMessage: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestSendSupervisorMessage_RegistersRefAndRecipient(t *testing.T) {
 	const recipientInput = "@coordinator_main"
 	const recipientBare = "coordinator_main"
 
-	msgID, err := p.SendSupervisorMessage(ctx, recipientInput, "hello")
+	msgID, err := p.SendSupervisorMessage(ctx, recipientInput, "hello", "")
 	if err != nil {
 		t.Fatalf("SendSupervisorMessage: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestSendSupervisorMessage_AcceptsBareAgentID(t *testing.T) {
 	p := newPermissionWithRealState(t)
 	ctx := context.Background()
 
-	msgID, err := p.SendSupervisorMessage(ctx, "coordinator_main", "hello")
+	msgID, err := p.SendSupervisorMessage(ctx, "coordinator_main", "hello", "")
 	if err != nil {
 		t.Fatalf("SendSupervisorMessage: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestSendSupervisorMessage_AcceptsBareAgentID(t *testing.T) {
 
 func TestSendSupervisorMessage_NilStateReturnsError(t *testing.T) {
 	p := New(nil, nil, "supervisor_thrum", "thrum", ".")
-	_, err := p.SendSupervisorMessage(context.Background(), "@foo", "body")
+	_, err := p.SendSupervisorMessage(context.Background(), "@foo", "body", "")
 	if err == nil {
 		t.Fatal("expected error with nil state")
 	}
@@ -146,7 +146,7 @@ func TestSendSupervisorMessage_NilStateReturnsError(t *testing.T) {
 
 func TestSendSupervisorMessage_EmptyRecipientErrors(t *testing.T) {
 	p := newPermissionWithRealState(t)
-	_, err := p.SendSupervisorMessage(context.Background(), "", "body")
+	_, err := p.SendSupervisorMessage(context.Background(), "", "body", "")
 	if err == nil {
 		t.Fatal("expected error with empty recipient")
 	}

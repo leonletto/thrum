@@ -452,3 +452,111 @@ func TestTryResolve_AnchoredRegex(t *testing.T) {
 		t.Skip("tautology")
 	}
 }
+
+// seedReminderMessage inserts a row into the messages table with the
+// given message_id and thread_id, simulating the reminder message that
+// fireReminder would have produced via SendSupervisorMessage(..., threadID).
+// Tests in this package have direct access to p.store.db (unexported)
+// because they live in package permission.
+func seedReminderMessage(t *testing.T, p *Permission, reminderMsgID, threadID string) {
+	t.Helper()
+	_, err := p.store.db.ExecContext(context.Background(), `
+		INSERT INTO messages
+			(message_id, thread_id, agent_id, session_id, created_at, body_format, body_content)
+		VALUES (?, ?, 'supervisor_thrum', 'supervisor', ?, 'markdown', '# Reminder')`,
+		reminderMsgID, threadID, time.Now().UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		t.Fatalf("seed reminder message: %v", err)
+	}
+}
+
+// TestTryResolve_ThreadIDFallback_Approve verifies that a reply aimed
+// at a reminder message_id (not the firstDetect nudge PK) still resolves
+// the nudge via the thread_id fallback path.
+func TestTryResolve_ThreadIDFallback_Approve(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const firstDetectMsgID = "msg_first_detect"
+	const reminderMsgID = "msg_reminder_2"
+
+	// Seed the nudge row — PK is the firstDetect message_id.
+	seedPendingNudge(t, p, firstDetectMsgID, "y", "Escape")
+
+	// Seed a reminder message in the messages table with thread_id
+	// pointing back to the firstDetect message (as fireReminder does).
+	seedReminderMessage(t, p, reminderMsgID, firstDetectMsgID)
+
+	// Reply to the reminder msg_id — NOT the firstDetect msg_id.
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		reminderMsgID)
+
+	calls := sender.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 keystroke dispatch via thread fallback, got %d: %v", len(calls), calls)
+	}
+	if calls[0].key != "y" {
+		t.Errorf("expected approve key 'y', got %q", calls[0].key)
+	}
+
+	// Nudge row must be gone after claim.
+	row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), firstDetectMsgID)
+	if row != nil {
+		t.Error("nudge row should be deleted after thread-fallback approve")
+	}
+}
+
+// TestTryResolve_ThreadIDFallback_Deny verifies the thread_id fallback
+// for the deny path (two-step peek-then-delete) also works when replyTo
+// targets a reminder message rather than the firstDetect nudge root.
+func TestTryResolve_ThreadIDFallback_Deny(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const firstDetectMsgID = "msg_first_detect_deny"
+	const reminderMsgID = "msg_reminder_deny_2"
+
+	seedPendingNudge(t, p, firstDetectMsgID, "y", "Escape")
+	seedReminderMessage(t, p, reminderMsgID, firstDetectMsgID)
+
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "n"}},
+		reminderMsgID)
+
+	calls := sender.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 deny keystroke via thread fallback, got %d: %v", len(calls), calls)
+	}
+	if calls[0].key != "Escape" {
+		t.Errorf("expected deny key 'Escape', got %q", calls[0].key)
+	}
+
+	// Nudge row must be gone.
+	row, _ := p.store.LookupPendingNudgeByMessageID(context.Background(), firstDetectMsgID)
+	if row != nil {
+		t.Error("nudge row should be deleted after thread-fallback deny")
+	}
+}
+
+// TestTryResolve_DirectFallback_Regression ensures that replies to the
+// original firstDetect message_id still work (no regression from the
+// thread_id fallback addition).
+func TestTryResolve_DirectFallback_Regression(t *testing.T) {
+	sender := &recordingSender{}
+	p := newReplyTestPermission(t, sender)
+
+	const firstDetectMsgID = "msg_first_direct"
+	seedPendingNudge(t, p, firstDetectMsgID, "y", "Escape")
+
+	// Reply directly to the firstDetect message_id — original path.
+	p.TryResolve(context.Background(),
+		types.MessageCreateEvent{Body: types.MessageBody{Content: "y"}},
+		firstDetectMsgID)
+
+	calls := sender.snapshot()
+	if len(calls) != 1 || calls[0].key != "y" {
+		t.Errorf("direct reply to firstDetect still expected to dispatch, got %v", calls)
+	}
+}

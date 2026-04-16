@@ -29,6 +29,7 @@ import (
 	agentcontext "github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon"
 	"github.com/leonletto/thrum/internal/daemon/cleanup"
+	"github.com/leonletto/thrum/internal/daemon/identity/peercred"
 	"github.com/leonletto/thrum/internal/daemon/monitor"
 	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/rpc"
@@ -4621,6 +4622,11 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		return fmt.Errorf("failed to create identities directory: %w", err)
 	}
 
+	// Backfill runtime from preferred_runtime for any identity files that
+	// pre-date the runtime field. Idempotent and non-fatal: silently skips
+	// unreadable files, never aborts daemon startup.
+	config.BackfillIdentityRuntime(filepath.Join(absPath, ".thrum"))
+
 	// Self-heal embedded reference files (.thrum/strategies/*.md + .thrum/llms.txt).
 	// Re-running this is idempotent and covers:
 	//   - Repos initialized before this feature landed (backfill on first daemon restart)
@@ -4783,6 +4789,16 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	// Create Unix socket server
 	socketPath := filepath.Join(varDir, "thrum.sock")
 	server := daemon.NewServer(socketPath)
+
+	// Wire the peer-credential identity resolver into the server. The
+	// resolver consults agent_work_contexts to map connecting PIDs → CWD →
+	// registered-agent worktrees, giving the daemon a kernel-verified caller
+	// identity on every unix-socket request. This replaces the old
+	// client-asserted CallerAgentID trust model and is the core of the v0.9.0
+	// security hardening (thrum-u4xv.3).
+	identityLister := daemon.NewDaemonAgentLister(st)
+	identityResolver := peercred.NewResolver(identityLister)
+	server.SetIdentityResolver(identityResolver)
 
 	// Create subscription dispatcher
 	dispatcher := subscriptions.NewDispatcher(st.DB())
@@ -5229,8 +5245,13 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	wsRegistry.Register("message.delete", websocket.Handler(messageHandler.HandleDelete))
 	wsRegistry.Register("message.edit", websocket.Handler(messageHandler.HandleEdit))
 	wsRegistry.Register("message.markRead", websocket.Handler(messageHandler.HandleMarkRead))
-	wsRegistry.Register("message.deleteByAgent", websocket.Handler(messageHandler.HandleDeleteByAgent))
-	wsRegistry.Register("message.deleteByScope", websocket.Handler(messageHandler.HandleDeleteByScope))
+	// SECURITY (sec.8): message.deleteByAgent and message.deleteByScope are
+	// NOT registered on the WS transport. They are admin/system operations
+	// restricted to daemon-internal callers (sec.8). The WS transport has no
+	// peercred injection, so the daemon-internal check would be bypassed —
+	// any localhost browser page could invoke bulk hard-deletes.
+	// See internal/daemon/rpc/monitor_trust_boundary_test.go for the
+	// structural guard pattern that enforces this on the monitor.* handlers.
 	wsRegistry.Register("message.archive", websocket.Handler(messageHandler.HandleArchive))
 	// Subscribe/unsubscribe WS handlers removed — CLI subscribe commands deleted.
 	wsRegistry.Register("user.register", websocket.Handler(userHandler.HandleRegister))

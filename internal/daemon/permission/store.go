@@ -154,6 +154,28 @@ func (s *Store) DeleteAndReturnPendingNudge(ctx context.Context, msgID string) (
 	return scanSingleRow(row)
 }
 
+// LookupThreadIDForMessage returns the thread_id stored on the given
+// message row, or "" if the row does not exist or has no thread_id.
+// Used by TryResolve's fallback path: when a supervisor replies to a
+// reminder message_id (not the firstDetect message_id), this lets us
+// walk back to the thread root — which equals the nudge row's PK.
+func (s *Store) LookupThreadIDForMessage(ctx context.Context, msgID string) (string, error) {
+	var threadID sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT thread_id FROM messages WHERE message_id = ?`, msgID,
+	).Scan(&threadID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("lookup thread_id for message %s: %w", msgID, err)
+	}
+	if !threadID.Valid {
+		return "", nil
+	}
+	return threadID.String, nil
+}
+
 // ReloadOnBoot returns all non-expired rows, used by the scheduler to
 // rehydrate its view after a daemon restart.
 func (s *Store) ReloadOnBoot(ctx context.Context) ([]*NudgeRow, error) {

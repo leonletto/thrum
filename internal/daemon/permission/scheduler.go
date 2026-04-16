@@ -135,7 +135,10 @@ func (p *Permission) firstDetect(
 	body := FormatNudge(row, paneTail, runtime, p.projectName, now)
 	var firstMsgID string
 	for i, to := range supers {
-		msgID, err := p.SendSupervisorMessage(ctx, to, body)
+		// First-detect messages have no thread yet; threadID="" lets
+		// the projector store NULL so the message_id itself becomes
+		// the thread root that fireReminder will reference.
+		msgID, err := p.SendSupervisorMessage(ctx, to, body, "")
 		if err != nil {
 			slog.Error("[permission] send nudge failed", "to", to, "err", err)
 			continue
@@ -182,7 +185,11 @@ func (p *Permission) fireReminder(
 	}
 	body := FormatNudge(row, paneTail, runtime, p.projectName, now)
 	for _, to := range supers {
-		if _, err := p.SendSupervisorMessage(ctx, to, body); err != nil {
+		// Reminder messages carry the firstDetect message_id as their
+		// thread_id so TryResolve can walk messages.thread_id back to
+		// the nudge row when a supervisor replies to a reminder rather
+		// than to the original firstDetect message.
+		if _, err := p.SendSupervisorMessage(ctx, to, body, row.MessageID); err != nil {
 			slog.Error("[permission] reminder send failed", "to", to, "err", err)
 		}
 	}

@@ -611,12 +611,17 @@ func (h *TmuxHandler) HandleCheckPane(ctx context.Context, params json.RawMessag
 		}
 	}
 
-	// Recovery path: the pane is genuinely idle (not in a command
-	// or working_but_idle state). If the permission scheduler has a
-	// pending nudge for this session, the agent has resolved the
-	// prompt on its own — delete the row and clear stuck. Best-effort;
+	// Recovery path: run OnRecovery whenever the pane is NOT in an
+	// active permission-prompt state. This covers idle, command_completed,
+	// command_sent, and working_but_idle — all cases where the agent has
+	// cleared the prompt on its own. The original guard gated this on
+	// paneState=="idle", which skipped cleanup when the command_completed
+	// branch had already flipped paneState (thrum-4ten regression).
+	// Explicitly excluding paneState=="permission" prevents wiping a row
+	// that OnDetection just inserted in this same handler invocation.
+	// OnRecovery is idempotent (no-op when no row exists). Best-effort;
 	// errors are logged but don't fail the RPC.
-	if paneState == "idle" && h.permission != nil {
+	if h.permission != nil && paneState != "permission" {
 		if err := h.permission.OnRecovery(ctx, req.Session, agentName); err != nil {
 			log.Printf("[tmux] check-pane: OnRecovery failed: %v", err)
 		}
