@@ -105,6 +105,15 @@ func TestInit(t *testing.T) {
 	if _, err := os.Stat(messagesDir); os.IsNotExist(err) {
 		t.Error("messages directory was not created in worktree")
 	}
+
+	// Row 2 config invariant: fresh init with no remote leaves LocalOnly=true.
+	cfg, err := config.LoadThrumConfig(thrumDir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.Daemon.LocalOnly {
+		t.Error("row 2: expected config.Daemon.LocalOnly=true after fresh init with no remote")
+	}
 }
 
 func TestInit_AlreadyInitialized(t *testing.T) {
