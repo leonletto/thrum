@@ -65,7 +65,7 @@ type PairingManager struct {
 }
 
 // NewPairingManager creates a new pairing manager.
-// localIdentity provides the full identity metadata sent to the remote peer during pairing.
+// LocalIdentity provides the full identity metadata sent to the remote peer during pairing.
 // The name parameter is the human-readable hostname/machine name for display.
 func NewPairingManager(peers *PeerRegistry, localIdentity identity.Identity, name string) *PairingManager {
 	return &PairingManager{

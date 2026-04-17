@@ -145,7 +145,7 @@ func (m *DaemonSyncManager) AddPeer(hostname string, port int) error {
 }
 
 // JoinPeer sends a pairing request to a remote peer and stores the result.
-// local carries the full identity metadata of this daemon sent to the remote peer.
+// Local carries the full identity metadata of this daemon sent to the remote peer.
 // This is used by the CLI "peer join" command.
 func (m *DaemonSyncManager) JoinPeer(peerAddr, code string, local PairMetadata) (*PeerInfo, error) {
 	result, err := m.client.RequestPairing(peerAddr, code, local)

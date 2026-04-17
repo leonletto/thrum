@@ -201,7 +201,7 @@ type PairResult struct {
 }
 
 // RequestPairing sends a pair.request to a remote peer using the pairing code.
-// local carries the full identity metadata of this daemon sent to the remote.
+// Local carries the full identity metadata of this daemon sent to the remote.
 // The connection uses ?pairing_code= (no token) since the goal is to obtain a token.
 func (c *SyncClient) RequestPairing(peerAddr, code string, local PairMetadata) (*PairResult, error) {
 	ctx := context.Background()

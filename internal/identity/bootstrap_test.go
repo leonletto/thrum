@@ -183,4 +183,3 @@ func TestBootstrap_NoBackupWhenStable(t *testing.T) {
 		t.Fatalf("backup should not be created when daemon_id is stable ULID")
 	}
 }
-

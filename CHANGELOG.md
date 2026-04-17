@@ -11,71 +11,70 @@ and this project adheres to
 ### Added
 
 - **Permission prompt detection and supervisor nudge** — when a tmux-managed
-  agent hits a permission prompt it cannot auto-approve, thrum detects the
-  stuck state and routes a rich actionable notification to configured
-  supervisors. Supervisors reply `y`/`n` from the CLI, web UI, or a Telegram
-  message, and the answer is replayed into the agent's pane as real
-  keystrokes. Works across a synced thrum network — a reply on any repo in
-  the network is dispatched to the daemon that owns the pane. Supports
-  Claude Code, Codex, Cursor, OpenCode, Kiro-CLI, and Auggie (tool-approval
-  pattern). See
+  agent hits a permission prompt it cannot auto-approve, thrum detects the stuck
+  state and routes a rich actionable notification to configured supervisors.
+  Supervisors reply `y`/`n` from the CLI, web UI, or a Telegram message, and the
+  answer is replayed into the agent's pane as real keystrokes. Works across a
+  synced thrum network — a reply on any repo in the network is dispatched to the
+  daemon that owns the pane. Supports Claude Code, Codex, Cursor, OpenCode,
+  Kiro-CLI, and Auggie (tool-approval pattern). See
   `dev-docs/specs/2026-04-14-permission-prompt-detection-design.md`.
-- **`@supervisor_<project>` reserved pseudo-agent** — registered at daemon
-  boot as the canonical author of permission nudges. Visible in
-  `thrum team --system`; hidden from default `thrum team` listings with a
-  new `⊙` reserved glyph in compact output.
+- **`@supervisor_<project>` reserved pseudo-agent** — registered at daemon boot
+  as the canonical author of permission nudges. Visible in
+  `thrum team --system`; hidden from default `thrum team` listings with a new
+  `⊙` reserved glyph in compact output.
 - **`thrum team --system`** flag — surfaces reserved pseudo-agents in team
-  listings, including the permission supervisor and any future
-  daemon-internal agents.
-- **Permission nudge reminder cadence** — exponential backoff at 0 / 5m /
-  15m / 45m / 2h / 4h. After six nudges without a supervisor response, the
-  scheduler marks the agent as `stuck` in its identity file so the UI,
-  `thrum team`, and other consumers can reflect that the agent is blocked.
-- **Restart resilience** — pending nudges persist in a new
-  `permission_nudges` SQLite table and survive `thrum daemon restart`; the
-  daemon logs `permission found N pending nudge(s) still in flight` on
-  startup, and reminders resume at the correct cadence automatically.
+  listings, including the permission supervisor and any future daemon-internal
+  agents.
+- **Permission nudge reminder cadence** — exponential backoff at 0 / 5m / 15m /
+  45m / 2h / 4h. After six nudges without a supervisor response, the scheduler
+  marks the agent as `stuck` in its identity file so the UI, `thrum team`, and
+  other consumers can reflect that the agent is blocked.
+- **Restart resilience** — pending nudges persist in a new `permission_nudges`
+  SQLite table and survive `thrum daemon restart`; the daemon logs
+  `permission found N pending nudge(s) still in flight` on startup, and
+  reminders resume at the correct cadence automatically.
 
 ### Changed
 
-- **`HandleCheckPane` is the single source of truth for runtime resolution**
-  — the CLI `thrum tmux check-pane` no longer computes a reason string
-  locally. It forwards only `(session, content)` and the daemon resolves
-  identity via `findIdentityForSession`, reads runtime from the identity
-  file, and runs `DetectPaneState` itself. Eliminates a class of bugs where
-  the CLI and daemon disagreed on which identity owned a session (the CLI
-  was reading identity from tmux-server cwd, not the agent's worktree).
+- **`HandleCheckPane` is the single source of truth for runtime resolution** —
+  the CLI `thrum tmux check-pane` no longer computes a reason string locally. It
+  forwards only `(session, content)` and the daemon resolves identity via
+  `findIdentityForSession`, reads runtime from the identity file, and runs
+  `DetectPaneState` itself. Eliminates a class of bugs where the CLI and daemon
+  disagreed on which identity owned a session (the CLI was reading identity from
+  tmux-server cwd, not the agent's worktree).
 - **`permission_supervisors` config key** — per-project list of supervisor
   agents to nudge. Defaults to role `coordinator` when unset. See
   `internal/config/daemon.go` `PermissionSupervisors`.
 - **`project_name` config key** — owner identifier for the local
-  `@supervisor_<project>` pseudo-agent. Falls back to `filepath.Base` of
-  the repo path.
+  `@supervisor_<project>` pseudo-agent. Falls back to `filepath.Base` of the
+  repo path.
 
 ### Security
 
 - **WebSocket origin allowlist (sec.1)** — `CheckOrigin` now restricts browser
   WebSocket connections to `http://{localhost,127.0.0.1}:{daemon_port}` and
   `ws://` equivalents. Foreign origins receive HTTP 403 at the handshake.
-  Previously returned `true` unconditionally, allowing any website to connect
-  to the local daemon.
-- **Kernel-verified caller identity (sec.2 + sec.3)** — unix-socket
-  connections are now identified via `SO_PEERCRED` (Linux) / `LOCAL_PEERPID`
-  (macOS) peer credentials, replacing the client-asserted `CallerAgentID`
-  trust model. The connecting process's PID → CWD → git root → registered
-  agent worktree match is resolved server-side. Forged `caller_agent_id`
-  claims are rejected with a clear "identity mismatch" error. Uses
-  `tailscale/peercred` (already an indirect dependency) and `gopsutil/v3`
-  for cross-platform PID → CWD resolution.
-- **Anonymous caller read-only allowlist (sec.3)** — callers without a
-  resolved identity (CLI invoked outside any registered worktree) may only
-  invoke read-only RPCs (30 methods: team.list, agent.list, message.list,
-  health, session.list, etc.). Mutating RPCs are rejected at the dispatcher
-  before the handler runs. Preserves the `cd ~ && thrum team` workflow.
+  Previously returned `true` unconditionally, allowing any website to connect to
+  the local daemon.
+- **Kernel-verified caller identity (sec.2 + sec.3)** — unix-socket connections
+  are now identified via `SO_PEERCRED` (Linux) / `LOCAL_PEERPID` (macOS) peer
+  credentials, replacing the client-asserted `CallerAgentID` trust model. The
+  connecting process's PID → CWD → git root → registered agent worktree match is
+  resolved server-side. Forged `caller_agent_id` claims are rejected with a
+  clear "identity mismatch" error. Uses `tailscale/peercred` (already an
+  indirect dependency) and `gopsutil/v3` for cross-platform PID → CWD
+  resolution.
+- **Anonymous caller read-only allowlist (sec.3)** — callers without a resolved
+  identity (CLI invoked outside any registered worktree) may only invoke
+  read-only RPCs (30 methods: team.list, agent.list, message.list, health,
+  session.list, etc.). Mutating RPCs are rejected at the dispatcher before the
+  handler runs. Preserves the `cd ~ && thrum team` workflow.
 - **Author-only message deletion (sec.4)** — `message.delete` now resolves
-  caller identity and verifies the caller authored the target message,
-  mirroring the existing `message.edit` author check. Previously, any caller
-  could soft-delete any message by ID.
+  caller identity and verifies the caller authored the target message, mirroring
+  the existing `message.edit` author check. Previously, any caller could
+  soft-delete any message by ID.
 - **Bulk hard-delete identity enforcement (sec.8)** — `message.deleteByAgent`
   now requires caller == target agent (agents can only bulk-delete their own
   messages). `message.deleteByScope` is restricted to daemon-internal callers
@@ -90,32 +89,31 @@ and this project adheres to
 
 - **`SendSupervisorMessage` @-prefix normalisation** — supervisor nudges no
   longer ghost to recipients with a leading `@` that doesn't match the
-  `message_refs` / `message_deliveries` schema (which store bare agent
-  IDs). Normalises `@name` to `name` before writing, matching the
-  `internal/daemon/rpc/message.go` TrimPrefix convention used by the
-  regular send path.
-- **`queryAgentsByRecipient` reserved-identity fallback** — replies
-  addressed to `@supervisor_<project>` no longer fail with `unknown
-  recipient` at validation time. The validator falls through to a
-  single-file identity lookup when the agents-table query returns empty,
-  accepting names that have `Reserved=true` in their identity file.
-- **Quickstart runtime field backfill (thrum-yl3k)** — new quickstart runs
-  now populate the `runtime` field from `preferred_runtime` at identity-save
-  time. A one-shot self-heal at daemon boot scans all identity files and
-  backfills `runtime` from `preferred_runtime` where missing. Eliminates the
-  need for manual re-registration of pre-runtime-tracking agents.
+  `message_refs` / `message_deliveries` schema (which store bare agent IDs).
+  Normalises `@name` to `name` before writing, matching the
+  `internal/daemon/rpc/message.go` TrimPrefix convention used by the regular
+  send path.
+- **`queryAgentsByRecipient` reserved-identity fallback** — replies addressed to
+  `@supervisor_<project>` no longer fail with `unknown recipient` at validation
+  time. The validator falls through to a single-file identity lookup when the
+  agents-table query returns empty, accepting names that have `Reserved=true` in
+  their identity file.
+- **Quickstart runtime field backfill (thrum-yl3k)** — new quickstart runs now
+  populate the `runtime` field from `preferred_runtime` at identity-save time. A
+  one-shot self-heal at daemon boot scans all identity files and backfills
+  `runtime` from `preferred_runtime` where missing. Eliminates the need for
+  manual re-registration of pre-runtime-tracking agents.
 - **Permission reminder replies now resolve (thrum-zaxt)** — replying to
-  reminder #N's message_id (rather than the original firstDetect message_id)
-  now correctly resolves and deletes the pending nudge row via a thread_id
-  fallback lookup in `TryResolve`. Previously, only replies to the original
-  firstDetect message worked; replies to subsequent reminders were silently
-  ignored.
+  reminder #N's message_id (rather than the original firstDetect message_id) now
+  correctly resolves and deletes the pending nudge row via a thread_id fallback
+  lookup in `TryResolve`. Previously, only replies to the original firstDetect
+  message worked; replies to subsequent reminders were silently ignored.
 - **Permission recovery after queued command (thrum-4ten)** — `HandleCheckPane`
   now runs `OnRecovery` unconditionally when the pane is not in a permission
   state, removing the `paneState == "idle"` guard that caused stale
   `permission_nudges` rows to persist after a supervisor answered via
-  `thrum tmux send <session> Escape`. The guard excluded the
-  `command_completed` and `working_but_idle` branches from cleanup.
+  `thrum tmux send <session> Escape`. The guard excluded the `command_completed`
+  and `working_but_idle` branches from cleanup.
 
 ### Known issues
 

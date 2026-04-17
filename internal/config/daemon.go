@@ -38,10 +38,10 @@ type ThrumConfig struct {
 }
 
 // IdentityConfig holds the daemon's per-repo identity.
-// daemon_id is generated once at thrum init (or first daemon start of an
+// Daemon_id is generated once at thrum init (or first daemon start of an
 // un-initialized repo) and persists forever. Other fields are refreshed on
 // each daemon start from current runtime values — they are informational
-// metadata, not keys. git_origin_url is set once at init.
+// metadata, not keys. Git_origin_url is set once at init.
 type IdentityConfig struct {
 	DaemonID     string `json:"daemon_id,omitempty"`
 	RepoName     string `json:"repo_name,omitempty"`
