@@ -6,7 +6,10 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -501,6 +504,31 @@ func Migrate(db *sql.DB) error {
 	if currentVersion == CurrentVersion {
 		// Already at current version
 		return nil
+	}
+
+	// Downgrade guard: refuse to run against a DB from a newer binary.
+	if currentVersion > CurrentVersion {
+		return fmt.Errorf("database schema is version %d, this binary supports up to %d — cannot downgrade; use a newer binary or delete the database to start fresh", currentVersion, CurrentVersion)
+	}
+
+	// Back up the DB file + WAL/SHM sidecars before any migration runs so the
+	// operator can revert cleanly by renaming the backup back.  Backup-once:
+	// never overwrite an existing backup (a later startup must not clobber the
+	// true pre-upgrade snapshot).  Skip when file == "" (in-memory test DB).
+	var dbSeq int
+	var dbName, dbFile string
+	if err := db.QueryRow("PRAGMA database_list").Scan(&dbSeq, &dbName, &dbFile); err == nil && dbFile != "" {
+		suffix := fmt.Sprintf(".pre-migration-v%d-bak", currentVersion)
+		if err := backupFileOnce(dbFile, dbFile+suffix); err != nil {
+			log.Printf("[schema] DB backup failed (migration proceeding): %v", err)
+		}
+		// WAL and SHM sidecars — absence is fine, backupFileOnce is a no-op.
+		if err := backupFileOnce(dbFile+"-wal", dbFile+"-wal"+suffix); err != nil {
+			log.Printf("[schema] WAL backup failed (migration proceeding): %v", err)
+		}
+		if err := backupFileOnce(dbFile+"-shm", dbFile+"-shm"+suffix); err != nil {
+			log.Printf("[schema] SHM backup failed (migration proceeding): %v", err)
+		}
 	}
 
 	// Run migrations
@@ -1094,6 +1122,27 @@ func queueColumnSet(tx *sql.Tx) (map[string]bool, error) {
 		cols[name] = true
 	}
 	return cols, rows.Err()
+}
+
+// backupFileOnce copies src to dst if src exists and dst does not.
+// Returns nil if dst already exists or src does not exist; errors on copy failure.
+// Same backup-once pattern as identity.backupConfigOnce.
+func backupFileOnce(src, dst string) error {
+	if _, err := os.Stat(dst); err == nil {
+		return nil // backup already exists — don't overwrite pre-upgrade state
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil // sidecar absent (e.g. no WAL) — nothing to back up
+		}
+		return fmt.Errorf("read for backup: %w", err)
+	}
+	if err := os.WriteFile(dst, data, 0o600); err != nil {
+		return fmt.Errorf("write backup: %w", err)
+	}
+	log.Printf("[schema] backed up pre-migration file to %s", dst)
+	return nil
 }
 
 // BackfillEventID backfills event_id fields for events in JSONL files that lack them.

@@ -469,6 +469,53 @@ func TestRemoveRemoteAgent(t *testing.T) {
 	}
 }
 
+func TestNewPeerRegistry_BackupOnReconciliation(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	varDir := filepath.Join(thrumDir, "var")
+	_ = os.MkdirAll(varDir, 0o750)
+
+	// config.json has the authoritative (new) daemon_id.
+	const authoritativeID = "d_01HYTEST_BACKUP_AUTH_ID00"
+	cfgJSON := `{"identity":{"daemon_id":"` + authoritativeID + `","init_at":"2026-01-01T00:00:00Z"}}`
+	_ = os.WriteFile(filepath.Join(thrumDir, "config.json"), []byte(cfgJSON), 0o600)
+
+	// peers.json has a stale id — this triggers reconciliation + backup.
+	const staleID = "d_stale_backup_test_id"
+	stalePeers := `{"local":{"daemon_id":"` + staleID + `","port":0},"peers":[]}`
+	peersPath := filepath.Join(varDir, "peers.json")
+	_ = os.WriteFile(peersPath, []byte(stalePeers), 0o600)
+
+	// First call: should create backup.
+	_, err := NewPeerRegistry(peersPath)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+
+	bakPath := peersPath + ".pre-rotation-bak"
+	bakData, err := os.ReadFile(bakPath)
+	if err != nil {
+		t.Fatalf("backup file not created: %v", err)
+	}
+	// Backup must contain the pre-rotation stale id.
+	if !strings.Contains(string(bakData), staleID) {
+		t.Fatalf("backup does not contain stale daemon_id %q: %s", staleID, bakData)
+	}
+
+	// Second call: backup must NOT be overwritten.
+	_, err = NewPeerRegistry(peersPath)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry second call: %v", err)
+	}
+	bakData2, err := os.ReadFile(bakPath)
+	if err != nil {
+		t.Fatalf("backup file disappeared: %v", err)
+	}
+	if string(bakData2) != string(bakData) {
+		t.Fatalf("backup overwritten on second call; want pre-rotation bytes unchanged")
+	}
+}
+
 func TestPeerInfo_Addr(t *testing.T) {
 	// Addr() now just returns the Address field
 	p := &PeerInfo{Name: "alice", Address: "alice.tailnet.ts.net:9100"}

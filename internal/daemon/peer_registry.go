@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -82,8 +84,13 @@ func NewPeerRegistry(filePath string) (*PeerRegistry, error) {
 			return nil, fmt.Errorf("load peer registry: %w", err)
 		}
 		// config.json is the source of truth. If peers.json has a stale daemon_id
-		// (e.g. pre-upgrade file), reconcile it and persist.
+		// (e.g. pre-upgrade file), back up peers.json then reconcile and persist.
 		if r.local.DaemonID != ident.DaemonID {
+			// Best-effort backup: log WARN on failure but don't abort.
+			// Same backup-once pattern as identity.backupConfigOnce.
+			if err := backupPeersOnce(filePath, filePath+".pre-rotation-bak"); err != nil {
+				log.Printf("[peer_registry] peers.json backup failed (reconciliation proceeding): %v", err)
+			}
 			r.mu.Lock()
 			r.local.DaemonID = ident.DaemonID
 			saveErr := r.saveLocked()
@@ -305,6 +312,28 @@ func (r *PeerRegistry) RemoveRemoteAgent(peerName, agentName string) error {
 	}
 	peer.RemoteAgents = filtered
 	return r.saveLocked()
+}
+
+// backupPeersOnce copies src to dst if src exists and dst does not.
+// Same backup-once pattern as identity.backupConfigOnce (duplicated at the
+// package boundary to avoid a circular import).
+// Returns nil if dst already exists or src does not exist; errors on copy failure.
+func backupPeersOnce(src, dst string) error {
+	if _, err := os.Stat(dst); err == nil {
+		return nil // backup already exists — don't overwrite pre-rotation state
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read for backup: %w", err)
+	}
+	if err := os.WriteFile(dst, data, 0o600); err != nil {
+		return fmt.Errorf("write backup: %w", err)
+	}
+	log.Printf("[peer_registry] backed up pre-rotation peers to %s", dst)
+	return nil
 }
 
 // load reads the peers.json file, auto-detecting old array or new object format.

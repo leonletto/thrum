@@ -93,6 +93,16 @@ func Bootstrap(thrumDir, repoPath string) (Identity, error) {
 		// Valid ULID. Leave daemon_id and init_at alone.
 	}
 
+	// Back up config.json before the first identity write (new or rotated id).
+	// Backup-once: never overwrite an existing .pre-identity-bak so operator
+	// can always revert by renaming the backup back to config.json.
+	changing := out.DaemonID != existing.DaemonID || out.InitAt != existing.InitAt
+	if changing {
+		if err := backupConfigOnce(cfgPath, cfgPath+".pre-identity-bak"); err != nil {
+			log.Printf("[identity] config.json backup failed (upgrade proceeding): %v", err)
+		}
+	}
+
 	blob, err := json.Marshal(out)
 	if err != nil {
 		return Identity{}, fmt.Errorf("marshal identity: %w", err)
@@ -115,6 +125,26 @@ func readGitOriginURL(repoPath string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// backupConfigOnce copies src to dst if src exists and dst does not.
+// Returns nil (no-op) if dst exists or src does not exist. Errors on copy failure.
+func backupConfigOnce(src, dst string) error {
+	if _, err := os.Stat(dst); err == nil {
+		return nil // backup already exists — don't overwrite pre-upgrade state
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil // nothing to back up on fresh install
+		}
+		return fmt.Errorf("read for backup: %w", err)
+	}
+	if err := os.WriteFile(dst, data, 0o600); err != nil {
+		return fmt.Errorf("write backup: %w", err)
+	}
+	log.Printf("[identity] backed up pre-upgrade config to %s", dst)
+	return nil
 }
 
 // writeConfigAtomic marshals cfg to JSON (indented) and writes to path via

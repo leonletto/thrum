@@ -1208,3 +1208,105 @@ func TestDaemonIdentityTable_Schema23(t *testing.T) {
 		t.Fatalf("expected NOT NULL violation on repo_name, got nil error")
 	}
 }
+
+func TestMigrate_DowngradeGuard(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "downgrade.db")
+
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() failed: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Initialize to current version.
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB() failed: %v", err)
+	}
+
+	// Manually bump the schema_version to simulate a newer-binary database.
+	futurVersion := schema.CurrentVersion + 1
+	if _, err := db.Exec("UPDATE schema_version SET version = ?", futurVersion); err != nil {
+		t.Fatalf("bump version: %v", err)
+	}
+
+	// Migrate must refuse with a "cannot downgrade" error.
+	err = schema.Migrate(db)
+	if err == nil {
+		t.Fatal("Migrate() should return error when DB version > CurrentVersion")
+	}
+	if !strings.Contains(err.Error(), "cannot downgrade") {
+		t.Fatalf("error should mention 'cannot downgrade', got: %v", err)
+	}
+}
+
+func TestMigrate_DBBackupBeforeMigration(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "backup_test.db")
+
+	// Create DB at a version older than CurrentVersion so migration will run.
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() failed: %v", err)
+	}
+
+	if err := schema.InitDB(db); err != nil {
+		_ = db.Close()
+		t.Fatalf("InitDB() failed: %v", err)
+	}
+
+	// Downgrade version to something < CurrentVersion to force migration.
+	const oldVersion = 21
+	if _, err := db.Exec("UPDATE schema_version SET version = ?", oldVersion); err != nil {
+		_ = db.Close()
+		t.Fatalf("set old version: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close after version set: %v", err)
+	}
+
+	// Record the DB bytes before migration.
+	preBytes, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatalf("read pre-migration DB: %v", err)
+	}
+
+	// Reopen and run Migrate — should create backup then migrate.
+	db2, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() reopen failed: %v", err)
+	}
+	defer func() { _ = db2.Close() }()
+
+	if err := schema.Migrate(db2); err != nil {
+		t.Fatalf("Migrate() failed: %v", err)
+	}
+
+	// Verify backup file exists.
+	bakPath := dbPath + ".pre-migration-v21-bak"
+	bakBytes, err := os.ReadFile(bakPath)
+	if err != nil {
+		t.Fatalf("backup file not created: %v", err)
+	}
+
+	// Backup bytes must match the pre-migration snapshot.
+	if len(bakBytes) != len(preBytes) {
+		t.Fatalf("backup size mismatch: got %d bytes, want %d bytes", len(bakBytes), len(preBytes))
+	}
+
+	// Run Migrate again — backup must NOT be overwritten.
+	// (First, downgrade version again to force another migration pass.)
+	if _, err := db2.Exec("UPDATE schema_version SET version = ?", oldVersion); err != nil {
+		t.Fatalf("re-downgrade version: %v", err)
+	}
+	if err := schema.Migrate(db2); err != nil {
+		t.Fatalf("Migrate() second call failed: %v", err)
+	}
+	bakBytes2, err := os.ReadFile(bakPath)
+	if err != nil {
+		t.Fatalf("backup file disappeared: %v", err)
+	}
+	if string(bakBytes2) != string(bakBytes) {
+		t.Fatalf("backup overwritten on second Migrate; want pre-migration bytes unchanged")
+	}
+}
