@@ -387,6 +387,29 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 			memberIndex = newIndex
 		}
 	}
+	// Inject the virtual supervisor pseudo-agent when IncludeSystem is
+	// set. After Task 7 (thrum-kqna.3) removed the Reserved=true
+	// identity file from disk, the file walk above cannot find a
+	// supervisor entry; the daemon carries its synthesized identity
+	// in-memory and injects it here. Injection runs outside the
+	// `h.thrumDir != ""` block so it works even when the file walk is
+	// disabled (e.g. unit-test fixtures).
+	if req.IncludeSystem && h.supervisorIdentity != nil {
+		name := h.supervisorIdentity.Agent.Name
+		if _, exists := memberIndex[name]; !exists {
+			synthetic := TeamMember{
+				AgentID:  name,
+				Role:     h.supervisorIdentity.Agent.Role,
+				Module:   h.supervisorIdentity.Agent.Module,
+				Display:  h.supervisorIdentity.Agent.Display,
+				Status:   "reserved",
+				Reserved: true,
+			}
+			memberIndex[name] = len(members)
+			members = append(members, synthetic)
+		}
+	}
+
 	// memberIndex is used by downstream logic below and by the caller's
 	// dead-agent self-heal in HandleList, which keys off agent_id
 	// (still valid after the optional filter above).

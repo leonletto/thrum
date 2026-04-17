@@ -547,3 +547,105 @@ func TestTeamList_SystemFlagMarksExistingReserved(t *testing.T) {
 		t.Error("member should carry Reserved=true after enrichment")
 	}
 }
+
+// TestHandleList_InjectsSupervisorWhenIncludeSystemTrue verifies that
+// HandleList injects the virtual supervisor pseudo-agent when the
+// request asks for system identities. Post-cleanup (Task 7) the
+// supervisor has no identity file on disk, so the daemon must carry
+// it in-memory via TeamHandler.supervisorIdentity.
+func TestHandleList_InjectsSupervisorWhenIncludeSystemTrue(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(thrumDir, "sync")
+	if err := os.MkdirAll(syncDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	s, err := state.NewState(thrumDir, syncDir, "test_repo_sys_true", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	supervisorIdentity := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "supervisor_test_user",
+			Role: "supervisor", Module: "daemon",
+			Display: "Supervisor (test)",
+		},
+		Reserved: true,
+	}
+	h := NewTeamHandler(s, "", supervisorIdentity)
+
+	reqJSON, _ := json.Marshal(TeamListRequest{IncludeSystem: true})
+	rawResp, err := h.HandleList(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("HandleList: %v", err)
+	}
+	resp, ok := rawResp.(*TeamListResponse)
+	if !ok {
+		t.Fatalf("unexpected response type %T", rawResp)
+	}
+
+	var supervisorMember *TeamMember
+	for i, m := range resp.Members {
+		if m.AgentID == "supervisor_test_user" {
+			supervisorMember = &resp.Members[i]
+			break
+		}
+	}
+	if supervisorMember == nil {
+		t.Fatalf("supervisor not injected; got %+v", resp.Members)
+	}
+	if supervisorMember.Role != "supervisor" {
+		t.Errorf("Role = %q, want supervisor", supervisorMember.Role)
+	}
+	if supervisorMember.Status != "reserved" {
+		t.Errorf("Status = %q, want reserved", supervisorMember.Status)
+	}
+	if !supervisorMember.Reserved {
+		t.Errorf("Reserved = false, want true")
+	}
+}
+
+// TestHandleList_HidesSupervisorWhenIncludeSystemFalse verifies that
+// the default listing (IncludeSystem=false) excludes the virtual
+// supervisor even when the handler has one wired.
+func TestHandleList_HidesSupervisorWhenIncludeSystemFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(thrumDir, "sync")
+	if err := os.MkdirAll(syncDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	s, err := state.NewState(thrumDir, syncDir, "test_repo_sys_false", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	supervisorIdentity := &config.IdentityFile{
+		Agent: config.AgentConfig{
+			Kind: "agent", Name: "supervisor_test_user",
+			Role: "supervisor", Module: "daemon",
+			Display: "Supervisor (test)",
+		},
+		Reserved: true,
+	}
+	h := NewTeamHandler(s, "", supervisorIdentity)
+
+	reqJSON, _ := json.Marshal(TeamListRequest{IncludeSystem: false})
+	rawResp, err := h.HandleList(context.Background(), reqJSON)
+	if err != nil {
+		t.Fatalf("HandleList: %v", err)
+	}
+	resp, ok := rawResp.(*TeamListResponse)
+	if !ok {
+		t.Fatalf("unexpected response type %T", rawResp)
+	}
+
+	for _, m := range resp.Members {
+		if m.AgentID == "supervisor_test_user" {
+			t.Fatalf("supervisor leaked into default listing: %+v", resp.Members)
+		}
+	}
+}
