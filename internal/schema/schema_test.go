@@ -1049,9 +1049,9 @@ func TestWorkContexts_ForeignKeyCascade(t *testing.T) {
 	}
 }
 
-func TestSchema_V22_CurrentVersion(t *testing.T) {
-	if schema.CurrentVersion != 22 {
-		t.Errorf("CurrentVersion = %d, want 22", schema.CurrentVersion)
+func TestSchema_V23_CurrentVersion(t *testing.T) {
+	if schema.CurrentVersion != 23 {
+		t.Errorf("CurrentVersion = %d, want 23", schema.CurrentVersion)
 	}
 }
 
@@ -1160,5 +1160,51 @@ func TestSchema_Migration_v20_to_v21_CreatesPermissionNudges(t *testing.T) {
 	}
 	if version < 21 {
 		t.Errorf("schema version = %d after migration, want >= 21", version)
+	}
+}
+
+func TestDaemonIdentityTable_Schema23(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := schema.OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer db.Close()
+	if err := schema.InitDB(db); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	// Verify table exists.
+	row := db.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name='daemon_identity'`)
+	var name string
+	if err := row.Scan(&name); err != nil {
+		t.Fatalf("daemon_identity table missing: %v", err)
+	}
+
+	// Verify an insert + read round trip.
+	_, err = db.Exec(`INSERT INTO daemon_identity
+		(daemon_id, repo_name, hostname, repo_path, git_origin_url, init_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"d_test", "thrum", "host", "/path", "https://example/x",
+		"2026-04-17T00:00:00Z", "2026-04-17T00:00:00Z")
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	var gotID string
+	if err := db.QueryRow(`SELECT daemon_id FROM daemon_identity`).Scan(&gotID); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if gotID != "d_test" {
+		t.Fatalf("got %q, want d_test", gotID)
+	}
+
+	// NOT NULL violation (omit repo_name) should fail.
+	_, err = db.Exec(`INSERT INTO daemon_identity
+		(daemon_id, repo_name, hostname, repo_path, init_at, updated_at)
+		VALUES (?, NULL, ?, ?, ?, ?)`,
+		"d_null", "host", "/path", "now", "now")
+	if err == nil {
+		t.Fatalf("expected NOT NULL violation on repo_name, got nil error")
 	}
 }

@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the current schema version.
-const CurrentVersion = 22
+const CurrentVersion = 23
 
 // InitDB initializes a new database with the current schema.
 func InitDB(db *sql.DB) error {
@@ -342,6 +342,18 @@ func createTables(tx *sql.Tx) error {
 			nudge_count      INTEGER NOT NULL,
 			last_pane_hash   BLOB NOT NULL,
 			expires_at       TIMESTAMP NOT NULL
+		)`,
+
+		// Daemon identity table (v23). Single-row mirror of the identity block
+		// in .thrum/config.json. Populated at daemon startup; not synced.
+		`CREATE TABLE IF NOT EXISTS daemon_identity (
+			daemon_id      TEXT PRIMARY KEY,
+			repo_name      TEXT NOT NULL,
+			hostname       TEXT NOT NULL,
+			repo_path      TEXT NOT NULL,
+			git_origin_url TEXT,
+			init_at        TEXT NOT NULL,
+			updated_at     TEXT NOT NULL
 		)`,
 	}
 
@@ -969,6 +981,28 @@ func runMigrations(db *sql.DB, startVersion, endVersion int) error {
 					return fmt.Errorf("migration 21→22: backfill origin_daemon: %w", err)
 				}
 			}
+		}
+	}
+
+	// Migration from version 22 to 23: Add daemon_identity table
+	// Single-row table mirroring the identity block in .thrum/config.json.
+	// Populated at daemon startup by state code; not backfilled here
+	// (existing databases simply get the empty table; state wiring in a
+	// subsequent task fills it on first daemon start post-upgrade).
+	if startVersion < 23 && endVersion >= 23 {
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS daemon_identity (
+				daemon_id      TEXT PRIMARY KEY,
+				repo_name      TEXT NOT NULL,
+				hostname       TEXT NOT NULL,
+				repo_path      TEXT NOT NULL,
+				git_origin_url TEXT,
+				init_at        TEXT NOT NULL,
+				updated_at     TEXT NOT NULL
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("migration 22→23: create daemon_identity table: %w", err)
 		}
 	}
 
