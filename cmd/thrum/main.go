@@ -4651,14 +4651,12 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create peer registry: %v\n", err)
 	}
 
-	// Use persistent daemon_id from peers.json if available
-	var daemonID string
-	if peerRegistry != nil {
-		daemonID = peerRegistry.LocalDaemonID()
-	}
-
-	// Create state manager
-	st, err := state.NewState(thrumDir, syncDir, repoID, daemonID)
+	// Create state manager. Passing empty daemonID so state.NewState calls
+	// identity.Bootstrap against config.json (source of truth) and populates
+	// the full Identity block on the state. peer_registry.LocalDaemonID
+	// will match because Bootstrap is idempotent — both reads resolve to
+	// the same ULID in config.json.
+	st, err := state.NewState(thrumDir, syncDir, repoID, "")
 	if err != nil {
 		return fmt.Errorf("failed to create state: %w", err)
 	}
