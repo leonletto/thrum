@@ -104,6 +104,23 @@ func (b *BranchManager) GetSyncBranchRef(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// RemoteTrackingSyncSHA returns the SHA of refs/remotes/origin/a-sync if it
+// exists locally (populated by git clone or git fetch). Returns ("", false)
+// if the ref is not present. Never performs a network call — this reads the
+// already-fetched remote-tracking ref.
+func (b *BranchManager) RemoteTrackingSyncSHA(ctx context.Context) (string, bool) {
+	output, err := safecmd.Git(ctx, b.repoPath, "rev-parse", "--verify",
+		"refs/remotes/origin/"+SyncBranchName)
+	if err != nil {
+		return "", false
+	}
+	sha := strings.TrimSpace(string(output))
+	if sha == "" {
+		return "", false
+	}
+	return sha, true
+}
+
 // checkGitRepo verifies that the path is a git repository.
 func (b *BranchManager) checkGitRepo(ctx context.Context) error {
 	if _, err := safecmd.Git(ctx, b.repoPath, "rev-parse", "--git-dir"); err != nil {

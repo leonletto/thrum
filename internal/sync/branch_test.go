@@ -718,3 +718,44 @@ func TestBranchManager_isWorktreeRegistered(t *testing.T) {
 		}
 	})
 }
+
+func TestRemoteTrackingSyncSHA_NoRemoteTrackingRef(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	bm := NewBranchManager(tmpDir, true)
+
+	sha, ok := bm.RemoteTrackingSyncSHA(context.Background())
+	if ok {
+		t.Errorf("expected ok=false with no remote-tracking ref, got ok=true sha=%q", sha)
+	}
+	if sha != "" {
+		t.Errorf("expected empty SHA, got %q", sha)
+	}
+}
+
+func TestRemoteTrackingSyncSHA_RemoteTrackingRefPresent(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+
+	// Synthesize a remote-tracking ref by creating a commit pointing at the
+	// empty tree and setting refs/remotes/origin/a-sync to it. No real remote
+	// is needed — this is a pure local-ref inspection test.
+	cmd := exec.Command("git", "-C", tmpDir, "commit-tree",
+		"4b825dc642cb6eb9a060e54bf8d69288fbee4904", "-m", "fake remote a-sync")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("commit-tree failed: %v", err)
+	}
+	wantSHA := strings.TrimSpace(string(out))
+	if err := exec.Command("git", "-C", tmpDir, "update-ref",
+		"refs/remotes/origin/a-sync", wantSHA).Run(); err != nil {
+		t.Fatalf("update-ref failed: %v", err)
+	}
+
+	bm := NewBranchManager(tmpDir, true)
+	sha, ok := bm.RemoteTrackingSyncSHA(context.Background())
+	if !ok {
+		t.Fatalf("expected ok=true, got false")
+	}
+	if sha != wantSHA {
+		t.Errorf("SHA mismatch: want %q got %q", wantSHA, sha)
+	}
+}
