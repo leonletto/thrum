@@ -912,3 +912,79 @@ func TestWriteEvent_UnknownAuthorDoesNotBlock(t *testing.T) {
 		t.Errorf("expected original content, got: %q", msgContent)
 	}
 }
+
+func TestNewState_BootstrapsIdentityWhenEmpty(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	if err := os.MkdirAll(thrumDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := NewState(thrumDir, thrumDir, "r_test_bootstrap", "")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer s.Close()
+
+	id := s.DaemonID()
+	if id == "" || !strings.HasPrefix(id, "d_") {
+		t.Fatalf("daemonID invalid: %q", id)
+	}
+
+	// config.json persisted
+	cfgBytes, err := os.ReadFile(filepath.Join(thrumDir, "config.json"))
+	if err != nil {
+		t.Fatalf("read config.json: %v", err)
+	}
+	if !strings.Contains(string(cfgBytes), id) {
+		t.Fatalf("daemon_id %q not found in config.json:\n%s", id, cfgBytes)
+	}
+
+	// SQLite mirror populated
+	var dbID string
+	if err := s.RawDB().QueryRow(`SELECT daemon_id FROM daemon_identity`).Scan(&dbID); err != nil {
+		t.Fatalf("query daemon_identity: %v", err)
+	}
+	if dbID != id {
+		t.Fatalf("SQLite daemon_id %q != state DaemonID %q", dbID, id)
+	}
+
+	// Identity accessor returns populated struct
+	ident := s.Identity()
+	if ident.DaemonID != id {
+		t.Fatalf("Identity().DaemonID = %q, want %q", ident.DaemonID, id)
+	}
+	if ident.RepoPath == "" {
+		t.Fatalf("Identity().RepoPath empty")
+	}
+}
+
+func TestNewState_UsesCallerIDVerbatim(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	_ = os.MkdirAll(thrumDir, 0o750)
+
+	s, err := NewState(thrumDir, thrumDir, "r_test_verbatim", "fixed-test-daemon")
+	if err != nil {
+		t.Fatalf("NewState: %v", err)
+	}
+	defer s.Close()
+
+	if s.DaemonID() != "fixed-test-daemon" {
+		t.Fatalf("DaemonID = %q, want fixed-test-daemon", s.DaemonID())
+	}
+
+	// config.json must NOT have been created — caller-provided id path.
+	if _, err := os.Stat(filepath.Join(thrumDir, "config.json")); !os.IsNotExist(err) {
+		t.Fatalf("config.json should not exist for test path; stat err = %v", err)
+	}
+
+	// daemon_identity table must be empty.
+	var count int
+	if err := s.RawDB().QueryRow(`SELECT COUNT(*) FROM daemon_identity`).Scan(&count); err != nil {
+		t.Fatalf("count daemon_identity: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("daemon_identity row count = %d, want 0", count)
+	}
+}
