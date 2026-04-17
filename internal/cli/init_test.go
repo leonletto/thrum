@@ -369,3 +369,32 @@ func initGitRepo(t *testing.T, dir string) {
 		t.Fatalf("Failed to create initial commit: %v", err)
 	}
 }
+
+// TestInit_DoesNotCreateSupervisorIdentity is the regression guard
+// for thrum-twut. Init() itself must not write a supervisor pseudo-
+// agent identity file — that was the original bug. Daemon boot also
+// doesn't persist one (Task 8 injects it in-memory), but this test
+// asserts the Init surface independently; the boot flow is covered
+// by TestCleanupLegacySupervisorFiles_* in internal/daemon/permission.
+func TestInit_DoesNotCreateSupervisorIdentity(t *testing.T) {
+	tmp := t.TempDir()
+	initGitRepo(t, tmp)
+
+	if err := Init(InitOptions{RepoPath: tmp}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	identitiesDir := filepath.Join(tmp, ".thrum", "identities")
+	entries, err := os.ReadDir(identitiesDir)
+	if os.IsNotExist(err) {
+		return // directory never created — ideal case
+	}
+	if err != nil {
+		t.Fatalf("read identities dir: %v", err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "supervisor_") {
+			t.Fatalf("supervisor identity file created unexpectedly: %s", e.Name())
+		}
+	}
+}

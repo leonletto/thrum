@@ -188,6 +188,49 @@ func TestCleanupLegacySupervisorFiles_NoIdentitiesDirIsNoop(t *testing.T) {
 	CleanupLegacySupervisorFiles(tmp)
 }
 
+// TestCleanupLegacySupervisorFiles_IdempotentOnSeededBoot reproduces
+// the daemon-boot flow: a pre-seeded legacy supervisor_<project>.json
+// is swept on first boot, and a second boot is a no-op (no errors,
+// directory stays empty). This enforces the spec's "per-host,
+// per-upgrade" guarantee — every subsequent boot must not touch
+// state the first boot already cleaned.
+func TestCleanupLegacySupervisorFiles_IdempotentOnSeededBoot(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	legacyJSON := `{"version":5,"agent":{"Kind":"agent","Name":"supervisor_oldproject","Role":"supervisor","Module":"daemon","Display":"Supervisor (oldproject)"},"reserved":true}`
+	legacyPath := filepath.Join(identitiesDir, "supervisor_oldproject.json")
+	if err := os.WriteFile(legacyPath, []byte(legacyJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// First boot removes the seeded file.
+	CleanupLegacySupervisorFiles(thrumDir)
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy file not removed on first boot: stat err = %v", err)
+	}
+
+	// Second boot is a no-op — directory remains empty, no panic,
+	// no error return (the function signature has none, so we just
+	// assert no side effects).
+	CleanupLegacySupervisorFiles(thrumDir)
+	entries, err := os.ReadDir(identitiesDir)
+	if err != nil {
+		t.Fatalf("ReadDir after second boot: %v", err)
+	}
+	if len(entries) != 0 {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Fatalf("unexpected files after second cleanup: %v", names)
+	}
+}
+
 // TestResolveUserSlug_Fallbacks covers the three branches of
 // resolveUserSlug in isolation per the spec's Testing section:
 // git user.name → $USER → hostname.
