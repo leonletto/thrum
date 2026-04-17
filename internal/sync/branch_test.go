@@ -857,6 +857,52 @@ func TestBranchHasContent_MissingRef(t *testing.T) {
 	}
 }
 
+func TestAttachToRemote_PointsLocalAtRemoteSHA(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+
+	// Synthesize refs/remotes/origin/a-sync by building a branch with content
+	// and moving its ref to the remote-tracking namespace.
+	remoteSHA := createBranchWithContent(t, tmpDir, "unused-tmp",
+		`{"type":"event"}`+"\n", nil)
+	if err := exec.Command("git", "-C", tmpDir, "update-ref",
+		"refs/remotes/origin/a-sync", remoteSHA).Run(); err != nil {
+		t.Fatalf("update-ref remote: %v", err)
+	}
+	if err := exec.Command("git", "-C", tmpDir, "update-ref", "-d",
+		"refs/heads/unused-tmp").Run(); err != nil {
+		t.Fatalf("delete tmp branch: %v", err)
+	}
+
+	// set-upstream-to requires an 'origin' remote to exist in config.
+	if err := exec.Command("git", "-C", tmpDir, "remote", "add",
+		"origin", tmpDir).Run(); err != nil {
+		t.Fatalf("remote add: %v", err)
+	}
+
+	bm := NewBranchManager(tmpDir, true)
+	if err := bm.AttachToRemote(context.Background(), remoteSHA); err != nil {
+		t.Fatalf("AttachToRemote failed: %v", err)
+	}
+
+	// Assert local a-sync points at remoteSHA
+	out, err := exec.Command("git", "-C", tmpDir, "rev-parse", "refs/heads/a-sync").Output()
+	if err != nil {
+		t.Fatalf("rev-parse local: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != remoteSHA {
+		t.Errorf("local a-sync SHA mismatch: want %q got %q", remoteSHA, got)
+	}
+
+	// Assert upstream tracking was set (branch.a-sync.merge == refs/heads/a-sync)
+	out, err = exec.Command("git", "-C", tmpDir, "config", "branch.a-sync.merge").Output()
+	if err != nil {
+		t.Fatalf("config read: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "refs/heads/a-sync" {
+		t.Errorf("upstream merge key mismatch: want %q got %q", "refs/heads/a-sync", got)
+	}
+}
+
 func TestRemoteTrackingSyncSHA_NoRemoteTrackingRef(t *testing.T) {
 	tmpDir := setupTestRepoWithCommit(t)
 	bm := NewBranchManager(tmpDir, true)

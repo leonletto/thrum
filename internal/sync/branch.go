@@ -122,6 +122,22 @@ func (b *BranchManager) RemoteTrackingSyncSHA(ctx context.Context) (string, bool
 	return sha, true
 }
 
+// AttachToRemote points refs/heads/a-sync at the given SHA and sets upstream
+// tracking to origin/a-sync. Must only be called when refs/heads/a-sync does
+// NOT already exist, or when the caller has explicitly decided to overwrite
+// the local ref. No working-tree changes.
+func (b *BranchManager) AttachToRemote(ctx context.Context, sha string) error {
+	if _, err := safecmd.Git(ctx, b.repoPath, "update-ref",
+		"refs/heads/"+SyncBranchName, sha); err != nil {
+		return fmt.Errorf("attach to remote: update-ref: %w", err)
+	}
+	if _, err := safecmd.Git(ctx, b.repoPath, "branch",
+		"--set-upstream-to=origin/"+SyncBranchName, SyncBranchName); err != nil {
+		return fmt.Errorf("attach to remote: set-upstream-to: %w", err)
+	}
+	return nil
+}
+
 // BranchHasContent reports whether the branch at ref has any JSONL event data
 // in its tree. Content = events.jsonl size > 0, OR any blob under messages/
 // with size > 0. Does not check out or touch the working tree.
