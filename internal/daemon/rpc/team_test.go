@@ -29,7 +29,7 @@ func TestTeamHandleList(t *testing.T) {
 	ctx := context.Background()
 	agentHandler := NewAgentHandler(s)
 	sessionHandler := NewSessionHandler(s)
-	teamHandler := NewTeamHandler(s, "")
+	teamHandler := NewTeamHandler(s, "", nil)
 
 	// Register two agents
 	reg1 := RegisterRequest{Role: "implementer", Module: "auth"}
@@ -213,7 +213,7 @@ func TestTeamHandleList_EmptyDB(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	teamHandler := NewTeamHandler(s, "")
+	teamHandler := NewTeamHandler(s, "", nil)
 	req := TeamListRequest{}
 	reqJSON, _ := json.Marshal(req)
 	resp, err := teamHandler.HandleList(context.Background(), reqJSON)
@@ -262,7 +262,7 @@ func TestTeamList_SelfHealSkipsLiveFilePID(t *testing.T) {
 	ctx := context.Background()
 	agentHandler := NewAgentHandler(s)
 	sessionHandler := NewSessionHandler(s)
-	teamHandler := NewTeamHandler(s, thrumDir)
+	teamHandler := NewTeamHandler(s, thrumDir, nil)
 
 	// Register an agent with a DEAD PID (simulating legacy/stale DB state).
 	// PID 999999 is nearly guaranteed to not be running on a developer box.
@@ -388,7 +388,7 @@ func TestTeamList_HidesReservedByDefault(t *testing.T) {
 		t.Fatalf("save normal identity: %v", err)
 	}
 
-	handler := NewTeamHandler(s, thrumDir)
+	handler := NewTeamHandler(s, thrumDir, nil)
 	ctx := context.Background()
 
 	reqJSON, _ := json.Marshal(TeamListRequest{IncludeOffline: true})
@@ -434,7 +434,7 @@ func TestTeamList_SystemFlagShowsReserved(t *testing.T) {
 		t.Fatalf("save reserved identity: %v", err)
 	}
 
-	handler := NewTeamHandler(s, thrumDir)
+	handler := NewTeamHandler(s, thrumDir, nil)
 	ctx := context.Background()
 
 	reqJSON, _ := json.Marshal(TeamListRequest{
@@ -518,7 +518,7 @@ func TestTeamList_SystemFlagMarksExistingReserved(t *testing.T) {
 		t.Fatalf("save identity: %v", err)
 	}
 
-	handler := NewTeamHandler(s, thrumDir)
+	handler := NewTeamHandler(s, thrumDir, nil)
 
 	// Default: should NOT include the reserved agent even though
 	// it has a live agents-table row.

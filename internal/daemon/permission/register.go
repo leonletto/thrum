@@ -27,7 +27,30 @@ func ResolveSupervisorID(cfg *config.ThrumConfig, repoPath string) string {
 // Old-binary fallback order: cfg.ProjectName → filepath.Base(repoPath) → "project".
 // This function MUST match that order exactly.
 func ResolveLegacySupervisorID(cfg *config.ThrumConfig, repoPath string) string {
-	return "supervisor_" + resolveLegacyRepoSlug(cfg, repoPath)
+	return "supervisor_" + ResolveProjectName(cfg, repoPath)
+}
+
+// ResolveProjectName returns a human-readable repo/project display name
+// for use in nudge bodies and other user-facing UI. Resolution order:
+// cfg.ProjectName → filepath.Base(repoPath) → "project".
+//
+// Distinct from resolveRepoSlug (the supervisor-ID repo half): this
+// function never returns an origin-URL hash, and the output is intended
+// for "Repo: <name>" display lines rather than for agent-ID embedding.
+// It is also the source of the legacy supervisor form — matching the
+// old-binary behavior exactly so ResolveLegacySupervisorID can accept
+// pre-upgrade replies on the receiver path.
+func ResolveProjectName(cfg *config.ThrumConfig, repoPath string) string {
+	if cfg != nil && cfg.ProjectName != "" {
+		return cfg.ProjectName
+	}
+	if repoPath != "" {
+		base := filepath.Base(repoPath)
+		if base != "" && base != "." && base != "/" {
+			return base
+		}
+	}
+	return "project"
 }
 
 // SupervisorIdentity returns the synthesized IdentityFile for the virtual
@@ -58,23 +81,6 @@ func resolveRepoSlug(cfg *config.ThrumConfig, repoPath string) string {
 		return hash
 	}
 	return identity.SanitizeAgentName(filepath.Base(repoPath))
-}
-
-// resolveLegacyRepoSlug matches the OLD binary's ResolveProjectName
-// fallback exactly so the legacy supervisor form is recognizable to the
-// receiver compat check. No origin-hash branch here — the old binary
-// never used one.
-func resolveLegacyRepoSlug(cfg *config.ThrumConfig, repoPath string) string {
-	if cfg != nil && cfg.ProjectName != "" {
-		return cfg.ProjectName
-	}
-	if repoPath != "" {
-		base := filepath.Base(repoPath)
-		if base != "" && base != "." && base != "/" {
-			return base
-		}
-	}
-	return "project"
 }
 
 // gitOriginHash returns a 12-char lowercase Crockford-base32 hash of

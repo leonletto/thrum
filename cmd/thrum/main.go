@@ -4720,26 +4720,19 @@ func runDaemon(repoPath string, flagLocal bool) error {
 		fmt.Fprintf(os.Stderr, "  Mode:        local-only (remote sync disabled)\n")
 	}
 
-	// Resolve the project name once — used by both the supervisor
-	// registration and the Permission package constructor below.
+	// Resolve the project name once — used for the "Repo:" display
+	// line in nudge bodies via permission.New below.
 	projectName := permission.ResolveProjectName(thrumCfg, absPath)
 
-	// Register the reserved @supervisor_<project> pseudo-agent so permission
-	// nudges have a reply-capable sender. Idempotent at boot.
-	supervisorID, err := permission.RegisterSupervisor(context.Background(), thrumCfg, thrumDir, absPath)
-	if err != nil {
-		// Identity file write failed (NFS hiccup, permission issue,
-		// disk full, etc.). Keep the daemon alive and fall back to
-		// the deterministic ID. Without this fallback, supervisorID
-		// is the empty string and every nudge authored by this
-		// daemon carries agent_id="" — which either breaks event
-		// validation at sync time (best case, sync breaks loudly)
-		// or produces untraceable events (worst case). The next
-		// daemon boot will either succeed or re-warn.
-		fmt.Fprintf(os.Stderr, "Warning: failed to register supervisor pseudo-agent: %v\n", err)
-		supervisorID = permission.SupervisorAgentID(projectName)
-	}
-	log.Printf("daemon: supervisor registered as @%s", supervisorID)
+	// Synthesize the virtual supervisor pseudo-agent. Pure resolvers;
+	// never persisted to disk. Legacy identity files (from pre-v0.8.3
+	// installs that wrote supervisor_<project>.json) are swept here so
+	// the daemon presents a single source of truth for its identity set.
+	supervisorID := permission.ResolveSupervisorID(thrumCfg, absPath)
+	legacySupervisorID := permission.ResolveLegacySupervisorID(thrumCfg, absPath)
+	supervisorIdentity := permission.SupervisorIdentity(thrumCfg, absPath)
+	permission.CleanupLegacySupervisorFiles(thrumDir)
+	log.Printf("daemon: supervisor virtual identity @%s (legacy compat @%s)", supervisorID, legacySupervisorID)
 
 	// Construct the permission package. The reply interceptor (Task
 	// 6.2) is wired into the event-write hook further below; the
@@ -4835,7 +4828,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("agent.set-status", agentHandler.HandleSetAgentStatus)
 
 	// Team management
-	teamHandler := rpc.NewTeamHandler(st, thrumDir)
+	teamHandler := rpc.NewTeamHandler(st, thrumDir, supervisorIdentity)
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
 	// Context management
@@ -4866,7 +4859,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	server.RegisterHandler("group.members", groupHandler.HandleMembers)
 
 	// Message management
-	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir)
+	messageHandler := rpc.NewMessageHandlerWithDispatcher(st, dispatcher, thrumDir, supervisorID, legacySupervisorID)
 	server.RegisterHandler("message.send", messageHandler.HandleSend)
 	server.RegisterHandler("message.get", messageHandler.HandleGet)
 	server.RegisterHandler("message.list", messageHandler.HandleList)

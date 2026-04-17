@@ -77,13 +77,21 @@ type TeamMember struct {
 
 // TeamHandler handles team-related RPC methods.
 type TeamHandler struct {
-	state    *state.State
-	thrumDir string
+	state              *state.State
+	thrumDir           string
+	supervisorIdentity *config.IdentityFile // synthesized virtual-supervisor identity; nil in tests
 }
 
 // NewTeamHandler creates a new team handler.
-func NewTeamHandler(state *state.State, thrumDir string) *TeamHandler {
-	return &TeamHandler{state: state, thrumDir: thrumDir}
+// supervisorIdentity is the virtual-supervisor identity synthesized at
+// daemon boot; it is wired in here now and consumed by ListAgents in a
+// later task. Passing nil is safe — the injection path short-circuits.
+func NewTeamHandler(state *state.State, thrumDir string, supervisorIdentity *config.IdentityFile) *TeamHandler {
+	return &TeamHandler{
+		state:              state,
+		thrumDir:           thrumDir,
+		supervisorIdentity: supervisorIdentity,
+	}
 }
 
 // HandleList handles the team.list RPC method.

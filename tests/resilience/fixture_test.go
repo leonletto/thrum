@@ -177,7 +177,7 @@ func registerAllHandlers(server *daemon.Server, st *state.State) {
 	server.RegisterHandler("group.members", groupHandler.HandleMembers)
 	server.RegisterHandler("group.member.add", groupHandler.HandleMemberAdd)
 
-	teamHandler := rpc.NewTeamHandler(st, "")
+	teamHandler := rpc.NewTeamHandler(st, "", nil)
 	server.RegisterHandler("team.list", teamHandler.HandleList)
 
 	contextHandler := rpc.NewContextHandler(st)
