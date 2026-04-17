@@ -695,3 +695,27 @@ func TestSaveThrumConfig_OmitsEmptyPermissionFields(t *testing.T) {
 		t.Error("project_name should be omitted when empty")
 	}
 }
+
+func TestThrumConfig_IdentityRoundTrip(t *testing.T) {
+	original := config.ThrumConfig{
+		Identity: config.IdentityConfig{
+			DaemonID:     "d_01HYC7K9ABCDEFGHJKMNPQRSTV",
+			RepoName:     "thrum",
+			Hostname:     "leonsmacm1pro",
+			RepoPath:     "/Users/leon/dev/opensource/thrum",
+			GitOriginURL: "https://github.com/leonletto/thrum",
+			InitAt:       "2026-04-17T05:30:00Z",
+		},
+	}
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var round config.ThrumConfig
+	if err := json.Unmarshal(data, &round); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if round.Identity != original.Identity {
+		t.Fatalf("identity mismatch:\n  got  = %+v\n  want = %+v", round.Identity, original.Identity)
+	}
+}
