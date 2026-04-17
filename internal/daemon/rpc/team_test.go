@@ -9,6 +9,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/state"
+	"github.com/leonletto/thrum/internal/process"
 )
 
 func TestTeamHandleList(t *testing.T) {
@@ -336,6 +337,95 @@ func TestTeamList_SelfHealSkipsLiveFilePID(t *testing.T) {
 	}
 
 	// Verify NO session.end event was emitted.
+	var endAfter int
+	if err := s.RawDB().QueryRow("SELECT COUNT(*) FROM events WHERE type = 'agent.session.end'").Scan(&endAfter); err != nil {
+		t.Fatalf("query session.end count after: %v", err)
+	}
+	if endAfter != endBefore {
+		t.Errorf("session.end event count changed: before=%d after=%d (expected no new event)", endBefore, endAfter)
+	}
+}
+
+func TestHandleList_DoesNotSelfHealCrossDaemonAgents(t *testing.T) {
+	tmpDir := t.TempDir()
+	thrumDir := filepath.Join(tmpDir, ".thrum")
+	syncDir := filepath.Join(thrumDir, "sync")
+	messagesDir := filepath.Join(syncDir, "messages")
+	if err := os.MkdirAll(messagesDir, 0750); err != nil {
+		t.Fatalf("create messages dir: %v", err)
+	}
+
+	s, err := state.NewState(thrumDir, syncDir, "test_repo_team", "local_daemon_id")
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	agentHandler := NewAgentHandler(s)
+	sessionHandler := NewSessionHandler(s)
+	teamHandler := NewTeamHandler(s, thrumDir)
+
+	reg := RegisterRequest{
+		Name:     "coordinator_main_remote",
+		Role:     "coordinator",
+		Module:   "main",
+		Display:  "Remote Coordinator",
+		AgentPID: 999999,
+	}
+	regJSON, _ := json.Marshal(reg)
+	regResp, err := agentHandler.HandleRegister(ctx, regJSON)
+	if err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+	agentID := regResp.(*RegisterResponse).AgentID
+
+	if _, err := s.RawDB().Exec(
+		`UPDATE agents SET origin_daemon = ?, hostname = ? WHERE agent_id = ?`,
+		"remote_daemon_mac",
+		"remote-host-xyz",
+		agentID,
+	); err != nil {
+		t.Fatalf("mark agent as cross-daemon: %v", err)
+	}
+
+	startReq := SessionStartRequest{AgentID: agentID}
+	startJSON, _ := json.Marshal(startReq)
+	if _, err := sessionHandler.HandleStart(ctx, startJSON); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	if process.IsRunning(999999) {
+		t.Fatalf("expected pid 999999 to be absent locally")
+	}
+
+	var endBefore int
+	if err := s.RawDB().QueryRow("SELECT COUNT(*) FROM events WHERE type = 'agent.session.end'").Scan(&endBefore); err != nil {
+		t.Fatalf("query session.end count before: %v", err)
+	}
+
+	req := TeamListRequest{IncludeOffline: true}
+	reqJSON, _ := json.Marshal(req)
+	resp, err := teamHandler.HandleList(ctx, reqJSON)
+	if err != nil {
+		t.Fatalf("HandleList error: %v", err)
+	}
+	result := resp.(*TeamListResponse)
+
+	var got *TeamMember
+	for i := range result.Members {
+		if result.Members[i].AgentID == agentID {
+			got = &result.Members[i]
+			break
+		}
+	}
+	if got == nil {
+		t.Fatalf("agent %s missing from team list", agentID)
+	}
+	if got.Status != "active" {
+		t.Errorf("Status = %q, want active", got.Status)
+	}
+
 	var endAfter int
 	if err := s.RawDB().QueryRow("SELECT COUNT(*) FROM events WHERE type = 'agent.session.end'").Scan(&endAfter); err != nil {
 		t.Fatalf("query session.end count after: %v", err)
