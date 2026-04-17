@@ -141,17 +141,49 @@ dev: build
 	@./$(BUILD_DIR)/$(BINARY_NAME) daemon restart 2>/dev/null || ./$(BUILD_DIR)/$(BINARY_NAME) daemon start
 	@./$(BUILD_DIR)/$(BINARY_NAME) daemon status
 
-# Deploy binary to a remote macOS machine via scp
-# Usage: make deploy-remote REMOTE=leontest
+# Deploy binary to a remote machine via scp with cross-compilation.
+# Usage: make deploy-remote REMOTE=leonsmacmini.local
+#        make deploy-remote REMOTE=ubuntuleondev
 #        make deploy-remote REMOTE=user@192.168.1.10
-deploy-remote: install
+# Detects remote OS/arch via `uname -s -m`, cross-compiles the right binary,
+# stops the remote daemon, uploads, codesigns on darwin targets, moves into
+# place, and restarts. Works across OS and arch differences; local-arch
+# assumption is removed. Supports darwin/amd64, darwin/arm64, linux/amd64,
+# linux/arm64.
+deploy-remote:
 ifndef REMOTE
-	$(error REMOTE is required. Usage: make deploy-remote REMOTE=leontest)
+	$(error REMOTE is required. Usage: make deploy-remote REMOTE=host)
 endif
-	@echo "Deploying $(BINARY_NAME) to $(REMOTE)..."
-	scp $(INSTALL_DIR)/$(BINARY_NAME) $(REMOTE):~/.local/bin/$(BINARY_NAME)
-	ssh $(REMOTE) "xattr -cr ~/.local/bin/$(BINARY_NAME) && codesign -s - -f ~/.local/bin/$(BINARY_NAME)"
-	@echo "Deployed and signed $(BINARY_NAME) on $(REMOTE)"
+	@set -e; \
+	echo "Detecting remote OS/arch on $(REMOTE)..."; \
+	uname_out=$$(ssh $(REMOTE) uname -s -m); \
+	echo "  remote: $$uname_out"; \
+	case "$$uname_out" in \
+		Darwin*arm64)    goos=darwin; goarch=arm64 ;; \
+		Darwin*x86_64)   goos=darwin; goarch=amd64 ;; \
+		Linux*x86_64)    goos=linux;  goarch=amd64 ;; \
+		Linux*aarch64)   goos=linux;  goarch=arm64 ;; \
+		Linux*arm64)     goos=linux;  goarch=arm64 ;; \
+		*) echo "ERROR: unsupported remote OS/arch: $$uname_out"; exit 1 ;; \
+	esac; \
+	artifact=$(BINARY_NAME)-$$goos-$$goarch; \
+	echo "Cross-compiling $$artifact..."; \
+	GOOS=$$goos GOARCH=$$goarch go build \
+		-ldflags="-X main.Version=$(VERSION) -X main.Build=$$(git rev-parse --short HEAD)" \
+		-o $(BUILD_DIR)/$$artifact ./cmd/$(BINARY_NAME); \
+	echo "Stopping remote daemon on $(REMOTE) (tolerate failure)..."; \
+	ssh $(REMOTE) "~/.local/bin/$(BINARY_NAME) daemon stop" || true; \
+	echo "Uploading $(BUILD_DIR)/$$artifact to $(REMOTE):/tmp/$(BINARY_NAME)-new..."; \
+	scp $(BUILD_DIR)/$$artifact $(REMOTE):/tmp/$(BINARY_NAME)-new; \
+	ssh $(REMOTE) "chmod +x /tmp/$(BINARY_NAME)-new"; \
+	if [ "$$goos" = "darwin" ]; then \
+		echo "Codesigning on darwin target..."; \
+		ssh $(REMOTE) "xattr -cr /tmp/$(BINARY_NAME)-new && codesign -s - -f /tmp/$(BINARY_NAME)-new"; \
+	fi; \
+	ssh $(REMOTE) "mv /tmp/$(BINARY_NAME)-new ~/.local/bin/$(BINARY_NAME)"; \
+	echo "Starting remote daemon..."; \
+	ssh $(REMOTE) "~/.local/bin/$(BINARY_NAME) daemon start"; \
+	echo "Deployed $(BINARY_NAME) ($$goos/$$goarch) to $(REMOTE)"
 
 ## E2E test cleanup — stops daemon and removes /tmp/thrum-e2e-release/
 clean-e2e:
