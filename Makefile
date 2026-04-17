@@ -22,7 +22,7 @@ help:
 	@echo "  make build-go          - Build Go binary only (skip UI rebuild)"
 	@echo "  make install           - Full build and install thrum to ~/.local/bin (SHARED — affects all agents)"
 	@echo "  make dev               - Full build + restart LOCAL worktree daemon (isolated — safe for multi-agent machines)"
-	@echo "  make deploy-remote REMOTE=host - Install + scp + sign on remote macOS"
+	@echo "  make deploy-remote REMOTE=host - Cross-compile + scp + (macOS: codesign) + verify version on remote"
 	@echo "  make fmt               - Format Go code"
 	@echo "  make fmt-md            - Format Markdown files with prettier"
 	@echo "  make fmt-all           - Format all files (Go + Markdown)"
@@ -145,11 +145,17 @@ dev: build
 # Usage: make deploy-remote REMOTE=leonsmacmini.local
 #        make deploy-remote REMOTE=ubuntuleondev
 #        make deploy-remote REMOTE=user@192.168.1.10
+#
+# Scope: JUST installs a verified working binary at ~/.local/bin/. Does NOT
+# touch daemon lifecycle — the agent operating on the remote decides when
+# to restart. The final `version` check confirms the binary is runnable on
+# the target (if codesign is missing or the arch is wrong the version call
+# fails and the deploy errors out). `thrum version` is repo-context-free
+# and is the only thrum subcommand run over raw ssh here.
+#
 # Detects remote OS/arch via `uname -s -m`, cross-compiles the right binary,
-# stops the remote daemon, uploads, codesigns on darwin targets, moves into
-# place, and restarts. Works across OS and arch differences; local-arch
-# assumption is removed. Supports darwin/amd64, darwin/arm64, linux/amd64,
-# linux/arm64.
+# uploads it, codesigns on darwin targets, moves it into place, and verifies.
+# Supports darwin/amd64, darwin/arm64, linux/amd64, linux/arm64.
 deploy-remote:
 ifndef REMOTE
 	$(error REMOTE is required. Usage: make deploy-remote REMOTE=host)
@@ -167,12 +173,11 @@ endif
 		*) echo "ERROR: unsupported remote OS/arch: $$uname_out"; exit 1 ;; \
 	esac; \
 	artifact=$(BINARY_NAME)-$$goos-$$goarch; \
-	echo "Cross-compiling $$artifact..."; \
+	short_sha=$$(git rev-parse --short HEAD); \
+	echo "Cross-compiling $$artifact (v$(VERSION) build $$short_sha)..."; \
 	GOOS=$$goos GOARCH=$$goarch go build \
-		-ldflags="-X main.Version=$(VERSION) -X main.Build=$$(git rev-parse --short HEAD)" \
+		-ldflags="-X main.Version=$(VERSION) -X main.Build=$$short_sha" \
 		-o $(BUILD_DIR)/$$artifact ./cmd/$(BINARY_NAME); \
-	echo "Stopping remote daemon on $(REMOTE) (tolerate failure)..."; \
-	ssh $(REMOTE) "~/.local/bin/$(BINARY_NAME) daemon stop" || true; \
 	echo "Uploading $(BUILD_DIR)/$$artifact to $(REMOTE):/tmp/$(BINARY_NAME)-new..."; \
 	scp $(BUILD_DIR)/$$artifact $(REMOTE):/tmp/$(BINARY_NAME)-new; \
 	ssh $(REMOTE) "chmod +x /tmp/$(BINARY_NAME)-new"; \
@@ -181,9 +186,16 @@ endif
 		ssh $(REMOTE) "xattr -cr /tmp/$(BINARY_NAME)-new && codesign -s - -f /tmp/$(BINARY_NAME)-new"; \
 	fi; \
 	ssh $(REMOTE) "mv /tmp/$(BINARY_NAME)-new ~/.local/bin/$(BINARY_NAME)"; \
-	echo "Starting remote daemon..."; \
-	ssh $(REMOTE) "~/.local/bin/$(BINARY_NAME) daemon start"; \
-	echo "Deployed $(BINARY_NAME) ($$goos/$$goarch) to $(REMOTE)"
+	echo "Verifying remote binary runs..."; \
+	remote_ver=$$(ssh $(REMOTE) "~/.local/bin/$(BINARY_NAME) version" 2>&1 | head -1); \
+	echo "  remote: $$remote_ver"; \
+	if ! echo "$$remote_ver" | grep -qF "v$(VERSION)" || ! echo "$$remote_ver" | grep -qF "$$short_sha"; then \
+		echo "ERROR: remote binary did not report expected version v$(VERSION) + build $$short_sha."; \
+		echo "This usually means the binary did not codesign properly, is"; \
+		echo "the wrong arch, or failed to run for another reason."; \
+		exit 1; \
+	fi; \
+	echo "Deployed $(BINARY_NAME) ($$goos/$$goarch) to $(REMOTE) — version verified. Daemon restart is up to the operator."
 
 ## E2E test cleanup — stops daemon and removes /tmp/thrum-e2e-release/
 clean-e2e:
