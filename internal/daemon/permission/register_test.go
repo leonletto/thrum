@@ -32,6 +32,30 @@ func TestResolveSupervisorID_FallsBackToBasename(t *testing.T) {
 	}
 }
 
+func TestSupervisorIdentity_Shape(t *testing.T) {
+	cfg := &config.ThrumConfig{ProjectName: "thrum"}
+	idFile := SupervisorIdentity(cfg, "/Users/leon/dev/opensource/thrum")
+
+	if !idFile.Reserved {
+		t.Fatalf("Reserved=false, want true")
+	}
+	if idFile.Agent.Kind != "agent" {
+		t.Fatalf("Kind=%q, want agent", idFile.Agent.Kind)
+	}
+	if idFile.Agent.Role != "supervisor" {
+		t.Fatalf("Role=%q, want supervisor", idFile.Agent.Role)
+	}
+	if idFile.Agent.Module != "daemon" {
+		t.Fatalf("Module=%q, want daemon", idFile.Agent.Module)
+	}
+	if !strings.HasPrefix(idFile.Agent.Name, "supervisor_thrum_") {
+		t.Fatalf("Name=%q, want prefix supervisor_thrum_", idFile.Agent.Name)
+	}
+	if !strings.Contains(idFile.Agent.Display, "thrum") {
+		t.Fatalf("Display=%q, want to contain 'thrum'", idFile.Agent.Display)
+	}
+}
+
 func TestResolveLegacySupervisorID_MatchesOldBinaryFallbacks(t *testing.T) {
 	cases := []struct {
 		name     string
