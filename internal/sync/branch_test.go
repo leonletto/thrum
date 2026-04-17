@@ -427,16 +427,16 @@ func TestBranchManager_branchExists(t *testing.T) {
 			t.Skip("no current branch found")
 		}
 
-		exists := bm.branchExists(context.Background(), currentBranch)
+		exists := bm.BranchExists(context.Background(), currentBranch)
 		if !exists {
-			t.Errorf("branchExists returned false for existing branch %s", currentBranch)
+			t.Errorf("BranchExists returned false for existing branch %s", currentBranch)
 		}
 	})
 
 	t.Run("non-existing branch", func(t *testing.T) {
-		exists := bm.branchExists(context.Background(), "non-existent-branch")
+		exists := bm.BranchExists(context.Background(), "non-existent-branch")
 		if exists {
-			t.Error("branchExists returned true for non-existent branch")
+			t.Error("BranchExists returned true for non-existent branch")
 		}
 	})
 }
@@ -854,6 +854,68 @@ func TestBranchHasContent_MissingRef(t *testing.T) {
 	}
 	if has {
 		t.Error("expected has=false for missing ref")
+	}
+}
+
+func TestCreateSyncBranch_Row3_AttachesToRemoteOnFreshClone(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+
+	// Synthesize a populated refs/remotes/origin/a-sync as if git clone had fetched it
+	remoteSHA := createBranchWithContent(t, tmpDir, "unused-tmp",
+		`{"type":"hello"}`+"\n", nil)
+	if err := exec.Command("git", "-C", tmpDir, "update-ref",
+		"refs/remotes/origin/a-sync", remoteSHA).Run(); err != nil {
+		t.Fatalf("update-ref remote: %v", err)
+	}
+	if err := exec.Command("git", "-C", tmpDir, "update-ref", "-d",
+		"refs/heads/unused-tmp").Run(); err != nil {
+		t.Fatalf("delete tmp branch: %v", err)
+	}
+	if err := exec.Command("git", "-C", tmpDir, "remote", "add",
+		"origin", tmpDir).Run(); err != nil {
+		t.Fatalf("remote add: %v", err)
+	}
+
+	bm := NewBranchManager(tmpDir, true)
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
+		t.Fatalf("CreateSyncBranch failed: %v", err)
+	}
+
+	// Assert local a-sync SHA == remote SHA (attach, not orphan)
+	out, err := exec.Command("git", "-C", tmpDir, "rev-parse", "refs/heads/a-sync").Output()
+	if err != nil {
+		t.Fatalf("rev-parse: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != remoteSHA {
+		t.Errorf("CreateSyncBranch did not attach: local SHA %q != remote SHA %q", got, remoteSHA)
+	}
+}
+
+func TestCreateSyncBranch_Row2_OrphanWhenNoRemote(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	bm := NewBranchManager(tmpDir, true)
+
+	if err := bm.CreateSyncBranch(context.Background()); err != nil {
+		t.Fatalf("CreateSyncBranch failed: %v", err)
+	}
+	// Assert local a-sync exists
+	if err := exec.Command("git", "-C", tmpDir, "rev-parse", "--verify",
+		"refs/heads/a-sync").Run(); err != nil {
+		t.Errorf("expected refs/heads/a-sync to exist, got error: %v", err)
+	}
+	// Assert no common ancestor with HEAD (orphan)
+	mainSHA, err := exec.Command("git", "-C", tmpDir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v", err)
+	}
+	syncSHA, err := exec.Command("git", "-C", tmpDir, "rev-parse", "refs/heads/a-sync").Output()
+	if err != nil {
+		t.Fatalf("rev-parse a-sync: %v", err)
+	}
+	cmd := exec.Command("git", "-C", tmpDir, "merge-base",
+		strings.TrimSpace(string(mainSHA)), strings.TrimSpace(string(syncSHA)))
+	if err := cmd.Run(); err == nil {
+		t.Error("expected no common ancestor between HEAD and a-sync (orphan), but merge-base succeeded")
 	}
 }
 

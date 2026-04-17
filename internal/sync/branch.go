@@ -31,21 +31,22 @@ func NewBranchManager(repoPath string, localOnly bool) *BranchManager {
 	}
 }
 
-// CreateSyncBranch creates the a-sync branch if it doesn't exist.
-// The a-sync branch is always created as an orphan (no shared history with main).
+// CreateSyncBranch ensures refs/heads/a-sync exists. If refs/remotes/origin/a-sync
+// was populated by a prior git clone or git fetch, attach local a-sync to that
+// remote SHA (spec matrix row 3). Otherwise create an orphan (row 2).
+// Idempotent: if local a-sync already exists, returns early without touching anything.
 func (b *BranchManager) CreateSyncBranch(ctx context.Context) error {
-	// Check if we're in a git repository
 	if err := b.checkGitRepo(ctx); err != nil {
 		return err
 	}
-
-	// Check if a-sync branch already exists
-	if exists := b.branchExists(ctx, SyncBranchName); exists {
-		// Branch already exists, nothing to do
+	if b.BranchExists(ctx, SyncBranchName) {
+		// Local already exists — do not modify. --force-reconciliation happens
+		// in cli/init.go's reconcileSyncBranch for cases that need it.
 		return nil
 	}
-
-	// Always create as orphan — a-sync should never share history with main
+	if sha, ok := b.RemoteTrackingSyncSHA(ctx); ok {
+		return b.AttachToRemote(ctx, sha)
+	}
 	return b.createOrphanBranch(ctx)
 }
 
@@ -192,8 +193,8 @@ func (b *BranchManager) checkGitRepo(ctx context.Context) error {
 	return nil
 }
 
-// branchExists checks if a git branch exists.
-func (b *BranchManager) branchExists(ctx context.Context, branchName string) bool {
+// BranchExists reports whether a git branch exists as refs/heads/<name> locally.
+func (b *BranchManager) BranchExists(ctx context.Context, branchName string) bool {
 	_, err := safecmd.Git(ctx, b.repoPath, "rev-parse", "--verify", branchName)
 	return err == nil
 }
