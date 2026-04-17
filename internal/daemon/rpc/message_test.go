@@ -2443,11 +2443,13 @@ func TestQueryAgentsByRecipient_ReservedIdentityFallback(t *testing.T) {
 		t.Fatalf("save non-reserved identity: %v", err)
 	}
 
-	// NewMessageHandlerWithDispatcher is the constructor that wires
-	// thrumDir. NewMessageHandler(st) leaves thrumDir empty which
-	// disables the fallback by design (localdev tests that don't
-	// exercise reserved recipients shouldn't pay the filesystem cost).
-	handler := NewMessageHandlerWithDispatcher(st, nil, thrumDir)
+	// Task 5 replaced the Reserved=true file-stat fallback with an
+	// in-memory supervisor-recipient check. To keep this test's
+	// positive/negative assertions meaningful without rewriting the
+	// fixture, wire reservedID through as supervisorLegacy so the
+	// legacy branch of isSupervisorRecipient matches. Task 7 cleans
+	// up the Reserved-file framing entirely.
+	handler := NewMessageHandlerWithDispatcher(st, nil, thrumDir, "", reservedID)
 	ctx := context.Background()
 
 	// Positive: reserved identity resolves via the fallback.
@@ -2488,5 +2490,45 @@ func TestQueryAgentsByRecipient_ReservedIdentityFallback(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("empty-thrumDir lookup got %v, want empty", got)
+	}
+}
+
+func TestIsSupervisorRecipient(t *testing.T) {
+	h := &MessageHandler{
+		supervisorID:     "supervisor_thrum_leon-letto",
+		supervisorLegacy: "supervisor_thrum",
+	}
+	cases := []struct {
+		name      string
+		recipient string
+		want      bool
+	}{
+		{"canonical matches", "supervisor_thrum_leon-letto", true},
+		{"legacy matches", "supervisor_thrum", true},
+		{"unrelated supervisor rejected", "supervisor_other_user", false},
+		{"non-supervisor rejected", "coordinator_main", false},
+		{"empty rejected", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isSupervisorRecipient(h, tc.recipient)
+			if got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsSupervisorRecipient_EmptyLegacyOK(t *testing.T) {
+	// supervisorLegacy may be empty in test paths; must not match anything.
+	h := &MessageHandler{
+		supervisorID:     "supervisor_x_y",
+		supervisorLegacy: "",
+	}
+	if isSupervisorRecipient(h, "") {
+		t.Fatal("empty recipient must not match empty supervisorLegacy")
+	}
+	if !isSupervisorRecipient(h, "supervisor_x_y") {
+		t.Fatal("canonical must still match with empty supervisorLegacy")
 	}
 }
