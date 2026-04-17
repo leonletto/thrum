@@ -610,6 +610,89 @@ func TestInit_Row1_SkipsBranchWorkWhenAlreadySyncing(t *testing.T) {
 	if cfgAfter.Daemon.LocalOnly {
 		t.Errorf("row 1: LocalOnly was reset to true")
 	}
+
+	// Assert strategy files were rewritten via reinitIdentityOnly.
+	strategiesDir := filepath.Join(tmpDir, ".thrum", "strategies")
+	entries, err := os.ReadDir(strategiesDir)
+	if err != nil {
+		t.Errorf("row 1: .thrum/strategies/ not readable: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Error("row 1: .thrum/strategies/ is empty; reinitIdentityOnly did not rewrite strategy files")
+	}
+}
+
+func TestInit_Row4_ForceReinitKeepsLocalNoRemote(t *testing.T) {
+	// Matrix row 4: --force, local a-sync has content, no remote a-sync.
+	// Init should preserve local a-sync and leave config unchanged.
+	tmpDir := setupThrumRepo(t)
+	localSHA := writeLocalASyncWithContent(t, tmpDir, `{"e":"local"}`+"\n")
+	cfgBefore, err := config.LoadThrumConfig(filepath.Join(tmpDir, ".thrum"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if err := Init(InitOptions{RepoPath: tmpDir, Force: true}); err != nil {
+		t.Fatalf("Init --force failed: %v", err)
+	}
+
+	if got := gitOut(t, tmpDir, "rev-parse", "refs/heads/a-sync"); got != localSHA {
+		t.Errorf("row 4: local a-sync SHA changed: want %q got %q", localSHA, got)
+	}
+	cfgAfter, err := config.LoadThrumConfig(filepath.Join(tmpDir, ".thrum"))
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if cfgAfter.Daemon.LocalOnly != cfgBefore.Daemon.LocalOnly {
+		t.Errorf("row 4: LocalOnly flipped unexpectedly: before=%v after=%v",
+			cfgBefore.Daemon.LocalOnly, cfgAfter.Daemon.LocalOnly)
+	}
+}
+
+func TestInit_Row6_ForceReinitKeepsLocalWhenRemoteEmpty(t *testing.T) {
+	// Matrix row 6: --force, local has content, remote is empty. Init should
+	// keep local but flip LocalOnly to false (a remote now exists).
+	tmpDir := setupThrumRepo(t)
+	localSHA := writeLocalASyncWithContent(t, tmpDir, `{"e":"local"}`+"\n")
+	writeRemoteTrackingASyncWithContent(t, tmpDir, "")
+
+	if err := Init(InitOptions{RepoPath: tmpDir, Force: true}); err != nil {
+		t.Fatalf("Init --force failed: %v", err)
+	}
+
+	if got := gitOut(t, tmpDir, "rev-parse", "refs/heads/a-sync"); got != localSHA {
+		t.Errorf("row 6: local a-sync SHA changed: want %q got %q", localSHA, got)
+	}
+	cfg, err := config.LoadThrumConfig(filepath.Join(tmpDir, ".thrum"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Daemon.LocalOnly {
+		t.Errorf("row 6: expected LocalOnly=false when remote a-sync exists")
+	}
+}
+
+func TestInit_Row7_ForceReinitBothEmptyAttachesToRemote(t *testing.T) {
+	// Matrix row 7: --force, both local and remote a-sync are empty.
+	// Init should attach local to remote SHA and flip LocalOnly to false.
+	tmpDir := setupThrumRepo(t)
+	writeLocalASyncWithContent(t, tmpDir, "")
+	remoteSHA := writeRemoteTrackingASyncWithContent(t, tmpDir, "")
+
+	if err := Init(InitOptions{RepoPath: tmpDir, Force: true}); err != nil {
+		t.Fatalf("Init --force failed: %v", err)
+	}
+
+	if got := gitOut(t, tmpDir, "rev-parse", "refs/heads/a-sync"); got != remoteSHA {
+		t.Errorf("row 7: a-sync SHA mismatch: want %q got %q", remoteSHA, got)
+	}
+	cfg, err := config.LoadThrumConfig(filepath.Join(tmpDir, ".thrum"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Daemon.LocalOnly {
+		t.Errorf("row 7: expected LocalOnly=false after both-empty attach")
+	}
 }
 
 func TestInit_Row3_AttachAndFlipLocalOnlyOnFreshInit(t *testing.T) {

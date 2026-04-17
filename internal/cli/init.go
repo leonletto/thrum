@@ -451,15 +451,24 @@ func initASyncBranch(repoPath string, recon SyncReconciliation) error {
 			if err := bm.AttachToRemote(ctx, recon.AttachToRemoteSHA); err != nil {
 				return fmt.Errorf("attach to remote: %w", err)
 			}
-			// After update-ref, an existing sync worktree's working-tree
-			// content may not match the new branch tip. Force-reset it so the
-			// subsequent `git add .` + commit hits the "nothing to commit"
-			// path instead of staging stale content and producing an unwanted
-			// commit on top of the remote SHA.
-			if syncDir, pathErr := paths.SyncWorktreePath(repoPath); pathErr == nil {
-				if _, statErr := os.Stat(syncDir); statErr == nil {
-					_, _ = safecmd.Git(ctx, syncDir, "reset", "--hard", "refs/heads/"+sync.SyncBranchName)
-				}
+		}
+	}
+
+	// If a pre-existing sync worktree's working-tree content has diverged from
+	// refs/heads/a-sync (e.g. the branch was just attached to a remote SHA, or
+	// was updated externally between inits), force-reset it so the subsequent
+	// `git add .` + commit hits the "nothing to commit" path instead of
+	// staging stale content and creating an unwanted commit on top of the
+	// current tip. No-op when the worktree doesn't exist yet or already
+	// matches the branch tip.
+	//
+	// Reset errors are propagated because silent failure here would
+	// re-introduce the exact bug this change fixes: a commit added on top
+	// of the attached SHA, producing a disjoint history that can't push.
+	if syncDir, pathErr := paths.SyncWorktreePath(repoPath); pathErr == nil {
+		if _, statErr := os.Stat(syncDir); statErr == nil {
+			if _, err := safecmd.Git(ctx, syncDir, "reset", "--hard", "refs/heads/"+sync.SyncBranchName); err != nil {
+				return fmt.Errorf("reset sync worktree to current a-sync tip: %w", err)
 			}
 		}
 	}
