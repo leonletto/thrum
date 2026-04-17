@@ -22,6 +22,27 @@ type InitOptions struct {
 	Stealth  bool // Use .git/info/exclude instead of .gitignore
 }
 
+// SyncReconciliation describes how Init should set up the sync branch and
+// config, based on the current state of refs/heads/a-sync and
+// refs/remotes/origin/a-sync. Produced by reconcileSyncBranch per the matrix
+// in dev-docs/specs/2026-04-17-thrum-init-attach-remote-a-sync-design.md.
+type SyncReconciliation struct {
+	// AttachToRemoteSHA, if non-empty, is the remote-tracking SHA that local
+	// refs/heads/a-sync should be pointed at. For rows 5 and 7 (local already
+	// exists, caller must overwrite), Init applies this via
+	// BranchManager.AttachToRemote after CreateSyncBranch's early-return.
+	// For row 3 (no local yet), CreateSyncBranch will attach on its own; the
+	// field is still set so Init knows to flip LocalOnly.
+	AttachToRemoteSHA string
+	// LocalOnlyOverride, if non-nil, is the value to stamp into
+	// config.Daemon.LocalOnly. nil means "leave whatever the caller's default
+	// was" (current behavior for rows 2 and 4).
+	LocalOnlyOverride *bool
+}
+
+// boolPtr returns a pointer to b, used for building LocalOnlyOverride.
+func boolPtr(b bool) *bool { return &b }
+
 // IsGitWorktree checks if repoPath is a git worktree (not the main working tree).
 // Returns (isWorktree, mainRepoRoot, error).
 func IsGitWorktree(repoPath string) (bool, string, error) {
@@ -399,4 +420,93 @@ func initASyncBranch(repoPath string) error {
 	}
 
 	return nil
+}
+
+// reconcileSyncBranch runs the behavior matrix from
+// dev-docs/specs/2026-04-17-thrum-init-attach-remote-a-sync-design.md for
+// matrix rows 2–8. Row 1 (skip branch work when already syncing) is handled
+// by Init itself before this function is called. This is pure decision logic —
+// does not mutate refs or config.
+// Returns an error only for row 8 (both local and remote have content).
+func reconcileSyncBranch(ctx stdcontext.Context, repoPath string) (SyncReconciliation, error) {
+	bm := sync.NewBranchManager(repoPath, true)
+	localExists := bm.BranchExists(ctx, sync.SyncBranchName)
+	remoteSHA, remoteExists := bm.RemoteTrackingSyncSHA(ctx)
+
+	switch {
+	case !localExists && !remoteExists:
+		// Row 2: fresh, no remote. CreateSyncBranch will create an orphan. No override.
+		return SyncReconciliation{}, nil
+
+	case !localExists && remoteExists:
+		// Row 3: fresh, remote present. CreateSyncBranch will attach; flip LocalOnly.
+		return SyncReconciliation{
+			AttachToRemoteSHA: remoteSHA,
+			LocalOnlyOverride: boolPtr(false),
+		}, nil
+
+	case localExists && !remoteExists:
+		// Row 4: keep local as-is, no remote, no override.
+		return SyncReconciliation{}, nil
+
+	case localExists && remoteExists:
+		localHasContent, err := bm.BranchHasContent(ctx, "refs/heads/"+sync.SyncBranchName)
+		if err != nil {
+			return SyncReconciliation{}, fmt.Errorf("check local a-sync content: %w", err)
+		}
+		remoteHasContent, err := bm.BranchHasContent(ctx, "refs/remotes/origin/"+sync.SyncBranchName)
+		if err != nil {
+			return SyncReconciliation{}, fmt.Errorf("check remote a-sync content: %w", err)
+		}
+		switch {
+		case localHasContent && remoteHasContent:
+			// Row 8: conflict — refuse init with recovery commands.
+			return SyncReconciliation{}, row8ConflictError(ctx, repoPath)
+		case !localHasContent && remoteHasContent:
+			// Row 5: local is empty placeholder, remote has real data — attach.
+			return SyncReconciliation{
+				AttachToRemoteSHA: remoteSHA,
+				LocalOnlyOverride: boolPtr(false),
+			}, nil
+		case localHasContent && !remoteHasContent:
+			// Row 6: local has real data, remote empty — keep local, flip LocalOnly.
+			return SyncReconciliation{
+				LocalOnlyOverride: boolPtr(false),
+			}, nil
+		default:
+			// Row 7: both empty — attach to remote (equivalent histories).
+			return SyncReconciliation{
+				AttachToRemoteSHA: remoteSHA,
+				LocalOnlyOverride: boolPtr(false),
+			}, nil
+		}
+	}
+
+	return SyncReconciliation{}, nil
+}
+
+// row8ConflictError builds the row-8 error with recovery commands filled in.
+// Includes the remote URL if one is configured; otherwise omits that line.
+func row8ConflictError(ctx stdcontext.Context, repoPath string) error {
+	var remoteLine string
+	if out, err := safecmd.Git(ctx, repoPath, "config", "--get", "remote.origin.url"); err == nil {
+		if url := strings.TrimSpace(string(out)); url != "" {
+			remoteLine = fmt.Sprintf("  Remote: %s/blob/a-sync/events.jsonl\n", url)
+		}
+	}
+	return fmt.Errorf(`local a-sync and origin/a-sync both contain data — cannot safely reconcile without manual intervention.
+
+Inspect each side before choosing:
+%s  Local:  .git/thrum-sync/a-sync/events.jsonl  (after one-time checkout)
+
+Then run ONE of the following, based on which side is authoritative:
+
+  # Keep local history (force-pushes over remote):
+  git push --force-with-lease origin a-sync
+
+  # Keep remote history (discards local a-sync, then re-run init):
+  git update-ref refs/heads/a-sync refs/remotes/origin/a-sync
+  thrum init --force
+
+A future 'thrum doctor --fix' will automate this (tracked as thrum-uvpp.1).`, remoteLine)
 }
