@@ -104,6 +104,10 @@ func Init(opts InitOptions) error {
 	// Row 1 short-circuit (spec: 2026-04-17-thrum-init-attach-remote-a-sync-design.md).
 	// If --force against an already-sync-configured install (LocalOnly=false),
 	// skip all sync-branch work and only refresh identity/strategy files.
+	//
+	// If config load fails (corrupt or unreadable), we intentionally fall
+	// through to the full init flow — it will overwrite a corrupt config on
+	// its way through, which is the correct recovery path.
 	if opts.Force {
 		if existing, loadErr := config.LoadThrumConfig(thrumDir); loadErr == nil && !existing.Daemon.LocalOnly {
 			return reinitIdentityOnly(opts)
@@ -520,6 +524,12 @@ func initASyncBranch(repoPath string, recon SyncReconciliation) error {
 // by Init itself before this function is called. This is pure decision logic —
 // does not mutate refs or config.
 // Returns an error only for row 8 (both local and remote have content).
+//
+// Invariant: rows 4–8 (local a-sync pre-exists) are only reachable with
+// --force, because Init's earlier `.thrum/` stat guard rejects a non-force
+// reinit against an existing install. If that guard is ever removed, this
+// function will need an explicit opts.Force check before the localExists
+// branches to preserve the spec's promise.
 func reconcileSyncBranch(ctx stdcontext.Context, repoPath string) (SyncReconciliation, error) {
 	bm := sync.NewBranchManager(repoPath, true)
 	localExists := bm.BranchExists(ctx, sync.SyncBranchName)
@@ -578,12 +588,13 @@ func reconcileSyncBranch(ctx stdcontext.Context, repoPath string) (SyncReconcili
 }
 
 // row8ConflictError builds the row-8 error with recovery commands filled in.
-// Includes the remote URL if one is configured; otherwise omits that line.
+// Includes the remote URL (raw, so it works for HTTPS/SSH/file:// remotes)
+// if one is configured; otherwise omits that line.
 func row8ConflictError(ctx stdcontext.Context, repoPath string) error {
 	var remoteLine string
 	if out, err := safecmd.Git(ctx, repoPath, "config", "--get", "remote.origin.url"); err == nil {
 		if url := strings.TrimSpace(string(out)); url != "" {
-			remoteLine = fmt.Sprintf("  Remote: %s/blob/a-sync/events.jsonl\n", url)
+			remoteLine = fmt.Sprintf("  Remote origin: %s (a-sync branch)\n", url)
 		}
 	}
 	return fmt.Errorf(`local a-sync and origin/a-sync both contain data — cannot safely reconcile without manual intervention.
@@ -600,5 +611,5 @@ Then run ONE of the following, based on which side is authoritative:
   git update-ref refs/heads/a-sync refs/remotes/origin/a-sync
   thrum init --force
 
-A future 'thrum doctor --fix' will automate this (tracked as thrum-uvpp.1).`, remoteLine)
+A future 'thrum doctor --fix' will automate this (tracked as thrum-uvpp.1)`, remoteLine)
 }
