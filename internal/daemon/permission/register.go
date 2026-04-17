@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/leonletto/thrum/internal/config"
-	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/identity"
 )
 
@@ -88,7 +89,17 @@ func resolveLegacyRepoSlug(cfg *config.ThrumConfig, repoPath string) string {
 // prefix from GenerateRepoID is stripped since this value is embedded
 // in "supervisor_<...>" where "r_" would be meaningless noise).
 func gitOriginHash(repoPath string) string {
-	out, err := safecmd.Git(context.Background(), repoPath, "config", "--get", "remote.origin.url")
+	// Intentionally uses exec.Command directly rather than safecmd.Git:
+	// safecmd injects `-c user.name=Thrum -c user.email=thrum@local` on
+	// every invocation, which is correct for commits but pollutes
+	// `git config --get` reads. The injection would cause this read to
+	// return the injected value instead of the repo's real origin URL in
+	// corner cases. This is a pure read with static, internal args; no
+	// user input flows into the argv.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "config", "--get", "remote.origin.url") // #nosec G204 -- args are static; repoPath is the resolved daemon working directory
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
@@ -122,8 +133,19 @@ func resolveUserSlug(repoPath string) string {
 }
 
 // gitUserName returns `git config --get user.name` run in repoPath, or "" on error.
+//
+// Uses exec.Command directly (not safecmd.Git) because safecmd injects
+// `-c user.name=Thrum -c user.email=thrum@local` on every invocation, and
+// those `-c` overrides win over local config for `git config --get` reads.
+// That is correct behavior for the commit paths safecmd is designed for,
+// but it would silently corrupt this lookup — `gitUserName` would always
+// return "Thrum" regardless of the user's real config. Pure read, static
+// args, no user input in argv.
 func gitUserName(repoPath string) string {
-	out, err := safecmd.Git(context.Background(), repoPath, "config", "--get", "user.name")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "config", "--get", "user.name") // #nosec G204 -- args are static; repoPath is the resolved daemon working directory
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}

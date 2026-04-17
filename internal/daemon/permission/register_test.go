@@ -1,12 +1,14 @@
 package permission
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 )
 
 func TestResolveSupervisorID_ProjectNameWins(t *testing.T) {
@@ -142,4 +144,59 @@ func TestCleanupLegacySupervisorFiles_NoIdentitiesDirIsNoop(t *testing.T) {
 	// Deliberately do not create .thrum/identities/.
 	// Should not panic or error.
 	CleanupLegacySupervisorFiles(tmp)
+}
+
+// TestResolveUserSlug_Fallbacks covers the three branches of
+// resolveUserSlug in isolation per the spec's Testing section:
+// git user.name → $USER → hostname.
+//
+// Each subtest sets GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM to /dev/null
+// so the host's real git config can't leak in and make the fallback
+// order nondeterministic. SanitizeAgentName lowercases and maps
+// non-[a-z0-9_-] to "_", so "Leon Letto" → "leon_letto".
+func TestResolveUserSlug_Fallbacks(t *testing.T) {
+	t.Run("git user.name branch", func(t *testing.T) {
+		t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+		t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+		gitRepo := t.TempDir()
+		ctx := context.Background()
+		if _, err := safecmd.Git(ctx, gitRepo, "init"); err != nil {
+			t.Skipf("git init unavailable: %v", err)
+		}
+		if _, err := safecmd.Git(ctx, gitRepo, "config", "user.name", "Leon Letto"); err != nil {
+			t.Skipf("git config unavailable: %v", err)
+		}
+		// $USER would otherwise win if the git branch returned "main";
+		// force a clearly-distinguishable value so a false positive is
+		// detectable.
+		t.Setenv("USER", "should-not-be-used")
+		if got := resolveUserSlug(gitRepo); got != "leon_letto" {
+			t.Errorf("git user.name branch: got %q, want leon_letto", got)
+		}
+	})
+
+	t.Run("$USER branch when no git user.name", func(t *testing.T) {
+		t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+		t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+		tmp := t.TempDir() // not a git repo → gitUserName returns ""
+		t.Setenv("USER", "jane")
+		if got := resolveUserSlug(tmp); got != "jane" {
+			t.Errorf("$USER branch: got %q, want jane", got)
+		}
+	})
+
+	t.Run("hostname branch when no git user.name and no $USER", func(t *testing.T) {
+		t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+		t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+		tmp := t.TempDir()
+		t.Setenv("USER", "")
+		got := resolveUserSlug(tmp)
+		if got == "" {
+			t.Fatalf("hostname branch returned empty")
+		}
+		hostname, err := os.Hostname()
+		if err == nil && hostname != "" && got == "main" && hostname != "main" {
+			t.Errorf("hostname branch returned sentinel %q for host %q", got, hostname)
+		}
+	})
 }
