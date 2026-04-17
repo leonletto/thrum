@@ -31,3 +31,39 @@ func TestResolveSupervisorID_FallsBackToBasename(t *testing.T) {
 		t.Fatalf("got %q, want prefix supervisor_%s_", got, want)
 	}
 }
+
+func TestResolveLegacySupervisorID_MatchesOldBinaryFallbacks(t *testing.T) {
+	cases := []struct {
+		name     string
+		cfg      *config.ThrumConfig
+		repoPath string
+		want     string
+	}{
+		{
+			name:     "ProjectName wins",
+			cfg:      &config.ThrumConfig{ProjectName: "ThrumRepo"},
+			repoPath: "/tmp/anywhere",
+			want:     "supervisor_ThrumRepo",
+		},
+		{
+			name:     "Falls back to basename",
+			cfg:      &config.ThrumConfig{},
+			repoPath: "/Users/leon/dev/opensource/thrum",
+			want:     "supervisor_thrum",
+		},
+		{
+			name:     "Falls back to 'project' when basename is unusable",
+			cfg:      &config.ThrumConfig{},
+			repoPath: "/",
+			want:     "supervisor_project",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ResolveLegacySupervisorID(tc.cfg, tc.repoPath)
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
