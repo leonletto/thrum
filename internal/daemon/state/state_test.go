@@ -3,7 +3,9 @@ package state
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -975,7 +977,7 @@ func TestNewState_UsesCallerIDVerbatim(t *testing.T) {
 	}
 
 	// config.json must NOT have been created — caller-provided id path.
-	if _, err := os.Stat(filepath.Join(thrumDir, "config.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(thrumDir, "config.json")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("config.json should not exist for test path; stat err = %v", err)
 	}
 

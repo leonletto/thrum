@@ -145,7 +145,7 @@ func NewState(thrumDir string, syncDir string, repoID string, daemonID string) (
 
 		// Mirror identity into the daemon_identity table (single row).
 		now := time.Now().UTC().Format(time.RFC3339)
-		if _, err := db.Exec(`INSERT OR REPLACE INTO daemon_identity
+		if _, err := safeDB.ExecContext(context.Background(), `INSERT OR REPLACE INTO daemon_identity
             (daemon_id, repo_name, hostname, repo_path, git_origin_url, init_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			ident.DaemonID, ident.RepoName, ident.Hostname, ident.RepoPath,
