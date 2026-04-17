@@ -38,7 +38,7 @@ type Identity struct {
 func Bootstrap(thrumDir, repoPath string) (Identity, error) {
 	cfgPath := filepath.Join(thrumDir, "config.json")
 
-	raw, readErr := os.ReadFile(cfgPath)
+	raw, readErr := os.ReadFile(cfgPath) // #nosec G304 -- cfgPath is derived from thrumDir, not untrusted input
 	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
 		return Identity{}, fmt.Errorf("read config.json: %w", readErr)
 	}
@@ -133,7 +133,7 @@ func backupConfigOnce(src, dst string) error {
 	if _, err := os.Stat(dst); err == nil {
 		return nil // backup already exists — don't overwrite pre-upgrade state
 	}
-	data, err := os.ReadFile(src)
+	data, err := os.ReadFile(src) // #nosec G304 -- src is a config.json path derived from thrumDir
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil // nothing to back up on fresh install
@@ -153,7 +153,7 @@ func backupConfigOnce(src, dst string) error {
 func writeConfigAtomic(path string, cfg map[string]json.RawMessage) error {
 	ordered := make(map[string]any, len(cfg))
 	for k, v := range cfg {
-		ordered[k] = json.RawMessage(v)
+		ordered[k] = v
 	}
 	data, err := json.MarshalIndent(ordered, "", "  ")
 	if err != nil {

@@ -1131,7 +1131,7 @@ func backupFileOnce(src, dst string) error {
 	if _, err := os.Stat(dst); err == nil {
 		return nil // backup already exists — don't overwrite pre-upgrade state
 	}
-	data, err := os.ReadFile(src)
+	data, err := os.ReadFile(src) // #nosec G304 -- src is SQLite DB path (+ sidecars) derived from PRAGMA database_list
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil // sidecar absent (e.g. no WAL) — nothing to back up

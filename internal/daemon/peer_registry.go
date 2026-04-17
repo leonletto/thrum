@@ -16,21 +16,21 @@ import (
 
 // PeerInfo represents a paired sync peer.
 type PeerInfo struct {
-	Name         string    `json:"name"`
-	Address      string    `json:"address"`
-	DaemonID     string    `json:"daemon_id"`
-	Token        string    `json:"token,omitempty"`
-	PairedAt     time.Time `json:"paired_at"`
-	LastSync     time.Time `json:"last_sync"`
-	Transport    string    `json:"transport,omitempty"`     // "local", "tailscale", "network"
-	RepoPath     string    `json:"repo_path,omitempty"`     // Filesystem path for local peers
-	ProxyPrefix  string    `json:"proxy_prefix,omitempty"`  // Namespace prefix for proxy agents
-	RemoteAgents       []string  `json:"remote_agents,omitempty"`        // Agent names to proxy
-	RemoteRepoName     string    `json:"remote_repo_name,omitempty"`     // Peer's repository name
-	RemoteHostname     string    `json:"remote_hostname,omitempty"`      // Peer's hostname
-	RemoteRepoPath     string    `json:"remote_repo_path,omitempty"`     // Peer's repo filesystem path
+	Name               string    `json:"name"`
+	Address            string    `json:"address"`
+	DaemonID           string    `json:"daemon_id"`
+	Token              string    `json:"token,omitempty"`
+	PairedAt           time.Time `json:"paired_at"`
+	LastSync           time.Time `json:"last_sync"`
+	Transport          string    `json:"transport,omitempty"`             // "local", "tailscale", "network"
+	RepoPath           string    `json:"repo_path,omitempty"`             // Filesystem path for local peers
+	ProxyPrefix        string    `json:"proxy_prefix,omitempty"`          // Namespace prefix for proxy agents
+	RemoteAgents       []string  `json:"remote_agents,omitempty"`         // Agent names to proxy
+	RemoteRepoName     string    `json:"remote_repo_name,omitempty"`      // Peer's repository name
+	RemoteHostname     string    `json:"remote_hostname,omitempty"`       // Peer's hostname
+	RemoteRepoPath     string    `json:"remote_repo_path,omitempty"`      // Peer's repo filesystem path
 	RemoteGitOriginURL string    `json:"remote_git_origin_url,omitempty"` // Peer's git origin URL
-	Role               string    `json:"role,omitempty"`                 // "listener" or "dialer"
+	Role               string    `json:"role,omitempty"`                  // "listener" or "dialer"
 }
 
 // Addr returns the network address for connecting to this peer.
@@ -60,7 +60,7 @@ type PeerRegistry struct {
 }
 
 // NewPeerRegistry creates a new peer registry. If filePath exists, peers are loaded from it.
-// filePath is expected to be <thrumDir>/var/peers.json. The daemon_id is sourced from
+// FilePath is expected to be <thrumDir>/var/peers.json. The daemon_id is sourced from
 // <thrumDir>/config.json via identity.Bootstrap, making config.json the single source of truth.
 func NewPeerRegistry(filePath string) (*PeerRegistry, error) {
 	// peers.json lives at <thrumDir>/var/peers.json. Derive thrumDir and repoPath
@@ -322,7 +322,7 @@ func backupPeersOnce(src, dst string) error {
 	if _, err := os.Stat(dst); err == nil {
 		return nil // backup already exists — don't overwrite pre-rotation state
 	}
-	data, err := os.ReadFile(src)
+	data, err := os.ReadFile(src) // #nosec G304 -- src is peers.json path controlled by PeerRegistry
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
