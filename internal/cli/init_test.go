@@ -674,3 +674,96 @@ func TestInit_Row8_ForceReinitErrorsOnConflict(t *testing.T) {
 		t.Errorf("row 8: error missing recovery commands. Got: %s", msg)
 	}
 }
+
+// --- End-to-end integration test for the fresh-clone scenario ---
+
+func TestInit_Integration_FreshCloneAttachesToRemoteASync(t *testing.T) {
+	// 1. Set up a bare "remote" repo.
+	remoteDir := filepath.Join(t.TempDir(), "remote.git")
+	if err := exec.Command("git", "init", "--bare", remoteDir).Run(); err != nil {
+		t.Fatalf("init bare: %v", err)
+	}
+
+	// 2. Populate the bare repo with main + a-sync by pushing from a scratch
+	//    working copy. The scratch copy acts as the "sender" machine.
+	scratch := t.TempDir()
+	initGitRepo(t, scratch)
+	seedFile := filepath.Join(scratch, "README.md")
+	if err := os.WriteFile(seedFile, []byte("seed\n"), 0600); err != nil {
+		t.Fatalf("seed write: %v", err)
+	}
+	gitRun(t, scratch, "add", "README.md")
+	gitRun(t, scratch, "commit", "-m", "seed")
+
+	eventsContent := `{"type":"test-event","id":"evt1"}` + "\n"
+	writeLocalASyncWithContent(t, scratch, eventsContent)
+
+	// Push both main and a-sync to the bare remote.
+	gitRun(t, scratch, "remote", "add", "bareremote", remoteDir)
+	gitRun(t, scratch, "push", "bareremote", "main")
+	gitRun(t, scratch, "push", "bareremote", "a-sync")
+	remoteASyncSHA := gitOut(t, scratch, "rev-parse", "refs/heads/a-sync")
+
+	// 3. Clone the bare repo to a fresh working dir — simulating a new machine.
+	cloneDir := filepath.Join(t.TempDir(), "clone")
+	if err := exec.Command("git", "clone", remoteDir, cloneDir).Run(); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	// git clone should have fetched refs/remotes/origin/a-sync.
+	cloneRemoteSHA := gitOut(t, cloneDir, "rev-parse", "refs/remotes/origin/a-sync")
+	if cloneRemoteSHA != remoteASyncSHA {
+		t.Fatalf("clone did not fetch origin/a-sync correctly: remote %q clone %q",
+			remoteASyncSHA, cloneRemoteSHA)
+	}
+	// Configure git user in the clone (for any commits that may happen during Init).
+	gitRun(t, cloneDir, "config", "user.name", "Test User")
+	gitRun(t, cloneDir, "config", "user.email", "test@example.com")
+
+	// 4. Run thrum init on the clone (fresh — NOT --force).
+	if err := Init(InitOptions{RepoPath: cloneDir}); err != nil {
+		t.Fatalf("Init on clone failed: %v", err)
+	}
+
+	// 5. Assertions.
+
+	// (a) refs/heads/a-sync SHA == refs/remotes/origin/a-sync SHA.
+	localSHA := gitOut(t, cloneDir, "rev-parse", "refs/heads/a-sync")
+	if localSHA != remoteASyncSHA {
+		t.Errorf("local a-sync did not attach to origin/a-sync: local %q remote %q",
+			localSHA, remoteASyncSHA)
+	}
+
+	// (b) branch.a-sync.merge upstream config is set.
+	upstream := gitOut(t, cloneDir, "config", "branch.a-sync.merge")
+	if upstream != "refs/heads/a-sync" {
+		t.Errorf("upstream tracking not set: got %q", upstream)
+	}
+
+	// (c) config.json has LocalOnly: false.
+	cfg, err := config.LoadThrumConfig(filepath.Join(cloneDir, ".thrum"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Daemon.LocalOnly {
+		t.Error("expected LocalOnly=false after fresh clone with existing origin/a-sync")
+	}
+
+	// (d) Sync worktree at .git/thrum-sync/a-sync exists and contains the remote events.jsonl.
+	syncPath := filepath.Join(cloneDir, ".git", "thrum-sync", "a-sync")
+	eventsPath := filepath.Join(syncPath, "events.jsonl")
+	got, err := os.ReadFile(eventsPath) //nolint:gosec // test fixture path
+	if err != nil {
+		t.Fatalf("read events.jsonl in sync worktree: %v", err)
+	}
+	if string(got) != eventsContent {
+		t.Errorf("events.jsonl content mismatch: want %q got %q", eventsContent, string(got))
+	}
+
+	// (e) No extra "Initialize Thrum sync data" commit on top of the remote.
+	//     Commit count on cloned a-sync must match the scratch side's count.
+	commitCount := gitOut(t, cloneDir, "rev-list", "--count", "refs/heads/a-sync")
+	remoteCount := gitOut(t, scratch, "rev-list", "--count", "refs/heads/a-sync")
+	if commitCount != remoteCount {
+		t.Errorf("a-sync has %s commits; remote had %s — an extra commit slipped in", commitCount, remoteCount)
+	}
+}
