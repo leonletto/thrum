@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/leonletto/thrum/internal/config"
 )
 
 func TestInit(t *testing.T) {
@@ -570,5 +572,105 @@ func TestReconcileSyncBranch_NoLocalRemotePresent_AttachDirective(t *testing.T) 
 	}
 	if recon.LocalOnlyOverride == nil || *recon.LocalOnlyOverride != false {
 		t.Errorf("row 3: expected LocalOnly override = false")
+	}
+}
+
+// --- Init integration tests for the sync-branch reconciliation matrix ---
+
+func TestInit_Row1_SkipsBranchWorkWhenAlreadySyncing(t *testing.T) {
+	tmpDir := setupThrumRepo(t)
+	// Flip config to LocalOnly: false — as if the user had opted into remote sync.
+	cfg, err := config.LoadThrumConfig(filepath.Join(tmpDir, ".thrum"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Daemon.LocalOnly = false
+	if err := config.SaveThrumConfig(filepath.Join(tmpDir, ".thrum"), cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	// Capture current a-sync SHA (created by the initial Init in setupThrumRepo).
+	beforeSHA := gitOut(t, tmpDir, "rev-parse", "refs/heads/a-sync")
+
+	// Run init --force.
+	if err := Init(InitOptions{RepoPath: tmpDir, Force: true}); err != nil {
+		t.Fatalf("Init --force failed: %v", err)
+	}
+
+	// Assert a-sync SHA unchanged — no branch work happened.
+	afterSHA := gitOut(t, tmpDir, "rev-parse", "refs/heads/a-sync")
+	if beforeSHA != afterSHA {
+		t.Errorf("row 1: a-sync SHA changed on --force reinit (expected no-op). before=%q after=%q", beforeSHA, afterSHA)
+	}
+
+	// Assert config unchanged (LocalOnly still false).
+	cfgAfter, err := config.LoadThrumConfig(filepath.Join(tmpDir, ".thrum"))
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if cfgAfter.Daemon.LocalOnly {
+		t.Errorf("row 1: LocalOnly was reset to true")
+	}
+}
+
+func TestInit_Row3_AttachAndFlipLocalOnlyOnFreshInit(t *testing.T) {
+	// Set up a fresh git repo with origin/a-sync populated, no .thrum/, no local a-sync.
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+	remoteSHA := writeRemoteTrackingASyncWithContent(t, tmpDir, `{"e":"fromremote"}`+"\n")
+
+	// Run thrum init (fresh; not --force).
+	if err := Init(InitOptions{RepoPath: tmpDir}); err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+
+	// Assert local a-sync SHA == remote SHA.
+	if got := gitOut(t, tmpDir, "rev-parse", "refs/heads/a-sync"); got != remoteSHA {
+		t.Errorf("row 3: local a-sync SHA mismatch: want %q got %q", remoteSHA, got)
+	}
+
+	// Assert config LocalOnly: false.
+	cfg, err := config.LoadThrumConfig(filepath.Join(tmpDir, ".thrum"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Daemon.LocalOnly {
+		t.Errorf("row 3: expected LocalOnly=false in default config after attach")
+	}
+}
+
+func TestInit_Row5_ForceReinitAttachesAndFlipsLocalOnly(t *testing.T) {
+	tmpDir := setupThrumRepo(t)
+	// Overwrite the post-init a-sync to simulate "local empty".
+	writeLocalASyncWithContent(t, tmpDir, "")
+	remoteSHA := writeRemoteTrackingASyncWithContent(t, tmpDir, `{"e":"remote"}`+"\n")
+
+	if err := Init(InitOptions{RepoPath: tmpDir, Force: true}); err != nil {
+		t.Fatalf("Init --force failed: %v", err)
+	}
+
+	if got := gitOut(t, tmpDir, "rev-parse", "refs/heads/a-sync"); got != remoteSHA {
+		t.Errorf("row 5: a-sync SHA mismatch: want %q got %q", remoteSHA, got)
+	}
+	cfg, err := config.LoadThrumConfig(filepath.Join(tmpDir, ".thrum"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Daemon.LocalOnly {
+		t.Errorf("row 5: expected LocalOnly=false after --force reinit with remote content")
+	}
+}
+
+func TestInit_Row8_ForceReinitErrorsOnConflict(t *testing.T) {
+	tmpDir := setupThrumRepo(t)
+	writeLocalASyncWithContent(t, tmpDir, `{"e":"local"}`+"\n")
+	writeRemoteTrackingASyncWithContent(t, tmpDir, `{"e":"remote"}`+"\n")
+
+	err := Init(InitOptions{RepoPath: tmpDir, Force: true})
+	if err == nil {
+		t.Fatal("row 8: expected Init --force to return an error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "git push --force-with-lease origin a-sync") {
+		t.Errorf("row 8: error missing recovery commands. Got: %s", msg)
 	}
 }
