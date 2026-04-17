@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/leonletto/thrum/internal/config"
+	"github.com/leonletto/thrum/internal/daemon/safecmd"
 	"github.com/leonletto/thrum/internal/identity"
 )
 
@@ -89,22 +88,8 @@ func resolveLegacyRepoSlug(cfg *config.ThrumConfig, repoPath string) string {
 // prefix from GenerateRepoID is stripped since this value is embedded
 // in "supervisor_<...>" where "r_" would be meaningless noise).
 func gitOriginHash(repoPath string) string {
-	// Intentionally uses exec.Command directly rather than safecmd.Git:
-	// safecmd injects `-c user.name=Thrum -c user.email=thrum@local` on
-	// every invocation, which is correct for commits but pollutes
-	// `git config --get` reads. The injection would cause this read to
-	// return the injected value instead of the repo's real origin URL in
-	// corner cases. This is a pure read with static, internal args; no
-	// user input flows into the argv.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "config", "--get", "remote.origin.url") // #nosec G204 -- args are static; repoPath is the resolved daemon working directory
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	origin := strings.TrimSpace(string(out))
-	if origin == "" {
+	origin, err := safecmd.GitConfig(context.Background(), repoPath, "remote.origin.url")
+	if err != nil || origin == "" {
 		return ""
 	}
 	repoID, err := identity.GenerateRepoID(origin)
@@ -116,40 +101,35 @@ func gitOriginHash(repoPath string) string {
 
 // resolveUserSlug selects the owner-identifying half of the supervisor ID.
 // Order: git config user.name → $USER → hostname. SanitizeAgentName is
-// applied to every source.
+// applied to every source once we know the raw input is non-empty — the
+// post-sanitize "main" string is an empty-input sentinel from
+// SanitizeAgentName and must not leak into fallback decisions (a user
+// whose real name happens to sanitize to "main" would otherwise be
+// skipped).
 func resolveUserSlug(repoPath string) string {
 	if name := gitUserName(repoPath); name != "" {
-		if slug := identity.SanitizeAgentName(name); slug != "main" { // "main" is SanitizeAgentName's fallback-for-empty
-			return slug
-		}
+		return identity.SanitizeAgentName(name)
 	}
 	if u := os.Getenv("USER"); u != "" {
 		return identity.SanitizeAgentName(u)
 	}
-	if h, err := os.Hostname(); err == nil {
+	if h, err := os.Hostname(); err == nil && h != "" {
 		return identity.SanitizeAgentName(h)
 	}
 	return "main"
 }
 
 // gitUserName returns `git config --get user.name` run in repoPath, or "" on error.
-//
-// Uses exec.Command directly (not safecmd.Git) because safecmd injects
-// `-c user.name=Thrum -c user.email=thrum@local` on every invocation, and
-// those `-c` overrides win over local config for `git config --get` reads.
-// That is correct behavior for the commit paths safecmd is designed for,
-// but it would silently corrupt this lookup — `gitUserName` would always
-// return "Thrum" regardless of the user's real config. Pure read, static
-// args, no user input in argv.
+// Delegates to safecmd.GitConfig, which does not apply safecmd.Git's
+// `-c user.name=Thrum -c user.email=thrum@local` injection — that
+// injection is needed for daemon commit paths but would silently corrupt
+// this read.
 func gitUserName(repoPath string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "config", "--get", "user.name") // #nosec G204 -- args are static; repoPath is the resolved daemon working directory
-	out, err := cmd.Output()
+	name, err := safecmd.GitConfig(context.Background(), repoPath, "user.name")
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	return name
 }
 
 // CleanupLegacySupervisorFiles removes all supervisor pseudo-agent

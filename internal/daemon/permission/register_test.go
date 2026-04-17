@@ -9,6 +9,7 @@ import (
 
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"github.com/leonletto/thrum/internal/identity"
 )
 
 func TestResolveSupervisorID_ProjectNameWins(t *testing.T) {
@@ -35,9 +36,50 @@ func TestResolveSupervisorID_FallsBackToBasename(t *testing.T) {
 	}
 }
 
+// TestResolveSupervisorID_OriginHashBranch covers the middle rung of
+// resolveRepoSlug: no ProjectName, but git remote.origin.url is set →
+// the slug is the 12-char lowercase crockford-base32 hash from
+// identity.GenerateRepoID.
+func TestResolveSupervisorID_OriginHashBranch(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	gitRepo := t.TempDir()
+	ctx := context.Background()
+	if _, err := safecmd.Git(ctx, gitRepo, "init"); err != nil {
+		t.Skipf("git init unavailable: %v", err)
+	}
+	const origin = "git@github.com:leonletto/thrum.git"
+	if _, err := safecmd.Git(ctx, gitRepo, "config", "remote.origin.url", origin); err != nil {
+		t.Skipf("git config unavailable: %v", err)
+	}
+	cfg := &config.ThrumConfig{ProjectName: ""}
+	got := ResolveSupervisorID(cfg, gitRepo)
+
+	// Compute the expected hash the same way gitOriginHash does.
+	repoID, err := identity.GenerateRepoID(origin)
+	if err != nil {
+		t.Fatalf("GenerateRepoID: %v", err)
+	}
+	wantHash := strings.ToLower(strings.TrimPrefix(repoID, "r_"))
+	if len(wantHash) != 12 {
+		t.Fatalf("expected 12-char hash, got %q (%d chars)", wantHash, len(wantHash))
+	}
+	wantPrefix := "supervisor_" + wantHash + "_"
+	if !strings.HasPrefix(got, wantPrefix) {
+		t.Fatalf("got %q, want prefix %q", got, wantPrefix)
+	}
+	// The hashed repo slug must not look like a filesystem basename —
+	// guards against a future refactor accidentally hitting the
+	// basename branch first.
+	if strings.Contains(got, filepath.Base(gitRepo)) {
+		t.Errorf("got %q contains basename %q; origin-hash branch should win",
+			got, filepath.Base(gitRepo))
+	}
+}
+
 func TestSupervisorIdentity_Shape(t *testing.T) {
 	cfg := &config.ThrumConfig{ProjectName: "thrum"}
-	idFile := SupervisorIdentity(cfg, "/Users/leon/dev/opensource/thrum")
+	idFile := SupervisorIdentity(cfg, t.TempDir())
 
 	if !idFile.Reserved {
 		t.Fatalf("Reserved=false, want true")
