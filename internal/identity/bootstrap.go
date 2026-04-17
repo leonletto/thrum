@@ -2,7 +2,9 @@ package identity
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -37,7 +39,7 @@ func Bootstrap(thrumDir, repoPath string) (Identity, error) {
 	cfgPath := filepath.Join(thrumDir, "config.json")
 
 	raw, readErr := os.ReadFile(cfgPath)
-	if readErr != nil && !os.IsNotExist(readErr) {
+	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
 		return Identity{}, fmt.Errorf("read config.json: %w", readErr)
 	}
 
@@ -79,6 +81,7 @@ func Bootstrap(thrumDir, repoPath string) (Identity, error) {
 	case IsLegacyDaemonID(out.DaemonID, host):
 		old := out.DaemonID
 		out.DaemonID = GenerateDaemonID()
+		out.InitAt = time.Now().UTC().Format(time.RFC3339)
 		log.Printf("[identity] daemon_id rotated: %s -> %s (reason: legacy hostname-derived)", old, out.DaemonID)
 		log.Printf("[identity] Paired peers must be re-paired manually. On each peer host:")
 		log.Printf("[identity]   thrum peer remove <this-hostname>")

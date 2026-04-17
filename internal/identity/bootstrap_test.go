@@ -100,6 +100,9 @@ func TestBootstrap_LegacyIDRotates(t *testing.T) {
 	if id.DaemonID == "" {
 		t.Fatalf("rotated DaemonID empty")
 	}
+	if id.InitAt == "2026-01-01T00:00:00Z" {
+		t.Fatalf("init_at not updated on rotation; still %q", id.InitAt)
+	}
 }
 
 func TestBootstrap_FreshULIDNotRotated(t *testing.T) {
