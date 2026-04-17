@@ -19,6 +19,17 @@ type HealthResult struct {
 	RepoID    string             `json:"repo_id"`
 	SyncState string             `json:"sync_state"`
 	Tailscale *TailscaleSyncInfo `json:"tailscale,omitempty"`
+	Identity  *IdentityInfo      `json:"identity,omitempty"`
+}
+
+// IdentityInfo mirrors the RPC IdentityInfo type for CLI deserialization.
+type IdentityInfo struct {
+	DaemonID     string `json:"daemon_id"`
+	RepoName     string `json:"repo_name"`
+	Hostname     string `json:"hostname"`
+	RepoPath     string `json:"repo_path"`
+	GitOriginURL string `json:"git_origin_url,omitempty"`
+	InitAt       string `json:"init_at"`
 }
 
 // TailscaleSyncInfo mirrors the RPC type for CLI deserialization.
@@ -233,6 +244,19 @@ func FormatStatus(result *StatusResult) string {
 	// Daemon info
 	uptime := formatDuration(time.Duration(result.Health.UptimeMs) * time.Millisecond)
 	fmt.Fprintf(&output, "Daemon:   running (%s uptime, v%s)\n", uptime, result.Health.Version)
+
+	// Identity
+	if result.Health.Identity != nil {
+		fmt.Fprintln(&output, "\nIdentity:")
+		fmt.Fprintf(&output, "  daemon_id:  %s\n", result.Health.Identity.DaemonID)
+		fmt.Fprintf(&output, "  repo_name:  %s\n", result.Health.Identity.RepoName)
+		fmt.Fprintf(&output, "  hostname:   %s\n", result.Health.Identity.Hostname)
+		fmt.Fprintf(&output, "  repo_path:  %s\n", result.Health.Identity.RepoPath)
+		if result.Health.Identity.GitOriginURL != "" {
+			fmt.Fprintf(&output, "  git_origin: %s\n", result.Health.Identity.GitOriginURL)
+		}
+		fmt.Fprintf(&output, "  init_at:    %s\n", result.Health.Identity.InitAt)
+	}
 
 	// WebSocket and UI
 	if result.WebSocketPort > 0 {

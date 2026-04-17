@@ -4811,6 +4811,20 @@ func runDaemon(repoPath string, flagLocal bool) error {
 	// Health check
 	healthHandler := rpc.NewHealthHandler(startTime, version, repoID)
 	server.RegisterHandler("health", healthHandler.Handle)
+	healthHandler.SetIdentityProvider(func() *rpc.IdentityInfo {
+		ident := st.Identity()
+		if ident.DaemonID == "" {
+			return nil
+		}
+		return &rpc.IdentityInfo{
+			DaemonID:     ident.DaemonID,
+			RepoName:     ident.RepoName,
+			Hostname:     ident.Hostname,
+			RepoPath:     ident.RepoPath,
+			GitOriginURL: ident.GitOriginURL,
+			InitAt:       ident.InitAt,
+		}
+	})
 
 	// Agent management
 	agentHandler := rpc.NewAgentHandler(st)
