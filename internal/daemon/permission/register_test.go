@@ -1,176 +1,33 @@
 package permission
 
 import (
-	"context"
-	"encoding/json"
-	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/leonletto/thrum/internal/config"
 )
 
-func TestResolveProjectName_PreferredConfigField(t *testing.T) {
-	cfg := &config.ThrumConfig{ProjectName: "awesome-thrum"}
-	got := ResolveProjectName(cfg, "/tmp/some-path")
-	if got != "awesome-thrum" {
-		t.Errorf("got %q, want awesome-thrum", got)
+func TestResolveSupervisorID_ProjectNameWins(t *testing.T) {
+	cfg := &config.ThrumConfig{ProjectName: "Acme Co"}
+	// Any repo path; won't be consulted because ProjectName is set.
+	got := ResolveSupervisorID(cfg, "/tmp/irrelevant")
+	// SanitizeAgentName lowercases and maps non-[a-z0-9_-] to "_", so
+	// "Acme Co" → "acme_co". User slug is machine-dependent but must
+	// follow after the sanitized repo slug.
+	if !strings.HasPrefix(got, "supervisor_acme_co_") {
+		t.Fatalf("got %q, want prefix supervisor_acme_co_", got)
 	}
 }
 
-func TestResolveProjectName_FallbackToBasename(t *testing.T) {
-	cfg := &config.ThrumConfig{}
-	got := ResolveProjectName(cfg, "/Users/leon/dev/opensource/thrum")
-	if got != "thrum" {
-		t.Errorf("got %q, want thrum", got)
-	}
-}
-
-func TestResolveProjectName_NilConfigFallsBack(t *testing.T) {
-	got := ResolveProjectName(nil, "/Users/leon/dev/opensource/thrum")
-	if got != "thrum" {
-		t.Errorf("got %q, want thrum", got)
-	}
-}
-
-func TestResolveProjectName_UltimateFallback(t *testing.T) {
-	if got := ResolveProjectName(nil, ""); got != "project" {
-		t.Errorf("got %q, want project", got)
-	}
-	if got := ResolveProjectName(nil, "/"); got != "project" {
-		t.Errorf("got %q for /, want project", got)
-	}
-	if got := ResolveProjectName(nil, "."); got != "project" {
-		t.Errorf("got %q for ., want project", got)
-	}
-}
-
-func TestSupervisorAgentID(t *testing.T) {
-	if got := SupervisorAgentID("thrum"); got != "supervisor_thrum" {
-		t.Errorf("got %q, want supervisor_thrum", got)
-	}
-}
-
-func TestRegisterSupervisor_WritesIdentityFile(t *testing.T) {
+func TestResolveSupervisorID_FallsBackToBasename(t *testing.T) {
+	cfg := &config.ThrumConfig{ProjectName: ""}
 	tmp := t.TempDir()
-	thrumDir := filepath.Join(tmp, ".thrum")
-	cfg := &config.ThrumConfig{ProjectName: "thrum"}
-
-	id, err := RegisterSupervisor(context.Background(), cfg, thrumDir, "")
-	if err != nil {
-		t.Fatalf("RegisterSupervisor: %v", err)
-	}
-	if id != "supervisor_thrum" {
-		t.Errorf("agent_id = %q, want supervisor_thrum", id)
-	}
-
-	// Verify the file exists at the expected path with the expected fields.
-	// Parse the JSON directly rather than going through LoadIdentityWithPath —
-	// that function honors THRUM_HOME, which the ambient agent session sets
-	// and which would otherwise redirect the test away from tmp.
-	idPath := filepath.Join(thrumDir, "identities", "supervisor_thrum.json")
-	data, err := os.ReadFile(idPath) //nolint:gosec // G304 - test fixture path
-	if err != nil {
-		t.Fatalf("read identity file: %v", err)
-	}
-	var idFile config.IdentityFile
-	if err := json.Unmarshal(data, &idFile); err != nil {
-		t.Fatalf("parse identity file: %v", err)
-	}
-	if idFile.Agent.Name != "supervisor_thrum" {
-		t.Errorf("Agent.Name = %q, want supervisor_thrum", idFile.Agent.Name)
-	}
-	if !idFile.Reserved {
-		t.Error("Reserved should be true")
-	}
-	if idFile.Agent.Role != "supervisor" {
-		t.Errorf("Agent.Role = %q, want supervisor", idFile.Agent.Role)
-	}
-	if idFile.Agent.Kind != "agent" {
-		t.Errorf("Agent.Kind = %q, want agent", idFile.Agent.Kind)
-	}
-	if idFile.Agent.Module != "daemon" {
-		t.Errorf("Agent.Module = %q, want daemon", idFile.Agent.Module)
-	}
-}
-
-func TestRegisterSupervisor_FallbackToBasename(t *testing.T) {
-	tmp := t.TempDir()
-	// Mimic a repo named after the tmp dir's basename.
-	thrumDir := filepath.Join(tmp, ".thrum")
-	// With nil ProjectName, ResolveProjectName uses filepath.Base(repoPath).
-	cfg := &config.ThrumConfig{}
-
-	id, err := RegisterSupervisor(context.Background(), cfg, thrumDir, "/workspace/my-project")
-	if err != nil {
-		t.Fatalf("RegisterSupervisor: %v", err)
-	}
-	if id != "supervisor_my-project" {
-		t.Errorf("agent_id = %q, want supervisor_my-project", id)
-	}
-	idPath := filepath.Join(thrumDir, "identities", "supervisor_my-project.json")
-	if _, err := os.Stat(idPath); err != nil {
-		t.Fatalf("identity file not at %s: %v", idPath, err)
-	}
-}
-
-// TestSupervisorAgentID_DeterministicFallback exercises the fallback
-// path used in cmd/thrum/main.go runDaemon when RegisterSupervisor
-// fails (NFS hiccup, permission issue, etc.). The daemon must not
-// end up with supervisorID="" — every nudge authored by this
-// daemon would then carry agent_id="", which either breaks sync
-// validation or produces untraceable events. This test asserts the
-// deterministic fallback produces a non-empty, well-formed ID for
-// every project-name resolution.
-func TestSupervisorAgentID_DeterministicFallback(t *testing.T) {
-	cases := []struct {
-		cfg     *config.ThrumConfig
-		repo    string
-		wantNon string
-	}{
-		{&config.ThrumConfig{ProjectName: "thrum"}, "/whatever", "supervisor_thrum"},
-		{&config.ThrumConfig{}, "/Users/leon/dev/opensource/thrum", "supervisor_thrum"},
-		{nil, "", "supervisor_project"},
-		{nil, "/", "supervisor_project"},
-	}
-	for _, tc := range cases {
-		name := ResolveProjectName(tc.cfg, tc.repo)
-		got := SupervisorAgentID(name)
-		if got == "" {
-			t.Errorf("SupervisorAgentID returned empty for cfg=%v repo=%q", tc.cfg, tc.repo)
-		}
-		if got != tc.wantNon {
-			t.Errorf("cfg=%v repo=%q: got %q, want %q", tc.cfg, tc.repo, got, tc.wantNon)
-		}
-	}
-}
-
-func TestRegisterSupervisor_Idempotent(t *testing.T) {
-	tmp := t.TempDir()
-	thrumDir := filepath.Join(tmp, ".thrum")
-	cfg := &config.ThrumConfig{ProjectName: "thrum"}
-
-	id1, err := RegisterSupervisor(context.Background(), cfg, thrumDir, "")
-	if err != nil {
-		t.Fatalf("first call: %v", err)
-	}
-	id2, err := RegisterSupervisor(context.Background(), cfg, thrumDir, "")
-	if err != nil {
-		t.Fatalf("second call: %v", err)
-	}
-	if id1 != id2 {
-		t.Errorf("id drift: %q vs %q", id1, id2)
-	}
-	// Only one identity file should exist.
-	entries, err := os.ReadDir(filepath.Join(thrumDir, "identities"))
-	if err != nil {
-		t.Fatalf("read identities: %v", err)
-	}
-	if len(entries) != 1 {
-		names := make([]string, 0, len(entries))
-		for _, e := range entries {
-			names = append(names, e.Name())
-		}
-		t.Errorf("expected 1 identity file, got %d: %v", len(entries), names)
+	// t.TempDir() is not a git repo and has no origin — the basename
+	// fallback fires.
+	got := ResolveSupervisorID(cfg, tmp)
+	want := filepath.Base(tmp)
+	if !strings.HasPrefix(got, "supervisor_"+want+"_") {
+		t.Fatalf("got %q, want prefix supervisor_%s_", got, want)
 	}
 }
