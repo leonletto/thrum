@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -90,4 +91,55 @@ func TestResolveLegacySupervisorID_MatchesOldBinaryFallbacks(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCleanupLegacySupervisorFiles_RemovesSupervisorOnly(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	if err := os.MkdirAll(identitiesDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	// Seed a supervisor file (should be removed).
+	supervisorJSON := `{"version":5,"agent":{"Kind":"agent","Name":"supervisor_old","Role":"supervisor","Module":"daemon","Display":"Supervisor (old)"},"reserved":true}`
+	supervisorPath := filepath.Join(identitiesDir, "supervisor_old.json")
+	if err := os.WriteFile(supervisorPath, []byte(supervisorJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Seed a coordinator file (should NOT be removed).
+	coordJSON := `{"version":5,"agent":{"Kind":"agent","Name":"coordinator_main","Role":"coordinator","Module":"main","Display":"Coordinator (main)"},"reserved":false}`
+	coordPath := filepath.Join(identitiesDir, "coordinator_main.json")
+	if err := os.WriteFile(coordPath, []byte(coordJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Seed a reserved-but-non-supervisor file (should NOT be removed —
+	// this guards against over-aggressive cleanup if a future pseudo-
+	// agent uses Reserved=true).
+	otherReservedJSON := `{"version":5,"agent":{"Kind":"agent","Name":"other_reserved","Role":"system","Module":"daemon","Display":"Other"},"reserved":true}`
+	otherReservedPath := filepath.Join(identitiesDir, "other_reserved.json")
+	if err := os.WriteFile(otherReservedPath, []byte(otherReservedJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	CleanupLegacySupervisorFiles(thrumDir)
+
+	if _, err := os.Stat(supervisorPath); !os.IsNotExist(err) {
+		t.Fatalf("supervisor file not removed: stat err = %v", err)
+	}
+	if _, err := os.Stat(coordPath); err != nil {
+		t.Fatalf("coordinator file should still exist: %v", err)
+	}
+	if _, err := os.Stat(otherReservedPath); err != nil {
+		t.Fatalf("non-supervisor reserved file should still exist: %v", err)
+	}
+}
+
+func TestCleanupLegacySupervisorFiles_NoIdentitiesDirIsNoop(t *testing.T) {
+	tmp := t.TempDir()
+	// Deliberately do not create .thrum/identities/.
+	// Should not panic or error.
+	CleanupLegacySupervisorFiles(tmp)
 }

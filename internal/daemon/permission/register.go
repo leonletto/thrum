@@ -2,6 +2,8 @@ package permission
 
 import (
 	"context"
+	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,4 +128,51 @@ func gitUserName(repoPath string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// CleanupLegacySupervisorFiles removes all supervisor pseudo-agent
+// identity files from <thrumDir>/identities/. Safe to call on every
+// daemon boot — no-op if the directory is missing or contains no
+// matching files.
+//
+// Match condition: file unmarshals to config.IdentityFile with
+// Reserved=true AND Agent.Role=="supervisor".
+//
+// Best-effort: individual read/unmarshal/remove errors are swallowed
+// and logged; the function never returns an error. The virtual
+// supervisor identity is always available regardless of cleanup
+// success.
+func CleanupLegacySupervisorFiles(thrumDir string) {
+	identitiesDir := filepath.Join(thrumDir, "identities")
+	entries, err := os.ReadDir(identitiesDir)
+	if err != nil {
+		return // missing dir → nothing to clean; other errors → best-effort no-op
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(identitiesDir, e.Name())
+		data, err := os.ReadFile(path) // #nosec G304 -- path is <thrumDir>/identities/<entry>
+		if err != nil {
+			log.Printf("[permission] cleanup: read %s: %v", path, err)
+			continue
+		}
+		var idFile config.IdentityFile
+		if err := json.Unmarshal(data, &idFile); err != nil {
+			log.Printf("[permission] cleanup: parse %s: %v", path, err)
+			continue
+		}
+		if !idFile.Reserved || idFile.Agent.Role != "supervisor" {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			log.Printf("[permission] cleanup: remove %s: %v", path, err)
+			continue
+		}
+		log.Printf("[permission] removed legacy supervisor identity file %s", path)
+	}
 }
