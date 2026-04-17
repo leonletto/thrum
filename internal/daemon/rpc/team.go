@@ -83,7 +83,7 @@ type TeamHandler struct {
 }
 
 // NewTeamHandler creates a new team handler.
-// supervisorIdentity is the virtual-supervisor identity synthesized at
+// SupervisorIdentity is the virtual-supervisor identity synthesized at
 // daemon boot; it is wired in here now and consumed by ListAgents in a
 // later task. Passing nil is safe — the injection path short-circuits.
 func NewTeamHandler(state *state.State, thrumDir string, supervisorIdentity *config.IdentityFile) *TeamHandler {
