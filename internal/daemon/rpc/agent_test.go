@@ -2145,4 +2145,3 @@ func TestAgentRegister_LocalConflictStillDetected(t *testing.T) {
 		t.Errorf("Conflict.ExistingAgentID = %v, want impl_alpha", regResp.Conflict)
 	}
 }
-

@@ -190,23 +190,32 @@ type PeerInfoResult struct {
 
 // PairResult represents the response from a pair.request RPC call.
 type PairResult struct {
-	Status   string `json:"status"`
-	Token    string `json:"token"`
-	DaemonID string `json:"daemon_id"`
-	Name     string `json:"name"`
+	Status       string `json:"status"`
+	Token        string `json:"token"`
+	DaemonID     string `json:"daemon_id"`
+	Name         string `json:"name"`
+	RepoName     string `json:"repo_name,omitempty"`
+	Hostname     string `json:"hostname,omitempty"`
+	RepoPath     string `json:"repo_path,omitempty"`
+	GitOriginURL string `json:"git_origin_url,omitempty"`
 }
 
 // RequestPairing sends a pair.request to a remote peer using the pairing code.
+// local carries the full identity metadata of this daemon sent to the remote.
 // The connection uses ?pairing_code= (no token) since the goal is to obtain a token.
-func (c *SyncClient) RequestPairing(peerAddr, code, localDaemonID, localName, localAddress string) (*PairResult, error) {
+func (c *SyncClient) RequestPairing(peerAddr, code string, local PairMetadata) (*PairResult, error) {
 	ctx := context.Background()
 	wsURL := pairingWSURL(peerAddr, code)
 
 	params := map[string]any{
-		"code":      code,
-		"daemon_id": localDaemonID,
-		"name":      localName,
-		"address":   localAddress,
+		"code":           code,
+		"daemon_id":      local.DaemonID,
+		"name":           local.Name,
+		"address":        local.Address,
+		"repo_name":      local.RepoName,
+		"hostname":       local.Hostname,
+		"repo_path":      local.RepoPath,
+		"git_origin_url": local.GitOriginURL,
 	}
 
 	raw, err := c.wsCall(ctx, wsURL, "pair.request", params)

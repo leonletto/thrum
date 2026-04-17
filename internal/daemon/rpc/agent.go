@@ -610,9 +610,9 @@ func (h *AgentHandler) ensureActiveSession(ctx context.Context, agentID string, 
 // deliberately excluded — they're not local conflicts, they're peers on
 // different machines doing the same thing (thrum-mm3l).
 //
-// The filter `origin_daemon IN (local, '')` also matches legacy rows that
+// The filter `origin_daemon IN (local, ”)` also matches legacy rows that
 // predate the origin_daemon column (migration 21→22 backfills known rows
-// from the events table; rows with no events tail end with '') so the
+// from the events table; rows with no events tail end with ”) so the
 // conflict check stays conservative for those.
 func (h *AgentHandler) getAgentByRoleModule(ctx context.Context, role, module string) (*AgentInfo, error) {
 	localDaemon := h.state.DaemonID()

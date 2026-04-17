@@ -4992,7 +4992,7 @@ func runDaemon(repoPath string, flagLocal bool) error {
 
 	if syncManager != nil {
 		// Create pairing manager (used by both Unix socket and Tailscale handlers)
-		pairingMgr = daemon.NewPairingManager(syncManager.PeerRegistry(), st.DaemonID(), hostname)
+		pairingMgr = daemon.NewPairingManager(syncManager.PeerRegistry(), st.Identity(), hostname)
 
 		// Adapter: convert daemon.PeerStatusInfo → rpc.PeerStatus
 		listPeersFn := func() []rpc.PeerStatus {
@@ -5086,7 +5086,17 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			if localAddr == "" {
 				return "", "", fmt.Errorf("tailscale not configured or not started")
 			}
-			peer, err := syncManager.JoinPeer(peerAddr, code, st.DaemonID(), hostname, localAddr)
+			localIdent := st.Identity()
+			localMeta := daemon.PairMetadata{
+				DaemonID:     localIdent.DaemonID,
+				Name:         hostname,
+				Address:      localAddr,
+				RepoName:     localIdent.RepoName,
+				Hostname:     localIdent.Hostname,
+				RepoPath:     localIdent.RepoPath,
+				GitOriginURL: localIdent.GitOriginURL,
+			}
+			peer, err := syncManager.JoinPeer(peerAddr, code, localMeta)
 			if err != nil {
 				return "", "", err
 			}
@@ -5374,7 +5384,21 @@ func runDaemon(repoPath string, flagLocal bool) error {
 			_ = syncRegistry.Register("sync.notify", syncNotifyHandler.Handle)
 		}
 		if pairingMgr != nil {
-			pairHandler := rpc.NewPairRequestHandler(pairingMgr.HandlePairRequest)
+			pairHandler := rpc.NewPairRequestHandler(func(
+				code, peerDaemonID, peerName, peerAddress string,
+				peerRepoName, peerHostname, peerRepoPath, peerGitOriginURL string,
+			) (string, string, string, string, string, string, string, error) {
+				token, local, err := pairingMgr.HandlePairRequest(code, daemon.PairMetadata{
+					DaemonID:     peerDaemonID,
+					Name:         peerName,
+					Address:      peerAddress,
+					RepoName:     peerRepoName,
+					Hostname:     peerHostname,
+					RepoPath:     peerRepoPath,
+					GitOriginURL: peerGitOriginURL,
+				})
+				return token, local.DaemonID, local.Name, local.RepoName, local.Hostname, local.RepoPath, local.GitOriginURL, err
+			})
 			_ = syncRegistry.Register("pair.request", pairHandler.Handle)
 		}
 

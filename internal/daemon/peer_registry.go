@@ -23,8 +23,12 @@ type PeerInfo struct {
 	Transport    string    `json:"transport,omitempty"`     // "local", "tailscale", "network"
 	RepoPath     string    `json:"repo_path,omitempty"`     // Filesystem path for local peers
 	ProxyPrefix  string    `json:"proxy_prefix,omitempty"`  // Namespace prefix for proxy agents
-	RemoteAgents []string  `json:"remote_agents,omitempty"` // Agent names to proxy
-	Role         string    `json:"role,omitempty"`          // "listener" or "dialer"
+	RemoteAgents       []string  `json:"remote_agents,omitempty"`        // Agent names to proxy
+	RemoteRepoName     string    `json:"remote_repo_name,omitempty"`     // Peer's repository name
+	RemoteHostname     string    `json:"remote_hostname,omitempty"`      // Peer's hostname
+	RemoteRepoPath     string    `json:"remote_repo_path,omitempty"`     // Peer's repo filesystem path
+	RemoteGitOriginURL string    `json:"remote_git_origin_url,omitempty"` // Peer's git origin URL
+	Role               string    `json:"role,omitempty"`                 // "listener" or "dialer"
 }
 
 // Addr returns the network address for connecting to this peer.
