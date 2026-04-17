@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -297,6 +298,37 @@ func TestIsGitWorktree(t *testing.T) {
 			t.Error("expected error for non-git directory")
 		}
 	})
+}
+
+func TestInit_WritesIdentityBlock(t *testing.T) {
+	tmp := t.TempDir()
+	initGitRepo(t, tmp)
+
+	if err := Init(InitOptions{
+		RepoPath: tmp,
+	}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	cfgBytes, err := os.ReadFile(filepath.Join(tmp, ".thrum", "config.json")) //nolint:gosec // G304 - test fixture path
+	if err != nil {
+		t.Fatalf("read config.json: %v", err)
+	}
+	var parsed struct {
+		Identity struct {
+			DaemonID string `json:"daemon_id"`
+			InitAt   string `json:"init_at"`
+		} `json:"identity"`
+	}
+	if err := json.Unmarshal(cfgBytes, &parsed); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if parsed.Identity.DaemonID == "" || !strings.HasPrefix(parsed.Identity.DaemonID, "d_") {
+		t.Fatalf("daemon_id missing or malformed: %q", parsed.Identity.DaemonID)
+	}
+	if parsed.Identity.InitAt == "" {
+		t.Fatalf("init_at missing")
+	}
 }
 
 // Helper function to initialize a git repository.

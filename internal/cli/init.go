@@ -10,6 +10,7 @@ import (
 	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/context"
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
+	"github.com/leonletto/thrum/internal/identity"
 	"github.com/leonletto/thrum/internal/paths"
 	"github.com/leonletto/thrum/internal/sync"
 )
@@ -162,6 +163,13 @@ func Init(opts InitOptions) error {
 			retErr = fmt.Errorf("failed to write config.json: %w", err)
 			return retErr
 		}
+	}
+
+	// 5b. Populate identity block (daemon_id, repo metadata) in config.json.
+	// Bootstrap is idempotent: re-init keeps the existing daemon_id.
+	if _, err := identity.Bootstrap(thrumDir, opts.RepoPath); err != nil {
+		retErr = fmt.Errorf("failed to bootstrap identity: %w", err)
+		return retErr
 	}
 
 	// 6. Initialize a-sync branch
