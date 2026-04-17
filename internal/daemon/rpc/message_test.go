@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/leonletto/thrum/internal/config"
 	"github.com/leonletto/thrum/internal/daemon/permission"
 	"github.com/leonletto/thrum/internal/daemon/state"
 	"github.com/leonletto/thrum/internal/identity"
@@ -2386,21 +2385,15 @@ func TestHandleSend_ReplyInterceptor(t *testing.T) {
 	}
 }
 
-// TestQueryAgentsByRecipient_ReservedIdentityFallback verifies the
-// reserved-identity fallback in queryAgentsByRecipient: a recipient
-// that has no row in the agents table BUT has a matching identity
-// file with Reserved=true must still resolve. This is the fix for a
-// real-live break where `thrum reply msg_XXX "y"` to a permission
-// supervisor was failing with "unknown recipient:
-// @supervisor_<project>" because the supervisor pseudo-agent never
-// registers a session and therefore never appears in agents.
-//
-// The test seeds a reserved identity file, builds a MessageHandler
-// with the thrumDir set (so the fallback has a directory to read
-// from), and asserts both the positive case (reserved → accepted)
-// and the negative cases (missing file → rejected; file present but
-// Reserved=false → rejected).
-func TestQueryAgentsByRecipient_ReservedIdentityFallback(t *testing.T) {
+// TestQueryAgentsByRecipient_SupervisorFallback verifies the supervisor
+// fallback in queryAgentsByRecipient: a recipient that has no row in
+// the agents table BUT matches the MessageHandler's supervisorID or
+// supervisorLegacy resolves as itself. This is the replacement for the
+// old Reserved=true file-stat fallback, and the fix for the real-world
+// break where `thrum reply msg_XXX "y"` to a permission supervisor was
+// failing with "unknown recipient" because the supervisor pseudo-agent
+// never registers a session.
+func TestQueryAgentsByRecipient_SupervisorFallback(t *testing.T) {
 	tmpDir := t.TempDir()
 	thrumDir := filepath.Join(tmpDir, ".thrum")
 	if err := os.MkdirAll(filepath.Join(thrumDir, "identities"), 0o750); err != nil {
@@ -2413,83 +2406,61 @@ func TestQueryAgentsByRecipient_ReservedIdentityFallback(t *testing.T) {
 	}
 	defer func() { _ = st.Close() }()
 
-	// Seed a reserved supervisor identity.
-	reservedID := "supervisor_thrum"
-	reserved := &config.IdentityFile{
-		Agent: config.AgentConfig{
-			Kind:    "agent",
-			Name:    reservedID,
-			Role:    "supervisor",
-			Module:  "daemon",
-			Display: "Supervisor (thrum)",
-		},
-		Reserved: true,
-	}
-	if err := config.SaveIdentityFile(thrumDir, reserved); err != nil {
-		t.Fatalf("save reserved identity: %v", err)
-	}
-
-	// Seed a second identity that is NOT Reserved — ensures the
-	// fallback discriminates.
-	nonReservedID := "implementer_bogus"
-	nonReserved := &config.IdentityFile{
-		Agent: config.AgentConfig{
-			Kind: "agent",
-			Name: nonReservedID,
-			Role: "implementer",
-		},
-	}
-	if err := config.SaveIdentityFile(thrumDir, nonReserved); err != nil {
-		t.Fatalf("save non-reserved identity: %v", err)
-	}
-
-	// Task 5 replaced the Reserved=true file-stat fallback with an
-	// in-memory supervisor-recipient check. To keep this test's
-	// positive/negative assertions meaningful without rewriting the
-	// fixture, wire reservedID through as supervisorLegacy so the
-	// legacy branch of isSupervisorRecipient matches. Task 7 cleans
-	// up the Reserved-file framing entirely.
-	handler := NewMessageHandlerWithDispatcher(st, nil, thrumDir, "", reservedID)
+	const (
+		canonicalID = "supervisor_thrum_leon_letto"
+		legacyID    = "supervisor_thrum"
+	)
+	handler := NewMessageHandlerWithDispatcher(st, nil, thrumDir, canonicalID, legacyID)
 	ctx := context.Background()
 
-	// Positive: reserved identity resolves via the fallback.
-	got, err := handler.queryAgentsByRecipient(ctx, reservedID)
+	// Positive: canonical supervisor recipient resolves via the
+	// in-memory fallback.
+	got, err := handler.queryAgentsByRecipient(ctx, canonicalID)
 	if err != nil {
-		t.Fatalf("queryAgentsByRecipient(%q): %v", reservedID, err)
+		t.Fatalf("queryAgentsByRecipient(%q): %v", canonicalID, err)
 	}
-	if len(got) != 1 || got[0] != reservedID {
-		t.Errorf("reserved lookup got %v, want [%q]", got, reservedID)
+	if len(got) != 1 || got[0] != canonicalID {
+		t.Errorf("canonical lookup got %v, want [%q]", got, canonicalID)
 	}
 
-	// Negative: identity file exists but Reserved=false → stays unknown.
-	got, err = handler.queryAgentsByRecipient(ctx, nonReservedID)
+	// Positive: legacy supervisor recipient also resolves (upgrade-window
+	// compat — pre-upgrade peers address replies by the old form).
+	got, err = handler.queryAgentsByRecipient(ctx, legacyID)
 	if err != nil {
-		t.Fatalf("queryAgentsByRecipient(%q): %v", nonReservedID, err)
+		t.Fatalf("queryAgentsByRecipient(%q): %v", legacyID, err)
 	}
-	if len(got) != 0 {
-		t.Errorf("non-reserved lookup got %v, want empty", got)
+	if len(got) != 1 || got[0] != legacyID {
+		t.Errorf("legacy lookup got %v, want [%q]", got, legacyID)
 	}
 
-	// Negative: name with no identity file at all.
-	got, err = handler.queryAgentsByRecipient(ctx, "no_such_agent")
+	// Negative: non-matching recipient stays unknown.
+	got, err = handler.queryAgentsByRecipient(ctx, "implementer_bogus")
 	if err != nil {
-		t.Fatalf("queryAgentsByRecipient(no_such_agent): %v", err)
+		t.Fatalf("queryAgentsByRecipient(implementer_bogus): %v", err)
 	}
 	if len(got) != 0 {
-		t.Errorf("missing-file lookup got %v, want empty", got)
+		t.Errorf("non-supervisor lookup got %v, want empty", got)
 	}
 
-	// Negative: thrumDir unset on the handler → fallback path is not
-	// taken even for a reserved identity that exists on disk. Guards
-	// the test-friendly NewMessageHandler(st) constructor used by
-	// older unit tests.
-	noDirHandler := NewMessageHandler(st)
-	got, err = noDirHandler.queryAgentsByRecipient(ctx, reservedID)
+	// Negative: unrelated supervisor_* slug stays unknown.
+	got, err = handler.queryAgentsByRecipient(ctx, "supervisor_other_user")
 	if err != nil {
-		t.Fatalf("queryAgentsByRecipient with empty thrumDir: %v", err)
+		t.Fatalf("queryAgentsByRecipient(supervisor_other_user): %v", err)
 	}
 	if len(got) != 0 {
-		t.Errorf("empty-thrumDir lookup got %v, want empty", got)
+		t.Errorf("unrelated supervisor lookup got %v, want empty", got)
+	}
+
+	// Negative: handler built without supervisor wiring (test-friendly
+	// NewMessageHandler constructor) never matches — empty supervisorID
+	// and supervisorLegacy short-circuit the check.
+	noSupHandler := NewMessageHandler(st)
+	got, err = noSupHandler.queryAgentsByRecipient(ctx, canonicalID)
+	if err != nil {
+		t.Fatalf("queryAgentsByRecipient without supervisor wiring: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("unwired-handler lookup got %v, want empty", got)
 	}
 }
 

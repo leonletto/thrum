@@ -1706,25 +1706,6 @@ func isSupervisorRecipient(h *MessageHandler, recipient string) bool {
 	return false
 }
 
-// isReservedIdentity reports whether thrumDir/identities/<name>.json
-// exists and has Reserved=true. Used by queryAgentsByRecipient to
-// accept reply targets for reserved pseudo-agents that never appear
-// in the agents table. Returns false on any I/O or unmarshal error —
-// the caller treats that as "unknown recipient" and falls through to
-// the standard rejection path.
-func isReservedIdentity(thrumDir, name string) bool {
-	idPath := filepath.Join(thrumDir, "identities", name+".json")
-	data, err := os.ReadFile(idPath) // #nosec G304 — idPath is .thrum/identities/<name>.json, an internal config file
-	if err != nil {
-		return false
-	}
-	var idFile config.IdentityFile
-	if err := json.Unmarshal(data, &idFile); err != nil {
-		return false
-	}
-	return idFile.Reserved
-}
-
 // queryAgentByID checks if an agent with the exact agent_id exists.
 // Unlike queryAgentsByRecipient, this does NOT fall back to role matching.
 func (h *MessageHandler) queryAgentByID(ctx context.Context, agentID string) (bool, error) {
