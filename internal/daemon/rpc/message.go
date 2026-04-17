@@ -286,7 +286,7 @@ func NewMessageHandler(state *state.State) *MessageHandler {
 
 // NewMessageHandlerWithDispatcher creates a new message handler with a custom dispatcher.
 // The dispatcher should have the client notifier configured for push notifications.
-// supervisorID / supervisorLegacy are the canonical and pre-upgrade forms of the
+// SupervisorID / supervisorLegacy are the canonical and pre-upgrade forms of the
 // virtual supervisor ID; both are consulted by isSupervisorRecipient on the
 // reply receiver path. Empty strings are safe (degrade to never-match).
 func NewMessageHandlerWithDispatcher(state *state.State, dispatcher *subscriptions.Dispatcher, thrumDir, supervisorID, supervisorLegacy string) *MessageHandler {
@@ -1657,18 +1657,16 @@ func (h *MessageHandler) queryAgentsByRecipient(ctx context.Context, recipient s
 		return nil, err
 	}
 
-	// Fallback: reserved pseudo-agents (e.g. @supervisor_<project>) live
-	// as identity files with Reserved=true but have no row in the agents
-	// table — they never register a session, by design. Without this
-	// fallback the regular send path rejects replies addressed to the
-	// permission supervisor with "unknown recipient", which breaks the
-	// Task 6.2 reply-interceptor chain end-to-end (supervisors can't
-	// reply `y`/`n` to a nudge).
+	// Fallback: the virtual supervisor pseudo-agent has no row in the
+	// agents table (it never registers a session, by design). Without
+	// this fallback the regular send path rejects replies addressed to
+	// the permission supervisor with "unknown recipient", which breaks
+	// the reply-interceptor chain end-to-end (supervisors can't reply
+	// `y`/`n` to a nudge).
 	//
-	// Kept targeted: only a name-for-name identity file lookup, and
-	// only when the agents-table query returned nothing. No directory
-	// walk, no reserved-catalog load — cost is one stat + one read on
-	// the slow path only.
+	// Kept targeted: pure in-memory string compare against the two
+	// supervisor IDs (canonical + legacy). No I/O, no directory walk,
+	// no identity-file read.
 	if len(agentIDs) == 0 && recipient != "" && isSupervisorRecipient(h, recipient) {
 		agentIDs = []string{recipient}
 	}

@@ -397,16 +397,16 @@ func (h *TeamHandler) buildTeamListLocked(ctx context.Context, req TeamListReque
 	if req.IncludeSystem && h.supervisorIdentity != nil {
 		name := h.supervisorIdentity.Agent.Name
 		if _, exists := memberIndex[name]; !exists {
-			synthetic := TeamMember{
+			// No memberIndex write here: the map is discarded below via
+			// `_ = memberIndex` so nothing downstream would read the entry.
+			members = append(members, TeamMember{
 				AgentID:  name,
 				Role:     h.supervisorIdentity.Agent.Role,
 				Module:   h.supervisorIdentity.Agent.Module,
 				Display:  h.supervisorIdentity.Agent.Display,
 				Status:   "reserved",
 				Reserved: true,
-			}
-			memberIndex[name] = len(members)
-			members = append(members, synthetic)
+			})
 		}
 	}
 

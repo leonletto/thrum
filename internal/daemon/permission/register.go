@@ -34,12 +34,19 @@ func ResolveLegacySupervisorID(cfg *config.ThrumConfig, repoPath string) string 
 // for use in nudge bodies and other user-facing UI. Resolution order:
 // cfg.ProjectName → filepath.Base(repoPath) → "project".
 //
+// Exported (unlike the sibling resolveRepoSlug) because two independent
+// external consumers need the same logic:
+//
+//  1. cmd/thrum/main.go's runDaemon builds the `projectName` variable it
+//     hands to permission.New for FormatNudge's "Repo:" display line.
+//  2. ResolveLegacySupervisorID derives the pre-upgrade supervisor form
+//     (`supervisor_<project>`) that the receiver path accepts for
+//     cross-version compat.
+//
 // Distinct from resolveRepoSlug (the supervisor-ID repo half): this
 // function never returns an origin-URL hash, and the output is intended
-// for "Repo: <name>" display lines rather than for agent-ID embedding.
-// It is also the source of the legacy supervisor form — matching the
-// old-binary behavior exactly so ResolveLegacySupervisorID can accept
-// pre-upgrade replies on the receiver path.
+// for display and legacy compat rather than for the new supervisor-ID
+// embedding.
 func ResolveProjectName(cfg *config.ThrumConfig, repoPath string) string {
 	if cfg != nil && cfg.ProjectName != "" {
 		return cfg.ProjectName
@@ -106,21 +113,39 @@ func gitOriginHash(repoPath string) string {
 }
 
 // resolveUserSlug selects the owner-identifying half of the supervisor ID.
-// Order: git config user.name → $USER → hostname. SanitizeAgentName is
-// applied to every source once we know the raw input is non-empty — the
-// post-sanitize "main" string is an empty-input sentinel from
-// SanitizeAgentName and must not leak into fallback decisions (a user
-// whose real name happens to sanitize to "main" would otherwise be
-// skipped).
+// Order: git config user.name → $USER → hostname. Each branch applies
+// BOTH guards:
+//
+//  1. Raw-empty guard — SanitizeAgentName("") returns "main", so skipping
+//     the empty string up-front avoids the "main" sentinel leaking when
+//     the source genuinely had no value.
+//  2. Post-sanitize "main" guard — an all-non-ASCII input (e.g. a name
+//     written entirely in non-Latin script, or a string that consists
+//     only of characters SanitizeAgentName replaces with "_" and then
+//     trims) collapses to "main" even though the raw input was non-empty.
+//     Without this second guard, a user with such a name would silently
+//     get `supervisor_<repo>_main` instead of falling through to $USER /
+//     hostname.
+//
+// If every source exhausts, the final `return "main"` is the last-resort
+// sentinel — intentional, because the virtual supervisor needs a
+// non-empty user slug and "main" is the idiomatic fallback from
+// SanitizeAgentName itself.
 func resolveUserSlug(repoPath string) string {
 	if name := gitUserName(repoPath); name != "" {
-		return identity.SanitizeAgentName(name)
+		if slug := identity.SanitizeAgentName(name); slug != "main" {
+			return slug
+		}
 	}
 	if u := os.Getenv("USER"); u != "" {
-		return identity.SanitizeAgentName(u)
+		if slug := identity.SanitizeAgentName(u); slug != "main" {
+			return slug
+		}
 	}
 	if h, err := os.Hostname(); err == nil && h != "" {
-		return identity.SanitizeAgentName(h)
+		if slug := identity.SanitizeAgentName(h); slug != "main" {
+			return slug
+		}
 	}
 	return "main"
 }

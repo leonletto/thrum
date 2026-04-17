@@ -270,6 +270,28 @@ func TestResolveUserSlug_Fallbacks(t *testing.T) {
 		}
 	})
 
+	t.Run("non-ASCII user.name that sanitizes to 'main' falls through", func(t *testing.T) {
+		t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+		t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+		gitRepo := t.TempDir()
+		ctx := context.Background()
+		if _, err := safecmd.Git(ctx, gitRepo, "init"); err != nil {
+			t.Skipf("git init unavailable: %v", err)
+		}
+		// "张伟" (Zhang Wei) is two CJK runes; SanitizeAgentName
+		// replaces each with "_", collapses to a single "_", strips
+		// trailing/leading, and returns its empty-input sentinel
+		// "main". The resolver must treat that as "no usable name"
+		// and fall through to $USER — not silently return "main".
+		if _, err := safecmd.Git(ctx, gitRepo, "config", "user.name", "张伟"); err != nil {
+			t.Skipf("git config unavailable: %v", err)
+		}
+		t.Setenv("USER", "jane")
+		if got := resolveUserSlug(gitRepo); got != "jane" {
+			t.Errorf("non-ASCII user.name branch: got %q, want jane (via $USER fallthrough)", got)
+		}
+	})
+
 	t.Run("hostname branch when no git user.name and no $USER", func(t *testing.T) {
 		t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
 		t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
