@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/leonletto/thrum/internal/daemon/safecmd"
@@ -119,6 +120,52 @@ func (b *BranchManager) RemoteTrackingSyncSHA(ctx context.Context) (string, bool
 		return "", false
 	}
 	return sha, true
+}
+
+// BranchHasContent reports whether the branch at ref has any JSONL event data
+// in its tree. Content = events.jsonl size > 0, OR any blob under messages/
+// with size > 0. Does not check out or touch the working tree.
+// Returns (false, nil) for non-existent refs — callers should handle existence
+// separately if they care.
+func (b *BranchManager) BranchHasContent(ctx context.Context, ref string) (bool, error) {
+	// Check events.jsonl blob size at the tree root.
+	output, err := safecmd.Git(ctx, b.repoPath, "cat-file", "-s", ref+":events.jsonl")
+	if err == nil {
+		if size, convErr := strconv.Atoi(strings.TrimSpace(string(output))); convErr == nil && size > 0 {
+			return true, nil
+		}
+	}
+	// cat-file -s fails when the path is missing from the tree — fall through to messages/ check.
+
+	// Enumerate messages/ subtree. `-l` adds size; format:
+	//   <mode> <type> <sha> <size>\t<path>
+	output, err = safecmd.Git(ctx, b.repoPath, "ls-tree", "-r", "-l", ref, "messages/")
+	if err != nil {
+		// Missing ref or missing subtree — treat as empty.
+		return false, nil //nolint:nilerr // intentional: absent subtree means no content
+	}
+	for _, line := range strings.Split(strings.TrimRight(string(output), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		// The path segment is tab-separated from the metadata; split there first.
+		tabIdx := strings.IndexByte(line, '\t')
+		if tabIdx < 0 {
+			continue
+		}
+		head := strings.Fields(line[:tabIdx])
+		if len(head) < 4 {
+			continue
+		}
+		if head[0] != "100644" {
+			continue
+		}
+		size, convErr := strconv.Atoi(head[3])
+		if convErr == nil && size > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // checkGitRepo verifies that the path is a git repository.

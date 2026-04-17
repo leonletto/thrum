@@ -2,9 +2,11 @@ package sync
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -717,6 +719,142 @@ func TestBranchManager_isWorktreeRegistered(t *testing.T) {
 			t.Error("expected no match in empty output")
 		}
 	})
+}
+
+// createBranchWithContent creates a branch at a commit whose tree contains the
+// given events.jsonl content and messages/ files. Returns the branch SHA.
+// Writing tree entries uses git plumbing — no working tree changes.
+func createBranchWithContent(t *testing.T, repoPath, branchName, events string, messages map[string]string) string {
+	t.Helper()
+
+	var treeEntries []string
+
+	// events.jsonl blob (always present; may be empty)
+	blobSHA := writeBlob(t, repoPath, events)
+	treeEntries = append(treeEntries, fmt.Sprintf("100644 blob %s\tevents.jsonl", blobSHA))
+
+	// messages/ subtree, if any files provided
+	if len(messages) > 0 {
+		var subEntries []string
+		names := make([]string, 0, len(messages))
+		for name := range messages {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			shardSHA := writeBlob(t, repoPath, messages[name])
+			subEntries = append(subEntries, fmt.Sprintf("100644 blob %s\t%s", shardSHA, name))
+		}
+		subtreeSHA := mktree(t, repoPath, strings.Join(subEntries, "\n")+"\n")
+		treeEntries = append(treeEntries, fmt.Sprintf("040000 tree %s\tmessages", subtreeSHA))
+	}
+
+	treeSHA := mktree(t, repoPath, strings.Join(treeEntries, "\n")+"\n")
+
+	cmd := exec.Command("git", "-C", repoPath, "commit-tree", treeSHA, "-m", "test commit")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("commit-tree: %v", err)
+	}
+	commitSHA := strings.TrimSpace(string(out))
+
+	if err := exec.Command("git", "-C", repoPath, "update-ref", "refs/heads/"+branchName, commitSHA).Run(); err != nil {
+		t.Fatalf("update-ref: %v", err)
+	}
+	return commitSHA
+}
+
+func writeBlob(t *testing.T, repoPath, content string) string {
+	t.Helper()
+	cmd := exec.Command("git", "-C", repoPath, "hash-object", "-w", "--stdin")
+	cmd.Stdin = strings.NewReader(content)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("hash-object: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func mktree(t *testing.T, repoPath, body string) string {
+	t.Helper()
+	cmd := exec.Command("git", "-C", repoPath, "mktree")
+	cmd.Stdin = strings.NewReader(body)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("mktree: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestBranchHasContent_EmptyEventsEmptyMessages(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	createBranchWithContent(t, tmpDir, "a-sync", "", nil)
+	bm := NewBranchManager(tmpDir, true)
+
+	has, err := bm.BranchHasContent(context.Background(), "refs/heads/a-sync")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if has {
+		t.Error("expected has=false for empty events.jsonl + no messages")
+	}
+}
+
+func TestBranchHasContent_NonEmptyEvents(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	createBranchWithContent(t, tmpDir, "a-sync", `{"type":"x"}`+"\n", nil)
+	bm := NewBranchManager(tmpDir, true)
+
+	has, err := bm.BranchHasContent(context.Background(), "refs/heads/a-sync")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !has {
+		t.Error("expected has=true for non-empty events.jsonl")
+	}
+}
+
+func TestBranchHasContent_EmptyEventsNonEmptyMessage(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	createBranchWithContent(t, tmpDir, "a-sync", "",
+		map[string]string{"agent_a.jsonl": `{"type":"msg"}` + "\n"})
+	bm := NewBranchManager(tmpDir, true)
+
+	has, err := bm.BranchHasContent(context.Background(), "refs/heads/a-sync")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !has {
+		t.Error("expected has=true when messages/ has non-empty file")
+	}
+}
+
+func TestBranchHasContent_EmptyEventsEmptyMessageFile(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	createBranchWithContent(t, tmpDir, "a-sync", "",
+		map[string]string{"agent_a.jsonl": ""})
+	bm := NewBranchManager(tmpDir, true)
+
+	has, err := bm.BranchHasContent(context.Background(), "refs/heads/a-sync")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if has {
+		t.Error("expected has=false when all files are empty")
+	}
+}
+
+func TestBranchHasContent_MissingRef(t *testing.T) {
+	tmpDir := setupTestRepoWithCommit(t)
+	bm := NewBranchManager(tmpDir, true)
+
+	has, err := bm.BranchHasContent(context.Background(), "refs/heads/nonexistent")
+	if err != nil {
+		t.Fatalf("expected no error for missing ref, got %v", err)
+	}
+	if has {
+		t.Error("expected has=false for missing ref")
+	}
 }
 
 func TestRemoteTrackingSyncSHA_NoRemoteTrackingRef(t *testing.T) {
