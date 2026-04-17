@@ -54,10 +54,22 @@ type PeerRegistry struct {
 }
 
 // NewPeerRegistry creates a new peer registry. If filePath exists, peers are loaded from it.
+// filePath is expected to be <thrumDir>/var/peers.json. The daemon_id is sourced from
+// <thrumDir>/config.json via identity.Bootstrap, making config.json the single source of truth.
 func NewPeerRegistry(filePath string) (*PeerRegistry, error) {
+	// peers.json lives at <thrumDir>/var/peers.json. Derive thrumDir and repoPath
+	// for identity.Bootstrap, which persists daemon_id to <thrumDir>/config.json.
+	thrumDir := filepath.Dir(filepath.Dir(filePath))
+	repoPath := filepath.Dir(thrumDir)
+
 	r := &PeerRegistry{
 		peers:    make(map[string]*PeerInfo),
 		filePath: filePath,
+	}
+
+	ident, err := identity.Bootstrap(thrumDir, repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap identity for peer registry: %w", err)
 	}
 
 	if _, err := os.Stat(filePath); err == nil {
@@ -65,9 +77,20 @@ func NewPeerRegistry(filePath string) (*PeerRegistry, error) {
 		if err := r.load(); err != nil {
 			return nil, fmt.Errorf("load peer registry: %w", err)
 		}
+		// config.json is the source of truth. If peers.json has a stale daemon_id
+		// (e.g. pre-upgrade file), reconcile it and persist.
+		if r.local.DaemonID != ident.DaemonID {
+			r.mu.Lock()
+			r.local.DaemonID = ident.DaemonID
+			saveErr := r.saveLocked()
+			r.mu.Unlock()
+			if saveErr != nil {
+				return nil, fmt.Errorf("reconcile local daemon_id: %w", saveErr)
+			}
+		}
 	} else {
-		// No file — generate fresh local config
-		r.local.DaemonID = identity.GenerateDaemonID()
+		// No file — seed from identity.Bootstrap
+		r.local.DaemonID = ident.DaemonID
 	}
 
 	return r, nil

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -479,5 +480,67 @@ func TestPeerInfo_Addr(t *testing.T) {
 	p2 := &PeerInfo{Name: "alice", Address: "alice:9100"}
 	if got := p2.Addr(); got != "alice:9100" {
 		t.Errorf("Addr = %q, want %q", got, "alice:9100")
+	}
+}
+
+func TestNewPeerRegistry_UsesConfigJSONDaemonID(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	varDir := filepath.Join(thrumDir, "var")
+	if err := os.MkdirAll(varDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-seed config.json with a specific daemon_id.
+	const wantID = "d_01HYTESTCONFIGJSONSEED01"
+	cfgJSON := `{"identity":{"daemon_id":"` + wantID + `","init_at":"2026-01-01T00:00:00Z"}}`
+	if err := os.WriteFile(filepath.Join(thrumDir, "config.json"), []byte(cfgJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create peer registry; it should pick up the config.json id.
+	reg, err := NewPeerRegistry(filepath.Join(varDir, "peers.json"))
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+	if got := reg.LocalDaemonID(); got != wantID {
+		t.Fatalf("LocalDaemonID = %q, want %q", got, wantID)
+	}
+}
+
+func TestNewPeerRegistry_ReconcilesStalePeersJSONWithConfig(t *testing.T) {
+	tmp := t.TempDir()
+	thrumDir := filepath.Join(tmp, ".thrum")
+	varDir := filepath.Join(thrumDir, "var")
+	_ = os.MkdirAll(varDir, 0o750)
+
+	// config.json has the authoritative id.
+	const authoritativeID = "d_01HYTESTAUTHORITATIVE00"
+	cfgJSON := `{"identity":{"daemon_id":"` + authoritativeID + `","init_at":"2026-01-01T00:00:00Z"}}`
+	_ = os.WriteFile(filepath.Join(thrumDir, "config.json"), []byte(cfgJSON), 0o600)
+
+	// peers.json has a stale id (simulating a pre-upgrade file).
+	stalePeers := `{"local":{"daemon_id":"d_stale_id_in_peers_json","port":0},"peers":[]}`
+	peersPath := filepath.Join(varDir, "peers.json")
+	_ = os.WriteFile(peersPath, []byte(stalePeers), 0o600)
+
+	reg, err := NewPeerRegistry(peersPath)
+	if err != nil {
+		t.Fatalf("NewPeerRegistry: %v", err)
+	}
+	if got := reg.LocalDaemonID(); got != authoritativeID {
+		t.Fatalf("LocalDaemonID = %q, want %q (config.json wins over stale peers.json)", got, authoritativeID)
+	}
+
+	// Verify peers.json was rewritten with the reconciled id.
+	data, err := os.ReadFile(peersPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), authoritativeID) {
+		t.Fatalf("peers.json not updated with authoritative id: %s", data)
+	}
+	if strings.Contains(string(data), "d_stale_id_in_peers_json") {
+		t.Fatalf("peers.json still contains stale id: %s", data)
 	}
 }
