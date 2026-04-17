@@ -87,6 +87,18 @@ and this project adheres to
 
 ### Fixed
 
+- **`thrum init` now correctly attaches to existing `origin/a-sync` on fresh
+  clones.** Previously, running `thrum init` in a freshly-cloned repo whose
+  remote already had an `a-sync` branch would create a disjoint local orphan
+  that could never be reconciled with the remote — every daemon sync tick
+  rejected with "non-fast-forward", silently blocking outbound sync forever.
+  The fix adds a decision matrix that checks for `refs/remotes/origin/a-sync`
+  (populated by `git clone`) and attaches local `a-sync` to it instead of
+  creating an orphan. `--force` reinit also reconciles content-based state: if
+  both local and remote have events, init errors out with the two recovery
+  commands the user can pick between instead of clobbering either side. A
+  future `thrum doctor --fix` (tracked as `thrum-uvpp.1`) will automate
+  recovery for machines already in the bad state.
 - **`SendSupervisorMessage` @-prefix normalisation** — supervisor nudges no
   longer ghost to recipients with a leading `@` that doesn't match the
   `message_refs` / `message_deliveries` schema (which store bare agent IDs).
