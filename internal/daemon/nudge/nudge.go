@@ -128,7 +128,11 @@ func identityPath(dir, agentName string) string {
 // file-not-found, which is the common case when an agent isn't
 // registered in this particular worktree).
 func readTmuxFromIdentity(identitiesDir, agentName string) string {
-	data, err := os.ReadFile(filepath.Join(identitiesDir, agentName+".json")) // #nosec G304 -- path is .thrum/identities/<name>.json
+	p := identityPath(identitiesDir, agentName)
+	if p == "" {
+		return ""
+	}
+	data, err := os.ReadFile(p) // #nosec G304 -- path is .thrum/identities/<name>.json
 	if err != nil {
 		return ""
 	}
