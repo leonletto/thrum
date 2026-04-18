@@ -154,6 +154,34 @@ func TestRule_LivePIDMismatch_HardError(t *testing.T) {
 	}
 }
 
+func TestRule_LivePIDMismatch_PopulatesDetectedAgent(t *testing.T) {
+	// Seed an identities dir with a file whose agent_pid is in the
+	// caller's chain — that's the caller's "detected" agent. Rule
+	// fires because the identity file being checked (999) is not.
+	dir := t.TempDir()
+	writeIdentityFile(t, dir, "impl_caller", 100, "claude")
+	ctx := newTestCtx(t,
+		withClosestRuntime(100, "claude"),
+		withChain([]int{100}),
+		withIdentityAgentPID(999),
+		withPIDAlive(999, true),
+	)
+	ctx.cc.IdentitiesDir = dir
+	ctx.cc.ExpectedAgent = "impl_target"
+
+	err := ctx.runRule()
+	var gErr *Error
+	if !errors.As(err, &gErr) {
+		t.Fatalf("want *Error, got %T", err)
+	}
+	if gErr.ExpectedAgent != "impl_target" {
+		t.Errorf("ExpectedAgent=%q want impl_target", gErr.ExpectedAgent)
+	}
+	if gErr.DetectedAgent != "impl_caller" {
+		t.Errorf("DetectedAgent=%q want impl_caller (resolved via findOwnedIdentity)", gErr.DetectedAgent)
+	}
+}
+
 func TestRule_WarnMode_LogsButProceeds(t *testing.T) {
 	ctx := newTestCtx(t,
 		withClosestRuntime(100, "claude"),

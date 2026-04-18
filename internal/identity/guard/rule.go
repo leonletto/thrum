@@ -71,6 +71,19 @@ type CheckContext struct {
 	// legitimate owners (spec §Rule #4‴).
 	CWDMatches bool
 
+	// IdentitiesDir is the absolute path to .thrum/identities, used by
+	// Rule's error-construction path to resolve DetectedAgent (the
+	// agent the caller's ancestor chain actually belongs to) via
+	// findOwnedIdentity. Empty when unknown or no identity files
+	// exist; DetectedAgent then stays blank, which is fine — the
+	// Error formatter elides blank optional fields.
+	IdentitiesDir string
+
+	// ExpectedAgent is the name recorded in the identity file the
+	// check is protecting. Populated by buildCheckContext; Rule's
+	// error path copies it into Error.ExpectedAgent.
+	ExpectedAgent string
+
 	// TmuxMatches is true when:
 	//   - the TMUX env var is present on both the caller and the
 	//     identity file, and the two values are equal, OR
@@ -171,12 +184,20 @@ func Rule(cc *CheckContext) error {
 
 	// Step 3.4: no rescue clause matched. Either hard error
 	// (strict) or emit a structured warn and proceed (warn).
+	detected := ""
+	if cc.IdentitiesDir != "" {
+		if name, _, _ := findOwnedIdentity(cc.IdentitiesDir, cc.Chain); name != "" {
+			detected = name
+		}
+	}
 	e := &Error{
-		Guard:       "cross_worktree",
-		Reason:      "pid_mismatch",
-		CallerPID:   chainHead(cc.Chain),
-		ExpectedPID: cc.IdentityAgentPID,
-		Remediation: "cd to the correct worktree or run 'thrum prime' to re-claim",
+		Guard:         "cross_worktree",
+		Reason:        "pid_mismatch",
+		CallerPID:     chainHead(cc.Chain),
+		ExpectedAgent: cc.ExpectedAgent,
+		DetectedAgent: detected,
+		ExpectedPID:   cc.IdentityAgentPID,
+		Remediation:   "cd to the correct worktree or run 'thrum prime' to re-claim",
 	}
 	if cc.Mode == ModeWarn {
 		if cc.warnLogger != nil {

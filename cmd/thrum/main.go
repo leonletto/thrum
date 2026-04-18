@@ -3700,18 +3700,28 @@ func loadInitBootstrapMode(dir string) guard.Mode {
 }
 
 // resolvePrimeIdentityPath resolves the on-disk identity file path for
-// the current agent and returns the closest-runtime PID that prime's
-// G5 check compares against. Returns ok=false when the agent has no
-// identity file yet (first-prime) — G5 is a no-op in that case.
-func resolvePrimeIdentityPath(agentID string) (repoPath, idPath string, runtimePID int, ok bool) {
+// the current agent and returns the closest-runtime PID plus the
+// stored AgentPID so the caller can compare before writing. Returns
+// ok=false when the agent has no identity file yet (first-prime) —
+// G5 + WritePID are no-ops in that case.
+func resolvePrimeIdentityPath(agentID string) (repoPath, idPath string, runtimePID, storedPID int, ok bool) {
 	repoPath = paths.EffectiveRepoPath(".")
 	idPath = filepath.Join(repoPath, ".thrum", "identities", agentID+".json")
-	if _, err := os.Stat(idPath); err != nil {
-		return repoPath, "", 0, false
+	// #nosec G304 -- idPath is derived from the agent's own identity dir.
+	data, err := os.ReadFile(idPath)
+	if err != nil {
+		return repoPath, "", 0, 0, false
+	}
+	var id config.IdentityFile
+	if err := json.Unmarshal(data, &id); err != nil {
+		// Corrupted file — let G5's own load path surface the error.
+		storedPID = 0
+	} else {
+		storedPID = id.AgentPID
 	}
 	ctx := context.Background()
 	rtPID, _, _ := guard.ClosestRuntimeAncestor(ctx, os.Getpid())
-	return repoPath, idPath, rtPID, true
+	return repoPath, idPath, rtPID, storedPID, true
 }
 
 // loadPrimeOwnershipMode returns the PrimeOwnership guard mode for
@@ -3766,7 +3776,7 @@ Examples:
 			// orphaned-agent reclaim can proceed. When the closest
 			// runtime differs from the stored PID and the stored PID is
 			// dead, guard.WritePID refreshes the identity atomically.
-			if repoPath, idPath, runtimePID, ok := resolvePrimeIdentityPath(agentID); ok {
+			if repoPath, idPath, runtimePID, storedPID, ok := resolvePrimeIdentityPath(agentID); ok {
 				pc := &guard.PrimeContext{
 					Mode:         loadPrimeOwnershipMode(repoPath),
 					IdentityPath: idPath,
@@ -3776,11 +3786,11 @@ Examples:
 				if err := guard.G5(pc); err != nil {
 					return err
 				}
-				// Update identity file PID to the current runtime if
-				// it diverged (e.g. runtime restarted). This is the
-				// canonical prime-time PID write — routes through
-				// guard.WritePID so AtomicWrite + fcntl lock apply.
-				if runtimePID > 0 {
+				// Only write when the stored PID diverged from the
+				// current runtime — unconditional writes on every
+				// prime inflate mtime and risk lock contention with
+				// concurrent agents in the same repo.
+				if runtimePID > 0 && runtimePID != storedPID {
 					if err := guard.WritePID(idPath, runtimePID); err != nil {
 						fmt.Fprintf(os.Stderr, "thrum: prime WritePID failed: %v\n", err)
 					}

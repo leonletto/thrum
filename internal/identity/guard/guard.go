@@ -41,7 +41,8 @@ func Check(ctx context.Context, repoPath string, cfg Config, logger *slog.Logger
 		// ownership check is vacuous; skip drift reconciliation too.
 		return nil
 	}
-	if derr := reconcileDrift(ctx, repoPath, idPath, idFile, cc); derr != nil {
+	_ = idPath // reserved for future DetectedAgent resolution callers.
+	if derr := reconcileDrift(ctx, repoPath, idFile, cc); derr != nil {
 		// Drift failures must not mask the ownership check — log
 		// and fall through so Rule still runs.
 		if logger != nil {
@@ -87,6 +88,7 @@ func buildCheckContext(ctx context.Context, repoPath string, cfg Config, logger 
 
 	effective := paths.EffectiveRepoPath(repoPath)
 	idPath := filepath.Join(effective, relPath)
+	identitiesDir := filepath.Join(effective, ".thrum", "identities")
 
 	cc := &CheckContext{
 		Ctx:              ctx,
@@ -98,6 +100,8 @@ func buildCheckContext(ctx context.Context, repoPath string, cfg Config, logger 
 		IsPIDAlive:       func(pid int) bool { return process.IsRunning(pid) },
 		CWDMatches:       cwdMatches(effective, idFile.Worktree),
 		TmuxMatches:      tmuxMatches(idFile.TmuxSession),
+		IdentitiesDir:    identitiesDir,
+		ExpectedAgent:    idFile.Agent.Name,
 		warnLogger:       logger,
 	}
 	return cc, idFile, idPath, nil
@@ -142,7 +146,17 @@ func tmuxMatches(stored string) bool {
 // from what's on disk. Mirrors the behavior historically in
 // RefreshLocalIdentity's Step 3; the PID-write branch has been
 // removed because PID writes now route exclusively through WritePID.
-func reconcileDrift(ctx context.Context, repoPath, idPath string, idFile *config.IdentityFile, cc *CheckContext) error {
+//
+// Note on write path: reconcileDrift writes through
+// config.SaveIdentityFile (atomic at the os.WriteFile level but
+// without fcntl serialization), NOT through guard.AtomicWrite. This
+// is intentional — these fields (Runtime, PreferredRuntime,
+// TmuxSession, Branch) are advisory metadata, not ownership state.
+// Two concurrent writes here would merge into whichever arrived last;
+// neither produces corruption nor violates an invariant Rule #4‴
+// depends on. WritePID, by contrast, does route through AtomicWrite
+// because a torn PID write WOULD corrupt ownership.
+func reconcileDrift(ctx context.Context, repoPath string, idFile *config.IdentityFile, cc *CheckContext) error {
 	detectedRuntime := ""
 	if cc.ClosestRtPID > 0 {
 		detectedRuntime = runtimeNameFn(ctx, cc.ClosestRtPID)
@@ -190,7 +204,6 @@ func reconcileDrift(ctx context.Context, repoPath, idPath string, idFile *config
 	if err := config.SaveIdentityFile(thrumDir, idFile); err != nil {
 		return fmt.Errorf("save identity: %w", err)
 	}
-	_ = idPath // (path returned for test observability; not used here yet)
 	return nil
 }
 
